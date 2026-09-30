@@ -487,7 +487,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
         </div>
       ) : null}
 
-      {text || !isTerminal(state.phase) ? (
+      {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3">
           <span className="sr-only">Hermes is saying: </span>
           {text ? <p className="prose-chat select-text">{text}</p> : null}
@@ -604,9 +604,9 @@ function Composer({
   const placeholder = !online
     ? "Offline — drafts are saved, not sent"
     : phase === "waiting_for_approval"
-      ? "Answer the approval above first"
+      ? "Answer the approval first"
       : running
-        ? "Add guidance for the current run…"
+        ? "Add guidance…"
         : "Message Hermes";
 
   return (
