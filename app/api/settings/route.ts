@@ -20,7 +20,9 @@ export const PUT = api(({ body }) => updatePreferences(body), {
       refreshIntervalMinutes: z.number().int().min(1).max(120),
       quietHours: z.object({ enabled: z.boolean(), start: hhmm, end: hhmm }).partial(),
       notificationCategories: z.record(z.string(), z.object({ push: z.boolean() })),
-      hermes: z.object({ defaultModel: z.string().max(100).optional(), defaultProvider: z.string().max(100).optional(), showToolDetails: z.boolean() }).partial(),
+      hermes: z
+        .object({ defaultModel: z.string().max(100).optional(), defaultProvider: z.string().max(100).optional(), showToolDetails: z.boolean() })
+        .partial(),
       integrationFailureAlertMinutes: z.number().int().min(5).max(1440),
       onboarding: z.object({ completedAt: z.string().nullable(), skippedSteps: z.array(z.string()) }).partial(),
     })

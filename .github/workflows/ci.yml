@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Typecheck, lint, unit, build, scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test -- --coverage
+      - run: npm run build
+      - name: Secret-pattern scan (client bundles + tracked files)
+        run: npm run secrets:scan
+      - name: docker compose config validation
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.demo.yml config -q
+
+  e2e:
+    name: Playwright (mobile 320 / 412, desktop, a11y, visual)
+    runs-on: ubuntu-latest
+    container:
+      # Pinned image = same fonts as the committed visual baselines.
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+    env:
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright test
+        env:
+          CI: "1"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  docker:
+    name: Docker image build + smoke
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build demo stack
+        run: docker compose -f docker-compose.demo.yml build
+      - name: Start, health, readiness
+        run: |
+          docker compose -f docker-compose.demo.yml up -d
+          for i in $(seq 1 60); do curl -fsS http://localhost:3000/api/ready && break; sleep 2; done
+          curl -fsS http://localhost:3000/api/health
+          curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:3000/manifest.webmanifest
+      - name: Persistence across restart + backup drill
+        run: |
+          # claim the instance so there is Jarvis-owned data
+          curl -fsS -X POST http://localhost:3000/api/auth/setup -H 'content-type: application/json' -H 'x-jarvis-csrf: 1' \
+            -d '{"setupCode":"DEMO","name":"CI","passcode":"ci-passcode"}' -o /dev/null
+          docker compose -f docker-compose.demo.yml restart jarvis
+          for i in $(seq 1 60); do curl -fsS http://localhost:3000/api/ready && break; sleep 2; done
+          test "$(curl -fsS http://localhost:3000/api/auth/setup | grep -o '"claimed":true')" = '"claimed":true'
+          docker compose -f docker-compose.demo.yml exec -T jarvis node scripts/backup.mjs
+      - if: always()
+        run: docker compose -f docker-compose.demo.yml logs --no-color | tail -100

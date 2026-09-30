@@ -89,10 +89,20 @@ export function SettingsView() {
               <input id="s-tz" className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
             </Field>
             <Field id="s-model" label="Default Hermes model (optional)" hint="Only sent when set; otherwise Hermes uses its own default.">
-              <input id="s-model" className={inputCls} value={form.hermes.defaultModel ?? ""} onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultModel: e.target.value || undefined } })} />
+              <input
+                id="s-model"
+                className={inputCls}
+                value={form.hermes.defaultModel ?? ""}
+                onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultModel: e.target.value || undefined } })}
+              />
             </Field>
             <Field id="s-provider" label="Default Hermes provider (optional)">
-              <input id="s-provider" className={inputCls} value={form.hermes.defaultProvider ?? ""} onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })} />
+              <input
+                id="s-provider"
+                className={inputCls}
+                value={form.hermes.defaultProvider ?? ""}
+                onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })}
+              />
             </Field>
             <Button type="submit" variant="primary" busy={save.isPending}>
               Save preferences
@@ -115,7 +125,15 @@ export function SettingsView() {
               <input id="p-cur" type="password" autoComplete="current-password" className={inputCls} value={cur} onChange={(e) => setCur(e.target.value)} />
             </Field>
             <Field id="p-new" label="New passcode" hint="At least 6 characters. Changing it signs out every device.">
-              <input id="p-new" type="password" minLength={6} autoComplete="new-password" className={inputCls} value={nxt} onChange={(e) => setNxt(e.target.value)} />
+              <input
+                id="p-new"
+                type="password"
+                minLength={6}
+                autoComplete="new-password"
+                className={inputCls}
+                value={nxt}
+                onChange={(e) => setNxt(e.target.value)}
+              />
             </Field>
             <Button type="submit" busy={pass.isPending} disabled={!cur || nxt.length < 6}>
               Change passcode

@@ -3,14 +3,17 @@ import { randomBytes } from "node:crypto";
 import { json, readBody, notFound, isoDate, addDays } from "./util.mjs";
 
 export function createSkylight({ refreshToken }) {
-  const state = { refresh: refreshToken, access: null, chores: new Map() };
+  const state = { refresh: null, access: null, chores: new Map() };
 
   function seed() {
-    state.refresh = refreshToken;
-    state.access = null;
+    // Token rotation state survives /__mock/reset (like a real account); only data is reset.
+    state.refresh ??= refreshToken;
     state.chores = new Map([
       ["55900629", { id: "55900629", summary: "Schedule vet appointment", emoji_icon: "🐾", status: "pending", start_time: null }],
-      ["55780859-" + isoDate(new Date()) + "-1800", { id: "55780859-" + isoDate(new Date()) + "-1800", summary: "Take out recycling", emoji_icon: "♻️", status: "pending", start_time: "18:00" }],
+      [
+        "55780859-" + isoDate(new Date()) + "-1800",
+        { id: "55780859-" + isoDate(new Date()) + "-1800", summary: "Take out recycling", emoji_icon: "♻️", status: "pending", start_time: "18:00" },
+      ],
     ]);
   }
   seed();
@@ -24,13 +27,27 @@ export function createSkylight({ refreshToken }) {
       if (body.grant_type === "refresh_token" && body.refresh_token === state.refresh) {
         state.refresh = `sk_rt_${randomBytes(8).toString("hex")}`;
         state.access = `sk_at_${randomBytes(8).toString("hex")}`;
-        return json(res, 200, { access_token: state.access, token_type: "Bearer", expires_in: 7200, refresh_token: state.refresh, created_at: Math.floor(Date.now() / 1000) });
+        return json(res, 200, {
+          access_token: state.access,
+          token_type: "Bearer",
+          expires_in: 7200,
+          refresh_token: state.refresh,
+          created_at: Math.floor(Date.now() / 1000),
+        });
       }
       return json(res, 400, { error: "invalid_grant", error_description: "The provided authorization grant is invalid" });
     }
     if (!state.access || req.headers.authorization !== `Bearer ${state.access}`) return json(res, 401, { errors: ["Invalid token"] });
     if (path === "/api/frames") {
-      return json(res, 200, { data: [{ id: "4418006", type: "frame_show", attributes: { name: "Kitchen Calendar", household_name: "The Bolles Family", timezone: "America/Chicago", mine: true } }] });
+      return json(res, 200, {
+        data: [
+          {
+            id: "4418006",
+            type: "frame_show",
+            attributes: { name: "Kitchen Calendar", household_name: "The Bolles Family", timezone: "America/Chicago", mine: true },
+          },
+        ],
+      });
     }
     if ((match = path.match(/^\/api\/frames\/([^/]+)\/calendar_events$/))) {
       const today = new Date();
@@ -41,14 +58,28 @@ export function createSkylight({ refreshToken }) {
       };
       return json(res, 200, {
         data: [
-          { id: "ev1-1", type: "calendar_event", attributes: { summary: "Dentist — Will", location: "Main St Dental", starts_at: at(0, 16), ends_at: at(0, 17), all_day: false } },
-          { id: "ev2", type: "calendar_event", attributes: { summary: "Family dinner at Grandma's", location: null, starts_at: at(1, 17), ends_at: at(1, 19), all_day: false } },
+          {
+            id: "ev1-1",
+            type: "calendar_event",
+            attributes: { summary: "Dentist — Will", location: "Main St Dental", starts_at: at(0, 16), ends_at: at(0, 17), all_day: false },
+          },
+          {
+            id: "ev2",
+            type: "calendar_event",
+            attributes: { summary: "Family dinner at Grandma's", location: null, starts_at: at(1, 17), ends_at: at(1, 19), all_day: false },
+          },
         ],
       });
     }
     if ((match = path.match(/^\/api\/frames\/([^/]+)\/chores$/))) {
       if (!url.searchParams.get("after") || !url.searchParams.get("before")) return json(res, 422, { errors: ["after can't be blank"] });
-      return json(res, 200, { data: [...state.chores.values()].map((c) => ({ id: c.id, type: "chore", attributes: { ...c, start: isoDate(new Date()), recurring: c.id.includes("-") } })) });
+      return json(res, 200, {
+        data: [...state.chores.values()].map((c) => ({
+          id: c.id,
+          type: "chore",
+          attributes: { ...c, start: isoDate(new Date()), recurring: c.id.includes("-") },
+        })),
+      });
     }
     return notFound(res);
   }

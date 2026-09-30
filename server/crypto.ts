@@ -20,7 +20,7 @@ export function getKey(): Buffer {
     cachedKey = buf;
     return buf;
   }
-  const file = path.join(config.dataDir, "secret.key");
+  const file = path.join(/*turbopackIgnore: true*/ config.dataDir, "secret.key");
   if (fs.existsSync(file)) {
     cachedKey = Buffer.from(fs.readFileSync(file, "utf8").trim(), "base64");
   } else {

@@ -37,7 +37,14 @@ export function CompassView() {
       {q.isLoading ? <Spinner label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data && !q.data.enabled ? (
-        <Empty title="Daily Compass isn’t set up" action={<Link className="underline" href="/settings/connections">Set it up</Link>} />
+        <Empty
+          title="Daily Compass isn’t set up"
+          action={
+            <Link className="underline" href="/settings/connections">
+              Set it up
+            </Link>
+          }
+        />
       ) : null}
       {s && q.data?.enabled ? (
         <Card>

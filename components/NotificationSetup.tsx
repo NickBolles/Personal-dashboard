@@ -36,7 +36,13 @@ export function PushControls() {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span>This device:</span>
         {support === "supported" ? (
-          subscribed ? <Badge tone="ok">Push enabled</Badge> : perm === "denied" ? <Badge tone="danger">Blocked in browser</Badge> : <Badge>Push off</Badge>
+          subscribed ? (
+            <Badge tone="ok">Push enabled</Badge>
+          ) : perm === "denied" ? (
+            <Badge tone="danger">Blocked in browser</Badge>
+          ) : (
+            <Badge>Push off</Badge>
+          )
         ) : support === "insecure" ? (
           <Badge tone="warn">Needs HTTPS</Badge>
         ) : support === "needs-install" ? (
@@ -45,7 +51,9 @@ export function PushControls() {
           <Badge tone="warn">Not supported in this browser</Badge>
         )}
       </div>
-      {support === "insecure" ? <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Jarvis through its HTTPS address.</p> : null}
+      {support === "insecure" ? (
+        <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Jarvis through its HTTPS address.</p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {support === "supported" && !subscribed ? (
           <Button
@@ -121,11 +129,21 @@ export function QuietHours() {
       <div className="flex flex-wrap gap-3">
         <label className="text-sm">
           <span className="block font-medium">From</span>
-          <input type="time" className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3" value={qh.start} onChange={(e) => m.mutate({ start: e.target.value })} />
+          <input
+            type="time"
+            className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3"
+            value={qh.start}
+            onChange={(e) => m.mutate({ start: e.target.value })}
+          />
         </label>
         <label className="text-sm">
           <span className="block font-medium">Until</span>
-          <input type="time" className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3" value={qh.end} onChange={(e) => m.mutate({ end: e.target.value })} />
+          <input
+            type="time"
+            className="min-h-12 rounded-[10px] border border-line-strong bg-surface px-3"
+            value={qh.end}
+            onChange={(e) => m.mutate({ end: e.target.value })}
+          />
         </label>
       </div>
     </fieldset>

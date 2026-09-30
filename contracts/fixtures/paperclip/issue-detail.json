@@ -1,0 +1,50 @@
+{
+  "id": "0e7f4d0a-2c1b-4a8e-bf1e-7c3d2a1b0f9e",
+  "companyId": "5b0c8a2e-6a0f-4b8e-9d3c-1f2a3b4c5d6e",
+  "identifier": "PAP-224",
+  "issueNumber": 224,
+  "title": "Wire Todoist adapter",
+  "description": "Implement list + close + snooze.",
+  "status": "blocked",
+  "priority": "high",
+  "assigneeAgentId": "3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
+  "assigneeUserId": null,
+  "parentId": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+  "projectId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "goalId": null,
+  "ancestors": [
+    {
+      "id": "9d8c7b6a-5f4e-4d3c-2b1a-0f9e8d7c6b5a",
+      "identifier": "PAP-200",
+      "title": "Personal dashboard v1",
+      "description": null,
+      "status": "in_progress",
+      "priority": "high",
+      "assigneeAgentId": null,
+      "assigneeUserId": "user_01HX",
+      "projectId": null,
+      "goalId": null,
+      "project": null,
+      "goal": null
+    }
+  ],
+  "blockedBy": [
+    {
+      "id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "identifier": "PAP-219",
+      "title": "Decide token storage",
+      "status": "in_review",
+      "priority": "medium",
+      "assigneeAgentId": null,
+      "assigneeUserId": "user_01HX"
+    }
+  ],
+  "blocks": [],
+  "documentSummaries": [],
+  "planDocument": null,
+  "startedAt": null,
+  "completedAt": null,
+  "cancelledAt": null,
+  "createdAt": "2026-09-28T10:00:00.000Z",
+  "updatedAt": "2026-09-29T16:20:00.000Z"
+}

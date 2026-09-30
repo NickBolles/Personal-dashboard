@@ -1,0 +1,24 @@
+# Standalone demo without Traefik: docker compose -f docker-compose.demo.yml up --build
+# Then open http://localhost:3000 and use setup code DEMO.
+name: jarvis-demo
+
+services:
+  jarvis:
+    build: .
+    environment:
+      JARVIS_SETUP_CODE: DEMO
+      JARVIS_MOCK_UPSTREAM_URL: http://mock:4010
+      JARVIS_SECURE_COOKIES: "false"
+      TZ: America/Chicago
+    volumes:
+      - demo-data:/data
+    ports:
+      - "3000:3000"
+    depends_on: [mock]
+  mock:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+
+volumes:
+  demo-data:

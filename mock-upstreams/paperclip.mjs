@@ -38,10 +38,21 @@ export function createPaperclip({ apiKey }) {
   }
 
   function summary(i) {
-    return { id: i.id, identifier: i.identifier, title: i.title, status: i.status, priority: i.priority, assigneeAgentId: i.assigneeAgentId, assigneeUserId: i.assigneeUserId };
+    return {
+      id: i.id,
+      identifier: i.identifier,
+      title: i.title,
+      status: i.status,
+      priority: i.priority,
+      assigneeAgentId: i.assigneeAgentId,
+      assigneeUserId: i.assigneeUserId,
+    };
   }
   function withRelations(i) {
-    const blockedBy = i.blockedByIds.map((id) => state.issues.get(id)).filter(Boolean).map(summary);
+    const blockedBy = i.blockedByIds
+      .map((id) => state.issues.get(id))
+      .filter(Boolean)
+      .map(summary);
     const blocks = [...state.issues.values()].filter((x) => x.blockedByIds.includes(i.id)).map(summary);
     const { blockedByIds, ...rest } = i;
     return { ...rest, blockedBy, blocks };
@@ -70,12 +81,34 @@ export function createPaperclip({ apiKey }) {
     if (!bearerOk(req, apiKey)) return json(res, 401, { error: "Agent token did not verify; obtain fresh credentials and retry" });
     const m = req.method;
     let match;
-    if (path === "/api/cli-auth/me") return json(res, 200, { user: { id: "user_nick", name: "Nick" }, userId: "user_nick", companyIds: [COMPANY], source: "board_key" });
+    if (path === "/api/cli-auth/me")
+      return json(res, 200, { user: { id: "user_nick", name: "Nick" }, userId: "user_nick", companyIds: [COMPANY], source: "board_key" });
     if (path === "/api/companies") {
-      return json(res, 200, [{ id: COMPANY, name: "Bolles HQ", status: "active", issuePrefix: "PAP", issueCounter: state.counter, createdAt: "2026-06-01T12:00:00.000Z", updatedAt: new Date().toISOString() }]);
+      return json(res, 200, [
+        {
+          id: COMPANY,
+          name: "Bolles HQ",
+          status: "active",
+          issuePrefix: "PAP",
+          issueCounter: state.counter,
+          createdAt: "2026-06-01T12:00:00.000Z",
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
     }
     if ((match = path.match(/^\/api\/companies\/([^/]+)\/projects$/))) {
-      return json(res, 200, [{ id: PROJECT, companyId: COMPANY, urlKey: "platform", name: "Platform", status: "in_progress", taskCount: state.issues.size, createdAt: "2026-07-01T00:00:00.000Z", updatedAt: new Date().toISOString() }]);
+      return json(res, 200, [
+        {
+          id: PROJECT,
+          companyId: COMPANY,
+          urlKey: "platform",
+          name: "Platform",
+          status: "in_progress",
+          taskCount: state.issues.size,
+          createdAt: "2026-07-01T00:00:00.000Z",
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
     }
     if ((match = path.match(/^\/api\/companies\/([^/]+)\/issues$/)) && m === "GET") {
       let list = [...state.issues.values()];
@@ -116,7 +149,14 @@ export function createPaperclip({ apiKey }) {
       const body = await readBody(req);
       const existing = state.comments.find((c) => c.clientRequestId && c.clientRequestId === body.clientRequestId);
       if (existing) return json(res, 201, existing);
-      const c = { id: randomUUID(), issueId: match[1], clientRequestId: body.clientRequestId, authorType: "user", body: body.body, createdAt: new Date().toISOString() };
+      const c = {
+        id: randomUUID(),
+        issueId: match[1],
+        clientRequestId: body.clientRequestId,
+        authorType: "user",
+        body: body.body,
+        createdAt: new Date().toISOString(),
+      };
       state.comments.push(c);
       return json(res, 201, c);
     }

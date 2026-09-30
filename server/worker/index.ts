@@ -84,7 +84,10 @@ export async function tick(now = new Date()) {
           category: "overdue",
           severity: "normal",
           title: overdue.length === 1 ? "1 overdue todo" : `${overdue.length} overdue todos`,
-          body: overdue.slice(0, 3).map((a) => a.title).join(" · "),
+          body: overdue
+            .slice(0, 3)
+            .map((a) => a.title)
+            .join(" · "),
           source: "todos",
           deepLink: "/todos",
           dedupeKey: `overdue:${ctx.today}`,

@@ -60,22 +60,14 @@ export const HermesDiscoveryClient = {
 /** Sessions, messages, fork, metadata. */
 export const HermesSessionClient = {
   list: (c: HermesConn, q: { limit?: number; offset?: number; includeChildren?: boolean } = {}) =>
-    call(
-      c,
-      { path: "/api/sessions", query: { limit: q.limit ?? 50, offset: q.offset ?? 0, include_children: q.includeChildren ?? true } },
-      sessionListSchema,
-    ),
+    call(c, { path: "/api/sessions", query: { limit: q.limit ?? 50, offset: q.offset ?? 0, include_children: q.includeChildren ?? true } }, sessionListSchema),
   get: (c: HermesConn, id: string) => call(c, { path: `/api/sessions/${encodeURIComponent(id)}` }, sessionEnvelopeSchema),
   create: (c: HermesConn, body: { title?: string; source?: string; model?: string; provider?: string }) =>
     call(c, { path: "/api/sessions", method: "POST", body }, sessionEnvelopeSchema),
   update: (c: HermesConn, id: string, body: { title?: string | null; archived?: boolean; pinned?: boolean; unread?: boolean }) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "PATCH", body }, sessionEnvelopeSchema),
   messages: (c: HermesConn, id: string, q: { limit?: number; order?: "oldest" | "latest" } = {}) =>
-    call(
-      c,
-      { path: `/api/sessions/${encodeURIComponent(id)}/messages`, query: { limit: q.limit ?? 500, order: q.order ?? "latest" } },
-      messageListSchema,
-    ),
+    call(c, { path: `/api/sessions/${encodeURIComponent(id)}/messages`, query: { limit: q.limit ?? 500, order: q.order ?? "latest" } }, messageListSchema),
   fork: (c: HermesConn, id: string, body: { title?: string }) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}/fork`, method: "POST", body }, sessionEnvelopeSchema),
 };
@@ -122,7 +114,11 @@ export const HermesExecutionClient = {
       timeoutMs: 24 * 60 * 60 * 1000,
     }),
   stop: (c: HermesConn, runId: string) =>
-    call(c, { path: `/v1/runs/${encodeURIComponent(runId)}/stop`, method: "POST" }, z.object({ run_id: z.string().optional(), status: z.string() }).passthrough()),
+    call(
+      c,
+      { path: `/v1/runs/${encodeURIComponent(runId)}/stop`, method: "POST" },
+      z.object({ run_id: z.string().optional(), status: z.string() }).passthrough(),
+    ),
   approve: (c: HermesConn, runId: string, body: { choice: string; request_id?: string }) =>
     call(
       c,
@@ -139,8 +135,7 @@ export const HermesExecutionClient = {
 
 /** Cron jobs. `jobs_admin` capability reads false even when routes exist, so probe. */
 export const HermesAutomationClient = {
-  list: (c: HermesConn) =>
-    call(c, { path: "/api/jobs", query: { include_disabled: true } }, z.object({ jobs: z.array(jobSchema) }).passthrough()),
+  list: (c: HermesConn) => call(c, { path: "/api/jobs", query: { include_disabled: true } }, z.object({ jobs: z.array(jobSchema) }).passthrough()),
   pause: (c: HermesConn, id: string) => call(c, { path: `/api/jobs/${id}/pause`, method: "POST" }, z.object({ job: jobSchema }).passthrough()),
   resume: (c: HermesConn, id: string) => call(c, { path: `/api/jobs/${id}/resume`, method: "POST" }, z.object({ job: jobSchema }).passthrough()),
   run: (c: HermesConn, id: string) => call(c, { path: `/api/jobs/${id}/run`, method: "POST", body: {} }, z.object({ job: jobSchema }).passthrough()),

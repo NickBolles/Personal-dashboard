@@ -1,0 +1,22 @@
+{
+  "object": "hermes.session",
+  "session": {
+    "id": "api_1759200000_a1b2c3d4",
+    "source": "api_server",
+    "model": null,
+    "title": "Dashboard chat",
+    "started_at": 1759200000.123,
+    "ended_at": null,
+    "end_reason": null,
+    "message_count": 4,
+    "tool_call_count": 1,
+    "parent_session_id": null,
+    "last_active": 1759200100.5,
+    "preview": "What files changed…",
+    "pinned": false,
+    "archived": false,
+    "hidden": false,
+    "has_system_prompt": false,
+    "has_model_config": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "object": "list",
+  "session_id": "my-session-1",
+  "data": [
+    { "id": 101, "session_id": "my-session-1", "role": "user", "content": "list files", "timestamp": 1759200001.0 },
+    {
+      "id": 102,
+      "session_id": "my-session-1",
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [{ "id": "call_1", "type": "function", "function": { "name": "terminal", "arguments": "{\"command\":\"ls\"}" } }],
+      "timestamp": 1759200002.0,
+      "finish_reason": "tool_calls"
+    },
+    {
+      "id": 103,
+      "session_id": "my-session-1",
+      "role": "tool",
+      "content": "README.md\nsrc",
+      "tool_call_id": "call_1",
+      "tool_name": "terminal",
+      "timestamp": 1759200003.0
+    },
+    { "id": 104, "session_id": "my-session-1", "role": "assistant", "content": "", "display_kind": "hidden", "timestamp": 1759200003.5 },
+    { "id": 105, "session_id": "my-session-1", "role": "assistant", "content": "Two entries.", "timestamp": 1759200004.0, "finish_reason": "stop" }
+  ],
+  "pagination": { "limit": 500, "offset": 0, "order": "latest", "returned": 5 }
+}

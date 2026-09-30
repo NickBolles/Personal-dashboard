@@ -16,7 +16,14 @@ export function GET() {
       const [pkg, fingerprints] = entry.split("=");
       return {
         relation: ["delegate_permission/common.handle_all_urls"],
-        target: { namespace: "android_app", package_name: pkg!.trim(), sha256_cert_fingerprints: (fingerprints ?? "").split(",").map((f) => f.trim()).filter(Boolean) },
+        target: {
+          namespace: "android_app",
+          package_name: pkg!.trim(),
+          sha256_cert_fingerprints: (fingerprints ?? "")
+            .split(",")
+            .map((f) => f.trim())
+            .filter(Boolean),
+        },
       };
     });
   return NextResponse.json(statements);

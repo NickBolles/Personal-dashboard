@@ -9,5 +9,14 @@ export const POST = api(
     await refreshSource("todos").catch(() => undefined);
     return { id };
   },
-  { body: z.object({ title: z.string().min(1).max(300), notes: z.string().max(2000).optional(), due: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }) },
+  {
+    body: z.object({
+      title: z.string().min(1).max(300),
+      notes: z.string().max(2000).optional(),
+      due: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional(),
+    }),
+  },
 );

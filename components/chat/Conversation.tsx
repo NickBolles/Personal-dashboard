@@ -61,18 +61,27 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const [forkFrom, setForkFrom] = useState<TimelineItem>();
   const [model, setModel] = useState<{ model?: string; provider?: string }>({});
   const [context, setContext] = useState<{ label: string; ref: string }[]>([]);
+  const [lastOutcome, setLastOutcome] = useState<RunPhase>();
+  const clearRunRef = useRef<() => void>(() => {});
 
   const onTerminal = useCallback(
     (s: RunState) => {
       announce(s.phase === "completed" ? "Hermes finished responding" : `Run ${PHASE_LABEL[s.phase].label.toLowerCase()}`);
-      setPendingInput(undefined);
-      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      setLastOutcome(s.phase);
       qc.invalidateQueries({ queryKey: ["sessions"] });
       qc.invalidateQueries({ queryKey: ["home"] });
+      // Once the durable transcript includes this turn, drop the live copy (keeps failure notices).
+      qc.refetchQueries({ queryKey: ["session", sessionId] }).then(() => {
+        setPendingInput(undefined);
+        if (s.phase === "completed") clearRunRef.current();
+      });
     },
     [announce, qc, sessionId],
   );
   const run = useRunStream(onTerminal);
+  useEffect(() => {
+    clearRunRef.current = run.clear;
+  });
 
   // Resume an active run (after refresh/navigation) or one passed in the URL.
   const resumed = useRef<string | null>(null);
@@ -183,9 +192,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     );
   }
 
-  const phase = run.state.runId ? run.state.phase : undefined;
+  const phase = run.state.runId ? run.state.phase : lastOutcome;
   const liveActive = run.active;
-  const showLive = Boolean(run.state.runId) && (liveActive || !isTerminal(run.state.phase) || run.state.text || run.state.activity.length);
+  const showLive = Boolean(run.state.runId) && (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
@@ -194,8 +203,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online },
     { label: "Model…", onSelect: () => setDialog("model") },
     { label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online },
-    { label: session!.pinned ? "Unpin" : "Pin", onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"), disabled: !online },
-    { label: session!.archived ? "Unarchive" : "Archive", onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"), disabled: !online },
+    {
+      label: session!.pinned ? "Unpin" : "Pin",
+      onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"),
+      disabled: !online,
+    },
+    {
+      label: session!.archived ? "Unarchive" : "Archive",
+      onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"),
+      disabled: !online,
+    },
     {
       label: "Copy link",
       onSelect: () => {
@@ -238,8 +255,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   ))}
                 </span>
               ) : null}
-              {detail.links.map((l) => (
-                <Link key={l.id} href="/initiatives" className="rounded-full border border-line px-2 py-0.5 font-mono">
+              {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
+                <Link key={l.targetId} href="/initiatives" data-dynamic className="rounded-full border border-line px-2 py-0.5 font-mono" title={l.targetTitle}>
                   {l.targetIdentifier}
                 </Link>
               ))}
@@ -252,7 +269,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       </header>
 
       <div className="flex-1 space-y-4 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
-        {detail.timeline.length === 0 && !showLive && !pendingInput ? <p className="py-10 text-center text-muted">Say hello to start the conversation.</p> : null}
+        {detail.timeline.length === 0 && !showLive && !pendingInput ? (
+          <p className="py-10 text-center text-muted">Say hello to start the conversation.</p>
+        ) : null}
         <ol className="space-y-4">
           {detail.timeline.map((item) => (
             <TimelineRow
@@ -308,7 +327,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
           kvSet(`model:${sessionId}`, m);
         }}
       />
-      <ContextPicker open={dialog === "context"} onClose={() => setDialog(null)} onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))} />
+      <ContextPicker
+        open={dialog === "context"}
+        onClose={() => setDialog(null)}
+        onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))}
+      />
     </div>
   );
 }
@@ -378,7 +401,12 @@ function MessageMeta({ time, onFork, who }: { time?: string; onFork: () => void;
   return (
     <div className="flex items-center gap-1 text-xs text-muted">
       {time ? <span>{time}</span> : null}
-      <button type="button" onClick={onFork} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 hover:bg-surface-2" aria-label={`Fork from ${who}${time ? ` at ${time}` : ""}`}>
+      <button
+        type="button"
+        onClick={onFork}
+        className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 hover:bg-surface-2"
+        aria-label={`Fork from ${who}${time ? ` at ${time}` : ""}`}
+      >
         <ForkIcon className="h-3.5 w-3.5" /> Fork from here
       </button>
     </div>
@@ -395,7 +423,12 @@ function ActivityRow({ a }: { a: Activity }) {
   const status = !a.done ? "running" : a.kind === "tool" && a.error ? "failed" : "done";
   return (
     <li>
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted hover:bg-surface-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted hover:bg-surface-2"
+      >
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className={cx("text-xs", status === "failed" && "text-danger")}>{status}</span>
@@ -418,7 +451,13 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
   const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
   return (
     <section aria-label="Current run" className="space-y-2">
-      {state.activity.length ? <ul className="space-y-1">{state.activity.map((a) => <ActivityRow key={a.id} a={a} />)}</ul> : null}
+      {state.activity.length ? (
+        <ul className="space-y-1">
+          {state.activity.map((a) => (
+            <ActivityRow key={a.id} a={a} />
+          ))}
+        </ul>
+      ) : null}
 
       {state.approval ? (
         <div role="group" aria-labelledby="approval-h" className="rounded-2xl border-2 border-warn bg-warn-soft p-4">
@@ -462,7 +501,9 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
         </div>
       ) : null}
 
-      {state.steerQueued > 0 && !isTerminal(state.phase) ? <p className="text-xs text-muted">Guidance queued ({state.steerQueued}) — Hermes will pick it up at the next step.</p> : null}
+      {state.steerQueued > 0 && !isTerminal(state.phase) ? (
+        <p className="text-xs text-muted">Guidance queued ({state.steerQueued}) — Hermes will pick it up at the next step.</p>
+      ) : null}
       {state.pendingSteer ? <p className="text-xs text-warn">Not consumed before the run ended: “{state.pendingSteer}”</p> : null}
       {state.phase === "failed" || state.phase === "interrupted" ? (
         <p role="alert" className="text-sm text-danger">
@@ -574,7 +615,12 @@ function Composer({
         <ul className="mb-2 flex flex-wrap gap-1" aria-label="Attached context">
           {context.map((c) => (
             <li key={c.ref}>
-              <button type="button" onClick={() => onRemoveContext(c.ref)} className="min-h-9 rounded-full border border-line px-3 text-xs" aria-label={`Remove context ${c.label}`}>
+              <button
+                type="button"
+                onClick={() => onRemoveContext(c.ref)}
+                className="min-h-9 rounded-full border border-line px-3 text-xs"
+                aria-label={`Remove context ${c.label}`}
+              >
                 {c.label} ✕
               </button>
             </li>

@@ -5,6 +5,7 @@ import { UpstreamError } from "@/server/http/errors";
 import { resolveIntegration, saveIntegration } from "@/integrations/store";
 import { sha256 } from "@/server/crypto";
 import { config } from "@/server/config";
+import { processSingleton } from "@/server/singleton";
 
 export const GOOGLE_TASKS_SCOPE = "https://www.googleapis.com/auth/tasks";
 
@@ -32,7 +33,7 @@ const tokenSchema = z.object({
 });
 
 type Cached = { token: string; expiresAt: number };
-const cache = new Map<string, Cached>();
+const cache = processSingleton("google_token_cache", () => new Map<string, Cached>());
 
 function settings() {
   const r = resolveIntegration("todos");
@@ -106,7 +107,12 @@ export async function exchangeCode(code: string, redirectUri: string) {
     client_id: s.clientId,
     client_secret: s.clientSecret,
   });
-  if (!t.refresh_token) throw new UpstreamError("Google", "bad_response", "Google did not return a refresh token. Remove Jarvis from your Google account's third-party access and try again.");
+  if (!t.refresh_token)
+    throw new UpstreamError(
+      "Google",
+      "bad_response",
+      "Google did not return a refresh token. Remove Jarvis from your Google account's third-party access and try again.",
+    );
   saveIntegration("todos", { enabled: true, config: { provider: "google_tasks" }, secrets: { refreshToken: t.refresh_token } });
   cache.clear();
 }
@@ -148,9 +154,7 @@ export const GoogleTasksClient = {
   },
   patch: async (id: string, body: Partial<Pick<GoogleTask, "status" | "due" | "title" | "notes">>) => {
     const s = settings();
-    return googleTaskSchema.parse(
-      await api(`/tasks/v1/lists/${encodeURIComponent(s.taskListId)}/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }),
-    );
+    return googleTaskSchema.parse(await api(`/tasks/v1/lists/${encodeURIComponent(s.taskListId)}/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body }));
   },
 };
 

@@ -20,12 +20,7 @@ export function redact(value: unknown, depth = 0): unknown {
   if (depth > 6) return "[depth]";
   if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
   if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
-        k,
-        SECRET_KEYS.test(k) ? "[redacted]" : redact(v, depth + 1),
-      ]),
-    );
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, SECRET_KEYS.test(k) ? "[redacted]" : redact(v, depth + 1)]));
   }
   if (typeof value === "string" && /^(Bearer\s+)?[A-Za-z0-9_\-.]{40,}$/.test(value)) return "[redacted]";
   return value;

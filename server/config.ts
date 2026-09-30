@@ -15,10 +15,10 @@ function bool(v: string | undefined, fallback = false) {
 
 export const config = {
   get dataDir() {
-    return path.resolve(process.env.JARVIS_DATA_DIR ?? "./data");
+    return path.resolve(/*turbopackIgnore: true*/ process.env.JARVIS_DATA_DIR ?? "./data");
   },
   get databasePath() {
-    return process.env.JARVIS_DB_PATH ?? path.join(this.dataDir, "jarvis.db");
+    return process.env.JARVIS_DB_PATH ?? path.join(/*turbopackIgnore: true*/ this.dataDir, "jarvis.db");
   },
   /** 32-byte key, base64. Falls back to a generated key file in the data dir. */
   get secretKey() {
@@ -70,7 +70,7 @@ export const config = {
   },
   /** Upper bound for concurrent Hermes SSE relays (kept below Hermes' own limit). */
   get maxStreams() {
-    return Number(process.env.JARVIS_MAX_STREAMS ?? 8);
+    return Number(process.env.JARVIS_MAX_STREAMS ?? 16);
   },
   get maxBodyBytes() {
     return Number(process.env.JARVIS_MAX_BODY_BYTES ?? 256 * 1024);

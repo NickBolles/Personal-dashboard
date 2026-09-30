@@ -75,7 +75,5 @@ export const HomeAssistantClient = {
     return z.array(haTodoItemSchema).parse(res.service_response?.[entityId]?.items ?? []);
   },
   calendarEvents: async (c: HaConn, entityId: string, start: string, end: string) =>
-    z.array(haCalendarEventSchema).parse(
-      await req(c, `/api/calendars/${encodeURIComponent(entityId)}`, { query: { start, end } }),
-    ),
+    z.array(haCalendarEventSchema).parse(await req(c, `/api/calendars/${encodeURIComponent(entityId)}`, { query: { start, end } })),
 };

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { upstream } from "@/server/http/fetch";
 import { UpstreamError } from "@/server/http/errors";
 import { resolveIntegration } from "@/integrations/store";
+import { processSingleton } from "@/server/singleton";
 
 /** Paperclip DTOs (paperclipai/paperclip @ f38b5693). Lenient: many optional fields exist upstream. */
 
@@ -73,16 +74,16 @@ function req<T>(c: PaperclipConn, path: string, init: { method?: string; body?: 
   });
 }
 
-let companyCache: { key: string; id: string; prefix?: string } | undefined;
+const companyCache = processSingleton<{ v?: { key: string; id: string; prefix?: string } }>("paperclip_company", () => ({}));
 
 export async function resolveCompany(c: PaperclipConn) {
   const key = `${c.baseUrl}|${c.companyId ?? ""}`;
-  if (companyCache?.key === key) return companyCache;
+  if (companyCache.v?.key === key) return companyCache.v;
   const companies = z.array(companySchema).parse(await req(c, "/companies", { query: { scope: "accessible" } }));
   const company = c.companyId ? companies.find((x) => x.id === c.companyId) : companies[0];
   if (!company) throw new UpstreamError("Paperclip", "not_found", "No accessible Paperclip company");
-  companyCache = { key, id: company.id, prefix: c.issuePrefix ?? company.issuePrefix ?? undefined };
-  return companyCache;
+  companyCache.v = { key, id: company.id, prefix: c.issuePrefix ?? company.issuePrefix ?? undefined };
+  return companyCache.v;
 }
 
 export const PaperclipClient = {
@@ -122,5 +123,5 @@ export function issueUrl(c: PaperclipConn, prefix: string | undefined, issue: Pi
 }
 
 export function __resetCompanyCache() {
-  companyCache = undefined;
+  companyCache.v = undefined;
 }

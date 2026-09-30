@@ -10,7 +10,14 @@ export function SourceState({ status, hasData }: { status?: SourceStatus; hasDat
   if (!status) return null;
   if (status.state === "unconfigured" || status.state === "disabled") {
     return (
-      <Empty title={`${status.label} isn’t connected`} action={<Link className="underline" href="/settings/connections">Connect {status.label}</Link>}>
+      <Empty
+        title={`${status.label} isn’t connected`}
+        action={
+          <Link className="underline" href="/settings/connections">
+            Connect {status.label}
+          </Link>
+        }
+      >
         Jarvis doesn’t know this source’s state yet.
       </Empty>
     );

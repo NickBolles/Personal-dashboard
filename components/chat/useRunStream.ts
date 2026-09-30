@@ -84,13 +84,24 @@ export function reduceRun(state: RunState, a: Action): RunState {
           return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at }] };
         case "subagent.completed": {
           const idx = s.activity.findIndex((x) => x.kind === "subagent" && (x.id === e.id || (!x.done && x.goal === e.goal)));
-          if (idx === -1) return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at }] };
+          if (idx === -1)
+            return {
+              ...s,
+              activity: [
+                ...s.activity,
+                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at },
+              ],
+            };
           const next = [...s.activity];
           next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), summary: e.summary, status: e.status, done: true };
           return { ...s, activity: next };
         }
         case "approval.requested":
-          return { ...s, phase: "waiting_for_approval", approval: { requestId: e.requestId, command: e.command, description: e.description, choices: e.choices } };
+          return {
+            ...s,
+            phase: "waiting_for_approval",
+            approval: { requestId: e.requestId, command: e.command, description: e.description, choices: e.choices },
+          };
         case "approval.resolved":
           return { ...s, phase: s.phase === "stopping" ? "stopping" : "running", approval: undefined };
         case "steer.queued":
@@ -122,6 +133,8 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     terminalCb.current = onTerminal;
   });
   const finished = useRef<string | null>(null);
+  // Connection facts updated synchronously (not via render) so connect() never sees a stale run.
+  const conn = useRef<{ runId?: string; lastSeq?: number; attempts: number }>({ attempts: 0 });
 
   const cleanup = useCallback(() => {
     es.current?.close();
@@ -130,17 +143,25 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     timer.current = null;
   }, []);
 
+  // finish() marks the run as done; the effect below notifies once React has committed the terminal state.
+  const pendingFinish = useRef<string | null>(null);
   const finish = useCallback(() => {
-    const s = stateRef.current;
-    if (s.runId && finished.current !== s.runId) {
-      finished.current = s.runId;
+    const runId = conn.current.runId;
+    if (runId && finished.current !== runId) {
+      pendingFinish.current = runId;
       cleanup();
-      setTimeout(() => terminalCb.current(stateRef.current), 0);
     }
   }, [cleanup]);
+  useEffect(() => {
+    if (state.runId && pendingFinish.current === state.runId && isTerminal(state.phase) && finished.current !== state.runId) {
+      finished.current = state.runId;
+      pendingFinish.current = null;
+      terminalCb.current(state);
+    }
+  }, [state]);
 
   const reconcile = useCallback(async (): Promise<RunView | undefined> => {
-    const runId = stateRef.current.runId;
+    const runId = conn.current.runId;
     if (!runId) return;
     try {
       const view = await api.get<RunView>(`/api/hermes/runs/${encodeURIComponent(runId)}`);
@@ -154,18 +175,19 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   const connectRef = useRef<() => void>(() => {});
 
   const scheduleReconnect = useCallback(() => {
-    const n = stateRef.current.attempts;
+    const n = conn.current.attempts;
     if (n >= BACKOFF.length) {
       dispatch({ type: "phase", phase: "disconnected", error: "Lost connection to Hermes. Retry when ready." });
       return;
     }
+    conn.current.attempts = n + 1;
     dispatch({ type: "attempt", n: n + 1 });
     timer.current = setTimeout(() => connectRef.current(), BACKOFF[n]);
   }, []);
 
   const onBroken = useCallback(async () => {
     cleanup();
-    if (!stateRef.current.runId) return;
+    if (!conn.current.runId) return;
     dispatch({ type: "phase", phase: "reconnecting" });
     const view = await reconcile();
     if (view && isTerminal(view.status)) return finish();
@@ -177,11 +199,11 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   }, [cleanup, reconcile, finish, scheduleReconnect]);
 
   const connect = useCallback(() => {
-    const s = stateRef.current;
-    if (!s.runId) return;
+    const c = conn.current;
+    if (!c.runId) return;
     cleanup();
-    const q = s.lastSeq !== undefined ? `?lastSeq=${s.lastSeq}` : "";
-    const source = new EventSource(`/api/hermes/runs/${encodeURIComponent(s.runId)}/events${q}`);
+    const q = c.lastSeq !== undefined ? `?lastSeq=${c.lastSeq}` : "";
+    const source = new EventSource(`/api/hermes/runs/${encodeURIComponent(c.runId)}/events${q}`);
     es.current = source;
     source.onmessage = (msg) => {
       let ev: RunEvent;
@@ -195,6 +217,8 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
         return;
       }
       const seq = msg.lastEventId && /^\d+$/.test(msg.lastEventId) ? Number(msg.lastEventId) : undefined;
+      if (seq !== undefined) conn.current.lastSeq = seq;
+      conn.current.attempts = 0;
       dispatch({ type: "event", event: ev, seq });
       if (ev.type === "run.terminal") {
         // Confirm with the authoritative status before finalizing.
@@ -213,14 +237,16 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     (runId: string, phase: RunPhase = "running") => {
       cleanup();
       finished.current = null;
+      pendingFinish.current = null;
+      conn.current = { runId, attempts: 0 };
       dispatch({ type: "reset", runId, phase });
-      setTimeout(() => connectRef.current(), 0);
+      connectRef.current();
     },
     [cleanup],
   );
 
   const stop = useCallback(async () => {
-    const runId = stateRef.current.runId;
+    const runId = conn.current.runId;
     if (!runId) return;
     dispatch({ type: "phase", phase: "stopping" });
     try {
@@ -236,6 +262,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   }, [finish, reconcile]);
 
   const retry = useCallback(() => {
+    conn.current.attempts = 0;
     dispatch({ type: "attempt", n: 0 });
     dispatch({ type: "phase", phase: "reconnecting" });
     connectRef.current();
@@ -243,7 +270,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
 
   useEffect(() => {
     const on = () => {
-      if (stateRef.current.runId && (stateRef.current.phase === "disconnected" || stateRef.current.phase === "reconnecting")) retry();
+      if (conn.current.runId && (stateRef.current.phase === "disconnected" || stateRef.current.phase === "reconnecting")) retry();
     };
     window.addEventListener("online", on);
     return () => {
@@ -252,6 +279,11 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     };
   }, [cleanup, retry]);
 
+  const clear = useCallback(() => {
+    cleanup();
+    conn.current = { attempts: 0 };
+    dispatch({ type: "reset" });
+  }, [cleanup]);
   const active = Boolean(state.runId) && !isTerminal(state.phase);
-  return { state, start, stop, retry, active, clear: () => dispatch({ type: "reset" }) };
+  return { state, start, stop, retry, active, clear };
 }

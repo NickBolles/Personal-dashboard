@@ -78,11 +78,7 @@ export function compassPrompt() {
 }
 
 export function recordCompassSession(date: string, sessionId: string) {
-  getDb()
-    .insert(schema.compassEntries)
-    .values({ date, sessionId })
-    .onConflictDoUpdate({ target: schema.compassEntries.date, set: { sessionId } })
-    .run();
+  getDb().insert(schema.compassEntries).values({ date, sessionId }).onConflictDoUpdate({ target: schema.compassEntries.date, set: { sessionId } }).run();
 }
 
 export async function completeCompass(date: string, actor: string, correlationId: string) {

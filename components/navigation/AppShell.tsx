@@ -86,11 +86,16 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     });
   };
 
-  const badge = unread > 0 ? (
-    <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[11px] font-semibold leading-5 text-white dark:text-black">
-      {unread > 99 ? "99+" : unread}
-    </span>
-  ) : null;
+  const badge =
+    unread > 0 ? (
+      <span
+        aria-hidden="true"
+        data-dynamic
+        className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[11px] font-semibold leading-5 text-white dark:text-black"
+      >
+        {unread > 99 ? "99+" : unread}
+      </span>
+    ) : null;
   const badgeLabel = unread > 0 ? `, ${unread} unread` : "";
 
   const railItem = (d: Dest) => {
@@ -101,6 +106,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         <Link
           href={hrefFor(d)}
           aria-current={active ? "page" : undefined}
+          aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
           title={collapsed ? d.label : undefined}
           className={cx(
             "relative flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium",
@@ -126,10 +132,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       {/* Desktop / tablet rail */}
       <nav
         aria-label="Primary"
-        className={cx(
-          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface px-2 py-3 lg:flex",
-          collapsed ? "w-[72px]" : "w-[260px]",
-        )}
+        className={cx("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface px-2 py-3 lg:flex", collapsed ? "w-[72px]" : "w-[260px]")}
       >
         <div className={cx("mb-3 flex items-center", collapsed ? "justify-center" : "justify-between px-2")}>
           {!collapsed ? <span className="text-lg font-semibold tracking-tight">Jarvis</span> : null}
@@ -166,7 +169,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
 
       {/* Mobile bottom bar: fixed four items */}
       <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <ul className="mx-auto grid max-w-xl grid-cols-4">
+        <ul className="mx-auto grid max-w-xl grid-cols-4 overflow-hidden">
           {[...PRIMARY, MORE].map((d) => {
             const active = d.key === "more" ? MORE.match(pathname) && !PRIMARY.some((p) => p.match(pathname)) : d.match(pathname);
             const Icon = d.icon;
@@ -175,16 +178,17 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                 <Link
                   href={d.key === "more" ? "/more" : hrefFor(d)}
                   aria-current={active ? "page" : undefined}
-                  className={cx("flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[12px] font-medium", active ? "text-accent" : "text-muted")}
+                  aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
+                  className={cx(
+                    "flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[12px] font-medium",
+                    active ? "text-accent" : "text-muted",
+                  )}
                 >
                   <span className="relative">
                     <Icon className="h-6 w-6" />
                     {d.key === "alerts" ? badge : null}
                   </span>
-                  <span>
-                    {d.label}
-                    {d.key === "alerts" ? <span className="sr-only">{badgeLabel}</span> : null}
-                  </span>
+                  <span className="block max-w-full truncate px-1">{d.label}</span>
                 </Link>
               </li>
             );

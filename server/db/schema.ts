@@ -88,10 +88,7 @@ export const notifications = sqliteTable(
     pushAttemptedAt: text("push_attempted_at"),
     scheduledFor: text("scheduled_for"),
   },
-  (t) => [
-    uniqueIndex("notifications_dedupe_idx").on(t.userId, t.dedupeKey),
-    index("notifications_created_idx").on(t.createdAt),
-  ],
+  (t) => [uniqueIndex("notifications_dedupe_idx").on(t.userId, t.dedupeKey), index("notifications_created_idx").on(t.createdAt)],
 );
 
 export const pushSubscriptions = sqliteTable("push_subscriptions", {
@@ -123,14 +120,7 @@ export const entityLinks = sqliteTable(
     lastVerifiedAt: text("last_verified_at").notNull().default(now),
   },
   (t) => [
-    uniqueIndex("entity_links_unique").on(
-      t.sourceType,
-      t.sourceId,
-      t.targetSystem,
-      t.targetType,
-      t.targetId,
-      t.relationship,
-    ),
+    uniqueIndex("entity_links_unique").on(t.sourceType, t.sourceId, t.targetSystem, t.targetType, t.targetId, t.relationship),
     index("entity_links_target_idx").on(t.targetSystem, t.targetId),
   ],
 );

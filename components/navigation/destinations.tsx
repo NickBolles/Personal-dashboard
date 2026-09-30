@@ -1,15 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  BellIcon,
-  BrainIcon,
-  CalendarIcon,
-  ChatIcon,
-  CompassIcon,
-  FlagIcon,
-  HomeIcon,
-  HouseIcon,
-  TodoIcon,
-} from "@/components/icons";
+import { BellIcon, BrainIcon, CalendarIcon, ChatIcon, CompassIcon, FlagIcon, HomeIcon, HouseIcon, TodoIcon } from "@/components/icons";
 
 export type Dest = { key: string; href: string; label: string; icon: (p: { className?: string }) => ReactNode; match: (p: string) => boolean };
 
@@ -27,4 +17,3 @@ export const DESTINATIONS: Dest[] = [
   { key: "home-control", href: "/home-control", label: "Home", icon: HouseIcon, match: (p) => p.startsWith("/home-control") },
   { key: "brain", href: "/brain", label: "Brain", icon: BrainIcon, match: (p) => p.startsWith("/brain") },
 ];
-

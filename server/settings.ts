@@ -16,12 +16,7 @@ export const preferencesSchema = z.object({
     .default({ enabled: true, start: "22:00", end: "07:00" }),
   notificationCategories: z
     .record(z.string(), z.object({ push: z.boolean() }))
-    .default(
-      Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c.id, { push: c.defaultPush }])) as Record<
-        string,
-        { push: boolean }
-      >,
-    ),
+    .default(Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c.id, { push: c.defaultPush }])) as Record<string, { push: boolean }>),
   hermes: z
     .object({
       defaultModel: z.string().optional(),
@@ -29,7 +24,12 @@ export const preferencesSchema = z.object({
       showToolDetails: z.boolean().default(false),
     })
     .default({ showToolDetails: false }),
-  integrationFailureAlertMinutes: z.number().int().min(5).max(24 * 60).default(30),
+  integrationFailureAlertMinutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(24 * 60)
+    .default(30),
   onboarding: z
     .object({
       completedAt: z.string().optional(),

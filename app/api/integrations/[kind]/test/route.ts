@@ -15,7 +15,12 @@ export const POST = api<undefined, { kind: string }>(async ({ params }) => {
   try {
     result = await adapter.test();
   } catch (err) {
-    result = { ok: false, checkedAt: new Date().toISOString(), summary: (err as Error).message, checks: [{ name: "Test", ok: false, detail: (err as Error).message }] };
+    result = {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      summary: (err as Error).message,
+      checks: [{ name: "Test", ok: false, detail: (err as Error).message }],
+    };
   }
   recordTestResult(params.kind as IntegrationKind, result);
   if (result.ok) {

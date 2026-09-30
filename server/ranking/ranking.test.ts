@@ -41,25 +41,9 @@ describe("classifyDue", () => {
 
 describe("rankActions", () => {
   it("orders every priority reason deterministically", () => {
-    const reasons: PriorityReason[] = [
-      "upcoming",
-      "today",
-      "checkin_window",
-      "due_soon",
-      "overdue",
-      "awaiting_user",
-      "critical",
-    ];
+    const reasons: PriorityReason[] = ["upcoming", "today", "checkin_window", "due_soon", "overdue", "awaiting_user", "critical"];
     const ranked = rankActions(reasons.map((r) => action({ id: r, priorityReason: r })));
-    expect(ranked.map((a) => a.priorityReason)).toEqual([
-      "critical",
-      "awaiting_user",
-      "overdue",
-      "due_soon",
-      "checkin_window",
-      "today",
-      "upcoming",
-    ]);
+    expect(ranked.map((a) => a.priorityReason)).toEqual(["critical", "awaiting_user", "overdue", "due_soon", "checkin_window", "today", "upcoming"]);
   });
 
   it("tie-breaker 1: pinned first", () => {
@@ -80,10 +64,7 @@ describe("rankActions", () => {
   });
 
   it("tie-breaker 3: most recently changed", () => {
-    const ranked = rankActions([
-      action({ id: "old", updatedAt: "2026-09-29T00:00:00Z" }),
-      action({ id: "new", updatedAt: "2026-09-30T00:00:00Z" }),
-    ]);
+    const ranked = rankActions([action({ id: "old", updatedAt: "2026-09-29T00:00:00Z" }), action({ id: "new", updatedAt: "2026-09-30T00:00:00Z" })]);
     expect(ranked.map((a) => a.id)).toEqual(["new", "old"]);
   });
 
@@ -97,17 +78,11 @@ describe("rankActions", () => {
 
 describe("dedupeActions", () => {
   it("never merges on similar titles", () => {
-    const out = dedupeActions([
-      action({ id: "1", title: "Call mom", sourceId: "x" }),
-      action({ id: "2", title: "Call mom", sourceId: "y" }),
-    ]);
+    const out = dedupeActions([action({ id: "1", title: "Call mom", sourceId: "x" }), action({ id: "2", title: "Call mom", sourceId: "y" })]);
     expect(out).toHaveLength(2);
   });
   it("merges the same source record and keeps the higher priority", () => {
-    const out = dedupeActions([
-      action({ id: "1", sourceId: "x", priorityReason: "today" }),
-      action({ id: "2", sourceId: "x", priorityReason: "overdue" }),
-    ]);
+    const out = dedupeActions([action({ id: "1", sourceId: "x", priorityReason: "today" }), action({ id: "2", sourceId: "x", priorityReason: "overdue" })]);
     expect(out).toHaveLength(1);
     expect(out[0]!.priorityReason).toBe("overdue");
   });

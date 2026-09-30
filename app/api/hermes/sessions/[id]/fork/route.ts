@@ -9,7 +9,6 @@ const schema = z.object({
   idempotencyKey: z.string().max(255).optional(),
 });
 
-export const POST = api<z.infer<typeof schema>, { id: string }>(
-  ({ params, body, user, correlationId }) => forkSession(user, params.id, body, correlationId),
-  { body: schema },
-);
+export const POST = api<z.infer<typeof schema>, { id: string }>(({ params, body, user, correlationId }) => forkSession(user, params.id, body, correlationId), {
+  body: schema,
+});

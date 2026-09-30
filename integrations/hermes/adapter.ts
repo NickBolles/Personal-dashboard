@@ -20,7 +20,7 @@ export const hermesAdapter: SourceAdapter = {
       const approval = r.pendingApproval ? (JSON.parse(r.pendingApproval) as { description?: string; command?: string }) : {};
       return baseAction("hermes", r.runId, ctx, STALE, {
         title: `Hermes needs approval: ${approval.description ?? "a pending action"}`,
-        detail: approval.command ? `Command: ${approval.command}` : r.inputPreview ?? undefined,
+        detail: approval.command ? `Command: ${approval.command}` : (r.inputPreview ?? undefined),
         status: "open",
         priorityReason: "awaiting_user",
         updatedAt: r.lastCheckedAt ?? r.startedAt,

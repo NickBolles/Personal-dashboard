@@ -34,7 +34,8 @@ export async function currentSubscription() {
 
 export async function enablePush() {
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") throw new Error(permission === "denied" ? "Notifications are blocked for this site. Allow them in your browser settings." : "Permission was not granted.");
+  if (permission !== "granted")
+    throw new Error(permission === "denied" ? "Notifications are blocked for this site. Allow them in your browser settings." : "Permission was not granted.");
   const reg = await registration();
   await navigator.serviceWorker.ready;
   const { publicKey } = await api.get<{ publicKey: string }>("/api/push/vapid");

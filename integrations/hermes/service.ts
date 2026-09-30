@@ -3,15 +3,12 @@ import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { config } from "@/server/config";
+import { processSingleton } from "@/server/singleton";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
 import type { CurrentUser } from "@/server/auth";
-import {
-  hermesConn,
-  HermesExecutionClient,
-  HermesSessionClient,
-} from "./client";
+import { hermesConn, HermesExecutionClient, HermesSessionClient } from "./client";
 import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
 import { RUN_TERMINAL, runEventSchema } from "./types";
 
@@ -58,11 +55,11 @@ function decorate(list: SessionSummary[]): SessionSummary[] {
 }
 
 function touchMeta(user: CurrentUser, sessionId: string, patch: Partial<typeof schema.sessionMeta.$inferInsert> = {}) {
-  db()
+  const insert = db()
     .insert(schema.sessionMeta)
-    .values({ sessionId, userId: user.id, ...patch })
-    .onConflictDoUpdate({ target: schema.sessionMeta.sessionId, set: { ...patch } })
-    .run();
+    .values({ sessionId, userId: user.id, ...patch });
+  if (Object.keys(patch).length) insert.onConflictDoUpdate({ target: schema.sessionMeta.sessionId, set: { ...patch } }).run();
+  else insert.onConflictDoNothing().run();
 }
 
 /**
@@ -89,18 +86,12 @@ export async function listSessions(opts: { includeArchived?: boolean } = {}) {
 export async function getSessionDetail(id: string) {
   assertSessionId(id);
   const conn = hermesConn();
-  const [session, messages] = await Promise.all([
-    HermesSessionClient.get(conn, id),
-    HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 }),
-  ]);
+  const [session, messages] = await Promise.all([HermesSessionClient.get(conn, id), HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 })]);
   const [summary] = decorate([normalizeSession(session.session)]);
   // Children (forks) of this session, for reciprocal lineage links.
   const all = await HermesSessionClient.list(conn, { limit: 200, includeChildren: true }).catch(() => ({ data: [] }));
   const localChildren = db().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.forkedFromSessionId, id)).all();
-  const childIds = new Set([
-    ...all.data.filter((s) => s.parent_session_id === id).map((s) => s.id),
-    ...localChildren.map((c) => c.sessionId),
-  ]);
+  const childIds = new Set([...all.data.filter((s) => s.parent_session_id === id).map((s) => s.id), ...localChildren.map((c) => c.sessionId)]);
   const children = decorate(all.data.filter((s) => childIds.has(s.id)).map(normalizeSession));
   let parent: SessionSummary | undefined;
   if (summary!.parentSessionId) {
@@ -182,12 +173,16 @@ export async function forkSession(user: CurrentUser, id: string, input: ForkInpu
     });
     child = normalizeSession(created.session);
     touchMeta(user, child.id, { forkedFromSessionId: id, forkedFromMessageId: input.fromMessageId });
-    run = await startRun(user, {
-      sessionId: child.id,
-      input: input.prompt,
-      idempotencyKey: input.idempotencyKey ?? `fork-${id}-${input.fromMessageId}-${Date.now()}`,
-      conversationHistory: history,
-    }, correlationId);
+    run = await startRun(
+      user,
+      {
+        sessionId: child.id,
+        input: input.prompt,
+        idempotencyKey: input.idempotencyKey ?? `fork-${id}-${input.fromMessageId}-${Date.now()}`,
+        conversationHistory: history,
+      },
+      correlationId,
+    );
   }
   audit({
     actor: user.id,
@@ -234,12 +229,24 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
     .onConflictDoNothing()
     .run();
   touchMeta(user, r.sessionId, { lastSeenAt: new Date().toISOString() });
-  audit({ actor: user.id, action: "hermes.run.start", source: "hermes", sourceRecord: r.sessionId, result: "ok", correlationId, detail: { runId: res.run_id } });
+  audit({
+    actor: user.id,
+    action: "hermes.run.start",
+    source: "hermes",
+    sourceRecord: r.sessionId,
+    result: "ok",
+    correlationId,
+    detail: { runId: res.run_id },
+  });
   return { runId: res.run_id, sessionId: r.sessionId, status: "running" };
 }
 
 function updateRunRow(runId: string, patch: Partial<typeof schema.runs.$inferInsert>) {
-  db().update(schema.runs).set({ ...patch, lastCheckedAt: new Date().toISOString() }).where(eq(schema.runs.runId, runId)).run();
+  db()
+    .update(schema.runs)
+    .set({ ...patch, lastCheckedAt: new Date().toISOString() })
+    .where(eq(schema.runs.runId, runId))
+    .run();
 }
 
 /** Authoritative state from Hermes. Never infer completion from a closed stream. */
@@ -303,7 +310,15 @@ export async function respondApproval(
     audit({ actor: user.id, action: "hermes.approval", source: "hermes", sourceRecord: runId, result: "ok", correlationId, detail: body });
     return res;
   } catch (err) {
-    audit({ actor: user.id, action: "hermes.approval", source: "hermes", sourceRecord: runId, result: "error", correlationId, detail: { ...body, error: (err as Error).message } });
+    audit({
+      actor: user.id,
+      action: "hermes.approval",
+      source: "hermes",
+      sourceRecord: runId,
+      result: "error",
+      correlationId,
+      detail: { ...body, error: (err as Error).message },
+    });
     throw err;
   }
 }
@@ -317,7 +332,7 @@ export async function steerRun(user: CurrentUser, runId: string, input: string, 
 
 // --- SSE relay ---
 
-let activeStreams = 0;
+const streams = processSingleton("hermes_streams", () => ({ active: 0 }));
 
 /**
  * Relay /v1/runs/:id/events through the BFF as normalized Jarvis events.
@@ -326,8 +341,8 @@ let activeStreams = 0;
  */
 export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string | undefined, clientSignal: AbortSignal) {
   assertRunOwner(user, runId);
-  if (activeStreams >= config.maxStreams) throw new HttpError(429, "too_many_streams", "Too many open streams");
-  activeStreams++;
+  if (streams.active >= config.maxStreams) throw new HttpError(429, "too_many_streams", "Too many open streams");
+  streams.active++;
   const upstreamAbort = new AbortController();
   const onClientAbort = () => upstreamAbort.abort();
   clientSignal.addEventListener("abort", onClientAbort);
@@ -336,27 +351,26 @@ export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string
   const release = () => {
     if (released) return;
     released = true;
-    activeStreams--;
+    streams.active--;
     clientSignal.removeEventListener("abort", onClientAbort);
   };
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const send = (e: RunEvent, id?: number) => {
+      // If the browser is gone, stop relaying and free the slot even if the abort signal never fires.
+      const write = (chunk: string) => {
         try {
-          controller.enqueue(encoder.encode(formatSse(e, id !== undefined ? { id } : {})));
+          controller.enqueue(encoder.encode(chunk));
+          return true;
         } catch {
-          /* client went away */
+          upstreamAbort.abort();
+          release();
+          return false;
         }
       };
-      controller.enqueue(encoder.encode(": relay open\n\nretry: 2000\n\n"));
-      const keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(": keepalive\n\n"));
-        } catch {
-          /* closed */
-        }
-      }, 15_000);
+      const send = (e: RunEvent, id?: number) => write(formatSse(e, id !== undefined ? { id } : {}));
+      write(": relay open\n\nretry: 2000\n\n");
+      const keepalive = setInterval(() => write(": keepalive\n\n"), 15_000);
       let sawTerminal = false;
       try {
         const res = await HermesExecutionClient.events(hermesConn(), runId, lastSeq, upstreamAbort.signal);
@@ -421,7 +435,11 @@ export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string
 
 /** Runs that still need reconciliation (used by the background worker). */
 export function unfinishedRuns() {
-  return db().select().from(schema.runs).where(notInArray(schema.runs.status, [...RUN_TERMINAL])).all();
+  return db()
+    .select()
+    .from(schema.runs)
+    .where(notInArray(schema.runs.status, [...RUN_TERMINAL]))
+    .all();
 }
 
 export function runsNeedingCompletionNotice() {

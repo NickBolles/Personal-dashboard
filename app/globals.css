@@ -74,33 +74,43 @@
   --radius-card: var(--radius);
 }
 
-* {
-  box-sizing: border-box;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
 
-html {
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
-}
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* Keep focused/scrolled-to elements clear of the fixed bottom bar (WCAG 2.4.11). */
+    scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.5;
-  overflow-x: hidden;
-  -webkit-tap-highlight-color: transparent;
-}
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-bottom: 0;
+    }
+  }
 
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 6px;
-}
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
 
-a {
-  color: inherit;
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  a {
+    color: inherit;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

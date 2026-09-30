@@ -1,0 +1,22 @@
+[
+  {
+    "start": { "date": "2026-10-02" },
+    "end": { "date": "2026-10-03" },
+    "summary": "School holiday",
+    "description": null,
+    "location": null,
+    "uid": "holiday-2026-10-02@example",
+    "recurrence_id": null,
+    "rrule": null
+  },
+  {
+    "start": { "dateTime": "2026-09-30T18:00:00-04:00" },
+    "end": { "dateTime": "2026-09-30T19:30:00-04:00" },
+    "summary": "Soccer practice",
+    "description": "Bring water",
+    "location": "Field 3",
+    "uid": "evt-77",
+    "recurrence_id": "20260930T220000Z",
+    "rrule": "FREQ=WEEKLY;BYDAY=WE"
+  }
+]

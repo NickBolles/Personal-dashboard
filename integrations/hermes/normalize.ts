@@ -5,10 +5,11 @@ const iso = (unix?: number | null) => (unix ? new Date(unix * 1000).toISOString(
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 const num = (v: unknown) => (typeof v === "number" ? v : undefined);
 
-const SECRETISH = /(api[_-]?key|token|secret|password|authorization)(["'\s:=]+)([^\s"',]{6,})/gi;
+const SECRETISH = /(api[_-]?key|token|secret|password|authorization)(["'\s:=]+)(?:(bearer|basic)\s+)?([^\s"',]{6,})/gi;
+const BEARER = /\b(bearer)\s+[A-Za-z0-9._~+/=-]{8,}/gi;
 /** Defence in depth: Hermes redacts previews, but never forward anything that still looks like a credential. */
 export function scrub(text: string | undefined) {
-  return text?.replace(SECRETISH, (_m, k, sep) => `${k}${sep}[redacted]`);
+  return text?.replace(SECRETISH, (_m, k, sep, scheme) => `${k}${sep}${scheme ? `${scheme} ` : ""}[redacted]`).replace(BEARER, "$1 [redacted]");
 }
 
 export function normalizeChoices(choices: unknown): ApprovalRequest["choices"] {

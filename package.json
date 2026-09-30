@@ -6,7 +6,20 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "mock": "node mock-upstreams/server.mjs",
+    "dev:demo": "node scripts/dev-demo.mjs",
+    "db:generate": "drizzle-kit generate",
+    "icons": "node scripts/generate-icons.mjs",
+    "secrets:scan": "node scripts/secret-scan.mjs",
+    "backup": "node scripts/backup.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run secrets:scan && npm run test:e2e"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.0",
@@ -41,5 +54,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

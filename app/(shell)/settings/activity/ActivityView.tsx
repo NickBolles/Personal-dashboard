@@ -4,7 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, ErrorNote, PageHeader, Spinner } from "@/components/ui";
 
-type Entry = { id: string; at: string; actor: string; action: string; source?: string; sourceRecord?: string; result: string; correlationId: string; detail?: string };
+type Entry = {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  source?: string;
+  sourceRecord?: string;
+  result: string;
+  correlationId: string;
+  detail?: string;
+};
 
 export function ActivityView() {
   const q = useQuery({ queryKey: ["audit"], queryFn: () => api.get<{ entries: Entry[] }>("/api/audit") });

@@ -4,22 +4,9 @@
  * contained there.
  */
 
-export type ActionSource =
-  | "hermes"
-  | "paperclip"
-  | "todos"
-  | "skylight"
-  | "daily_compass"
-  | "home_assistant";
+export type ActionSource = "hermes" | "paperclip" | "todos" | "skylight" | "daily_compass" | "home_assistant";
 
-export const ACTION_SOURCES: ActionSource[] = [
-  "hermes",
-  "paperclip",
-  "todos",
-  "skylight",
-  "daily_compass",
-  "home_assistant",
-];
+export const ACTION_SOURCES: ActionSource[] = ["hermes", "paperclip", "todos", "skylight", "daily_compass", "home_assistant"];
 
 export const SOURCE_LABELS: Record<ActionSource, string> = {
   hermes: "Hermes",
@@ -30,24 +17,9 @@ export const SOURCE_LABELS: Record<ActionSource, string> = {
   home_assistant: "Home Assistant",
 };
 
-export type PriorityReason =
-  | "critical"
-  | "awaiting_user"
-  | "overdue"
-  | "due_soon"
-  | "checkin_window"
-  | "today"
-  | "upcoming";
+export type PriorityReason = "critical" | "awaiting_user" | "overdue" | "due_soon" | "checkin_window" | "today" | "upcoming";
 
-export const PRIORITY_ORDER: PriorityReason[] = [
-  "critical",
-  "awaiting_user",
-  "overdue",
-  "due_soon",
-  "checkin_window",
-  "today",
-  "upcoming",
-];
+export const PRIORITY_ORDER: PriorityReason[] = ["critical", "awaiting_user", "overdue", "due_soon", "checkin_window", "today", "upcoming"];
 
 export const PRIORITY_LABELS: Record<PriorityReason, string> = {
   critical: "Needs attention now",
@@ -88,14 +60,7 @@ export type NextAction = {
   secondaryActions?: PrimaryActionKind[];
 };
 
-export type SourceState =
-  | "ok"
-  | "stale"
-  | "error"
-  | "unauthorized"
-  | "disabled"
-  | "unconfigured"
-  | "refreshing";
+export type SourceState = "ok" | "stale" | "error" | "unauthorized" | "disabled" | "unconfigured" | "refreshing";
 
 export type SourceStatus = {
   source: ActionSource;
@@ -150,14 +115,7 @@ export type HomePayload = {
 
 export type NotificationSeverity = "info" | "normal" | "high" | "critical";
 
-export type NotificationCategory =
-  | "hermes_input"
-  | "hermes_complete"
-  | "ha_critical"
-  | "overdue"
-  | "daily_compass"
-  | "integration_failure"
-  | "info";
+export type NotificationCategory = "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "integration_failure" | "info";
 
 export const NOTIFICATION_CATEGORIES: {
   id: NotificationCategory;
@@ -235,12 +193,7 @@ export type JarvisNotification = {
   source: ActionSource | "jarvis";
 };
 
-export type EntityLinkRelationship =
-  | "originated_from"
-  | "related_to"
-  | "implements"
-  | "blocked_by"
-  | "evidence_for";
+export type EntityLinkRelationship = "originated_from" | "related_to" | "implements" | "blocked_by" | "evidence_for";
 
 export type EntityLink = {
   id: string;

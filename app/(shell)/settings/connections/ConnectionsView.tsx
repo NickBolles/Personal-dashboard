@@ -33,7 +33,15 @@ export function ConnectionsView() {
                     <span className="block truncate text-sm text-muted">{d.tagline}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    {!i?.enabled ? <Badge>Off</Badge> : i.lastTest?.ok ? <Badge tone="ok">Verified</Badge> : i.lastTest ? <Badge tone="danger">Failing</Badge> : <Badge tone="warn">Untested</Badge>}
+                    {!i?.enabled ? (
+                      <Badge>Off</Badge>
+                    ) : i.lastTest?.ok ? (
+                      <Badge tone="ok">Verified</Badge>
+                    ) : i.lastTest ? (
+                      <Badge tone="danger">Failing</Badge>
+                    ) : (
+                      <Badge tone="warn">Untested</Badge>
+                    )}
                     <ChevronIcon className={cx("h-5 w-5 transition-transform", isOpen && "rotate-90")} />
                   </span>
                 </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { Button, cx, inputCls, useOnline, useToast } from "@/components/ui";
@@ -12,12 +12,27 @@ import type { SessionSummary } from "@/lib/hermes";
  * One input that starts a Hermes conversation (optionally with source context)
  * and opens it. The draft survives refresh; offline it is saved, never sent.
  */
-export function QuickCapture({ context, placeholder = "Ask Hermes or capture something…" }: { context?: string; placeholder?: string }) {
+export function QuickCapture({
+  context,
+  initialText,
+  placeholder = "Ask Hermes or capture…",
+}: {
+  context?: string;
+  initialText?: string;
+  placeholder?: string;
+}) {
   const router = useRouter();
   const online = useOnline();
   const { toast } = useToast();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [busy, setBusy] = useState(false);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ta.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
 
   useEffect(() => {
     kvGet<string>("draft:quick").then((d) => d && setText((t) => t || d));
@@ -63,6 +78,7 @@ export function QuickCapture({ context, placeholder = "Ask Hermes or capture som
       </label>
       <textarea
         id="quick-capture"
+        ref={ta}
         rows={1}
         value={text}
         placeholder={placeholder}

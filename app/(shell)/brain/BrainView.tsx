@@ -6,7 +6,18 @@ import { relativeTime } from "@/lib/time";
 import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, Spinner, useOnline, useToast } from "@/components/ui";
 
 type Settled<T> = { ok: true; items: T[] } | { ok: false; error: string };
-type Job = { id: string; name: string; schedule_display?: string; enabled?: boolean; state?: string; next_run_at?: string; last_run_at?: string; last_status?: string; last_error?: string; failure_streak?: number };
+type Job = {
+  id: string;
+  name: string;
+  schedule_display?: string;
+  enabled?: boolean;
+  state?: string;
+  next_run_at?: string;
+  last_run_at?: string;
+  last_status?: string;
+  last_error?: string;
+  failure_streak?: number;
+};
 type Brain = {
   health: { ok: boolean; value?: { version?: string; status: string }; error?: string };
   memoryWriteApi: boolean;
@@ -35,7 +46,13 @@ export function BrainView() {
       <PageHeader
         title="Brain"
         subtitle="Hermes status, skills, tools and scheduled jobs."
-        actions={d?.dashboardUrl ? <ButtonLink href={d.dashboardUrl} external>Operator dashboard</ButtonLink> : null}
+        actions={
+          d?.dashboardUrl ? (
+            <ButtonLink href={d.dashboardUrl} external>
+              Operator dashboard
+            </ButtonLink>
+          ) : null
+        }
       />
       {q.isLoading ? <Spinner label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
@@ -51,7 +68,10 @@ export function BrainView() {
               <p className="mt-1 text-sm text-danger">Unreachable: {d.health.error}</p>
             )}
             <p className="mt-2 text-sm text-muted">
-              Memory: Hermes keeps MEMORY.md and USER.md on the server. {d.memoryWriteApi ? "This Hermes exposes a memory API." : "The API server doesn’t expose memory contents, so view or edit them in the operator dashboard."}
+              Memory: Hermes keeps MEMORY.md and USER.md on the server.{" "}
+              {d.memoryWriteApi
+                ? "This Hermes exposes a memory API."
+                : "The API server doesn’t expose memory contents, so view or edit them in the operator dashboard."}
             </p>
           </Card>
 
@@ -65,7 +85,9 @@ export function BrainView() {
                   <li key={j.id} className="py-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{j.name}</span>
-                      <Badge tone={j.state === "paused" || j.enabled === false ? "neutral" : "accent"}>{j.state ?? (j.enabled ? "scheduled" : "disabled")}</Badge>
+                      <Badge tone={j.state === "paused" || j.enabled === false ? "neutral" : "accent"}>
+                        {j.state ?? (j.enabled ? "scheduled" : "disabled")}
+                      </Badge>
                       {j.last_status === "error" || (j.failure_streak ?? 0) > 0 ? <Badge tone="danger">Failing ×{j.failure_streak ?? 1}</Badge> : null}
                     </div>
                     <p className="text-sm text-muted">
@@ -117,7 +139,11 @@ export function BrainView() {
               <ul className="mt-2 space-y-1 text-sm">
                 {d.toolsets.items.map((t) => (
                   <li key={t.name}>
-                    <span className="font-medium">{t.label ?? t.name}</span> <span className="text-muted">{t.enabled ? "enabled" : "disabled"}{t.configured === false ? " · not configured" : ""}</span>
+                    <span className="font-medium">{t.label ?? t.name}</span>{" "}
+                    <span className="text-muted">
+                      {t.enabled ? "enabled" : "disabled"}
+                      {t.configured === false ? " · not configured" : ""}
+                    </span>
                   </li>
                 ))}
               </ul>

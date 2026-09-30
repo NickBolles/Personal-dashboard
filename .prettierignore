@@ -1,0 +1,12 @@
+.next
+node_modules
+drizzle
+data
+data-dev
+coverage
+playwright-report
+test-results
+e2e/__screenshots__
+docs/research
+package-lock.json
+public/sw.js

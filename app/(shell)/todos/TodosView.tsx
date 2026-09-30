@@ -24,7 +24,9 @@ export function TodosView() {
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
         title="Todos"
-        subtitle={provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Jarvis"}` : undefined}
+        subtitle={
+          provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Jarvis"}` : undefined
+        }
       />
       {q.isLoading ? <Spinner label="Loading todos…" /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />

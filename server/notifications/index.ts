@@ -101,17 +101,8 @@ const severityRank = (s: NotificationSeverity) => RANK[s] ?? 3;
 
 export function listNotifications(userId: string, filter: "inbox" | "all" = "inbox", limit = 100) {
   const where =
-    filter === "inbox"
-      ? and(eq(schema.notifications.userId, userId), isNull(schema.notifications.dismissedAt))
-      : eq(schema.notifications.userId, userId);
-  return getDb()
-    .select()
-    .from(schema.notifications)
-    .where(where)
-    .orderBy(desc(schema.notifications.updatedAt))
-    .limit(limit)
-    .all()
-    .map(toNotification);
+    filter === "inbox" ? and(eq(schema.notifications.userId, userId), isNull(schema.notifications.dismissedAt)) : eq(schema.notifications.userId, userId);
+  return getDb().select().from(schema.notifications).where(where).orderBy(desc(schema.notifications.updatedAt)).limit(limit).all().map(toNotification);
 }
 
 /** Badge count: unread, undismissed, un-acted actionable items (info is not actionable). */
@@ -176,17 +167,18 @@ export function pendingPushes(now = new Date()) {
 }
 
 export function setPushState(id: string, state: "sent" | "suppressed" | "failed" | "pending") {
-  getDb()
-    .update(schema.notifications)
-    .set({ pushState: state, pushAttemptedAt: new Date().toISOString() })
-    .where(eq(schema.notifications.id, id))
-    .run();
+  getDb().update(schema.notifications).set({ pushState: state, pushAttemptedAt: new Date().toISOString() }).where(eq(schema.notifications.id, id)).run();
 }
 
 export function pruneNotifications(days = 30) {
   const cutoff = new Date(Date.now() - days * 86400_000).toISOString();
   getDb()
     .delete(schema.notifications)
-    .where(and(lt(schema.notifications.updatedAt, cutoff), or(sql`${schema.notifications.dismissedAt} is not null`, sql`${schema.notifications.actedAt} is not null`)))
+    .where(
+      and(
+        lt(schema.notifications.updatedAt, cutoff),
+        or(sql`${schema.notifications.dismissedAt} is not null`, sql`${schema.notifications.actedAt} is not null`),
+      ),
+    )
     .run();
 }

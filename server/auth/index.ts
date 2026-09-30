@@ -6,6 +6,7 @@ import { getDb, schema } from "@/server/db";
 import { hashPasscode, newId, randomToken, safeEqual, sha256, verifyPasscode } from "@/server/crypto";
 import { getSetting, setSetting } from "@/server/settings";
 import { DAY } from "@/lib/time";
+import { processSingleton } from "@/server/singleton";
 
 export const SESSION_COOKIE = "jarvis_session";
 
@@ -27,7 +28,10 @@ export function getSetupCode(): string {
   if (config.setupCode) return config.setupCode;
   let code = getSetting<string>("setup_code");
   if (!code) {
-    code = randomToken(6).replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase();
+    code = randomToken(6)
+      .replace(/[^A-Za-z0-9]/g, "")
+      .slice(0, 8)
+      .toUpperCase();
     setSetting("setup_code", code);
   }
   return code;
@@ -35,9 +39,7 @@ export function getSetupCode(): string {
 
 export function logSetupCodeIfUnclaimed() {
   if (config.authMode === "local" && !isClaimed()) {
-    console.log(
-      `\n[jarvis] Instance not yet claimed. Setup code: ${getSetupCode()}\n[jarvis] Open the app and enter this code to finish onboarding.\n`,
-    );
+    console.log(`\n[jarvis] Instance not yet claimed. Setup code: ${getSetupCode()}\n[jarvis] Open the app and enter this code to finish onboarding.\n`);
   }
 }
 
@@ -61,7 +63,11 @@ export function changePasscode(userId: string, current: string, next: string) {
     throw new AuthError("bad_passcode", "Current passcode is incorrect.");
   }
   if (next.length < 6) throw new AuthError("weak_passcode", "Use at least 6 characters.");
-  getDb().update(schema.users).set({ passcodeHash: hashPasscode(next) }).where(eq(schema.users.id, userId)).run();
+  getDb()
+    .update(schema.users)
+    .set({ passcodeHash: hashPasscode(next) })
+    .where(eq(schema.users.id, userId))
+    .run();
   // Invalidate other sessions
   getDb().delete(schema.authSessions).where(eq(schema.authSessions.userId, userId)).run();
 }
@@ -76,7 +82,7 @@ export class AuthError extends Error {
 }
 
 // --- login throttling (in-memory, per client key) ---
-const failures = new Map<string, { count: number; until: number }>();
+const failures = processSingleton("login_failures", () => new Map<string, { count: number; until: number }>());
 
 export function checkThrottle(key: string) {
   const f = failures.get(key);
@@ -124,7 +130,10 @@ export function sessionCookieOptions(expiresAt: string) {
 }
 
 export function destroySession(token: string) {
-  getDb().delete(schema.authSessions).where(eq(schema.authSessions.id, sha256(token))).run();
+  getDb()
+    .delete(schema.authSessions)
+    .where(eq(schema.authSessions.id, sha256(token)))
+    .run();
 }
 
 export function pruneSessions() {
@@ -151,7 +160,10 @@ export function userFromProxyHeader(value: string | null | undefined): CurrentUs
   if (allow.length && !allow.includes(username)) return null;
   let owner = getOwner();
   if (!owner) {
-    getDb().insert(schema.users).values({ id: newId("usr"), name: username }).run();
+    getDb()
+      .insert(schema.users)
+      .values({ id: newId("usr"), name: username })
+      .run();
     owner = getOwner()!;
   }
   // Single-household model: every allowed proxy identity maps to the owner record.

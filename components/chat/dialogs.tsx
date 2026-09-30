@@ -40,7 +40,15 @@ export function RenameDialog({ open, onClose, session }: { open: boolean; onClos
       }
     >
       <Field id="rename-title" label="Title">
-        <input id="rename-title" data-autofocus className={inputCls} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === "Enter" && m.mutate()} />
+        <input
+          id="rename-title"
+          data-autofocus
+          className={inputCls}
+          value={title}
+          maxLength={200}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && m.mutate()}
+        />
       </Field>
     </Dialog>
   );
@@ -111,7 +119,9 @@ export function ForkDialog({
       }
     >
       <div className="space-y-4">
-        <p className="rounded-xl bg-ok-soft p-3 text-sm text-ok">The original conversation’s messages stay exactly as they are. Both conversations link to each other.</p>
+        <p className="rounded-xl bg-ok-soft p-3 text-sm text-ok">
+          The original conversation’s messages stay exactly as they are. Both conversations link to each other.
+        </p>
         {preview ? (
           <div className="rounded-xl border border-line bg-surface-2 p-3">
             <p className="text-xs font-medium text-muted">Fork point</p>
@@ -121,7 +131,11 @@ export function ForkDialog({
         <Field id="fork-title" label="Title (optional)">
           <input id="fork-title" data-autofocus className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
         </Field>
-        <Field id="fork-prompt" label={needsPrompt ? "First prompt" : "First prompt (optional)"} hint={needsPrompt ? "Required: the context is sent together with your first message." : undefined}>
+        <Field
+          id="fork-prompt"
+          label={needsPrompt ? "First prompt" : "First prompt (optional)"}
+          hint={needsPrompt ? "Required: the context is sent together with your first message." : undefined}
+        >
           <textarea id="fork-prompt" rows={3} className={inputCls} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
         </Field>
       </div>
@@ -158,7 +172,11 @@ export function ModelDialog({
       open={open}
       onClose={onClose}
       title="Model for this conversation"
-      description={caps.data?.model ? `Hermes default: ${caps.data.provider ? `${caps.data.provider} / ` : ""}${caps.data.model}` : "Leave blank to use the Hermes default."}
+      description={
+        caps.data?.model
+          ? `Hermes default: ${caps.data.provider ? `${caps.data.provider} / ` : ""}${caps.data.model}`
+          : "Leave blank to use the Hermes default."
+      }
       footer={
         <>
           <Button
@@ -184,7 +202,14 @@ export function ModelDialog({
     >
       <div className="space-y-3">
         <Field id="m-provider" label="Provider">
-          <input id="m-provider" list="m-providers" className={inputCls} value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="e.g. anthropic" />
+          <input
+            id="m-provider"
+            list="m-providers"
+            className={inputCls}
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            placeholder="e.g. anthropic"
+          />
           <datalist id="m-providers">
             {(caps.data?.providers ?? []).map((p, i) => (
               <option key={p.id ?? i} value={p.id ?? ""}>
@@ -221,7 +246,11 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
       <ul className="mb-4 space-y-1">
         {actions.map((a) => (
           <li key={a.id}>
-            <button type="button" onClick={() => pick(a.title, `${a.source}:${a.sourceId}`)} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2">
+            <button
+              type="button"
+              onClick={() => pick(a.title, `${a.source}:${a.sourceId}`)}
+              className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2"
+            >
               {a.title} <span className="text-muted">· {a.source}</span>
             </button>
           </li>
@@ -232,7 +261,11 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
       <ul className="space-y-1">
         {(alerts.data?.notifications ?? []).slice(0, 10).map((n) => (
           <li key={n.id}>
-            <button type="button" onClick={() => pick(n.title, `alert:${n.id}`)} className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2">
+            <button
+              type="button"
+              onClick={() => pick(n.title, `alert:${n.id}`)}
+              className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2"
+            >
               {n.title}
             </button>
           </li>
@@ -279,14 +312,23 @@ export function TrackDialog({ open, onClose, session }: { open: boolean; onClose
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["session", session.id] });
       qc.invalidateQueries({ queryKey: ["initiatives"] });
-      toast(res.created ? `Created ${res.issue.identifier} and linked it` : `Linked to ${res.issue.identifier}${res.deduplicated ? " (already existed)" : ""}`, "ok");
+      toast(
+        res.created ? `Created ${res.issue.identifier} and linked it` : `Linked to ${res.issue.identifier}${res.deduplicated ? " (already existed)" : ""}`,
+        "ok",
+      );
       onClose();
     },
     onError: (e) => toast((e as Error).message, "danger"),
   });
 
   return (
-    <Dialog open={open} onClose={onClose} size="lg" title="Track in Paperclip" description="Search first so the same initiative is reused across conversations.">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title="Track in Paperclip"
+      description="Search first so the same initiative is reused across conversations."
+    >
       {mode === "search" ? (
         <div className="space-y-3">
           <Field id="pc-search" label="Search Paperclip issues">
@@ -298,9 +340,15 @@ export function TrackDialog({ open, onClose, session }: { open: boolean; onClose
             {(results.data?.results ?? []).map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line p-2">
                 <span className="min-w-0 flex-1 text-sm">
-                  <span className="font-mono text-xs text-muted">{r.identifier}</span> {r.title} <span className="text-xs text-muted">· {r.status.replace("_", " ")}</span>
+                  <span className="font-mono text-xs text-muted">{r.identifier}</span> {r.title}{" "}
+                  <span className="text-xs text-muted">· {r.status.replace("_", " ")}</span>
                 </span>
-                <Button size="sm" onClick={() => m.mutate({ mode: "link", issueId: r.id, relationship: "related_to" })} busy={m.isPending} aria-label={`Link to ${r.identifier}`}>
+                <Button
+                  size="sm"
+                  onClick={() => m.mutate({ mode: "link", issueId: r.id, relationship: "related_to" })}
+                  busy={m.isPending}
+                  aria-label={`Link to ${r.identifier}`}
+                >
                   Link
                 </Button>
                 <Button

@@ -85,12 +85,7 @@ export type ControlRequest = { entityId: string; service: string; stateToken: st
  *  2. live state must still match what the user saw (stateToken)
  *  3. success is reported only after Home Assistant reads back the new state
  */
-export async function executeControl(
-  req: ControlRequest,
-  actor: string,
-  correlationId: string,
-  opts: { readbackTimeoutMs?: number; pollMs?: number } = {},
-) {
+export async function executeControl(req: ControlRequest, actor: string, correlationId: string, opts: { readbackTimeoutMs?: number; pollMs?: number } = {}) {
   const rules = parseAllowlist(resolveIntegration("home_assistant").config.controlAllowlist);
   const rule = rules.find((r) => r.entityId === req.entityId);
   const base = { actor, action: `ha.${req.service}`, source: "home_assistant", sourceRecord: req.entityId, correlationId };

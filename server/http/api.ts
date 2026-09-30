@@ -55,7 +55,12 @@ export function toErrorResponse(err: unknown, correlationId?: string) {
     return jsonError(status, err.message, err.code);
   }
   if (err instanceof ZodError) {
-    return jsonError(400, "Invalid request", "validation", err.issues.map((i) => ({ path: i.path.join("."), message: i.message })));
+    return jsonError(
+      400,
+      "Invalid request",
+      "validation",
+      err.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
+    );
   }
   if (err instanceof UpstreamError) {
     const status = err.kind === "unauthorized" ? 502 : err.kind === "not_found" ? 404 : err.kind === "conflict" ? 409 : err.kind === "unsupported" ? 501 : 502;

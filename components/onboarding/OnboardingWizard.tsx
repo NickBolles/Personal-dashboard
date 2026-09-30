@@ -21,7 +21,17 @@ const STEPS: Step[] = [
   { id: "finish", title: "Verify & finish" },
 ];
 
-export function OnboardingWizard({ claimed, initialStep, googleStatus, googleMessage }: { claimed: boolean; initialStep?: string; googleStatus?: string; googleMessage?: string }) {
+export function OnboardingWizard({
+  claimed,
+  initialStep,
+  googleStatus,
+  googleMessage,
+}: {
+  claimed: boolean;
+  initialStep?: string;
+  googleStatus?: string;
+  googleMessage?: string;
+}) {
   if (!claimed) return <ClaimStep />;
   return <Wizard initialStep={initialStep} googleStatus={googleStatus} googleMessage={googleMessage} />;
 }
@@ -57,16 +67,49 @@ function ClaimStep() {
         }}
       >
         <Field id="setup-code" label="Setup code">
-          <input id="setup-code" required autoComplete="one-time-code" className={cx(inputCls, "font-mono uppercase")} value={setupCode} onChange={(e) => setSetupCode(e.target.value)} />
+          <input
+            id="setup-code"
+            required
+            autoComplete="one-time-code"
+            className={cx(inputCls, "font-mono uppercase")}
+            value={setupCode}
+            onChange={(e) => setSetupCode(e.target.value)}
+          />
         </Field>
         <Field id="owner-name" label="Your name">
-          <input id="owner-name" required className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nick" autoComplete="given-name" />
+          <input
+            id="owner-name"
+            required
+            className={inputCls}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nick"
+            autoComplete="given-name"
+          />
         </Field>
         <Field id="new-passcode" label="Passcode" hint="At least 6 characters. Used to sign in on new devices.">
-          <input id="new-passcode" type="password" required minLength={6} autoComplete="new-password" className={inputCls} value={passcode} onChange={(e) => setPasscode(e.target.value)} />
+          <input
+            id="new-passcode"
+            type="password"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            className={inputCls}
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+          />
         </Field>
         <Field id="confirm-passcode" label="Confirm passcode" error={error}>
-          <input id="confirm-passcode" type="password" required minLength={6} autoComplete="new-password" className={inputCls} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <input
+            id="confirm-passcode"
+            type="password"
+            required
+            minLength={6}
+            autoComplete="new-password"
+            className={inputCls}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
         </Field>
         <Button type="submit" variant="primary" className="w-full" busy={busy}>
           Continue
@@ -83,7 +126,10 @@ function useIntegrations() {
 function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: string; googleStatus?: string; googleMessage?: string }) {
   const router = useRouter();
   const { toast } = useToast();
-  const startIdx = Math.max(0, STEPS.findIndex((s) => s.id === initialStep));
+  const startIdx = Math.max(
+    0,
+    STEPS.findIndex((s) => s.id === initialStep),
+  );
   const [idx, setIdx] = useState(startIdx);
   const step = STEPS[idx]!;
   const integrations = useIntegrations();
@@ -115,7 +161,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
     <div className="mx-auto max-w-5xl px-4 py-6 lg:flex lg:gap-8">
       <nav aria-label="Setup steps" className="mb-4 lg:mb-0 lg:w-56 lg:shrink-0">
         <p className="mb-2 text-sm font-medium text-accent">Jarvis setup</p>
-        <ol className="flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
+        <ol className="relative flex gap-1 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible">
           {STEPS.map((s, i) => {
             const st = status(s.id);
             const verified = st?.lastTest?.ok;
@@ -130,7 +176,13 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
                     i === idx ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-surface-2",
                   )}
                 >
-                  <span aria-hidden="true" className={cx("flex h-6 w-6 items-center justify-center rounded-full border text-xs", verified ? "border-ok bg-ok-soft text-ok" : "border-line-strong")}>
+                  <span
+                    aria-hidden="true"
+                    className={cx(
+                      "flex h-6 w-6 items-center justify-center rounded-full border text-xs",
+                      verified ? "border-ok bg-ok-soft text-ok" : "border-line-strong",
+                    )}
+                  >
                     {verified ? <CheckIcon className="h-3.5 w-3.5" /> : i + 1}
                   </span>
                   {s.title}
@@ -159,7 +211,9 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
           ) : null}
           {step.id === "install" ? (
             <div className="card p-5">
-              <p className="mb-4 text-muted">Install Jarvis to your home screen for a full-screen app, faster launch, offline access, and reliable notifications.</p>
+              <p className="mb-4 text-muted">
+                Install Jarvis to your home screen for a full-screen app, faster launch, offline access, and reliable notifications.
+              </p>
               <InstallPrompt />
             </div>
           ) : null}
@@ -196,7 +250,8 @@ function Welcome() {
   return (
     <div className="card space-y-4 p-5">
       <p>
-        Jarvis is your command center for <strong>Hermes</strong> and the systems around it. It answers one question: <em>what needs my attention, and what should I do next?</em>
+        Jarvis is your command center for <strong>Hermes</strong> and the systems around it. It answers one question:{" "}
+        <em>what needs my attention, and what should I do next?</em>
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
         {INTEGRATIONS.map((i) => (
@@ -209,7 +264,8 @@ function Welcome() {
         ))}
       </ul>
       <p className="text-sm text-muted">
-        Each step saves the connection on the server (secrets are encrypted and never sent back to the browser) and runs a live test. You can skip anything and finish later in Settings → Connections.
+        Each step saves the connection on the server (secrets are encrypted and never sent back to the browser) and runs a live test. You can skip anything and
+        finish later in Settings → Connections.
       </p>
     </div>
   );
@@ -244,7 +300,12 @@ function Finish({ integrations, onRefresh }: { integrations: PublicIntegration[]
       try {
         out[i.kind] = await api.post<TestResult>(`/api/integrations/${i.kind}/test`);
       } catch (err) {
-        out[i.kind] = { ok: false, checkedAt: new Date().toISOString(), summary: (err as Error).message, checks: [{ name: "Test", ok: false, detail: (err as Error).message }] };
+        out[i.kind] = {
+          ok: false,
+          checkedAt: new Date().toISOString(),
+          summary: (err as Error).message,
+          checks: [{ name: "Test", ok: false, detail: (err as Error).message }],
+        };
       }
       setResults({ ...out });
     }
@@ -267,7 +328,15 @@ function Finish({ integrations, onRefresh }: { integrations: PublicIntegration[]
             <li key={d.kind} className="rounded-xl border border-line p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{d.label}</span>
-                {!i?.enabled ? <Badge>Skipped</Badge> : r?.ok ? <Badge tone="ok">Verified</Badge> : r ? <Badge tone="danger">Failing</Badge> : <Badge tone="warn">Not tested</Badge>}
+                {!i?.enabled ? (
+                  <Badge>Skipped</Badge>
+                ) : r?.ok ? (
+                  <Badge tone="ok">Verified</Badge>
+                ) : r ? (
+                  <Badge tone="danger">Failing</Badge>
+                ) : (
+                  <Badge tone="warn">Not tested</Badge>
+                )}
               </div>
               {i?.enabled && r && !r.ok ? (
                 <div className="mt-2">

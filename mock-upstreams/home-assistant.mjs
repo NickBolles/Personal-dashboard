@@ -6,7 +6,14 @@ export function createHomeAssistant({ token }) {
 
   function set(entity_id, s, attributes = {}, agoMin = 5) {
     const t = new Date(Date.now() - agoMin * 60000).toISOString();
-    state.entities.set(entity_id, { entity_id, state: s, attributes: { friendly_name: attributes.friendly_name ?? entity_id, ...attributes }, last_changed: t, last_updated: t, context: { id: "01J9", parent_id: null, user_id: null } });
+    state.entities.set(entity_id, {
+      entity_id,
+      state: s,
+      attributes: { friendly_name: attributes.friendly_name ?? entity_id, ...attributes },
+      last_changed: t,
+      last_updated: t,
+      context: { id: "01J9", parent_id: null, user_id: null },
+    });
   }
 
   function seed() {
@@ -59,8 +66,26 @@ export function createHomeAssistant({ token }) {
         return x.toISOString();
       };
       return json(res, 200, [
-        { start: { dateTime: at(18) }, end: { dateTime: at(19) }, summary: "Soccer practice", description: "Bring water", location: "Field 3", uid: "evt-77", recurrence_id: null, rrule: null },
-        { start: { date: isoDate(addDays(today, 2)) }, end: { date: isoDate(addDays(today, 3)) }, summary: "School holiday", description: null, location: null, uid: "hol-1", recurrence_id: null, rrule: null },
+        {
+          start: { dateTime: at(18) },
+          end: { dateTime: at(19) },
+          summary: "Soccer practice",
+          description: "Bring water",
+          location: "Field 3",
+          uid: "evt-77",
+          recurrence_id: null,
+          rrule: null,
+        },
+        {
+          start: { date: isoDate(addDays(today, 2)) },
+          end: { date: isoDate(addDays(today, 3)) },
+          summary: "School holiday",
+          description: null,
+          location: null,
+          uid: "hol-1",
+          recurrence_id: null,
+          rrule: null,
+        },
       ]);
     }
     if ((match = path.match(/^\/api\/services\/([^/]+)\/([^/]+)$/)) && m === "POST") {
@@ -72,7 +97,9 @@ export function createHomeAssistant({ token }) {
         if (!wantsResponse) return json(res, 400, { message: "Service call requires responses but caller did not ask for responses" });
         const ids = [].concat(body.entity_id);
         const statuses = body.status ? [].concat(body.status) : null;
-        const service_response = Object.fromEntries(ids.map((id) => [id, { items: (state.todos.get(id) ?? []).filter((i) => !statuses || statuses.includes(i.status)) }]));
+        const service_response = Object.fromEntries(
+          ids.map((id) => [id, { items: (state.todos.get(id) ?? []).filter((i) => !statuses || statuses.includes(i.status)) }]),
+        );
         return json(res, 200, { changed_states: [], service_response });
       }
       if (domain === "todo" && service === "update_item") {

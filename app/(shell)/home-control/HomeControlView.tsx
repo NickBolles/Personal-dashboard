@@ -80,7 +80,9 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
               {exceptions.map((e) => (
                 <li key={e.entityId} className={cx("card p-3", focusEntity === e.entityId && "border-accent")}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={e.severity === "critical" || e.severity === "high" ? "danger" : e.severity === "normal" ? "warn" : "neutral"}>{e.severity}</Badge>
+                    <Badge tone={e.severity === "critical" || e.severity === "high" ? "danger" : e.severity === "normal" ? "warn" : "neutral"}>
+                      {e.severity}
+                    </Badge>
                     <span className="font-medium">{e.name}</span>
                   </div>
                   <p className="text-sm text-muted">
@@ -106,7 +108,9 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         ) : null}
         {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
         {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
-        {controls.data && !controls.data.controls.length ? <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p> : null}
+        {controls.data && !controls.data.controls.length ? (
+          <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
+        ) : null}
         <ul className="grid gap-2 sm:grid-cols-2">
           {(controls.data?.controls ?? []).map((c) => (
             <li key={c.entityId}>
@@ -131,7 +135,11 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
                     </Button>
                   ))}
                 </div>
-                {pendingId === c.entityId ? <p className="mt-2 text-xs text-muted" role="status">Waiting for Home Assistant to confirm…</p> : null}
+                {pendingId === c.entityId ? (
+                  <p className="mt-2 text-xs text-muted" role="status">
+                    Waiting for Home Assistant to confirm…
+                  </p>
+                ) : null}
               </Card>
             </li>
           ))}
@@ -145,7 +153,8 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         description={
           confirm ? (
             <>
-              Current state: <strong>{confirm.control.state}</strong> (checked {new Date(confirm.control.observedAt).toLocaleTimeString()}). If it changed since then, Jarvis will stop and ask again.
+              Current state: <strong>{confirm.control.state}</strong> (checked {new Date(confirm.control.observedAt).toLocaleTimeString()}). If it changed since
+              then, Jarvis will stop and ask again.
             </>
           ) : undefined
         }

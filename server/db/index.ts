@@ -13,16 +13,13 @@ type Holder = { db: DB; sqlite: Database.Database; path: string };
 const g = globalThis as unknown as { __jarvisDb?: Holder };
 
 function migrationsFolder() {
-  const candidates = [
-    process.env.JARVIS_MIGRATIONS_DIR,
-    path.join(process.cwd(), "drizzle"),
-  ].filter(Boolean) as string[];
-  for (const c of candidates) if (fs.existsSync(path.join(c, "meta", "_journal.json"))) return c;
+  const candidates = [process.env.JARVIS_MIGRATIONS_DIR, path.join(process.cwd(), "drizzle")].filter(Boolean) as string[];
+  for (const c of candidates) if (fs.existsSync(path.join(/*turbopackIgnore: true*/ c, "meta", "_journal.json"))) return c;
   throw new Error(`Drizzle migrations folder not found (looked in ${candidates.join(", ")})`);
 }
 
 export function openDatabase(file: string): Holder {
-  if (file !== ":memory:") fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (file !== ":memory:") fs.mkdirSync(path.dirname(/*turbopackIgnore: true*/ file), { recursive: true });
   const sqlite = new Database(file);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("synchronous = NORMAL");

@@ -1,0 +1,17 @@
+{
+  "object": "hermes.run",
+  "run_id": "run_3f2a",
+  "status": "waiting_for_approval",
+  "created_at": 1759200000.0,
+  "updated_at": 1759200003.4,
+  "session_id": "my-session-1",
+  "last_event": "approval.request",
+  "approval": {
+    "event": "approval.request",
+    "command": "rm -rf build",
+    "description": "Recursive delete",
+    "request_id": "4b7e",
+    "choices": ["once", "deny"],
+    "smart_denied": true
+  }
+}

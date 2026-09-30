@@ -33,7 +33,15 @@ export type PushPayload = {
 };
 
 export function saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }, userAgent?: string | null) {
-  const values = { id: newId("push"), userId, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, userAgent: userAgent?.slice(0, 200), failureCount: 0 };
+  const values = {
+    id: newId("push"),
+    userId,
+    endpoint: sub.endpoint,
+    p256dh: sub.keys.p256dh,
+    auth: sub.keys.auth,
+    userAgent: userAgent?.slice(0, 200),
+    failureCount: 0,
+  };
   getDb()
     .insert(schema.pushSubscriptions)
     .values(values)
@@ -58,25 +66,29 @@ export async function sendToUser(userId: string, payload: PushPayload, opts: { u
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification(
-          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify(payload),
-          {
-            vapidDetails: { subject: config.vapidSubject, publicKey: vapid.publicKey, privateKey: vapid.privateKey },
-            TTL: 60 * 60 * 12,
-            urgency: opts.urgency ?? "normal",
-            topic: payload.tag?.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || undefined,
-            timeout: 10_000,
-          },
-        );
+        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), {
+          vapidDetails: { subject: config.vapidSubject, publicKey: vapid.publicKey, privateKey: vapid.privateKey },
+          TTL: 60 * 60 * 12,
+          urgency: opts.urgency ?? "normal",
+          topic: payload.tag?.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) || undefined,
+          timeout: 10_000,
+        });
         sent++;
-        getDb().update(schema.pushSubscriptions).set({ lastSuccessAt: new Date().toISOString(), failureCount: 0 }).where(eq(schema.pushSubscriptions.id, s.id)).run();
+        getDb()
+          .update(schema.pushSubscriptions)
+          .set({ lastSuccessAt: new Date().toISOString(), failureCount: 0 })
+          .where(eq(schema.pushSubscriptions.id, s.id))
+          .run();
       } catch (err) {
         failed++;
         const status = (err as { statusCode?: number }).statusCode;
         if (status === 404 || status === 410) removeSubscription(s.endpoint);
         else {
-          getDb().update(schema.pushSubscriptions).set({ failureCount: s.failureCount + 1 }).where(eq(schema.pushSubscriptions.id, s.id)).run();
+          getDb()
+            .update(schema.pushSubscriptions)
+            .set({ failureCount: s.failureCount + 1 })
+            .where(eq(schema.pushSubscriptions.id, s.id))
+            .run();
           console.warn(`[jarvis] push failed (${status ?? "network"})`);
         }
       }

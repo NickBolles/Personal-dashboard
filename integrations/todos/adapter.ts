@@ -136,7 +136,8 @@ async function mutate(id: string, kind: PrimaryActionKind, opts: { until?: strin
       // Readback before reporting success.
       const after = await GoogleTasksClient.get(id);
       if (kind === "complete" && after.status !== "completed") throw new UpstreamError("Google Tasks", "bad_response", "Google did not confirm completion");
-      if (kind === "snooze" && after.due?.slice(0, 10) !== snoozeDate) throw new UpstreamError("Google Tasks", "bad_response", "Google did not confirm the new due date");
+      if (kind === "snooze" && after.due?.slice(0, 10) !== snoozeDate)
+        throw new UpstreamError("Google Tasks", "bad_response", "Google did not confirm the new due date");
       return;
     }
     case "home_assistant": {
@@ -150,7 +151,8 @@ async function mutate(id: string, kind: PrimaryActionKind, opts: { until?: strin
       const items = await HomeAssistantClient.todoItems(conn, entity);
       const after = items.find((i) => i.uid === id);
       if (!after) throw new UpstreamError("Home Assistant", "not_found", "Item disappeared");
-      if (kind === "complete" && after.status !== "completed") throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm completion");
+      if (kind === "complete" && after.status !== "completed")
+        throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm completion");
       return;
     }
     case "jarvis": {
@@ -177,9 +179,25 @@ export const todosAdapter: SourceAdapter = {
     const tz = (await import("@/server/settings")).getPreferences().timezone;
     try {
       await mutate(sourceId, kind, { until: opts.until, timezone: tz });
-      audit({ actor: opts.actor, action: `todos.${kind}`, source: "todos", sourceRecord: sourceId, result: "ok", correlationId: opts.correlationId, detail: { until: opts.until } });
+      audit({
+        actor: opts.actor,
+        action: `todos.${kind}`,
+        source: "todos",
+        sourceRecord: sourceId,
+        result: "ok",
+        correlationId: opts.correlationId,
+        detail: { until: opts.until },
+      });
     } catch (err) {
-      audit({ actor: opts.actor, action: `todos.${kind}`, source: "todos", sourceRecord: sourceId, result: "error", correlationId: opts.correlationId, detail: { error: (err as Error).message } });
+      audit({
+        actor: opts.actor,
+        action: `todos.${kind}`,
+        source: "todos",
+        sourceRecord: sourceId,
+        result: "error",
+        correlationId: opts.correlationId,
+        detail: { error: (err as Error).message },
+      });
       throw err;
     }
     return { ok: true, message: kind === "complete" ? "Marked done" : "Snoozed" };

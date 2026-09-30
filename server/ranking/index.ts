@@ -76,9 +76,7 @@ export const NOW_LIMIT = 3;
 
 /** Split ranked actions into the Home sections. */
 export function partitionForHome(actions: NextAction[], now: Date, limit = NOW_LIMIT): Partitioned {
-  const open = rankActions(
-    actions.filter((a) => a.status === "open" && (!a.availableAt || new Date(a.availableAt) <= now)),
-  );
+  const open = rankActions(actions.filter((a) => a.status === "open" && (!a.availableAt || new Date(a.availableAt) <= now)));
   const deferred = actions.filter((a) => a.status === "open" && a.availableAt && new Date(a.availableAt) > now);
   const nowItems = open.slice(0, limit);
   const rest = open.slice(limit);

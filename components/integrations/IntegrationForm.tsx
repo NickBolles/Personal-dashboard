@@ -3,14 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import {
-  getIntegrationDef,
-  isFieldVisible,
-  type FieldDef,
-  type IntegrationKind,
-  type PublicIntegration,
-  type TestResult,
-} from "@/integrations/registry";
+import { getIntegrationDef, isFieldVisible, type FieldDef, type IntegrationKind, type PublicIntegration, type TestResult } from "@/integrations/registry";
 import { Badge, Button, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 
@@ -76,7 +69,9 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
 
   const save = useMutation({
     mutationFn: async (opts: { enabled?: boolean; test: boolean }) => {
-      const config = Object.fromEntries(def.fields.filter((f) => f.type !== "secret" && !q.data?.envManaged.includes(f.key)).map((f) => [f.key, values[f.key] ?? ""]));
+      const config = Object.fromEntries(
+        def.fields.filter((f) => f.type !== "secret" && !q.data?.envManaged.includes(f.key)).map((f) => [f.key, values[f.key] ?? ""]),
+      );
       const sec: Record<string, string | null> = {};
       for (const f of def.fields.filter((x) => x.type === "secret")) {
         if (clear[f.key]) sec[f.key] = null;
@@ -137,7 +132,12 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
           />
           {s?.set && !env ? (
             <label className="mt-1 flex min-h-11 items-center gap-2 text-xs text-muted">
-              <input type="checkbox" className="h-5 w-5" checked={Boolean(clear[f.key])} onChange={(e) => setClear((c) => ({ ...c, [f.key]: e.target.checked }))} />
+              <input
+                type="checkbox"
+                className="h-5 w-5"
+                checked={Boolean(clear[f.key])}
+                onChange={(e) => setClear((c) => ({ ...c, [f.key]: e.target.checked }))}
+              />
               Remove saved value
             </label>
           ) : null}
@@ -148,7 +148,13 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
       const options = discovered?.options ?? f.options ?? [];
       return (
         <Field key={f.key} id={id} label={f.label} hint={hint}>
-          <select id={id} disabled={env} className={inputCls} value={values[f.key] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}>
+          <select
+            id={id}
+            disabled={env}
+            className={inputCls}
+            value={values[f.key] ?? ""}
+            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+          >
             {f.type !== "select" ? <option value="">{values[f.key] ? `Keep: ${values[f.key]}` : "Choose…"}</option> : null}
             {options.map((o) => (
               <option key={o.value} value={o.value}>
@@ -162,7 +168,14 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
     if (f.type === "textarea") {
       return (
         <Field key={f.key} id={id} label={f.label} hint={hint}>
-          <textarea id={id} rows={f.key === "prompt" ? 3 : 5} disabled={env} className={cx(inputCls, "font-mono text-sm")} value={values[f.key] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))} />
+          <textarea
+            id={id}
+            rows={f.key === "prompt" ? 3 : 5}
+            disabled={env}
+            className={cx(inputCls, "font-mono text-sm")}
+            value={values[f.key] ?? ""}
+            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+          />
         </Field>
       );
     }
@@ -214,7 +227,9 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
         </div>
       ) : null}
       {basic.map(renderField)}
-      {kind === "todos" && values.provider === "google_tasks" ? <GoogleConnect connected={Boolean(pub?.secrets.refreshToken?.set)} onBeforeConnect={() => save.mutateAsync({ test: false })} /> : null}
+      {kind === "todos" && values.provider === "google_tasks" ? (
+        <GoogleConnect connected={Boolean(pub?.secrets.refreshToken?.set)} onBeforeConnect={() => save.mutateAsync({ test: false })} />
+      ) : null}
       {kind === "skylight" ? <SkylightSignIn onDone={() => qc.invalidateQueries({ queryKey: ["integration", kind] })} /> : null}
       {advanced.length ? (
         <div>
@@ -247,7 +262,9 @@ function GoogleConnect({ connected, onBeforeConnect }: { connected: boolean; onB
   return (
     <div className="rounded-xl border border-line bg-surface-2 p-3 text-sm">
       <p className="font-medium">{connected ? "Google account connected" : "Connect your Google account"}</p>
-      <p className="mt-1 text-muted">Saves the client ID/secret above, then opens Google to grant Tasks access. Jarvis stores only the refresh token, encrypted.</p>
+      <p className="mt-1 text-muted">
+        Saves the client ID/secret above, then opens Google to grant Tasks access. Jarvis stores only the refresh token, encrypted.
+      </p>
       <Button
         type="button"
         size="sm"
@@ -285,12 +302,21 @@ function SkylightSignIn({ onDone }: { onDone: () => void }) {
   return (
     <fieldset className="space-y-3 rounded-xl border border-line bg-surface-2 p-3">
       <legend className="px-1 text-sm font-medium">Sign in to Skylight</legend>
-      <p className="text-xs text-muted">Used once to obtain a refresh token; your password is not stored. If Skylight asks for 2FA, use `skycli auth login` and paste the refresh token instead.</p>
+      <p className="text-xs text-muted">
+        Used once to obtain a refresh token; your password is not stored. If Skylight asks for 2FA, use `skycli auth login` and paste the refresh token instead.
+      </p>
       <Field id="sk-email" label="Email">
         <input id="sk-email" type="email" autoComplete="username" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <Field id="sk-pass" label="Password">
-        <input id="sk-pass" type="password" autoComplete="current-password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input
+          id="sk-pass"
+          type="password"
+          autoComplete="current-password"
+          className={inputCls}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
       </Field>
       <Button type="button" size="sm" busy={m.isPending} disabled={!email || !password} onClick={() => m.mutate()}>
         Sign in

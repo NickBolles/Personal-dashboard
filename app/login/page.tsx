@@ -15,7 +15,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     return (
       <main id="main" className="mx-auto max-w-md p-6">
         <h1 className="text-2xl font-semibold">Sign-in required</h1>
-        <p className="mt-2 text-muted">Jarvis is configured to trust your reverse proxy for sign-in, but no identity header arrived. Open Jarvis through its authenticated URL.</p>
+        <p className="mt-2 text-muted">
+          Jarvis is configured to trust your reverse proxy for sign-in, but no identity header arrived. Open Jarvis through its authenticated URL.
+        </p>
       </main>
     );
   }

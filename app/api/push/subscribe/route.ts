@@ -8,7 +8,12 @@ const subSchema = z.object({
 });
 
 export const GET = api(({ user }) => ({
-  subscriptions: listSubscriptions(user.id).map((s) => ({ endpoint: s.endpoint, userAgent: s.userAgent, createdAt: s.createdAt, lastSuccessAt: s.lastSuccessAt })),
+  subscriptions: listSubscriptions(user.id).map((s) => ({
+    endpoint: s.endpoint,
+    userAgent: s.userAgent,
+    createdAt: s.createdAt,
+    lastSuccessAt: s.lastSuccessAt,
+  })),
 }));
 
 export const POST = api<z.infer<typeof subSchema>>(

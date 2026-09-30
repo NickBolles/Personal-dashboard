@@ -223,11 +223,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
     kind: "home_assistant",
     label: "Home Assistant",
     tagline: "Exceptional home state, calendars, and a small allowlisted control set.",
-    uses: [
-      "Critical alerts (alarm, doors, garage)",
-      "Household glance and calendar",
-      "Confirmed lock/garage controls",
-    ],
+    uses: ["Critical alerts (alarm, doors, garage)", "Household glance and calendar", "Confirmed lock/garage controls"],
     recommended: true,
     docs: "https://developers.home-assistant.io/docs/api/rest/",
     fields: [

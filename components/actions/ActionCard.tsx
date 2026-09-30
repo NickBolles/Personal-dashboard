@@ -23,8 +23,7 @@ export function useActionMutation() {
   const qc = useQueryClient();
   const { toast, announce } = useToast();
   return useMutation({
-    mutationFn: (v: { actionId: string; kind: PrimaryActionKind | "pin" | "unpin"; until?: string }) =>
-      api.post<{ message: string }>("/api/actions", v),
+    mutationFn: (v: { actionId: string; kind: PrimaryActionKind | "pin" | "unpin"; until?: string }) => api.post<{ message: string }>("/api/actions", v),
     onSuccess: (res) => {
       toast(res.message, "ok");
       announce(res.message);
@@ -46,7 +45,10 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
   const titleId = `act-${action.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   const run = (kind: PrimaryActionKind | "pin" | "unpin") => m.mutate({ actionId: action.id, kind });
-  const askHermes = () => router.push(`/chat?new=1&context=${encodeURIComponent(`${action.title}${action.detail ? ` — ${action.detail}` : ""} [${action.source}:${action.sourceId}]`)}`);
+  const askHermes = () =>
+    router.push(
+      `/chat?new=1&context=${encodeURIComponent(`${action.title}${action.detail ? ` — ${action.detail}` : ""} [${action.source}:${action.sourceId}]`)}`,
+    );
 
   const menu: MenuItem[] = [
     ...(action.secondaryActions ?? [])
@@ -58,7 +60,10 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
       })),
     { label: action.pinned ? "Unpin" : "Pin to top", onSelect: () => run(action.pinned ? "unpin" : "pin") },
     { label: "Ask Hermes about this", onSelect: askHermes },
-    { label: action.external ? "Open in source" : "Open", onSelect: () => (action.external ? window.open(action.href, "_blank", "noopener") : router.push(action.href)) },
+    {
+      label: action.external ? "Open in source" : "Open",
+      onSelect: () => (action.external ? window.open(action.href, "_blank", "noopener") : router.push(action.href)),
+    },
   ];
 
   return (

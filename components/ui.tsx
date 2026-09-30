@@ -94,7 +94,12 @@ export function Spinner({ label }: { label?: string }) {
   );
 }
 
-export function Card({ children, className, as: As = "section", ...rest }: { children: ReactNode; className?: string; as?: "section" | "article" | "div" | "li" } & Record<string, unknown>) {
+export function Card({
+  children,
+  className,
+  as: As = "section",
+  ...rest
+}: { children: ReactNode; className?: string; as?: "section" | "article" | "div" | "li" } & Record<string, unknown>) {
   return (
     <As className={cx("card p-4", className)} {...rest}>
       {children}
@@ -143,11 +148,7 @@ const TONES: Record<Tone, string> = {
 };
 
 export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return (
-    <span className={cx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", TONES[tone], className)}>
-      {children}
-    </span>
-  );
+  return <span className={cx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", TONES[tone], className)}>{children}</span>;
 }
 
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
@@ -163,7 +164,10 @@ export function Empty({ title, children, action }: { title: string; children?: R
 export function ErrorNote({ error, retry }: { error: unknown; retry?: () => void }) {
   const msg = error instanceof Error ? error.message : String(error ?? "Something went wrong");
   return (
-    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-danger bg-danger-soft p-3 text-sm text-danger">
+    <div
+      role="alert"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-danger bg-danger-soft p-3 text-sm text-danger"
+    >
       <span>{msg}</span>
       {retry ? (
         <Button size="sm" variant="secondary" onClick={retry}>
@@ -204,7 +208,9 @@ export function Dialog({
     const el = ref.current;
     const focusables = () =>
       Array.from(
-        el?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])') ?? [],
+        el?.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        ) ?? [],
       );
     const first = el?.querySelector<HTMLElement>("[data-autofocus]") ?? focusables()[0];
     first?.focus();
@@ -339,10 +345,7 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
                   setOpen(false);
                   it.onSelect();
                 }}
-                className={cx(
-                  "block min-h-11 w-full px-4 text-left text-sm hover:bg-surface-2 disabled:opacity-50",
-                  it.danger && "text-danger",
-                )}
+                className={cx("block min-h-11 w-full px-4 text-left text-sm hover:bg-surface-2 disabled:opacity-50", it.danger && "text-danger")}
               >
                 {it.label}
               </button>
@@ -382,7 +385,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6">
         {toasts.map((t) => (
-          <div key={t.id} role="status" className={cx("pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg", TONES[t.tone], t.tone === "neutral" && "bg-surface text-text")}>
+          <div
+            key={t.id}
+            role="status"
+            className={cx(
+              "pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg",
+              TONES[t.tone],
+              t.tone === "neutral" && "bg-surface text-text",
+            )}
+          >
             {t.text}
           </div>
         ))}
@@ -424,19 +435,7 @@ export function useNow(intervalMs = 30_000) {
   return now;
 }
 
-export function Field({
-  label,
-  hint,
-  children,
-  id,
-  error,
-}: {
-  label: string;
-  hint?: ReactNode;
-  children: ReactNode;
-  id: string;
-  error?: string;
-}) {
+export function Field({ label, hint, children, id, error }: { label: string; hint?: ReactNode; children: ReactNode; id: string; error?: string }) {
   return (
     <div className="space-y-1">
       <label htmlFor={id} className="block text-sm font-medium">

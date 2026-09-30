@@ -1,14 +1,6 @@
 import "server-only";
 import { eq, inArray } from "drizzle-orm";
-import {
-  ACTION_SOURCES,
-  SOURCE_LABELS,
-  type ActionSource,
-  type CalendarEvent,
-  type HomePayload,
-  type NextAction,
-  type SourceStatus,
-} from "@/lib/contracts";
+import { ACTION_SOURCES, SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomePayload, type NextAction, type SourceStatus } from "@/lib/contracts";
 import { iso, localDate, startOfLocalDay, DAY } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
 import { getPreferences } from "@/server/settings";
@@ -149,7 +141,12 @@ function applyPrefs(actions: NextAction[], now: Date) {
   const prefs = getDb()
     .select()
     .from(schema.actionPrefs)
-    .where(inArray(schema.actionPrefs.actionId, actions.map((a) => a.id)))
+    .where(
+      inArray(
+        schema.actionPrefs.actionId,
+        actions.map((a) => a.id),
+      ),
+    )
     .all();
   const map = new Map(prefs.map((p) => [p.actionId, p]));
   return actions
@@ -174,9 +171,12 @@ export async function collectSources(opts: { live: boolean; sources?: ActionSour
   const ctx = adapterContext();
   const list = opts.sources ?? ACTION_SOURCES;
   const results = opts.live
-    ? (await boundedAll(list.map((s) => () => refreshSource(s, ctx)), 4)).map((r, i) =>
-        r.status === "fulfilled" ? r.value : cachedSource(list[i]!),
-      )
+    ? (
+        await boundedAll(
+          list.map((s) => () => refreshSource(s, ctx)),
+          4,
+        )
+      ).map((r, i) => (r.status === "fulfilled" ? r.value : cachedSource(list[i]!)))
     : list.map((s) => cachedSource(s, ctx.now));
   return { ctx, results };
 }

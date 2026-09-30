@@ -111,7 +111,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
                   ) : null}
                   {s.pinned ? <span>Pinned</span> : null}
                   {s.archived ? <span>Archived</span> : null}
-                  {s.lastActiveAt ? <span>{relativeTime(s.lastActiveAt)}</span> : null}
+                  {s.lastActiveAt ? <span data-dynamic>{relativeTime(s.lastActiveAt)}</span> : null}
                 </span>
                 {!compact && s.preview ? <span className="mt-0.5 block truncate text-sm text-muted">{s.preview}</span> : null}
               </Link>

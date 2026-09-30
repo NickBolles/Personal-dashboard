@@ -27,7 +27,8 @@ export function AlertsView() {
     refetchInterval: 30_000,
   });
   const t = useMutation({
-    mutationFn: (v: { id: string; transition: "read" | "unread" | "dismiss" | "restore" | "acted" }) => api.patch(`/api/notifications/${v.id}`, { transition: v.transition }),
+    mutationFn: (v: { id: string; transition: "read" | "unread" | "dismiss" | "restore" | "acted" }) =>
+      api.patch(`/api/notifications/${v.id}`, { transition: v.transition }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
     onError: (e) => toast((e as Error).message, "danger"),
   });
@@ -54,7 +55,7 @@ export function AlertsView() {
           </Button>
         }
       />
-      <div role="tablist" aria-label="Filter alerts" className="mb-4 inline-flex rounded-xl border border-line bg-surface p-1">
+      <div role="tablist" aria-label="Filter alerts" className="mb-4 inline-flex max-w-full flex-wrap rounded-xl border border-line bg-surface p-1">
         {(["inbox", "all"] as const).map((f) => (
           <button
             key={f}
@@ -70,12 +71,12 @@ export function AlertsView() {
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.isLoading ? <Spinner label="Loading alerts…" /> : null}
       {q.data && !list.length ? <Empty title="You're all caught up">New alerts from Hermes, home, and your sources will appear here.</Empty> : null}
-      <ul className="space-y-2">
+      <ul className="space-y-2" data-dynamic>
         {list.map((n) => {
           const sev = SEVERITY[n.severity];
           const unread = !n.readAt && !n.dismissedAt;
           return (
-            <li key={n.id} className={cx("card p-4", unread && "border-l-4 border-l-accent", n.dismissedAt && "opacity-70")}>
+            <li key={n.id} data-id={n.id} className={cx("card p-4", unread && "border-l-4 border-l-accent", n.dismissedAt && "opacity-70")}>
               <div className="flex items-start gap-3">
                 <span className={cx("mt-0.5", n.severity === "critical" || n.severity === "high" ? "text-danger" : "text-muted")}>
                   {n.severity === "critical" || n.severity === "high" ? <AlertIcon className="h-5 w-5" /> : <BellIcon className="h-5 w-5" />}
@@ -89,7 +90,7 @@ export function AlertsView() {
                     {n.dismissedAt ? <Badge>Dismissed</Badge> : null}
                   </div>
                   <h2 className="mt-1 font-semibold">
-                    <button type="button" className="text-left hover:underline" onClick={() => open(n)}>
+                    <button type="button" className="block w-full text-left [overflow-wrap:anywhere] hover:underline" onClick={() => open(n)}>
                       {n.title}
                     </button>
                   </h2>
@@ -112,8 +113,12 @@ export function AlertsView() {
                 <OverflowMenu
                   label={`More actions for ${n.title}`}
                   items={[
-                    n.readAt ? { label: "Mark unread", onSelect: () => t.mutate({ id: n.id, transition: "unread" }) } : { label: "Mark read", onSelect: () => t.mutate({ id: n.id, transition: "read" }) },
-                    n.dismissedAt ? { label: "Restore to inbox", onSelect: () => t.mutate({ id: n.id, transition: "restore" }) } : { label: "Dismiss", onSelect: () => t.mutate({ id: n.id, transition: "dismiss" }) },
+                    n.readAt
+                      ? { label: "Mark unread", onSelect: () => t.mutate({ id: n.id, transition: "unread" }) }
+                      : { label: "Mark read", onSelect: () => t.mutate({ id: n.id, transition: "read" }) },
+                    n.dismissedAt
+                      ? { label: "Restore to inbox", onSelect: () => t.mutate({ id: n.id, transition: "restore" }) }
+                      : { label: "Dismiss", onSelect: () => t.mutate({ id: n.id, transition: "dismiss" }) },
                   ]}
                 />
               </div>

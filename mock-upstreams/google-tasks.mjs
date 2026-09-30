@@ -10,7 +10,16 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
     const today = new Date();
     const due = (d) => `${isoDate(addDays(today, d))}T00:00:00.000Z`;
     const add = (id, title, d, extra = {}) =>
-      state.tasks.set(id, { kind: "tasks#task", id, title, status: "needsAction", due: d === null ? undefined : due(d), updated: new Date(Date.now() - 3600e3).toISOString(), webViewLink: `https://tasks.google.com/task/${id}`, ...extra });
+      state.tasks.set(id, {
+        kind: "tasks#task",
+        id,
+        title,
+        status: "needsAction",
+        due: d === null ? undefined : due(d),
+        updated: new Date(Date.now() - 3600e3).toISOString(),
+        webViewLink: `https://tasks.google.com/task/${id}`,
+        ...extra,
+      });
     add("gt-1", "Renew car registration", -2, { notes: "DMV online" });
     add("gt-2", "Call plumber about water heater", 0);
     add("gt-3", "Book flights for Thanksgiving", 3);
@@ -39,7 +48,13 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
         state.codes.delete(body.code);
         const at = `ya29.mock_${randomBytes(6).toString("hex")}`;
         state.access.add(at);
-        return json(res, 200, { access_token: at, expires_in: 3599, refresh_token: refreshToken, scope: "https://www.googleapis.com/auth/tasks", token_type: "Bearer" });
+        return json(res, 200, {
+          access_token: at,
+          expires_in: 3599,
+          refresh_token: refreshToken,
+          scope: "https://www.googleapis.com/auth/tasks",
+          token_type: "Bearer",
+        });
       }
       if (body.grant_type === "refresh_token" && body.refresh_token === refreshToken) {
         const at = `ya29.mock_${randomBytes(6).toString("hex")}`;
@@ -50,9 +65,16 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
     }
     if (control.fail.has("todos")) return json(res, 503, { error: { code: 503, message: "Backend Error" } });
     const auth = (req.headers.authorization ?? "").replace("Bearer ", "");
-    if (!state.access.has(auth)) return json(res, 401, { error: { code: 401, message: "Request had invalid authentication credentials.", status: "UNAUTHENTICATED" } });
+    if (!state.access.has(auth))
+      return json(res, 401, { error: { code: 401, message: "Request had invalid authentication credentials.", status: "UNAUTHENTICATED" } });
     if (path === "/tasks/v1/users/@me/lists") {
-      return json(res, 200, { kind: "tasks#taskLists", items: [{ id: "MDEyMzQ1", title: "My Tasks", updated: new Date().toISOString() }, { id: "list-house", title: "House", updated: new Date().toISOString() }] });
+      return json(res, 200, {
+        kind: "tasks#taskLists",
+        items: [
+          { id: "MDEyMzQ1", title: "My Tasks", updated: new Date().toISOString() },
+          { id: "list-house", title: "House", updated: new Date().toISOString() },
+        ],
+      });
     }
     if ((match = path.match(/^\/tasks\/v1\/lists\/([^/]+)\/tasks$/)) && m === "GET") {
       const showCompleted = url.searchParams.get("showCompleted") === "true";
@@ -62,7 +84,15 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
     if ((match = path.match(/^\/tasks\/v1\/lists\/([^/]+)\/tasks$/)) && m === "POST") {
       const body = await readBody(req);
       const id = `gt-${Date.now()}`;
-      state.tasks.set(id, { kind: "tasks#task", id, title: body.title, notes: body.notes, due: body.due, status: "needsAction", updated: new Date().toISOString() });
+      state.tasks.set(id, {
+        kind: "tasks#task",
+        id,
+        title: body.title,
+        notes: body.notes,
+        due: body.due,
+        status: "needsAction",
+        updated: new Date().toISOString(),
+      });
       return json(res, 200, state.tasks.get(id));
     }
     if ((match = path.match(/^\/tasks\/v1\/lists\/([^/]+)\/tasks\/([^/]+)$/))) {

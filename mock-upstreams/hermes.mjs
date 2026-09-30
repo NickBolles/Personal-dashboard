@@ -52,6 +52,7 @@ export function createHermes({ apiKey }) {
   }
 
   function seed() {
+    for (const run of state.runs.values()) for (const end of run.enders) end();
     state.sessions.clear();
     state.messages.clear();
     state.runs.clear();
@@ -139,17 +140,21 @@ export function createHermes({ apiKey }) {
       }
     }
     const slow = /slow|long/i.test(input);
-    const reply = slow
-      ? "Working through this step by step. ".repeat(12).trim()
-      : `Got it: "${input.slice(0, 60)}". Here's what I found.`;
+    const reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${input.slice(0, 60)}". Here's what I found.`;
     const words = reply.split(/(?<= )/);
     for (const w of words) {
       if (run.status === "stopping") {
         await sleep(t);
-        return finish(run, "cancelled", { completed: false, partial: true, interrupted: true, turn_exit_reason: "interrupted_by_user", pending_steer: run.pendingSteer ?? undefined });
+        return finish(run, "cancelled", {
+          completed: false,
+          partial: true,
+          interrupted: true,
+          turn_exit_reason: "interrupted_by_user",
+          pending_steer: run.pendingSteer ?? undefined,
+        });
       }
       pushEvent(run, { event: "message.delta", delta: w });
-      await sleep(slow ? t * 3 : Math.max(10, t / 4));
+      await sleep(slow ? t * 1.5 : Math.max(10, t / 4));
     }
     if (run.pendingSteer) {
       pushEvent(run, { event: "message.delta", delta: ` (Adjusted for: ${run.pendingSteer})` });
@@ -163,7 +168,13 @@ export function createHermes({ apiKey }) {
       run.enders = [];
       await sleep(t * 4);
     }
-    finish(run, "completed", { completed: true, partial: false, interrupted: false, output, usage: { input_tokens: 10, output_tokens: words.length, total_tokens: 10 + words.length } });
+    finish(run, "completed", {
+      completed: true,
+      partial: false,
+      interrupted: false,
+      output,
+      usage: { input_tokens: 10, output_tokens: words.length, total_tokens: 10 + words.length },
+    });
   }
 
   function runStatus(run) {
@@ -216,22 +227,70 @@ export function createHermes({ apiKey }) {
       });
     }
     if (path === "/v1/models") {
-      return json(res, 200, { object: "list", data: [{ id: "hermes-agent", object: "model", created: 1759200000, owned_by: "hermes", root: "hermes-agent", parent: null }] });
+      return json(res, 200, {
+        object: "list",
+        data: [{ id: "hermes-agent", object: "model", created: 1759200000, owned_by: "hermes", root: "hermes-agent", parent: null }],
+      });
     }
     if (path === "/api/model/options") {
-      return json(res, 200, { providers: [{ id: "anthropic", name: "Anthropic" }, { id: "openai", name: "OpenAI" }], model: "claude-sonnet-4", provider: "anthropic" });
+      return json(res, 200, {
+        providers: [
+          { id: "anthropic", name: "Anthropic" },
+          { id: "openai", name: "OpenAI" },
+        ],
+        model: "claude-sonnet-4",
+        provider: "anthropic",
+      });
     }
     if (path === "/v1/skills") {
-      return json(res, 200, { object: "list", data: [{ name: "daily-compass", description: "Evening check-in", category: "life" }, { name: "github-pr-workflow", description: "Open and iterate on PRs", category: "github" }] });
+      return json(res, 200, {
+        object: "list",
+        data: [
+          { name: "daily-compass", description: "Evening check-in", category: "life" },
+          { name: "github-pr-workflow", description: "Open and iterate on PRs", category: "github" },
+        ],
+      });
     }
     if (path === "/v1/toolsets") {
-      return json(res, 200, { object: "list", platform: "api_server", data: [{ name: "web", label: "Web Search", description: "Search", enabled: true, configured: true, tools: ["web_search", "web_extract"] }, { name: "terminal", label: "Terminal", enabled: true, configured: true, tools: ["terminal"] }] });
+      return json(res, 200, {
+        object: "list",
+        platform: "api_server",
+        data: [
+          { name: "web", label: "Web Search", description: "Search", enabled: true, configured: true, tools: ["web_search", "web_extract"] },
+          { name: "terminal", label: "Terminal", enabled: true, configured: true, tools: ["terminal"] },
+        ],
+      });
     }
     if (path === "/api/jobs" && m === "GET") {
       return json(res, 200, {
         jobs: [
-          { id: "a1b2c3d4e5f6", name: "Morning brief", prompt: "Summarize my inbox", schedule: { kind: "cron", expr: "0 7 * * *", display: "0 7 * * *" }, schedule_display: "0 7 * * *", enabled: true, state: "scheduled", next_run_at: new Date(Date.now() + 36e5 * 10).toISOString(), last_run_at: new Date(Date.now() - 36e5 * 14).toISOString(), last_status: "ok", last_error: null, failure_streak: 0 },
-          { id: "0f1e2d3c4b5a", name: "Backup check", prompt: "Verify backups", schedule_display: "every 6h", enabled: true, state: "scheduled", next_run_at: new Date(Date.now() + 36e5 * 2).toISOString(), last_run_at: new Date(Date.now() - 36e5 * 4).toISOString(), last_status: "error", last_error: "rsync exited 23", failure_streak: 2 },
+          {
+            id: "a1b2c3d4e5f6",
+            name: "Morning brief",
+            prompt: "Summarize my inbox",
+            schedule: { kind: "cron", expr: "0 7 * * *", display: "0 7 * * *" },
+            schedule_display: "0 7 * * *",
+            enabled: true,
+            state: "scheduled",
+            next_run_at: new Date(Date.now() + 36e5 * 10).toISOString(),
+            last_run_at: new Date(Date.now() - 36e5 * 14).toISOString(),
+            last_status: "ok",
+            last_error: null,
+            failure_streak: 0,
+          },
+          {
+            id: "0f1e2d3c4b5a",
+            name: "Backup check",
+            prompt: "Verify backups",
+            schedule_display: "every 6h",
+            enabled: true,
+            state: "scheduled",
+            next_run_at: new Date(Date.now() + 36e5 * 2).toISOString(),
+            last_run_at: new Date(Date.now() - 36e5 * 4).toISOString(),
+            last_status: "error",
+            last_error: "rsync exited 23",
+            failure_streak: 2,
+          },
         ],
       });
     }
@@ -280,7 +339,7 @@ export function createHermes({ apiKey }) {
       if (!src) return hermesError(res, 404, "session_not_found", "Session not found");
       const body = await readBody(req);
       const child = addSession({ id: body.id, title: body.title ?? `${src.title ?? "Session"} fork`, parent_session_id: id });
-      for (const msg of state.messages.get(id)) addMessage(child.id, { ...msg, id: undefined, session_id: child.id });
+      for (const { id: _omit, ...msg } of state.messages.get(id)) addMessage(child.id, { ...msg, session_id: child.id });
       src.end_reason = "branched";
       src.ended_at = now();
       return json(res, 201, { object: "hermes.session", session: child });
@@ -314,7 +373,7 @@ export function createHermes({ apiKey }) {
       };
       state.runs.set(run.run_id, run);
       if (key) state.idem.set(key, { runId: run.run_id, body: JSON.stringify(body) });
-      const input = typeof body.input === "string" ? body.input : body.input.at(-1)?.content ?? "";
+      const input = typeof body.input === "string" ? body.input : (body.input.at(-1)?.content ?? "");
       setTimeout(() => execute(run, input), 5);
       return json(res, 202, { run_id: run.run_id, status: "started", replayed: false });
     }

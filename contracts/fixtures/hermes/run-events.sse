@@ -1,0 +1,36 @@
+: open
+
+id: 0
+data: {"event":"tool.started","run_id":"run_3f2a","timestamp":1759200001.9,"tool":"terminal","preview":"ls -la","seq":0}
+
+id: 1
+data: {"event":"tool.completed","run_id":"run_3f2a","timestamp":1759200002.4,"tool":"terminal","duration":0.512,"error":false,"preview":"README.md src","seq":1}
+
+id: 2
+data: {"event":"message.delta","run_id":"run_3f2a","timestamp":1759200002.5,"delta":"Two ","seq":2}
+
+: keepalive
+
+id: 3
+data: {"event":"approval.request","run_id":"run_3f2a","timestamp":1759200003.4,"command":"rm -rf build","pattern_key":"rm_recursive","pattern_keys":["rm_recursive"],"description":"Recursive delete","allow_permanent":true,"allow_session":true,"request_id":"4b7e0c1d2a3f4e5d6c7b8a9f0e1d2c3b","choices":["once","session","always","deny"],"seq":3}
+
+id: 4
+data: {"event":"approval.responded","run_id":"run_3f2a","timestamp":1759200004.0,"choice":"once","request_id":"4b7e0c1d2a3f4e5d6c7b8a9f0e1d2c3b","resolved":1,"seq":4}
+
+id: 5
+data: {"event":"subagent.start","run_id":"run_3f2a","timestamp":1759200004.1,"subagent_id":"sa_1","goal":"Research","seq":5}
+
+id: 6
+data: {"event":"subagent.complete","run_id":"run_3f2a","timestamp":1759200005.1,"subagent_id":"sa_1","goal":"Research","status":"completed","summary":"Found 3","seq":6}
+
+id: 7
+data: {"event":"run.steered","run_id":"run_3f2a","timestamp":1759200005.2,"accepted":true,"seq":7}
+
+id: 8
+data: {"event":"message.delta","run_id":"run_3f2a","timestamp":1759200005.3,"delta":"entries.","seq":8}
+
+id: 9
+data: {"event":"run.completed","run_id":"run_3f2a","timestamp":1759200006.0,"completed":true,"partial":false,"interrupted":false,"output":"Two entries.","usage":{"input_tokens":50,"output_tokens":3,"total_tokens":53},"seq":9}
+
+: stream closed
+

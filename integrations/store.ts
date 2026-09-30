@@ -2,14 +2,7 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { decrypt, encrypt } from "@/server/crypto";
-import {
-  getIntegrationDef,
-  INTEGRATIONS,
-  withDefaults,
-  type IntegrationKind,
-  type PublicIntegration,
-  type TestResult,
-} from "./registry";
+import { getIntegrationDef, INTEGRATIONS, withDefaults, type IntegrationKind, type PublicIntegration, type TestResult } from "./registry";
 
 export type ResolvedIntegration = {
   kind: IntegrationKind;
@@ -79,9 +72,7 @@ export function publicIntegration(kind: IntegrationKind): PublicIntegration {
     enabled: r.enabled,
     config: r.config,
     secrets: Object.fromEntries(
-      def.fields
-        .filter((f) => f.type === "secret")
-        .map((f) => [f.key, { set: Boolean(r.secrets[f.key]), fromEnv: r.envManaged.includes(f.key) }]),
+      def.fields.filter((f) => f.type === "secret").map((f) => [f.key, { set: Boolean(r.secrets[f.key]), fromEnv: r.envManaged.includes(f.key) }]),
     ),
     envManaged: r.envManaged,
     lastTest: stored?.lastTestResult ? (JSON.parse(stored.lastTestResult) as TestResult) : undefined,
@@ -122,11 +113,7 @@ export function saveIntegration(kind: IntegrationKind, update: IntegrationUpdate
     secrets: Object.keys(secrets).length ? encrypt(JSON.stringify(secrets)) : null,
     updatedAt: new Date().toISOString(),
   };
-  getDb()
-    .insert(schema.integrations)
-    .values(values)
-    .onConflictDoUpdate({ target: schema.integrations.kind, set: values })
-    .run();
+  getDb().insert(schema.integrations).values(values).onConflictDoUpdate({ target: schema.integrations.kind, set: values }).run();
   return publicIntegration(kind);
 }
 

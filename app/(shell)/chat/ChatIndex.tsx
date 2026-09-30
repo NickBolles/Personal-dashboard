@@ -1,15 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { SessionList } from "@/components/chat/SessionList";
-import { kvSet } from "@/lib/client/idb";
 import { PageHeader } from "@/components/ui";
 
 export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; context?: string; draft?: string }) {
-  useEffect(() => {
-    if (draft) kvSet("draft:quick", draft);
-  }, [draft]);
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." />
@@ -20,7 +15,12 @@ export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; co
             <p className="mt-0.5">{context}</p>
           </div>
         ) : null}
-        <QuickCapture key={draft ?? "q"} context={context} placeholder={startNew || context ? "What should Hermes do with this?" : undefined} />
+        <QuickCapture
+          key={draft ?? "q"}
+          initialText={draft}
+          context={context}
+          placeholder={startNew || context ? "What should Hermes do with this?" : undefined}
+        />
       </div>
       <div className="lg:hidden">
         <SessionList />

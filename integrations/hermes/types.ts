@@ -77,12 +77,7 @@ export const runCreatedSchema = z.object({
 });
 
 export const RUN_TERMINAL = ["completed", "failed", "cancelled", "interrupted"] as const;
-export type RunStatus =
-  | "queued"
-  | "running"
-  | "waiting_for_approval"
-  | "stopping"
-  | (typeof RUN_TERMINAL)[number];
+export type RunStatus = "queued" | "running" | "waiting_for_approval" | "stopping" | (typeof RUN_TERMINAL)[number];
 
 export const approvalRequestSchema = z
   .object({
@@ -136,8 +131,7 @@ export type HermesCapabilities = z.infer<typeof capabilitiesSchema>;
 
 export const healthSchema = z.object({ status: z.string(), platform: z.string().optional(), version: z.string().optional() }).passthrough();
 
-export const listSchema = <T extends z.ZodTypeAny>(item: T) =>
-  z.object({ object: z.string().optional(), data: z.array(item) }).passthrough();
+export const listSchema = <T extends z.ZodTypeAny>(item: T) => z.object({ object: z.string().optional(), data: z.array(item) }).passthrough();
 
 export const skillSchema = z.object({ name: z.string(), description: z.string().nullish(), category: z.string().nullish() }).passthrough();
 export const toolsetSchema = z

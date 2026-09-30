@@ -40,12 +40,25 @@ export function InitiativesView() {
       <PageHeader
         title="Initiatives"
         subtitle="Paperclip owns status, blockers and assignments. Jarvis shows them and links conversations."
-        actions={q.data ? <ButtonLink href={q.data.paperclipUrl} external>Open Paperclip</ButtonLink> : null}
+        actions={
+          q.data ? (
+            <ButtonLink href={q.data.paperclipUrl} external>
+              Open Paperclip
+            </ButtonLink>
+          ) : null
+        }
       />
       {q.isLoading ? <Spinner label="Loading from Paperclip…" /> : null}
       {q.error ? (
         (q.error as { status?: number }).status === 501 ? (
-          <Empty title="Paperclip isn’t connected" action={<Link className="underline" href="/settings/connections">Connect Paperclip</Link>} />
+          <Empty
+            title="Paperclip isn’t connected"
+            action={
+              <Link className="underline" href="/settings/connections">
+                Connect Paperclip
+              </Link>
+            }
+          />
         ) : (
           <ErrorNote error={q.error} retry={() => q.refetch()} />
         )
@@ -95,7 +108,14 @@ export function InitiativesView() {
                             {it.progress.done} of {it.progress.total} done
                           </span>
                         </div>
-                        <div className="mt-1 h-2 rounded-full bg-surface-2" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${it.title} progress`}>
+                        <div
+                          className="mt-1 h-2 rounded-full bg-surface-2"
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={pct}
+                          aria-label={`${it.title} progress`}
+                        >
                           <div className="h-2 rounded-full bg-accent" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -153,7 +173,9 @@ export function InitiativesView() {
                         <ButtonLink href={it.url} external>
                           Open in Paperclip
                         </ButtonLink>
-                        <ButtonLink href={`/chat?new=1&context=${encodeURIComponent(`Paperclip initiative ${it.identifier}: ${it.title}`)}`}>Discuss with Hermes</ButtonLink>
+                        <ButtonLink href={`/chat?new=1&context=${encodeURIComponent(`Paperclip initiative ${it.identifier}: ${it.title}`)}`}>
+                          Discuss with Hermes
+                        </ButtonLink>
                       </div>
                     </Card>
                   </li>

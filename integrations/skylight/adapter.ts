@@ -1,11 +1,12 @@
 import "server-only";
 import crypto from "node:crypto";
 import { z } from "zod";
-import { upstream } from "@/server/http/fetch";
+import { joinUrl, upstream } from "@/server/http/fetch";
 import { UpstreamError } from "@/server/http/errors";
 import { iso, localDate, MINUTE, DAY, localTimeToInstant } from "@/lib/time";
 import type { CalendarEvent, NextAction } from "@/lib/contracts";
 import { resolveIntegration, saveIntegration } from "@/integrations/store";
+import { processSingleton } from "@/server/singleton";
 import { runChecks } from "@/integrations/testing";
 import { baseAction, classifyInstant } from "@/integrations/actions";
 import type { AdapterContext, SourceAdapter } from "@/integrations/types";
@@ -32,14 +33,14 @@ function cfg() {
 
 const tokenSchema = z.object({ access_token: z.string(), refresh_token: z.string().optional(), expires_in: z.number().default(3600) });
 
-let access: { token: string; expiresAt: number; forRefresh: string } | undefined;
-let refreshing: Promise<string> | undefined;
+type TokenState = { access?: { token: string; expiresAt: number; forRefresh: string }; refreshing?: Promise<string> };
+const tokens = processSingleton<TokenState>("skylight_tokens", () => ({}));
 
 async function tokenRequest(form: Record<string, string>) {
   const c = cfg();
   let res: Response;
   try {
-    res = await fetch(new URL("/oauth/token", c.baseUrl), {
+    res = await fetch(joinUrl(c.baseUrl, "oauth/token"), {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams(form),
@@ -49,7 +50,9 @@ async function tokenRequest(form: Record<string, string>) {
     throw new UpstreamError("Skylight", "unreachable", `Could not reach Skylight (${(err as Error).message})`);
   }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new UpstreamError("Skylight", "unauthorized", "Skylight rejected the refresh token — sign in again", res.status);
+  if (res.status === 400 || res.status === 401)
+    throw new UpstreamError("Skylight", "unauthorized", "Skylight rejected the refresh token — sign in again", res.status);
+  if (!res.ok) throw new UpstreamError("Skylight", "bad_response", `Skylight token endpoint returned ${res.status}`, res.status);
   return tokenSchema.parse(body);
 }
 
@@ -57,24 +60,35 @@ async function tokenRequest(form: Record<string, string>) {
 async function accessToken(): Promise<string> {
   const c = cfg();
   if (!c.refreshToken) throw new UpstreamError("Skylight", "unauthorized", "Sign in to Skylight first");
-  if (access && access.forRefresh === c.refreshToken && access.expiresAt > Date.now() + 60_000) return access.token;
-  refreshing ??= (async () => {
+  const a = tokens.access;
+  if (a && a.forRefresh === c.refreshToken && a.expiresAt > Date.now() + 60_000) return a.token;
+  tokens.refreshing ??= (async () => {
     try {
-      const t = await tokenRequest({
-        grant_type: "refresh_token",
-        refresh_token: c.refreshToken,
-        client_id: CLIENT_ID,
-        ...(c.fingerprint ? { skylight_api_client_device_fingerprint: c.fingerprint } : {}),
-      });
-      const nextRefresh = t.refresh_token ?? c.refreshToken;
-      if (t.refresh_token) saveIntegration("skylight", { secrets: { refreshToken: t.refresh_token } });
-      access = { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000, forRefresh: nextRefresh };
-      return t.access_token;
+      return await refreshWith(cfg().refreshToken);
+    } catch (err) {
+      // Another refresh may have rotated the token between our read and the request: retry once with the latest.
+      const latest = cfg().refreshToken;
+      if (err instanceof UpstreamError && err.kind === "unauthorized" && latest && latest !== c.refreshToken) return refreshWith(latest);
+      throw err;
     } finally {
-      refreshing = undefined;
+      tokens.refreshing = undefined;
     }
   })();
-  return refreshing;
+  return tokens.refreshing;
+}
+
+async function refreshWith(refreshToken: string) {
+  const c = cfg();
+  const t = await tokenRequest({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+    client_id: CLIENT_ID,
+    ...(c.fingerprint ? { skylight_api_client_device_fingerprint: c.fingerprint } : {}),
+  });
+  const nextRefresh = t.refresh_token ?? refreshToken;
+  if (t.refresh_token) saveIntegration("skylight", { secrets: { refreshToken: t.refresh_token } });
+  tokens.access = { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000, forRefresh: nextRefresh };
+  return t.access_token;
 }
 
 async function api<T>(path: string, query?: Record<string, string>) {
@@ -95,7 +109,11 @@ const doc = z.object({ data: z.array(resource) });
 
 export async function listFrames() {
   const r = doc.parse(await api("/frames"));
-  return r.data.map((f) => ({ id: f.id, name: String(f.attributes.name ?? f.attributes.household_name ?? f.id), timezone: String(f.attributes.timezone ?? "") }));
+  return r.data.map((f) => ({
+    id: f.id,
+    name: String(f.attributes.name ?? f.attributes.household_name ?? f.id),
+    timezone: String(f.attributes.timezone ?? ""),
+  }));
 }
 
 async function frameId() {
@@ -208,13 +226,13 @@ export async function skylightSignIn(email: string, password: string) {
   const base = c.baseUrl;
   const fail = (msg: string) => new UpstreamError("Skylight", "unauthorized", msg);
 
-  const form = await fetch(new URL("/auth/session/new", base), { headers: { "user-agent": ua }, redirect: "manual", signal: AbortSignal.timeout(10_000) });
+  const form = await fetch(joinUrl(base, "auth/session/new"), { headers: { "user-agent": ua }, redirect: "manual", signal: AbortSignal.timeout(10_000) });
   store(form);
   const html = await form.text();
   const authenticity = html.match(/name="authenticity_token"[^>]*value="([^"]+)"/)?.[1];
   if (!authenticity) throw fail("Could not load the Skylight login form");
 
-  const login = await fetch(new URL("/auth/session", base), {
+  const login = await fetch(joinUrl(base, "auth/session"), {
     method: "POST",
     redirect: "manual",
     headers: {
@@ -222,7 +240,7 @@ export async function skylightSignIn(email: string, password: string) {
       "user-agent": ua,
       cookie: cookie(),
       origin: base,
-      referer: new URL("/auth/session/new", base).toString(),
+      referer: joinUrl(base, "auth/session/new").toString(),
     },
     body: new URLSearchParams({ authenticity_token: authenticity, email, password }),
     signal: AbortSignal.timeout(10_000),
@@ -234,7 +252,7 @@ export async function skylightSignIn(email: string, password: string) {
 
   const verifier = crypto.randomBytes(32).toString("base64url");
   const challenge = crypto.createHash("sha256").update(verifier).digest("base64url");
-  const authorize = new URL("/oauth/authorize", base);
+  const authorize = joinUrl(base, "oauth/authorize");
   for (const [k, v] of Object.entries({
     client_id: CLIENT_ID,
     response_type: "code",
@@ -264,5 +282,5 @@ export async function skylightSignIn(email: string, password: string) {
     config: { deviceFingerprint: fingerprint },
     secrets: { refreshToken: t.refresh_token },
   });
-  access = { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000, forRefresh: t.refresh_token };
+  tokens.access = { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000, forRefresh: t.refresh_token };
 }

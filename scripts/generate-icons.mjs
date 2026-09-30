@@ -8,7 +8,7 @@ const maskable = Buffer.from(
   svg
     .toString()
     .replace('rx="112"', 'rx="0"')
-    .replace("<circle cx=\"256\"", '<g transform="translate(51.2 51.2) scale(0.8)"><circle cx="256"')
+    .replace('<circle cx="256"', '<g transform="translate(51.2 51.2) scale(0.8)"><circle cx="256"')
     .replace("</svg>", "</g></svg>"),
 );
 const out = [

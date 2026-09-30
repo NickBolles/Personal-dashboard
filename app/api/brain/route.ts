@@ -4,7 +4,7 @@ import { resolveIntegration } from "@/integrations/store";
 
 export const dynamic = "force-dynamic";
 
-const settle = async <T,>(p: Promise<T>) => {
+const settle = async <T>(p: Promise<T>) => {
   try {
     return { ok: true as const, value: await p };
   } catch (err) {

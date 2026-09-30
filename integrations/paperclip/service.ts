@@ -10,14 +10,7 @@ import { iso, MINUTE } from "@/lib/time";
 import { runChecks } from "@/integrations/testing";
 import { baseAction } from "@/integrations/actions";
 import type { SourceAdapter } from "@/integrations/types";
-import {
-  issueUrl,
-  PaperclipClient,
-  paperclipConn,
-  resolveCompany,
-  TERMINAL,
-  type PaperclipIssue,
-} from "./client";
+import { issueUrl, PaperclipClient, paperclipConn, resolveCompany, TERMINAL, type PaperclipIssue } from "./client";
 
 const STALE = 10 * MINUTE;
 const PRIORITY = ["critical", "high", "medium", "low"];
@@ -40,7 +33,11 @@ export type InitiativeCard = IssueCard & {
   relatedSessions: { sessionId: string; relationship: string; linkId: string }[];
 };
 
-function card(c: ReturnType<typeof paperclipConn>, prefix: string | undefined, i: Pick<PaperclipIssue, "id" | "identifier" | "title" | "status" | "priority" | "assigneeAgentId" | "assigneeUserId">): IssueCard {
+function card(
+  c: ReturnType<typeof paperclipConn>,
+  prefix: string | undefined,
+  i: Pick<PaperclipIssue, "id" | "identifier" | "title" | "status" | "priority" | "assigneeAgentId" | "assigneeUserId">,
+): IssueCard {
   return {
     id: i.id,
     identifier: i.identifier ?? i.id.slice(0, 8),

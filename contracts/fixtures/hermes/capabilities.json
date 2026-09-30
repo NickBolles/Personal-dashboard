@@ -1,0 +1,19 @@
+{
+  "object": "hermes.api_server.capabilities",
+  "platform": "hermes-agent",
+  "model": "hermes-agent",
+  "auth": { "type": "bearer", "required": true },
+  "features": {
+    "run_submission": true,
+    "runs_idempotency": { "supported": true, "durable": true, "retention_seconds": 86400 },
+    "run_status": true,
+    "run_events_sse": true,
+    "run_stop": true,
+    "run_steer": true,
+    "run_approval_response": true,
+    "session_fork": true,
+    "jobs_admin": false,
+    "memory_write_api": false
+  },
+  "endpoints": { "runs": { "method": "POST", "path": "/v1/runs" }, "session_fork": { "method": "POST", "path": "/api/sessions/{session_id}/fork" } }
+}

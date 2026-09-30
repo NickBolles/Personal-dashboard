@@ -36,7 +36,11 @@ export function InstallPrompt() {
   if (installed) return <Badge tone="ok">Installed — you’re running the app</Badge>;
   return (
     <div className="space-y-3 text-sm">
-      {!secure ? <p className="rounded-xl bg-warn-soft p-3 text-warn">Installing requires HTTPS. Open Jarvis at its HTTPS address (for example through Traefik) on your phone.</p> : null}
+      {!secure ? (
+        <p className="rounded-xl bg-warn-soft p-3 text-warn">
+          Installing requires HTTPS. Open Jarvis at its HTTPS address (for example through Traefik) on your phone.
+        </p>
+      ) : null}
       {canPrompt ? (
         <Button
           variant="primary"
@@ -55,7 +59,9 @@ export function InstallPrompt() {
         <p className="font-medium">On Android (Chrome)</p>
         <ol className="ml-5 list-decimal text-muted">
           <li>Open Jarvis at its HTTPS address.</li>
-          <li>Tap the ⋮ menu → <strong>Install app</strong> (or <strong>Add to Home screen</strong>).</li>
+          <li>
+            Tap the ⋮ menu → <strong>Install app</strong> (or <strong>Add to Home screen</strong>).
+          </li>
           <li>Open Jarvis from your home screen, then enable push in Settings → Notifications.</li>
         </ol>
       </div>

@@ -74,7 +74,12 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
         if (!bearerOk(req, c.compassToken)) return json(res, 401, { error: "unauthorized" });
         const date = isoDate(new Date());
         if (path === "/today" && req.method === "GET") {
-          return json(res, 200, { date, completed: compass.completed.has(date), completedAt: compass.completed.get(date) ?? null, url: "https://compass.example.com/today" });
+          return json(res, 200, {
+            date,
+            completed: compass.completed.has(date),
+            completedAt: compass.completed.get(date) ?? null,
+            url: "https://compass.example.com/today",
+          });
         }
         if (path === "/today/complete" && req.method === "POST") {
           compass.completed.set(date, new Date().toISOString());

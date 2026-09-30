@@ -47,3 +47,7 @@ next-env.d.ts
 /blob-report/
 /e2e/.auth/
 !.env.example
+/e2e/__screenshots__/local/
+/data-dev/
+/.e2e-pass*.log
+/.sandbox-ca.crt

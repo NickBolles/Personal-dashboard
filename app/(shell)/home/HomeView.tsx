@@ -31,11 +31,15 @@ function FreshnessStrip({ sources, refreshing, online, generatedAt }: { sources:
           <strong className="font-semibold">{s.label}:</strong>{" "}
           {s.state === "unauthorized" ? (
             <>
-              needs re-authentication. <Link className="underline" href="/settings/connections">Fix connection</Link>
+              needs re-authentication.{" "}
+              <Link className="underline" href="/settings/connections">
+                Fix connection
+              </Link>
             </>
           ) : s.state === "error" ? (
             <>
-              couldn’t refresh{s.fetchedAt ? ` (showing data from ${relativeTime(s.fetchedAt)})` : " — nothing cached yet"}. {s.error ? <span className="opacity-80">{s.error}</span> : null}
+              couldn’t refresh{s.fetchedAt ? ` (showing data from ${relativeTime(s.fetchedAt)})` : " — nothing cached yet"}.{" "}
+              {s.error ? <span className="opacity-80">{s.error}</span> : null}
             </>
           ) : s.state === "stale" ? (
             <>data from {s.fetchedAt ? relativeTime(s.fetchedAt) : "earlier"}</>
@@ -115,9 +119,7 @@ export function HomeView() {
         <h1 className="text-2xl font-semibold tracking-tight">{greeting}</h1>
       </header>
 
-      {data ? (
-        <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} />
-      ) : null}
+      {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
       <section aria-labelledby="now-h" className="mb-6">
@@ -137,9 +139,23 @@ export function HomeView() {
             ))}
           </ol>
         ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
-          <Empty title="Nothing needs you right now">Checked {data.sources.filter((s) => s.state === "ok" || s.state === "stale").map((s) => s.label).join(", ")}.</Empty>
+          <Empty title="Nothing needs you right now">
+            Checked{" "}
+            {data.sources
+              .filter((s) => s.state === "ok" || s.state === "stale")
+              .map((s) => s.label)
+              .join(", ")}
+            .
+          </Empty>
         ) : (
-          <Empty title="No sources connected yet" action={<Link className="underline" href="/settings/connections">Connect sources</Link>}>
+          <Empty
+            title="No sources connected yet"
+            action={
+              <Link className="underline" href="/settings/connections">
+                Connect sources
+              </Link>
+            }
+          >
             Jarvis can’t tell what’s next until at least one source is connected.
           </Empty>
         )}
@@ -203,7 +219,11 @@ function Glance({ data }: { data: HomePayload }) {
           {data.glance.compass ? (
             <p className="mt-1">
               <Link href="/daily-compass" className="font-medium hover:underline">
-                {data.glance.compass.completed ? "Done for today" : data.glance.compass.inWindow ? "Check-in open now" : `Opens ${data.glance.compass.windowLabel.split("–")[0]}`}
+                {data.glance.compass.completed
+                  ? "Done for today"
+                  : data.glance.compass.inWindow
+                    ? "Check-in open now"
+                    : `Opens ${data.glance.compass.windowLabel.split("–")[0]}`}
               </Link>
             </p>
           ) : (

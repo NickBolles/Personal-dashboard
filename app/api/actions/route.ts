@@ -9,7 +9,10 @@ import { DAY } from "@/lib/time";
 const bodySchema = z.object({
   actionId: z.string().min(3).max(500),
   kind: z.enum(["complete", "snooze", "acknowledge", "pin", "unpin"]),
-  until: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 /**
