@@ -19,7 +19,6 @@ import type { IntegrationKind } from "@/integrations/registry";
 import { ADAPTERS } from "@/integrations";
 import { adapterContext, getHome, refreshSource } from "@/server/sources";
 import { evaluateException, homeHealth, parseAllowlist } from "@/integrations/home-assistant/adapter";
-import { assertShareableContext } from "@/server/privacy";
 import { executeControl, listControls } from "@/integrations/home-assistant/controls";
 import { track, trackIdempotencyKey } from "@/integrations/paperclip/service";
 import { tick } from "@/server/worker";
@@ -181,23 +180,6 @@ describe("home assistant", () => {
     const bare = homeHealth([{ entity_id: "light.x", state: "on", attributes: {} }], undefined, new Date());
     expect(bare.updatesPending).toBeUndefined();
     expect(bare.integrationsFailing).toBeUndefined();
-  });
-  it("privacy: Home Assistant items can't be attached as Hermes context", () => {
-    expect(() => assertShareableContext("- Garage door: Open [home_assistant:cover.garage_door@x]")).toThrow(/stays out of Hermes/);
-    notify({
-      type: "home.exception",
-      category: "ha_critical",
-      severity: "high",
-      title: "Front door lock: Unlocked",
-      body: "x",
-      source: "home_assistant",
-      deepLink: "/home-control",
-      dedupeKey: "privacy-test",
-    });
-    const alertId = listNotifications(userId).find((n) => n.title === "Front door lock: Unlocked")!.id;
-    expect(() => assertShareableContext(`- Front door [alert:${alertId}]`)).toThrow(/stays out of Hermes/);
-    expect(() => assertShareableContext("- Renew car registration [todos:abc]")).not.toThrow();
-    expect(() => assertShareableContext(undefined)).not.toThrow();
   });
   it("controls: rejects non-allowlisted, rejects stale state, confirms by readback", async () => {
     await setHa("cover.garage_door", "open", 20);

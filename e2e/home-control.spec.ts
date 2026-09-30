@@ -51,3 +51,14 @@ test("controls are disabled offline and never queued", async ({ page, context })
   for (const b of await page.locator("section[aria-labelledby=ctl-h] li button").all()) await expect(b).toBeDisabled();
   await context.setOffline(false);
 });
+
+test("ask Hermes about my home attaches a snapshot of what Jarvis sees", async ({ page, request }) => {
+  await setHa(request, "cover.garage_door", "open", 30);
+  await page.goto("/home-control");
+  await expect(page.locator("section[aria-labelledby=ctl-h] li").first()).toBeVisible();
+  await page.getByRole("link", { name: "Ask Hermes about my home" }).click();
+  await expect(page).toHaveURL(/\/chat\?new=1&context=/);
+  const context = decodeURIComponent(new URL(page.url()).searchParams.get("context") ?? "");
+  expect(context).toContain("Garage door (cover.garage_door)");
+  expect(context).toContain("Health:");
+});

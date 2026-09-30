@@ -10,3 +10,6 @@ e2e/__screenshots__
 docs/research
 package-lock.json
 public/sw.js
+android/.gradle
+android/build
+android/app/build

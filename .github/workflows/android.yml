@@ -1,0 +1,120 @@
+name: Android APK
+
+# Builds the Trusted Web Activity wrapper in android/ into an installable APK.
+# Set the repo variable JARVIS_DOMAIN (Settings → Secrets and variables →
+# Actions → Variables) and the signing secrets described in docs/android.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Jarvis hostname (defaults to the JARVIS_DOMAIN repo variable)"
+        required: false
+      release:
+        description: "Also publish a GitHub release with the APK (direct download on your phone)"
+        type: boolean
+        default: false
+  push:
+    paths:
+      - "android/**"
+      - "scripts/generate-icons.mjs"
+      - ".github/workflows/android.yml"
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    env:
+      JARVIS_HOST: ${{ inputs.host || vars.JARVIS_DOMAIN || 'jarvis.example.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ks="$RUNNER_TEMP/jarvis.jks"
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$ks"
+            alias="$KEY_ALIAS"; storepass="$KEYSTORE_PASSWORD"; keypass="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            echo "persistent=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with a throwaway key. Updates won't install over this APK and assetlinks won't match the next build. See docs/android.md."
+            alias=jarvis; storepass=$(openssl rand -hex 16); keypass=$storepass
+            keytool -genkeypair -keystore "$ks" -alias "$alias" -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$storepass" -keypass "$keypass" -dname "CN=Jarvis" -noprompt
+            echo "persistent=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::add-mask::$storepass"
+          echo "::add-mask::$keypass"
+          {
+            echo "JARVIS_KEYSTORE=$ks"
+            echo "JARVIS_KEYSTORE_PASSWORD=$storepass"
+            echo "JARVIS_KEY_ALIAS=$alias"
+            echo "JARVIS_KEY_PASSWORD=$keypass"
+          } >> "$GITHUB_ENV"
+          fp=$(keytool -list -v -keystore "$ks" -alias "$alias" -storepass "$storepass" | awk '/SHA256:/{print $2}')
+          echo "fingerprint=$fp" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon assembleRelease \
+            -PjarvisHost="$JARVIS_HOST" \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=1.0.${{ github.run_number }}
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk "../dist/jarvis-${{ github.run_number }}.apk"
+
+      - name: Verify signature
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner
+          "$apksigner" verify --print-certs "dist/jarvis-${{ github.run_number }}.apk" | head -5
+
+      - name: Summary
+        run: |
+          {
+            echo "### Jarvis APK for \`$JARVIS_HOST\`"
+            echo
+            echo "Signing key: ${{ steps.key.outputs.persistent == 'true' && 'persistent (from secrets)' || '**throwaway** (set the signing secrets, see docs/android.md)' }}"
+            echo
+            echo "Set this in Jarvis's \`.env\` so the app opens full-screen (no URL bar), then restart Jarvis:"
+            echo
+            echo '```'
+            echo "JARVIS_TWA_ASSETLINKS=com.nickbolles.jarvis=${{ steps.key.outputs.fingerprint }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-apk-${{ github.run_number }}
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Publish release
+        if: ${{ inputs.release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "android-${{ github.run_number }}" dist/*.apk \
+            --target "${{ github.sha }}" \
+            --title "Jarvis Android ${{ github.run_number }}" \
+            --notes "TWA wrapper for https://$JARVIS_HOST. Assetlinks: com.nickbolles.jarvis=${{ steps.key.outputs.fingerprint }}"

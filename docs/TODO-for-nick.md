@@ -52,7 +52,7 @@ Daily Compass lives in Hermes, so Jarvis asks Hermes for today's state instead o
 - [ ] Review the **allowed controls**. Per the assessment's rules on sensitive domains, the defaults are the **safe direction only**: lock the front door, close each garage. Add `, unlock` or `, open_cover` to a line only if you want that from your phone. Jarvis should never be the only way to unlock a door.
 - [ ] Calendars: `calendar.family_calendar` is pre-filled for the household glance.
 - [ ] Glance at Home → **Home Assistant health**: counts of unavailable/unknown entities, pending updates, and failing integrations. Anything unreadable is "unknown", never 0.
-- Privacy line: Home Assistant items are never offered as Hermes context, and the server rejects them if sent (docs/security.md → What never reaches Hermes).
+- Ask about your home: **Ask Hermes about my home** on the Home page starts a conversation with a snapshot of exceptions, controllable entities and health (docs/security.md → Home Assistant and Hermes).
 - ⚠️ Separate from Jarvis, from the assessment: `hass-config/automations.yaml` (~line 568) has a webhook token committed in plain text. Rotate it and move it to `secrets.yaml`. Also leave the HA MCP server as a _future_ read-only channel for Hermes. Jarvis doesn't need it.
 
 ## 7. Skylight (Hermes-owned, read-only)
@@ -75,5 +75,5 @@ No Paperclip deployment was found in your repos.
 
 ## 10. Optional later
 
-- [ ] Wrap Jarvis as an APK with PWABuilder and set `JARVIS_TWA_ASSETLINKS` (docs/android.md).
+- [ ] APK (optional; the Chrome install already works): create a signing key, add the `ANDROID_*` secrets and the `JARVIS_DOMAIN` variable in GitHub, run **Actions → Android APK**, then set the `JARVIS_TWA_ASSETLINKS` line from the run summary (docs/android.md).
 - [ ] Schedule backups: `docker compose exec jarvis node scripts/backup.mjs` in cron (keeps 14).

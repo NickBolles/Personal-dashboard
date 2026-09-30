@@ -23,3 +23,27 @@ for (const [name, src, size] of out) {
   await sharp(src, { density: 384 }).resize(size, size).png().toFile(`public/icons/${name}`);
   console.log("wrote", name);
 }
+
+// Android (TWA wrapper in android/): legacy launcher PNGs + adaptive/monochrome foreground.
+// The glyph layer (no background) is scaled into the adaptive icon's 66/108 safe zone.
+const res = "android/app/src/main/res";
+const glyph = Buffer.from(
+  svg
+    .toString()
+    .replace(/<rect[^>]*\/>/, "")
+    .replace('<circle cx="256"', '<g transform="translate(256 256) scale(0.62) translate(-256 -256)"><circle cx="256"')
+    .replace("</svg>", "</g></svg>"),
+);
+const densities = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+for (const [d, k] of Object.entries(densities)) {
+  fs.mkdirSync(`${res}/mipmap-${d}`, { recursive: true });
+  await sharp(svg, { density: 384 })
+    .resize(48 * k, 48 * k)
+    .png()
+    .toFile(`${res}/mipmap-${d}/ic_launcher.png`);
+  await sharp(glyph, { density: 384 })
+    .resize(108 * k, 108 * k)
+    .png()
+    .toFile(`${res}/mipmap-${d}/ic_launcher_foreground.png`);
+}
+console.log("wrote android launcher icons");

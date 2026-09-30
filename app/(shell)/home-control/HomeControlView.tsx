@@ -6,7 +6,7 @@ import { api } from "@/lib/client/api";
 import type { HomeHealth, SourceStatus } from "@/lib/contracts";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
-import { Badge, Button, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
 
 type Control = {
   entityId: string;
@@ -67,7 +67,17 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
-      <PageHeader title="Home" subtitle="Exceptions and a small set of confirmed controls." />
+      <PageHeader
+        title="Home"
+        subtitle="Exceptions and a small set of confirmed controls."
+        actions={
+          home.data?.data ? (
+            <ButtonLink href={`/chat?new=1&context=${encodeURIComponent(homeContext(home.data.data, controls.data?.controls))}`}>
+              Ask Hermes about my home
+            </ButtonLink>
+          ) : null
+        }
+      />
       {home.isLoading ? <Spinner label="Loading home state…" /> : null}
       <SourceState status={home.data?.status} hasData={Boolean(home.data?.data)} />
 
@@ -236,4 +246,28 @@ function HealthPanel({ status, health }: { status: SourceStatus; health?: HomeHe
       </Card>
     </section>
   );
+}
+
+/** What Jarvis currently sees at home, as plain text context for a Hermes conversation. */
+function homeContext(
+  data: { homeExceptions?: { entityId: string; name: string; state: string; reason: string; since?: string }[]; extra?: Record<string, unknown> },
+  controls: Control[] | undefined,
+) {
+  const time = (t?: string) => (t ? new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "");
+  const lines = [`Home Assistant snapshot from Jarvis at ${time(new Date().toISOString())}:`];
+  const ex = data.homeExceptions ?? [];
+  lines.push(ex.length ? "Exceptions:" : "Exceptions: none in watched entities.");
+  for (const e of ex) lines.push(`- ${e.name} (${e.entityId}): ${e.reason}, state "${e.state}"${e.since ? ` since ${time(e.since)}` : ""}`);
+  if (controls?.length) {
+    lines.push("Controllable entities:");
+    for (const c of controls) lines.push(`- ${c.name} (${c.entityId}): ${c.state}`);
+  }
+  const h = data.extra?.health as HomeHealth | undefined;
+  if (h) {
+    const v = (n?: number) => (n === undefined ? "unknown" : n);
+    lines.push(
+      `Health: ${h.entities} entities, ${h.unavailable} unavailable, ${h.unknown} unknown, updates pending ${v(h.updatesPending)}, integrations failing ${v(h.integrationsFailing)}${h.failingDomains?.length ? ` (${h.failingDomains.join(", ")})` : ""}.`,
+    );
+  }
+  return lines.join("\n").slice(0, 3800);
 }

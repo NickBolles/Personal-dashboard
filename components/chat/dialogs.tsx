@@ -7,7 +7,6 @@ import { api, newIdempotencyKey } from "@/lib/client/api";
 import type { HomePayload, JarvisNotification } from "@/lib/contracts";
 import type { RunView, SessionSummary, TimelineItem } from "@/lib/hermes";
 import { Button, Dialog, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
-import { shareableWithHermes } from "@/lib/privacy";
 
 export function RenameDialog({ open, onClose, session }: { open: boolean; onClose: () => void; session: SessionSummary }) {
   const [title, setTitle] = useState(session.title);
@@ -235,11 +234,8 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
     queryFn: () => api.get<{ notifications: JarvisNotification[] }>("/api/notifications"),
     enabled: open,
   });
-  // Home data never goes to the AI layer (lib/privacy.ts).
-  const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])]
-    .filter((a) => shareableWithHermes(a.source))
-    .slice(0, 12);
-  const alertItems = (alerts.data?.notifications ?? []).filter((n) => shareableWithHermes(n.source));
+  const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])].slice(0, 12);
+  const alertItems = alerts.data?.notifications ?? [];
   const pick = (label: string, ref: string) => {
     onPick(label, ref);
     onClose();
