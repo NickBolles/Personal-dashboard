@@ -31,6 +31,9 @@ jobs:
           node-version: 22
           cache: npm
       - if: steps.check.outputs.skip != 'true'
+        name: Build tools for native modules (better-sqlite3)
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential python3
+      - if: steps.check.outputs.skip != 'true'
         run: npm ci
       - if: steps.check.outputs.skip != 'true'
         run: npm run build

@@ -49,6 +49,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Build tools for native modules (better-sqlite3)
+        run: apt-get update && apt-get install -y --no-install-recommends build-essential python3
       - run: npm ci
       - run: npm run build
       - run: npx playwright test
