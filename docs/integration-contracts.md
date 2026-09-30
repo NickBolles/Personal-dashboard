@@ -25,16 +25,35 @@ Pinned upstream versions and verified endpoints. Full research notes with fixtur
 | states, service calls, calendars                          | `GET /api/states`, `POST /api/services/:d/:s`, `GET /api/calendars/:e?start&end`                        | verified (docs+source)                                      |
 | todo list                                                 | `POST /api/services/todo/get_items?return_response`                                                     | verified                                                    |
 | **Google Tasks**                                          | `GET /tasks/v1/lists/:list/tasks`, `PATCH …/tasks/:id`, OAuth refresh                                   | public API                                                  |
-| **Skylight** (unofficial)                                 | OAuth refresh (`client_id=skylight-mobile`, rotating), `GET /api/frames`, `/calendar_events`, `/chores` | community clients — **read-only**, verify with your account |
-| **Daily Compass**                                         | Jarvis-native (SQLite + Hermes conversation) or HTTP `GET {url}/today`, `POST {url}/today/complete`     | canonical store undecided — see TODO                        |
+| **Skylight** via Hermes (default)                         | structured Hermes request (below) → `{events[], chores[]}`                                              | depends on your Hermes Skylight tools — **verify**          |
+| **Skylight** direct (unofficial)                          | OAuth refresh (`client_id=skylight-mobile`, rotating), `GET /api/frames`, `/calendar_events`, `/chores` | community clients — **read-only**, verify with your account |
+| **Daily Compass** via Hermes (default)                    | structured Hermes request → `{date, completed, completedAt?, summary?}`; complete = mark + read back    | depends on your Hermes Daily Compass tools — **verify**     |
+| **Daily Compass** other modes                             | Jarvis-native (SQLite + Hermes conversation) or HTTP `GET {url}/today`, `POST {url}/today/complete`     | alternatives                                                |
+| **Home Assistant** health                                 | `GET /api/states` (counts), `GET /api/config/config_entries/entry` (admin token)                        | counts only; unreadable → "unknown", never 0                |
 
 ## Freshness & mutation guarantees
 
-| Source         | Stale after | Mutations                                         | Success means                                              |
-| -------------- | ----------- | ------------------------------------------------- | ---------------------------------------------------------- |
-| Hermes         | 2 min       | runs, approvals, stop, steer, rename/archive/fork | upstream 2xx; run completion only after terminal status    |
-| Todos          | 5 min       | complete, snooze (tomorrow)                       | readback shows new status/due                              |
-| Home Assistant | 5 min       | allowlisted services                              | readback shows expected state (else "sent, not confirmed") |
-| Daily Compass  | 10 min      | complete                                          | Jarvis row written / HTTP endpoint confirms                |
-| Paperclip      | 10 min      | create/link (Jarvis link record)                  | 201 or 200 `deduplicated`                                  |
-| Skylight       | 15 min      | none (read-only)                                  | —                                                          |
+| Source         | Stale after                            | Mutations                                         | Success means                                                                                          |
+| -------------- | -------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Hermes         | 2 min                                  | runs, approvals, stop, steer, rename/archive/fork | upstream 2xx; run completion only after terminal status                                                |
+| Todos          | 5 min                                  | complete, snooze (tomorrow)                       | readback shows new status/due                                                                          |
+| Home Assistant | 5 min                                  | allowlisted services                              | readback shows expected state (else "sent, not confirmed")                                             |
+| Daily Compass  | 10 min (via Hermes: 2 × sync interval) | complete                                          | Jarvis row written / HTTP endpoint confirms / Hermes answer reads back `completed: true` for that date |
+| Paperclip      | 10 min                                 | create/link (Jarvis link record)                  | 201 or 200 `deduplicated`                                                                              |
+| Skylight       | 15 min (via Hermes: 2 × sync interval) | none (read-only)                                  | —                                                                                                      |
+
+## Structured Hermes requests (Skylight, Daily Compass)
+
+Skylight and Daily Compass are **Hermes-owned**: Hermes has the tools and the credentials, and Jarvis asks it for data rather than holding a second set. `integrations/hermes/structured.ts` does this in a fixed way:
+
+1. Create a throwaway session titled `jarvis-sync:<source>` (source `jarvis-sync`) and PATCH it `hidden: true`. Jarvis never lists these in chat.
+2. `POST /v1/runs` with an empty `conversation_history` and `instructions` that start with `JARVIS_STRUCTURED_REQUEST source=<source>`, say "reply with ONE JSON object", and give an example of the exact shape. The task text is configurable in Settings → Connections (advanced).
+3. Poll `GET /v1/runs/:id` until terminal. If Hermes asks for **approval**, Jarvis stops the run and reports it. A sync never approves anything.
+4. Extract the JSON (code fences tolerated) and validate it with zod. `{"error": "…"}`, prose, or a shape mismatch **fail closed**: the source shows an error, never an empty calendar.
+5. `DELETE /api/sessions/:id`.
+
+Answers are cached (`settings` key `hermes_snapshot:<source>`, per local date) and refreshed in the background every _sync interval_. Home reads the cache, so it never waits on a model. Freshness follows the time Hermes answered. Data older than two intervals shows as **stale**, and the first sync shows "still running" rather than nothing.
+
+**Daily Compass → complete** sends a separate "mark complete, then read it back" request. Jarvis reports success only if the answer is for today's date **and** says `completed: true`.
+
+The Hermes side needs only tools that can read Skylight and Daily Compass. Nothing special is required for the JSON format; any capable model follows the instructions. The mock (`mock-upstreams/hermes.mjs`) answers these markers for tests. `FORCE_ERROR`, `FORCE_PROSE` and `FORCE_APPROVAL` in the task text exercise the failure paths.

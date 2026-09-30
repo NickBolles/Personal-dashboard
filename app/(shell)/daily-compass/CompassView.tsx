@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/client/api";
 import type { CompassState } from "@/integrations/types";
+import { relativeTime } from "@/lib/time";
 import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, useOnline, useToast } from "@/components/ui";
 
 export function CompassView() {
@@ -51,7 +52,13 @@ export function CompassView() {
           <div className="flex flex-wrap items-center gap-2">
             {s.completed ? <Badge tone="ok">Completed</Badge> : s.inWindow ? <Badge tone="accent">Window open</Badge> : <Badge>Window closed</Badge>}
             <span className="text-sm text-muted">Reminder at {q.data.reminderTime}</span>
+            {s.asOf ? (
+              <span className="text-sm text-muted" data-dynamic>
+                · Read via Hermes {relativeTime(s.asOf)}
+              </span>
+            ) : null}
           </div>
+          {s.summary ? <p className="mt-3 text-sm text-muted">{s.summary}</p> : null}
           <p className="mt-3">
             {s.completed
               ? `Done for today${s.completedAt ? ` at ${new Date(s.completedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}. Nice.`
@@ -69,7 +76,7 @@ export function CompassView() {
             )}
             {!s.completed ? (
               <Button busy={complete.isPending} disabled={!online} onClick={() => complete.mutate()}>
-                Mark complete
+                {complete.isPending && q.data.mode === "hermes" ? "Asking Hermes…" : "Mark complete"}
               </Button>
             ) : null}
           </div>

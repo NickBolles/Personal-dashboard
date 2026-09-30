@@ -10,6 +10,7 @@ import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/
 import type { CurrentUser } from "@/server/auth";
 import { hermesConn, HermesExecutionClient, HermesSessionClient } from "./client";
 import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
+import { SYNC_SESSION_SOURCE } from "./structured";
 import { RUN_TERMINAL, runEventSchema } from "./types";
 
 const db = () => getDb();
@@ -79,7 +80,9 @@ function assertRunOwner(user: CurrentUser, runId: string) {
 
 export async function listSessions(opts: { includeArchived?: boolean } = {}) {
   const res = await HermesSessionClient.list(hermesConn(), { limit: 100, includeChildren: true });
-  const sessions = decorate(res.data.map(normalizeSession));
+  // Hidden sessions (e.g. Jarvis's own structured sync requests) never show in chat.
+  const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
+  const sessions = decorate(visible.map(normalizeSession));
   return sessions.filter((s) => opts.includeArchived || !s.archived);
 }
 

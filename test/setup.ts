@@ -8,3 +8,4 @@ process.env.JARVIS_DATA_DIR = dir;
 process.env.JARVIS_DB_PATH = ":memory:";
 process.env.JARVIS_SETUP_CODE = "TESTCODE";
 process.env.JARVIS_DISABLE_WORKER = "1";
+process.env.JARVIS_STRUCTURED_POLL_MS = "20";

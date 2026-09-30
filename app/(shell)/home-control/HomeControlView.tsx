@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
+import type { HomeHealth, SourceStatus } from "@/lib/contracts";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
 import { Badge, Button, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
@@ -97,6 +98,10 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         </section>
       ) : null}
 
+      {home.data?.status && home.data.status.state !== "unconfigured" && home.data.status.state !== "disabled" ? (
+        <HealthPanel status={home.data.status} health={home.data.data?.extra?.health as HomeHealth | undefined} />
+      ) : null}
+
       <section aria-labelledby="ctl-h" className="mt-6">
         <h2 id="ctl-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
           Controls
@@ -176,5 +181,59 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         }
       />
     </div>
+  );
+}
+
+/**
+ * Counts only. Anything Jarvis couldn't read is "unknown", never 0. When the
+ * last read failed, every count is unknown rather than a reassuring old number.
+ */
+function HealthPanel({ status, health }: { status: SourceStatus; health?: HomeHealth }) {
+  const readable = status.state === "ok" || status.state === "stale";
+  const h = readable ? health : undefined;
+  const value = (n: number | undefined) => (n === undefined ? "unknown" : String(n));
+  const rows: { label: string; value: string; warn: boolean; note?: string }[] = [
+    { label: "Entities", value: value(h?.entities), warn: false },
+    { label: "Unavailable", value: value(h?.unavailable), warn: Boolean(h?.unavailable) },
+    { label: "Unknown state", value: value(h?.unknown), warn: false },
+    {
+      label: "Updates pending",
+      value: value(h?.updatesPending),
+      warn: Boolean(h?.updatesPending),
+      note: h && h.updatesPending === undefined ? "No update entities exposed" : undefined,
+    },
+    {
+      label: "Integrations failing",
+      value: value(h?.integrationsFailing),
+      warn: Boolean(h?.integrationsFailing),
+      note: h && h.integrationsFailing === undefined ? "Needs an admin token to read" : h?.failingDomains?.length ? h.failingDomains.join(", ") : undefined,
+    },
+  ];
+  return (
+    <section aria-labelledby="health-h" className="mt-6">
+      <h2 id="health-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+        Home Assistant health
+      </h2>
+      <Card as="div">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+          {rows.map((r) => (
+            <div key={r.label} className="min-w-0">
+              <dt className="text-xs text-muted">{r.label}</dt>
+              <dd className={cx("text-lg font-semibold tabular-nums", r.value === "unknown" && "text-base font-medium text-muted", r.warn && "text-warn")}>
+                {r.value}
+              </dd>
+              {r.note ? <dd className="text-xs text-muted [overflow-wrap:anywhere]">{r.note}</dd> : null}
+            </div>
+          ))}
+        </dl>
+        <p className="mt-3 text-xs text-muted" data-dynamic>
+          {h
+            ? `Read ${new Date(h.checkedAt).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}`
+            : readable
+              ? "Home Assistant hasn’t reported health yet."
+              : "Can’t read Home Assistant right now, so these are unknown."}
+        </p>
+      </Card>
+    </section>
   );
 }

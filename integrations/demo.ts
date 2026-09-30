@@ -36,7 +36,10 @@ export function demoPresets(): Partial<Record<IntegrationKind, Preset>> | null {
     },
     daily_compass: { config: { mode: "jarvis", windowStart: "00:00", windowEnd: "23:59", reminderTime: "20:00" }, secrets: {} },
     home_assistant: { config: { baseUrl: `${base}/ha` }, secrets: { token: MOCK.haToken } },
-    skylight: { config: { baseUrl: `${base}/skylight`, frameId: "", apiVersion: "2026-06-01" }, secrets: { refreshToken: MOCK.skylightRefresh } },
+    skylight: {
+      config: { mode: "direct", baseUrl: `${base}/skylight`, frameId: "", apiVersion: "2026-06-01" },
+      secrets: { refreshToken: MOCK.skylightRefresh },
+    },
     paperclip: { config: { baseUrl: `${base}/paperclip`, uiUrl: "https://paperclip.example.com", companyId: "" }, secrets: { apiKey: MOCK.paperclipKey } },
   };
 }

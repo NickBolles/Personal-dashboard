@@ -8,13 +8,18 @@ import type { CalendarEvent, NextAction } from "@/lib/contracts";
 import { resolveIntegration, saveIntegration } from "@/integrations/store";
 import { processSingleton } from "@/server/singleton";
 import { runChecks } from "@/integrations/testing";
+import { SKYLIGHT_DEFAULT_PROMPT } from "@/integrations/registry";
 import { baseAction, classifyInstant } from "@/integrations/actions";
-import type { AdapterContext, SourceAdapter } from "@/integrations/types";
+import { cachedStructured, runStructured, saveSnapshot } from "@/integrations/hermes/structured";
+import type { AdapterContext, SourceAdapter, SourceData } from "@/integrations/types";
 
 /**
- * Skylight has no official API. Contracts come from community clients
- * (go-skylight, skycli, pyskylight) — see docs/research/integrations-api.md.
- * Read-only: chore completion exists upstream but is not verified.
+ * Skylight has no official API. Two modes:
+ * - "hermes" (default): Skylight is Hermes-owned. Jarvis sends a structured,
+ *   read-only request and caches the validated answer (integrations/hermes/structured.ts).
+ * - "direct": community-client contracts (go-skylight, skycli, pyskylight) —
+ *   see docs/research/integrations-api.md.
+ * Read-only in both: chore completion exists upstream but is not verified.
  */
 const STALE = 15 * MINUTE;
 const CLIENT_ID = "skylight-mobile";
@@ -23,6 +28,9 @@ const REDIRECT_URI = "https://ourskylight.com/welcome";
 function cfg() {
   const r = resolveIntegration("skylight");
   return {
+    mode: (r.config.mode || "hermes") as "hermes" | "direct",
+    prompt: r.config.prompt || SKYLIGHT_DEFAULT_PROMPT,
+    syncMs: Math.max(5, Number(r.config.syncMinutes) || 30) * MINUTE,
     baseUrl: r.config.baseUrl || "https://app.ourskylight.com",
     apiVersion: r.config.apiVersion || "2026-06-01",
     frameId: r.config.frameId,
@@ -124,10 +132,129 @@ async function frameId() {
   return frames[0].id;
 }
 
+/* ------------------------------------------------------------------ via Hermes */
+
+const hermesAnswer = z.object({
+  events: z
+    .array(
+      z.object({
+        title: z.string(),
+        start: z.string().min(10),
+        end: z.string().nullish(),
+        allDay: z.boolean().nullish(),
+        location: z.string().nullish(),
+      }),
+    )
+    .max(500),
+  chores: z
+    .array(
+      z.object({
+        id: z.union([z.string(), z.number()]).nullish(),
+        title: z.string(),
+        time: z
+          .string()
+          .regex(/^\d{2}:\d{2}$/)
+          .nullish(),
+        completed: z.boolean(),
+      }),
+    )
+    .max(200),
+});
+type HermesAnswer = z.infer<typeof hermesAnswer>;
+
+const EXAMPLE: HermesAnswer = {
+  events: [
+    { title: "Soccer practice", start: "2026-10-01T17:30:00-05:00", end: "2026-10-01T18:30:00-05:00", allDay: false, location: "Field 3" },
+    { title: "School holiday", start: "2026-10-02", allDay: true },
+  ],
+  chores: [{ id: "123", title: "Feed the dog", time: "07:30", completed: false }],
+};
+
+function fill(template: string, vars: Record<string, string>) {
+  return template.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m);
+}
+
+export function skylightHermesRequest(ctx: AdapterContext) {
+  const c = cfg();
+  const to = localDate(ctx.now.getTime() + 7 * DAY, ctx.timezone);
+  return {
+    source: "skylight",
+    label: "Skylight",
+    task: fill(c.prompt, { from: ctx.today, to, timezone: ctx.timezone }),
+    schema: hermesAnswer,
+    example: EXAMPLE,
+  };
+}
+
+/** Event times without an offset are wall-clock times in the user's timezone. */
+function toInstant(v: string, ctx: AdapterContext) {
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+  const d = m ? localTimeToInstant(m[1]!, m[2]!, ctx.timezone) : new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+export function mapHermesAnswer(answer: HermesAnswer, ctx: AdapterContext): SourceData {
+  const events: CalendarEvent[] = answer.events
+    .map((e, i) => {
+      const allDay = Boolean(e.allDay) || /^\d{4}-\d{2}-\d{2}$/.test(e.start);
+      const startsAt = allDay ? e.start.slice(0, 10) : toInstant(e.start, ctx);
+      if (!startsAt) return null;
+      return {
+        id: `skylight:h${crypto.createHash("sha1").update(`${e.title}|${e.start}|${i}`).digest("hex").slice(0, 12)}`,
+        title: e.title || "(untitled)",
+        startsAt,
+        endsAt: e.end ? (allDay ? e.end.slice(0, 10) : toInstant(e.end, ctx)) : undefined,
+        allDay,
+        location: e.location ?? undefined,
+        source: "skylight" as const,
+        href: "https://app.ourskylight.com/",
+      };
+    })
+    .filter((e): e is NonNullable<typeof e> => Boolean(e))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const actions: NextAction[] = answer.chores
+    .filter((c) => !c.completed)
+    .map((c) => {
+      const id = c.id != null ? String(c.id) : `h${crypto.createHash("sha1").update(c.title).digest("hex").slice(0, 12)}`;
+      const due = c.time ? iso(localTimeToInstant(ctx.today, c.time, ctx.timezone)) : undefined;
+      return baseAction("skylight", id, ctx, STALE, {
+        title: c.title,
+        detail: "Skylight chore",
+        status: "open",
+        priorityReason: due ? classifyInstant(due, ctx) : "today",
+        dueAt: due,
+        updatedAt: iso(ctx.now),
+        href: "https://app.ourskylight.com/",
+        external: true,
+        primaryAction: { kind: "open", label: "Open Skylight" },
+      });
+    });
+  return { actions, events, extra: { via: "hermes" } };
+}
+
+async function fetchViaHermes(ctx: AdapterContext): Promise<SourceData> {
+  const c = cfg();
+  const snap = await cachedStructured({
+    source: "skylight",
+    label: "Skylight",
+    // A new day needs a new answer: chores and "today" move.
+    key: ctx.today,
+    maxAgeMs: c.syncMs,
+    load: () => runStructured(skylightHermesRequest(ctx)),
+  });
+  return {
+    ...mapHermesAnswer(snap.data, ctx),
+    asOf: snap.asOf,
+    // Tolerate one missed sync before calling it stale.
+    staleAfter: iso(new Date(snap.asOf).getTime() + 2 * c.syncMs),
+  };
+}
+
 export const skylightAdapter: SourceAdapter = {
   source: "skylight",
   staleAfterMs: STALE,
   async fetch(ctx: AdapterContext) {
+    if (cfg().mode === "hermes") return fetchViaHermes(ctx);
     const frame = await frameId();
     const until = localDate(ctx.now.getTime() + 7 * DAY, ctx.timezone);
     const [eventsDoc, choresDoc] = await Promise.all([
@@ -173,6 +300,28 @@ export const skylightAdapter: SourceAdapter = {
     return { actions, events };
   },
   async test() {
+    if (cfg().mode === "hermes") {
+      return runChecks([
+        {
+          name: "Hermes connected",
+          run: async () => {
+            if (!resolveIntegration("hermes").config.baseUrl) throw new Error("Connect Hermes first: Skylight is read through Hermes");
+            return "Skylight requests go through Hermes";
+          },
+        },
+        {
+          name: "Read Skylight via Hermes",
+          run: async () => {
+            const { adapterContext } = await import("@/server/sources");
+            const ctx = adapterContext();
+            const answer = await runStructured(skylightHermesRequest(ctx));
+            saveSnapshot("skylight", ctx.today, answer);
+            const open = answer.chores.filter((c) => !c.completed).length;
+            return `${answer.events.length} events this week, ${open} open chores today`;
+          },
+        },
+      ]);
+    }
     let frames: { id: string; name: string }[] = [];
     return runChecks(
       [

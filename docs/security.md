@@ -10,11 +10,25 @@
 | Credential leakage to the browser          | Upstream credentials stay server-side, AES-256-GCM encrypted at rest (`JARVIS_SECRET_KEY` or `/data/secret.key`). Public integration views only say whether a secret is set. `npm run secrets:scan` checks client bundles and tracked files in CI. |
 | Credentials in Hermes tool output          | Hermes redacts previews; Jarvis scrubs again (`scrub()` in `integrations/hermes/normalize.ts`).                                                                                                                                                    |
 | Arbitrary session/run IDs                  | Session IDs validated by pattern; run IDs must belong to the user in the `runs` table before stop/approve/steer/stream.                                                                                                                            |
-| Physical-world actions                     | HA allowlist, explicit confirmation, live state token check, readback verification, audit log, disabled offline.                                                                                                                                   |
+| Physical-world actions                     | HA allowlist (default: lock and close only; unlock/open are explicit opt-ins), explicit confirmation, live state token check, readback verification, audit log, disabled offline. Jarvis is never the only way to unlock a door.                   |
+| Home data reaching the AI layer            | Home Assistant actions/alerts can't be attached as Hermes context: hidden in the UI (`lib/privacy.ts`) and rejected server-side (`server/privacy.ts`). See below.                                                                                  |
+| Hermes-owned sources misreporting          | Structured requests (Skylight, Daily Compass) fail closed on prose, `{"error"}` or schema mismatch, stop on any approval request, and only count a completion that Hermes read back.                                                               |
 | Duplicate side effects                     | Idempotency keys for Hermes runs (browser-generated, reused on retry) and Paperclip creates (deterministic from title + parent).                                                                                                                   |
 | Resource exhaustion                        | Request body limit (256 KB), max concurrent SSE relays (`JARVIS_MAX_STREAMS`, default 8), per-source timeouts.                                                                                                                                     |
 | Clickjacking / injection                   | CSP, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`.                                                                                                                                                                                 |
 | Caching sensitive data offline             | The service worker never caches `/api/*`. IndexedDB holds only drafts and bounded snapshots (≤10 sessions). "Clear local cache" in Settings wipes it.                                                                                              |
+
+## What never reaches Hermes
+
+Following the home automation assessment, these never go to the AI layer, in any form: camera data, presence/occupancy, person and device-tracker state, precise location, lock/alarm/garage/cover **state**, entity IDs, device names, credentials, webhook IDs, and calendar content from Home Assistant.
+
+In Jarvis this means:
+
+- Home Assistant is read and controlled **directly** by the Jarvis server. None of it is sent to Hermes, and Jarvis's own Hermes requests (chat, structured syncs) never include it.
+- "Ask Hermes about this" is not offered on Home Assistant cards, and the context picker excludes Home Assistant actions and alerts. `POST /api/hermes/sessions/:id/runs` rejects context that references `home_assistant:*` or a Home Assistant alert (`400 private_context`).
+- The Home Assistant health panel is counts only (no entity IDs). Anything unreadable shows "unknown", never 0.
+
+What you type into chat yourself is yours to send; Jarvis doesn't scan free text.
 
 ## Secret map
 

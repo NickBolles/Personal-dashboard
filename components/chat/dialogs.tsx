@@ -7,6 +7,7 @@ import { api, newIdempotencyKey } from "@/lib/client/api";
 import type { HomePayload, JarvisNotification } from "@/lib/contracts";
 import type { RunView, SessionSummary, TimelineItem } from "@/lib/hermes";
 import { Button, Dialog, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { shareableWithHermes } from "@/lib/privacy";
 
 export function RenameDialog({ open, onClose, session }: { open: boolean; onClose: () => void; session: SessionSummary }) {
   const [title, setTitle] = useState(session.title);
@@ -234,7 +235,11 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
     queryFn: () => api.get<{ notifications: JarvisNotification[] }>("/api/notifications"),
     enabled: open,
   });
-  const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])].slice(0, 12);
+  // Home data never goes to the AI layer (lib/privacy.ts).
+  const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])]
+    .filter((a) => shareableWithHermes(a.source))
+    .slice(0, 12);
+  const alertItems = (alerts.data?.notifications ?? []).filter((n) => shareableWithHermes(n.source));
   const pick = (label: string, ref: string) => {
     onPick(label, ref);
     onClose();
@@ -259,7 +264,7 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
       </ul>
       <h3 className="mb-1 text-sm font-semibold">Alerts</h3>
       <ul className="space-y-1">
-        {(alerts.data?.notifications ?? []).slice(0, 10).map((n) => (
+        {alertItems.slice(0, 10).map((n) => (
           <li key={n.id}>
             <button
               type="button"
@@ -270,7 +275,7 @@ export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClos
             </button>
           </li>
         ))}
-        {!alerts.data?.notifications.length && !alerts.isLoading ? <li className="text-sm text-muted">No alerts.</li> : null}
+        {!alertItems.length && !alerts.isLoading ? <li className="text-sm text-muted">No alerts.</li> : null}
       </ul>
     </Dialog>
   );

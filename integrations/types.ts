@@ -19,6 +19,9 @@ export type CompassState = {
   windowEnd: string;
   sessionId?: string;
   url?: string;
+  /** Hermes-owned mode: when Hermes last read the state, and its one-line status */
+  asOf?: string;
+  summary?: string;
 };
 
 export type SourceData = {
@@ -28,6 +31,10 @@ export type SourceData = {
   homeExceptions?: HomeException[];
   /** extra, source-specific summary for its own page */
   extra?: Record<string, unknown>;
+  /** when the data was actually read upstream, if earlier than this fetch (cached answers) */
+  asOf?: string;
+  /** overrides asOf + staleAfterMs when the adapter syncs on its own schedule */
+  staleAfter?: string;
 };
 
 export type ActOptions = { until?: string; correlationId: string; actor: string };

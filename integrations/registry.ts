@@ -45,11 +45,18 @@ export const HA_DEFAULT_WATCH = [
   "binary_sensor.back_door",
 ].join("\n");
 
-export const HA_DEFAULT_CONTROLS = [
-  "lock.front_door_lock: lock, unlock",
-  "cover.garage_door: close_cover, open_cover",
-  "cover.garage_door_2: close_cover, open_cover",
-].join("\n");
+/**
+ * Safe direction only (lock, close). Unlocking or opening from a phone is an
+ * explicit opt-in: add ", unlock" / ", open_cover" yourself if you want it.
+ */
+export const HA_DEFAULT_CONTROLS = ["lock.front_door_lock: lock", "cover.garage_door: close_cover", "cover.garage_door_2: close_cover"].join("\n");
+
+/** Default structured requests Jarvis sends Hermes (Jarvis appends the JSON answer contract). */
+export const SKYLIGHT_DEFAULT_PROMPT =
+  "Read the Skylight family calendar from {from} through {to} (timezone {timezone}) and today's Skylight chores. Read only: do not create, change or complete anything.";
+export const COMPASS_STATUS_PROMPT = "Read my Daily Compass check-in state for {date} (timezone {timezone}). Read only: do not change anything.";
+export const COMPASS_COMPLETE_PROMPT =
+  "Mark my Daily Compass check-in for {date} (timezone {timezone}) as complete, then read the state back and report what it says now.";
 
 export const INTEGRATIONS: IntegrationDef[] = [
   {
@@ -193,9 +200,10 @@ export const INTEGRATIONS: IntegrationDef[] = [
         key: "mode",
         label: "Where check-ins live",
         type: "select",
-        default: "jarvis",
+        default: "hermes",
         options: [
-          { value: "jarvis", label: "Jarvis + Hermes (check-in is a Hermes conversation)" },
+          { value: "hermes", label: "Hermes owns Daily Compass (Jarvis asks Hermes for today's state)" },
+          { value: "jarvis", label: "Stored in Jarvis (check-in is a Hermes conversation)" },
           { value: "http", label: "External HTTP endpoint" },
         ],
       },
@@ -207,7 +215,33 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Hermes check-in prompt",
         type: "textarea",
         default: "Let's do my Daily Compass check-in. Ask me how today went, what mattered, and what tomorrow's one thing is.",
-        showWhen: { field: "mode", oneOf: ["jarvis"] },
+        showWhen: { field: "mode", oneOf: ["jarvis", "hermes"] },
+      },
+      {
+        key: "syncMinutes",
+        label: "Sync every (minutes)",
+        type: "number",
+        default: 15,
+        showWhen: { field: "mode", oneOf: ["hermes"] },
+        help: "How often Jarvis asks Hermes for today's check-in state.",
+      },
+      {
+        key: "statusPrompt",
+        label: "Status request sent to Hermes",
+        type: "textarea",
+        default: COMPASS_STATUS_PROMPT,
+        advanced: true,
+        showWhen: { field: "mode", oneOf: ["hermes"] },
+        help: "Placeholders: {date}, {timezone}. Must be read-only; Jarvis appends a JSON answer contract.",
+      },
+      {
+        key: "completePrompt",
+        label: "Mark-complete request sent to Hermes",
+        type: "textarea",
+        default: COMPASS_COMPLETE_PROMPT,
+        advanced: true,
+        showWhen: { field: "mode", oneOf: ["hermes"] },
+        help: "Placeholders: {date}, {timezone}. Hermes must read the state back; Jarvis only reports done when the answer says completed.",
       },
       {
         key: "url",
@@ -254,7 +288,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Allowed controls",
         type: "textarea",
         default: HA_DEFAULT_CONTROLS,
-        help: "entity_id: service, service. Every control asks for confirmation against live state.",
+        help: "entity_id: service, service. Defaults are the safe direction only (lock, close_cover). Add unlock or open_cover only if you want them from your phone. Every control asks for confirmation against live state.",
       },
       {
         key: "calendarEntities",
@@ -274,16 +308,46 @@ export const INTEGRATIONS: IntegrationDef[] = [
     docs: "https://github.com/jwmoss/skycli",
     fields: [
       {
+        key: "mode",
+        label: "How Jarvis reads Skylight",
+        type: "select",
+        default: "hermes",
+        options: [
+          { value: "hermes", label: "Via Hermes (Hermes owns Skylight)" },
+          { value: "direct", label: "Directly (unofficial API, refresh token)" },
+        ],
+        help: "Via Hermes: Jarvis sends Hermes a read-only structured request and caches the validated answer. Needs Hermes connected with its Skylight tools.",
+      },
+      {
+        key: "syncMinutes",
+        label: "Sync every (minutes)",
+        type: "number",
+        default: 30,
+        showWhen: { field: "mode", oneOf: ["hermes"] },
+        help: "Each sync is a short Hermes run. Data older than two intervals shows as stale.",
+      },
+      {
+        key: "prompt",
+        label: "Request sent to Hermes",
+        type: "textarea",
+        default: SKYLIGHT_DEFAULT_PROMPT,
+        advanced: true,
+        showWhen: { field: "mode", oneOf: ["hermes"] },
+        help: "Placeholders: {from}, {to}, {timezone}. Jarvis appends a JSON answer contract; keep this read-only.",
+      },
+      {
         key: "refreshToken",
         label: "Refresh token",
         type: "secret",
         env: "SKYLIGHT_REFRESH_TOKEN",
+        showWhen: { field: "mode", oneOf: ["direct"] },
         help: "Use “Sign in to Skylight” below, or paste one from `skycli auth login`. Skylight rotates it on every refresh; Jarvis stores the new one automatically.",
       },
       {
         key: "frameId",
         label: "Frame",
         type: "text",
+        showWhen: { field: "mode", oneOf: ["direct"] },
         help: "Leave blank. “Test connection” lists your frames so you can pick one.",
       },
       {
@@ -291,10 +355,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Device fingerprint",
         type: "text",
         advanced: true,
+        showWhen: { field: "mode", oneOf: ["direct"] },
         help: "Stable device UUID used with the refresh token. Generated at sign-in.",
       },
-      { key: "apiVersion", label: "API version header", type: "text", default: "2026-06-01", advanced: true },
-      { key: "baseUrl", label: "API base", type: "url", default: "https://app.ourskylight.com", advanced: true },
+      { key: "apiVersion", label: "API version header", type: "text", default: "2026-06-01", advanced: true, showWhen: { field: "mode", oneOf: ["direct"] } },
+      {
+        key: "baseUrl",
+        label: "API base",
+        type: "url",
+        default: "https://app.ourskylight.com",
+        advanced: true,
+        showWhen: { field: "mode", oneOf: ["direct"] },
+      },
     ],
   },
   {

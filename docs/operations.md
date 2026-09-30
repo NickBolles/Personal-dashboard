@@ -52,7 +52,7 @@ See `.env.example`. Notable: `JARVIS_AUTH_MODE` (`local`|`proxy`), `JARVIS_AUTH_
 
 - Hermes has no HTTP fork point; "Fork from here" is a Jarvis approximation using `conversation_history`.
 - Hermes memory contents are not exposed by the API server; Brain shows status, skills, toolsets and jobs.
-- Skylight has no official API and is read-only here; chore completion is not enabled.
+- Skylight is read-only here, via Hermes by default. Chore completion is not enabled. Hermes sync sessions (`jarvis-sync:*`) are hidden and deleted after each answer. If you see leftovers in the Hermes dashboard, a sync was interrupted; they're safe to delete.
 - Paperclip comments/status changes are implemented in the client but not surfaced in the UI yet (deep-link instead).
 - Web Push on iOS requires installing the PWA first.
 - Single household owner; no multi-user roles.

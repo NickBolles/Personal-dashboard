@@ -85,11 +85,14 @@ export async function refreshSource(source: ActionSource, ctx = adapterContext()
   const now = new Date().toISOString();
   try {
     const data = await withTimeout(adapter.fetch(ctx), SOURCE_TIMEOUT_MS, SOURCE_LABELS[source]);
-    const staleAfter = iso(ctx.now.getTime() + adapter.staleAfterMs);
+    // Cached upstream answers (e.g. via Hermes) carry their own read time; freshness follows it.
+    const fetchedAt = data.asOf ?? now;
+    const staleAfter = data.staleAfter ?? iso(new Date(fetchedAt).getTime() + adapter.staleAfterMs);
+    if (data.asOf) data.actions = data.actions.map((a) => ({ ...a, fetchedAt, staleAfter }));
     const values = {
       source,
       state: "ok",
-      fetchedAt: now,
+      fetchedAt,
       staleAfter,
       error: null,
       payload: JSON.stringify(data),
@@ -98,7 +101,8 @@ export async function refreshSource(source: ActionSource, ctx = adapterContext()
       updatedAt: now,
     };
     getDb().insert(schema.sourceSnapshots).values(values).onConflictDoUpdate({ target: schema.sourceSnapshots.source, set: values }).run();
-    return { status: { source, label: SOURCE_LABELS[source], state: "ok", fetchedAt: now, staleAfter }, data };
+    const state = new Date(staleAfter) < ctx.now ? "stale" : "ok";
+    return { status: { source, label: SOURCE_LABELS[source], state, fetchedAt, staleAfter }, data };
   } catch (err) {
     const unauthorized = err instanceof UpstreamError && err.kind === "unauthorized";
     const message = err instanceof UpstreamError ? err.message : `Unexpected error: ${(err as Error).message}`;

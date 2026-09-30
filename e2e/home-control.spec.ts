@@ -19,20 +19,28 @@ test("allowlisted control requires confirmation and reports success only after r
 });
 
 test("state changed since the user looked → rejected, nothing sent", async ({ page, request }) => {
-  await setHa(request, "lock.front_door_lock", "locked");
+  await setHa(request, "lock.front_door_lock", "unlocked");
   await page.goto("/home-control");
   const card = page.locator("section[aria-labelledby=ctl-h] li", { hasText: "Front door lock" }).first();
-  await expect(card).toContainText("locked");
-  await card.getByRole("button", { name: "Unlock Front door lock" }).click();
-  // Someone unlocks it physically before we confirm
-  await setHa(request, "lock.front_door_lock", "unlocked");
+  await expect(card).toContainText("unlocked");
+  await card.getByRole("button", { name: "Lock Front door lock" }).click();
+  // Someone locks it physically before we confirm
+  await setHa(request, "lock.front_door_lock", "locked");
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: /Yes, unlock/ })
+    .getByRole("button", { name: /Yes, lock/ })
     .click();
   await expect(page.getByRole("status").filter({ hasText: /State changed/ })).toBeVisible();
   const state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
-  expect(state.haCalls.filter((c: { service: string }) => c.service === "unlock")).toHaveLength(0);
+  expect(state.haCalls.filter((c: { service: string }) => c.service === "lock")).toHaveLength(0);
+});
+
+test("only the safe direction is allowed by default", async ({ page }) => {
+  await page.goto("/home-control");
+  const controls = page.locator("section[aria-labelledby=ctl-h]");
+  await expect(controls.getByRole("button", { name: "Lock Front door lock" })).toBeVisible();
+  await expect(controls.getByRole("button", { name: /^Unlock / })).toHaveCount(0);
+  await expect(controls.getByRole("button", { name: /^Open / })).toHaveCount(0);
 });
 
 test("controls are disabled offline and never queued", async ({ page, context }) => {

@@ -100,6 +100,23 @@ export type HomeException = {
   since?: string;
 };
 
+/**
+ * Counts only: no entity IDs or names. A count Jarvis could not read is
+ * undefined and renders as "unknown", never 0.
+ */
+export type HomeHealth = {
+  checkedAt: string;
+  entities: number;
+  unavailable: number;
+  unknown: number;
+  /** update.* entities reporting "on"; undefined when HA exposes no update entities */
+  updatesPending?: number;
+  /** config entries not loaded (setup error/retry, not loaded); undefined when the token can't read them */
+  integrationsFailing?: number;
+  /** integration domains (not entity IDs) that failed to load, max 5 */
+  failingDomains?: string[];
+};
+
 export type HomePayload = {
   generatedAt: string;
   now: NextAction[];

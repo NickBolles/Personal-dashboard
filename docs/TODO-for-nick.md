@@ -1,6 +1,6 @@
 # Your setup checklist
 
-Everything that needs your accounts, browser, or home network. The app, tests, CI, Docker, and docs are done. Each step says where it plugs in. In-app onboarding walks through steps 3–9 and tests each connection live.
+Everything that needs your accounts, browser, or home network. The app, tests, CI, Docker, and docs are done. Each step says where it plugs in. In-app onboarding walks through steps 3–8 and tests each connection live.
 
 ## 1. Deploy on the home server (≈10 min)
 
@@ -36,27 +36,31 @@ Your only todo integration today is **Google Tasks**, used through the gtasks MC
 - [ ] Onboarding → Todos: paste the client ID and secret, then **Connect Google** → consent → **Save & test**. Pick the task list it discovers.
 - Alternatives: a Home Assistant to-do entity, or "Built into Jarvis".
 
-## 5. Daily Compass — decide what it is
+## 5. Daily Compass (Hermes-owned)
 
-I couldn't find "Daily Compass" anywhere. The closest thing is `life-progress`, a daily check-in coach on Vercel with Clerk auth, and it has no external API. For now Jarvis runs it **natively**: a check-in window, a reminder push, and a one-tap Hermes conversation, with completion stored in Jarvis.
+Daily Compass lives in Hermes, so Jarvis asks Hermes for today's state instead of keeping its own copy. It sends a structured, JSON-only request and caches the validated answer (docs/integration-contracts.md → Structured Hermes requests).
 
-- [ ] Set your window and reminder time in Onboarding → Daily Compass. Defaults: 19:00–22:00, reminder at 20:00. life-progress uses 20:00.
-- [ ] If it should live in life-progress or elsewhere, expose `GET /today` and `POST /today/complete` (bearer token) and switch the mode to **External HTTP endpoint**. See docs/integration-contracts.md.
+- [ ] Onboarding → Daily Compass: keep **Hermes owns Daily Compass** (the default). Set your window and reminder. Defaults: 19:00–22:00, reminder at 20:00.
+- [ ] Press **Save & test**. "Read today's state via Hermes" must pass. If Hermes answers `{"error": …}` or in prose, the check says so. Adjust the status request under _advanced_ so it names your Daily Compass tool/skill.
+- [ ] Try **Mark complete** once. Jarvis only reports done when Hermes reads the state back as completed for today. If your Hermes asks for approval on that write, Jarvis stops and tells you. Then either allow that tool in Hermes or do it in chat.
+- Alternatives remain: "Stored in Jarvis" or an external HTTP endpoint.
 
 ## 6. Home Assistant
 
-- [ ] Create a long-lived token: HA → Profile → Security.
+- [ ] Create a long-lived token: HA → Profile → Security. An **admin** user's token also lets Jarvis count integrations that failed to load. Otherwise that count shows "unknown".
 - [ ] Onboarding → Home Assistant: enter URL `http://192.168.1.249:8123` and the token. Watched entities are pre-filled from your config: alarm, front lock, both garage doors, front and back doors.
-- [ ] Review the **allowed controls**. Pre-filled: lock/unlock front door and open/close both garages. Remove any you don't want controllable from your phone.
+- [ ] Review the **allowed controls**. Per the assessment's rules on sensitive domains, the defaults are the **safe direction only**: lock the front door, close each garage. Add `, unlock` or `, open_cover` to a line only if you want that from your phone. Jarvis should never be the only way to unlock a door.
 - [ ] Calendars: `calendar.family_calendar` is pre-filled for the household glance.
-- ⚠️ Separate from Jarvis: `hass-config/automations.yaml` (~line 568) has a webhook token committed in plain text. Rotate it and move it to `secrets.yaml`.
+- [ ] Glance at Home → **Home Assistant health**: counts of unavailable/unknown entities, pending updates, and failing integrations. Anything unreadable is "unknown", never 0.
+- Privacy line: Home Assistant items are never offered as Hermes context, and the server rejects them if sent (docs/security.md → What never reaches Hermes).
+- ⚠️ Separate from Jarvis, from the assessment: `hass-config/automations.yaml` (~line 568) has a webhook token committed in plain text. Rotate it and move it to `secrets.yaml`. Also leave the HA MCP server as a _future_ read-only channel for Hermes. Jarvis doesn't need it.
 
-## 7. Skylight (optional, read-only)
+## 7. Skylight (Hermes-owned, read-only)
 
-Skylight retired password login for API clients.
-
-- [ ] Try **Sign in to Skylight** in onboarding. Your password is used once and not stored.
-- [ ] If 2FA or device verification blocks it, run `skycli auth login` (github.com/jwmoss/skycli) and paste the refresh token. Jarvis rotates it automatically after that.
+- [ ] Onboarding → Skylight: keep **Via Hermes** (the default), then **Save & test**. "Read Skylight via Hermes" should report this week's events and today's open chores.
+- [ ] If the check fails, open _advanced_ and edit the request so it names your Skylight tool. Keep it read-only. Placeholders: `{from}`, `{to}`, `{timezone}`.
+- [ ] Sync interval defaults to 30 minutes. Each sync is one short hidden Hermes run, deleted afterwards.
+- Direct mode (unofficial API with a rotating refresh token, via **Sign in to Skylight** or `skycli auth login`) is still there as a fallback.
 
 ## 8. Paperclip (optional)
 

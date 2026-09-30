@@ -28,6 +28,13 @@ export function createHomeAssistant({ token }) {
     set("binary_sensor.back_door", "off", { friendly_name: "Back door", device_class: "door" });
     set("todo.shopping_list", "2", { friendly_name: "Shopping List", supported_features: 127 });
     set("calendar.family_calendar", "off", { friendly_name: "Family" });
+    set("update.home_assistant_core_update", "on", {
+      friendly_name: "Home Assistant Core Update",
+      installed_version: "2026.10.0",
+      latest_version: "2026.10.1",
+    });
+    set("update.zwave_js_ui_update", "off", { friendly_name: "Z-Wave JS UI Update" });
+    set("sensor.porch_temperature", "unavailable", { friendly_name: "Porch temperature", device_class: "temperature" });
     state.todos.set("todo.shopping_list", [
       { uid: "ha-1", summary: "Milk", status: "needs_action" },
       { uid: "ha-2", summary: "Pay water bill", status: "needs_action", due: isoDate(new Date()), description: "Autopay failed" },
@@ -50,6 +57,14 @@ export function createHomeAssistant({ token }) {
     const m = req.method;
     let match;
     if (path === "/api/" || path === "/api") return json(res, 200, { message: "API running." });
+    if (path === "/api/config/config_entries/entry") {
+      return json(res, 200, [
+        { entry_id: "e1", domain: "zwave_js", title: "Z-Wave JS", state: "loaded", disabled_by: null },
+        { entry_id: "e2", domain: "met", title: "Home", state: "loaded", disabled_by: null },
+        { entry_id: "e3", domain: "ring", title: "Ring", state: "setup_retry", disabled_by: null },
+        { entry_id: "e4", domain: "hue", title: "Hue", state: "not_loaded", disabled_by: "user" },
+      ]);
+    }
     if (path === "/api/config") return json(res, 200, { location_name: "Home", time_zone: "America/Chicago", version: "2026.10.0" });
     if (path === "/api/states") return json(res, 200, [...state.entities.values()]);
     if ((match = path.match(/^\/api\/states\/(.+)$/))) {

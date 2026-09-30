@@ -13,6 +13,8 @@ export function createHermes({ apiKey }) {
     runs: new Map(),
     idem: new Map(),
     msgSeq: 100,
+    compassDone: new Map(), // date -> completedAt ISO
+    structuredCount: 0,
   };
 
   function addSession(s) {
@@ -57,6 +59,8 @@ export function createHermes({ apiKey }) {
     state.messages.clear();
     state.runs.clear();
     state.idem.clear();
+    state.compassDone.clear();
+    state.structuredCount = 0;
     const a = addSession({ id: "sess_morning", title: "Morning planning", started_at: now() - 7200, last_active: now() - 3600 });
     addMessage(a.id, { role: "user", content: "What's on my plate today?" });
     addMessage(a.id, {
@@ -89,13 +93,62 @@ export function createHermes({ apiKey }) {
     for (const end of run.enders) end();
   }
 
+  /**
+   * Structured requests from Jarvis (JARVIS_STRUCTURED_REQUEST source=…):
+   * answer with JSON the way a Hermes agent with Skylight / Daily Compass
+   * tools would. "FORCE_ERROR" in the task makes it decline; "FORCE_PROSE"
+   * makes it answer in prose; "FORCE_APPROVAL" makes it ask for approval.
+   */
+  function structuredAnswer(source, input) {
+    const date = input.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? new Date().toISOString().slice(0, 10);
+    if (/FORCE_ERROR/.test(input)) return JSON.stringify({ error: "Skylight tool is not available in this profile" });
+    if (/FORCE_PROSE/.test(input)) return "Sure! You have soccer practice at 5:30 and the dog needs feeding.";
+    if (source === "skylight") {
+      // Fenced on purpose: real models often wrap JSON in a code block.
+      const body = {
+        events: [
+          { title: "Soccer practice", start: `${date}T17:30:00`, end: `${date}T18:30:00`, allDay: false, location: "Field 3" },
+          { title: "Grandma visiting", start: date, allDay: true },
+        ],
+        chores: [
+          { id: 9001, title: "Feed the dog", time: "07:30", completed: true },
+          { id: 9002, title: "Take out recycling", time: "19:00", completed: false },
+          { title: "Water plants", completed: false },
+        ],
+      };
+      return "```json\n" + JSON.stringify(body, null, 2) + "\n```";
+    }
+    if (source === "daily_compass_complete") {
+      if (!state.compassDone.has(date)) state.compassDone.set(date, new Date().toISOString());
+    }
+    if (source === "daily_compass" || source === "daily_compass_complete") {
+      const completedAt = state.compassDone.get(date) ?? null;
+      return JSON.stringify({ date, completed: Boolean(completedAt), completedAt, summary: completedAt ? "Checked in" : "Not checked in yet" });
+    }
+    return JSON.stringify({ error: `No tool for ${source}` });
+  }
+
   /** Scripted agent behaviour, driven by keywords in the input for E2E. */
-  async function execute(run, input) {
+  async function execute(run, input, instructions) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const t = run.speed;
     run.status = "running";
     addMessage(run.session_id, { role: "user", content: input });
     await sleep(t);
+    const structured = typeof instructions === "string" ? instructions.match(/JARVIS_STRUCTURED_REQUEST source=(\w+)/)?.[1] : undefined;
+    if (structured) {
+      state.structuredCount++;
+      if (/FORCE_APPROVAL/.test(input)) {
+        run.status = "waiting_for_approval";
+        run.approval = { event: "approval.request", command: "skylight write", request_id: hex(8), choices: ["once", "deny"] };
+        pushEvent(run, run.approval);
+        await new Promise((resolve) => (run.approvalResolver = resolve));
+        return;
+      }
+      const output = structuredAnswer(structured, input);
+      addMessage(run.session_id, { role: "assistant", content: output, finish_reason: "stop" });
+      return finish(run, "completed", { completed: true, partial: false, interrupted: false, output });
+    }
     if (/fail/i.test(input)) {
       await sleep(t);
       return finish(run, "failed", { error: "Mock provider error", completed: false, partial: false });
@@ -374,7 +427,7 @@ export function createHermes({ apiKey }) {
       state.runs.set(run.run_id, run);
       if (key) state.idem.set(key, { runId: run.run_id, body: JSON.stringify(body) });
       const input = typeof body.input === "string" ? body.input : (body.input.at(-1)?.content ?? "");
-      setTimeout(() => execute(run, input), 5);
+      setTimeout(() => execute(run, input, body.instructions), 5);
       return json(res, 202, { run_id: run.run_id, status: "started", replayed: false });
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)$/)) && m === "GET") {

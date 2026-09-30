@@ -1,5 +1,5 @@
 import "server-only";
-import type { CalendarEvent, HomeException, NextAction } from "@/lib/contracts";
+import type { CalendarEvent, HomeException, HomeHealth, NextAction } from "@/lib/contracts";
 import { iso, MINUTE, DAY } from "@/lib/time";
 import { resolveIntegration } from "@/integrations/store";
 import { runChecks } from "@/integrations/testing";
@@ -85,6 +85,23 @@ export function evaluateException(s: HaState, now: Date): HomeException | null {
   return null;
 }
 
+/** Config entry states that mean an integration is not working (disabled entries are intentional). */
+const FAILING_ENTRY_STATES = new Set(["setup_error", "setup_retry", "not_loaded", "failed_unload", "migration_error"]);
+
+export function homeHealth(states: HaState[], entries: { domain: string; state: string; disabled_by?: string | null }[] | undefined, now: Date): HomeHealth {
+  const updates = states.filter((s) => s.entity_id.startsWith("update."));
+  const failing = entries?.filter((e) => !e.disabled_by && FAILING_ENTRY_STATES.has(e.state));
+  return {
+    checkedAt: iso(now),
+    entities: states.length,
+    unavailable: states.filter((s) => s.state === "unavailable").length,
+    unknown: states.filter((s) => s.state === "unknown").length,
+    updatesPending: updates.length ? updates.filter((s) => s.state === "on").length : undefined,
+    integrationsFailing: failing?.length,
+    failingDomains: failing ? [...new Set(failing.map((e) => e.domain))].slice(0, 5) : undefined,
+  };
+}
+
 const SEVERITY_RANK = { critical: 0, high: 1, normal: 2, info: 3 } as const;
 
 function eventFromHa(e: import("zod").infer<typeof import("./client").haCalendarEventSchema>, calendar: string): CalendarEvent | null {
@@ -110,7 +127,11 @@ export const homeAssistantAdapter: SourceAdapter = {
     const cfg = resolveIntegration("home_assistant").config;
     const watch = new Set(parseLines(cfg.watchEntities));
     const calendars = parseLines(cfg.calendarEntities);
-    const states = await HomeAssistantClient.states(conn);
+    const [states, entries] = await Promise.all([
+      HomeAssistantClient.states(conn),
+      // Health is best-effort: a failure here must not hide home state.
+      HomeAssistantClient.configEntries(conn).catch(() => undefined),
+    ]);
     const exceptions = states
       .filter((s) => watch.has(s.entity_id))
       .map((s) => evaluateException(s, ctx.now))
@@ -150,7 +171,7 @@ export const homeAssistantAdapter: SourceAdapter = {
         }
       }),
     );
-    return { actions, homeExceptions: exceptions, events };
+    return { actions, homeExceptions: exceptions, events, extra: { health: homeHealth(states, entries, ctx.now) } };
   },
   async test() {
     let version = "";

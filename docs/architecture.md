@@ -25,11 +25,14 @@ Jarvis (Next.js 16 standalone, one container)
 | Hermes                 | sessions, messages, runs, approvals, memory, cron           | run tracking rows (until terminal), lineage for "fork from here", drafts (browser) |
 | Paperclip              | initiatives, issues, status, blockers, assignments          | `entity_links` (conversation ↔ issue) only                                         |
 | Google Tasks / HA todo | todo records                                                | nothing (optional _built-in_ list when "Jarvis" is the canonical provider)         |
-| Home Assistant         | device state                                                | exception snapshots, audit of controls                                             |
-| Skylight               | calendar, chores                                            | snapshots                                                                          |
+| Home Assistant         | device state                                                | exception snapshots, health counts, audit of controls (never shared with Hermes)   |
+| Skylight (via Hermes)  | calendar, chores                                            | validated structured-answer snapshots (`hermes_snapshot:skylight`)                 |
+| Daily Compass (Hermes) | check-in state                                              | validated structured-answer snapshots; check-in conversation id                    |
 | Jarvis                 | alerts inbox, push subscriptions, preferences, links, audit | all of it in SQLite                                                                |
 
 ## Key flows
+
+**Hermes-owned sources** (Skylight, Daily Compass): a structured request in a hidden throwaway Hermes session. It returns JSON only, is zod-validated and fails closed. The answer is cached and refreshed in the background, so Home never waits on a model (docs/integration-contracts.md).
 
 **Hermes turn**: `POST /api/hermes/sessions/:id/runs` (idempotency key from the browser, retried with the same key) → Hermes `POST /v1/runs` → browser opens `EventSource /api/hermes/runs/:runId/events` → BFF relays `/v1/runs/:id/events`, normalizing events (`lib/hermes.ts`). If the stream closes without a terminal event the relay emits `stream.closed`; the client reconciles with `GET /api/hermes/runs/:id` and reconnects with `lastSeq`. Completion is only shown after a terminal event _and_ a status reconcile. Stop shows "Stopping…" until Hermes confirms.
 

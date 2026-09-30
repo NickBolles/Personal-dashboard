@@ -18,11 +18,14 @@ import { demoPresets } from "@/integrations/demo";
 import type { IntegrationKind } from "@/integrations/registry";
 import { ADAPTERS } from "@/integrations";
 import { adapterContext, getHome, refreshSource } from "@/server/sources";
-import { evaluateException, parseAllowlist } from "@/integrations/home-assistant/adapter";
+import { evaluateException, homeHealth, parseAllowlist } from "@/integrations/home-assistant/adapter";
+import { assertShareableContext } from "@/server/privacy";
 import { executeControl, listControls } from "@/integrations/home-assistant/controls";
 import { track, trackIdempotencyKey } from "@/integrations/paperclip/service";
 import { tick } from "@/server/worker";
 import { updatePreferences } from "@/server/settings";
+import { clearSnapshot, extractJson, parseStructured, saveSnapshot } from "@/integrations/hermes/structured";
+import { z } from "zod";
 
 let server: Server;
 let base: string;
@@ -159,6 +162,43 @@ describe("home assistant", () => {
       { entityId: "cover.g", services: ["close_cover"] },
     ]);
   });
+  it("default allowlist is the safe direction only: unlock and open are opt-in", async () => {
+    await setHa("lock.front_door_lock", "locked");
+    await setHa("cover.garage_door_2", "closed");
+    const controls = await listControls();
+    const lock = controls.find((c) => c.entityId === "lock.front_door_lock")!;
+    expect(lock.services.map((s) => s.service)).toEqual(["lock"]);
+    expect(controls.flatMap((c) => c.services.map((s) => s.service))).not.toContain("open_cover");
+    await expect(executeControl({ entityId: lock.entityId, service: "unlock", stateToken: lock.stateToken, confirmed: true }, userId, "c0")).rejects.toThrow(
+      /allowlist/,
+    );
+  });
+  it("health: counts only, and unknown (undefined) rather than 0 when HA can't say", async () => {
+    const data = await ADAPTERS.home_assistant.fetch(adapterContext());
+    const h = data.extra!.health as ReturnType<typeof homeHealth>;
+    expect(h).toMatchObject({ unavailable: 1, updatesPending: 1, integrationsFailing: 1, failingDomains: ["ring"] });
+    expect(JSON.stringify(h)).not.toMatch(/sensor\.|lock\.|cover\./);
+    const bare = homeHealth([{ entity_id: "light.x", state: "on", attributes: {} }], undefined, new Date());
+    expect(bare.updatesPending).toBeUndefined();
+    expect(bare.integrationsFailing).toBeUndefined();
+  });
+  it("privacy: Home Assistant items can't be attached as Hermes context", () => {
+    expect(() => assertShareableContext("- Garage door: Open [home_assistant:cover.garage_door@x]")).toThrow(/stays out of Hermes/);
+    notify({
+      type: "home.exception",
+      category: "ha_critical",
+      severity: "high",
+      title: "Front door lock: Unlocked",
+      body: "x",
+      source: "home_assistant",
+      deepLink: "/home-control",
+      dedupeKey: "privacy-test",
+    });
+    const alertId = listNotifications(userId).find((n) => n.title === "Front door lock: Unlocked")!.id;
+    expect(() => assertShareableContext(`- Front door [alert:${alertId}]`)).toThrow(/stays out of Hermes/);
+    expect(() => assertShareableContext("- Renew car registration [todos:abc]")).not.toThrow();
+    expect(() => assertShareableContext(undefined)).not.toThrow();
+  });
   it("controls: rejects non-allowlisted, rejects stale state, confirms by readback", async () => {
     await setHa("cover.garage_door", "open", 20);
     const controls = await listControls();
@@ -216,6 +256,98 @@ describe("adapters against the mock upstreams", () => {
     expect(home.now.length).toBeLessThanOrEqual(3);
     expect(home.sources.find((s) => s.source === "hermes")!.state).toBe("ok");
     await mock("/fail", { restore: ["todos"] });
+  });
+});
+
+describe("sources owned by Hermes (structured requests)", () => {
+  const hermesSessions = async () => {
+    const r = await fetch(`${base}/hermes/api/sessions?limit=200`, { headers: { authorization: "Bearer mock-hermes-key-0123456789" } });
+    return ((await r.json()) as { data: { title?: string; source?: string }[] }).data;
+  };
+  const useSkylightViaHermes = (prompt = "") => {
+    saveIntegration("skylight", { config: { mode: "hermes", prompt } });
+    clearSnapshot("skylight");
+  };
+  afterAll(() => saveIntegration("skylight", { config: { mode: "direct", prompt: "" } }));
+
+  it("parses fenced JSON and fails closed on prose, error answers and contract mismatches", () => {
+    expect(extractJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    expect(extractJson('Here you go: {"a":2} hope that helps')).toEqual({ a: 2 });
+    const schema = z.object({ a: z.number() });
+    expect(parseStructured("X", '{"a":3}', schema)).toEqual({ a: 3 });
+    expect(() => parseStructured("X", "no idea", schema)).toThrow(/did not answer X with JSON/);
+    expect(() => parseStructured("X", '{"error":"tool missing"}', schema)).toThrow(/could not complete X: tool missing/);
+    expect(() => parseStructured("X", '{"a":"three"}', schema)).toThrow(/didn't match the contract \(a:/);
+    expect(() => parseStructured("X", "", schema)).toThrow(/no answer/);
+  });
+
+  it("skylight via Hermes: validated answer becomes events and open chores, in a hidden throwaway session", async () => {
+    useSkylightViaHermes();
+    const ctx = adapterContext();
+    const data = await ADAPTERS.skylight.fetch(ctx);
+    expect(data.asOf).toBeTruthy();
+    expect(data.events!.map((e) => e.title)).toEqual(["Grandma visiting", "Soccer practice"]);
+    const soccer = data.events!.find((e) => e.title === "Soccer practice")!;
+    // Offset-less times are wall-clock in the user's timezone (America/Chicago).
+    expect(new Date(soccer.startsAt).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })).toBe("5:30 PM");
+    expect(data.actions.map((a) => a.title).sort()).toEqual(["Take out recycling", "Water plants"]);
+    expect(data.actions.find((a) => a.title === "Take out recycling")!.sourceId).toBe("9002");
+    const sessions = await hermesSessions();
+    expect(sessions.some((s) => s.source === "jarvis-sync" || s.title?.startsWith("jarvis-sync"))).toBe(false);
+
+    const r = await refreshSource("skylight");
+    expect(r.status.state).toBe("ok");
+    expect(r.status.fetchedAt).toBe(data.asOf);
+  });
+
+  it("skylight via Hermes: serves the last answer labelled stale while it refreshes", async () => {
+    useSkylightViaHermes();
+    const ctx = adapterContext();
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    saveSnapshot("skylight", ctx.today, { events: [], chores: [{ title: "Old chore", completed: false }] }, old);
+    const r = await refreshSource("skylight", ctx);
+    expect(r.status.state).toBe("stale");
+    expect(r.status.fetchedAt).toBe(old);
+    expect(r.data!.actions.map((a) => a.title)).toEqual(["Old chore"]);
+    await new Promise((res) => setTimeout(res, 800));
+    const again = await ADAPTERS.skylight.fetch(adapterContext());
+    expect(again.actions.map((a) => a.title)).toContain("Take out recycling");
+  });
+
+  it("skylight via Hermes: test connection reports declines, prose and approval requests honestly", async () => {
+    useSkylightViaHermes();
+    expect((await ADAPTERS.skylight.test()).ok).toBe(true);
+    useSkylightViaHermes("Read Skylight FORCE_ERROR");
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/could not complete Skylight: Skylight tool is not available/);
+    useSkylightViaHermes("Read Skylight FORCE_PROSE");
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/did not answer Skylight with JSON/);
+    useSkylightViaHermes("Read Skylight FORCE_APPROVAL");
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/asked for approval/);
+    // A failed first sync is an error, never an empty calendar.
+    await expect(ADAPTERS.skylight.fetch(adapterContext())).rejects.toThrow(/approval/);
+    // …and Jarvis backs off instead of spending a model run on every refresh.
+    const count = async () => ((await (await fetch(`${base}/__mock/state`)).json()) as { hermesStructuredRequests: number }).hermesStructuredRequests;
+    const before = await count();
+    await expect(ADAPTERS.skylight.fetch(adapterContext())).rejects.toThrow(/approval/);
+    expect(await count()).toBe(before);
+  });
+
+  it("daily compass via Hermes: completion only counts after Hermes reads it back", async () => {
+    saveIntegration("daily_compass", { config: { mode: "hermes" } });
+    clearSnapshot("daily_compass");
+    try {
+      const ctx = adapterContext();
+      const before = await ADAPTERS.daily_compass.fetch(ctx);
+      expect(before.compass!.completed).toBe(false);
+      expect(before.compass!.summary).toBe("Not checked in yet");
+      expect((await ADAPTERS.daily_compass.test()).ok).toBe(true);
+      await expect(ADAPTERS.daily_compass.act!(ctx.today, "complete", { actor: userId, correlationId: "c1" })).resolves.toMatchObject({ ok: true });
+      const after = await ADAPTERS.daily_compass.fetch(adapterContext());
+      expect(after.compass!.completed).toBe(true);
+      expect(after.actions).toHaveLength(0);
+    } finally {
+      saveIntegration("daily_compass", { config: { mode: "jarvis" } });
+    }
   });
 });
 

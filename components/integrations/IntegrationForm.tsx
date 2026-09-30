@@ -230,7 +230,7 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
       {kind === "todos" && values.provider === "google_tasks" ? (
         <GoogleConnect connected={Boolean(pub?.secrets.refreshToken?.set)} onBeforeConnect={() => save.mutateAsync({ test: false })} />
       ) : null}
-      {kind === "skylight" ? <SkylightSignIn onDone={() => qc.invalidateQueries({ queryKey: ["integration", kind] })} /> : null}
+      {kind === "skylight" && values.mode === "direct" ? <SkylightSignIn onDone={() => qc.invalidateQueries({ queryKey: ["integration", kind] })} /> : null}
       {advanced.length ? (
         <div>
           <button type="button" className="min-h-11 text-sm underline" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((s) => !s)}>

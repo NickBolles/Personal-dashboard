@@ -58,7 +58,12 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           control.speed = Number(body.ms ?? control.speed);
           return json(res, 200, { speed: control.speed });
         }
-        if (path === "/state") return json(res, 200, { haCalls: services.ha.state.calls, failing: [...control.fail] });
+        if (path === "/state")
+          return json(res, 200, {
+            haCalls: services.ha.state.calls,
+            hermesStructuredRequests: services.hermes.state.structuredCount,
+            failing: [...control.fail],
+          });
         if (path === "/health") return json(res, 200, { ok: true });
       }
       if (prefix === "hermes") return await services.hermes.handle(req, res, path, url, control);

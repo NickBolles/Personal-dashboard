@@ -2,6 +2,7 @@ import { z } from "zod";
 import { api } from "@/server/http/api";
 import { startRun } from "@/integrations/hermes/service";
 import { getPreferences } from "@/server/settings";
+import { assertShareableContext } from "@/server/privacy";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -14,6 +15,7 @@ const schema = z.object({
 /** Start a turn. Model/provider are sent only when the user overrides defaults. */
 export const POST = api<z.infer<typeof schema>, { id: string }>(
   ({ params, body, user, correlationId }) => {
+    assertShareableContext(body.context);
     const prefs = getPreferences().hermes;
     const input = body.context ? `${body.input}\n\n---\nContext from Jarvis:\n${body.context}` : body.input;
     return startRun(

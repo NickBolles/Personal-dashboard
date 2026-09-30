@@ -7,6 +7,7 @@ import { PRIORITY_LABELS, type NextAction, type PrimaryActionKind } from "@/lib/
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
 import { Badge, Button, ButtonLink, OverflowMenu, SourceBadge, useNow, useOnline, useToast, type MenuItem, type Tone } from "@/components/ui";
+import { shareableWithHermes } from "@/lib/privacy";
 import { formatDue } from "./format";
 
 const REASON_TONE: Record<NextAction["priorityReason"], Tone> = {
@@ -59,7 +60,8 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
         disabled: !online && k !== "acknowledge",
       })),
     { label: action.pinned ? "Unpin" : "Pin to top", onSelect: () => run(action.pinned ? "unpin" : "pin") },
-    { label: "Ask Hermes about this", onSelect: askHermes },
+    // Home data never goes to the AI layer (lib/privacy.ts).
+    ...(shareableWithHermes(action.source) ? [{ label: "Ask Hermes about this", onSelect: askHermes }] : []),
     {
       label: action.external ? "Open in source" : "Open",
       onSelect: () => (action.external ? window.open(action.href, "_blank", "noopener") : router.push(action.href)),

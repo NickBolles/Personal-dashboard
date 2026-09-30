@@ -64,8 +64,10 @@ export const HermesSessionClient = {
   get: (c: HermesConn, id: string) => call(c, { path: `/api/sessions/${encodeURIComponent(id)}` }, sessionEnvelopeSchema),
   create: (c: HermesConn, body: { title?: string; source?: string; model?: string; provider?: string }) =>
     call(c, { path: "/api/sessions", method: "POST", body }, sessionEnvelopeSchema),
-  update: (c: HermesConn, id: string, body: { title?: string | null; archived?: boolean; pinned?: boolean; unread?: boolean }) =>
+  update: (c: HermesConn, id: string, body: { title?: string | null; archived?: boolean; pinned?: boolean; hidden?: boolean; unread?: boolean }) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "PATCH", body }, sessionEnvelopeSchema),
+  remove: (c: HermesConn, id: string) =>
+    call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "DELETE" }, z.object({ deleted: z.boolean().optional() }).passthrough()),
   messages: (c: HermesConn, id: string, q: { limit?: number; order?: "oldest" | "latest" } = {}) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}/messages`, query: { limit: q.limit ?? 500, order: q.order ?? "latest" } }, messageListSchema),
   fork: (c: HermesConn, id: string, body: { title?: string }) =>

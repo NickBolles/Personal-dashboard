@@ -37,6 +37,15 @@ export const haCalendarEventSchema = z
   })
   .passthrough();
 
+export const haConfigEntrySchema = z
+  .object({
+    entry_id: z.string(),
+    domain: z.string(),
+    state: z.string(),
+    disabled_by: z.string().nullish(),
+  })
+  .passthrough();
+
 export type HaConn = { baseUrl: string; token?: string };
 
 export function haConn(): HaConn {
@@ -73,6 +82,15 @@ export const HomeAssistantClient = {
       query: { return_response: "true" },
     });
     return z.array(haTodoItemSchema).parse(res.service_response?.[entityId]?.items ?? []);
+  },
+  /** Admin-only REST view. Resolves undefined when this token can't read it (non-admin, older HA). */
+  configEntries: async (c: HaConn) => {
+    try {
+      return z.array(haConfigEntrySchema).parse(await req(c, "/api/config/config_entries/entry"));
+    } catch (err) {
+      if (err instanceof UpstreamError && (err.kind === "unauthorized" || err.kind === "not_found" || err.status === 403)) return undefined;
+      throw err;
+    }
   },
   calendarEvents: async (c: HaConn, entityId: string, start: string, end: string) =>
     z.array(haCalendarEventSchema).parse(await req(c, `/api/calendars/${encodeURIComponent(entityId)}`, { query: { start, end } })),

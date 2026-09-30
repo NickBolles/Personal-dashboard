@@ -1,13 +1,14 @@
 import { api } from "@/server/http/api";
 import { adapterContext } from "@/server/sources";
-import { compassPrompt, compassState, recordCompassSession } from "@/integrations/daily-compass/adapter";
+import { compassPrompt, compassSessionId, recordCompassSession } from "@/integrations/daily-compass/adapter";
 import { createSession, startRun } from "@/integrations/hermes/service";
 
 /** Starts (or resumes) today's check-in as a Hermes conversation. */
 export const POST = api(async ({ user, correlationId }) => {
   const ctx = adapterContext();
-  const state = await compassState(ctx);
-  if (state.sessionId) return { sessionId: state.sessionId, resumed: true };
+  // Local lookup only: starting a check-in must not wait on a Hermes status sync.
+  const existing = compassSessionId(ctx.today);
+  if (existing) return { sessionId: existing, resumed: true };
   const session = await createSession(user, `Daily Compass · ${ctx.today}`);
   recordCompassSession(ctx.today, session.id);
   const run = await startRun(
