@@ -82,7 +82,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         if (s.phase === "completed") clearRunRef.current();
       });
     },
-    [announce, qc, sessionId],
+    [announce, qc, sessionId, who],
   );
   const run = useRunStream(onTerminal);
   useEffect(() => {

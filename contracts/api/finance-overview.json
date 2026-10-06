@@ -1,0 +1,62 @@
+{
+  "month": "2026-10",
+  "status": "attention",
+  "statusText": "October check-in needs attention (1).",
+  "asOf": "2026-10-06T14:51:56.679Z",
+  "setup": {
+    "accounts": 3,
+    "cushionSet": true,
+    "balanceSource": "monarch",
+    "monarchValidatedAt": null,
+    "releaseBlocker": true
+  },
+  "checkin": {
+    "id": "fci_35d3604b-b75a-40d7-ad3f-d8b1dd26192b",
+    "month": "2026-10",
+    "status": "draft",
+    "blocking": 1,
+    "warnings": 0,
+    "open": 1,
+    "canClose": false
+  },
+  "totals": {
+    "net": 5700000,
+    "liquid": 5700000,
+    "reserve": 200000,
+    "unrestricted": 650000,
+    "inTransit": 0
+  },
+  "funds": [
+    {
+      "fundId": "ffd_b45f02f2-f8ca-4e09-9115-47f27bb9d459",
+      "name": "Travel",
+      "protected": false,
+      "held": 400000,
+      "reserved": 0,
+      "available": 400000,
+      "byAccount": [
+        {
+          "accountId": "fac_33be60b5-c1d2-44f5-8327-2dc3c17bf5ae",
+          "held": 400000,
+          "reserved": 0
+        }
+      ]
+    }
+  ],
+  "upcoming": [],
+  "issues": [
+    {
+      "code": "date_missing",
+      "blocking": true,
+      "message": "“Pay Visa” needs a date.",
+      "ref": "fat_f553a373-0690-40c2-94ca-f83ba955986c"
+    }
+  ],
+  "lastRun": {
+    "kind": "manual",
+    "status": "succeeded",
+    "outcome": null,
+    "at": "2026-10-06T14:51:56.682Z",
+    "error": null
+  }
+}

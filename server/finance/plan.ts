@@ -245,7 +245,7 @@ export function addActual(
 /** Correct an actual's fund effects: a new audited row, never an edit of history (F5). */
 export function correctActual(actualId: string, input: { fundId: string | null; amount: Cents; note: string }, actor: string, correlationId: string) {
   if (!input.note.trim()) throw new HttpError(400, "note_required", "Say why this correction is needed.");
-  db().select().from(schema.finActuals).where(eq(schema.finActuals.id, actualId)).get() ?? notFound("Actual");
+  if (!db().select().from(schema.finActuals).where(eq(schema.finActuals.id, actualId)).get()) notFound("Actual");
   const id = newId("faa");
   db()
     .insert(schema.finActualAllocations)

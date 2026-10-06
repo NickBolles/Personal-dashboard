@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-06T01:35:37.946Z",
+  "generatedAt": "2026-10-06T14:51:55.346Z",
   "unread": 1,
   "next": [
     {
-      "id": "home_assistant:cover.garage_door@2026-10-06T00:53:37.318Z",
+      "id": "home_assistant:cover.garage_door@2026-10-06T14:09:54.422Z",
       "source": "home_assistant",
       "title": "Garage door: Open for 42 min",
       "detail": "State: open",
@@ -18,7 +18,7 @@
       "href": "/home-control?entity=cover.garage_door"
     },
     {
-      "id": "paperclip:de8084b0-9354-438b-8144-e61c35964fd6",
+      "id": "paperclip:950f3895-193f-4fea-8a4e-8b8e2a41cc3b",
       "source": "paperclip",
       "title": "PAP-221 Decide config token storage",
       "detail": "Waiting for your review in Paperclip",
@@ -47,12 +47,12 @@
       "href": "/todos#todo-gt-1"
     },
     {
-      "id": "daily_compass:2026-10-05",
+      "id": "daily_compass:2026-10-06",
       "source": "daily_compass",
       "title": "Daily Compass check-in",
       "detail": "Window open until 23:59",
       "priorityReason": "checkin_window",
-      "dueAt": "2026-10-06T04:59:00.000Z",
+      "dueAt": "2026-10-07T04:59:00.000Z",
       "primaryAction": {
         "kind": "open",
         "label": "Start"
@@ -63,11 +63,12 @@
       "href": "/daily-compass"
     },
     {
-      "id": "skylight:55900629",
+      "id": "skylight:55780859-2026-10-06-1800",
       "source": "skylight",
-      "title": "🐾 Schedule vet appointment",
+      "title": "♻️ Take out recycling",
       "detail": "Skylight chore",
       "priorityReason": "today",
+      "dueAt": "2026-10-06T23:00:00.000Z",
       "primaryAction": {
         "kind": "open",
         "label": "Open Skylight"
@@ -84,7 +85,7 @@
     "source": "skylight"
   },
   "compass": {
-    "date": "2026-10-05",
+    "date": "2026-10-06",
     "completed": false,
     "inWindow": true,
     "windowLabel": "00:00–23:59"

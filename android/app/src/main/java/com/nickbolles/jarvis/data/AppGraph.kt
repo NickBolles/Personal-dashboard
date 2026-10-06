@@ -64,6 +64,12 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
 
     fun launch(block: suspend CoroutineScope.() -> Unit) = scope.launch(block = block)
 
+    /** Who this phone is signed in as and what they can use; cached so navigation is right offline. */
+    val access by lazy { Resource(this, "auth-me", AuthMe.serializer()) { it.authMe() } }
+
+    /** Which assistants new conversations can go to. */
+    val assistant by lazy { Resource(this, "assistant", AssistantStatus.serializer()) { it.assistant() } }
+
     /** Shared preferences resource: Home, Settings and the theme all observe the same copy. */
     val prefs by lazy { Resource(this, "prefs", Preferences.serializer()) { it.preferences() } }
 

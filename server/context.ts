@@ -138,11 +138,15 @@ async function compass(user: Viewer) {
 
 async function overview(user: Viewer, tz: string) {
   const home = await getHome(user, { live: false });
+  // Finance never goes to the AI layer (docs/finance.md), not even card titles.
+  const shareable = (list: NextAction[]) => list.filter((a) => a.source !== "finance");
+  const now = shareable(home.now);
+  const laterToday = shareable(home.later.laterToday);
   const lines = ["Jarvis overview:"];
-  lines.push(home.now.length ? "Now:" : "Now: nothing urgent.", ...home.now.map((a) => fmtAction(a, tz)));
-  if (home.later.laterToday.length) lines.push("Later today:", ...home.later.laterToday.map((a) => fmtAction(a, tz)));
+  lines.push(now.length ? "Now:" : "Now: nothing urgent.", ...now.map((a) => fmtAction(a, tz)));
+  if (laterToday.length) lines.push("Later today:", ...laterToday.map((a) => fmtAction(a, tz)));
   if (home.glance.nextEvent) lines.push(`Next event: ${fmtEvent(home.glance.nextEvent, tz).slice(2)}`);
-  const degraded = home.sources.filter((s) => !["ok", "disabled", "unconfigured"].includes(s.state));
+  const degraded = home.sources.filter((s) => s.source !== "finance" && !["ok", "disabled", "unconfigured"].includes(s.state));
   if (degraded.length) lines.push(`Sources with problems: ${degraded.map((s) => `${s.label} (${s.state})`).join(", ")}`);
   return lines;
 }

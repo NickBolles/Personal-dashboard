@@ -61,6 +61,8 @@ import com.nickbolles.jarvis.ui.screens.LayoutScreen
 import com.nickbolles.jarvis.ui.screens.MoreScreen
 import com.nickbolles.jarvis.ui.screens.PairLink
 import com.nickbolles.jarvis.ui.screens.PairScreen
+import com.nickbolles.jarvis.ui.screens.FinanceScreen
+import com.nickbolles.jarvis.ui.screens.SearchScreen
 import com.nickbolles.jarvis.ui.screens.SettingsScreen
 import com.nickbolles.jarvis.ui.screens.SkylightScreen
 import com.nickbolles.jarvis.ui.screens.TodosScreen
@@ -98,11 +100,11 @@ sealed interface LaunchRequest {
     }
 }
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector, val selected: ImageVector)
+private data class Tab(val route: String, val label: String, val icon: ImageVector, val selected: ImageVector, val capability: String? = null)
 
 private val TABS = listOf(
     Tab(Routes.HOME, "Home", Icons.Outlined.Home, Icons.Filled.Home),
-    Tab(Routes.CHAT, "Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble),
+    Tab(Routes.CHAT, "Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble, capability = "hermes.chat"),
     Tab(Routes.ALERTS, "Alerts", Icons.Outlined.Notifications, Icons.Filled.Notifications),
     Tab(Routes.MORE, "More", Icons.Outlined.Menu, Icons.Filled.Menu),
 )
@@ -139,6 +141,8 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
     var capture by remember { mutableStateOf<CaptureRequest?>(null) }
     var unread by remember { mutableStateOf(graph.store.readCache("unread", UnreadCount.serializer())?.unread ?: 0) }
     val request by requests.collectAsState()
+    val access by graph.access.state.collectAsState()
+    LaunchedEffect(Unit) { graph.access.refresh() }
 
     val actions = remember(nav) {
         object : AppActions {
@@ -184,10 +188,10 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
         }
     }
 
-    CompositionLocalProvider(LocalAppActions provides actions) {
+    CompositionLocalProvider(LocalAppActions provides actions, LocalAccess provides access.data) {
         Scaffold(
             snackbarHost = { SnackbarHost(snack) },
-            bottomBar = { BottomBar(nav, unread) },
+            bottomBar = { BottomBar(nav, unread, TABS.filter { t -> t.capability == null || access.data?.can(t.capability) != false }) },
         ) { padding ->
             NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
                 composable(Routes.HOME) { HomeScreen() }
@@ -206,6 +210,8 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
                 composable(Routes.TODOS) { TodosScreen() }
                 composable(Routes.SETTINGS) { SettingsScreen() }
                 composable(Routes.LAYOUT) { LayoutScreen() }
+                composable(Routes.SEARCH) { SearchScreen() }
+                composable(Routes.FINANCE) { FinanceScreen() }
             }
         }
         capture?.let { c -> CaptureSheet(graph, c, onDismiss = { capture = null }, onNavigate = actions::navigate) }
@@ -213,13 +219,13 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
 }
 
 @Composable
-private fun BottomBar(nav: NavHostController, unread: Int) {
+private fun BottomBar(nav: NavHostController, unread: Int, tabs: List<Tab>) {
     val entry by nav.currentBackStackEntryAsState()
     val current = entry?.destination?.route
     NavigationBar {
-        TABS.forEach { tab ->
+        tabs.forEach { tab ->
             val selected = current == tab.route || (tab.route == Routes.CHAT && current == Routes.CONVERSATION) ||
-                (tab.route == Routes.MORE && current in setOf(Routes.CONTROLS, Routes.SKYLIGHT, Routes.COMPASS, Routes.TODOS, Routes.SETTINGS, Routes.LAYOUT))
+                (tab.route == Routes.MORE && current in setOf(Routes.CONTROLS, Routes.SKYLIGHT, Routes.COMPASS, Routes.TODOS, Routes.SETTINGS, Routes.LAYOUT, Routes.SEARCH, Routes.FINANCE))
             NavigationBarItem(
                 selected = selected,
                 onClick = {

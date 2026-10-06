@@ -23,6 +23,9 @@
     "daily_compass": {
       "push": true
     },
+    "finance": {
+      "push": false
+    },
     "integration_failure": {
       "push": false
     },

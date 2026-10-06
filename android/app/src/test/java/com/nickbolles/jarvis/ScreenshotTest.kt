@@ -7,10 +7,13 @@ import com.nickbolles.jarvis.data.ApprovalRequest
 import com.nickbolles.jarvis.data.ControlsResponse
 import com.nickbolles.jarvis.data.DailyCompassResponse
 import com.nickbolles.jarvis.data.DeviceMe
+import com.nickbolles.jarvis.data.DevicesResponse
+import com.nickbolles.jarvis.data.FinanceOverview
 import com.nickbolles.jarvis.data.HomePayload
 import com.nickbolles.jarvis.data.Loadable
 import com.nickbolles.jarvis.data.NotificationsResponse
 import com.nickbolles.jarvis.data.Preferences
+import com.nickbolles.jarvis.data.SearchResponse
 import com.nickbolles.jarvis.data.SessionDetail
 import com.nickbolles.jarvis.data.SessionsResponse
 import com.nickbolles.jarvis.data.SourceResult
@@ -18,6 +21,8 @@ import com.nickbolles.jarvis.ui.components.ActionHandlers
 import com.nickbolles.jarvis.ui.screens.AlertsContent
 import com.nickbolles.jarvis.ui.screens.ChatListContent
 import com.nickbolles.jarvis.ui.screens.CompassContent
+import com.nickbolles.jarvis.ui.screens.FinanceContent
+import com.nickbolles.jarvis.ui.screens.SearchContent
 import com.nickbolles.jarvis.ui.screens.ControlsContent
 import com.nickbolles.jarvis.ui.screens.ConversationContent
 import com.nickbolles.jarvis.ui.screens.ConversationState
@@ -86,7 +91,18 @@ class ScreenshotTest {
             focusEntity = null,
             onRefresh = {},
             onExecute = { _, _ -> },
+            devices = Loadable(Fixtures.load("ha-devices", DevicesResponse.serializer())),
         )
+    }
+
+    @Test fun search() = compose.snapshot("search") { SearchContent(Loadable(Fixtures.load("search", SearchResponse.serializer())), {}, autoFocus = false) }
+
+    @Test fun finance() = compose.snapshot("finance") {
+        FinanceContent(Loadable(Fixtures.load("finance-overview", FinanceOverview.serializer())), hidden = false, busy = false, {}, {}, {}, {})
+    }
+
+    @Test fun finance_amounts_hidden_dark() = compose.snapshot("finance_hidden_dark", dark = true) {
+        FinanceContent(Loadable(Fixtures.load("finance-overview", FinanceOverview.serializer())), hidden = true, busy = false, {}, {}, {}, {})
     }
 
     @Test fun skylight() = compose.snapshot("skylight") { SkylightContent(Loadable(Fixtures.load("source-skylight", SourceResult.serializer())), emptySet(), ActionHandlers(), {}) }

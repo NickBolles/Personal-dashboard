@@ -15,6 +15,8 @@ object Routes {
     const val TODOS = "todos"
     const val SETTINGS = "settings"
     const val LAYOUT = "settings/layout"
+    const val SEARCH = "search"
+    const val FINANCE = "finance"
 
     fun conversation(id: String, run: String? = null) = "chat/${Uri.encode(id)}" + (run?.let { "?run=${Uri.encode(it)}" } ?: "")
     fun controls(entity: String? = null) = "home-control" + (entity?.let { "?entity=${Uri.encode(it)}" } ?: "")
@@ -37,6 +39,8 @@ object Routes {
             "todos" -> TODOS
             "settings" -> SETTINGS
             "more" -> MORE
+            "search" -> SEARCH
+            "finance" -> FINANCE
             else -> null
         }
     }

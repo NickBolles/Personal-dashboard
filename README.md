@@ -5,7 +5,11 @@ A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose 
 - **Home** — up to three ranked next actions (deterministic, with source + freshness), quick capture, Later groups, household glance.
 - **Hermes** — conversations with live streaming, tool activity, inline approvals, steering, stop, reconnect-safe runs, drafts, fork (latest or from a message) with lineage, rename/archive/pin, model override, context attachments, "Track in Paperclip".
 - **Alerts** — canonical inbox (dedupe, read/dismissed/acted), Web Push with quiet hours and per-category settings, deep links.
-- **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (allowlisted, confirmed, readback-verified), Brain (Hermes status, skills, toolsets, cron jobs), Settings.
+- **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (every door, lock, light and camera; lights switch with readback; door controls allowlisted and confirmed), Brain (Hermes status, skills, toolsets, cron jobs), Settings.
+- **Finance** — monthly household check-in (card payments, checking reserve, funds, daily liquidity check), funds and a long-term plan. Manual, CSV or Monarch balances. Never moves money; no amounts in notifications. See [docs/finance.md](docs/finance.md).
+- **People** — you, your partner, kids and a shared home tablet, each with their own sign-in, private conversations, alerts and per-module capabilities.
+- **Search** — Ctrl K / `/` across conversations, todos, devices, calendar, finance and pages, scoped to what each person can see.
+- **Swappable AI** — Hermes, or Claude directly through the Anthropic API when Hermes is slow, chosen per conversation.
 - **Onboarding** — claim with a one-time setup code, connect + live-test every integration (or use the bundled demo server), enable push, install the app, verify everything.
 - **Native Android app** (`android/`, Kotlin + Compose): Home, Chat with approvals, Alerts, Home controls, Skylight, Todos, Daily Compass, "Ask Hermes about …" any source, home-screen widgets, a Quick Settings tile, share-to-Jarvis and FCM notifications. Pairs with a QR code. Screenshot-tested with Roborazzi. See [docs/android.md](docs/android.md).
 - **Installable PWA** too: manifest, maskable icons, service worker, offline shell, share target, shortcuts.
@@ -38,17 +42,17 @@ CI (`.github/workflows/ci.yml`) runs everything plus a Docker build, restart-per
 
 ## Docs
 
-- [Architecture](docs/architecture.md) · [Security](docs/security.md) · [Integration contracts](docs/integration-contracts.md) · [Operations](docs/operations.md) · [Android](docs/android.md)
+- [Architecture](docs/architecture.md) · [Security](docs/security.md) · [Integration contracts](docs/integration-contracts.md) · [Operations](docs/operations.md) · [Android](docs/android.md) · [Finance](docs/finance.md)
 - [Your setup checklist](docs/TODO-for-nick.md) — the steps that need your browser/accounts
 - Upstream API research: [Hermes](docs/research/hermes-api.md), [Paperclip / Skylight / HA / Web Push](docs/research/integrations-api.md)
 
 ## Layout
 
 ```
-app/            routes: (shell)/home, chat, alerts, more, todos, skylight, daily-compass, home-control, brain, initiatives, settings; onboarding, login, share; api/*
+app/            routes: (shell)/home, chat, alerts, more, todos, skylight, daily-compass, home-control, finance, brain, initiatives, settings (+ people); onboarding, login, join, share; api/*
 components/     UI (navigation, chat, actions, integrations, onboarding)
-integrations/   hermes, paperclip, todos (google/ha/jarvis), daily-compass, home-assistant, skylight — upstream DTOs stay here
-server/         auth, db (Drizzle/SQLite), ranking, notifications (+push), audit, sources, worker, http
+integrations/   hermes, paperclip, todos (google/ha/jarvis), daily-compass, home-assistant, skylight, finance, monarch — upstream DTOs stay here
+server/         auth, access, people, search, assistant (Hermes | Claude), finance, db (Drizzle/SQLite), ranking, notifications (+push), audit, sources, worker, http
 lib/            shared contracts, SSE parser, time, client helpers (api, IndexedDB, push)
 mock-upstreams/ faithful mock servers for demo + tests
 contracts/      sanitized upstream fixtures for contract tests

@@ -24,6 +24,10 @@ import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import com.nickbolles.jarvis.ui.nav.can
+import com.nickbolles.jarvis.ui.nav.canAny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -82,11 +86,14 @@ import kotlinx.coroutines.launch
 @Composable
 fun MoreScreen() {
     val app = LocalAppActions.current
-    val items = listOf(
-        Triple(Icons.Outlined.Home, "Home controls", Routes.controls()),
-        Triple(Icons.Outlined.CalendarMonth, "Skylight", Routes.SKYLIGHT),
-        Triple(Icons.Outlined.CheckCircle, "Todos", Routes.TODOS),
-        Triple(Icons.Outlined.Explore, "Daily Compass", Routes.COMPASS),
+    // Only what this person can use (Settings → People on the web decides).
+    val items = listOfNotNull(
+        Triple(Icons.Outlined.Search, "Search", Routes.SEARCH),
+        if (can("finance.view")) Triple(Icons.Outlined.AccountBalanceWallet, "Finance", Routes.FINANCE) else null,
+        if (canAny("home_assistant.view", "home_assistant.calendar", "home_assistant.cameras")) Triple(Icons.Outlined.Home, "Home controls", Routes.controls()) else null,
+        if (can("skylight.view")) Triple(Icons.Outlined.CalendarMonth, "Skylight", Routes.SKYLIGHT) else null,
+        if (can("todos.view")) Triple(Icons.Outlined.CheckCircle, "Todos", Routes.TODOS) else null,
+        if (can("daily_compass.use")) Triple(Icons.Outlined.Explore, "Daily Compass", Routes.COMPASS) else null,
         Triple(Icons.Outlined.Dashboard, "Home layout", Routes.LAYOUT),
         Triple(Icons.Outlined.Settings, "Settings", Routes.SETTINGS),
     )

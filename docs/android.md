@@ -11,6 +11,11 @@ The web app is still there for desktop and for setup (connections, onboarding). 
 - **Chat**: conversations, live replies, tool activity, inline **approval** buttons (allow once, this conversation, always, deny) and **Stop**.
 - **Alerts**: inbox and all, swipe right = handled, left = dismiss, Mark all read. The badge counts unread actionable alerts.
 - **Home controls**: exceptions, allowlisted controls with a confirm dialog against live state, success only after Home Assistant reads back the new state, never queued. The health panel shows counts only, and unknown is never 0.
+- **Who's signed in decides what shows**: the app reads `/api/auth/me` (cached for offline) and hides tabs and screens the person can't use. A kid's phone gets no Chat tab and no Finance. The server still enforces every call.
+- **Hermes or Claude**: when both are set up, Ask shows a Hermes / Claude choice (remembered on the phone). Claude conversations show a Claude tag; conversations someone shared with the household open read-only.
+- **Lights, doors and cameras** (Home controls): every door and lock with its state, light switches (success only after Home Assistant reads back), and camera stills loaded on tap and never cached.
+- **Search** (More → Search): conversations, todos, devices, calendar, finance items, whatever you can see.
+- **Finance** (More → Finance): status, the two labelled totals, the reserve, funds and what needs fixing. **Hide amounts on this phone** replaces every amount with •••••. The check-in itself opens on the web.
 - **Skylight** (agenda + chores), **Todos** (complete/snooze), **Daily Compass** (start/continue the check-in, mark complete with readback).
 - **Settings**: theme, Material You colors, compact density, **Home layout** (reorder/hide sections, shared with the web), notification status and test, sign out.
 

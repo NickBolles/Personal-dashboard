@@ -51,6 +51,15 @@ class LiveServerTest {
         assertTrue("confirmed by readback: ${result.message}", result.verified)
         api.notifications().notifications.firstOrNull()?.let { assertTrue(api.transition(it.id, "acted").ok) }
 
+        // People, search, lights (readback), cameras and finance, as the owner.
+        assertTrue(api.authMe().can("finance.view"))
+        assertTrue(api.search("garage").results.any { it.kind == "device" })
+        val devices = api.devices()
+        val lamp = devices.lights.first { it.state == "off" && it.services.isNotEmpty() }
+        assertTrue("light confirmed by readback", api.setLight(lamp.entityId, true).verified)
+        assertTrue("camera still is an image", api.cameraImage(devices.cameras.first().entityId).size > 8)
+        assertTrue(api.financeOverview().status in setOf("ready", "attention", "failed", "setup"))
+
         // Sign out: the token stops working.
         api.signOut(paired.deviceId)
         try {

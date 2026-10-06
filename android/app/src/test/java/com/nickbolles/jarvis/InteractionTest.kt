@@ -8,13 +8,16 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.nickbolles.jarvis.data.AuthMe
 import com.nickbolles.jarvis.data.ContextSource
+import com.nickbolles.jarvis.data.DevicesResponse
 import com.nickbolles.jarvis.data.ControlView
 import com.nickbolles.jarvis.data.ControlsResponse
 import com.nickbolles.jarvis.data.HomePayload
@@ -23,7 +26,9 @@ import com.nickbolles.jarvis.data.NextAction
 import com.nickbolles.jarvis.data.SourceResult
 import com.nickbolles.jarvis.ui.components.ActionCard
 import com.nickbolles.jarvis.ui.components.ActionHandlers
+import com.nickbolles.jarvis.ui.nav.LocalAccess
 import com.nickbolles.jarvis.ui.nav.Routes
+import com.nickbolles.jarvis.ui.screens.MoreScreen
 import com.nickbolles.jarvis.ui.screens.Composer
 import com.nickbolles.jarvis.ui.screens.ControlsContent
 import com.nickbolles.jarvis.ui.screens.PairContent
@@ -108,5 +113,42 @@ class InteractionTest {
         assertEquals("home-control?entity=cover.garage_door", Routes.fromPath("/home-control?entity=cover.garage_door"))
         assertEquals(Routes.ALERTS, Routes.fromPath("jarvis://open/alerts"))
         assertNull(Routes.fromPath("/settings/connections/hermes").takeIf { it != Routes.SETTINGS })
+    }
+
+    private val owner = Fixtures.load("auth-me", AuthMe.serializer())
+    private val kid = owner.copy(user = owner.user.copy(role = "kid"), capabilities = listOf("todos.view", "skylight.view", "home_assistant.calendar"))
+
+    @Test fun moreShowsOnlyWhatThisPersonCanUse() {
+        var who by mutableStateOf(owner)
+        compose.setContent { JarvisTheme(dynamicColor = false) { CompositionLocalProvider(LocalAccess provides who) { MoreScreen() } } }
+        compose.onNodeWithText("Finance").assertExists()
+        who = kid
+        compose.onNodeWithText("Finance").assertDoesNotExist()
+        compose.onNodeWithText("Daily Compass").assertDoesNotExist()
+        compose.onNodeWithText("Todos").assertExists()
+    }
+
+    @Test fun lightsSwitchOnlyWithLightControl() {
+        val devices = Fixtures.load("ha-devices", DevicesResponse.serializer())
+        val light = devices.lights.first { it.state == "off" && it.services.isNotEmpty() }
+        val switched = mutableListOf<Pair<String, Boolean>>()
+        var who by mutableStateOf(owner)
+        compose.setContent {
+            JarvisTheme(dynamicColor = false) {
+                CompositionLocalProvider(LocalAccess provides who) {
+                    ControlsContent(
+                        Loadable(Fixtures.load("source-home-assistant", SourceResult.serializer())),
+                        Loadable(Fixtures.load("controls", ControlsResponse.serializer())),
+                        pending = null, focusEntity = null, onRefresh = {}, onExecute = { _, _ -> },
+                        devices = Loadable(devices),
+                        onLight = { d, on -> switched += d.entityId to on },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("${light.name} light").performClick()
+        assertEquals(listOf(light.entityId to true), switched)
+        who = owner.copy(capabilities = owner.capabilities - "home_assistant.control_lights")
+        compose.onNodeWithContentDescription("${light.name} light").assertIsNotEnabled()
     }
 }

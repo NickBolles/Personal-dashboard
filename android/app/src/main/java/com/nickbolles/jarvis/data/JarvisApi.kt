@@ -132,8 +132,11 @@ class JarvisApi(
 
     suspend fun session(id: String) = get("/api/hermes/sessions/$id", SessionDetail.serializer())
 
-    suspend fun createSession(title: String?) =
-        post("/api/hermes/sessions", buildJsonObject { title?.let { put("title", it) } }, SessionSummary.serializer())
+    /** `backend`: "hermes" or "claude"; null uses the household default. */
+    suspend fun createSession(title: String?, backend: String? = null) =
+        post("/api/hermes/sessions", buildJsonObject { title?.let { put("title", it) }; backend?.let { put("backend", it) } }, SessionSummary.serializer())
+
+    suspend fun assistant() = get("/api/assistant", AssistantStatus.serializer())
 
     suspend fun startRun(sessionId: String, input: String, idempotencyKey: String, contextSources: List<ContextSource> = emptyList(), context: String? = null) = post(
         "/api/hermes/sessions/$sessionId/runs",
@@ -166,6 +169,38 @@ class JarvisApi(
         buildJsonObject { put("entityId", c.entityId); put("service", service); put("stateToken", c.stateToken); put("confirmed", true) },
         ControlResult.serializer(),
     )
+
+    /** Every door, lock, light and camera this person may see, with the controls they may use. */
+    suspend fun devices() = get("/api/home-assistant/devices", DevicesResponse.serializer())
+
+    suspend fun setLight(entityId: String, on: Boolean) =
+        post("/api/home-assistant/lights", buildJsonObject { put("entityId", entityId); put("on", on) }, ControlResult.serializer())
+
+    /** A fresh camera still (bytes). Never cached. */
+    suspend fun cameraImage(entityId: String): ByteArray = withContext(Dispatchers.IO) {
+        val req = authed(Request.Builder().url(url("/api/home-assistant/cameras/${java.net.URLEncoder.encode(entityId, "UTF-8")}"))).header("Cache-Control", "no-store").build()
+        val res = try {
+            http.newCall(req).execute()
+        } catch (e: IOException) {
+            throw ApiException(0, "network", "Can't reach Jarvis (${e.message ?: "network error"})")
+        }
+        res.use { r ->
+            if (!r.isSuccessful) throw ApiException(r.code, null, "Camera image unavailable (${r.code})")
+            r.body.bytes()
+        }
+    }
+
+    /* ------------------------------------------------------------ people */
+
+    suspend fun authMe() = get("/api/auth/me", AuthMe.serializer())
+
+    suspend fun search(query: String) = get("/api/search?q=${java.net.URLEncoder.encode(query, "UTF-8")}", SearchResponse.serializer())
+
+    /* ------------------------------------------------------------ finance */
+
+    suspend fun financeOverview() = get("/api/finance/overview", FinanceOverview.serializer())
+
+    suspend fun refreshFinance() = post("/api/finance/refresh", JsonObject(emptyMap()), FinanceRefreshResult.serializer())
 
     /* ------------------------------------------------------ daily compass */
 

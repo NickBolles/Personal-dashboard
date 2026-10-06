@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Notifications
@@ -59,6 +60,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nickbolles.jarvis.data.NextAction
+import com.nickbolles.jarvis.ui.nav.can
 import com.nickbolles.jarvis.ui.theme.LocalJarvisDensity
 import com.nickbolles.jarvis.ui.theme.LocalStatusColors
 import com.nickbolles.jarvis.ui.theme.SectionLabel
@@ -70,6 +72,7 @@ fun sourceIcon(source: String): ImageVector = when (source) {
     "daily_compass" -> Icons.Outlined.Explore
     "home_assistant" -> Icons.Outlined.Home
     "paperclip" -> Icons.Outlined.Flag
+    "finance" -> Icons.Outlined.AccountBalanceWallet
     else -> Icons.Outlined.Notifications
 }
 
@@ -174,6 +177,8 @@ fun ActionCard(action: NextAction, handlers: ActionHandlers, modifier: Modifier 
     val canAck = "acknowledge" in action.secondaryActions || action.primaryAction?.kind == "acknowledge"
     val swipeRight = if (canComplete) "complete" else if (canAck) "acknowledge" else null
     val swipeLeft = if (canSnooze) "snooze" else null
+    // Finance never goes to the AI layer (docs/finance.md).
+    val canAsk = can("hermes.chat") && action.source != "finance"
 
     val state = rememberSwipeToDismissBoxState()
     LaunchedEffect(state.currentValue) {
@@ -196,7 +201,7 @@ fun ActionCard(action: NextAction, handlers: ActionHandlers, modifier: Modifier 
             customActions = listOfNotNull(
                 swipeRight?.let { k -> CustomAccessibilityAction(labels[k]!!) { handlers.onAct(action, k); true } },
                 swipeLeft?.let { k -> CustomAccessibilityAction(labels[k]!!) { handlers.onAct(action, k); true } },
-                CustomAccessibilityAction("Ask Hermes about this") { handlers.onAsk(action); true },
+                if (canAsk) CustomAccessibilityAction("Ask Hermes about this") { handlers.onAsk(action); true } else null,
             )
         },
         enableDismissFromStartToEnd = swipeRight != null && !busy,
@@ -254,7 +259,7 @@ fun ActionCard(action: NextAction, handlers: ActionHandlers, modifier: Modifier 
                         if (canSnooze) DropdownMenuItem(text = { Text("Snooze until tomorrow") }, onClick = { menu = false; handlers.onAct(action, "snooze") })
                         if (canAck) DropdownMenuItem(text = { Text("Acknowledge") }, onClick = { menu = false; handlers.onAct(action, "acknowledge") })
                         DropdownMenuItem(text = { Text(if (action.pinned) "Unpin" else "Pin to top") }, onClick = { menu = false; handlers.onAct(action, if (action.pinned) "unpin" else "pin") })
-                        DropdownMenuItem(text = { Text("Ask Hermes about this") }, onClick = { menu = false; handlers.onAsk(action) })
+                        if (canAsk) DropdownMenuItem(text = { Text("Ask Hermes about this") }, onClick = { menu = false; handlers.onAsk(action) })
                         DropdownMenuItem(text = { Text(if (action.external) "Open in source" else "Open") }, onClick = { menu = false; handlers.onOpen(action) })
                     }
                 }
