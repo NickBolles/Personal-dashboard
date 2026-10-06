@@ -13,3 +13,4 @@ public/sw.js
 android/.gradle
 android/build
 android/app/build
+contracts/api

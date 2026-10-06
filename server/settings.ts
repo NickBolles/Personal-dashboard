@@ -3,9 +3,34 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { config } from "@/server/config";
-import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
+import { HOME_SECTIONS, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24h)");
+
+const HOME_SECTION_IDS = HOME_SECTIONS.map((s) => s.id) as [string, ...string[]];
+
+/** Home layout and look, shared by the phone app and the web. */
+export const layoutSchema = z.object({
+  /** order = display order; every known section appears exactly once */
+  homeSections: z.array(z.object({ id: z.enum(HOME_SECTION_IDS), visible: z.boolean() })).transform((list) => {
+    const seen = new Set<string>();
+    const kept = list.filter((s) => !seen.has(s.id) && seen.add(s.id));
+    return [...kept, ...HOME_SECTION_IDS.filter((id) => !seen.has(id)).map((id) => ({ id, visible: true }))];
+  }),
+  /** phone: follow the wallpaper (Material You) instead of Jarvis blue */
+  dynamicColor: z.boolean(),
+  theme: z.enum(["system", "light", "dark"]),
+  density: z.enum(["comfortable", "compact"]),
+});
+
+function defaultLayout() {
+  return {
+    homeSections: HOME_SECTION_IDS.map((id) => ({ id, visible: true })),
+    dynamicColor: true,
+    theme: "system" as const,
+    density: "comfortable" as const,
+  };
+}
 
 export const preferencesSchema = z.object({
   displayName: z.string().min(1).max(60).default("Nick"),
@@ -36,6 +61,7 @@ export const preferencesSchema = z.object({
       skippedSteps: z.array(z.string()).default([]),
     })
     .default({ skippedSteps: [] }),
+  layout: layoutSchema.default(defaultLayout()),
 });
 
 export type Preferences = z.infer<typeof preferencesSchema>;
@@ -48,8 +74,9 @@ export function getPreferences(): Preferences {
   return parsed.success ? parsed.data : preferencesSchema.parse({});
 }
 
-export type PreferencesPatch = Omit<Partial<Preferences>, "onboarding" | "quietHours" | "hermes"> & {
+export type PreferencesPatch = Omit<Partial<Preferences>, "onboarding" | "quietHours" | "hermes" | "layout"> & {
   quietHours?: Partial<Preferences["quietHours"]>;
+  layout?: Partial<Preferences["layout"]>;
   hermes?: Partial<Preferences["hermes"]>;
   onboarding?: { completedAt?: string | null; skippedSteps?: string[] };
 };
@@ -64,6 +91,7 @@ export function updatePreferences(patch: PreferencesPatch): Preferences {
     quietHours: { ...current.quietHours, ...(patch.quietHours ?? {}) },
     notificationCategories: { ...current.notificationCategories, ...(patch.notificationCategories ?? {}) },
     hermes: { ...current.hermes, ...(patch.hermes ?? {}) },
+    layout: { ...current.layout, ...(patch.layout ?? {}) },
     onboarding,
   });
   const value = JSON.stringify(merged);

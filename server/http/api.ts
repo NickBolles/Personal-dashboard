@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError, type ZodType } from "zod";
 import { config } from "@/server/config";
-import { AuthError, resolveUser, SESSION_COOKIE, type CurrentUser } from "@/server/auth";
+import { AuthError, bearerToken, resolveUser, SESSION_COOKIE, type CurrentUser } from "@/server/auth";
 import { newId } from "@/server/crypto";
 import { HttpError, UpstreamError } from "./errors";
 
@@ -19,6 +19,8 @@ export type ApiContext<B, P> = {
 type Options<B> = {
   /** skip authentication (health, login, setup) */
   public?: boolean;
+  /** false for public endpoints called by the phone app with no cookies at all (pairing) */
+  csrf?: boolean;
   body?: ZodType<B>;
 };
 
@@ -90,7 +92,8 @@ export function api<B = undefined, P = Record<string, string>>(
   return async (req: NextRequest, ctx: Ctx<P>) => {
     const correlationId = req.headers.get("x-correlation-id") ?? newId();
     try {
-      checkCsrf(req);
+      // Bearer (paired phone) requests carry no ambient credentials, so CSRF doesn't apply.
+      if (bearerToken(req.headers) === undefined && options.csrf !== false) checkCsrf(req);
       let user: CurrentUser | null = null;
       if (!options.public) {
         user = resolveUser(req.headers, req.cookies.get(SESSION_COOKIE)?.value);

@@ -1,0 +1,7 @@
+{
+  "code": "ZNB9-K6G2",
+  "expiresAt": "2026-10-06T01:45:37.506Z",
+  "server": "http://jarvis.test",
+  "uri": "jarvis://pair?server=http%3A%2F%2Fjarvis.test&code=ZNB9-K6G2",
+  "qrSvg": "<svg/>"
+}

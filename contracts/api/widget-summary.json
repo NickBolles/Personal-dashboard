@@ -1,0 +1,104 @@
+{
+  "generatedAt": "2026-10-06T01:35:37.946Z",
+  "unread": 1,
+  "next": [
+    {
+      "id": "home_assistant:cover.garage_door@2026-10-06T00:53:37.318Z",
+      "source": "home_assistant",
+      "title": "Garage door: Open for 42 min",
+      "detail": "State: open",
+      "priorityReason": "critical",
+      "primaryAction": {
+        "kind": "open",
+        "label": "Review"
+      },
+      "secondaryActions": [
+        "acknowledge"
+      ],
+      "href": "/home-control?entity=cover.garage_door"
+    },
+    {
+      "id": "paperclip:de8084b0-9354-438b-8144-e61c35964fd6",
+      "source": "paperclip",
+      "title": "PAP-221 Decide config token storage",
+      "detail": "Waiting for your review in Paperclip",
+      "priorityReason": "awaiting_user",
+      "primaryAction": {
+        "kind": "open",
+        "label": "Open in Paperclip"
+      },
+      "href": "https://paperclip.example.com/PAP/issues/PAP-221"
+    },
+    {
+      "id": "todos:gt-1",
+      "source": "todos",
+      "title": "Renew car registration",
+      "detail": "DMV online",
+      "priorityReason": "overdue",
+      "dueAt": "2026-10-05T04:59:00.000Z",
+      "dueIsDate": true,
+      "primaryAction": {
+        "kind": "complete",
+        "label": "Done"
+      },
+      "secondaryActions": [
+        "snooze"
+      ],
+      "href": "/todos#todo-gt-1"
+    },
+    {
+      "id": "daily_compass:2026-10-05",
+      "source": "daily_compass",
+      "title": "Daily Compass check-in",
+      "detail": "Window open until 23:59",
+      "priorityReason": "checkin_window",
+      "dueAt": "2026-10-06T04:59:00.000Z",
+      "primaryAction": {
+        "kind": "open",
+        "label": "Start"
+      },
+      "secondaryActions": [
+        "complete"
+      ],
+      "href": "/daily-compass"
+    },
+    {
+      "id": "skylight:55900629",
+      "source": "skylight",
+      "title": "🐾 Schedule vet appointment",
+      "detail": "Skylight chore",
+      "priorityReason": "today",
+      "primaryAction": {
+        "kind": "open",
+        "label": "Open Skylight"
+      },
+      "href": "https://app.ourskylight.com/"
+    }
+  ],
+  "nextEvent": {
+    "title": "Dentist — Will",
+    "startsAt": "2026-10-06T16:30:00.000Z",
+    "endsAt": "2026-10-06T17:30:00.000Z",
+    "allDay": false,
+    "location": "Main St Dental",
+    "source": "skylight"
+  },
+  "compass": {
+    "date": "2026-10-05",
+    "completed": false,
+    "inWindow": true,
+    "windowLabel": "00:00–23:59"
+  },
+  "home": {
+    "exceptions": [
+      {
+        "name": "Garage door",
+        "reason": "Open for 42 min",
+        "severity": "high",
+        "state": "open"
+      }
+    ],
+    "critical": 1
+  },
+  "degradedSources": []
+}

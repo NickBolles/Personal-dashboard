@@ -1,0 +1,72 @@
+{
+  "status": {
+    "source": "skylight",
+    "label": "Skylight",
+    "state": "ok",
+    "fetchedAt": "2026-10-06T01:35:37.451Z",
+    "staleAfter": "2026-10-06T01:50:37.451Z",
+    "fromCache": true
+  },
+  "data": {
+    "actions": [
+      {
+        "id": "skylight:55900629",
+        "source": "skylight",
+        "sourceId": "55900629",
+        "fetchedAt": "2026-10-06T01:35:37.449Z",
+        "staleAfter": "2026-10-06T01:50:37.449Z",
+        "title": "🐾 Schedule vet appointment",
+        "detail": "Skylight chore",
+        "status": "open",
+        "priorityReason": "today",
+        "updatedAt": "2026-10-06T01:35:37.449Z",
+        "href": "https://app.ourskylight.com/",
+        "external": true,
+        "primaryAction": {
+          "kind": "open",
+          "label": "Open Skylight"
+        }
+      },
+      {
+        "id": "skylight:55780859-2026-10-06-1800",
+        "source": "skylight",
+        "sourceId": "55780859-2026-10-06-1800",
+        "fetchedAt": "2026-10-06T01:35:37.449Z",
+        "staleAfter": "2026-10-06T01:50:37.449Z",
+        "title": "♻️ Take out recycling",
+        "detail": "Skylight chore",
+        "status": "open",
+        "priorityReason": "upcoming",
+        "dueAt": "2026-10-06T23:00:00.000Z",
+        "updatedAt": "2026-10-06T01:35:37.449Z",
+        "href": "https://app.ourskylight.com/",
+        "external": true,
+        "primaryAction": {
+          "kind": "open",
+          "label": "Open Skylight"
+        }
+      }
+    ],
+    "events": [
+      {
+        "id": "skylight:ev1-1",
+        "title": "Dentist — Will",
+        "startsAt": "2026-10-06T16:30:00.000Z",
+        "endsAt": "2026-10-06T17:30:00.000Z",
+        "allDay": false,
+        "location": "Main St Dental",
+        "source": "skylight",
+        "href": "https://app.ourskylight.com/"
+      },
+      {
+        "id": "skylight:ev2",
+        "title": "Family dinner at Grandma's",
+        "startsAt": "2026-10-07T17:30:00.000Z",
+        "endsAt": "2026-10-07T19:30:00.000Z",
+        "allDay": false,
+        "source": "skylight",
+        "href": "https://app.ourskylight.com/"
+      }
+    ]
+  }
+}

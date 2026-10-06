@@ -1,0 +1,22 @@
+{
+  "devices": [
+    {
+      "id": "dev_f2db732b-d7a6-44dc-ade9-9878d920350c",
+      "name": "Galaxy S22",
+      "platform": "android",
+      "appVersion": "1.0.0",
+      "pushEnabled": false,
+      "createdAt": "2026-10-06T01:35:37.519Z",
+      "lastSeenAt": "2026-10-06T01:35:37.519Z"
+    },
+    {
+      "id": "dev_8d407bb1-3e15-4a98-a750-36813d15d62e",
+      "name": "Pixel test",
+      "platform": "android",
+      "pushEnabled": false,
+      "createdAt": "2026-10-06T01:35:37.398Z",
+      "lastSeenAt": "2026-10-06T01:35:37.398Z"
+    }
+  ],
+  "current": null
+}

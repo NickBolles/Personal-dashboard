@@ -1,6 +1,7 @@
 import { api } from "@/server/http/api";
 import { notify } from "@/server/notifications";
 import { deliverPendingPushes, listSubscriptions } from "@/server/notifications/push";
+import { pushDevices } from "@/server/devices";
 
 /** Creates a real inbox item and pushes it immediately (bypasses quiet hours for the test). */
 export const POST = api(async ({ user }) => {
@@ -21,5 +22,5 @@ export const POST = api(async ({ user }) => {
   const { inQuietHours } = await import("@/server/notifications/push");
   const quiet = inQuietHours();
   const delivered = await deliverPendingPushes(quiet ? new Date(0) : new Date());
-  return { ok: true, id: created?.id, subscriptions: subs, delivered, quietHours: quiet };
+  return { ok: true, id: created?.id, subscriptions: subs, phones: pushDevices(user.id).length, delivered, quietHours: quiet };
 });

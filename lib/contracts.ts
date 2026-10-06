@@ -130,6 +130,28 @@ export type HomePayload = {
   sources: SourceStatus[];
 };
 
+/** Home sections the user can reorder or hide (phone app and web share this layout). */
+export const HOME_SECTIONS = [
+  { id: "now", label: "Now" },
+  { id: "glance", label: "Household glance" },
+  { id: "later_today", label: "Later today" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "waiting", label: "Waiting on" },
+  { id: "completed", label: "Recently completed" },
+] as const;
+export type HomeSectionId = (typeof HOME_SECTIONS)[number]["id"];
+
+/** Compact summary for home-screen widgets (GET /api/widget/summary). */
+export type WidgetSummary = {
+  generatedAt: string;
+  unread: number;
+  next: Pick<NextAction, "id" | "source" | "title" | "detail" | "priorityReason" | "dueAt" | "dueIsDate" | "primaryAction" | "secondaryActions" | "href">[];
+  nextEvent?: Pick<CalendarEvent, "title" | "startsAt" | "endsAt" | "allDay" | "location" | "source">;
+  compass?: HouseholdGlance["compass"];
+  home: { exceptions: Pick<HomeException, "name" | "reason" | "severity" | "state">[]; critical: number };
+  degradedSources: string[];
+};
+
 export type NotificationSeverity = "info" | "normal" | "high" | "critical";
 
 export type NotificationCategory = "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "integration_failure" | "info";

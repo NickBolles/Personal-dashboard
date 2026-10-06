@@ -1,0 +1,71 @@
+{
+  "displayName": "Nick",
+  "timezone": "America/Chicago",
+  "refreshIntervalMinutes": 5,
+  "quietHours": {
+    "enabled": true,
+    "start": "22:00",
+    "end": "07:00"
+  },
+  "notificationCategories": {
+    "hermes_input": {
+      "push": true
+    },
+    "hermes_complete": {
+      "push": true
+    },
+    "ha_critical": {
+      "push": true
+    },
+    "overdue": {
+      "push": true
+    },
+    "daily_compass": {
+      "push": true
+    },
+    "integration_failure": {
+      "push": false
+    },
+    "info": {
+      "push": false
+    }
+  },
+  "hermes": {
+    "showToolDetails": false
+  },
+  "integrationFailureAlertMinutes": 30,
+  "onboarding": {
+    "skippedSteps": []
+  },
+  "layout": {
+    "homeSections": [
+      {
+        "id": "glance",
+        "visible": true
+      },
+      {
+        "id": "now",
+        "visible": true
+      },
+      {
+        "id": "later_today",
+        "visible": true
+      },
+      {
+        "id": "upcoming",
+        "visible": true
+      },
+      {
+        "id": "waiting",
+        "visible": true
+      },
+      {
+        "id": "completed",
+        "visible": true
+      }
+    ],
+    "dynamicColor": false,
+    "theme": "system",
+    "density": "comfortable"
+  }
+}

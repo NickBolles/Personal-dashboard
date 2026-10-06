@@ -3,6 +3,7 @@
 //   /hermes/*   Hermes API Server       /paperclip/*   Paperclip
 //   /ha/*       Home Assistant          /skylight/*    Skylight
 //   /google/*   Google OAuth + Tasks    /compass/*     Daily Compass HTTP
+//   /fcm/*      Firebase OAuth + FCM v1 (phone push)
 //   /__mock/*   control plane (reset, fail, speed)
 import http from "node:http";
 import { createHermes } from "./hermes.mjs";
@@ -10,6 +11,7 @@ import { createPaperclip } from "./paperclip.mjs";
 import { createHomeAssistant } from "./home-assistant.mjs";
 import { createSkylight } from "./skylight.mjs";
 import { createGoogleTasks } from "./google-tasks.mjs";
+import { createFcm } from "./fcm.mjs";
 import { json, readBody, bearerOk, isoDate } from "./util.mjs";
 
 export const MOCK_CREDENTIALS = {
@@ -32,6 +34,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
     ha: createHomeAssistant({ token: c.haToken }),
     skylight: createSkylight({ refreshToken: c.skylightRefresh }),
     google: createGoogleTasks({ clientId: c.googleClientId, clientSecret: c.googleClientSecret, refreshToken: c.googleRefresh }),
+    fcm: createFcm(),
   };
   const compass = { completed: new Map() };
 
@@ -62,6 +65,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           return json(res, 200, {
             haCalls: services.ha.state.calls,
             hermesStructuredRequests: services.hermes.state.structuredCount,
+            fcmMessages: services.fcm.state.messages,
             failing: [...control.fail],
           });
         if (path === "/health") return json(res, 200, { ok: true });
@@ -74,6 +78,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
       }
       if (prefix === "skylight") return await services.skylight.handle(req, res, path, url, control);
       if (prefix === "google") return await services.google.handle(req, res, path, url, control);
+      if (prefix === "fcm") return await services.fcm.handle(req, res, path, url, control);
       if (prefix === "compass") {
         if (control.fail.has("daily_compass")) return json(res, 503, { error: "unavailable" });
         if (!bearerOk(req, c.compassToken)) return json(res, 401, { error: "unauthorized" });

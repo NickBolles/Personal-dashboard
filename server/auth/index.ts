@@ -7,10 +7,11 @@ import { hashPasscode, newId, randomToken, safeEqual, sha256, verifyPasscode } f
 import { getSetting, setSetting } from "@/server/settings";
 import { DAY } from "@/lib/time";
 import { processSingleton } from "@/server/singleton";
+import { deviceFromToken } from "@/server/devices";
 
 export const SESSION_COOKIE = "jarvis_session";
 
-export type CurrentUser = { id: string; name: string; via: "session" | "proxy" };
+export type CurrentUser = { id: string; name: string; via: "session" | "proxy" | "device"; deviceId?: string };
 
 export function getOwner() {
   return getDb().select().from(schema.users).limit(1).get();
@@ -91,7 +92,7 @@ export function checkThrottle(key: string) {
   }
 }
 
-function recordFailure(key: string) {
+export function recordFailure(key: string) {
   const f = failures.get(key) ?? { count: 0, until: 0 };
   f.count += 1;
   if (f.count >= 5) f.until = Date.now() + Math.min(15 * 60_000, 2 ** (f.count - 5) * 30_000);
@@ -170,7 +171,21 @@ export function userFromProxyHeader(value: string | null | undefined): CurrentUs
   return { id: owner.id, name: owner.name, via: "proxy" };
 }
 
+/** `Authorization: Bearer jdv_…` from a paired phone, in any auth mode. */
+export function bearerToken(h: Headers) {
+  const v = h.get("authorization");
+  return v?.startsWith("Bearer ") ? v.slice(7).trim() : undefined;
+}
+
+export function userFromDeviceToken(token: string): CurrentUser | null {
+  const d = deviceFromToken(token);
+  return d ? { id: d.userId, name: d.name, via: "device", deviceId: d.id } : null;
+}
+
 export function resolveUser(h: Headers, cookieValue: string | undefined): CurrentUser | null {
+  const bearer = bearerToken(h);
+  // A bearer request is judged on its token alone: never fall back to cookies.
+  if (bearer !== undefined) return userFromDeviceToken(bearer);
   if (config.authMode === "proxy") return userFromProxyHeader(h.get(config.authProxyHeader));
   return userFromSessionToken(cookieValue);
 }

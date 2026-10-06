@@ -1,0 +1,287 @@
+{
+  "generatedAt": "2026-10-06T01:35:37.960Z",
+  "now": [
+    {
+      "id": "home_assistant:cover.garage_door@2026-10-06T00:53:37.318Z",
+      "source": "home_assistant",
+      "sourceId": "cover.garage_door@2026-10-06T00:53:37.318Z",
+      "fetchedAt": "2026-10-06T01:35:37.469Z",
+      "staleAfter": "2026-10-06T01:40:37.469Z",
+      "title": "Garage door: Open for 42 min",
+      "detail": "State: open",
+      "status": "open",
+      "priorityReason": "critical",
+      "updatedAt": "2026-10-06T00:53:37.318Z",
+      "href": "/home-control?entity=cover.garage_door",
+      "primaryAction": {
+        "kind": "open",
+        "label": "Review"
+      },
+      "secondaryActions": [
+        "acknowledge"
+      ]
+    },
+    {
+      "id": "paperclip:de8084b0-9354-438b-8144-e61c35964fd6",
+      "source": "paperclip",
+      "sourceId": "de8084b0-9354-438b-8144-e61c35964fd6",
+      "fetchedAt": "2026-10-06T01:35:37.490Z",
+      "staleAfter": "2026-10-06T01:45:37.490Z",
+      "title": "PAP-221 Decide config token storage",
+      "detail": "Waiting for your review in Paperclip",
+      "status": "open",
+      "priorityReason": "awaiting_user",
+      "updatedAt": "2026-10-06T01:35:37.318Z",
+      "href": "https://paperclip.example.com/PAP/issues/PAP-221",
+      "external": true,
+      "primaryAction": {
+        "kind": "open",
+        "label": "Open in Paperclip"
+      }
+    },
+    {
+      "id": "todos:gt-1",
+      "source": "todos",
+      "sourceId": "gt-1",
+      "fetchedAt": "2026-10-06T01:35:37.398Z",
+      "staleAfter": "2026-10-06T01:40:37.398Z",
+      "title": "Renew car registration",
+      "detail": "DMV online",
+      "status": "open",
+      "priorityReason": "overdue",
+      "dueAt": "2026-10-05T04:59:00.000Z",
+      "dueIsDate": true,
+      "updatedAt": "2026-10-06T00:35:37.318Z",
+      "href": "/todos#todo-gt-1",
+      "primaryAction": {
+        "kind": "complete",
+        "label": "Done"
+      },
+      "secondaryActions": [
+        "snooze"
+      ]
+    }
+  ],
+  "later": {
+    "laterToday": [
+      {
+        "id": "daily_compass:2026-10-05",
+        "source": "daily_compass",
+        "sourceId": "2026-10-05",
+        "fetchedAt": "2026-10-06T01:35:37.481Z",
+        "staleAfter": "2026-10-06T01:45:37.481Z",
+        "title": "Daily Compass check-in",
+        "detail": "Window open until 23:59",
+        "status": "open",
+        "priorityReason": "checkin_window",
+        "dueAt": "2026-10-06T04:59:00.000Z",
+        "updatedAt": "2026-10-06T01:35:37.481Z",
+        "href": "/daily-compass",
+        "primaryAction": {
+          "kind": "open",
+          "label": "Start"
+        },
+        "secondaryActions": [
+          "complete"
+        ]
+      },
+      {
+        "id": "skylight:55900629",
+        "source": "skylight",
+        "sourceId": "55900629",
+        "fetchedAt": "2026-10-06T01:35:37.449Z",
+        "staleAfter": "2026-10-06T01:50:37.449Z",
+        "title": "🐾 Schedule vet appointment",
+        "detail": "Skylight chore",
+        "status": "open",
+        "priorityReason": "today",
+        "updatedAt": "2026-10-06T01:35:37.449Z",
+        "href": "https://app.ourskylight.com/",
+        "external": true,
+        "primaryAction": {
+          "kind": "open",
+          "label": "Open Skylight"
+        }
+      }
+    ],
+    "upcoming": [
+      {
+        "id": "skylight:55780859-2026-10-06-1800",
+        "source": "skylight",
+        "sourceId": "55780859-2026-10-06-1800",
+        "fetchedAt": "2026-10-06T01:35:37.449Z",
+        "staleAfter": "2026-10-06T01:50:37.449Z",
+        "title": "♻️ Take out recycling",
+        "detail": "Skylight chore",
+        "status": "open",
+        "priorityReason": "upcoming",
+        "dueAt": "2026-10-06T23:00:00.000Z",
+        "updatedAt": "2026-10-06T01:35:37.449Z",
+        "href": "https://app.ourskylight.com/",
+        "external": true,
+        "primaryAction": {
+          "kind": "open",
+          "label": "Open Skylight"
+        }
+      },
+      {
+        "id": "todos:gt-2",
+        "source": "todos",
+        "sourceId": "gt-2",
+        "fetchedAt": "2026-10-06T01:35:37.398Z",
+        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "title": "Call plumber about water heater",
+        "status": "open",
+        "priorityReason": "upcoming",
+        "dueAt": "2026-10-07T04:59:00.000Z",
+        "dueIsDate": true,
+        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "href": "/todos#todo-gt-2",
+        "primaryAction": {
+          "kind": "complete",
+          "label": "Done"
+        },
+        "secondaryActions": [
+          "snooze"
+        ]
+      },
+      {
+        "id": "todos:gt-3",
+        "source": "todos",
+        "sourceId": "gt-3",
+        "fetchedAt": "2026-10-06T01:35:37.398Z",
+        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "title": "Book flights for Thanksgiving",
+        "status": "open",
+        "priorityReason": "upcoming",
+        "dueAt": "2026-10-10T04:59:00.000Z",
+        "dueIsDate": true,
+        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "href": "/todos#todo-gt-3",
+        "primaryAction": {
+          "kind": "complete",
+          "label": "Done"
+        },
+        "secondaryActions": [
+          "snooze"
+        ]
+      },
+      {
+        "id": "todos:gt-4",
+        "source": "todos",
+        "sourceId": "gt-4",
+        "fetchedAt": "2026-10-06T01:35:37.398Z",
+        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "title": "Sort garage shelves",
+        "status": "open",
+        "priorityReason": "upcoming",
+        "dueIsDate": false,
+        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "href": "/todos#todo-gt-4",
+        "primaryAction": {
+          "kind": "complete",
+          "label": "Done"
+        },
+        "secondaryActions": [
+          "snooze"
+        ]
+      }
+    ],
+    "waitingOn": [],
+    "recentlyCompleted": [
+      {
+        "id": "todos:gt-5",
+        "source": "todos",
+        "sourceId": "gt-5",
+        "fetchedAt": "2026-10-06T01:35:37.398Z",
+        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "title": "Pick up dry cleaning",
+        "status": "completed",
+        "priorityReason": "today",
+        "dueAt": "2026-10-06T04:59:00.000Z",
+        "dueIsDate": true,
+        "updatedAt": "2026-10-06T01:05:37.318Z",
+        "href": "/todos#todo-gt-5",
+        "secondaryActions": []
+      }
+    ]
+  },
+  "glance": {
+    "nextEvent": {
+      "id": "skylight:ev1-1",
+      "title": "Dentist — Will",
+      "startsAt": "2026-10-06T16:30:00.000Z",
+      "endsAt": "2026-10-06T17:30:00.000Z",
+      "allDay": false,
+      "location": "Main St Dental",
+      "source": "skylight",
+      "href": "https://app.ourskylight.com/"
+    },
+    "compass": {
+      "date": "2026-10-05",
+      "completed": false,
+      "inWindow": true,
+      "windowLabel": "00:00–23:59"
+    },
+    "homeExceptions": [
+      {
+        "entityId": "cover.garage_door",
+        "name": "Garage door",
+        "state": "open",
+        "severity": "high",
+        "reason": "Open for 42 min",
+        "since": "2026-10-06T00:53:37.318Z"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "source": "hermes",
+      "label": "Hermes",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.486Z",
+      "staleAfter": "2026-10-06T01:37:37.486Z",
+      "fromCache": true
+    },
+    {
+      "source": "paperclip",
+      "label": "Paperclip",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.492Z",
+      "staleAfter": "2026-10-06T01:45:37.492Z",
+      "fromCache": true
+    },
+    {
+      "source": "todos",
+      "label": "Todos",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.411Z",
+      "staleAfter": "2026-10-06T01:40:37.411Z",
+      "fromCache": true
+    },
+    {
+      "source": "skylight",
+      "label": "Skylight",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.451Z",
+      "staleAfter": "2026-10-06T01:50:37.451Z",
+      "fromCache": true
+    },
+    {
+      "source": "daily_compass",
+      "label": "Daily Compass",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.482Z",
+      "staleAfter": "2026-10-06T01:45:37.482Z",
+      "fromCache": true
+    },
+    {
+      "source": "home_assistant",
+      "label": "Home Assistant",
+      "state": "ok",
+      "fetchedAt": "2026-10-06T01:35:37.470Z",
+      "staleAfter": "2026-10-06T01:40:37.470Z",
+      "fromCache": true
+    }
+  ]
+}

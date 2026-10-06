@@ -1,0 +1,49 @@
+: relay open
+
+retry: 2000
+
+id: 0
+data: {"type":"tool.started","seq":0,"tool":"web_search","preview":"weather today","at":"2026-10-06T01:35:38.116Z"}
+
+id: 1
+data: {"type":"tool.completed","seq":1,"tool":"web_search","preview":"Sunny, 64°F","durationSec":0.42,"error":false,"at":"2026-10-06T01:35:38.357Z"}
+
+id: 2
+data: {"type":"text.delta","seq":2,"delta":"Got "}
+
+id: 3
+data: {"type":"text.delta","seq":3,"delta":"it: "}
+
+id: 4
+data: {"type":"text.delta","seq":4,"delta":"\"search "}
+
+id: 5
+data: {"type":"text.delta","seq":5,"delta":"the "}
+
+id: 6
+data: {"type":"text.delta","seq":6,"delta":"weather\n\n---\nContext "}
+
+id: 7
+data: {"type":"text.delta","seq":7,"delta":"from "}
+
+id: 8
+data: {"type":"text.delta","seq":8,"delta":"Jarvis:\nJarvis "}
+
+id: 9
+data: {"type":"text.delta","seq":9,"delta":"overview\". "}
+
+id: 10
+data: {"type":"text.delta","seq":10,"delta":"Here's "}
+
+id: 11
+data: {"type":"text.delta","seq":11,"delta":"what "}
+
+id: 12
+data: {"type":"text.delta","seq":12,"delta":"I "}
+
+id: 13
+data: {"type":"text.delta","seq":13,"delta":"found."}
+
+id: 14
+data: {"type":"run.terminal","seq":14,"status":"completed","output":"Got it: \"search the weather\n\n---\nContext from Jarvis:\nJarvis overview\". Here's what I found.","at":"2026-10-06T01:35:38.725Z"}
+

@@ -1,0 +1,5 @@
+{
+  "source": "home_assistant",
+  "text": "Home Assistant — as of Mon, Oct 5, 8:35 PM\nExceptions in watched entities:\n- Garage door (cover.garage_door): Open for 42 min, state \"open\" since Mon, Oct 5, 7:53 PM\nControllable entities (live):\n- Front door lock (lock.front_door_lock): locked since Mon, Oct 5, 8:30 PM\n- Garage door (cover.garage_door): open since Mon, Oct 5, 7:53 PM\n- Garage door 2 (cover.garage_door_2): closed since Mon, Oct 5, 8:30 PM\nHealth: 11 entities, 1 unavailable, 0 unknown, updates pending 1, integrations failing 1 (ring).\nHome Assistant calendars:\n- Tue, Oct 6, 1:00 PM–2:00 PM: Soccer practice @ Field 3 [calendar.family_calendar]\n- Thu, Oct 8 (all day): School holiday [calendar.family_calendar]",
+  "lines": 11
+}

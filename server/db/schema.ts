@@ -206,3 +206,32 @@ export const auditLog = sqliteTable(
   },
   (t) => [index("audit_at_idx").on(t.at)],
 );
+
+/** Paired phones (native app). The bearer token is stored only as a sha256 hash. */
+export const devices = sqliteTable("devices", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  platform: text("platform").notNull().default("android"),
+  tokenHash: text("token_hash").notNull().unique(),
+  appVersion: text("app_version"),
+  /** Firebase Cloud Messaging registration token */
+  pushToken: text("push_token"),
+  pushFailures: integer("push_failures").notNull().default(0),
+  createdAt: text("created_at").notNull().default(now),
+  lastSeenAt: text("last_seen_at").notNull().default(now),
+  revokedAt: text("revoked_at"),
+});
+
+/** One-time pairing codes shown as a QR code in Settings; stored hashed, single use. */
+export const pairingCodes = sqliteTable("pairing_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(now),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+});

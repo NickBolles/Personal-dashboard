@@ -7,7 +7,8 @@ import { config } from "@/server/config";
 import { getSetting, setSetting, getPreferences } from "@/server/settings";
 import { inWindow, localMinutes } from "@/lib/time";
 import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
-import { pendingPushes, setPushState } from "./index";
+import { pendingPushes, setPushState, unreadActionableCount } from "./index";
+import { fcmData, sendFcmToUser } from "./fcm";
 
 type Vapid = { publicKey: string; privateKey: string };
 
@@ -114,13 +115,17 @@ export async function deliverPendingPushes(now = new Date()) {
     }
     const cat = NOTIFICATION_CATEGORIES.find((c) => c.id === (n.category as NotificationCategory));
     if (quiet && !(cat?.bypassQuietHours || n.severity === "critical")) continue; // hold until quiet hours end
-    const res = await sendToUser(
-      n.userId,
-      { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity },
-      { urgency: n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal" },
-    );
-    setPushState(n.id, res.total === 0 ? "suppressed" : res.sent > 0 ? "sent" : "failed");
-    delivered += res.sent;
+    const payload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
+    const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
+    // Browsers (web push) and paired phones (FCM) both get it.
+    const [web, phone] = await Promise.all([
+      sendToUser(n.userId, payload, { urgency }),
+      sendFcmToUser(n.userId, fcmData({ ...payload, category: n.category, unread: unreadActionableCount(n.userId) }), { urgency }),
+    ]);
+    const total = web.total + phone.total;
+    const sent = web.sent + phone.sent;
+    setPushState(n.id, total === 0 ? "suppressed" : sent > 0 ? "sent" : "failed");
+    delivered += sent;
   }
   return delivered;
 }

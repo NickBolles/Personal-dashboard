@@ -47,6 +47,7 @@ export function SettingsView() {
   const links = [
     { href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass" },
     { href: "/settings/notifications", label: "Notifications", desc: "Push on this device, quiet hours, categories" },
+    { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
     { href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" },
   ];
 

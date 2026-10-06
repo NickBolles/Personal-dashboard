@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { HomePayload, NextAction, SourceStatus } from "@/lib/contracts";
+import { HOME_SECTIONS, type HomePayload, type HomeSectionId, type NextAction, type SourceStatus } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
 import { kvGet, kvSet } from "@/lib/client/idb";
@@ -84,6 +84,13 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
   );
 }
 
+const LATER_GROUPS: Partial<Record<HomeSectionId, { id: string; title: string; items: (d: HomePayload) => NextAction[] }>> = {
+  later_today: { id: "later-today", title: "Later today", items: (d) => d.later.laterToday },
+  upcoming: { id: "later-upcoming", title: "Upcoming", items: (d) => d.later.upcoming },
+  waiting: { id: "later-waiting", title: "Waiting on", items: (d) => d.later.waitingOn },
+  completed: { id: "later-done", title: "Recently completed", items: (d) => d.later.recentlyCompleted },
+};
+
 export function HomeView() {
   const online = useOnline();
   const [snapshot, setSnapshot] = useState<HomePayload>();
@@ -109,6 +116,13 @@ export function HomeView() {
   }, [live.data]);
 
   const data = live.data ?? cached.data ?? snapshot;
+  // Section order/visibility is shared with the phone app (Settings → Home layout there).
+  const prefs = useQuery({
+    queryKey: ["preferences"],
+    queryFn: () => api.get<{ layout?: { homeSections: { id: HomeSectionId; visible: boolean }[] } }>("/api/settings"),
+  });
+  const layout = prefs.data?.layout?.homeSections ?? HOME_SECTIONS.map((s) => ({ id: s.id as HomeSectionId, visible: true }));
+  const visible = (id: HomeSectionId) => layout.find((s) => s.id === id)?.visible ?? true;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
@@ -122,44 +136,46 @@ export function HomeView() {
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
-      <section aria-labelledby="now-h" className="mb-6">
-        <h2 id="now-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-          Now
-        </h2>
-        {!data ? (
-          <div className="card p-4">
-            <Spinner label="Loading your next actions…" />
-          </div>
-        ) : data.now.length ? (
-          <ol className="space-y-3">
-            {data.now.map((a) => (
-              <li key={a.id}>
-                <ActionCard action={a} />
-              </li>
-            ))}
-          </ol>
-        ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
-          <Empty title="Nothing needs you right now">
-            Checked{" "}
-            {data.sources
-              .filter((s) => s.state === "ok" || s.state === "stale")
-              .map((s) => s.label)
-              .join(", ")}
-            .
-          </Empty>
-        ) : (
-          <Empty
-            title="No sources connected yet"
-            action={
-              <Link className="underline" href="/settings/connections">
-                Connect sources
-              </Link>
-            }
-          >
-            Jarvis can’t tell what’s next until at least one source is connected.
-          </Empty>
-        )}
-      </section>
+      {visible("now") ? (
+        <section aria-labelledby="now-h" className="mb-6">
+          <h2 id="now-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+            Now
+          </h2>
+          {!data ? (
+            <div className="card p-4">
+              <Spinner label="Loading your next actions…" />
+            </div>
+          ) : data.now.length ? (
+            <ol className="space-y-3">
+              {data.now.map((a) => (
+                <li key={a.id}>
+                  <ActionCard action={a} />
+                </li>
+              ))}
+            </ol>
+          ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
+            <Empty title="Nothing needs you right now">
+              Checked{" "}
+              {data.sources
+                .filter((s) => s.state === "ok" || s.state === "stale")
+                .map((s) => s.label)
+                .join(", ")}
+              .
+            </Empty>
+          ) : (
+            <Empty
+              title="No sources connected yet"
+              action={
+                <Link className="underline" href="/settings/connections">
+                  Connect sources
+                </Link>
+              }
+            >
+              Jarvis can’t tell what’s next until at least one source is connected.
+            </Empty>
+          )}
+        </section>
+      ) : null}
 
       <section aria-labelledby="capture-h" className="mb-6">
         <h2 id="capture-h" className="sr-only">
@@ -174,10 +190,12 @@ export function HomeView() {
             Later
           </h2>
           <ul className="space-y-2">
-            <LaterGroup id="later-today" title="Later today" items={data.later.laterToday} />
-            <LaterGroup id="later-upcoming" title="Upcoming" items={data.later.upcoming} />
-            <LaterGroup id="later-waiting" title="Waiting on" items={data.later.waitingOn} />
-            <LaterGroup id="later-done" title="Recently completed" items={data.later.recentlyCompleted} />
+            {layout
+              .filter((s) => s.visible && LATER_GROUPS[s.id])
+              .map((s) => {
+                const g = LATER_GROUPS[s.id]!;
+                return <LaterGroup key={s.id} id={g.id} title={g.title} items={g.items(data)} />;
+              })}
           </ul>
           {!data.later.laterToday.length && !data.later.upcoming.length && !data.later.waitingOn.length && !data.later.recentlyCompleted.length ? (
             <p className="text-sm text-muted">Nothing else queued.</p>
@@ -185,7 +203,7 @@ export function HomeView() {
         </section>
       ) : null}
 
-      {data ? <Glance data={data} /> : null}
+      {data && visible("glance") ? <Glance data={data} /> : null}
     </div>
   );
 }

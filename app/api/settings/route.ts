@@ -25,6 +25,14 @@ export const PUT = api(({ body }) => updatePreferences(body), {
         .partial(),
       integrationFailureAlertMinutes: z.number().int().min(5).max(1440),
       onboarding: z.object({ completedAt: z.string().nullable(), skippedSteps: z.array(z.string()) }).partial(),
+      layout: z
+        .object({
+          homeSections: z.array(z.object({ id: z.string().max(40), visible: z.boolean() })).max(20),
+          dynamicColor: z.boolean(),
+          theme: z.enum(["system", "light", "dark"]),
+          density: z.enum(["comfortable", "compact"]),
+        })
+        .partial(),
     })
     .partial(),
 });
