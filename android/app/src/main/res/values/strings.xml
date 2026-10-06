@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="appName">Jarvis</string>
+    <string name="app_name">Jarvis</string>
+    <string name="shortcut_ask">Ask Hermes</string>
+    <string name="shortcut_alerts">Alerts</string>
+    <string name="shortcut_home">Home controls</string>
+    <string name="widget_next_up_desc">Your next few actions. Tap ✓ to complete.</string>
+    <string name="widget_home_status_desc">Doors, locks, garage, alarm and alerts.</string>
+    <string name="widget_capture_desc">Ask Hermes in one tap.</string>
+    <string name="widget_compass_desc">Daily Compass and your next event.</string>
+    <string name="tile_capture">Ask Hermes</string>
+    <string name="widget_next_up">Next up</string>
+    <string name="widget_home_status">Home status</string>
+    <string name="widget_capture">Ask Hermes</string>
+    <string name="widget_compass">Daily Compass</string>
 </resources>

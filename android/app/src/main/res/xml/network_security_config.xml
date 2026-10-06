@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS everywhere, except plain HTTP to private LAN addresses so a home
+  server can be tried before it has a certificate. The app warns when the
+  server is http://.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="true">local</domain>
+        <domain includeSubdomains="true">lan</domain>
+        <domain includeSubdomains="true">home.arpa</domain>
+    </domain-config>
+</network-security-config>

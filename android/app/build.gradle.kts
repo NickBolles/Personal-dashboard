@@ -1,46 +1,36 @@
 /**
- * Trusted Web Activity wrapper for the Jarvis PWA. There is no app code:
- * Chrome renders Jarvis full-screen once /.well-known/assetlinks.json on
- * `jarvisHost` lists this package and signing key (JARVIS_TWA_ASSETLINKS).
+ * Jarvis for Android: a native client for the Jarvis server. All logic
+ * (integrations, ranking, readback) stays on the server; the app is screens,
+ * a local cache, widgets and notifications. The server address comes from
+ * pairing, so one APK works with any Jarvis.
  *
- *   ./gradlew assembleRelease -PjarvisHost=jarvis.example.com
+ *   ./gradlew assembleRelease            # APK
+ *   ./gradlew testDebugUnitTest          # unit, UI and contract tests
+ *   ./gradlew verifyRoborazziDebug       # screenshot comparison (record: recordRoborazziDebug)
  *
- * Signing: set JARVIS_KEYSTORE (path), JARVIS_KEYSTORE_PASSWORD,
- * JARVIS_KEY_ALIAS and JARVIS_KEY_PASSWORD, or the release APK is unsigned.
+ * Signing: JARVIS_KEYSTORE, JARVIS_KEYSTORE_PASSWORD, JARVIS_KEY_ALIAS,
+ * JARVIS_KEY_PASSWORD (release is unsigned otherwise).
  */
 plugins {
-    id("com.android.application")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.roborazzi)
 }
-
-val host = (findProperty("jarvisHost") as String).removePrefix("https://").trimEnd('/')
-val origin = "https://$host"
-val appId = (findProperty("jarvisAppId") as String?) ?: "com.nickbolles.jarvis"
-
-// Mirrors app/manifest.ts shortcuts and share_target.
-val shortcuts = listOf(
-    Triple("hermes", "Ask Hermes", "/chat?new=1"),
-    Triple("alerts", "Alerts", "/alerts"),
-    Triple("home", "Home controls", "/home-control"),
-)
-val shareTarget = """{"action":"$origin/share","method":"GET","params":{"title":"title","text":"text","url":"url"}}"""
-val assetStatements = """[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"web","site":"$origin"}}]"""
 
 android {
     namespace = "com.nickbolles.jarvis"
-    compileSdk = 36
+    // Current Compose/Navigation need the 37.2 SDK to compile; targetSdk (runtime behavior) stays 36.
+    compileSdk {
+        version = release(37) { minorApiLevel = 2 }
+    }
 
     defaultConfig {
-        applicationId = appId
-        minSdk = 24
+        applicationId = "com.nickbolles.jarvis"
+        minSdk = 29
         targetSdk = 36
         versionCode = ((findProperty("versionCode") as String?) ?: "1").toInt()
-        versionName = (findProperty("versionName") as String?) ?: "1.0"
-        manifestPlaceholders["hostName"] = host
-        manifestPlaceholders["launchUrl"] = "$origin/home?source=twa"
-        manifestPlaceholders["providerAuthority"] = "$appId.fileprovider"
-        // Android string resources drop unescaped double quotes.
-        resValue("string", "assetStatements", assetStatements.replace("\"", "\\\""))
-        resValue("string", "shareTarget", shareTarget.replace("\"", "\\\""))
+        versionName = (findProperty("versionName") as String?) ?: "1.0.0"
     }
 
     val keystore = System.getenv("JARVIS_KEYSTORE")
@@ -57,69 +47,78 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (!keystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("release")
         }
     }
 
     buildFeatures {
-        resValues = true
+        compose = true
+        buildConfig = true
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-}
 
-// App shortcuts need absolute URLs and the literal package name, so generate them.
-abstract class GenerateShortcuts : DefaultTask() {
-    @get:Input abstract val origin: Property<String>
-
-    @get:Input abstract val appId: Property<String>
-
-    /** "id|label|path" per shortcut */
-    @get:Input abstract val shortcuts: ListProperty<String>
-
-    @get:OutputDirectory abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun generate() {
-        val items = shortcuts.get().map { it.split("|") }
-        val xml = outputDir.get().dir("xml").asFile.apply { mkdirs() }
-        val entries = items.joinToString("\n") { (id, _, path) ->
-            """
-            |  <shortcut android:shortcutId="$id" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_$id">
-            |    <intent android:action="android.intent.action.VIEW" android:targetPackage="${appId.get()}" android:targetClass="com.google.androidbrowserhelper.trusted.LauncherActivity" android:data="${origin.get()}$path" />
-            |  </shortcut>""".trimMargin()
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                // Contract tests parse the API fixtures the server tests record.
+                it.systemProperty("jarvis.contracts", rootProject.file("../contracts/api").absolutePath)
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.maxHeapSize = "3g"
+                // Robolectric (SDK 36 shared memory) reaches into JDK internals on Java 21.
+                it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED", "--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
+            }
         }
-        File(xml, "shortcuts.xml").writeText(
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<shortcuts xmlns:android=\"http://schemas.android.com/apk/res/android\">\n$entries\n</shortcuts>\n",
-        )
-        val values = outputDir.get().dir("values").asFile.apply { mkdirs() }
-        File(values, "shortcuts.xml").writeText(
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<resources>\n" +
-                items.joinToString("\n") { (id, label, _) -> "    <string name=\"shortcut_$id\">$label</string>" } +
-                "\n</resources>\n",
-        )
     }
 }
 
-val shortcutOrigin = origin
-val shortcutAppId = appId
-val shortcutSpecs = shortcuts.map { (id, label, path) -> "$id|$label|$path" }
-val generateShortcuts = tasks.register<GenerateShortcuts>("generateShortcuts") {
-    origin.set(shortcutOrigin)
-    appId.set(shortcutAppId)
-    shortcuts.set(shortcutSpecs)
-}
-
-androidComponents {
-    onVariants { variant ->
-        variant.sources.res?.addGeneratedSourceDirectory(generateShortcuts, GenerateShortcuts::outputDir)
-    }
+roborazzi {
+    outputDir.set(file("src/test/screenshots"))
 }
 
 dependencies {
-    implementation("com.google.androidbrowserhelper:androidbrowserhelper:2.7.3")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.icons.extended)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.code.scanner)
+    // The scanner pulls an old Fragment; ActivityResult APIs need a current one.
+    implementation(libs.androidx.fragment)
+    debugImplementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.test.manifest)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.androidx.test.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
 }

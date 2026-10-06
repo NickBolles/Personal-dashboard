@@ -12,7 +12,18 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true }],
     },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "coverage/**", "playwright-report/**", "test-results/**", "data/**", "public/sw.js"]),
+  globalIgnores([
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "data/**",
+    "public/sw.js",
+    "android/**",
+  ]),
 ]);
 
 export default eslintConfig;

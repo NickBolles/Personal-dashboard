@@ -7,7 +7,8 @@ A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose 
 - **Alerts** — canonical inbox (dedupe, read/dismissed/acted), Web Push with quiet hours and per-category settings, deep links.
 - **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (allowlisted, confirmed, readback-verified), Brain (Hermes status, skills, toolsets, cron jobs), Settings.
 - **Onboarding** — claim with a one-time setup code, connect + live-test every integration (or use the bundled demo server), enable push, install the app, verify everything.
-- **Installable on Android** — manifest, maskable icons, service worker, offline shell, share target, shortcuts. See [docs/android.md](docs/android.md).
+- **Native Android app** (`android/`, Kotlin + Compose): Home, Chat with approvals, Alerts, Home controls, Skylight, Todos, Daily Compass, "Ask Hermes about …" any source, home-screen widgets, a Quick Settings tile, share-to-Jarvis and FCM notifications. Pairs with a QR code. Screenshot-tested with Roborazzi. See [docs/android.md](docs/android.md).
+- **Installable PWA** too: manifest, maskable icons, service worker, offline shell, share target, shortcuts.
 
 ## Quick start
 

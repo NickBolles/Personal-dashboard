@@ -44,6 +44,7 @@ export function createHermes({ apiKey }) {
 
   function addMessage(sessionId, m) {
     const list = state.messages.get(sessionId);
+    if (!list) return undefined; // session was reset/deleted while a run was still going
     const msg = { id: ++state.msgSeq, session_id: sessionId, timestamp: now(), ...m };
     list.push(msg);
     const s = state.sessions.get(sessionId);
@@ -135,6 +136,8 @@ export function createHermes({ apiKey }) {
     run.status = "running";
     addMessage(run.session_id, { role: "user", content: input });
     await sleep(t);
+    // Scripted keywords apply to what the person typed, not to context Jarvis attached.
+    const said = input.split("\n\n---\nContext from Jarvis:")[0];
     const structured = typeof instructions === "string" ? instructions.match(/JARVIS_STRUCTURED_REQUEST source=(\w+)/)?.[1] : undefined;
     if (structured) {
       state.structuredCount++;
@@ -149,22 +152,22 @@ export function createHermes({ apiKey }) {
       addMessage(run.session_id, { role: "assistant", content: output, finish_reason: "stop" });
       return finish(run, "completed", { completed: true, partial: false, interrupted: false, output });
     }
-    if (/fail/i.test(input)) {
+    if (/fail/i.test(said)) {
       await sleep(t);
       return finish(run, "failed", { error: "Mock provider error", completed: false, partial: false });
     }
-    if (/tool|search|weather/i.test(input)) {
+    if (/tool|search|weather/i.test(said)) {
       pushEvent(run, { event: "tool.started", tool: "web_search", preview: "weather today" });
       await sleep(t * 2);
       pushEvent(run, { event: "tool.completed", tool: "web_search", duration: 0.42, error: false, preview: "Sunny, 64°F" });
       addMessage(run.session_id, { role: "tool", content: "Sunny, 64°F", tool_name: "web_search" });
     }
-    if (/subagent|delegate/i.test(input)) {
+    if (/subagent|delegate/i.test(said)) {
       pushEvent(run, { event: "subagent.start", subagent_id: "sa_1", goal: "Research options" });
       await sleep(t * 2);
       pushEvent(run, { event: "subagent.complete", subagent_id: "sa_1", goal: "Research options", status: "completed", summary: "Found 3 options" });
     }
-    if (/approv|delete|rm /i.test(input)) {
+    if (/approv|delete|rm /i.test(said)) {
       const request_id = hex(16);
       run.status = "waiting_for_approval";
       run.approval = {
@@ -192,8 +195,8 @@ export function createHermes({ apiKey }) {
         pushEvent(run, { event: "tool.completed", tool: "terminal", duration: 0.1, error: false, preview: "" });
       }
     }
-    const slow = /slow|long/i.test(input);
-    const reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${input.slice(0, 60)}". Here's what I found.`;
+    const slow = /slow|long/i.test(said);
+    const reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
     const words = reply.split(/(?<= )/);
     for (const w of words) {
       if (run.status === "stopping") {
@@ -215,7 +218,7 @@ export function createHermes({ apiKey }) {
     }
     const output = reply;
     addMessage(run.session_id, { role: "assistant", content: output, finish_reason: "stop" });
-    if (/drop|disconnect/i.test(input)) {
+    if (/drop|disconnect/i.test(said)) {
       // Simulate the stream dying before the terminal event is delivered.
       for (const end of run.enders) end();
       run.enders = [];

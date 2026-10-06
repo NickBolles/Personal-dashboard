@@ -84,3 +84,25 @@ test("API refuses cross-site mutations and unauthenticated calls", async ({ page
   expect(res.status()).toBe(401);
   await anon.dispose();
 });
+
+test("pair a phone from Settings → Phones, then sign it out", async ({ page, playwright, baseURL }) => {
+  await page.goto("/settings/phones");
+  await page.getByRole("button", { name: "Show pairing code" }).click();
+  await expect(page.getByRole("img", { name: /Pairing QR code/ })).toBeVisible();
+  const code = (await page.getByTestId("pairing-code").textContent())!.trim();
+  expect(code).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+
+  // What the Android app does: exchange the code (no cookies), then call the API with the token.
+  const phone = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  const paired = await (await phone.post("/api/devices/pair", { data: { code, name: "E2E Pixel", appVersion: "1.0.0" } })).json();
+  expect(paired.token).toMatch(/^jdv_/);
+  const auth = { authorization: `Bearer ${paired.token}` };
+  expect((await phone.get("/api/widget/summary", { headers: auth })).status()).toBe(200);
+
+  const row = page.getByRole("listitem").filter({ hasText: "E2E Pixel" });
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await row.getByRole("button", { name: /Sign out/ }).click();
+  await expect(row).toHaveCount(0);
+  expect((await phone.get("/api/widget/summary", { headers: auth })).status()).toBe(401);
+  await phone.dispose();
+});

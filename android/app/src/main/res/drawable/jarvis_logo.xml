@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- public/icons/icon.svg as a vector drawable -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp" android:height="64dp" android:viewportWidth="512" android:viewportHeight="512">
+    <path android:fillColor="#2749D8" android:pathData="M112,0H400A112,112 0,0 1,512 112V400A112,112 0,0 1,400 512H112A112,112 0,0 1,0 400V112A112,112 0,0 1,112 0Z" />
+    <path android:strokeColor="#59FFFFFF" android:strokeWidth="28" android:pathData="M256,108A148,148 0,1 1,255.99 108Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="44" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M300,150v150c0,44 -30,72 -74,72c-30,0 -54,-14 -66,-38" />
+    <path android:fillColor="#FFFFFF" android:pathData="M330,164a22,22 0,1 0,44 0a22,22 0,1 0,-44 0" />
+</vector>

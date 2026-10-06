@@ -14,6 +14,7 @@ const PAGES = [
   "/settings",
   "/settings/connections",
   "/settings/notifications",
+  "/settings/phones",
   "/brain",
   "/daily-compass",
   "/skylight",

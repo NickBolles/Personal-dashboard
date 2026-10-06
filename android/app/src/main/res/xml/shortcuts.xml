@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="ask" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_ask">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" android:data="jarvis://open/capture" />
+    </shortcut>
+    <shortcut android:shortcutId="alerts" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_alerts">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" android:data="jarvis://open/alerts" />
+    </shortcut>
+    <shortcut android:shortcutId="home" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_home">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" android:data="jarvis://open/home-control" />
+    </shortcut>
+</shortcuts>

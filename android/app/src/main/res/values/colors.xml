@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Match app/manifest.ts theme_color / background_color. -->
 <resources>
-    <color name="statusBar">#2749d8</color>
-    <color name="navigationBar">#f6f6f3</color>
-    <color name="splashBackground">#2749d8</color>
-    <color name="iconBackground">#2749d8</color>
+    <color name="window_background">#F6F6F3</color>
+    <color name="brand">#2749D8</color>
+    <color name="icon_background">#2749D8</color>
 </resources>

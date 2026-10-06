@@ -11,10 +11,18 @@ Everything that needs your accounts, browser, or home network. The app, tests, C
 
 Want to look around first? Run `docker compose -f docker-compose.demo.yml up --build` and use setup code `DEMO`.
 
-## 2. Install on your Android (S22)
+## 2. The Jarvis Android app (S22)
 
-- [ ] Open `https://<domain>` in Chrome, then use ⋮ → **Install app**. HTTPS is required.
-- [ ] In Settings → Notifications, turn on **Enable push on this device**, then **Send a test alert**.
+Native app with widgets; details in docs/android.md.
+
+- [ ] Create a signing key once (`keytool …` in docs/android.md) and keep it in your password manager.
+- [ ] GitHub → Settings → Secrets → Actions: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+- [ ] Actions → **Android app** → Run workflow with **publish a GitHub release** ticked. Install the APK from the release on your phone.
+- [ ] Jarvis on the web → **Settings → Phones → Show pairing code**, then **Scan pairing code** in the app.
+- [ ] Notifications: create a free Firebase project, add an Android app `com.nickbolles.jarvis`, then paste **google-services.json** and a **service-account key** in Settings → Phones. In the app: Settings → **Send a test**.
+- [ ] Add widgets (long-press home screen → Widgets → Jarvis): Next up, Home status, Ask Hermes, Daily Compass. Add the **Ask Hermes** Quick Settings tile.
+- If Authelia/Authentik is in front (`JARVIS_AUTH_MODE=proxy`): let `/api/*` requests with an `Authorization: Bearer` header through to Jarvis.
+- The browser install (Chrome ⋮ → Install app, web push in Settings → Notifications) still works if you'd rather not use the APK.
 
 ## 3. Hermes (required)
 
@@ -75,5 +83,4 @@ No Paperclip deployment was found in your repos.
 
 ## 10. Optional later
 
-- [ ] APK (optional; the Chrome install already works): create a signing key, add the `ANDROID_*` secrets and the `JARVIS_DOMAIN` variable in GitHub, run **Actions → Android APK**, then set the `JARVIS_TWA_ASSETLINKS` line from the run summary (docs/android.md).
 - [ ] Schedule backups: `docker compose exec jarvis node scripts/backup.mjs` in cron (keeps 14).

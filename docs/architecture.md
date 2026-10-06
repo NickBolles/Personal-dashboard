@@ -32,6 +32,8 @@ Jarvis (Next.js 16 standalone, one container)
 
 ## Key flows
 
+**Phone app** (`android/`, Kotlin + Compose): a native client of the same API. It pairs with a one-time code (Settings → Phones), then sends `Authorization: Bearer jdv_…`. It caches last responses for instant open, and gets widgets from `/api/widget/summary` and notifications through FCM, which the server sends alongside web push. "Ask about …" attaches server-built source snapshots (`server/context.ts`, `contextSources` on runs) so web and phone attach the same thing. `contracts/api` holds the recorded responses both sides test against.
+
 **Hermes-owned sources** (Skylight, Daily Compass): a structured request in a hidden throwaway Hermes session. It returns JSON only, is zod-validated and fails closed. The answer is cached and refreshed in the background, so Home never waits on a model (docs/integration-contracts.md).
 
 **Hermes turn**: `POST /api/hermes/sessions/:id/runs` (idempotency key from the browser, retried with the same key) → Hermes `POST /v1/runs` → browser opens `EventSource /api/hermes/runs/:runId/events` → BFF relays `/v1/runs/:id/events`, normalizing events (`lib/hermes.ts`). If the stream closes without a terminal event the relay emits `stream.closed`; the client reconciles with `GET /api/hermes/runs/:id` and reconnects with `lastSeq`. Completion is only shown after a terminal event _and_ a status reconcile. Stop shows "Stopping…" until Hermes confirms.

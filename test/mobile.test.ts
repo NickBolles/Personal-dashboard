@@ -309,7 +309,12 @@ describe("ask Hermes about a source", () => {
       }),
     );
     expect(run.status).toBe(200);
-    await new Promise((r) => setTimeout(r, 300));
+    // Let the run finish so it can't outlive this test.
+    for (let i = 0; i < 100; i++) {
+      const st = await json<{ status: string }>(call(runRoute.GET, `/api/hermes/runs/${run.body.runId}`, { params: { runId: run.body.runId } }));
+      if (["completed", "failed", "cancelled", "interrupted"].includes(st.body.status)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
     const all = (await fetch(`${base}/hermes/api/sessions/${sid}/messages`, { headers: { authorization: "Bearer mock-hermes-key-0123456789" } }).then((r) =>
       r.json(),
     )) as {
