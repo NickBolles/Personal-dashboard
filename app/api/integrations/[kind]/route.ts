@@ -16,7 +16,7 @@ const updateSchema = z.object({
   secrets: z.record(z.string(), z.string().max(4000).nullable()).optional(),
 });
 
-export const GET = api<undefined, { kind: string }>(({ params }) => publicIntegration(kindOf(params.kind)));
+export const GET = api<undefined, { kind: string }>(({ params }) => publicIntegration(kindOf(params.kind)), { cap: "admin" });
 
 export const PUT = api<z.infer<typeof updateSchema>, { kind: string }>(
   ({ params, body, user, correlationId }) => {
@@ -32,5 +32,5 @@ export const PUT = api<z.infer<typeof updateSchema>, { kind: string }>(
     });
     return res;
   },
-  { body: updateSchema },
+  { cap: "admin", body: updateSchema },
 );

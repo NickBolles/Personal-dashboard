@@ -15,5 +15,5 @@ export const POST = api(
       throw err;
     }
   },
-  { body: z.object({ email: z.string().email(), password: z.string().min(1).max(200) }) },
+  { cap: "admin", body: z.object({ email: z.string().email(), password: z.string().min(1).max(200) }) },
 );

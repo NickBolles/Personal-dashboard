@@ -59,6 +59,10 @@ export type SessionSummary = {
   endReason?: string;
   pinned: boolean;
   archived: boolean;
+  /** visible (read-only) to everyone in the household who can chat */
+  shared?: boolean;
+  /** someone else's shared conversation: read and fork only */
+  readOnly?: boolean;
   source?: string;
   model?: string;
   /** Jarvis-side lineage when a fork was approximated ("fork from here") */

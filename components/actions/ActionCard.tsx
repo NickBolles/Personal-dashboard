@@ -1,5 +1,6 @@
 "use client";
 
+import { useAccess } from "@/components/access";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +39,7 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
   const router = useRouter();
   const online = useOnline();
   const m = useActionMutation();
+  const { can } = useAccess();
   const now = useNow();
   const stale = new Date(action.staleAfter).getTime() < now;
   const due = formatDue(action, now);
@@ -59,7 +61,7 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
         disabled: !online && k !== "acknowledge",
       })),
     { label: action.pinned ? "Unpin" : "Pin to top", onSelect: () => run(action.pinned ? "unpin" : "pin") },
-    { label: "Ask Hermes about this", onSelect: askHermes },
+    ...(can("hermes.chat") ? [{ label: "Ask Hermes about this", onSelect: askHermes }] : []),
     {
       label: action.external ? "Open in source" : "Open",
       onSelect: () => (action.external ? window.open(action.href, "_blank", "noopener") : router.push(action.href)),

@@ -16,5 +16,5 @@ export const POST = api<z.infer<typeof bodySchema>>(
     await refreshSource("home_assistant").catch(() => undefined);
     return res;
   },
-  { body: bodySchema },
+  { cap: ["home_assistant.control_doors", "home_assistant.control_lights"], body: bodySchema },
 );

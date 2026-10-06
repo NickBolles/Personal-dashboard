@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { getOwner } from "@/server/auth";
+import { capabilitiesFor, asRole } from "@/server/access";
 import { categoryPushEnabled, getPreferences } from "@/server/settings";
 import type { ActionSource, JarvisNotification, NotificationCategory, NotificationSeverity } from "@/lib/contracts";
 
@@ -65,7 +66,7 @@ export function notify(input: NotifyInput, userId = getOwner()?.id) {
           occurrences: existing.occurrences + 1,
           updatedAt: now,
           // An escalation is new information: surface it again.
-          ...(escalated ? { readAt: null, pushState: pushWanted(input.category) ? "pending" : existing.pushState } : {}),
+          ...(escalated ? { readAt: null, pushState: pushWanted(input.category, userId) ? "pending" : existing.pushState } : {}),
         })
         .where(eq(schema.notifications.id, existing.id))
         .run();
@@ -85,15 +86,31 @@ export function notify(input: NotifyInput, userId = getOwner()?.id) {
       source: input.source,
       deepLink: input.deepLink,
       dedupeKey: input.dedupeKey,
-      pushState: pushWanted(input.category) ? "pending" : null,
+      pushState: pushWanted(input.category, userId) ? "pending" : null,
       scheduledFor: input.scheduledFor,
     })
     .run();
   return { id, created: true };
 }
 
-function pushWanted(category: NotificationCategory) {
-  return categoryPushEnabled(getPreferences(), category);
+function pushWanted(category: NotificationCategory, userId: string) {
+  return categoryPushEnabled(getPreferences(userId), category);
+}
+
+/** Everyone (enabled) who holds `capability`, e.g. home alerts go to whoever can see the home. */
+export function usersWith(capability: string) {
+  return getDb()
+    .select({ id: schema.users.id, role: schema.users.role })
+    .from(schema.users)
+    .where(isNull(schema.users.disabledAt))
+    .all()
+    .filter((u) => capabilitiesFor(u.id, asRole(u.role)).has(capability))
+    .map((u) => u.id);
+}
+
+/** notify() each person who holds `capability`. */
+export function notifyHolders(input: NotifyInput, capability: string) {
+  return usersWith(capability).map((userId) => notify(input, userId));
 }
 
 const RANK: Record<NotificationSeverity, number> = { critical: 0, high: 1, normal: 2, info: 3 };

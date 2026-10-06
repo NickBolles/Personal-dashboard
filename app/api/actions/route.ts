@@ -5,6 +5,8 @@ import { audit } from "@/server/audit";
 import { getAdapter } from "@/integrations";
 import { refreshSource, setActionPref } from "@/server/sources";
 import { DAY } from "@/lib/time";
+import { requireCap } from "@/server/access";
+import { actionCapability } from "@/lib/modules";
 
 const bodySchema = z.object({
   actionId: z.string().min(3).max(500),
@@ -24,12 +26,13 @@ export const POST = api<z.infer<typeof bodySchema>>(
     const idx = body.actionId.indexOf(":");
     const source = body.actionId.slice(0, idx);
     const sourceId = body.actionId.slice(idx + 1);
+    requireCap(user, actionCapability(source, body.kind));
     if (body.kind === "pin" || body.kind === "unpin") {
-      setActionPref(body.actionId, { pinned: body.kind === "pin" });
+      setActionPref(user.id, body.actionId, { pinned: body.kind === "pin" });
       return { ok: true, message: body.kind === "pin" ? "Pinned" : "Unpinned" };
     }
     if (body.kind === "acknowledge") {
-      setActionPref(body.actionId, { hiddenUntil: new Date(Date.now() + 7 * DAY).toISOString() });
+      setActionPref(user.id, body.actionId, { hiddenUntil: new Date(Date.now() + 7 * DAY).toISOString() });
       audit({ actor: user.id, action: "action.acknowledge", source, sourceRecord: sourceId, result: "ok", correlationId });
       return { ok: true, message: "Acknowledged" };
     }

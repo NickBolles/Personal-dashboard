@@ -10,6 +10,7 @@ import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunVie
 import { formatTime } from "@/components/actions/format";
 import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
 import { ChevronIcon, ForkIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
+import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { ContextPicker, ForkDialog, ModelDialog, RenameDialog, TrackDialog } from "./dialogs";
 
@@ -55,6 +56,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const qc = useQueryClient();
   const online = useOnline();
   const { toast, announce } = useToast();
+  const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
   const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context">(null);
@@ -198,28 +200,41 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
-  const menu = [
-    { label: "Rename", onSelect: () => setDialog("rename") },
-    { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online },
-    { label: "Model…", onSelect: () => setDialog("model") },
-    { label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online },
-    {
-      label: session!.pinned ? "Unpin" : "Pin",
-      onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"),
-      disabled: !online,
+  const readOnly = Boolean(session!.readOnly);
+  const fork = { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online };
+  const menu = readOnly
+    ? [fork]
+    : [
+        { label: "Rename", onSelect: () => setDialog("rename") },
+        fork,
+        { label: "Model…", onSelect: () => setDialog("model") },
+        ...(can("paperclip.track") ? [{ label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online }] : []),
+        {
+          label: session!.pinned ? "Unpin" : "Pin",
+          onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"),
+          disabled: !online,
+        },
+        {
+          label: session!.shared ? "Stop sharing with the household" : "Share with the household",
+          onSelect: () =>
+            patch(
+              { shared: !session!.shared },
+              session!.shared ? "Only you can see this conversation now" : "Shared: others who use Hermes can read and fork it",
+            ),
+          disabled: !online,
+        },
+        {
+          label: session!.archived ? "Unarchive" : "Archive",
+          onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"),
+          disabled: !online,
+        },
+      ];
+  menu.push({
+    label: "Copy link",
+    onSelect: () => {
+      navigator.clipboard?.writeText(window.location.origin + `/chat/${encodeURIComponent(sessionId)}`).then(() => toast("Link copied", "ok"));
     },
-    {
-      label: session!.archived ? "Unarchive" : "Archive",
-      onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"),
-      disabled: !online,
-    },
-    {
-      label: "Copy link",
-      onSelect: () => {
-        navigator.clipboard?.writeText(window.location.origin + `/chat/${encodeURIComponent(sessionId)}`).then(() => toast("Link copied", "ok"));
-      },
-    },
-  ];
+  });
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-3xl flex-col lg:min-h-dvh">
@@ -232,6 +247,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
             <h1 className="truncate text-lg font-semibold">{session!.title}</h1>
             <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
               {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
+              {readOnly ? <Badge>Shared with you · read only</Badge> : session!.shared ? <Badge tone="accent">Shared with the household</Badge> : null}
               {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
               {detail.parent ? (
                 <span className="inline-flex items-center gap-1">
@@ -303,17 +319,27 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         </div>
       ) : null}
 
-      <Composer
-        sessionId={sessionId}
-        phase={phase}
-        online={online}
-        context={context}
-        onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
-        onAttach={() => setDialog("context")}
-        onSend={send}
-        onSteer={steer}
-        onStop={run.stop}
-      />
+      {readOnly ? (
+        <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
+          This conversation was shared with you.{" "}
+          <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
+            Fork it
+          </button>{" "}
+          to continue it as your own.
+        </div>
+      ) : (
+        <Composer
+          sessionId={sessionId}
+          phase={phase}
+          online={online}
+          context={context}
+          onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
+          onAttach={() => setDialog("context")}
+          onSend={send}
+          onSteer={steer}
+          onStop={run.stop}
+        />
+      )}
 
       <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
       <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /** Small payload for phone home-screen widgets. Reads cached snapshots only: widgets never wait on upstreams. */
 export const GET = api(async ({ user }): Promise<WidgetSummary> => {
-  const home = await getHome({ live: false });
+  const home = await getHome(user, { live: false });
   const top = [...home.now, ...home.later.laterToday].slice(0, 5);
   const ex = home.glance.homeExceptions;
   return {

@@ -11,4 +11,5 @@ const schema = z.object({
 
 export const POST = api<z.infer<typeof schema>, { id: string }>(({ params, body, user, correlationId }) => forkSession(user, params.id, body, correlationId), {
   body: schema,
+  cap: "hermes.chat",
 });

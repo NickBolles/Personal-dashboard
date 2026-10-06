@@ -9,5 +9,5 @@ export const POST = api(
     audit({ actor: user.id, action: "auth.passcode_change", result: "ok", correlationId });
     return { ok: true, signedOut: true };
   },
-  { body: z.object({ current: z.string().min(1), next: z.string().min(6).max(200) }) },
+  { body: z.object({ current: z.string().min(1), next: z.string().min(4).max(200) }) },
 );

@@ -6,5 +6,5 @@ const bodySchema = z.object({ input: z.string().min(1).max(5000) });
 
 export const POST = api<z.infer<typeof bodySchema>, { runId: string }>(
   ({ params, body, user, correlationId }) => steerRun(user, params.runId, body.input, correlationId),
-  { body: bodySchema },
+  { cap: "hermes.chat", body: bodySchema },
 );

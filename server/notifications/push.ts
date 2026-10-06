@@ -98,15 +98,16 @@ export async function sendToUser(userId: string, payload: PushPayload, opts: { u
   return { sent, failed, total: subs.length };
 }
 
-export function inQuietHours(now = new Date()) {
-  const p = getPreferences();
+export function inQuietHours(now = new Date(), userId?: string) {
+  const p = getPreferences(userId);
   if (!p.quietHours.enabled) return false;
   return inWindow(localMinutes(now, p.timezone), p.quietHours.start, p.quietHours.end);
 }
 
 /** Outbox worker: deliver queued pushes, respecting quiet hours and read state. */
 export async function deliverPendingPushes(now = new Date()) {
-  const quiet = inQuietHours(now);
+  const quietFor = new Map<string, boolean>();
+  const quiet = (userId: string) => quietFor.get(userId) ?? quietFor.set(userId, inQuietHours(now, userId)).get(userId)!;
   let delivered = 0;
   for (const n of pendingPushes(now)) {
     if (n.readAt || n.dismissedAt || n.actedAt) {
@@ -114,7 +115,7 @@ export async function deliverPendingPushes(now = new Date()) {
       continue;
     }
     const cat = NOTIFICATION_CATEGORIES.find((c) => c.id === (n.category as NotificationCategory));
-    if (quiet && !(cat?.bypassQuietHours || n.severity === "critical")) continue; // hold until quiet hours end
+    if (quiet(n.userId) && !(cat?.bypassQuietHours || n.severity === "critical")) continue; // hold until quiet hours end
     const payload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
     const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
     // Browsers (web push) and paired phones (FCM) both get it.

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser, isClaimed } from "@/server/auth";
 import { config } from "@/server/config";
+import { isMultiPerson } from "@/server/people";
 import { LoginForm } from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -21,5 +22,5 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </main>
     );
   }
-  return <LoginForm next={safeNext} />;
+  return <LoginForm next={safeNext} askName={isMultiPerson()} />;
 }

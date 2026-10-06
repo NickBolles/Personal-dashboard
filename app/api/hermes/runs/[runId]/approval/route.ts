@@ -17,5 +17,5 @@ export const POST = api<z.infer<typeof bodySchema>, { runId: string }>(
       .run();
     return res;
   },
-  { body: bodySchema },
+  { cap: "hermes.approve", body: bodySchema },
 );

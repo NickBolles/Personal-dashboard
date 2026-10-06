@@ -10,7 +10,7 @@ import { NextRequest } from "next/server";
 import { startMockServer } from "../mock-upstreams/server.mjs";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { decrypt, encrypt, hashPasscode, verifyPasscode } from "@/server/crypto";
-import { claimInstance, createSession, userFromSessionToken, verifyLogin, AuthError } from "@/server/auth";
+import { claimInstance, createSession, userById, userFromSessionToken, verifyLogin, AuthError } from "@/server/auth";
 import { checkCsrf } from "@/server/http/api";
 import { listNotifications, notify, transition, unreadActionableCount } from "@/server/notifications";
 import { saveIntegration, resolveIntegration, publicIntegration } from "@/integrations/store";
@@ -231,7 +231,7 @@ describe("adapters against the mock upstreams", () => {
   it("home composition survives a failing source and reports it honestly", async () => {
     await refreshSource("todos");
     await mock("/fail", { services: ["todos"] });
-    const home = await getHome({ live: true });
+    const home = await getHome(userById(userId)!, { live: true });
     const todos = home.sources.find((s) => s.source === "todos")!;
     expect(todos.state).toBe("error");
     expect(todos.fromCache).toBe(true);

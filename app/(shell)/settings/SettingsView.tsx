@@ -7,6 +7,7 @@ import { api } from "@/lib/client/api";
 import { clearAllLocal } from "@/lib/client/idb";
 import { Button, Card, Field, PageHeader, inputCls, useToast } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
+import { useAccess } from "@/components/access";
 
 type Prefs = {
   displayName: string;
@@ -18,6 +19,8 @@ type Prefs = {
 export function SettingsView() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { isAdmin, role } = useAccess();
+  const minPass = role === "household" ? 4 : 6;
   const prefs = useQuery({ queryKey: ["preferences"], queryFn: () => api.get<Prefs>("/api/settings") });
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<{ authMode: string; user: { name: string; via: string } }>("/api/auth/me") });
   const [form, setForm] = useState<Prefs>();
@@ -45,10 +48,13 @@ export function SettingsView() {
   });
 
   const links = [
-    { href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass" },
+    ...(isAdmin
+      ? [{ href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass, Finance" }]
+      : []),
+    ...(isAdmin ? [{ href: "/settings/people", label: "People", desc: "Family members, the kitchen tablet, and what each can use" }] : []),
     { href: "/settings/notifications", label: "Notifications", desc: "Push on this device, quiet hours, categories" },
     { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
-    { href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" },
+    ...(isAdmin ? [{ href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" }] : []),
   ];
 
   return (
@@ -75,36 +81,44 @@ export function SettingsView() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              save.mutate({
-                displayName: form.displayName,
-                timezone: form.timezone,
-                refreshIntervalMinutes: Number(form.refreshIntervalMinutes),
-                hermes: form.hermes,
-              });
+              save.mutate(
+                isAdmin
+                  ? {
+                      displayName: form.displayName,
+                      timezone: form.timezone,
+                      refreshIntervalMinutes: Number(form.refreshIntervalMinutes),
+                      hermes: form.hermes,
+                    }
+                  : { displayName: form.displayName },
+              );
             }}
           >
             <Field id="s-name" label="Your name">
               <input id="s-name" className={inputCls} value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
             </Field>
-            <Field id="s-tz" label="Timezone" hint="Used for due dates, check-in windows and quiet hours.">
-              <input id="s-tz" className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
-            </Field>
-            <Field id="s-model" label="Default Hermes model (optional)" hint="Only sent when set; otherwise Hermes uses its own default.">
-              <input
-                id="s-model"
-                className={inputCls}
-                value={form.hermes.defaultModel ?? ""}
-                onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultModel: e.target.value || undefined } })}
-              />
-            </Field>
-            <Field id="s-provider" label="Default Hermes provider (optional)">
-              <input
-                id="s-provider"
-                className={inputCls}
-                value={form.hermes.defaultProvider ?? ""}
-                onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })}
-              />
-            </Field>
+            {isAdmin ? (
+              <>
+                <Field id="s-tz" label="Timezone" hint="Used for due dates, check-in windows and quiet hours.">
+                  <input id="s-tz" className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
+                </Field>
+                <Field id="s-model" label="Default Hermes model (optional)" hint="Only sent when set; otherwise Hermes uses its own default.">
+                  <input
+                    id="s-model"
+                    className={inputCls}
+                    value={form.hermes.defaultModel ?? ""}
+                    onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultModel: e.target.value || undefined } })}
+                  />
+                </Field>
+                <Field id="s-provider" label="Default Hermes provider (optional)">
+                  <input
+                    id="s-provider"
+                    className={inputCls}
+                    value={form.hermes.defaultProvider ?? ""}
+                    onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })}
+                  />
+                </Field>
+              </>
+            ) : null}
             <Button type="submit" variant="primary" busy={save.isPending}>
               Save preferences
             </Button>
@@ -125,18 +139,22 @@ export function SettingsView() {
             <Field id="p-cur" label="Current passcode">
               <input id="p-cur" type="password" autoComplete="current-password" className={inputCls} value={cur} onChange={(e) => setCur(e.target.value)} />
             </Field>
-            <Field id="p-new" label="New passcode" hint="At least 6 characters. Changing it signs out every device.">
+            <Field
+              id="p-new"
+              label={role === "household" ? "New PIN or passcode" : "New passcode"}
+              hint={`${role === "household" ? "At least 4 digits, or 6 characters." : "At least 6 characters."} Changing it signs out every device.`}
+            >
               <input
                 id="p-new"
                 type="password"
-                minLength={6}
+                minLength={minPass}
                 autoComplete="new-password"
                 className={inputCls}
                 value={nxt}
                 onChange={(e) => setNxt(e.target.value)}
               />
             </Field>
-            <Button type="submit" busy={pass.isPending} disabled={!cur || nxt.length < 6}>
+            <Button type="submit" busy={pass.isPending} disabled={!cur || nxt.length < minPass}>
               Change passcode
             </Button>
           </form>
@@ -151,14 +169,16 @@ export function SettingsView() {
       <Card>
         <h2 className="mb-3 font-semibold">This device</h2>
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={async () => {
-              await api.put("/api/settings", { onboarding: { completedAt: null } }).catch(() => undefined);
-              window.location.href = "/onboarding?step=welcome";
-            }}
-          >
-            Re-run setup
-          </Button>
+          {isAdmin ? (
+            <Button
+              onClick={async () => {
+                await api.put("/api/settings", { onboarding: { completedAt: null } }).catch(() => undefined);
+                window.location.href = "/onboarding?step=welcome";
+              }}
+            >
+              Re-run setup
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             onClick={async () => {

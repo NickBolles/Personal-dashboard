@@ -10,6 +10,7 @@ export const POST = api(
     return { id };
   },
   {
+    cap: "todos.edit",
     body: z.object({
       title: z.string().min(1).max(300),
       notes: z.string().max(2000).optional(),

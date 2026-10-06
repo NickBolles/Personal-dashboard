@@ -1,5 +1,6 @@
 "use client";
 
+import { useAccess } from "@/components/access";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
@@ -21,6 +22,7 @@ type Control = {
 
 export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
   const online = useOnline();
+  const { can } = useAccess();
   const qc = useQueryClient();
   const { toast, announce } = useToast();
   const home = useSource("home_assistant");
@@ -28,7 +30,11 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
   const controls = useQuery({
     queryKey: ["ha", "controls"],
     queryFn: () => api.get<{ controls: Control[]; fetchedAt: string }>("/api/home-assistant/controls"),
-    enabled: online && home.data?.status.state !== "unconfigured" && home.data?.status.state !== "disabled",
+    enabled:
+      online &&
+      (can("home_assistant.control_doors") || can("home_assistant.control_lights")) &&
+      home.data?.status.state !== "unconfigured" &&
+      home.data?.status.state !== "disabled",
     refetchInterval: 15_000,
     gcTime: 0,
   });
@@ -71,7 +77,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         title="Home"
         subtitle="Exceptions and a small set of confirmed controls."
         actions={
-          home.data?.data ? (
+          home.data?.data && can("hermes.chat") ? (
             <ButtonLink href={`/chat?new=1&context=${encodeURIComponent(homeContext(home.data.data, controls.data?.controls))}`}>
               Ask Hermes about my home
             </ButtonLink>

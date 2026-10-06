@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Jarvis-owned persistence only. Hermes sessions/messages, Paperclip issues and
@@ -12,8 +12,38 @@ const now = sql`(strftime('%Y-%m-%dT%H:%M:%fZ','now'))`;
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  /** sign-in name (lowercase); null for the original owner until they set one */
+  username: text("username").unique(),
+  /** admin | adult | kid | household (lib/modules.ts) */
+  role: text("role").notNull().default("admin"),
   passcodeHash: text("passcode_hash"),
+  disabledAt: text("disabled_at"),
   createdAt: text("created_at").notNull().default(now),
+});
+
+/** Per-person capability grants/revocations on top of their role's defaults. */
+export const userCapabilities = sqliteTable(
+  "user_capabilities",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    capability: text("capability").notNull(),
+    granted: integer("granted", { mode: "boolean" }).notNull(),
+  },
+  (t) => [uniqueIndex("user_capabilities_idx").on(t.userId, t.capability)],
+);
+
+/** One-time invites to join the household (hashed code, expires). */
+export const invites = sqliteTable("invites", {
+  codeHash: text("code_hash").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull().default(now),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
 });
 
 export const authSessions = sqliteTable(
@@ -134,6 +164,8 @@ export const sessionMeta = sqliteTable("session_meta", {
   forkedFromSessionId: text("forked_from_session_id"),
   forkedFromMessageId: text("forked_from_message_id"),
   titleOverride: text("title_override"),
+  /** visible to everyone in the household who can chat (read-only for them) */
+  shared: integer("shared", { mode: "boolean" }).notNull().default(false),
   lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull().default(now),
 });
@@ -158,12 +190,18 @@ export const runs = sqliteTable(
 );
 
 /** Jarvis-local per-action preferences (pin). Never a copy of upstream state. */
-export const actionPrefs = sqliteTable("action_prefs", {
-  actionId: text("action_id").primaryKey(),
-  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
-  hiddenUntil: text("hidden_until"),
-  updatedAt: text("updated_at").notNull().default(now),
-});
+/** Per-person pins and acknowledgements of Home actions. */
+export const actionPrefs = sqliteTable(
+  "action_prefs",
+  {
+    userId: text("user_id").notNull().default(""),
+    actionId: text("action_id").notNull(),
+    pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+    hiddenUntil: text("hidden_until"),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.actionId] })],
+);
 
 /** Built-in todo store — only used when "Jarvis" is the canonical todo provider. */
 export const localTodos = sqliteTable("local_todos", {
