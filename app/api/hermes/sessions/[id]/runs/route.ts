@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { startRun } from "@/integrations/hermes/service";
+import { startRun } from "@/server/assistant";
 import { getPreferences } from "@/server/settings";
 import { buildContext, CONTEXT_SOURCES } from "@/server/context";
 

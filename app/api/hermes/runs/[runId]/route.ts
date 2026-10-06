@@ -1,5 +1,5 @@
 import { api } from "@/server/http/api";
-import { getRun } from "@/integrations/hermes/service";
+import { getRun } from "@/server/assistant";
 
 export const dynamic = "force-dynamic";
 

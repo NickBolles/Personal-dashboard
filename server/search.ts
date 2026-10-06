@@ -3,11 +3,17 @@ import { can, type Capable } from "@/server/access";
 import { getHome, cachedSource, scopeResult, sourceVisible } from "@/server/sources";
 import { listSessions } from "@/integrations/hermes/service";
 import { isConfigured } from "@/integrations/store";
-import { listControls } from "@/integrations/home-assistant/controls";
+import { listDevices } from "@/integrations/home-assistant/devices";
 import { listPeople } from "@/server/people";
 import type { CurrentUser } from "@/server/auth";
 import { matchScore, type SearchResponse, type SearchResult } from "@/lib/search";
 import { MODULES, ROLE_LABELS } from "@/lib/modules";
+import { listAccounts as financeAccounts } from "@/server/finance/accounts";
+import { listFunds } from "@/server/finance/funds";
+import { listCheckins } from "@/server/finance/checkins";
+import { listYears, revisionsFor } from "@/server/finance/plan";
+import { getDb, schema } from "@/server/db";
+import { monthName } from "@/server/finance/common";
 
 /**
  * One search across every module the person can see. Each provider is gated
@@ -121,17 +127,84 @@ const providers: SearchProvider[] = [
   {
     id: "devices",
     label: "Home devices",
-    visible: (u) => can(u, "home_assistant.view") && isConfigured("home_assistant"),
-    search: async (q) =>
-      (await listControls()).map((c) => ({
-        id: `device:${c.entityId}`,
+    visible: (u) => (can(u, "home_assistant.view") || can(u, "home_assistant.cameras")) && isConfigured("home_assistant"),
+    search: async (q, user) => {
+      const d = await listDevices({
+        doors: can(user, "home_assistant.view"),
+        lights: can(user, "home_assistant.view"),
+        cameras: can(user, "home_assistant.cameras"),
+        doorControls: false,
+        lightControls: false,
+      });
+      return [...d.doors, ...d.lights, ...d.cameras].map((x) => ({
+        id: `device:${x.entityId}`,
         kind: "device" as const,
         module: "home_assistant",
-        title: c.name,
-        subtitle: c.state,
-        href: `/home-control?entity=${encodeURIComponent(c.entityId)}`,
-        _s: matchScore(q, c.name, c.entityId, c.domain),
+        title: x.name,
+        subtitle: x.kind === "camera" ? "Camera" : `${x.kind} · ${x.state}`,
+        href: `/home-control?entity=${encodeURIComponent(x.entityId)}`,
+        _s: matchScore(q, x.name, x.entityId, x.kind),
+      }));
+    },
+  },
+  {
+    id: "finance",
+    label: "Finance",
+    visible: (u) => can(u, "finance.view"),
+    // Names only: search results never show amounts.
+    search: (q) => [
+      ...financeAccounts().map((a) => ({
+        id: `finance:account:${a.id}`,
+        kind: "finance" as const,
+        module: "finance",
+        title: a.name,
+        subtitle: "Account",
+        href: "/finance/accounts",
+        _s: matchScore(q, a.name, a.kind),
       })),
+      ...listFunds().map((f) => ({
+        id: `finance:fund:${f.id}`,
+        kind: "finance" as const,
+        module: "finance",
+        title: f.name,
+        subtitle: "Fund",
+        href: "/finance/funds",
+        _s: matchScore(q, f.name, "fund"),
+      })),
+      ...listCheckins().map((c) => ({
+        id: `finance:checkin:${c.id}`,
+        kind: "finance" as const,
+        module: "finance",
+        title: `${monthName(c.month)} ${c.month.slice(0, 4)} check-in`,
+        subtitle: c.status === "closed" ? "Closed" : "Draft",
+        href: `/finance/checkin/${c.id}`,
+        _s: matchScore(q, `${monthName(c.month)} ${c.month} check-in budget review`),
+      })),
+      ...getDb()
+        .select()
+        .from(schema.finEvents)
+        .all()
+        .map((e) => ({
+          id: `finance:event:${e.id}`,
+          kind: "finance" as const,
+          module: "finance",
+          title: e.label,
+          subtitle: `Plan ${e.year}`,
+          href: `/finance/plan?year=${e.year}`,
+          _s: matchScore(q, e.label, e.kind),
+        })),
+      ...listYears().flatMap((y) =>
+        revisionsFor(y.year).map((r) => ({
+          id: `finance:rev:${r.id}`,
+          kind: "finance" as const,
+          module: "finance",
+          title: `${r.year} plan: ${r.name}`,
+          subtitle: r.kind,
+          href: `/finance/plan?year=${r.year}&revision=${r.id}`,
+          _s: matchScore(q, r.name, r.changeNote, "plan revision"),
+        })),
+      ),
+    ],
   },
   {
     id: "people",

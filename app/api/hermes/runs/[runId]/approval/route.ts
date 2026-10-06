@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { respondApproval } from "@/integrations/hermes/service";
+import { respondApproval } from "@/server/assistant";
 import { getDb, schema } from "@/server/db";
 import { and, eq, like } from "drizzle-orm";
 

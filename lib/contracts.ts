@@ -4,9 +4,9 @@
  * contained there.
  */
 
-export type ActionSource = "hermes" | "paperclip" | "todos" | "skylight" | "daily_compass" | "home_assistant";
+export type ActionSource = "hermes" | "paperclip" | "todos" | "skylight" | "daily_compass" | "home_assistant" | "finance";
 
-export const ACTION_SOURCES: ActionSource[] = ["hermes", "paperclip", "todos", "skylight", "daily_compass", "home_assistant"];
+export const ACTION_SOURCES: ActionSource[] = ["hermes", "paperclip", "todos", "skylight", "daily_compass", "home_assistant", "finance"];
 
 export const SOURCE_LABELS: Record<ActionSource, string> = {
   hermes: "Hermes",
@@ -15,6 +15,7 @@ export const SOURCE_LABELS: Record<ActionSource, string> = {
   skylight: "Skylight",
   daily_compass: "Daily Compass",
   home_assistant: "Home Assistant",
+  finance: "Finance",
 };
 
 export type PriorityReason = "critical" | "awaiting_user" | "overdue" | "due_soon" | "checkin_window" | "today" | "upcoming";
@@ -154,7 +155,8 @@ export type WidgetSummary = {
 
 export type NotificationSeverity = "info" | "normal" | "high" | "critical";
 
-export type NotificationCategory = "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "integration_failure" | "info";
+export type NotificationCategory =
+  "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "finance" | "integration_failure" | "info";
 
 export const NOTIFICATION_CATEGORIES: {
   id: NotificationCategory;
@@ -196,6 +198,13 @@ export const NOTIFICATION_CATEGORIES: {
     label: "Daily Compass reminder",
     description: "A nudge when your check-in window opens.",
     defaultPush: true,
+    bypassQuietHours: false,
+  },
+  {
+    id: "finance",
+    label: "Finance check-in",
+    description: "Ready, needs attention, or refresh failed. Never includes amounts or account names. Off until you turn it on.",
+    defaultPush: false,
     bypassQuietHours: false,
   },
   {

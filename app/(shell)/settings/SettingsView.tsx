@@ -8,6 +8,7 @@ import { clearAllLocal } from "@/lib/client/idb";
 import { Button, Card, Field, PageHeader, inputCls, useToast } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
+import { AssistantSettings } from "./AssistantSettings";
 
 type Prefs = {
   displayName: string;
@@ -125,6 +126,8 @@ export function SettingsView() {
           </form>
         </Card>
       ) : null}
+
+      {isAdmin ? <AssistantSettings /> : null}
 
       {me.data?.authMode === "local" ? (
         <Card>

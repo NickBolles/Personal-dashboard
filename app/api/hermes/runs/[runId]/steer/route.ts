@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { steerRun } from "@/integrations/hermes/service";
+import { steerRun } from "@/server/assistant";
 
 const bodySchema = z.object({ input: z.string().min(1).max(5000) });
 

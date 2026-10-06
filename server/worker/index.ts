@@ -7,7 +7,9 @@ import { deliverPendingPushes } from "@/server/notifications/push";
 import { collectSources, failureInfo } from "@/server/sources";
 import { SOURCE_LABELS, type ActionSource } from "@/lib/contracts";
 import { MINUTE } from "@/lib/time";
-import { markCompletionNotified, reconcileRun, runsNeedingCompletionNotice, unfinishedRuns } from "@/integrations/hermes/service";
+import { markCompletionNotified, runsNeedingCompletionNotice, unfinishedRuns } from "@/integrations/hermes/service";
+import { reconcileRun } from "@/server/assistant";
+import { isLocalRun } from "@/lib/assistant";
 import { isConfigured } from "@/integrations/store";
 import { reminderInstant } from "@/integrations/daily-compass/adapter";
 
@@ -19,9 +21,10 @@ export async function tick(now = new Date()) {
   const prefs = getPreferences();
   const summary: Record<string, unknown> = {};
 
-  // 1. Hermes runs: reconcile anything not yet terminal; alert on approvals and unseen completions.
-  if (isConfigured("hermes")) {
-    for (const run of unfinishedRuns()) {
+  // 1. Assistant runs (Hermes and Claude-direct): reconcile anything not yet terminal; alert on approvals and unseen completions.
+  {
+    const hermesUp = isConfigured("hermes");
+    for (const run of unfinishedRuns().filter((r) => hermesUp || isLocalRun(r.runId))) {
       try {
         const view = await reconcileRun(run.runId);
         if (view.status === "waiting_for_approval" && view.pendingApproval) {
@@ -50,7 +53,7 @@ export async function tick(now = new Date()) {
           type: "hermes.run_finished",
           category: "hermes_complete",
           severity: failed ? "high" : "normal",
-          title: failed ? `Hermes run ${run.status}` : "Hermes finished",
+          title: `${isLocalRun(run.runId) ? "Claude" : "Hermes"} ${failed ? `run ${run.status}` : "finished"}`,
           body: run.inputPreview ? `“${run.inputPreview}”` : "Background work finished.",
           source: "hermes",
           deepLink: `/chat/${encodeURIComponent(run.sessionId)}`,

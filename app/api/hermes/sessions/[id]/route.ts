@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { getSessionDetail, updateSession } from "@/integrations/hermes/service";
+import { getSessionDetail, updateSession } from "@/server/assistant";
 import { linksForSession } from "@/integrations/paperclip/service";
 import { can } from "@/server/access";
 

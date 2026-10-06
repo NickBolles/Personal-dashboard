@@ -1,5 +1,5 @@
 import { api } from "@/server/http/api";
-import { relayRunEvents } from "@/integrations/hermes/service";
+import { relayRunEvents } from "@/server/assistant";
 
 export const dynamic = "force-dynamic";
 

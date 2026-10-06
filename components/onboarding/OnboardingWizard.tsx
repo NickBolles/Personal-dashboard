@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { INTEGRATIONS, getIntegrationDef, type IntegrationKind, type PublicIntegration, type TestResult } from "@/integrations/registry";
+import { ONBOARDING_INTEGRATIONS, getIntegrationDef, type IntegrationKind, type PublicIntegration, type TestResult } from "@/integrations/registry";
 import { IntegrationForm, TestResults } from "@/components/integrations/IntegrationForm";
 import { PushControls, QuietHours } from "@/components/NotificationSetup";
 import { InstallPrompt } from "@/components/InstallPrompt";
@@ -15,7 +15,7 @@ type Step = { id: string; title: string; optional?: boolean };
 
 const STEPS: Step[] = [
   { id: "welcome", title: "Welcome" },
-  ...INTEGRATIONS.map((i) => ({ id: i.kind, title: i.label, optional: !i.recommended })),
+  ...ONBOARDING_INTEGRATIONS.map((i) => ({ id: i.kind, title: i.label, optional: !i.recommended })),
   { id: "notifications", title: "Notifications" },
   { id: "install", title: "Install" },
   { id: "finish", title: "Verify & finish" },
@@ -254,7 +254,7 @@ function Welcome() {
         <em>what needs my attention, and what should I do next?</em>
       </p>
       <ul className="grid gap-2 sm:grid-cols-2">
-        {INTEGRATIONS.map((i) => (
+        {ONBOARDING_INTEGRATIONS.map((i) => (
           <li key={i.kind} className="rounded-xl border border-line p-3">
             <p className="font-medium">
               {i.label} {!i.recommended ? <span className="text-xs font-normal text-muted">optional</span> : null}
@@ -321,7 +321,7 @@ function Finish({ integrations, onRefresh }: { integrations: PublicIntegration[]
         Re-test all connections
       </Button>
       <ul className="space-y-3">
-        {INTEGRATIONS.map((d) => {
+        {ONBOARDING_INTEGRATIONS.map((d) => {
           const i = integrations.find((x) => x.kind === d.kind);
           const r = results[d.kind] ?? i?.lastTest;
           return (

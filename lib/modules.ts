@@ -133,7 +133,7 @@ export const MODULES: ModuleDef[] = [
     id: "finance",
     label: "Finance",
     description: "Monthly check-in, card payments, reserve, purpose funds and the long-term plan.",
-    sources: [],
+    sources: ["finance"],
     viewCapability: "finance.view",
     routes: [{ href: "/finance", label: "Finance" }],
     capabilities: [

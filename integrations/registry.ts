@@ -32,6 +32,8 @@ export type IntegrationDef = {
   uses: string[];
   /** onboarding treats required integrations as strongly recommended */
   recommended: boolean;
+  /** false: set up from Settings → Connections only, not the onboarding wizard */
+  onboarding?: boolean;
   fields: FieldDef[];
   docs?: string;
 };
@@ -291,6 +293,18 @@ export const INTEGRATIONS: IntegrationDef[] = [
         help: "entity_id: service, service. Defaults are the safe direction only (lock, close_cover). Add unlock or open_cover only if you want them from your phone. Every control asks for confirmation against live state.",
       },
       {
+        key: "lightControl",
+        label: "Light switching",
+        type: "select",
+        default: "all",
+        options: [
+          { value: "all", label: "Any light (on/off, with readback)" },
+          { value: "allowlist", label: "Only lights in the allowed controls" },
+          { value: "none", label: "View only" },
+        ],
+        help: "Who can switch them is set per person in Settings → People.",
+      },
+      {
         key: "calendarEntities",
         label: "Calendars for the household glance",
         type: "textarea",
@@ -407,7 +421,57 @@ export const INTEGRATIONS: IntegrationDef[] = [
       },
     ],
   },
+  {
+    kind: "finance",
+    label: "Finance",
+    tagline: "Balances for the monthly check-in: Monarch, or manual entry and CSV.",
+    uses: ["Monthly check-in: card payments, reserve, funds", "Finance items in your priorities", "Ready / needs attention notices (no amounts)"],
+    recommended: false,
+    onboarding: false,
+    fields: [
+      {
+        key: "balanceSource",
+        label: "Where balances come from",
+        type: "select",
+        default: "manual",
+        options: [
+          { value: "manual", label: "Manual entry and CSV import" },
+          { value: "monarch", label: "Monarch (unofficial API; must be validated)" },
+        ],
+        help: "Manual and CSV always work. Monarch has no supported API: until a refresh works with your real account it's reported as a release blocker.",
+      },
+      {
+        key: "monarchToken",
+        label: "Monarch session token",
+        type: "secret",
+        env: "MONARCH_TOKEN",
+        showWhen: { field: "balanceSource", oneOf: ["monarch"] },
+        help: "From `monarch login` (or your browser session). Stored encrypted on the server; never sent to the browser or logged.",
+      },
+      {
+        key: "monarchUrl",
+        label: "Monarch API URL",
+        type: "url",
+        default: "https://api.monarchmoney.com",
+        env: "MONARCH_API_URL",
+        advanced: true,
+        showWhen: { field: "balanceSource", oneOf: ["monarch"] },
+      },
+      {
+        key: "refreshWaitSeconds",
+        label: "Wait for Monarch's bank sync (seconds)",
+        type: "number",
+        default: 60,
+        advanced: true,
+        showWhen: { field: "balanceSource", oneOf: ["monarch"] },
+        help: "After asking Monarch to sync, Jarvis waits this long for fresh balances before reading what's there (and saying so).",
+      },
+    ],
+  },
 ];
+
+/** The integrations the onboarding wizard walks through. */
+export const ONBOARDING_INTEGRATIONS = INTEGRATIONS.filter((i) => i.onboarding !== false);
 
 export function getIntegrationDef(kind: string) {
   return INTEGRATIONS.find((i) => i.kind === kind);

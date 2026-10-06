@@ -18,6 +18,12 @@ const PAGES = [
   "/brain",
   "/daily-compass",
   "/skylight",
+  "/settings/people",
+  "/finance",
+  "/finance/accounts",
+  "/finance/funds",
+  "/finance/plan",
+  "/finance/checkin?all=1",
 ];
 
 for (const path of PAGES) {

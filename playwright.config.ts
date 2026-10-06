@@ -72,6 +72,7 @@ export default defineConfig({
       env: {
         PORT: String(PORT),
         JARVIS_MOCK_UPSTREAM_URL: MOCK_URL,
+        JARVIS_ANTHROPIC_BASE_URL: `${MOCK_URL}/anthropic`,
         JARVIS_SETUP_CODE: "E2E-SETUP",
         JARVIS_WORKER_INTERVAL_MS: "3600000",
         JARVIS_SECURE_COOKIES: "false",

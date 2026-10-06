@@ -10,6 +10,7 @@ import { api } from "@/lib/client/api";
 import { kvGet, kvSet } from "@/lib/client/idb";
 import { Badge, Button, ErrorNote, Spinner, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { ForkIcon, PlusIcon } from "@/components/icons";
+import { BackendSwitch, useAssistantChoice } from "./backend";
 
 export function useSessions(archived = false) {
   const [cached, setCached] = useState<SessionSummary[]>();
@@ -33,6 +34,7 @@ export function NewConversationButton({ className }: { className?: string }) {
   const online = useOnline();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  const { backend } = useAssistantChoice();
   return (
     <Button
       variant="primary"
@@ -42,7 +44,7 @@ export function NewConversationButton({ className }: { className?: string }) {
       onClick={async () => {
         setBusy(true);
         try {
-          const s = await api.post<SessionSummary>("/api/hermes/sessions", {});
+          const s = await api.post<SessionSummary>("/api/hermes/sessions", { backend });
           router.push(`/chat/${encodeURIComponent(s.id)}`);
         } catch (err) {
           toast((err as Error).message, "danger");
@@ -70,6 +72,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
 
   return (
     <div className="flex flex-col gap-3">
+      <BackendSwitch className="self-start" />
       <NewConversationButton className="w-full" />
       <div className="flex gap-2">
         <label htmlFor="session-filter" className="sr-only">
@@ -97,6 +100,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
               >
                 <span className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate font-medium">{s.title}</span>
+                  {s.source === "claude" ? <Badge>Claude</Badge> : null}
                   {s.activeRun ? (
                     <Badge tone={s.activeRun.status === "waiting_for_approval" ? "warn" : "accent"}>
                       {s.activeRun.status === "waiting_for_approval" ? "Needs you" : "Running"}

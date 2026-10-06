@@ -14,6 +14,7 @@ export const MOCK = {
   googleClientSecret: "mock-client-secret",
   googleRefresh: "1//mock-refresh-token",
   compassToken: "mock-compass-token",
+  monarchToken: "mock-monarch-session-token",
 };
 
 export type Preset = { config: Record<string, string>; secrets: Record<string, string> };
@@ -41,5 +42,6 @@ export function demoPresets(): Partial<Record<IntegrationKind, Preset>> | null {
       secrets: { refreshToken: MOCK.skylightRefresh },
     },
     paperclip: { config: { baseUrl: `${base}/paperclip`, uiUrl: "https://paperclip.example.com", companyId: "" }, secrets: { apiKey: MOCK.paperclipKey } },
+    finance: { config: { balanceSource: "monarch", monarchUrl: `${base}/monarch`, refreshWaitSeconds: "5" }, secrets: { monarchToken: MOCK.monarchToken } },
   };
 }

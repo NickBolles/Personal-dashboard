@@ -2,6 +2,7 @@ import "server-only";
 import { SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomeHealth, type NextAction } from "@/lib/contracts";
 import { adapterContext, cachedSource, getHome, scopeResult } from "@/server/sources";
 import { listControls } from "@/integrations/home-assistant/controls";
+import { listDevices } from "@/integrations/home-assistant/devices";
 import { can, type Capable } from "@/server/access";
 import { HttpError } from "@/server/http/errors";
 
@@ -97,6 +98,14 @@ async function homeAssistant(user: Viewer, tz: string) {
     }
   } catch {
     lines.push("Controllable entities: couldn't read live state right now.");
+  }
+  try {
+    const d = await listDevices({ doors: true, lights: true, cameras: false, doorControls: false, lightControls: false });
+    if (d.lights.length)
+      lines.push(`Lights (live): ${d.lights.map((l) => `${l.name} ${l.state}${l.brightness !== undefined ? ` ${l.brightness}%` : ""}`).join("; ")}`);
+    if (d.doors.length) lines.push(`Doors, locks and covers (live): ${d.doors.map((x) => `${x.name} ${x.state}`).join("; ")}`);
+  } catch {
+    /* already reported above */
   }
   const h = r.data?.extra?.health as HomeHealth | undefined;
   if (h) {
