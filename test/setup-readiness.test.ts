@@ -18,7 +18,8 @@ describe("Android release signing", () => {
     const block = workflow.match(/- name: Validate release signing[\s\S]*?run: \|\n([\s\S]*?)(?=\n      -)/)?.[1];
     expect(block, "signing preflight must precede Java/Gradle setup").toBeTruthy();
     expect(workflow.indexOf("Validate release signing")).toBeLessThan(workflow.indexOf("actions/setup-java"));
-    const env: Record<string, string> = {
+    const env: NodeJS.ProcessEnv = {
+      NODE_ENV: "test",
       PATH: process.env.PATH!,
       RELEASE: String(release),
       KEYSTORE_B64: "fixture",
