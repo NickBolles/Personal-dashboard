@@ -397,7 +397,9 @@ const VALIDATED_KEY = "finance_monarch_validated";
 
 /** Has a refresh ever worked against a real (non-mock) Monarch account? Until then it's a release blocker. */
 export function monarchValidation() {
-  return getSetting<{ at: string; accounts: number }>(VALIDATED_KEY) ?? null;
+  const validation = getSetting<{ at: string; accounts: number; runId?: string }>(VALIDATED_KEY);
+  // Legacy flags could have been set by a partial refresh; require new run provenance.
+  return validation?.runId ? validation : null;
 }
 
 function isMockUrl(url: string) {
@@ -430,14 +432,17 @@ export async function refreshFromMonarch(actor: string, correlationId: string) {
     const mapped = accountRows().filter((a) => a.externalSource === "monarch" && a.externalId);
     const missing: string[] = [];
     let stored = 0;
+    let timestamped = 0;
     for (const a of mapped) {
       const r = remote.find((x) => x.externalId === a.externalId);
       if (!r || r.balance === null) {
         missing.push(a.id);
         continue;
       }
-      recordBalance({ accountId: a.id, balance: r.balance, semantics: "current", source: "monarch", asOf: r.asOf, runId }, actor);
+      const asOf = r.asOf && Number.isFinite(Date.parse(r.asOf)) ? r.asOf : null;
+      recordBalance({ accountId: a.id, balance: r.balance, semantics: "current", source: "monarch", asOf, runId }, actor);
       stored++;
+      if (asOf) timestamped++;
     }
     const since = addDays(today(), -45);
     const byExternal = new Map(mapped.map((a) => [a.externalId!, a.id]));
@@ -452,7 +457,6 @@ export async function refreshFromMonarch(actor: string, correlationId: string) {
         pending: t.pending,
       }));
     const imported = upsertTransactions("monarch", txns, runId);
-    if (stored > 0 && !isMockUrl(conn.baseUrl) && remote.some((r) => r.asOf)) setSetting(VALIDATED_KEY, { at: now, accounts: stored });
     const partial = !completed || missing.length > 0 || mapped.length === 0;
     const detail = { stored, missing: missing.length, unmapped: remote.length - mapped.length, syncCompleted: completed, transactions: imported };
     auditFinance(actor, "finance.refresh.monarch", runId, null, detail, correlationId);
@@ -468,6 +472,9 @@ export async function refreshFromMonarch(actor: string, correlationId: string) {
             : undefined,
       detail,
     );
+    if (!partial && stored > 0 && timestamped === stored && !isMockUrl(conn.baseUrl)) {
+      setSetting(VALIDATED_KEY, { at: new Date().toISOString(), accounts: stored, runId });
+    }
     return { runId, outcome, ...detail };
   } catch (err) {
     const message = err instanceof UpstreamError || err instanceof HttpError ? err.message : `Unexpected error: ${(err as Error).message}`;

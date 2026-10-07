@@ -22,6 +22,18 @@
 | Clickjacking / injection                        | CSP, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`.                                                                                                                                                                                                                                                                                                                                 |
 | Caching sensitive data offline                  | The service worker never caches `/api/*`. IndexedDB holds only drafts and bounded snapshots (≤10 sessions). "Clear local cache" in Settings wipes it.                                                                                                                                                                                                                                              |
 
+## Proxy authentication is a deployment trust boundary
+
+`JARVIS_AUTH_MODE=local` ignores proxy identity headers and uses passcodes. In `proxy` mode Jarvis trusts `JARVIS_AUTH_PROXY_HEADER` (default `remote-user`); the first accepted identity can become the admin. **Do not enable proxy mode until all of these are verified:**
+
+- Traefik runs an actual authenticating middleware (Authelia/Authentik/oauth2-proxy) and includes it in `TRAEFIK_MIDDLEWARES`. The default `jarvis-headers` only emits security headers; it does not authenticate anyone.
+- The trusted proxy strips client-supplied identity headers and sets the authenticated identity itself. Test an unauthenticated request containing a forged `remote-user`: it must not gain access.
+- No app host port bypasses the proxy. Production Compose publishes none. Also restrict untrusted containers/hosts from reaching the app on its Docker networks: no host port alone is not full network isolation.
+- Set `JARVIS_AUTH_PROXY_USERS` to the intended identities where practical. This allowlist is defense in depth, not a substitute for authenticating middleware.
+- Any device-bearer bypass strips identity headers and still reaches Jarvis token validation; a forged bearer must return 401, never a proxy identity. Limit pairing exceptions to the documented pairing endpoint.
+
+The explicit `docker-compose.local.yml` override binds only loopback and forces **local** auth. Do not use it for proxy-mode production. Live spoofed-header, passcode, device-token, and pairing checks remain deployment acceptance gates.
+
 ## Home Assistant and Hermes
 
 Your decision (overriding the assessment's "never to the AI layer" rule): Home Assistant data **may** go to Hermes so you can ask questions about your home.

@@ -173,8 +173,9 @@ export type ForkInput = {
  *    transcript into a child; Hermes marks the source end_reason=branched but
  *    leaves its messages untouched).
  *  - From a specific message: the pinned Hermes version has no HTTP fork-point,
- *    so we create a child session and seed its first run with
- *    conversation_history up to that message. Lineage is recorded in Jarvis.
+ *    so a text-only restart seeds conversation_history up to that message.
+ *    Refuse unverified/truncated windows and unsupported context before writes.
+ *    This does not copy the parent's model/system configuration. Lineage is local.
  */
 export async function forkSession(user: CurrentUser, id: string, input: ForkInput, correlationId: string) {
   assertSessionId(id);
@@ -190,13 +191,44 @@ export async function forkSession(user: CurrentUser, id: string, input: ForkInpu
     if (!input.prompt?.trim()) {
       throw new HttpError(400, "prompt_required", "Forking from an earlier message needs a first prompt.");
     }
-    const messages = await HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 });
+    // The HTTP API has no fork-point operation. Only seed a verified complete,
+    // bounded text transcript; never silently drop an older window or tool context.
+    const messages = await HermesSessionClient.messages(conn, id, { order: "oldest", limit: 500, offset: 0, includeCompacted: true });
+    const pagination = messages.pagination;
+    if (
+      !pagination ||
+      pagination.order !== "oldest" ||
+      pagination.offset !== 0 ||
+      pagination.limit !== 500 ||
+      pagination.returned !== messages.data.length ||
+      messages.data.length >= 500 ||
+      pagination.has_more === true ||
+      new Set(messages.data.map((m) => String(m.id))).size !== messages.data.length
+    ) {
+      throw new HttpError(409, "fork_history_incomplete", "Cannot verify a complete transcript below the 500-message limit. Use Fork latest state instead.");
+    }
     const idx = messages.data.findIndex((m) => String(m.id) === input.fromMessageId);
     if (idx === -1) throw new HttpError(404, "message_not_found", "That message is no longer in the conversation");
-    const history = messages.data
-      .slice(0, idx + 1)
-      .filter((m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
-      .map((m) => ({ role: m.role, content: m.content as string }));
+    const history = messages.data.slice(0, idx + 1).map((m) => {
+      if (
+        (m.role !== "user" && m.role !== "assistant") ||
+        typeof m.content !== "string" ||
+        m.tool_calls?.length ||
+        m.tool_call_id ||
+        m.tool_name ||
+        m.reasoning ||
+        m.reasoning_content ||
+        m.display_kind ||
+        (m.finish_reason && m.finish_reason !== "stop")
+      ) {
+        throw new HttpError(
+          409,
+          "fork_context_unsupported",
+          "Text-only restart cannot preserve this tool, reasoning, or non-text context. Use Fork latest state instead.",
+        );
+      }
+      return { role: m.role, content: m.content };
+    });
     const parent = await HermesSessionClient.get(conn, id);
     const created = await HermesSessionClient.create(conn, {
       title: input.title?.trim() || `${parent.session.title ?? "Conversation"} (fork)`,

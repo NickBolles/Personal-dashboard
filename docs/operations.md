@@ -5,12 +5,16 @@
 ```bash
 git clone https://github.com/NickBolles/Personal-dashboard jarvis && cd jarvis
 cp .env.example .env        # set JARVIS_DOMAIN, TRAEFIK_*, JARVIS_VAPID_SUBJECT
-docker network create traefik 2>/dev/null || true   # skip if your Traefik network exists
+docker network inspect <approved-proxy-network>    # substitute the actual user-defined proxy network
 docker compose up -d --build
 docker compose logs jarvis | grep "Setup code"
 ```
 
-Open `https://$JARVIS_DOMAIN`, enter the setup code, and follow onboarding.
+Open your configured HTTPS domain, enter the setup code, and follow onboarding. Confirm Traefik is attached to the same network and run `docker compose config --quiet` before starting. The Unraid audit found built-in `bridge` networking, not the assumed external user-defined network: deployment needs an approved compatible topology, not just these example commands.
+
+Production Compose has **no app host port**. For deliberate local debugging only, add `-f docker-compose.local.yml` after `-f docker-compose.yml`; it publishes `127.0.0.1:${JARVIS_PORT:-3000}` and forces local passcode authentication. Do not expose that port to the LAN or use it with proxy auth. HTTPS remains necessary for normal secure-cookie browser acceptance.
+
+Proxy mode requires a real authenticating middleware (see docs/security.md), not merely the default `jarvis-headers` security-header middleware.
 
 Hermes must be reachable from the Jarvis container. Put both on a shared Docker network (e.g. add Hermes' compose service to the `jarvis_default` network, or Jarvis to Hermes' network) and use `http://<hermes-service>:8642`. Never publish the Hermes API port publicly.
 
@@ -50,7 +54,7 @@ See `.env.example`. Notable: `JARVIS_AUTH_MODE` (`local`|`proxy`), `JARVIS_AUTH_
 
 ## Known limitations
 
-- Hermes has no HTTP fork point; "Fork from here" is a Jarvis approximation using `conversation_history`.
+- Hermes has no HTTP fork point. **Restart with text** seeds `conversation_history` only for a verified complete oldest-first transcript under 500 messages and a text-only prefix. Unsupported tool/reasoning/non-text context or unknown/truncated pagination is rejected before creating a child. Parent model/system settings are not copied; use **Fork latest state** for native full-context branching.
 - Hermes memory contents are not exposed by the API server; Brain shows status, skills, toolsets and jobs.
 - Skylight is read-only here, via Hermes by default. Chore completion is not enabled. Hermes sync sessions (`jarvis-sync:*`) are hidden and deleted after each answer. If you see leftovers in the Hermes dashboard, a sync was interrupted; they're safe to delete.
 - Paperclip comments/status changes are implemented in the client but not surfaced in the UI yet (deep-link instead).
