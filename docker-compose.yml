@@ -27,9 +27,7 @@ services:
       JARVIS_MOCK_UPSTREAM_URL: ${JARVIS_MOCK_UPSTREAM_URL:-}
     volumes:
       - jarvis-data:/data
-    ports:
-      # Direct LAN access (optional). Remove if you only want Traefik.
-      - "${JARVIS_PORT:-3000}:3000"
+    # No host port: all production ingress must pass through Traefik.
     networks:
       - default
       - traefik

@@ -24,6 +24,7 @@ on:
     paths:
       - "android/**"
       - "contracts/api/**"
+      - ".github/workflows/android.yml"
 
 concurrency:
   group: android-${{ github.ref }}
@@ -41,6 +42,23 @@ jobs:
         working-directory: android
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate release signing
+        env:
+          RELEASE: ${{ inputs.release == true }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ "$RELEASE" = "true" ]; then
+            for name in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+              if [ -z "${!name}" ]; then
+                echo "::error::Release requires all four persistent Android signing secrets. See docs/android.md."
+                exit 1
+              fi
+            done
+          fi
 
       - uses: actions/setup-java@v4
         with:
@@ -133,7 +151,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish release
-        if: ${{ inputs.release }}
+        if: ${{ inputs.release && steps.key.outputs.persistent == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         working-directory: .

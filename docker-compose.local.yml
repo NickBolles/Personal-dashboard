@@ -1,0 +1,8 @@
+# Explicit local debugging only; never combine with proxy authentication.
+# docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+services:
+  jarvis:
+    environment:
+      JARVIS_AUTH_MODE: local
+    ports:
+      - "127.0.0.1:${JARVIS_PORT:-3000}:3000"

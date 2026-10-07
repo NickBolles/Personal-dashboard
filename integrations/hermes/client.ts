@@ -68,8 +68,20 @@ export const HermesSessionClient = {
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "PATCH", body }, sessionEnvelopeSchema),
   remove: (c: HermesConn, id: string) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "DELETE" }, z.object({ deleted: z.boolean().optional() }).passthrough()),
-  messages: (c: HermesConn, id: string, q: { limit?: number; order?: "oldest" | "latest" } = {}) =>
-    call(c, { path: `/api/sessions/${encodeURIComponent(id)}/messages`, query: { limit: q.limit ?? 500, order: q.order ?? "latest" } }, messageListSchema),
+  messages: (c: HermesConn, id: string, q: { limit?: number; offset?: number; order?: "oldest" | "latest"; includeCompacted?: boolean } = {}) =>
+    call(
+      c,
+      {
+        path: `/api/sessions/${encodeURIComponent(id)}/messages`,
+        query: {
+          limit: q.limit ?? 500,
+          offset: q.offset ?? 0,
+          order: q.order ?? "latest",
+          ...(q.includeCompacted !== undefined ? { include_compacted: q.includeCompacted } : {}),
+        },
+      },
+      messageListSchema,
+    ),
   fork: (c: HermesConn, id: string, body: { title?: string }) =>
     call(c, { path: `/api/sessions/${encodeURIComponent(id)}/fork`, method: "POST", body }, sessionEnvelopeSchema),
 };

@@ -1,13 +1,14 @@
 # Your setup checklist
 
-Everything that needs your accounts, browser, or home network. The app, tests, CI, Docker, and docs are done. Each step says where it plugs in. In-app onboarding walks through steps 3–8 and tests each connection live.
+Code readiness is not live acceptance. Automated tests cover the app and setup guards; deployment, credentials, phone installation, and real-provider checks below still require approval and verification. In-app onboarding walks through steps 3–8, but Save & test alone does not prove every end-to-end workflow.
 
 ## 1. Deploy on the home server (≈10 min)
 
-- [ ] Pick a hostname, e.g. `jarvis.nickbolles.com`, and point DNS at the server running Traefik. No Traefik config for the Unraid box exists in any repo; the VPS one uses certresolver `mytlschallenge` on network `traefik`. Adjust `TRAEFIK_*` in `.env` to match the home server.
+- [ ] Approve deployment of `jarvis.nickbolles.com` and verify DNS/TLS. The read-only Unraid audit observed Traefik entrypoint `https`, resolver `letsencrypt`, and Docker `bridge`, not a user-defined `traefik` network. The production Compose file assumes an external user-defined network: agree on and preflight compatible networking before starting it; do not blindly use the VPS defaults or assume service-name DNS on the built-in bridge.
+- [ ] Install/verify Docker Compose v2 on the deployment host (Docker CLI was present, Compose plugin was absent). No Jarvis deployment was running at the audit.
 - [ ] `git clone … && cp .env.example .env`, then set `JARVIS_DOMAIN`, `TZ`, `JARVIS_VAPID_SUBJECT=mailto:<you>`, and optionally `JARVIS_SECRET_KEY`.
 - [ ] `docker compose up -d --build`, then `docker compose logs jarvis | grep "Setup code"`.
-- [ ] Optional: put Jarvis behind Authelia/Authentik and set `JARVIS_AUTH_MODE=proxy`. The default is passcode login.
+- [ ] Keep `JARVIS_AUTH_MODE=local` unless authenticating middleware is configured and tested. Proxy mode trusts identity headers; `jarvis-headers` only sets security headers and is **not authentication**. See docs/security.md. Production Compose publishes no app host port; the explicit loopback-only local override must not be used for proxy mode.
 
 Want to look around first? Run `docker compose -f docker-compose.demo.yml up --build` and use setup code `DEMO`.
 
@@ -26,13 +27,12 @@ Native app with widgets; details in docs/android.md.
 
 ## 3. Hermes (required)
 
-Your `hermes-agent-docker-aio` compose only exposes the dashboard on :18789. The API server isn't enabled yet.
+The read-only home audit found the Hermes API **already enabled**: `/health` returned 200, version `0.21.5`. Hermes is on Docker `bridge`, with 8642 published on all host interfaces and an existing Traefik API route. This is observed topology, not approval to expose it or proof of authenticated integration acceptance. Leave the existing service unchanged until networking/security changes are explicitly approved.
 
-- [ ] In `$HERMES_HOME/.env` (`/opt/data/.env` in the container), set `API_SERVER_ENABLED=true`, `API_SERVER_HOST=0.0.0.0`, `API_SERVER_PORT=8642`, and `API_SERVER_KEY=<32+ random chars>`. The key must be at least 16 characters.
-- [ ] Make sure the gateway runs (`hermes gateway`) alongside the dashboard, then restart.
-- [ ] Put Hermes and Jarvis on a shared Docker network. **Don't publish 8642 publicly.** Use `http://<hermes-container>:8642` as the URL in Jarvis.
+- [ ] Confirm an approved server-to-server path from Jarvis to the existing API and retrieve the existing API key securely. Do not re-enable, restart, rotate credentials, or alter port exposure merely to follow this checklist.
+- [ ] Review the existing 8642 exposure separately. A user-defined shared network is an option, not the current topology; container-name DNS must be verified before using `http://<hermes-container>:8642`.
 - [ ] Onboarding → Hermes: enter the URL and key, then **Save & test**.
-- [ ] Verify "Fork from here" on the real Hermes. It uses `conversation_history`; check that the fork's transcript contains the earlier context. Fork latest state uses the native endpoint.
+- [ ] With explicit permission to create test conversations, verify **Restart with text** on real Hermes. It seeds `conversation_history` only after a complete oldest-first transcript under 500 messages is verified; tool/reasoning/non-text prefixes fail closed. It does not copy model/system settings. Verify the earlier text is actually available to the new run. **Fork latest state** uses the native endpoint, preserves full context, and marks the source as branched.
 - [ ] Optional: set the operator dashboard URL for deep links.
 
 ## 4. Todos — decide the canonical list
@@ -72,9 +72,9 @@ Daily Compass lives in Hermes, so Jarvis asks Hermes for today's state instead o
 
 ## 8. Paperclip (optional)
 
-No Paperclip deployment was found in your repos.
+The read-only home audit found **Paperclip-HTTPS already deployed**, on Docker `bridge`, port 3100. Jarvis connectivity, authentication and company selection remain unverified.
 
-- [ ] Once it's running: `npx paperclipai token board create --name jarvis`. The key expires after 30 days by default; use `--ttl-days` or `expiresAt: null` for longer.
+- [ ] After approval, provision a dedicated board token against the existing deployment: `npx paperclipai token board create --name jarvis`. The key expires after 30 days by default; use `--ttl-days` or `expiresAt: null` for longer.
 - [ ] Onboarding → Paperclip: enter the URL and key, then pick the company. Set **Browser URL** if you open Paperclip at a different address.
 
 ## 9. People: your wife, the kids, the home tablet
@@ -95,8 +95,8 @@ No Paperclip deployment was found in your repos.
 - [ ] Finance → **Accounts**: add checking, savings and cards, then enter balances (or import a CSV).
 - [ ] Finance → **Funds & reserve**: set the checking cushion, then add your funds (and mark any protected).
 - [ ] Run your first month-end **check-in** and close it.
-- [ ] **Monarch (release blocker until done):** switch the source to Monarch and paste the session token (`monarch login`, or your browser session). Map each account, then **Refresh balances**. The blocker clears after the first successful refresh against your real account.
-- [ ] While you're there, check that one credit card's balance owed shows as **negative** in Jarvis. If it's positive, tell me: the liability sign in `integrations/monarch/client.ts` needs flipping.
+- [ ] **Monarch (release blocker until done):** switch the source to Monarch and paste the session token (`monarch login`, or your browser session). Map each account, then **Refresh balances**. The code validation marker requires a completed, non-mock refresh, every mapped balance imported with a valid provider timestamp, and successful transaction import/run finalization. Legacy markers without run provenance do not qualify. This marker is not proof of balance-sign correctness or complete live acceptance.
+- [ ] While you're there, check that one credit card's balance owed shows as **negative** in Jarvis. Compare both an ordinary amount owed and any credit/overpayment with Monarch before changing normalization. Preserve the existing sign conversion until that evidence is available; do not apply `abs()` blindly.
 - [ ] Notifications → **Finance** is off by default. Turn it on if you want "check-in ready / needs attention" pushes. They never include amounts or account names.
 
 ## 12. Lights and cameras

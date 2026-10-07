@@ -45,7 +45,7 @@ Widgets refresh every 30 minutes, and right after anything you do in the app or 
 3. **Actions → Android app → Run workflow**, tick **publish a GitHub release**. Open the release on your phone and install the APK. Allow "install unknown apps" for your browser when asked.
 4. Open Jarvis on the web → **Settings → Phones → Show pairing code**. In the app, tap **Scan pairing code**, or type the server address and code. Codes work once and expire after 10 minutes.
 
-Without the signing secrets the workflow still builds, with a throwaway key: fine to try it, but the next build won't install over it.
+A release dispatch fails before Java/Gradle setup unless all four persistent signing secrets are present. Publishing also requires the persistent-signing output. Only non-release CI may use a throwaway key: fine to try it, but the next build will not install over it. This guard does not prove the key is valid; the actual build and APK signature verification must still pass.
 
 If you use `JARVIS_AUTH_MODE=proxy` (Authelia/Authentik in front), let requests with an `Authorization: Bearer jdv_…` header through to Jarvis for `/api/*`. The phone authenticates with its device token, not the proxy session. Pairing itself (`POST /api/devices/pair`) must also be reachable.
 

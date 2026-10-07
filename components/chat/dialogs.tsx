@@ -78,6 +78,7 @@ export function ForkDialog({
     }
   }, [open, session.title]);
   const needsPrompt = Boolean(fromMessage);
+  const isHermes = session.source !== "claude";
   const m = useMutation({
     mutationFn: () =>
       api.post<{ session: SessionSummary; run?: RunView }>(`/api/hermes/sessions/${encodeURIComponent(session.id)}/fork`, {
@@ -89,7 +90,14 @@ export function ForkDialog({
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["sessions"] });
       qc.invalidateQueries({ queryKey: ["session", session.id] });
-      toast("Fork created. The original conversation is unchanged.", "ok");
+      toast(
+        fromMessage
+          ? "Text restart created. The original conversation is unchanged."
+          : isHermes
+            ? "Fork created. Hermes marks the source as branched; its messages are unchanged."
+            : "Fork created. The original conversation is unchanged.",
+        "ok",
+      );
       onClose();
       router.push(`/chat/${encodeURIComponent(res.session.id)}${res.run ? `?run=${encodeURIComponent(res.run.runId)}` : ""}`);
     },
@@ -101,11 +109,15 @@ export function ForkDialog({
       open={open}
       onClose={onClose}
       size="lg"
-      title={fromMessage ? "Fork from this message" : "Fork latest state"}
+      title={fromMessage ? (isHermes ? "Restart with text through this message" : "Fork from this message") : "Fork latest state"}
       description={
         fromMessage
-          ? "Starts a new conversation that carries the context up to and including the selected message."
-          : "Starts a new conversation with a copy of the full transcript."
+          ? isHermes
+            ? "Seeds a new conversation with text through this message, not a full Hermes fork. Requires a complete transcript under 500 messages and a text-only prefix; tool, reasoning, or non-text context is refused. Parent model and system settings are not copied."
+            : "Starts a new conversation that carries the context up to and including the selected message."
+          : isHermes
+            ? "Copies the full transcript with Hermes’ native fork. Hermes marks the source as branched; its messages stay unchanged."
+            : "Starts a new conversation with a copy of the full transcript."
       }
       footer={
         <>
@@ -113,7 +125,7 @@ export function ForkDialog({
             Cancel
           </Button>
           <Button variant="primary" busy={m.isPending} disabled={needsPrompt && !prompt.trim()} onClick={() => m.mutate()}>
-            Create fork
+            {fromMessage && isHermes ? "Restart with text" : "Create fork"}
           </Button>
         </>
       }

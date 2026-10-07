@@ -86,13 +86,13 @@ test("fork latest state leaves the original unchanged and links both ways", asyn
 test("fork from an earlier message needs a first prompt and starts a run", async ({ page }) => {
   await page.goto("/chat/sess_morning");
   await page
-    .getByRole("button", { name: /Fork from your message/ })
+    .getByRole("button", { name: /Restart with text through your message/ })
     .first()
     .click();
-  const dialog = page.getByRole("dialog", { name: "Fork from this message" });
-  await expect(dialog.getByRole("button", { name: "Create fork" })).toBeDisabled();
+  const dialog = page.getByRole("dialog", { name: "Restart with text through this message" });
+  await expect(dialog.getByRole("button", { name: "Restart with text" })).toBeDisabled();
   await dialog.getByLabel("First prompt").fill("Instead, plan a rainy day");
-  await dialog.getByRole("button", { name: "Create fork" }).click();
+  await dialog.getByRole("button", { name: "Restart with text" }).click();
   await page.waitForURL(/run=/);
   await expect(page.getByText(/Got it: "Instead, plan a rainy day/)).toBeVisible({ timeout: 15_000 });
 });

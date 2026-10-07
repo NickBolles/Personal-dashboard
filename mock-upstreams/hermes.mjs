@@ -386,8 +386,14 @@ export function createHermes({ apiKey }) {
     if ((match = path.match(/^\/api\/sessions\/([^/]+)\/messages$/)) && m === "GET") {
       const id = decodeURIComponent(match[1]);
       if (!state.sessions.has(id)) return hermesError(res, 404, "session_not_found", "Session not found");
-      const data = state.messages.get(id);
-      return json(res, 200, { object: "list", session_id: id, data, pagination: { limit: 500, offset: 0, order: "latest", returned: data.length } });
+      const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || 500)));
+      const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
+      const order = url.searchParams.get("order") || "latest";
+      if (!["oldest", "latest"].includes(order)) return hermesError(res, 400, "invalid_pagination", "Invalid order");
+      const all = state.messages.get(id);
+      const end = Math.max(0, all.length - offset);
+      const data = order === "oldest" ? all.slice(offset, offset + limit) : all.slice(Math.max(0, end - limit), end);
+      return json(res, 200, { object: "list", session_id: id, data, pagination: { limit, offset, order, returned: data.length } });
     }
     if ((match = path.match(/^\/api\/sessions\/([^/]+)\/fork$/)) && m === "POST") {
       const id = decodeURIComponent(match[1]);

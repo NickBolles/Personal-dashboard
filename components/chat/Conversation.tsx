@@ -438,6 +438,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
 }
 
 function MessageMeta({ time, onFork, who }: { time?: string; onFork: () => void; who: string }) {
+  const isHermes = useContext(AssistantName) === "Hermes";
   return (
     <div className="flex items-center gap-1 text-xs text-muted">
       {time ? <span>{time}</span> : null}
@@ -445,9 +446,9 @@ function MessageMeta({ time, onFork, who }: { time?: string; onFork: () => void;
         type="button"
         onClick={onFork}
         className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 hover:bg-surface-2"
-        aria-label={`Fork from ${who}${time ? ` at ${time}` : ""}`}
+        aria-label={`${isHermes ? "Restart with text through" : "Fork from"} ${who}${time ? ` at ${time}` : ""}`}
       >
-        <ForkIcon className="h-3.5 w-3.5" /> Fork from here
+        <ForkIcon className="h-3.5 w-3.5" /> {isHermes ? "Restart with text" : "Fork from here"}
       </button>
     </div>
   );
