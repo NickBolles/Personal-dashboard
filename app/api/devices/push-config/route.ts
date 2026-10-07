@@ -23,5 +23,5 @@ export const PUT = api<z.infer<typeof schema>>(
     audit({ actor: user.id, action: "settings.fcm", result: "ok", correlationId });
     return fcmStatus();
   },
-  { body: schema },
+  { cap: "admin", body: schema },
 );

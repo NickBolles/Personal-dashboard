@@ -7,6 +7,7 @@ import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { Button, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { SendIcon } from "@/components/icons";
 import type { SessionSummary } from "@/lib/hermes";
+import { useAssistantChoice } from "./backend";
 
 /**
  * One input that starts a Hermes conversation (optionally with source context)
@@ -26,6 +27,7 @@ export function QuickCapture({
   const { toast } = useToast();
   const [text, setText] = useState(initialText ?? "");
   const [busy, setBusy] = useState(false);
+  const { backend } = useAssistantChoice();
   const ta = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const el = ta.current;
@@ -51,7 +53,7 @@ export function QuickCapture({
     }
     setBusy(true);
     try {
-      const session = await api.post<SessionSummary>("/api/hermes/sessions", { title: input.slice(0, 60) });
+      const session = await api.post<SessionSummary>("/api/hermes/sessions", { title: input.slice(0, 60), backend });
       const key = newIdempotencyKey("qc");
       await kvSet(`pending:${session.id}`, { input, key, context });
       await api.post(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, { input, idempotencyKey: key, context });

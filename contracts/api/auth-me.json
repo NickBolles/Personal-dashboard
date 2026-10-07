@@ -1,0 +1,38 @@
+{
+  "user": {
+    "id": "usr_5516609d-865d-4ffd-b35b-a3149966f5aa",
+    "name": "Nick",
+    "role": "admin",
+    "via": "device"
+  },
+  "capabilities": [
+    "admin",
+    "daily_compass.use",
+    "finance.edit",
+    "finance.view",
+    "hermes.approve",
+    "hermes.brain",
+    "hermes.chat",
+    "home_assistant.calendar",
+    "home_assistant.cameras",
+    "home_assistant.control_doors",
+    "home_assistant.control_lights",
+    "home_assistant.view",
+    "paperclip.track",
+    "paperclip.view",
+    "skylight.view",
+    "todos.edit",
+    "todos.view"
+  ],
+  "modules": [
+    "hermes",
+    "todos",
+    "skylight",
+    "daily_compass",
+    "home_assistant",
+    "paperclip",
+    "finance"
+  ],
+  "authMode": "local",
+  "onboarded": false
+}

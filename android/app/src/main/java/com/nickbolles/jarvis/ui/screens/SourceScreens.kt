@@ -83,7 +83,7 @@ fun SourceScaffold(title: String, ask: ContextSource?, content: @Composable () -
             title = { Text(title) },
             navigationIcon = { IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") } },
             actions = {
-                if (ask != null) TextButton(onClick = { app.capture(CaptureRequest(sources = setOf(ask))) }) {
+                if (ask != null && com.nickbolles.jarvis.ui.nav.can("hermes.chat")) TextButton(onClick = { app.capture(CaptureRequest(sources = setOf(ask))) }) {
                     Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Ask Hermes")

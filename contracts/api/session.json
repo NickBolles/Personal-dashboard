@@ -3,34 +3,36 @@
     "id": "sess_morning",
     "title": "Morning planning",
     "preview": "What's on my plate today?",
-    "startedAt": "2026-10-05T23:35:37.959Z",
-    "lastActiveAt": "2026-10-06T01:35:37.959Z",
+    "startedAt": "2026-10-06T12:51:55.368Z",
+    "lastActiveAt": "2026-10-06T14:51:55.368Z",
     "messageCount": 4,
     "pinned": false,
     "archived": false,
-    "source": "api_server"
+    "source": "api_server",
+    "shared": false,
+    "readOnly": false
   },
   "timeline": [
     {
       "kind": "user",
-      "id": "156",
+      "id": "157",
       "text": "What's on my plate today?",
-      "at": "2026-10-06T01:35:37.959Z"
+      "at": "2026-10-06T14:51:55.368Z"
     },
     {
       "kind": "tool",
-      "id": "158",
+      "id": "159",
       "tool": "web_search",
       "summary": "weather wausau today",
       "detail": "Sunny, high of 64°F",
-      "at": "2026-10-06T01:35:37.959Z",
+      "at": "2026-10-06T14:51:55.368Z",
       "error": false
     },
     {
       "kind": "assistant",
-      "id": "159",
+      "id": "160",
       "text": "You have 3 todos due today and it's sunny — good day for the garage cleanup.",
-      "at": "2026-10-06T01:35:37.959Z"
+      "at": "2026-10-06T14:51:55.368Z"
     }
   ],
   "children": [],

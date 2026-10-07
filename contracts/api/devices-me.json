@@ -1,11 +1,11 @@
 {
   "device": {
-    "id": "dev_8d407bb1-3e15-4a98-a750-36813d15d62e",
+    "id": "dev_f1b9e1c6-1687-4596-873b-03c20b29ee00",
     "name": "Pixel test",
     "platform": "android",
     "pushEnabled": false,
-    "createdAt": "2026-10-06T01:35:37.398Z",
-    "lastSeenAt": "2026-10-06T01:35:37.398Z"
+    "createdAt": "2026-10-06T14:51:54.548Z",
+    "lastSeenAt": "2026-10-06T14:51:54.548Z"
   },
   "user": {
     "name": "Nick"

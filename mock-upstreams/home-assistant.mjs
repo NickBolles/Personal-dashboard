@@ -35,6 +35,11 @@ export function createHomeAssistant({ token }) {
     });
     set("update.zwave_js_ui_update", "off", { friendly_name: "Z-Wave JS UI Update" });
     set("sensor.porch_temperature", "unavailable", { friendly_name: "Porch temperature", device_class: "temperature" });
+    set("light.kitchen", "on", { friendly_name: "Kitchen lights", brightness: 204 });
+    set("light.porch", "off", { friendly_name: "Porch light" });
+    set("light.living_room", "off", { friendly_name: "Living room lamp" });
+    set("camera.front_door", "idle", { friendly_name: "Front door camera" });
+    set("camera.driveway", "recording", { friendly_name: "Driveway camera" });
     state.todos.set("todo.shopping_list", [
       { uid: "ha-1", summary: "Milk", status: "needs_action" },
       { uid: "ha-2", summary: "Pay water bill", status: "needs_action", due: isoDate(new Date()), description: "Autopay failed" },
@@ -49,7 +54,11 @@ export function createHomeAssistant({ token }) {
     "cover.open_cover": "open",
     "alarm_control_panel.alarm_arm_away": "armed_away",
     "alarm_control_panel.alarm_disarm": "disarmed",
+    "light.turn_on": "on",
+    "light.turn_off": "off",
   };
+  // A 1x1 PNG stands in for a camera still.
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
   async function handle(req, res, path, url, control) {
     if (control.fail.has("home_assistant")) return json(res, 503, { message: "unavailable" });
@@ -70,6 +79,13 @@ export function createHomeAssistant({ token }) {
     if ((match = path.match(/^\/api\/states\/(.+)$/))) {
       const e = state.entities.get(decodeURIComponent(match[1]));
       return e ? json(res, 200, e) : json(res, 404, { message: "Entity not found." });
+    }
+    if ((match = path.match(/^\/api\/camera_proxy\/(.+)$/))) {
+      const e = state.entities.get(decodeURIComponent(match[1]));
+      if (!e || !e.entity_id.startsWith("camera.")) return json(res, 404, { message: "Entity not found." });
+      state.calls.push({ domain: "camera", service: "snapshot", body: { entity_id: e.entity_id }, at: new Date().toISOString() });
+      res.writeHead(200, { "content-type": "image/png", "content-length": PNG.length });
+      return res.end(PNG);
     }
     if (path === "/api/calendars") return json(res, 200, [{ entity_id: "calendar.family_calendar", name: "Family" }]);
     if ((match = path.match(/^\/api\/calendars\/(.+)$/))) {

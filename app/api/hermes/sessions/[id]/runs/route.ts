@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { startRun } from "@/integrations/hermes/service";
+import { startRun } from "@/server/assistant";
 import { getPreferences } from "@/server/settings";
 import { buildContext, CONTEXT_SOURCES } from "@/server/context";
 
@@ -18,7 +18,7 @@ const schema = z.object({
 export const POST = api<z.infer<typeof schema>, { id: string }>(
   async ({ params, body, user, correlationId }) => {
     const prefs = getPreferences().hermes;
-    const context = await buildContext(body.contextSources, body.context);
+    const context = await buildContext(user, body.contextSources, body.context);
     const input = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
     return startRun(
       user,
@@ -32,5 +32,5 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
       correlationId,
     );
   },
-  { body: schema },
+  { body: schema, cap: "hermes.chat" },
 );

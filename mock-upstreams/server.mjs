@@ -4,6 +4,8 @@
 //   /ha/*       Home Assistant          /skylight/*    Skylight
 //   /google/*   Google OAuth + Tasks    /compass/*     Daily Compass HTTP
 //   /fcm/*      Firebase OAuth + FCM v1 (phone push)
+//   /monarch/*  Monarch Money GraphQL (finance balances)
+//   /anthropic/* Anthropic Messages API (Claude-direct conversations)
 //   /__mock/*   control plane (reset, fail, speed)
 import http from "node:http";
 import { createHermes } from "./hermes.mjs";
@@ -12,6 +14,8 @@ import { createHomeAssistant } from "./home-assistant.mjs";
 import { createSkylight } from "./skylight.mjs";
 import { createGoogleTasks } from "./google-tasks.mjs";
 import { createFcm } from "./fcm.mjs";
+import { createMonarch } from "./monarch.mjs";
+import { createAnthropic } from "./anthropic.mjs";
 import { json, readBody, bearerOk, isoDate } from "./util.mjs";
 
 export const MOCK_CREDENTIALS = {
@@ -23,6 +27,8 @@ export const MOCK_CREDENTIALS = {
   googleClientSecret: "mock-client-secret",
   googleRefresh: "1//mock-refresh-token",
   compassToken: "mock-compass-token",
+  monarchToken: "mock-monarch-session-token",
+  anthropicKey: "mock-anthropic-key",
 };
 
 export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), host = process.env.MOCK_HOST ?? "127.0.0.1" } = {}) {
@@ -35,6 +41,8 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
     skylight: createSkylight({ refreshToken: c.skylightRefresh }),
     google: createGoogleTasks({ clientId: c.googleClientId, clientSecret: c.googleClientSecret, refreshToken: c.googleRefresh }),
     fcm: createFcm(),
+    monarch: createMonarch({ token: c.monarchToken }),
+    anthropic: createAnthropic({ apiKey: c.anthropicKey }),
   };
   const compass = { completed: new Map() };
 
@@ -66,6 +74,8 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
             haCalls: services.ha.state.calls,
             hermesStructuredRequests: services.hermes.state.structuredCount,
             fcmMessages: services.fcm.state.messages,
+            monarchRefreshes: services.monarch.state.refreshes,
+            anthropicRequests: services.anthropic.state.requests,
             failing: [...control.fail],
           });
         if (path === "/health") return json(res, 200, { ok: true });
@@ -79,6 +89,8 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
       if (prefix === "skylight") return await services.skylight.handle(req, res, path, url, control);
       if (prefix === "google") return await services.google.handle(req, res, path, url, control);
       if (prefix === "fcm") return await services.fcm.handle(req, res, path, url, control);
+      if (prefix === "monarch") return await services.monarch.handle(req, res, path, url, control);
+      if (prefix === "anthropic") return await services.anthropic.handle(req, res, path, url, control);
       if (prefix === "compass") {
         if (control.fail.has("daily_compass")) return json(res, 503, { error: "unavailable" });
         if (!bearerOk(req, c.compassToken)) return json(res, 401, { error: "unauthorized" });

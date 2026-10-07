@@ -2,12 +2,13 @@
 
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { SessionList } from "@/components/chat/SessionList";
+import { BackendSwitch } from "@/components/chat/backend";
 import { PageHeader } from "@/components/ui";
 
 export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; context?: string; draft?: string }) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
-      <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." />
+      <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." actions={<BackendSwitch />} />
       <div className="mb-6">
         {context ? (
           <div className="mb-2 rounded-xl border border-line bg-surface-2 p-3 text-sm">

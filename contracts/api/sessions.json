@@ -4,23 +4,28 @@
       "id": "sess_morning",
       "title": "Morning planning",
       "preview": "What's on my plate today?",
-      "startedAt": "2026-10-05T23:35:37.959Z",
-      "lastActiveAt": "2026-10-06T01:35:37.959Z",
+      "startedAt": "2026-10-06T12:51:55.368Z",
+      "lastActiveAt": "2026-10-06T14:51:55.368Z",
       "messageCount": 4,
       "pinned": false,
       "archived": false,
-      "source": "api_server"
+      "source": "api_server",
+      "shared": false,
+      "readOnly": false
     },
     {
       "id": "sess_v5",
       "title": "Enable v5 rollout",
       "preview": "Let's plan enabling v5 across the platform.",
-      "startedAt": "2026-10-05T01:35:37.959Z",
-      "lastActiveAt": "2026-10-06T01:35:37.959Z",
+      "startedAt": "2026-10-05T14:51:55.368Z",
+      "lastActiveAt": "2026-10-06T14:51:55.368Z",
       "messageCount": 2,
       "pinned": false,
       "archived": false,
-      "source": "api_server"
+      "source": "api_server",
+      "shared": false,
+      "readOnly": false
     }
-  ]
+  ],
+  "unavailable": []
 }

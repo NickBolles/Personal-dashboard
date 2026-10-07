@@ -6,8 +6,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, useOnline } from "@/components/ui";
-import { GearIcon, MoreIcon, PanelIcon } from "@/components/icons";
-import { DESTINATIONS, PRIMARY, type Dest } from "./destinations";
+import { GearIcon, MoreIcon, PanelIcon, SearchIcon } from "@/components/icons";
+import { useAccess } from "@/components/access";
+import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
+import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 
 const MORE: Dest = {
   key: "more",
@@ -75,6 +77,28 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const unread = useUnreadCount().data?.unread ?? 0;
   const [collapsed, setCollapsed] = useState(true);
   const mainRef = useRef<HTMLElement>(null);
+  const { capabilities } = useAccess();
+  const primary = PRIMARY.filter((d) => allowed(d, capabilities));
+  const destinations = DESTINATIONS.filter((d) => allowed(d, capabilities));
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (e.key === "/" && !(e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable=true]")) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    const onOpen = () => setSearchOpen(true);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);
+    };
+  }, []);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem("jarvis:rail") !== "expanded");
@@ -146,9 +170,24 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             <PanelIcon className="h-5 w-5" />
           </button>
         </div>
-        <ul className="space-y-1">{PRIMARY.map(railItem)}</ul>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          title={collapsed ? "Search (Ctrl K)" : undefined}
+          className={cx(
+            "mb-2 flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted hover:bg-surface-2 hover:text-text",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          <SearchIcon className="h-6 w-6" />
+          <span className={collapsed ? "sr-only" : "flex flex-1 items-center justify-between"}>
+            Search
+            {!collapsed ? <kbd className="rounded border border-line px-1.5 text-[11px]">Ctrl K</kbd> : null}
+          </span>
+        </button>
+        <ul className="space-y-1">{primary.map(railItem)}</ul>
         <hr className="my-3 border-line" />
-        <ul className="space-y-1">{DESTINATIONS.map(railItem)}</ul>
+        <ul className="space-y-1">{destinations.map(railItem)}</ul>
         <div className="mt-auto space-y-1">
           <p className={cx("flex min-h-10 items-center gap-2 px-3 text-xs text-muted", collapsed && "justify-center px-0")} role="status">
             <span aria-hidden="true" className={cx("h-2 w-2 rounded-full", online ? "bg-ok" : "bg-warn")} />
@@ -166,12 +205,13 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         ) : null}
         {children}
       </main>
+      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Mobile bottom bar: fixed four items */}
       <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <ul className="mx-auto grid max-w-xl grid-cols-4 overflow-hidden">
-          {[...PRIMARY, MORE].map((d) => {
-            const active = d.key === "more" ? MORE.match(pathname) && !PRIMARY.some((p) => p.match(pathname)) : d.match(pathname);
+        <ul className={cx("mx-auto grid max-w-xl overflow-hidden", primary.length === 3 ? "grid-cols-4" : "grid-cols-3")}>
+          {[...primary, MORE].map((d) => {
+            const active = d.key === "more" ? MORE.match(pathname) && !primary.some((p) => p.match(pathname)) : d.match(pathname);
             const Icon = d.icon;
             return (
               <li key={d.key}>

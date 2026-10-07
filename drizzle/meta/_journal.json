@@ -15,6 +15,27 @@
       "when": 1791250072474,
       "tag": "0001_shocking_starhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791293736404,
+      "tag": "0002_low_mephistopheles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791295366604,
+      "tag": "0003_nifty_scarecrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791297005635,
+      "tag": "0004_freezing_flatman",
+      "breakpoints": true
     }
   ]
 }

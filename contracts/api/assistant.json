@@ -1,0 +1,22 @@
+{
+  "defaultBackend": "hermes",
+  "backends": [
+    {
+      "id": "hermes",
+      "label": "Hermes",
+      "available": true
+    },
+    {
+      "id": "claude",
+      "label": "Claude",
+      "available": false,
+      "reason": "Add an Anthropic API key"
+    }
+  ],
+  "claude": {
+    "model": "claude-opus-5-5",
+    "effort": "low",
+    "keySet": false,
+    "keyFromEnv": false
+  }
+}

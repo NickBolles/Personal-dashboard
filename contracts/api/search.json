@@ -1,0 +1,29 @@
+{
+  "query": "garage",
+  "results": [
+    {
+      "id": "device:cover.garage_door",
+      "kind": "device",
+      "module": "home_assistant",
+      "title": "Garage door",
+      "subtitle": "garage · open",
+      "href": "/home-control?entity=cover.garage_door"
+    },
+    {
+      "id": "device:cover.garage_door_2",
+      "kind": "device",
+      "module": "home_assistant",
+      "title": "Garage door 2",
+      "subtitle": "garage · closed",
+      "href": "/home-control?entity=cover.garage_door_2"
+    },
+    {
+      "id": "action:todos:gt-4",
+      "kind": "action",
+      "module": "todos",
+      "title": "Sort garage shelves",
+      "href": "/todos#todo-gt-4"
+    }
+  ],
+  "partial": []
+}

@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { ACTION_SOURCES, SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomePayload, type NextAction, type SourceStatus } from "@/lib/contracts";
 import { iso, localDate, startOfLocalDay, DAY } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
@@ -10,6 +10,10 @@ import { dedupeActions, partitionForHome } from "@/server/ranking";
 import { ADAPTERS } from "@/integrations";
 import { isConfigured, resolveIntegration } from "@/integrations/store";
 import type { AdapterContext, SourceData } from "@/integrations/types";
+import { can, type Capable } from "@/server/access";
+import { moduleForSource, sourceCapability } from "@/lib/modules";
+
+type Viewer = Capable & { id: string };
 
 export const SOURCE_TIMEOUT_MS = Number(process.env.JARVIS_SOURCE_TIMEOUT_MS ?? 6000);
 
@@ -140,15 +144,58 @@ export function failureInfo(source: ActionSource) {
   return row ? { consecutiveFailures: row.consecutiveFailures, firstFailureAt: row.firstFailureAt, state: row.state, error: row.error } : undefined;
 }
 
-function applyPrefs(actions: NextAction[], now: Date) {
+/** Can this person see anything from `source` (its page, calendar or cards)? */
+export function sourceVisible(user: Capable, source: ActionSource) {
+  const m = moduleForSource(source);
+  return m ? m.capabilities.some((c) => can(user, c.id)) : can(user, "admin");
+}
+
+/**
+ * What of a source's data this person may see. Home Assistant splits: the
+ * household calendar is for everyone with it; doors, alerts and health need
+ * home_assistant.view. Hermes approvals belong to whoever started the run.
+ */
+export function scopeResult(user: Viewer, r: SourceResult): SourceResult | undefined {
+  const source = r.status.source;
+  if (!sourceVisible(user, source)) return undefined;
+  if (!r.data) return r;
+  let data = r.data;
+  if (!can(user, sourceCapability(source))) data = { ...data, actions: [], homeExceptions: [], compass: undefined, extra: undefined };
+  if (source === "home_assistant" && !can(user, "home_assistant.calendar")) data = { ...data, events: [] };
+  if (source === "hermes" && data.actions.length) {
+    const mine = new Set(
+      getDb()
+        .select({ runId: schema.runs.runId })
+        .from(schema.runs)
+        .where(
+          and(
+            eq(schema.runs.userId, user.id),
+            inArray(
+              schema.runs.runId,
+              data.actions.map((a) => a.sourceId),
+            ),
+          ),
+        )
+        .all()
+        .map((x) => x.runId),
+    );
+    data = { ...data, actions: data.actions.filter((a) => mine.has(a.sourceId)) };
+  }
+  return { ...r, data };
+}
+
+function applyPrefs(actions: NextAction[], now: Date, userId: string) {
   if (!actions.length) return actions;
   const prefs = getDb()
     .select()
     .from(schema.actionPrefs)
     .where(
-      inArray(
-        schema.actionPrefs.actionId,
-        actions.map((a) => a.id),
+      and(
+        eq(schema.actionPrefs.userId, userId),
+        inArray(
+          schema.actionPrefs.actionId,
+          actions.map((a) => a.id),
+        ),
       ),
     )
     .all();
@@ -185,10 +232,14 @@ export async function collectSources(opts: { live: boolean; sources?: ActionSour
   return { ctx, results };
 }
 
-export async function getHome(opts: { live: boolean }): Promise<HomePayload> {
-  const { ctx, results } = await collectSources(opts);
+/** Home for one person: only the modules they can see, with their own pins and acknowledgements. */
+export async function getHome(user: Viewer, opts: { live: boolean }): Promise<HomePayload> {
+  const visible = ACTION_SOURCES.filter((s) => sourceVisible(user, s));
+  const collected = await collectSources({ live: opts.live, sources: visible });
+  const ctx = collected.ctx;
+  const results = collected.results.map((r) => scopeResult(user, r)!).filter(Boolean);
   const all = results.flatMap((r) => r.data?.actions ?? []);
-  const actions = dedupeActions(applyPrefs(all, ctx.now));
+  const actions = dedupeActions(applyPrefs(all, ctx.now, user.id));
   const parts = partitionForHome(actions, ctx.now);
   const byKey = Object.fromEntries(results.map((r) => [r.status.source, r])) as Record<ActionSource, SourceResult>;
   const events = [...(byKey.skylight?.data?.events ?? []), ...(byKey.home_assistant?.data?.events ?? [])];
@@ -213,12 +264,12 @@ export async function getHome(opts: { live: boolean }): Promise<HomePayload> {
   };
 }
 
-export function setActionPref(actionId: string, patch: { pinned?: boolean; hiddenUntil?: string | null }) {
+export function setActionPref(userId: string, actionId: string, patch: { pinned?: boolean; hiddenUntil?: string | null }) {
   getDb()
     .insert(schema.actionPrefs)
-    .values({ actionId, pinned: patch.pinned ?? false, hiddenUntil: patch.hiddenUntil ?? null })
+    .values({ userId, actionId, pinned: patch.pinned ?? false, hiddenUntil: patch.hiddenUntil ?? null })
     .onConflictDoUpdate({
-      target: schema.actionPrefs.actionId,
+      target: [schema.actionPrefs.userId, schema.actionPrefs.actionId],
       set: { ...patch, updatedAt: new Date().toISOString() },
     })
     .run();

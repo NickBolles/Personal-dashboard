@@ -35,7 +35,8 @@ export async function expectNoHorizontalOverflow(page: Page) {
     const offenders: string[] = [];
     for (const el of Array.from(document.querySelectorAll("body *"))) {
       const b = el.getBoundingClientRect();
-      if (b.width > 0 && b.right > cw + 1 && !el.closest("nav.fixed"))
+      // [data-scroll-x] marks the few wide tables allowed to scroll sideways (the finance grids).
+      if (b.width > 0 && b.right > cw + 1 && !el.closest("nav.fixed, [data-scroll-x]"))
         offenders.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 50)} "${(el.textContent ?? "").trim().slice(0, 30)}"`);
     }
     // Text that spills out of its box (not visible via element rects).
@@ -44,7 +45,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
       const range = document.createRange();
       range.selectNodeContents(n);
       const b = range.getBoundingClientRect();
-      if (b.width > 0 && b.right > cw + 1 && !n.parentElement?.closest("nav.fixed, .sr-only"))
+      if (b.width > 0 && b.right > cw + 1 && !n.parentElement?.closest("nav.fixed, .sr-only, [data-scroll-x]"))
         offenders.push(
           `text in ${n.parentElement?.tagName.toLowerCase()}.${String(n.parentElement?.className).slice(0, 40)} "${(n.textContent ?? "").trim().slice(0, 30)}"`,
         );

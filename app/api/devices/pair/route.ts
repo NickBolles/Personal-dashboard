@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { clientKey } from "@/server/http/origin";
-import { checkThrottle, getOwner, recordFailure } from "@/server/auth";
+import { checkThrottle, getUser, recordFailure } from "@/server/auth";
 import { audit } from "@/server/audit";
 import { redeemPairingCode } from "@/server/devices";
 import { HttpError } from "@/server/http/errors";
@@ -21,7 +21,7 @@ export const POST = api<z.infer<typeof schema>>(
     try {
       const r = redeemPairingCode(body.code, body);
       audit({ actor: r.userId, action: "device.paired", sourceRecord: r.deviceId, result: "ok", correlationId, detail: { name: body.name } });
-      return { token: r.token, deviceId: r.deviceId, user: { name: getOwner()?.name ?? "" } };
+      return { token: r.token, deviceId: r.deviceId, user: { name: getUser(r.userId)?.name ?? "" } };
     } catch (err) {
       if (err instanceof HttpError) recordFailure(key);
       throw err;

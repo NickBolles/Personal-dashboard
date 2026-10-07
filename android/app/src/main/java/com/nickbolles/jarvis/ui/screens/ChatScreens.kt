@@ -124,6 +124,8 @@ fun ChatListContent(state: Loadable<SessionsResponse>, onRefresh: () -> Unit) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (s.pinned) Icon(Icons.Outlined.PushPin, contentDescription = "Pinned", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                                 Text(s.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                if (s.source == "claude") Pill("Claude", tone = "accent")
+                                if (s.readOnly) Pill("Shared", tone = "neutral")
                                 s.activeRun?.let { r ->
                                     Pill(if (r.pendingApproval != null || r.status == "waiting_for_approval") "Needs you" else "Working", tone = if (r.pendingApproval != null) "warn" else "accent")
                                 }
@@ -240,7 +242,7 @@ class ConversationViewModel(private val graph: AppGraph, private val sessionId: 
                         live = null,
                         pendingUser = null,
                         outcome = when (ev.status) {
-                            "failed" -> "Hermes couldn't finish: ${ev.error ?: "the run failed"}"
+                            "failed" -> "${_state.value.detail.data?.session?.assistantName ?: "Hermes"} couldn't finish: ${ev.error ?: "the run failed"}"
                             "cancelled", "interrupted" -> "Stopped."
                             else -> null
                         },
@@ -310,17 +312,26 @@ fun ConversationContent(
                 state.outcome?.let { item(key = "outcome") { StatusBanner(it, tone = "danger") } }
             }
         }
-        Composer(
-            enabled = state.live == null && !state.sending,
-            busyLabel = when {
-                state.sending -> "Sending…"
-                state.live?.approval != null -> "Waiting for your approval"
-                state.live != null -> "Hermes is working…"
-                else -> null
-            },
-            initialText = initialText,
-            onSend = onSend,
-        )
+        if (detail?.session?.readOnly == true) {
+            Text(
+                "Shared with you, read only. Fork it in Jarvis on the web to continue it as your own.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+            )
+        } else {
+            Composer(
+                enabled = state.live == null && !state.sending,
+                busyLabel = when {
+                    state.sending -> "Sending…"
+                    state.live?.approval != null -> "Waiting for your approval"
+                    state.live != null -> "${detail?.session?.assistantName ?: "Hermes"} is working…"
+                    else -> null
+                },
+                initialText = initialText,
+                onSend = onSend,
+            )
+        }
     }
 }
 

@@ -7,6 +7,7 @@ import { dailyCompassAdapter } from "./daily-compass/adapter";
 import { homeAssistantAdapter } from "./home-assistant/adapter";
 import { skylightAdapter } from "./skylight/adapter";
 import { paperclipAdapter } from "./paperclip/service";
+import { financeAdapter } from "./finance/adapter";
 
 export const ADAPTERS: Record<ActionSource, SourceAdapter> = {
   hermes: hermesAdapter,
@@ -15,6 +16,7 @@ export const ADAPTERS: Record<ActionSource, SourceAdapter> = {
   home_assistant: homeAssistantAdapter,
   skylight: skylightAdapter,
   paperclip: paperclipAdapter,
+  finance: financeAdapter,
 };
 
 export function getAdapter(source: string): SourceAdapter | undefined {

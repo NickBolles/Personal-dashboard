@@ -3,8 +3,8 @@
     "source": "todos",
     "label": "Todos",
     "state": "ok",
-    "fetchedAt": "2026-10-06T01:35:37.411Z",
-    "staleAfter": "2026-10-06T01:40:37.411Z",
+    "fetchedAt": "2026-10-06T14:51:54.572Z",
+    "staleAfter": "2026-10-06T14:56:54.572Z",
     "fromCache": true
   },
   "data": {
@@ -13,15 +13,15 @@
         "id": "todos:gt-1",
         "source": "todos",
         "sourceId": "gt-1",
-        "fetchedAt": "2026-10-06T01:35:37.398Z",
-        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "fetchedAt": "2026-10-06T14:51:54.548Z",
+        "staleAfter": "2026-10-06T14:56:54.548Z",
         "title": "Renew car registration",
         "detail": "DMV online",
         "status": "open",
         "priorityReason": "overdue",
         "dueAt": "2026-10-05T04:59:00.000Z",
         "dueIsDate": true,
-        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "updatedAt": "2026-10-06T13:51:54.423Z",
         "href": "/todos#todo-gt-1",
         "primaryAction": {
           "kind": "complete",
@@ -35,14 +35,14 @@
         "id": "todos:gt-2",
         "source": "todos",
         "sourceId": "gt-2",
-        "fetchedAt": "2026-10-06T01:35:37.398Z",
-        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "fetchedAt": "2026-10-06T14:51:54.548Z",
+        "staleAfter": "2026-10-06T14:56:54.548Z",
         "title": "Call plumber about water heater",
         "status": "open",
-        "priorityReason": "upcoming",
+        "priorityReason": "today",
         "dueAt": "2026-10-07T04:59:00.000Z",
         "dueIsDate": true,
-        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "updatedAt": "2026-10-06T13:51:54.423Z",
         "href": "/todos#todo-gt-2",
         "primaryAction": {
           "kind": "complete",
@@ -56,14 +56,14 @@
         "id": "todos:gt-3",
         "source": "todos",
         "sourceId": "gt-3",
-        "fetchedAt": "2026-10-06T01:35:37.398Z",
-        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "fetchedAt": "2026-10-06T14:51:54.548Z",
+        "staleAfter": "2026-10-06T14:56:54.548Z",
         "title": "Book flights for Thanksgiving",
         "status": "open",
         "priorityReason": "upcoming",
         "dueAt": "2026-10-10T04:59:00.000Z",
         "dueIsDate": true,
-        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "updatedAt": "2026-10-06T13:51:54.423Z",
         "href": "/todos#todo-gt-3",
         "primaryAction": {
           "kind": "complete",
@@ -77,13 +77,13 @@
         "id": "todos:gt-4",
         "source": "todos",
         "sourceId": "gt-4",
-        "fetchedAt": "2026-10-06T01:35:37.398Z",
-        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "fetchedAt": "2026-10-06T14:51:54.548Z",
+        "staleAfter": "2026-10-06T14:56:54.548Z",
         "title": "Sort garage shelves",
         "status": "open",
         "priorityReason": "upcoming",
         "dueIsDate": false,
-        "updatedAt": "2026-10-06T00:35:37.318Z",
+        "updatedAt": "2026-10-06T13:51:54.423Z",
         "href": "/todos#todo-gt-4",
         "primaryAction": {
           "kind": "complete",
@@ -97,14 +97,14 @@
         "id": "todos:gt-5",
         "source": "todos",
         "sourceId": "gt-5",
-        "fetchedAt": "2026-10-06T01:35:37.398Z",
-        "staleAfter": "2026-10-06T01:40:37.398Z",
+        "fetchedAt": "2026-10-06T14:51:54.548Z",
+        "staleAfter": "2026-10-06T14:56:54.548Z",
         "title": "Pick up dry cleaning",
         "status": "completed",
-        "priorityReason": "today",
+        "priorityReason": "overdue",
         "dueAt": "2026-10-06T04:59:00.000Z",
         "dueIsDate": true,
-        "updatedAt": "2026-10-06T01:05:37.318Z",
+        "updatedAt": "2026-10-06T14:21:54.423Z",
         "href": "/todos#todo-gt-5",
         "secondaryActions": []
       }
@@ -118,7 +118,7 @@
           "notes": "DMV online",
           "due": "2026-10-04",
           "completed": false,
-          "updatedAt": "2026-10-06T00:35:37.318Z",
+          "updatedAt": "2026-10-06T13:51:54.423Z",
           "url": "https://tasks.google.com/task/gt-1"
         },
         {
@@ -126,7 +126,7 @@
           "title": "Call plumber about water heater",
           "due": "2026-10-06",
           "completed": false,
-          "updatedAt": "2026-10-06T00:35:37.318Z",
+          "updatedAt": "2026-10-06T13:51:54.423Z",
           "url": "https://tasks.google.com/task/gt-2"
         },
         {
@@ -134,14 +134,14 @@
           "title": "Book flights for Thanksgiving",
           "due": "2026-10-09",
           "completed": false,
-          "updatedAt": "2026-10-06T00:35:37.318Z",
+          "updatedAt": "2026-10-06T13:51:54.423Z",
           "url": "https://tasks.google.com/task/gt-3"
         },
         {
           "id": "gt-4",
           "title": "Sort garage shelves",
           "completed": false,
-          "updatedAt": "2026-10-06T00:35:37.318Z",
+          "updatedAt": "2026-10-06T13:51:54.423Z",
           "url": "https://tasks.google.com/task/gt-4"
         },
         {
@@ -149,8 +149,8 @@
           "title": "Pick up dry cleaning",
           "due": "2026-10-05",
           "completed": true,
-          "completedAt": "2026-10-06T01:05:37.318Z",
-          "updatedAt": "2026-10-06T00:35:37.318Z",
+          "completedAt": "2026-10-06T14:21:54.423Z",
+          "updatedAt": "2026-10-06T13:51:54.423Z",
           "url": "https://tasks.google.com/task/gt-5"
         }
       ]

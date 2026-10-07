@@ -22,6 +22,11 @@ type Options<B> = {
   /** false for public endpoints called by the phone app with no cookies at all (pairing) */
   csrf?: boolean;
   body?: ZodType<B>;
+  /**
+   * Capability the caller needs (lib/modules.ts); a list means any of them.
+   * Omit only for routes every signed-in person may use.
+   */
+  cap?: string | string[];
 };
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -98,6 +103,10 @@ export function api<B = undefined, P = Record<string, string>>(
       if (!options.public) {
         user = resolveUser(req.headers, req.cookies.get(SESSION_COOKIE)?.value);
         if (!user) return jsonError(401, "Sign in required", "unauthenticated");
+        if (options.cap) {
+          const needed = Array.isArray(options.cap) ? options.cap : [options.cap];
+          if (!needed.some((c) => user!.capabilities.has(c))) return jsonError(403, "You don't have access to that.", "forbidden");
+        }
       }
       let body = undefined as B;
       if (options.body) body = options.body.parse(await readJson(req));

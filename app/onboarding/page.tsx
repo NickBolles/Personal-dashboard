@@ -10,6 +10,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
   const claimed = isClaimed();
   const user = await getCurrentUser();
   if (claimed && !user) redirect("/login?next=/onboarding");
+  if (user && !user.capabilities.has("admin")) redirect("/home");
   const sp = await searchParams;
   return <OnboardingWizard claimed={claimed || config.authMode === "proxy"} initialStep={sp.step} googleStatus={sp.google} googleMessage={sp.message} />;
 }

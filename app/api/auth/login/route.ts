@@ -6,11 +6,11 @@ import { createSession, SESSION_COOKIE, sessionCookieOptions, verifyLogin } from
 export const POST = api(
   ({ body, req }) => {
     const key = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-    const owner = verifyLogin(body.passcode, key);
+    const owner = verifyLogin(body.passcode, key, body.username || undefined);
     const s = createSession(owner.id, req.headers.get("user-agent"));
     const res = NextResponse.json({ ok: true });
     res.cookies.set(SESSION_COOKIE, s.token, sessionCookieOptions(s.expiresAt));
     return res;
   },
-  { public: true, body: z.object({ passcode: z.string().min(1).max(200) }) },
+  { public: true, body: z.object({ passcode: z.string().min(1).max(200), username: z.string().max(32).optional() }) },
 );

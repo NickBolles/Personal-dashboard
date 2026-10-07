@@ -20,7 +20,7 @@ export const POST = api(async ({ user }) => {
   );
   const subs = listSubscriptions(user.id).length;
   const { inQuietHours } = await import("@/server/notifications/push");
-  const quiet = inQuietHours();
+  const quiet = inQuietHours(new Date(), user.id);
   const delivered = await deliverPendingPushes(quiet ? new Date(0) : new Date());
   return { ok: true, id: created?.id, subscriptions: subs, phones: pushDevices(user.id).length, delivered, quietHours: quiet };
 });

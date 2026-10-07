@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
@@ -10,6 +10,7 @@ import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunVie
 import { formatTime } from "@/components/actions/format";
 import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
 import { ChevronIcon, ForkIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
+import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { ContextPicker, ForkDialog, ModelDialog, RenameDialog, TrackDialog } from "./dialogs";
 
@@ -35,6 +36,9 @@ const PHASE_LABEL: Record<RunPhase, { label: string; tone: Tone }> = {
   disconnected: { label: "Disconnected", tone: "danger" },
 };
 
+/** "Hermes" or "Claude": who answers this conversation. */
+const AssistantName = createContext("Hermes");
+
 function useSessionDetail(sessionId: string) {
   const [offline, setOffline] = useState<Detail>();
   const q = useQuery({
@@ -55,6 +59,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const qc = useQueryClient();
   const online = useOnline();
   const { toast, announce } = useToast();
+  const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
   const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context">(null);
@@ -63,10 +68,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const [context, setContext] = useState<{ label: string; ref: string }[]>([]);
   const [lastOutcome, setLastOutcome] = useState<RunPhase>();
   const clearRunRef = useRef<() => void>(() => {});
+  const who = detail?.session.source === "claude" ? "Claude" : "Hermes";
 
   const onTerminal = useCallback(
     (s: RunState) => {
-      announce(s.phase === "completed" ? "Hermes finished responding" : `Run ${PHASE_LABEL[s.phase].label.toLowerCase()}`);
+      announce(s.phase === "completed" ? `${who} finished responding` : `Run ${PHASE_LABEL[s.phase].label.toLowerCase()}`);
       setLastOutcome(s.phase);
       qc.invalidateQueries({ queryKey: ["sessions"] });
       qc.invalidateQueries({ queryKey: ["home"] });
@@ -76,7 +82,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         if (s.phase === "completed") clearRunRef.current();
       });
     },
-    [announce, qc, sessionId],
+    [announce, qc, sessionId, who],
   );
   const run = useRunStream(onTerminal);
   useEffect(() => {
@@ -116,7 +122,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       });
       await kvDel(`pending:${sessionId}`);
       setContext([]);
-      announce("Message sent. Hermes is responding.");
+      announce(`Message sent. ${who} is responding.`);
       run.start(r.runId);
       qc.invalidateQueries({ queryKey: ["sessions"] });
       return true;
@@ -198,145 +204,179 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
-  const menu = [
-    { label: "Rename", onSelect: () => setDialog("rename") },
-    { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online },
-    { label: "Model…", onSelect: () => setDialog("model") },
-    { label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online },
-    {
-      label: session!.pinned ? "Unpin" : "Pin",
-      onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"),
-      disabled: !online,
+  const readOnly = Boolean(session!.readOnly);
+  const fork = { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online };
+  const menu = readOnly
+    ? [fork]
+    : [
+        { label: "Rename", onSelect: () => setDialog("rename") },
+        fork,
+        { label: "Model…", onSelect: () => setDialog("model") },
+        ...(can("paperclip.track") ? [{ label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online }] : []),
+        {
+          label: session!.pinned ? "Unpin" : "Pin",
+          onSelect: () => patch({ pinned: !session!.pinned }, session!.pinned ? "Unpinned" : "Pinned"),
+          disabled: !online,
+        },
+        {
+          label: session!.shared ? "Stop sharing with the household" : "Share with the household",
+          onSelect: () =>
+            patch(
+              { shared: !session!.shared },
+              session!.shared ? "Only you can see this conversation now" : `Shared: others who use ${who} can read and fork it`,
+            ),
+          disabled: !online,
+        },
+        {
+          label: session!.archived ? "Unarchive" : "Archive",
+          onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"),
+          disabled: !online,
+        },
+      ];
+  menu.push({
+    label: "Copy link",
+    onSelect: () => {
+      navigator.clipboard?.writeText(window.location.origin + `/chat/${encodeURIComponent(sessionId)}`).then(() => toast("Link copied", "ok"));
     },
-    {
-      label: session!.archived ? "Unarchive" : "Archive",
-      onSelect: () => patch({ archived: !session!.archived }, session!.archived ? "Restored" : "Archived"),
-      disabled: !online,
-    },
-    {
-      label: "Copy link",
-      onSelect: () => {
-        navigator.clipboard?.writeText(window.location.origin + `/chat/${encodeURIComponent(sessionId)}`).then(() => toast("Link copied", "ok"));
-      },
-    },
-  ];
+  });
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-3xl flex-col lg:min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="flex items-start gap-2">
-          <Link href="/chat" className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden" aria-label="Back to conversations">
-            <ChevronIcon className="h-5 w-5 rotate-180" />
-          </Link>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-semibold">{session!.title}</h1>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
-              {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
-              {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
-              {detail.parent ? (
-                <span className="inline-flex items-center gap-1">
-                  <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
-                  <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
-                    {detail.parent.title}
-                  </Link>
-                </span>
-              ) : session!.parentSessionId ? (
-                <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
-                  <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
-                </Link>
-              ) : null}
-              {detail.children.length ? (
-                <span className="inline-flex flex-wrap items-center gap-1">
-                  <ForkIcon className="h-3.5 w-3.5" /> Forks:
-                  {detail.children.map((c) => (
-                    <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
-                      {c.title}
+    <AssistantName.Provider value={who}>
+      <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-3xl flex-col lg:min-h-dvh">
+        <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur sm:px-6">
+          <div className="flex items-start gap-2">
+            <Link href="/chat" className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden" aria-label="Back to conversations">
+              <ChevronIcon className="h-5 w-5 rotate-180" />
+            </Link>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg font-semibold">{session!.title}</h1>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
+                {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
+                {readOnly ? <Badge>Shared with you · read only</Badge> : session!.shared ? <Badge tone="accent">Shared with the household</Badge> : null}
+                {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
+                {detail.parent ? (
+                  <span className="inline-flex items-center gap-1">
+                    <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
+                    <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
+                      {detail.parent.title}
                     </Link>
-                  ))}
-                </span>
-              ) : null}
-              {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
-                <Link key={l.targetId} href="/initiatives" data-dynamic className="rounded-full border border-line px-2 py-0.5 font-mono" title={l.targetTitle}>
-                  {l.targetIdentifier}
-                </Link>
-              ))}
-              {model.model ? <span>Model: {model.model}</span> : null}
-              {fromCache ? <span className="text-warn">Saved copy</span> : null}
-            </div>
-          </div>
-          <OverflowMenu label="Conversation actions" items={menu} />
-        </div>
-      </header>
-
-      <div className="flex-1 space-y-4 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
-        {detail.timeline.length === 0 && !showLive && !pendingInput ? (
-          <p className="py-10 text-center text-muted">Say hello to start the conversation.</p>
-        ) : null}
-        <ol className="space-y-4">
-          {detail.timeline.map((item) => (
-            <TimelineRow
-              key={item.id}
-              item={item}
-              onFork={() => {
-                setForkFrom(item);
-                setDialog("fork");
-              }}
-            />
-          ))}
-          {showPendingUser ? (
-            <li className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-accent-contrast">
-                <p className="prose-chat">{pendingInput}</p>
+                  </span>
+                ) : session!.parentSessionId ? (
+                  <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
+                    <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
+                  </Link>
+                ) : null}
+                {detail.children.length ? (
+                  <span className="inline-flex flex-wrap items-center gap-1">
+                    <ForkIcon className="h-3.5 w-3.5" /> Forks:
+                    {detail.children.map((c) => (
+                      <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
+                        {c.title}
+                      </Link>
+                    ))}
+                  </span>
+                ) : null}
+                {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
+                  <Link
+                    key={l.targetId}
+                    href="/initiatives"
+                    data-dynamic
+                    className="rounded-full border border-line px-2 py-0.5 font-mono"
+                    title={l.targetTitle}
+                  >
+                    {l.targetIdentifier}
+                  </Link>
+                ))}
+                {model.model ? <span>Model: {model.model}</span> : null}
+                {fromCache ? <span className="text-warn">Saved copy</span> : null}
               </div>
-            </li>
+            </div>
+            <OverflowMenu label="Conversation actions" items={menu} />
+          </div>
+        </header>
+
+        <div className="flex-1 space-y-4 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
+          {detail.timeline.length === 0 && !showLive && !pendingInput ? (
+            <p className="py-10 text-center text-muted">Say hello to start the conversation.</p>
           ) : null}
-        </ol>
-        {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onRetry={run.retry} /> : null}
-        <div ref={bottomRef} />
-      </div>
-
-      {detached ? (
-        <div className="pointer-events-none sticky bottom-[140px] z-10 flex justify-center">
-          <Button size="sm" className="pointer-events-auto shadow" onClick={() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })}>
-            Jump to latest
-          </Button>
+          <ol className="space-y-4">
+            {detail.timeline.map((item) => (
+              <TimelineRow
+                key={item.id}
+                item={item}
+                onFork={() => {
+                  setForkFrom(item);
+                  setDialog("fork");
+                }}
+              />
+            ))}
+            {showPendingUser ? (
+              <li className="flex justify-end">
+                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-accent-contrast">
+                  <p className="prose-chat">{pendingInput}</p>
+                </div>
+              </li>
+            ) : null}
+          </ol>
+          {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onRetry={run.retry} /> : null}
+          <div ref={bottomRef} />
         </div>
-      ) : null}
 
-      <Composer
-        sessionId={sessionId}
-        phase={phase}
-        online={online}
-        context={context}
-        onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
-        onAttach={() => setDialog("context")}
-        onSend={send}
-        onSteer={steer}
-        onStop={run.stop}
-      />
+        {detached ? (
+          <div className="pointer-events-none sticky bottom-[140px] z-10 flex justify-center">
+            <Button size="sm" className="pointer-events-auto shadow" onClick={() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })}>
+              Jump to latest
+            </Button>
+          </div>
+        ) : null}
 
-      <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
-      <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
-      <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
-      <ModelDialog
-        open={dialog === "model"}
-        onClose={() => setDialog(null)}
-        value={model}
-        onChange={(m) => {
-          setModel(m);
-          kvSet(`model:${sessionId}`, m);
-        }}
-      />
-      <ContextPicker
-        open={dialog === "context"}
-        onClose={() => setDialog(null)}
-        onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))}
-      />
-    </div>
+        {readOnly ? (
+          <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
+            This conversation was shared with you.{" "}
+            <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
+              Fork it
+            </button>{" "}
+            to continue it as your own.
+          </div>
+        ) : (
+          <Composer
+            sessionId={sessionId}
+            phase={phase}
+            online={online}
+            context={context}
+            onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
+            onAttach={() => setDialog("context")}
+            onSend={send}
+            onSteer={steer}
+            onStop={run.stop}
+          />
+        )}
+
+        <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
+        <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
+        <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
+        <ModelDialog
+          open={dialog === "model"}
+          onClose={() => setDialog(null)}
+          value={model}
+          onChange={(m) => {
+            setModel(m);
+            kvSet(`model:${sessionId}`, m);
+          }}
+        />
+        <ContextPicker
+          open={dialog === "context"}
+          onClose={() => setDialog(null)}
+          onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))}
+        />
+      </div>
+    </AssistantName.Provider>
   );
 }
 
 function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void }) {
+  const who = useContext(AssistantName);
   const [open, setOpen] = useState(false);
   const time = item.at ? formatTime(item.at) : undefined;
   if (item.kind === "user") {
@@ -354,10 +394,10 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
     return (
       <li className="flex flex-col gap-1">
         <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3">
-          <span className="sr-only">Hermes said: </span>
+          <span className="sr-only">{who} said: </span>
           <p className="prose-chat select-text">{item.text}</p>
         </div>
-        <MessageMeta time={time} onFork={onFork} who="Hermes' message" />
+        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} />
       </li>
     );
   }
@@ -447,6 +487,7 @@ function ActivityRow({ a }: { a: Activity }) {
 }
 
 function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c: ApprovalRequest["choices"][number]) => void; onRetry: () => void }) {
+  const who = useContext(AssistantName);
   const [busy, setBusy] = useState<string>();
   const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
   return (
@@ -489,7 +530,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3">
-          <span className="sr-only">Hermes is saying: </span>
+          <span className="sr-only">{who} is saying: </span>
           {text ? <p className="prose-chat select-text">{text}</p> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? (
             <p className="mt-1 flex items-center gap-1 text-muted" aria-hidden="true">
@@ -514,12 +555,12 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       {state.phase === "cancelled" ? <p className="text-sm text-muted">Stopped at your request.</p> : null}
       {state.phase === "reconnecting" ? (
         <p role="status" className="text-sm text-warn">
-          Connection dropped — reconnecting and checking Hermes for the real status…
+          Connection dropped — reconnecting and checking {who} for the real status…
         </p>
       ) : null}
       {state.phase === "disconnected" ? (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger">
-          <span>{state.error ?? "Disconnected from Hermes."} The run may still be going.</span>
+          <span>{state.error ?? `Disconnected from ${who}.`} The run may still be going.</span>
           <Button size="sm" onClick={onRetry}>
             Reconnect
           </Button>
@@ -550,6 +591,7 @@ function Composer({
   onSteer: (text: string) => Promise<boolean>;
   onStop: () => void;
 }) {
+  const who = useContext(AssistantName);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -607,7 +649,7 @@ function Composer({
       ? "Answer the approval first"
       : running
         ? "Add guidance…"
-        : "Message Hermes";
+        : `Message ${who}`;
 
   return (
     <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur sm:px-6 lg:bottom-0">
@@ -638,7 +680,7 @@ function Composer({
           +
         </Button>
         <label htmlFor="composer" className="sr-only">
-          {running ? "Guidance for the current run" : "Message Hermes"}
+          {running ? "Guidance for the current run" : `Message ${who}`}
         </label>
         <textarea
           id="composer"

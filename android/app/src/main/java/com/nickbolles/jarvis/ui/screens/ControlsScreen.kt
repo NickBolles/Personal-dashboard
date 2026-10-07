@@ -1,5 +1,19 @@
 package com.nickbolles.jarvis.ui.screens
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.nickbolles.jarvis.data.DeviceView
+import com.nickbolles.jarvis.data.DevicesResponse
+import com.nickbolles.jarvis.ui.nav.can
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -72,13 +86,34 @@ class ControlsViewModel(private val graph: AppGraph) : ViewModel() {
     val source = Resource(graph, "source-home_assistant", SourceResult.serializer()) { it.source("home_assistant") }
     /** Never cached: controls always act on live state. */
     val controls = Resource(graph, null, ControlsResponse.serializer()) { it.controls() }
+    /** Doors, lights and cameras this person may see (live, never cached). */
+    val devices = Resource(graph, null, DevicesResponse.serializer()) { it.devices() }
     private val _pending = MutableStateFlow<String?>(null)
     val pending = _pending.asStateFlow()
 
     fun refresh() {
         viewModelScope.launch { source.refresh() }
         viewModelScope.launch { controls.refresh() }
+        viewModelScope.launch { devices.refresh() }
     }
+
+    /** Lights: one attempt, success only after Home Assistant reads back the new state. */
+    fun setLight(d: DeviceView, on: Boolean, onMessage: (String) -> Unit) {
+        if (_pending.value != null) return
+        _pending.value = d.entityId
+        viewModelScope.launch {
+            try {
+                onMessage(graph.call { it.setLight(d.entityId, on) }.message)
+            } catch (e: ApiException) {
+                onMessage(e.message ?: "Nothing was sent")
+            } finally {
+                _pending.value = null
+                devices.refresh()
+            }
+        }
+    }
+
+    suspend fun cameraImage(entityId: String): ByteArray = graph.call { it.cameraImage(entityId) }
 
     /** One attempt, never queued or retried: success only after Home Assistant reads back the new state. */
     fun execute(c: ControlView, service: String, onMessage: (String) -> Unit) {
@@ -107,9 +142,20 @@ fun ControlsScreen(focusEntity: String?) {
     val source by vm.source.state.collectAsState()
     val controls by vm.controls.state.collectAsState()
     val pending by vm.pending.collectAsState()
+    val devices by vm.devices.state.collectAsState()
     val app = LocalAppActions.current
     LaunchedEffect(Unit) { vm.refresh() }
-    ControlsContent(source, controls, pending, focusEntity, onRefresh = vm::refresh, onExecute = { c, s -> vm.execute(c, s, app::message) })
+    ControlsContent(
+        source,
+        controls,
+        pending,
+        focusEntity,
+        onRefresh = vm::refresh,
+        onExecute = { c, s -> vm.execute(c, s, app::message) },
+        devices = devices,
+        onLight = { d, on -> vm.setLight(d, on, app::message) },
+        loadCamera = vm::cameraImage,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -121,7 +167,13 @@ fun ControlsContent(
     focusEntity: String?,
     onRefresh: () -> Unit,
     onExecute: (ControlView, String) -> Unit,
+    devices: Loadable<DevicesResponse> = Loadable(),
+    onLight: (DeviceView, Boolean) -> Unit = { _, _ -> },
+    loadCamera: (suspend (String) -> ByteArray)? = null,
 ) {
+    val canView = can("home_assistant.view")
+    val doorControls = can("home_assistant.control_doors")
+    val canLights = can("home_assistant.control_lights")
     val app = LocalAppActions.current
     val zone = LocalZone.current
     var confirm by remember { mutableStateOf<Pair<ControlView, String>?>(null) }
@@ -130,7 +182,7 @@ fun ControlsContent(
             title = { Text("Home") },
             navigationIcon = { IconButton(onClick = app::back) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") } },
             actions = {
-                TextButton(onClick = { app.capture(CaptureRequest(sources = setOf(ContextSource.HomeAssistant))) }) {
+                if (can("hermes.chat")) TextButton(onClick = { app.capture(CaptureRequest(sources = setOf(ContextSource.HomeAssistant))) }) {
                     Icon(Icons.Outlined.AutoAwesome, contentDescription = null)
                     Spacer(Modifier.width(6.dp))
                     Text("Ask Hermes")
@@ -145,9 +197,17 @@ fun ControlsContent(
                 }
                 source.error?.let { item { StatusBanner(it, tone = "danger", onRetry = onRefresh) } }
 
-                item { SectionHeader("Exceptions") }
-                val ex = source.data?.data?.homeExceptions.orEmpty()
-                if (source.data?.data != null && ex.isEmpty()) item { EmptyState("Nothing unusual", "Your watched doors, locks, garage and alarm look normal.") }
+                if (!canView) {
+                    val events = source.data?.data?.events.orEmpty()
+                    item { SectionHeader("Household calendar") }
+                    if (events.isEmpty()) item { EmptyState("Nothing coming up") }
+                    items(events.take(10), key = { "ev:${it.id}" }) { e ->
+                        Text("${e.title} · ${formatClock(e.startsAt, zone).ifBlank { e.startsAt.take(10) }}", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                if (canView) item { SectionHeader("Exceptions") }
+                val ex = if (canView) source.data?.data?.homeExceptions.orEmpty() else emptyList()
+                if (canView && source.data?.data != null && ex.isEmpty()) item { EmptyState("Nothing unusual", "Your watched doors, locks, garage and alarm look normal.") }
                 items(ex, key = { "ex:${it.entityId}" }) { e ->
                     val focused = e.entityId == focusEntity
                     Surface(shape = MaterialTheme.shapes.large, color = if (focused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
@@ -163,12 +223,12 @@ fun ControlsContent(
                     }
                 }
 
-                item { SectionHeader("Controls") }
-                controls.error?.let { item { StatusBanner("Controls need live state: $it", tone = "danger", onRetry = onRefresh) } }
-                val list = controls.data?.controls.orEmpty()
-                if (controls.data != null && list.isEmpty()) item { EmptyState("No controls allowed", "Add entities to “Allowed controls” in Jarvis on the web (Settings → Connections → Home Assistant).") }
+                if (doorControls) item { SectionHeader("Controls") }
+                if (doorControls) controls.error?.let { item { StatusBanner("Controls need live state: $it", tone = "danger", onRetry = onRefresh) } }
+                val list = if (doorControls) controls.data?.controls.orEmpty() else emptyList()
+                if (doorControls && controls.data != null && list.isEmpty()) item { EmptyState("No controls allowed", "Add entities to “Allowed controls” in Jarvis on the web (Settings → Connections → Home Assistant).") }
                 items(list, key = { "c:${it.entityId}" }) { c -> ControlRow(c, pending == c.entityId, pending != null, onRequest = { s -> confirm = c to s }) }
-                item {
+                if (doorControls) item {
                     Text(
                         "Every control asks first, checks the state hasn't changed, and reports success only after Home Assistant confirms. Nothing is queued while offline.",
                         style = MaterialTheme.typography.labelMedium,
@@ -177,8 +237,29 @@ fun ControlsContent(
                     )
                 }
 
-                item { SectionHeader("Home Assistant health") }
-                item { HealthPanel(source.data) }
+                devices.error?.let { item { StatusBanner("Devices: $it", tone = "warn", onRetry = onRefresh) } }
+                val d = devices.data
+                if (d != null && d.lights.isNotEmpty()) {
+                    item { SectionHeader("Lights") }
+                    items(d.lights, key = { "l:${it.entityId}" }) { l -> LightRow(l, pending == l.entityId, pending != null || !canLights, onLight) }
+                }
+                if (d != null && d.doors.isNotEmpty()) {
+                    item { SectionHeader("Doors, locks and garage") }
+                    items(d.doors, key = { "d:${it.entityId}" }) { x ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(x.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            val shown = if (x.kind == "door" || x.kind == "window") (if (x.state == "on") "open" else if (x.state == "off") "closed" else x.state) else x.state
+                            Pill(shown, tone = if (shown in setOf("open", "unlocked", "opening")) "warn" else if (shown == "unavailable") "neutral" else "ok")
+                        }
+                    }
+                }
+                if (d != null && d.cameras.isNotEmpty() && loadCamera != null) {
+                    item { SectionHeader("Cameras") }
+                    items(d.cameras, key = { "cam:${it.entityId}" }) { c -> CameraCard(c, loadCamera) }
+                }
+
+                if (canView) item { SectionHeader("Home Assistant health") }
+                if (canView) item { HealthPanel(source.data) }
             }
         }
     }
@@ -216,6 +297,66 @@ private fun ControlRow(c: ControlView, running: Boolean, disabled: Boolean, onRe
                 c.services.forEach { s ->
                     FilledTonalButton(onClick = { onRequest(s.service) }, enabled = !disabled && s.wouldChange) { Text(s.label) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LightRow(l: DeviceView, running: Boolean, disabled: Boolean, onLight: (DeviceView, Boolean) -> Unit) {
+    val on = l.state == "on"
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = if (on) LocalStatusColors.current.warn else MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(l.name, style = MaterialTheme.typography.titleMedium)
+                Text(if (running) "Waiting for Home Assistant…" else l.state + (l.brightness?.let { " · $it%" } ?: ""), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (l.services.isNotEmpty()) {
+                Switch(
+                    checked = on,
+                    enabled = !disabled && l.state != "unavailable",
+                    onCheckedChange = { onLight(l, it) },
+                    modifier = Modifier.semantics { contentDescription = "${l.name} light" },
+                )
+            }
+        }
+    }
+}
+
+/** Loads a still only when asked; never cached. */
+@Composable
+private fun CameraCard(c: DeviceView, load: suspend (String) -> ByteArray) {
+    val scope = rememberCoroutineScope()
+    var image by remember { mutableStateOf<ImageBitmap?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            image?.let { Image(it, contentDescription = "${c.name} still", modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentScale = ContentScale.Crop) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(c.name, style = MaterialTheme.typography.titleMedium)
+                    Text(error ?: c.state, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                FilledTonalButton(
+                    enabled = !loading,
+                    onClick = {
+                        loading = true
+                        scope.launch {
+                            try {
+                                val bytes = load(c.entityId)
+                                image = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+                                error = if (image == null) "Couldn't read the image" else null
+                            } catch (e: ApiException) {
+                                error = e.message
+                            } finally {
+                                loading = false
+                            }
+                        }
+                    },
+                ) { Text(if (image == null) "Show image" else "Refresh") }
             }
         }
     }

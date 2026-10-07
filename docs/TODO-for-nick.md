@@ -77,10 +77,37 @@ No Paperclip deployment was found in your repos.
 - [ ] Once it's running: `npx paperclipai token board create --name jarvis`. The key expires after 30 days by default; use `--ttl-days` or `expiresAt: null` for longer.
 - [ ] Onboarding → Paperclip: enter the URL and key, then pick the company. Set **Browser URL** if you open Paperclip at a different address.
 
-## 9. Visual baselines in CI (one click, if needed)
+## 9. People: your wife, the kids, the home tablet
+
+- [ ] Settings → **People → Add someone**. Pick a role: **Adult** (own private conversations and alerts, home, finances), **Kid** (household calendar and Skylight, no Hermes) or **Household tablet** (calendar, Skylight, home status, lights and the safe door controls; signs in with a 4+ digit PIN).
+- [ ] Hand them the one-time **invite link**, or set their passcode yourself. They sign in with their name and passcode.
+- [ ] Fine-tune per person: **Edit** shows each module's capabilities (for example, turn off cameras or finances for someone).
+- Conversations are private. Open one and use **Share with the household** to let others read it.
+
+## 10. Claude as a faster chat backend (optional)
+
+- [ ] Settings → **Assistant**: paste an Anthropic API key (or set `ANTHROPIC_API_KEY`). Pick the default (Hermes or Claude) and the effort. **Low** is the default, for speed.
+- Every new conversation can go to either; Ask shows a Hermes / Claude choice. Claude answers directly with the Jarvis context you attach. It has no Hermes tools, memory or approvals, and it never gets your finances. If Claude declines a request, the API's server-side fallback retries it once with another model before Jarvis reports "declined".
+
+## 11. Finance (docs/finance.md)
+
+- [ ] Settings → Connections → **Finance**: start with **Manual entry and CSV import**.
+- [ ] Finance → **Accounts**: add checking, savings and cards, then enter balances (or import a CSV).
+- [ ] Finance → **Funds & reserve**: set the checking cushion, then add your funds (and mark any protected).
+- [ ] Run your first month-end **check-in** and close it.
+- [ ] **Monarch (release blocker until done):** switch the source to Monarch and paste the session token (`monarch login`, or your browser session). Map each account, then **Refresh balances**. The blocker clears after the first successful refresh against your real account.
+- [ ] While you're there, check that one credit card's balance owed shows as **negative** in Jarvis. If it's positive, tell me: the liability sign in `integrations/monarch/client.ts` needs flipping.
+- [ ] Notifications → **Finance** is off by default. Turn it on if you want "check-in ready / needs attention" pushes. They never include amounts or account names.
+
+## 12. Lights and cameras
+
+- [ ] Settings → Connections → Home Assistant → **Light switching**: all lights (the default), only allowlisted ones, or none.
+- [ ] Home controls now lists every door, lock, light and camera. Camera stills load on tap and are never cached.
+
+## 13. Visual baselines in CI (one click, if needed)
 
 - [ ] The "Update visual baselines" workflow runs automatically on the first push and commits `e2e/__screenshots__/ci`. If it didn't, run it from the Actions tab (workflow_dispatch). After that, CI compares screenshots.
 
-## 10. Optional later
+## 14. Optional later
 
 - [ ] Schedule backups: `docker compose exec jarvis node scripts/backup.mjs` in cron (keeps 14).

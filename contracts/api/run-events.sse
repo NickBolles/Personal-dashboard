@@ -3,10 +3,10 @@
 retry: 2000
 
 id: 0
-data: {"type":"tool.started","seq":0,"tool":"web_search","preview":"weather today","at":"2026-10-06T01:35:38.116Z"}
+data: {"type":"tool.started","seq":0,"tool":"web_search","preview":"weather today","at":"2026-10-06T14:51:55.580Z"}
 
 id: 1
-data: {"type":"tool.completed","seq":1,"tool":"web_search","preview":"Sunny, 64°F","durationSec":0.42,"error":false,"at":"2026-10-06T01:35:38.357Z"}
+data: {"type":"tool.completed","seq":1,"tool":"web_search","preview":"Sunny, 64°F","durationSec":0.42,"error":false,"at":"2026-10-06T14:51:55.820Z"}
 
 id: 2
 data: {"type":"text.delta","seq":2,"delta":"Got "}
@@ -21,29 +21,20 @@ id: 5
 data: {"type":"text.delta","seq":5,"delta":"the "}
 
 id: 6
-data: {"type":"text.delta","seq":6,"delta":"weather\n\n---\nContext "}
+data: {"type":"text.delta","seq":6,"delta":"weather\". "}
 
 id: 7
-data: {"type":"text.delta","seq":7,"delta":"from "}
+data: {"type":"text.delta","seq":7,"delta":"Here's "}
 
 id: 8
-data: {"type":"text.delta","seq":8,"delta":"Jarvis:\nJarvis "}
+data: {"type":"text.delta","seq":8,"delta":"what "}
 
 id: 9
-data: {"type":"text.delta","seq":9,"delta":"overview\". "}
+data: {"type":"text.delta","seq":9,"delta":"I "}
 
 id: 10
-data: {"type":"text.delta","seq":10,"delta":"Here's "}
+data: {"type":"text.delta","seq":10,"delta":"found."}
 
 id: 11
-data: {"type":"text.delta","seq":11,"delta":"what "}
-
-id: 12
-data: {"type":"text.delta","seq":12,"delta":"I "}
-
-id: 13
-data: {"type":"text.delta","seq":13,"delta":"found."}
-
-id: 14
-data: {"type":"run.terminal","seq":14,"status":"completed","output":"Got it: \"search the weather\n\n---\nContext from Jarvis:\nJarvis overview\". Here's what I found.","at":"2026-10-06T01:35:38.725Z"}
+data: {"type":"run.terminal","seq":11,"status":"completed","output":"Got it: \"search the weather\". Here's what I found.","at":"2026-10-06T14:51:56.098Z"}
 

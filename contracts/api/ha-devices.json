@@ -1,0 +1,152 @@
+{
+  "fetchedAt": "2026-10-06T14:51:56.721Z",
+  "lightControl": "all",
+  "doors": [
+    {
+      "entityId": "binary_sensor.back_door",
+      "name": "Back door",
+      "kind": "door",
+      "state": "off",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "cae255785eafcce8",
+      "services": []
+    },
+    {
+      "entityId": "binary_sensor.front_door_sensor",
+      "name": "Front door",
+      "kind": "door",
+      "state": "off",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "9d2ec5a1d5448eeb",
+      "services": []
+    },
+    {
+      "entityId": "lock.front_door_lock",
+      "name": "Front door lock",
+      "kind": "lock",
+      "state": "locked",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "8c6688266f216e7b",
+      "services": [
+        {
+          "service": "lock",
+          "label": "Lock",
+          "wouldChange": false
+        }
+      ]
+    },
+    {
+      "entityId": "cover.garage_door",
+      "name": "Garage door",
+      "kind": "garage",
+      "state": "open",
+      "lastChanged": "2026-10-06T14:09:56.643Z",
+      "stateToken": "94805a0ec4bfb352",
+      "services": [
+        {
+          "service": "close_cover",
+          "label": "Close",
+          "wouldChange": true
+        }
+      ]
+    },
+    {
+      "entityId": "cover.garage_door_2",
+      "name": "Garage door 2",
+      "kind": "garage",
+      "state": "closed",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "5921b6d02820ea94",
+      "services": [
+        {
+          "service": "close_cover",
+          "label": "Close",
+          "wouldChange": false
+        }
+      ]
+    }
+  ],
+  "lights": [
+    {
+      "entityId": "light.kitchen",
+      "name": "Kitchen lights",
+      "kind": "light",
+      "state": "on",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "brightness": 80,
+      "stateToken": "f395da954c340b76",
+      "services": [
+        {
+          "service": "turn_on",
+          "label": "Turn on",
+          "wouldChange": false
+        },
+        {
+          "service": "turn_off",
+          "label": "Turn off",
+          "wouldChange": true
+        }
+      ]
+    },
+    {
+      "entityId": "light.living_room",
+      "name": "Living room lamp",
+      "kind": "light",
+      "state": "off",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "263b418cc86ba608",
+      "services": [
+        {
+          "service": "turn_on",
+          "label": "Turn on",
+          "wouldChange": true
+        },
+        {
+          "service": "turn_off",
+          "label": "Turn off",
+          "wouldChange": false
+        }
+      ]
+    },
+    {
+      "entityId": "light.porch",
+      "name": "Porch light",
+      "kind": "light",
+      "state": "off",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "15114f5218402b99",
+      "services": [
+        {
+          "service": "turn_on",
+          "label": "Turn on",
+          "wouldChange": true
+        },
+        {
+          "service": "turn_off",
+          "label": "Turn off",
+          "wouldChange": false
+        }
+      ]
+    }
+  ],
+  "cameras": [
+    {
+      "entityId": "camera.driveway",
+      "name": "Driveway camera",
+      "kind": "camera",
+      "state": "recording",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "e3a7163a84774818",
+      "services": []
+    },
+    {
+      "entityId": "camera.front_door",
+      "name": "Front door camera",
+      "kind": "camera",
+      "state": "idle",
+      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "stateToken": "50c17f91b6e5dee8",
+      "services": []
+    }
+  ]
+}

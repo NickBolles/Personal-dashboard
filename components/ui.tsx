@@ -126,6 +126,7 @@ const SOURCE_DOT: Record<string, string> = {
   skylight: "bg-[#d06b00]",
   daily_compass: "bg-[#a0287a]",
   home_assistant: "bg-[#0a7ea4]",
+  finance: "bg-[#2f7d32]",
   jarvis: "bg-[#5b5f57]",
 };
 

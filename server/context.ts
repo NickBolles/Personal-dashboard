@@ -1,7 +1,12 @@
 import "server-only";
 import { SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomeHealth, type NextAction } from "@/lib/contracts";
-import { adapterContext, cachedSource, getHome } from "@/server/sources";
+import { adapterContext, cachedSource, getHome, scopeResult } from "@/server/sources";
 import { listControls } from "@/integrations/home-assistant/controls";
+import { listDevices } from "@/integrations/home-assistant/devices";
+import { can, type Capable } from "@/server/access";
+import { HttpError } from "@/server/http/errors";
+
+type Viewer = Capable & { id: string };
 
 /**
  * "Ask Hermes about …": a plain-text snapshot of what Jarvis currently knows
@@ -37,16 +42,34 @@ function fmtAction(a: NextAction, tz: string) {
   return `- ${a.title}${due}${a.detail ? ` — ${a.detail}` : ""} [${a.source}:${a.sourceId}]`;
 }
 
-function header(source: ActionSource) {
-  const r = cachedSource(source);
+/** Which "Ask about" sources a person may attach. */
+export function contextAllowed(user: Capable, source: ContextSource) {
+  switch (source) {
+    case "overview":
+      return true;
+    case "skylight":
+      return can(user, "skylight.view");
+    case "home_assistant":
+      return can(user, "home_assistant.view") || can(user, "home_assistant.calendar");
+    case "todos":
+      return can(user, "todos.view");
+    case "daily_compass":
+      return can(user, "daily_compass.use");
+    case "paperclip":
+      return can(user, "paperclip.view");
+  }
+}
+
+function header(user: Viewer, source: ActionSource) {
+  const r = scopeResult(user, cachedSource(source)) ?? { status: cachedSource(source).status };
   const s = r.status;
   const freshness = s.fetchedAt ? `as of ${fmtTime(s.fetchedAt, adapterContext().timezone, true)}` : "not read yet";
   const state = s.state === "ok" ? "" : ` (${s.state}${s.error ? `: ${s.error}` : ""})`;
   return { r, line: `${SOURCE_LABELS[source]} — ${freshness}${state}` };
 }
 
-async function skylight(tz: string) {
-  const { r, line } = header("skylight");
+async function skylight(user: Viewer, tz: string) {
+  const { r, line } = header(user, "skylight");
   const events = (r.data?.events ?? []).slice(0, 40);
   const chores = (r.data?.actions ?? []).filter((a) => a.status === "open");
   return [
@@ -58,8 +81,12 @@ async function skylight(tz: string) {
   ];
 }
 
-async function homeAssistant(tz: string) {
-  const { r, line } = header("home_assistant");
+async function homeAssistant(user: Viewer, tz: string) {
+  const { r, line } = header(user, "home_assistant");
+  if (!can(user, "home_assistant.view")) {
+    const events = (r.data?.events ?? []).slice(0, 20);
+    return [line, ...(events.length ? ["Home Assistant calendars:", ...events.map((e) => fmtEvent(e, tz))] : ["Calendars: nothing coming up."])];
+  }
   const ex = r.data?.homeExceptions ?? [];
   const lines = [line, ex.length ? "Exceptions in watched entities:" : "Exceptions: none in watched entities."];
   for (const e of ex) lines.push(`- ${e.name} (${e.entityId}): ${e.reason}, state "${e.state}"${e.since ? ` since ${fmtTime(e.since, tz, true)}` : ""}`);
@@ -71,6 +98,14 @@ async function homeAssistant(tz: string) {
     }
   } catch {
     lines.push("Controllable entities: couldn't read live state right now.");
+  }
+  try {
+    const d = await listDevices({ doors: true, lights: true, cameras: false, doorControls: false, lightControls: false });
+    if (d.lights.length)
+      lines.push(`Lights (live): ${d.lights.map((l) => `${l.name} ${l.state}${l.brightness !== undefined ? ` ${l.brightness}%` : ""}`).join("; ")}`);
+    if (d.doors.length) lines.push(`Doors, locks and covers (live): ${d.doors.map((x) => `${x.name} ${x.state}`).join("; ")}`);
+  } catch {
+    /* already reported above */
   }
   const h = r.data?.extra?.health as HomeHealth | undefined;
   if (h) {
@@ -84,14 +119,14 @@ async function homeAssistant(tz: string) {
   return lines;
 }
 
-async function simpleActions(source: ActionSource, tz: string, emptyLabel: string) {
-  const { r, line } = header(source);
+async function simpleActions(user: Viewer, source: ActionSource, tz: string, emptyLabel: string) {
+  const { r, line } = header(user, source);
   const open = (r.data?.actions ?? []).filter((a) => a.status === "open" || a.status === "waiting").slice(0, 40);
   return [line, ...(open.length ? open.map((a) => fmtAction(a, tz)) : [emptyLabel])];
 }
 
-async function compass() {
-  const { r, line } = header("daily_compass");
+async function compass(user: Viewer) {
+  const { r, line } = header(user, "daily_compass");
   const c = r.data?.compass;
   if (!c) return [line, "No state yet."];
   return [
@@ -101,37 +136,42 @@ async function compass() {
   ];
 }
 
-async function overview(tz: string) {
-  const home = await getHome({ live: false });
+async function overview(user: Viewer, tz: string) {
+  const home = await getHome(user, { live: false });
+  // Finance never goes to the AI layer (docs/finance.md), not even card titles.
+  const shareable = (list: NextAction[]) => list.filter((a) => a.source !== "finance");
+  const now = shareable(home.now);
+  const laterToday = shareable(home.later.laterToday);
   const lines = ["Jarvis overview:"];
-  lines.push(home.now.length ? "Now:" : "Now: nothing urgent.", ...home.now.map((a) => fmtAction(a, tz)));
-  if (home.later.laterToday.length) lines.push("Later today:", ...home.later.laterToday.map((a) => fmtAction(a, tz)));
+  lines.push(now.length ? "Now:" : "Now: nothing urgent.", ...now.map((a) => fmtAction(a, tz)));
+  if (laterToday.length) lines.push("Later today:", ...laterToday.map((a) => fmtAction(a, tz)));
   if (home.glance.nextEvent) lines.push(`Next event: ${fmtEvent(home.glance.nextEvent, tz).slice(2)}`);
-  const degraded = home.sources.filter((s) => !["ok", "disabled", "unconfigured"].includes(s.state));
+  const degraded = home.sources.filter((s) => s.source !== "finance" && !["ok", "disabled", "unconfigured"].includes(s.state));
   if (degraded.length) lines.push(`Sources with problems: ${degraded.map((s) => `${s.label} (${s.state})`).join(", ")}`);
   return lines;
 }
 
-export async function sourceContext(source: ContextSource): Promise<string> {
+export async function sourceContext(user: Viewer, source: ContextSource): Promise<string> {
+  if (!contextAllowed(user, source)) throw new HttpError(403, "forbidden", "You don't have access to that.");
   const tz = adapterContext().timezone;
   const lines =
     source === "skylight"
-      ? await skylight(tz)
+      ? await skylight(user, tz)
       : source === "home_assistant"
-        ? await homeAssistant(tz)
+        ? await homeAssistant(user, tz)
         : source === "todos"
-          ? await simpleActions("todos", tz, "No open todos.")
+          ? await simpleActions(user, "todos", tz, "No open todos.")
           : source === "paperclip"
-            ? await simpleActions("paperclip", tz, "No open initiatives.")
+            ? await simpleActions(user, "paperclip", tz, "No open initiatives.")
             : source === "daily_compass"
-              ? await compass()
-              : await overview(tz);
+              ? await compass(user)
+              : await overview(user, tz);
   return lines.join("\n");
 }
 
-/** Combined context for a Hermes message: each source block, then any free-form context. */
-export async function buildContext(sources: ContextSource[] | undefined, extra: string | undefined) {
-  const blocks = await Promise.all([...new Set(sources ?? [])].map(sourceContext));
+/** Combined context for a message: each source block (only what this person may see), then any free-form context. */
+export async function buildContext(user: Viewer, sources: ContextSource[] | undefined, extra: string | undefined) {
+  const blocks = await Promise.all([...new Set(sources ?? [])].map((s) => sourceContext(user, s)));
   const text = [...blocks, ...(extra ? [extra] : [])].join("\n\n");
   return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n…(truncated)` : text;
 }

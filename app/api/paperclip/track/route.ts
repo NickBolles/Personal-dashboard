@@ -20,4 +20,7 @@ const bodySchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
-export const POST = api<z.infer<typeof bodySchema>>(({ body, user, correlationId }) => track(body, user.id, correlationId), { body: bodySchema });
+export const POST = api<z.infer<typeof bodySchema>>(({ body, user, correlationId }) => track(body, user.id, correlationId), {
+  cap: "paperclip.track",
+  body: bodySchema,
+});

@@ -5,9 +5,9 @@ import { CONTEXT_SOURCES, sourceContext, type ContextSource } from "@/server/con
 export const dynamic = "force-dynamic";
 
 /** Preview what "Ask about <source>" attaches: GET /api/context?source=skylight */
-export const GET = api(async ({ req }) => {
+export const GET = api(async ({ req, user }) => {
   const source = req.nextUrl.searchParams.get("source") ?? "overview";
   if (!(CONTEXT_SOURCES as readonly string[]).includes(source)) throw new HttpError(400, "unknown_source", "Unknown context source");
-  const text = await sourceContext(source as ContextSource);
+  const text = await sourceContext(user, source as ContextSource);
   return { source, text, lines: text.split("\n").length };
 });

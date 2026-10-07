@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gt, lt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
 import { config } from "@/server/config";
 import { getDb, schema } from "@/server/db";
@@ -8,13 +8,45 @@ import { getSetting, setSetting } from "@/server/settings";
 import { DAY } from "@/lib/time";
 import { processSingleton } from "@/server/singleton";
 import { deviceFromToken } from "@/server/devices";
+import { asRole, capabilitiesFor } from "@/server/access";
+import type { Role } from "@/lib/modules";
 
 export const SESSION_COOKIE = "jarvis_session";
 
-export type CurrentUser = { id: string; name: string; via: "session" | "proxy" | "device"; deviceId?: string };
+export type CurrentUser = {
+  id: string;
+  name: string;
+  role: Role;
+  /** role defaults + per-person grants (server/access.ts) */
+  capabilities: Set<string>;
+  via: "session" | "proxy" | "device";
+  deviceId?: string;
+};
 
+type UserRow = typeof schema.users.$inferSelect;
+
+function toCurrentUser(row: Pick<UserRow, "id" | "name" | "role">, via: CurrentUser["via"], deviceId?: string): CurrentUser {
+  const role = asRole(row.role);
+  return { id: row.id, name: row.name, role, capabilities: capabilitiesFor(row.id, role), via, ...(deviceId ? { deviceId } : {}) };
+}
+
+/** The person who claimed this instance (the first admin). */
 export function getOwner() {
-  return getDb().select().from(schema.users).limit(1).get();
+  return getDb().select().from(schema.users).where(eq(schema.users.role, "admin")).orderBy(asc(schema.users.createdAt)).limit(1).get();
+}
+
+export function getUser(id: string) {
+  return getDb().select().from(schema.users).where(eq(schema.users.id, id)).get();
+}
+
+/** Load a person as a request identity (e.g. for background work done on their behalf). */
+export function userById(id: string, via: CurrentUser["via"] = "session"): CurrentUser | null {
+  const row = getUser(id);
+  return row && !row.disabledAt ? toCurrentUser(row, via) : null;
+}
+
+export function normalizeUsername(v: string) {
+  return v.trim().toLowerCase();
 }
 
 export function isClaimed() {
@@ -53,7 +85,7 @@ export function claimInstance(input: { setupCode: string; name: string; passcode
   const id = newId("usr");
   getDb()
     .insert(schema.users)
-    .values({ id, name: input.name.trim() || "Owner", passcodeHash: hashPasscode(input.passcode) })
+    .values({ id, name: input.name.trim() || "Owner", role: "admin", passcodeHash: hashPasscode(input.passcode) })
     .run();
   return id;
 }
@@ -63,7 +95,7 @@ export function changePasscode(userId: string, current: string, next: string) {
   if (!user?.passcodeHash || !verifyPasscode(current, user.passcodeHash)) {
     throw new AuthError("bad_passcode", "Current passcode is incorrect.");
   }
-  if (next.length < 6) throw new AuthError("weak_passcode", "Use at least 6 characters.");
+  assertPasscodeStrength(next, asRole(user.role));
   getDb()
     .update(schema.users)
     .set({ passcodeHash: hashPasscode(next) })
@@ -71,6 +103,13 @@ export function changePasscode(userId: string, current: string, next: string) {
     .run();
   // Invalidate other sessions
   getDb().delete(schema.authSessions).where(eq(schema.authSessions.userId, userId)).run();
+}
+
+/** Household tablets may use a 4+ digit PIN; everyone else needs 6+ characters. */
+export function assertPasscodeStrength(passcode: string, role: Role) {
+  if (role === "household" && /^\d{4,}$/.test(passcode)) return;
+  if (passcode.length < 6)
+    throw new AuthError("weak_passcode", role === "household" ? "Use a PIN of at least 4 digits, or 6+ characters." : "Use at least 6 characters.");
 }
 
 export class AuthError extends Error {
@@ -99,15 +138,26 @@ export function recordFailure(key: string) {
   failures.set(key, f);
 }
 
-export function verifyLogin(passcode: string, throttleKey: string) {
+/**
+ * Sign in by name + passcode. With no name, the passcode is checked against
+ * the owner only (the single-person setup keeps its passcode-only sign-in).
+ */
+export function verifyLogin(passcode: string, throttleKey: string, username?: string) {
   checkThrottle(throttleKey);
-  const owner = getOwner();
-  if (!owner?.passcodeHash || !verifyPasscode(passcode, owner.passcodeHash)) {
+  const name = username ? normalizeUsername(username) : "";
+  const user = name
+    ? getDb()
+        .select()
+        .from(schema.users)
+        .where(and(eq(schema.users.username, name), isNull(schema.users.disabledAt)))
+        .get()
+    : getOwner();
+  if (!user?.passcodeHash || user.disabledAt || !verifyPasscode(passcode, user.passcodeHash)) {
     recordFailure(throttleKey);
-    throw new AuthError("bad_passcode", "Incorrect passcode.");
+    throw new AuthError("bad_passcode", name ? "Incorrect name or passcode." : "Incorrect passcode.");
   }
   failures.delete(throttleKey);
-  return owner;
+  return user;
 }
 
 export function createSession(userId: string, userAgent?: string | null) {
@@ -144,31 +194,38 @@ export function pruneSessions() {
 export function userFromSessionToken(token: string | undefined): CurrentUser | null {
   if (!token) return null;
   const row = getDb()
-    .select({ id: schema.users.id, name: schema.users.name, sid: schema.authSessions.id })
+    .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role })
     .from(schema.authSessions)
     .innerJoin(schema.users, eq(schema.users.id, schema.authSessions.userId))
-    .where(and(eq(schema.authSessions.id, sha256(token)), gt(schema.authSessions.expiresAt, new Date().toISOString())))
+    .where(and(eq(schema.authSessions.id, sha256(token)), gt(schema.authSessions.expiresAt, new Date().toISOString()), isNull(schema.users.disabledAt)))
     .get();
   if (!row) return null;
-  return { id: row.id, name: row.name, via: "session" };
+  return toCurrentUser(row, "session");
 }
 
 /** Proxy mode: trust the identity header from the authenticating reverse proxy. */
 export function userFromProxyHeader(value: string | null | undefined): CurrentUser | null {
   if (!value) return null;
-  const username = value.trim();
-  const allow = config.authProxyUsers;
-  if (allow.length && !allow.includes(username)) return null;
-  let owner = getOwner();
+  const username = normalizeUsername(value);
+  const allow = config.authProxyUsers.map(normalizeUsername);
+  if (!username || (allow.length && !allow.includes(username))) return null;
+  const db = getDb();
+  const known = db.select().from(schema.users).where(eq(schema.users.username, username)).get();
+  if (known) return known.disabledAt ? null : toCurrentUser(known, "proxy");
+  const owner = getOwner();
   if (!owner) {
-    getDb()
-      .insert(schema.users)
-      .values({ id: newId("usr"), name: username })
-      .run();
-    owner = getOwner()!;
+    // First identity through the proxy becomes the admin.
+    const id = newId("usr");
+    db.insert(schema.users).values({ id, name: value.trim(), username, role: "admin" }).run();
+    return userById(id, "proxy");
   }
-  // Single-household model: every allowed proxy identity maps to the owner record.
-  return { id: owner.id, name: owner.name, via: "proxy" };
+  if (!owner.username) {
+    // Upgrade from the single-person model: the owner adopts their proxy name.
+    db.update(schema.users).set({ username }).where(eq(schema.users.id, owner.id)).run();
+    return toCurrentUser(owner, "proxy");
+  }
+  // Anyone else must be added in Settings → People (with this sign-in name) first.
+  return null;
 }
 
 /** `Authorization: Bearer jdv_…` from a paired phone, in any auth mode. */
@@ -179,7 +236,9 @@ export function bearerToken(h: Headers) {
 
 export function userFromDeviceToken(token: string): CurrentUser | null {
   const d = deviceFromToken(token);
-  return d ? { id: d.userId, name: d.name, via: "device", deviceId: d.id } : null;
+  if (!d) return null;
+  const u = getUser(d.userId);
+  return u && !u.disabledAt ? toCurrentUser(u, "device", d.id) : null;
 }
 
 export function resolveUser(h: Headers, cookieValue: string | undefined): CurrentUser | null {

@@ -12,6 +12,7 @@ import { formatWhen } from "@/components/actions/format";
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { Badge, Empty, ErrorNote, Spinner, cx, useOnline } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
+import { useAccess } from "@/components/access";
 
 const PROBLEM: SourceStatus["state"][] = ["stale", "error", "unauthorized", "refreshing"];
 
@@ -93,6 +94,7 @@ const LATER_GROUPS: Partial<Record<HomeSectionId, { id: string; title: string; i
 
 export function HomeView() {
   const online = useOnline();
+  const { can } = useAccess();
   const [snapshot, setSnapshot] = useState<HomePayload>();
 
   useEffect(() => {
@@ -177,12 +179,14 @@ export function HomeView() {
         </section>
       ) : null}
 
-      <section aria-labelledby="capture-h" className="mb-6">
-        <h2 id="capture-h" className="sr-only">
-          Quick capture
-        </h2>
-        <QuickCapture />
-      </section>
+      {can("hermes.chat") ? (
+        <section aria-labelledby="capture-h" className="mb-6">
+          <h2 id="capture-h" className="sr-only">
+            Quick capture
+          </h2>
+          <QuickCapture />
+        </section>
+      ) : null}
 
       {data ? (
         <section aria-labelledby="later-h" className="mb-6">

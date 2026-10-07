@@ -49,6 +49,17 @@ import * as compassRoute from "@/app/api/daily-compass/route";
 import * as contextRoute from "@/app/api/context/route";
 import * as settingsRoute from "@/app/api/settings/route";
 import * as actionsRoute from "@/app/api/actions/route";
+import * as authMeRoute from "@/app/api/auth/me/route";
+import * as searchRoute from "@/app/api/search/route";
+import * as financeOverviewRoute from "@/app/api/finance/overview/route";
+import * as devicesHaRoute from "@/app/api/home-assistant/devices/route";
+import * as lightsRoute from "@/app/api/home-assistant/lights/route";
+import * as assistantRoute from "@/app/api/assistant/route";
+import { createAccount } from "@/server/finance/accounts";
+import { saveFinanceSettings, thisMonth } from "@/server/finance/common";
+import { enterBalances } from "@/server/finance/sync";
+import { addAction, startCheckin } from "@/server/finance/checkins";
+import { createFund, setHolding } from "@/server/finance/funds";
 
 let server: Server;
 let base: string;
@@ -431,5 +442,53 @@ describe("app screens' existing APIs work with a device token", () => {
     }
     record("daily-compass", (await json(call(compassRoute.GET, "/api/daily-compass"))).body);
     record("action-result", (await json(call(actionsRoute.POST, "/api/actions", { method: "POST", body: { actionId: "todos:x1", kind: "pin" } }))).body);
+  }, 30_000);
+});
+
+describe("modules, finance, home devices and assistant (phone surface)", () => {
+  it("records who-am-I, search, finance overview, devices and assistant status", async () => {
+    const me = await json<{ capabilities: string[]; modules: string[]; user: { role: string } }>(call(authMeRoute.GET, "/api/auth/me"));
+    expect(me.status).toBe(200);
+    expect(me.body.modules).toEqual(expect.arrayContaining(["hermes", "finance", "home_assistant"]));
+    record("auth-me", me.body);
+
+    const found = await json<{ results: { kind: string }[] }>(call(searchRoute.GET, "/api/search?q=garage"));
+    expect(found.body.results.length).toBeGreaterThan(0);
+    record("search", found.body);
+
+    const chk = createAccount({ name: "Joint checking", kind: "checking", reserveAccount: true }, userId, "fx").id;
+    const sav = createAccount({ name: "Savings", kind: "savings" }, userId, "fx").id;
+    const visa = createAccount({ name: "Visa", kind: "credit_card", cardBasis: "current" }, userId, "fx").id;
+    enterBalances(
+      [
+        { accountId: chk, balance: 1_000_000 },
+        { accountId: sav, balance: 4_850_000 },
+        { accountId: visa, balance: -150_000 },
+      ],
+      userId,
+      "fx",
+    );
+    saveFinanceSettings({ cushion: 200_000 }, userId, "fx");
+    const travel = createFund({ name: "Travel" }, userId, "fx");
+    setHolding(travel, sav, 400_000, null, userId, "fx");
+    const ci = startCheckin(thisMonth(), userId, "fx");
+    addAction(ci, { kind: "card_payment", label: "Pay Visa", amount: 150_000, fromAccountId: chk, toAccountId: visa, date: null }, userId, "fx");
+    const fo = await json<{ status: string; totals: { net: number } }>(call(financeOverviewRoute.GET, "/api/finance/overview"));
+    expect(fo.status).toBe(200);
+    expect(fo.body.totals.net).toBe(1_000_000 + 4_850_000 - 150_000);
+    record("finance-overview", fo.body);
+
+    const dev = await json<{ lights: { entityId: string; services: unknown[] }[]; cameras: unknown[]; doors: unknown[] }>(
+      call(devicesHaRoute.GET, "/api/home-assistant/devices"),
+    );
+    expect(dev.body.lights.length).toBeGreaterThan(0);
+    record("ha-devices", dev.body);
+    const lit = await json<{ verified: boolean }>(
+      call(lightsRoute.POST, "/api/home-assistant/lights", { method: "POST", body: { entityId: "light.porch", on: true } }),
+    );
+    expect(lit.body.verified).toBe(true);
+    record("light-result", lit.body);
+
+    record("assistant", (await json(call(assistantRoute.GET, "/api/assistant"))).body);
   }, 30_000);
 });

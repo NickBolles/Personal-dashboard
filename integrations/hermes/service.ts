@@ -7,7 +7,7 @@ import { processSingleton } from "@/server/singleton";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
-import type { CurrentUser } from "@/server/auth";
+import { getOwner, type CurrentUser } from "@/server/auth";
 import { hermesConn, HermesExecutionClient, HermesSessionClient } from "./client";
 import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
 import { SYNC_SESSION_SOURCE } from "./structured";
@@ -31,15 +31,42 @@ function activeRunsFor(ids: string[]) {
   return new Map(rows.map((r) => [r.sessionId, r]));
 }
 
-function decorate(list: SessionSummary[]): SessionSummary[] {
+type Meta = typeof schema.sessionMeta.$inferSelect;
+
+/**
+ * Conversations are private to the person who started them. Sessions Jarvis
+ * didn't create (made in Hermes directly) belong to the owner. A shared one is
+ * readable (and forkable) by everyone who can chat; only its owner writes to it.
+ */
+function access(user: CurrentUser, m: Meta | undefined, ownerId = getOwner()?.id): "write" | "read" | null {
+  const owner = m?.userId ?? ownerId;
+  if (owner === user.id) return "write";
+  return m?.shared ? "read" : null;
+}
+
+export function sessionAccess(user: CurrentUser, id: string) {
+  return access(user, metaFor([id]).get(id));
+}
+
+function assertAccess(user: CurrentUser, id: string, need: "read" | "write") {
+  const a = sessionAccess(user, id);
+  if (!a) throw new HttpError(404, "session_not_found", "Conversation not found");
+  if (need === "write" && a !== "write") throw new HttpError(403, "read_only", "This conversation was shared with you read-only. Fork it to continue.");
+}
+
+function decorate(list: SessionSummary[], user?: CurrentUser): SessionSummary[] {
   const ids = list.map((s) => s.id);
   const meta = metaFor(ids);
   const runs = activeRunsFor(ids);
-  return list.map((s) => {
+  const ownerId = getOwner()?.id;
+  const visible = user ? list.filter((s) => access(user, meta.get(s.id), ownerId)) : list;
+  return visible.map((s) => {
     const m = meta.get(s.id);
     const r = runs.get(s.id);
     return {
       ...s,
+      shared: Boolean(m?.shared),
+      readOnly: user ? access(user, m, ownerId) === "read" : undefined,
       title: m?.titleOverride ?? s.title,
       forkedFromSessionId: m?.forkedFromSessionId ?? undefined,
       forkedFromMessageId: m?.forkedFromMessageId ?? undefined,
@@ -63,11 +90,7 @@ function touchMeta(user: CurrentUser, sessionId: string, patch: Partial<typeof s
   else insert.onConflictDoNothing().run();
 }
 
-/**
- * Single-household authorization: every Hermes session reachable through the
- * configured API key belongs to the owner. We still refuse IDs that look
- * malformed so arbitrary strings never reach upstream paths.
- */
+/** Refuse IDs that look malformed so arbitrary strings never reach upstream paths. */
 export function assertSessionId(id: string) {
   if (!/^[A-Za-z0-9_.:-]{1,256}$/.test(id)) throw new HttpError(400, "bad_session_id", "Invalid session id");
 }
@@ -78,28 +101,29 @@ function assertRunOwner(user: CurrentUser, runId: string) {
   return run;
 }
 
-export async function listSessions(opts: { includeArchived?: boolean } = {}) {
+export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
   const res = await HermesSessionClient.list(hermesConn(), { limit: 100, includeChildren: true });
   // Hidden sessions (e.g. Jarvis's own structured sync requests) never show in chat.
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
-  const sessions = decorate(visible.map(normalizeSession));
+  const sessions = decorate(visible.map(normalizeSession), user);
   return sessions.filter((s) => opts.includeArchived || !s.archived);
 }
 
-export async function getSessionDetail(id: string) {
+export async function getSessionDetail(user: CurrentUser, id: string) {
   assertSessionId(id);
+  assertAccess(user, id, "read");
   const conn = hermesConn();
   const [session, messages] = await Promise.all([HermesSessionClient.get(conn, id), HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 })]);
-  const [summary] = decorate([normalizeSession(session.session)]);
+  const [summary] = decorate([normalizeSession(session.session)], user);
   // Children (forks) of this session, for reciprocal lineage links.
   const all = await HermesSessionClient.list(conn, { limit: 200, includeChildren: true }).catch(() => ({ data: [] }));
   const localChildren = db().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.forkedFromSessionId, id)).all();
   const childIds = new Set([...all.data.filter((s) => s.parent_session_id === id).map((s) => s.id), ...localChildren.map((c) => c.sessionId)]);
-  const children = decorate(all.data.filter((s) => childIds.has(s.id)).map(normalizeSession));
+  const children = decorate(all.data.filter((s) => childIds.has(s.id)).map(normalizeSession), user);
   let parent: SessionSummary | undefined;
   if (summary!.parentSessionId) {
     const p = all.data.find((s) => s.id === summary!.parentSessionId);
-    if (p) parent = decorate([normalizeSession(p)])[0];
+    if (p) parent = decorate([normalizeSession(p)], user)[0];
   }
   return {
     session: summary!,
@@ -113,23 +137,26 @@ export async function createSession(user: CurrentUser, title?: string) {
   const conn = hermesConn();
   const res = await HermesSessionClient.create(conn, { title: title?.trim() || undefined, source: "api_server" });
   touchMeta(user, res.session.id);
-  return decorate([normalizeSession(res.session)])[0]!;
+  return decorate([normalizeSession(res.session)], user)[0]!;
 }
 
 export async function updateSession(
   user: CurrentUser,
   id: string,
-  patch: { title?: string | null; archived?: boolean; pinned?: boolean },
+  patch: { title?: string | null; archived?: boolean; pinned?: boolean; shared?: boolean },
   correlationId: string,
 ) {
   assertSessionId(id);
-  const res = await HermesSessionClient.update(hermesConn(), id, patch);
+  assertAccess(user, id, "write");
+  const { shared, ...upstream } = patch;
+  const res = Object.keys(upstream).length ? await HermesSessionClient.update(hermesConn(), id, upstream) : await HermesSessionClient.get(hermesConn(), id);
   touchMeta(user, id, {
     ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
     ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
+    ...(shared !== undefined ? { shared } : {}),
   });
   audit({ actor: user.id, action: "hermes.session.update", source: "hermes", sourceRecord: id, result: "ok", correlationId, detail: patch });
-  return decorate([normalizeSession(res.session)])[0]!;
+  return decorate([normalizeSession(res.session)], user)[0]!;
 }
 
 export type ForkInput = {
@@ -151,6 +178,7 @@ export type ForkInput = {
  */
 export async function forkSession(user: CurrentUser, id: string, input: ForkInput, correlationId: string) {
   assertSessionId(id);
+  assertAccess(user, id, "read");
   const conn = hermesConn();
   let child: SessionSummary;
   let run: RunView | undefined;
@@ -199,7 +227,7 @@ export async function forkSession(user: CurrentUser, id: string, input: ForkInpu
   if (input.prompt?.trim() && !run) {
     run = await startRun(user, { sessionId: child.id, input: input.prompt, idempotencyKey: input.idempotencyKey ?? `fork-${child.id}` }, correlationId);
   }
-  return { session: decorate([child])[0]!, run };
+  return { session: decorate([child], user)[0]!, run };
 }
 
 export type StartRunRequest = {
@@ -213,6 +241,7 @@ export type StartRunRequest = {
 
 export async function startRun(user: CurrentUser, r: StartRunRequest, correlationId: string): Promise<RunView> {
   assertSessionId(r.sessionId);
+  assertAccess(user, r.sessionId, "write");
   if (!/^[\x21-\x7e]{1,255}$/.test(r.idempotencyKey)) throw new HttpError(400, "bad_idempotency_key", "Invalid idempotency key");
   const existing = db().select().from(schema.runs).where(eq(schema.runs.idempotencyKey, r.idempotencyKey)).get();
   if (existing) {

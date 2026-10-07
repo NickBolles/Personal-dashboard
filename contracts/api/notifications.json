@@ -1,29 +1,29 @@
 {
   "notifications": [
     {
-      "id": "ntf_a65c751c-73f7-489e-bfee-9464eff26d69",
+      "id": "ntf_3d16b11e-fd52-4c92-b12c-7e373ccad90b",
       "type": "jarvis.test",
       "category": "hermes_input",
       "severity": "normal",
       "title": "Hermes needs you",
       "body": "Approve a command",
-      "createdAt": "2026-10-06T01:35:37.966Z",
-      "updatedAt": "2026-10-06T01:35:37.966Z",
+      "createdAt": "2026-10-06T14:51:55.383Z",
+      "updatedAt": "2026-10-06T14:51:55.383Z",
       "dedupeKey": "fixture-1",
       "occurrences": 1,
       "deepLink": "/chat/sess_morning",
       "source": "hermes"
     },
     {
-      "id": "ntf_72d078a6-e000-4053-b86b-7dc677c71a51",
+      "id": "ntf_438e384f-1a03-4c82-bd6e-1500eb8cd1ce",
       "type": "home.exception",
       "category": "ha_critical",
       "severity": "critical",
       "title": "House alarm: Alarm triggered",
       "body": "Current state: triggered",
-      "createdAt": "2026-10-06T01:35:37.586Z",
-      "updatedAt": "2026-10-06T01:35:37.586Z",
-      "dedupeKey": "fcm-test-1791250537584",
+      "createdAt": "2026-10-06T14:51:54.794Z",
+      "updatedAt": "2026-10-06T14:51:54.794Z",
+      "dedupeKey": "fcm-test-1791298314792",
       "occurrences": 1,
       "deepLink": "/home-control",
       "source": "home_assistant"

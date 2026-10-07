@@ -7,8 +7,11 @@ import { authorizationUrl, googleRedirectUri, requestOrigin } from "@/integratio
 export const dynamic = "force-dynamic";
 
 /** Begins Google consent for the Tasks scope. Client secret stays server-side. */
-export const GET = api(({ req }) => {
-  const state = randomToken(16);
-  setSetting("google_oauth_state", { state, at: Date.now() });
-  return NextResponse.redirect(authorizationUrl(googleRedirectUri(requestOrigin(req)), state));
-});
+export const GET = api(
+  ({ req }) => {
+    const state = randomToken(16);
+    setSetting("google_oauth_state", { state, at: Date.now() });
+    return NextResponse.redirect(authorizationUrl(googleRedirectUri(requestOrigin(req)), state));
+  },
+  { cap: "admin" },
+);

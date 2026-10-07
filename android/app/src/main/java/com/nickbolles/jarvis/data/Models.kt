@@ -158,10 +158,17 @@ data class SessionSummary(
     val source: String? = null,
     val model: String? = null,
     val activeRun: ActiveRun? = null,
-)
+    /** visible read-only to the household */
+    val shared: Boolean = false,
+    /** someone else's shared conversation: read and fork only */
+    val readOnly: Boolean = false,
+) {
+    /** "Claude" for Claude-direct conversations, otherwise Hermes. */
+    val assistantName: String get() = if (source == "claude") "Claude" else "Hermes"
+}
 
 @Serializable
-data class SessionsResponse(val sessions: List<SessionSummary> = emptyList())
+data class SessionsResponse(val sessions: List<SessionSummary> = emptyList(), val unavailable: List<String> = emptyList())
 
 /** Transcript entry; `kind` is user | assistant | tool | system. */
 @Serializable
@@ -403,4 +410,129 @@ enum class ContextSource(val id: String, val label: String) {
     companion object {
         fun forSource(source: String) = entries.firstOrNull { it.id == source }
     }
+}
+
+
+/* ------------------------------------------------------------- people */
+
+@Serializable
+data class AuthUser(val id: String, val name: String, val username: String? = null, val role: String = "admin", val via: String = "device")
+
+/** GET /api/auth/me: who this phone is signed in as and what they can use. */
+@Serializable
+data class AuthMe(
+    val user: AuthUser,
+    val capabilities: List<String> = emptyList(),
+    val modules: List<String> = emptyList(),
+    val authMode: String = "local",
+    val onboarded: Boolean = true,
+) {
+    fun can(capability: String) = capability in capabilities
+}
+
+/* ------------------------------------------------------------- search */
+
+@Serializable
+data class SearchResult(val id: String, val kind: String, val module: String, val title: String, val subtitle: String? = null, val href: String)
+
+@Serializable
+data class SearchResponse(val query: String = "", val results: List<SearchResult> = emptyList(), val partial: List<String> = emptyList())
+
+/* ------------------------------------------------------------ finance */
+
+@Serializable
+data class FinanceSetup(
+    val accounts: Int = 0,
+    val cushionSet: Boolean = false,
+    val balanceSource: String = "manual",
+    val monarchValidatedAt: String? = null,
+    val releaseBlocker: Boolean = false,
+)
+
+@Serializable
+data class FinanceCheckinSummary(
+    val id: String,
+    val month: String,
+    val status: String,
+    val blocking: Int = 0,
+    val warnings: Int = 0,
+    val open: Int = 0,
+    val canClose: Boolean = false,
+)
+
+/** Integer cents. Net position = all accounts; Liquid cash = banks only. */
+@Serializable
+data class FinanceTotals(val net: Long, val liquid: Long, val reserve: Long? = null, val unrestricted: Long? = null, val inTransit: Long = 0)
+
+@Serializable
+data class FundSummary(val fundId: String, val name: String, val protected: Boolean = false, val held: Long = 0, val reserved: Long = 0, val available: Long = 0)
+
+@Serializable
+data class FinanceIssue(val code: String, val blocking: Boolean, val message: String, val ref: String? = null)
+
+@Serializable
+data class FinanceUpcoming(val id: String, val label: String, val date: String, val kind: String, val amount: Long? = null)
+
+@Serializable
+data class FinanceRun(val kind: String, val status: String, val outcome: String? = null, val at: String, val error: String? = null)
+
+@Serializable
+data class FinanceOverview(
+    val month: String = "",
+    /** ready | attention | failed | setup */
+    val status: String,
+    val statusText: String = "",
+    val asOf: String? = null,
+    val setup: FinanceSetup = FinanceSetup(),
+    val checkin: FinanceCheckinSummary? = null,
+    val totals: FinanceTotals? = null,
+    val funds: List<FundSummary> = emptyList(),
+    val upcoming: List<FinanceUpcoming> = emptyList(),
+    val issues: List<FinanceIssue> = emptyList(),
+    val lastRun: FinanceRun? = null,
+)
+
+@Serializable
+data class FinanceRefreshResult(val runId: String = "", val outcome: String = "", val stored: Int = 0, val unmapped: Int = 0)
+
+/* ------------------------------------------------------- home devices */
+
+@Serializable
+data class DeviceView(
+    val entityId: String,
+    val name: String,
+    /** lock | garage | door | window | cover | light | camera */
+    val kind: String,
+    val state: String,
+    val lastChanged: String? = null,
+    val brightness: Int? = null,
+    val stateToken: String = "",
+    val services: List<ControlService> = emptyList(),
+)
+
+@Serializable
+data class DevicesResponse(
+    val fetchedAt: String = "",
+    val lightControl: String = "all",
+    val doors: List<DeviceView> = emptyList(),
+    val lights: List<DeviceView> = emptyList(),
+    val cameras: List<DeviceView> = emptyList(),
+)
+
+/* ---------------------------------------------------------- assistant */
+
+@Serializable
+data class AssistantBackendStatus(val id: String, val label: String, val available: Boolean, val reason: String? = null)
+
+@Serializable
+data class ClaudeStatus(val model: String = "", val effort: String = "", val keySet: Boolean = false, val keyFromEnv: Boolean = false)
+
+/** Which AI new conversations can go to (Hermes, or Claude directly). */
+@Serializable
+data class AssistantStatus(
+    val defaultBackend: String = "hermes",
+    val backends: List<AssistantBackendStatus> = emptyList(),
+    val claude: ClaudeStatus = ClaudeStatus(),
+) {
+    val available: List<AssistantBackendStatus> get() = backends.filter { it.available }
 }

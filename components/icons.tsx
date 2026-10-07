@@ -171,3 +171,45 @@ export const CheckIcon = ({ className }: P) =>
     </>,
     className,
   );
+export const WalletIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M4 7h15a1 1 0 0 1 1 1v11H5a1 1 0 0 1-1-1z" />
+      <path d="M4 7V6a2 2 0 0 1 2-2h11v3" />
+      <path d="M16 13.5h.01" />
+    </>,
+    className,
+  );
+export const SearchIcon = ({ className }: P) =>
+  base(
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </>,
+    className,
+  );
+export const PeopleIcon = ({ className }: P) =>
+  base(
+    <>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" />
+      <path d="M15.5 5.2a3 3 0 0 1 0 5.6M17.5 14.8c1.6.6 2.7 2.2 3 4.7" />
+    </>,
+    className,
+  );
+export const LightIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M9 18h6M10 21h4" />
+      <path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" />
+    </>,
+    className,
+  );
+export const CameraIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M4 7h3l2-2.5h6L17 7h3v12H4z" />
+      <circle cx="12" cy="13" r="3.5" />
+    </>,
+    className,
+  );

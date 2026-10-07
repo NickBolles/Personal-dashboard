@@ -1,5 +1,5 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { config } from "@/server/config";
@@ -68,10 +68,37 @@ export type Preferences = z.infer<typeof preferencesSchema>;
 
 const KEY = "preferences";
 
-export function getPreferences(): Preferences {
+/**
+ * Personal preferences: each person has their own. The owner's live in the
+ * household record (as before people existed); everyone else's in an overlay.
+ * Everything else (timezone, Hermes defaults, onboarding…) is household-wide.
+ */
+export const PERSONAL_PREFERENCES = ["displayName", "quietHours", "notificationCategories", "layout"] as const;
+const personalKey = (userId: string) => `preferences:user:${userId}`;
+
+function ownerId() {
+  return getDb().select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.role, "admin")).orderBy(asc(schema.users.createdAt)).limit(1).get()
+    ?.id;
+}
+
+function householdPreferences(): Preferences {
   const row = getDb().select().from(schema.settings).where(eq(schema.settings.key, KEY)).get();
   const parsed = preferencesSchema.safeParse(row ? JSON.parse(row.value) : {});
   return parsed.success ? parsed.data : preferencesSchema.parse({});
+}
+
+function usesOverlay(userId: string | undefined): userId is string {
+  return Boolean(userId && userId !== ownerId());
+}
+
+/** Household preferences, with `userId`'s personal ones when given. */
+export function getPreferences(userId?: string): Preferences {
+  const household = householdPreferences();
+  if (!usesOverlay(userId)) return household;
+  const name = getDb().select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, userId)).get()?.name;
+  const shared = Object.fromEntries(Object.entries(household).filter(([k]) => !(PERSONAL_PREFERENCES as readonly string[]).includes(k)));
+  const parsed = preferencesSchema.safeParse({ ...shared, displayName: name || household.displayName, ...(getSetting<object>(personalKey(userId)) ?? {}) });
+  return parsed.success ? parsed.data : preferencesSchema.parse({ ...shared, displayName: name || household.displayName });
 }
 
 export type PreferencesPatch = Omit<Partial<Preferences>, "onboarding" | "quietHours" | "hermes" | "layout"> & {
@@ -81,8 +108,29 @@ export type PreferencesPatch = Omit<Partial<Preferences>, "onboarding" | "quietH
   onboarding?: { completedAt?: string | null; skippedSteps?: string[] };
 };
 
-export function updatePreferences(patch: PreferencesPatch): Preferences {
-  const current = getPreferences();
+export function updatePreferences(patch: PreferencesPatch, userId?: string): Preferences {
+  if (usesOverlay(userId)) {
+    const personal: PreferencesPatch = {};
+    const household: PreferencesPatch = {};
+    for (const [k, v] of Object.entries(patch)) Object.assign((PERSONAL_PREFERENCES as readonly string[]).includes(k) ? personal : household, { [k]: v });
+    if (Object.keys(household).length) updatePreferences(household);
+    if (Object.keys(personal).length) {
+      const merged = mergePreferences(getPreferences(userId), personal);
+      setSetting(personalKey(userId), Object.fromEntries(PERSONAL_PREFERENCES.map((k) => [k, merged[k]])));
+    }
+    return getPreferences(userId);
+  }
+  const merged = mergePreferences(householdPreferences(), patch);
+  const value = JSON.stringify(merged);
+  getDb()
+    .insert(schema.settings)
+    .values({ key: KEY, value })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value, updatedAt: new Date().toISOString() } })
+    .run();
+  return merged;
+}
+
+function mergePreferences(current: Preferences, patch: PreferencesPatch): Preferences {
   const onboarding = { ...current.onboarding, ...(patch.onboarding ?? {}) };
   if (onboarding.completedAt === null) delete onboarding.completedAt;
   const merged = preferencesSchema.parse({
@@ -94,12 +142,6 @@ export function updatePreferences(patch: PreferencesPatch): Preferences {
     layout: { ...current.layout, ...(patch.layout ?? {}) },
     onboarding,
   });
-  const value = JSON.stringify(merged);
-  getDb()
-    .insert(schema.settings)
-    .values({ key: KEY, value })
-    .onConflictDoUpdate({ target: schema.settings.key, set: { value, updatedAt: new Date().toISOString() } })
-    .run();
   return merged;
 }
 
