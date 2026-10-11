@@ -44,8 +44,8 @@ class HomePriorityTest {
                 HomeContent(Loadable(home), Layout(homeSections = listOf(HomeSection("now", visible = false))), emptySet(), ActionHandlers(), {})
             }
         }
-        compose.onNodeWithText("Now").assertDoesNotExist()
-        compose.onNodeWithText("Suggestions").assertExists()
+        compose.onNodeWithText("NOW").assertDoesNotExist()
+        compose.onNodeWithText("SUGGESTIONS").assertExists()
         compose.onNodeWithText(card.title).assertExists()
     }
 
