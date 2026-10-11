@@ -153,6 +153,8 @@ async function mutate(id: string, kind: PrimaryActionKind, opts: { until?: strin
       if (!after) throw new UpstreamError("Home Assistant", "not_found", "Item disappeared");
       if (kind === "complete" && after.status !== "completed")
         throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm completion");
+      if (kind === "snooze" && after.due !== snoozeDate)
+        throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm the new due date");
       return;
     }
     case "jarvis": {

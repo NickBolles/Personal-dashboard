@@ -9,7 +9,7 @@ import { Button, ButtonLink, Dialog, Field, cx, inputCls, useOnline, useToast } 
 import { chatHref } from "./chat";
 
 type Item = NonNullable<AssistCard["triage"]>["items"][number];
-type Result = { state: "pending" | "ok" | "error"; message?: string };
+type Result = { state: "pending" | "ok" | "unverified"; message?: string };
 
 function dateChoices() {
   const today = localDate(Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -67,15 +67,19 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
     let ok = 0;
     for (const i of chosen) {
       try {
-        await api.post("/api/actions", { actionId: i.id, kind: "snooze", until: date });
+        const result = await api.post<{ ok?: boolean } | undefined>("/api/actions", { actionId: i.id, kind: "snooze", until: date });
+        if (result?.ok !== true) throw new Error("No confirmation received");
         ok++;
         setResults((r) => ({ ...r, [i.id]: { state: "ok" } }));
       } catch (err) {
-        setResults((r) => ({ ...r, [i.id]: { state: "error", message: err instanceof ApiError ? err.message : "Failed" } }));
+        // A timeout, readback failure, or lost response cannot prove the write did not happen.
+        setResults((r) => ({ ...r, [i.id]: { state: "unverified", message: err instanceof ApiError ? err.message : "No confirmation received" } }));
       }
     }
     const msg =
-      ok === chosen.length ? `Moved ${ok} ${ok === 1 ? "task" : "tasks"} to ${choices.fmt(date)}` : `Moved ${ok} of ${chosen.length}; see which failed`;
+      ok === chosen.length
+        ? `Moved ${ok} ${ok === 1 ? "task" : "tasks"} to ${choices.fmt(date)}`
+        : `Verified ${ok} of ${chosen.length}; ${chosen.length - ok} unverified — may have changed`;
     toast(msg, ok === chosen.length ? "ok" : "warn");
     announce(msg);
     qc.invalidateQueries({ queryKey: ["home"] });
@@ -83,6 +87,7 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
   }
 
   const running = Object.values(results).some((r) => r.state === "pending");
+  const unverified = Object.values(results).some((r) => r.state === "unverified");
 
   return (
     <Dialog
@@ -198,27 +203,42 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
           ))}
         </ul>
       ) : (
-        <ul className="max-h-[40dvh] space-y-1 overflow-y-auto text-sm" aria-live="polite">
-          {chosen.map((i) => {
-            const r = results[i.id];
-            return (
-              <li key={i.id} className="flex items-start gap-2">
-                <span
-                  aria-hidden="true"
-                  className={cx("w-4 shrink-0", r?.state === "ok" ? "jv-check text-ok" : r?.state === "error" ? "text-danger" : "text-muted")}
-                >
-                  {r?.state === "ok" ? "✓" : r?.state === "error" ? "!" : "…"}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate">{i.title}</span>
-                  <span className={cx("text-xs", r?.state === "error" ? "text-danger" : "text-muted")}>
-                    {r?.state === "ok" ? `Now due ${choices.fmt(date)}` : r?.state === "error" ? `Not changed: ${r.message}` : "Waiting for readback…"}
+        <>
+          {unverified && !running ? (
+            <p className="mb-3 text-sm text-muted">
+              Check your todo list before trying again. A write may have succeeded even when its confirmation was lost. No changes will be retried
+              automatically.{" "}
+              <ButtonLink href="/todos" variant="ghost">
+                Check todo list
+              </ButtonLink>
+            </p>
+          ) : null}
+          <ul className="max-h-[40dvh] space-y-1 overflow-y-auto text-sm" aria-live="polite">
+            {chosen.map((i) => {
+              const r = results[i.id];
+              return (
+                <li key={i.id} className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={cx("w-4 shrink-0", r?.state === "ok" ? "jv-check text-ok" : r?.state === "unverified" ? "text-danger" : "text-muted")}
+                  >
+                    {r?.state === "ok" ? "✓" : r?.state === "unverified" ? "!" : "…"}
                   </span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+                  <span className="min-w-0">
+                    <span className="block truncate">{i.title}</span>
+                    <span className={cx("text-xs", r?.state === "unverified" ? "text-danger" : "text-muted")}>
+                      {r?.state === "ok"
+                        ? `Now due ${choices.fmt(date)}`
+                        : r?.state === "unverified"
+                          ? `Unverified — may have changed: ${r.message}`
+                          : "Waiting for readback…"}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </Dialog>
   );
