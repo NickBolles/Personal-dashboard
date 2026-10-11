@@ -8,14 +8,17 @@ import type { Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { startMockServer } from "../mock-upstreams/server.mjs";
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
+import { eq } from "drizzle-orm";
+import type { SourceData } from "@/integrations/types";
 import { claimInstance, createSession } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { saveIntegration } from "@/integrations/store";
 import { demoPresets } from "@/integrations/demo";
 import type { IntegrationKind } from "@/integrations/registry";
 import { updatePreferences } from "@/server/settings";
-import { adapterContext, compassFocus, refreshSource } from "@/server/sources";
+import { adapterContext, compassFocus, refreshSource, setActionPref } from "@/server/sources";
+import { loadTuning } from "@/server/home-tuning";
 import { DAY, localDate } from "@/lib/time";
 import type { HomePayload } from "@/lib/contracts";
 
@@ -193,6 +196,70 @@ describe("attention budget on /api/home", () => {
       await fetch(`${base}/__mock/fail`, { method: "POST", body: JSON.stringify({ restore: ["todos"] }) });
       await refreshSource("todos");
     }
+  });
+});
+
+describe("saved waiting pins", () => {
+  it("round-trips pin and unpin through the action API and refreshed Home payload", async () => {
+    const db = getDb();
+    const where = eq(schema.sourceSnapshots.source, "todos");
+    const original = db.select().from(schema.sourceSnapshots).where(where).get()!.payload!;
+    const data = JSON.parse(original) as SourceData;
+    data.actions = data.actions.slice(0, 2).map((a) => ({ ...a, status: "waiting", priorityReason: "upcoming" }));
+    db.update(schema.sourceSnapshots)
+      .set({ payload: JSON.stringify(data) })
+      .where(where)
+      .run();
+    const waiting = (await home(owner)).later.waitingOn;
+    expect(waiting).toHaveLength(2);
+    const id = waiting.at(-1)!.id;
+    try {
+      for (const kind of ["pin", "unpin"] as const) {
+        expect((await call(actionsRoute.POST, "/api/actions", owner, { method: "POST", body: { actionId: id, kind } })).status).toBe(200);
+        const refreshed = (await home(owner)).later.waitingOn;
+        expect(Boolean(refreshed.find((a) => a.id === id)?.pinned)).toBe(kind === "pin");
+        expect(refreshed.map((a) => a.id)).toEqual((kind === "pin" ? [...waiting].reverse() : waiting).map((a) => a.id));
+        expect(loadTuning(owner).pinned.has(id)).toBe(kind === "pin");
+        expect(Boolean((await home(partner)).later.waitingOn.find((a) => a.id === id)?.pinned)).toBe(false);
+      }
+    } finally {
+      setActionPref(owner, id, { pinned: false });
+      db.update(schema.sourceSnapshots).set({ payload: original }).where(where).run();
+    }
+  });
+});
+
+describe("critical acknowledgement", () => {
+  it("persists explicit acknowledgement across refresh without letting feedback suppress safety alerts", async () => {
+    const alert = (await home(owner)).now.find((a) => a.source === "home_assistant" && a.priorityReason === "critical");
+    expect(alert).toBeDefined();
+    const id = alert!.id;
+    const target = { kind: "action", id, category: "source:home_assistant" };
+    for (const verdict of ["not_now", "less_like_this", "less_like_this", "wrong_assumption"]) {
+      expect((await feedback(owner, { target, verdict })).status).toBe(200);
+      expect((await home(owner)).now.some((a) => a.id === id)).toBe(true);
+    }
+    const ack = await call(actionsRoute.POST, "/api/actions", owner, { method: "POST", body: { actionId: id, kind: "acknowledge" } });
+    expect(ack.status).toBe(200);
+    expect(ack.body).toMatchObject({ ok: true, message: "Acknowledged" });
+    expect((await home(owner)).now.some((a) => a.id === id)).toBe(false);
+    expect((await home(partner)).now.some((a) => a.id === id)).toBe(true);
+    const acknowledgedUntil = loadTuning(owner).acknowledged.get(id)!;
+    expect(new Date(acknowledgedUntil).getTime() - Date.now()).toBeGreaterThan(6 * DAY);
+    expect(loadTuning(partner).acknowledged.has(id)).toBe(false);
+    const view = await call<{ snoozed: { id: string; until: string }[] }>(tuningRoute.GET, "/api/home/tuning", owner);
+    expect(view.body.snoozed.find((s) => s.id === id)?.until).toBe(acknowledgedUntil);
+    // Subsequent feedback must not shorten or overwrite explicit acknowledgement.
+    await feedback(owner, { target, verdict: "not_now" });
+    expect(loadTuning(owner).acknowledged.get(id)).toBe(acknowledgedUntil);
+    await refreshSource("home_assistant");
+    expect((await home(owner)).now.some((a) => a.id === id)).toBe(false);
+    // At expiry the still-critical alert returns even with an active feedback snooze.
+    setActionPref(owner, id, { acknowledgedUntil: new Date(Date.now() - 1).toISOString() });
+    expect((await home(owner)).now.some((a) => a.id === id)).toBe(true);
+    await call(actionsRoute.POST, "/api/actions", owner, { method: "POST", body: { actionId: id, kind: "acknowledge" } });
+    await call(tuningRoute.DELETE, "/api/home/tuning", owner, { method: "DELETE", body: { scope: "snooze", target: id } });
+    expect((await home(owner)).now.some((a) => a.id === id)).toBe(true);
   });
 });
 

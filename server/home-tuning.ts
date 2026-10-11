@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { ACTION_SOURCES, type ActionSource, type NextAction } from "@/lib/contracts";
 import { ASSIST_CATEGORIES, categoryLabel, MAX_WEIGHT, MIN_WEIGHT, VERDICT_LABELS, type FeedbackVerdict } from "@/lib/attention";
 import { addDays, DAY, localDate, startOfLocalDay } from "@/lib/time";
@@ -12,7 +12,7 @@ import type { Milestone, MutedCard } from "@/server/ranking/assists";
 
 /**
  * Per-person Home tuning: feedback rows (immutable), category weights, snoozes
- * (action_prefs.hiddenUntil, shared with "acknowledge") and saved dates. The
+ * (action_prefs.hiddenUntil), separate explicit acknowledgements and saved dates. The
  * ranking reads these through `loadTuning`; nothing here edits source data.
  */
 
@@ -25,6 +25,7 @@ const MUTE_LOOKBACK = 500;
 export type Tuning = {
   weights: Record<string, number>;
   snoozed: Map<string, string>;
+  acknowledged: Map<string, string>;
   pinned: Set<string>;
   muted: MutedCard[];
   milestones: Milestone[];
@@ -42,6 +43,7 @@ export function loadTuning(userId: string, now = new Date()): Tuning {
   );
   const prefs = db.select().from(schema.actionPrefs).where(eq(schema.actionPrefs.userId, userId)).all();
   const snoozed = new Map(prefs.filter((p) => p.hiddenUntil && new Date(p.hiddenUntil) > now).map((p) => [p.actionId, p.hiddenUntil!]));
+  const acknowledged = new Map(prefs.filter((p) => p.acknowledgedUntil && new Date(p.acknowledgedUntil) > now).map((p) => [p.actionId, p.acknowledgedUntil!]));
   const pinned = new Set(prefs.filter((p) => p.pinned).map((p) => p.actionId));
   const muted = db
     .select({
@@ -55,7 +57,7 @@ export function loadTuning(userId: string, now = new Date()): Tuning {
     .orderBy(desc(schema.homeFeedback.createdAt))
     .limit(MUTE_LOOKBACK)
     .all() as MutedCard[];
-  return { weights, snoozed, pinned, muted, milestones: listMilestones(userId) };
+  return { weights, snoozed, acknowledged, pinned, muted, milestones: listMilestones(userId) };
 }
 
 /** Actions the person said were ranked wrong, while they still look the same (due date and title). */
@@ -224,13 +226,20 @@ export function resetTuning(userId: string, scope: ResetScope, target?: string) 
   if (snoozes || (scope === "snooze" && target)) {
     const where = and(
       eq(schema.actionPrefs.userId, userId),
-      isNotNull(schema.actionPrefs.hiddenUntil),
+      or(isNotNull(schema.actionPrefs.hiddenUntil), isNotNull(schema.actionPrefs.acknowledgedUntil)),
       ...(scope === "snooze" ? [eq(schema.actionPrefs.actionId, target!)] : []),
     );
-    db.update(schema.actionPrefs).set({ hiddenUntil: null, updatedAt: new Date().toISOString() }).where(where).run();
+    db.update(schema.actionPrefs).set({ hiddenUntil: null, acknowledgedUntil: null, updatedAt: new Date().toISOString() }).where(where).run();
     // Rows that now hold nothing (not pinned, not hidden) are dropped.
     db.delete(schema.actionPrefs)
-      .where(and(eq(schema.actionPrefs.userId, userId), eq(schema.actionPrefs.pinned, false), isNull(schema.actionPrefs.hiddenUntil)))
+      .where(
+        and(
+          eq(schema.actionPrefs.userId, userId),
+          eq(schema.actionPrefs.pinned, false),
+          isNull(schema.actionPrefs.hiddenUntil),
+          isNull(schema.actionPrefs.acknowledgedUntil),
+        ),
+      )
       .run();
   }
   if (feedback) db.delete(schema.homeFeedback).where(eq(schema.homeFeedback.userId, userId)).run();
@@ -305,9 +314,21 @@ export function tuningView(user: Viewer, titles: Map<string, string>, now = new 
   const snoozed = db
     .select()
     .from(schema.actionPrefs)
-    .where(and(eq(schema.actionPrefs.userId, user.id), gt(schema.actionPrefs.hiddenUntil, now.toISOString())))
+    .where(
+      and(
+        eq(schema.actionPrefs.userId, user.id),
+        or(gt(schema.actionPrefs.hiddenUntil, now.toISOString()), gt(schema.actionPrefs.acknowledgedUntil, now.toISOString())),
+      ),
+    )
     .all()
-    .map((p) => ({ id: p.actionId, label: titles.get(p.actionId) ?? describeTarget(p.actionId), until: p.hiddenUntil! }))
+    .map((p) => ({
+      id: p.actionId,
+      label: titles.get(p.actionId) ?? describeTarget(p.actionId),
+      until: [p.hiddenUntil, p.acknowledgedUntil]
+        .filter((v): v is string => !!v)
+        .sort()
+        .at(-1)!,
+    }))
     .sort((a, b) => (a.until < b.until ? -1 : 1));
   const feedback = db
     .select()

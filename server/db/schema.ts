@@ -198,6 +198,8 @@ export const actionPrefs = sqliteTable(
     actionId: text("action_id").notNull(),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
     hiddenUntil: text("hidden_until"),
+    /** Explicit acknowledgement, independent of generic feedback snoozes. */
+    acknowledgedUntil: text("acknowledged_until"),
     updatedAt: text("updated_at").notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.userId, t.actionId] })],

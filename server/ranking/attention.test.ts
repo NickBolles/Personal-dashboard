@@ -79,6 +79,19 @@ describe("attention budget", () => {
   });
 });
 
+describe("saved waiting pins", () => {
+  it("applies saved pins before ordering without mutating source snapshots", () => {
+    const a = action({ id: "a", status: "waiting" });
+    const z = action({ id: "z", status: "waiting" });
+    const pinned = select([a, z], { pinned: new Set([z.id]) });
+    expect(ids(pinned.waiting)).toEqual(["z", "a"]);
+    expect(pinned.waiting[0]!.pinned).toBe(true);
+    expect(z.pinned).toBeUndefined();
+    expect(ids(select([a, z]).waiting)).toEqual(["a", "z"]);
+    expect(select([a, z]).waiting[1]!.pinned).toBeUndefined();
+  });
+});
+
 describe("snoozes", () => {
   it("hides waiting and completed items before sorting and capping, until expiry", () => {
     const waiting = action({ id: "waiting", status: "waiting" });

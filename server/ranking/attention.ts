@@ -12,7 +12,8 @@ import { classifyDue, dedupeActions, rankActions } from "./index";
  * overdue_recent → due_soon → checkin_window → today → overdue_stale →
  * upcoming → someday. Within a tier: feedback weight → due → recently changed → id.
  * Now and Today take only the tiers up to `today`; critical items are never
- * budgeted away, snoozed, demoted or muted.
+ * budgeted away, feedback-snoozed, demoted or muted. Explicit acknowledgement
+ * is separate and lasts until its expiry.
  */
 
 export type Budget = { now: number; today: number; upcoming: number };
@@ -46,6 +47,8 @@ export type AttentionInput = {
   timezone: string;
   /** action id → hidden until (ISO) */
   snoozed?: Map<string, string>;
+  /** Explicit acknowledgements may hide even critical alerts until expiry. */
+  acknowledged?: Map<string, string>;
   pinned?: Set<string>;
   /** today's Daily Compass priorities (only when known for today) */
   focus?: string[];
@@ -226,19 +229,21 @@ export function selectAttention(input: AttentionInput): Attention {
   const budget = input.budget ?? BUDGET;
   const today = localDate(input.now, input.timezone);
   const ctx: Ctx = { now: input.now, timezone: input.timezone, today, endOfToday: startOfLocalDay(addDays(today, 1), input.timezone) };
-  const all = dedupeActions(input.actions);
+  const all = dedupeActions(input.actions).map((a) => (input.pinned?.has(a.id) ? { ...a, pinned: true } : a));
 
   let snoozedCount = 0;
   const activelySnoozed = (a: NextAction) => {
     const until = input.snoozed?.get(a.id);
-    return !!until && new Date(until) > input.now;
+    const acknowledgedUntil = input.acknowledged?.get(a.id);
+    return (!!until && new Date(until) > input.now) || (!!acknowledgedUntil && new Date(acknowledgedUntil) > input.now);
   };
   const open: Placed[] = [];
   for (const a of all) {
     if (a.status !== "open") continue;
     const until = input.snoozed?.get(a.id);
     const placed = classify(a, ctx, input);
-    if (until && new Date(until) > input.now && placed.tier !== "critical") {
+    const acknowledgedUntil = input.acknowledged?.get(a.id);
+    if ((acknowledgedUntil && new Date(acknowledgedUntil) > input.now) || (until && new Date(until) > input.now && placed.tier !== "critical")) {
       snoozedCount++;
       continue;
     }

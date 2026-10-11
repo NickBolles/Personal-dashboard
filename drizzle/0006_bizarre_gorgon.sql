@@ -1,0 +1,1 @@
+ALTER TABLE `action_prefs` ADD `acknowledged_until` text;

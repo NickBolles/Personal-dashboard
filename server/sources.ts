@@ -257,6 +257,7 @@ export async function homeSelection(user: Viewer, opts: { live: boolean }): Prom
     now: ctx.now,
     timezone: ctx.timezone,
     snoozed: tuning.snoozed,
+    acknowledged: tuning.acknowledged,
     pinned: tuning.pinned,
     focus: focus?.state === "focus" ? focus.focus : undefined,
     weights: tuning.weights,
@@ -308,10 +309,10 @@ export async function getHome(user: Viewer, opts: { live: boolean }): Promise<Ho
   return (await homeSelection(user, opts)).payload;
 }
 
-export function setActionPref(userId: string, actionId: string, patch: { pinned?: boolean; hiddenUntil?: string | null }) {
+export function setActionPref(userId: string, actionId: string, patch: { pinned?: boolean; hiddenUntil?: string | null; acknowledgedUntil?: string | null }) {
   getDb()
     .insert(schema.actionPrefs)
-    .values({ userId, actionId, pinned: patch.pinned ?? false, hiddenUntil: patch.hiddenUntil ?? null })
+    .values({ userId, actionId, pinned: patch.pinned ?? false, hiddenUntil: patch.hiddenUntil ?? null, acknowledgedUntil: patch.acknowledgedUntil ?? null })
     .onConflictDoUpdate({
       target: [schema.actionPrefs.userId, schema.actionPrefs.actionId],
       set: { ...patch, updatedAt: new Date().toISOString() },
