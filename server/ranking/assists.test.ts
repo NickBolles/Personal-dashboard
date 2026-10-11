@@ -124,6 +124,8 @@ describe("no nagging", () => {
     // More overdue tasks change the fingerprint, so the card may come back.
     const more = [...list, ...["4", "5", "6"].map((i) => overdue(i, "2026-10-01"))];
     expect(buildAssists(input({ overdue: more, muted: [wrong] }))).toHaveLength(1);
+    // A changing count must not break the explicit two-week quiet period.
+    expect(buildAssists(input({ overdue: more, muted: [recent] }))).toEqual([]);
   });
 
   it("a category at -2 stops its cards; at most two cards show", () => {

@@ -225,7 +225,7 @@ export function buildAssists(input: AssistInput): AssistCard[] {
   const weight = (c: string) => input.weights?.[c] ?? 0;
   const muted = (d: Draft) =>
     (input.muted ?? []).some(
-      (m) => m.id === d.id && m.fingerprint === d.fp && (m.verdict === "wrong_assumption" || nowMs - new Date(m.createdAt).getTime() < NOT_HELPFUL_DAYS * DAY),
+      (m) => m.id === d.id && (m.verdict === "wrong_assumption" ? m.fingerprint === d.fp : nowMs - new Date(m.createdAt).getTime() < NOT_HELPFUL_DAYS * DAY),
     );
   return drafts
     .filter((d) => {
