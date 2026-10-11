@@ -25,6 +25,119 @@ afterEach(() => {
 });
 
 describe("incremental chat loading", () => {
+  it.each([
+    ["manual", "first", false],
+    ["manual", "", false],
+    ["mutation", "first", false],
+    ["mutation", "", false],
+    ["manual", "", true],
+    ["mutation", "", true],
+  ] as const)("%s refresh preserves pages with head '%s' on failure (partial=%s), then resets on retry", async (kind, first, partial) => {
+    let finish!: (value: SessionPage) => void;
+    let fail!: (error: Error) => void;
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce(page(first, 20))
+      .mockResolvedValueOnce(page("older", 40))
+      .mockImplementationOnce(
+        () =>
+          new Promise<SessionPage>((resolve, reject) => {
+            finish = resolve;
+            fail = reject;
+          }),
+      )
+      .mockResolvedValueOnce(page("fresh", 20))
+      .mockResolvedValueOnce(page("next", null));
+    const { result } = mount();
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await act(() => result.current.fetchNextPage());
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    const old = result.current.data;
+    let refreshing!: Promise<unknown>;
+    act(() => {
+      refreshing = kind === "manual" ? result.current.refetch() : refreshSessionLists(clients[0]!);
+    });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    expect(result.current.data).toEqual(old);
+    await act(async () => {
+      if (partial) finish({ ...page("local", 0), unavailable: ["Hermes"] });
+      else fail(new Error("Hermes timeout"));
+      await refreshing;
+    });
+    await waitFor(() => expect(result.current.fromCache).toBe(true));
+    expect(result.current.isFetchNextPageError).toBe(false);
+    expect(result.current.data).toEqual(old);
+    expect(result.current.sessions?.map((s) => s.id)).toEqual(first ? [first, "older"] : ["older"]);
+    expect(get).toHaveBeenCalledTimes(3);
+    await act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.sessions?.map((s) => s.id)).toEqual(["fresh"]));
+    expect(result.current.data?.pageParams).toEqual([0]);
+    expect(result.current.fromCache).toBe(false);
+    await act(() => result.current.fetchNextPage());
+    await waitFor(() => expect(result.current.sessions?.map((s) => s.id)).toEqual(["fresh", "next"]));
+    expect(get.mock.calls.map((c) => c[0])).toEqual([0, 20, 0, 0, 20].map((offset) => `/api/hermes/sessions?offset=${offset}`));
+  });
+
+  it.each(["manual", "mutation"])("cancels a %s head refresh on unmount without discarding history", async (kind) => {
+    let signal: AbortSignal | undefined;
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce(page("", 20))
+      .mockResolvedValueOnce(page("older", 40))
+      .mockImplementationOnce((_path, s) => {
+        signal = s;
+        return new Promise(() => {});
+      });
+    const { result, unmount } = mount();
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await act(() => result.current.fetchNextPage());
+    const old = clients[0]!.getQueryData(["sessions", false]);
+    let refreshing!: Promise<unknown>;
+    act(() => {
+      refreshing = kind === "manual" ? result.current.refetch() : refreshSessionLists(clients[0]!);
+    });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    unmount();
+    await refreshing;
+    expect(signal?.aborted).toBe(true);
+    expect(clients[0]!.getQueryData(["sessions", false])).toEqual(old);
+  });
+
+  it.each(["manual", "mutation"])("%s refresh cancels a pending continuation and ignores its late result", async (kind) => {
+    let signal: AbortSignal | undefined;
+    let finish!: (value: SessionPage) => void;
+    const get = vi
+      .spyOn(api, "get")
+      .mockResolvedValueOnce(page("", 20))
+      .mockResolvedValueOnce(page("older", 40))
+      .mockImplementationOnce((_path, s) => {
+        signal = s;
+        return new Promise<SessionPage>((resolve) => {
+          finish = resolve;
+        });
+      })
+      .mockResolvedValueOnce(page("fresh", 20));
+    const { result } = mount();
+    await waitFor(() => expect(result.current.hasNextPage).toBe(true));
+    await act(() => result.current.fetchNextPage());
+    let continuation!: Promise<unknown>;
+    act(() => {
+      continuation = result.current.fetchNextPage();
+    });
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    await act(async () => {
+      await (kind === "manual" ? result.current.refetch() : refreshSessionLists(clients[0]!));
+    });
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      finish(page("cancelled", null));
+      await continuation;
+    });
+    await waitFor(() => expect(result.current.sessions?.map((s) => s.id)).toEqual(["fresh"]));
+    expect(result.current.data?.pageParams).toEqual([0]);
+    expect(get.mock.calls.map((c) => c[0])).toEqual([0, 20, 40, 0].map((offset) => `/api/hermes/sessions?offset=${offset}`));
+  });
+
   it("chat mutation invalidation refreshes only the head window", async () => {
     const get = vi
       .spyOn(api, "get")

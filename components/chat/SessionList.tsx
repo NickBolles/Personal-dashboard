@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient, type FetchInfiniteQueryOptions, type InfiniteData } from "@tanstack/react-query";
 import type { SessionSummary } from "@/lib/hermes";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
@@ -12,10 +12,16 @@ import { Badge, Button, ErrorNote, Spinner, cx, inputCls, useOnline, useToast } 
 import { ForkIcon, PlusIcon } from "@/components/icons";
 import { BackendSwitch, useAssistantChoice } from "./backend";
 
+// Query Core's fetch-page budget limits refetches, not stored history or
+// fetchNextPage. It commits the new head only on success, retaining old pages
+// and the normal error/cancellation state until then.
+const headWindow = { pages: 1 } satisfies Pick<FetchInfiniteQueryOptions, "pages">;
+
 export function useSessions(archived = false) {
   const client = useQueryClient();
   const queryKey = ["sessions", archived];
   const q = useInfiniteQuery({
+    ...headWindow,
     queryKey,
     initialPageParam: 0,
     queryFn: async ({ pageParam, signal }) => {
@@ -35,7 +41,6 @@ export function useSessions(archived = false) {
   });
   const refresh = async () => {
     await client.cancelQueries({ queryKey, exact: true });
-    client.setQueryData<InfiniteData<SessionPage, number>>(queryKey, (old) => old && { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) });
     return q.refetch();
   };
   return {
