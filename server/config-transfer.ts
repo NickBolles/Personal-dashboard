@@ -1,5 +1,5 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scrypt } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scrypt } from "node:crypto";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { getDb, getSqlite, schema } from "@/server/db";
@@ -165,12 +165,31 @@ function currentState() {
   return { rows, envKinds, revision };
 }
 
+/** Bind consent to the complete validated import, mode and destination. HMAC avoids
+ * exposing a reusable plain hash of low-entropy secrets. Restart requires re-preview.
+ * Entry and record-key ordering have no import semantics, so canonicalize both. */
+function previewRevision(data: Configuration, replaceExisting: boolean, destination: string) {
+  const sorted = (record: Record<string, string>) => Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+  const payload = {
+    version: data.version,
+    integrations: [...data.integrations]
+      .sort((a, b) => a.kind.localeCompare(b.kind))
+      .map((entry) => ({
+        kind: entry.kind,
+        config: sorted(entry.config),
+        secrets: sorted(entry.secrets),
+      })),
+  };
+  const key = processSingleton("configurationPreviewKey", () => randomBytes(32));
+  return createHmac("sha256", key).update(JSON.stringify({ payload, replaceExisting, destination })).digest("hex");
+}
+
 /** Preview intentionally contains no imported values, URLs, prompts or secrets. */
 export function previewConfiguration(input: Configuration, replaceExisting: boolean) {
   const data = validated(input);
   const state = currentState();
   return {
-    revision: state.revision,
+    revision: previewRevision(data, replaceExisting, state.revision),
     entries: data.integrations.map((entry) => {
       const exists = state.rows.some((row) => row.kind === entry.kind) || state.envKinds.includes(entry.kind);
       const def = getIntegrationDef(entry.kind)!;

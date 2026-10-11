@@ -215,7 +215,8 @@ export const dailyCompassAdapter: SourceAdapter = {
         {
           name: "Hermes connected",
           run: async () => {
-            if (!resolveIntegration("hermes").config.baseUrl) throw new Error("Connect Hermes first: Daily Compass is read through Hermes");
+            const h = resolveIntegration("hermes");
+            if (!h.enabled || !h.config.baseUrl) throw new Error("Enable and connect Hermes first: Daily Compass is read through Hermes");
             return "Daily Compass requests go through Hermes";
           },
         },
@@ -237,7 +238,7 @@ export const dailyCompassAdapter: SourceAdapter = {
           name: "Hermes available for check-ins",
           run: async () => {
             const h = resolveIntegration("hermes");
-            if (!h.config.baseUrl) throw new Error("Connect Hermes to run check-ins as conversations");
+            if (!h.enabled || !h.config.baseUrl) throw new Error("Enable and connect Hermes to run check-ins as conversations");
             return "Check-ins start a Hermes conversation";
           },
         },

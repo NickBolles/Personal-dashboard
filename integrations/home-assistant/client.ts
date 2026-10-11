@@ -48,8 +48,10 @@ export const haConfigEntrySchema = z
 
 export type HaConn = { baseUrl: string; token?: string };
 
-export function haConn(): HaConn {
+/** Ordinary use requires enabled; only this integration's admin connection test may opt out. */
+export function haConn(purpose?: "admin-connection-test"): HaConn {
   const r = resolveIntegration("home_assistant");
+  if (!r.enabled && purpose !== "admin-connection-test") throw new UpstreamError("Home Assistant", "unsupported", "Home Assistant is disabled");
   if (!r.config.baseUrl) throw new UpstreamError("Home Assistant", "unsupported", "Home Assistant is not configured");
   return { baseUrl: r.config.baseUrl, token: r.secrets.token };
 }
