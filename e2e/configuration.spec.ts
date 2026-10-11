@@ -19,7 +19,7 @@ test("encrypted export, wrong password, safe preview and explicit replacement", 
     .setInputFiles({ name: "fixture.encrypted.json", mimeType: "application/json", buffer: file });
   await page.getByLabel("File password", { exact: true }).fill("incorrect-password-fixture");
   await page.getByRole("button", { name: "Decrypt and preview" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Invalid configuration file or password");
+  await expect(page.getByRole("alert").filter({ hasText: "Invalid configuration file or password" })).toHaveText("Invalid configuration file or password");
   await page.getByLabel("File password", { exact: true }).fill("e2e-configuration-password");
   await page.getByRole("button", { name: "Decrypt and preview" }).click();
   const preview = page.getByRole("region", { name: "Import preview" });
