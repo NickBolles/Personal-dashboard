@@ -36,7 +36,9 @@ test("visual: home suggestions and the backlog", async ({ page, request }) => {
   await assists.waitFor();
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await expect(assists).toHaveScreenshot("home-suggestions.png", { mask: MASK.map((m) => page.locator(m)) });
+  // Seeded counts and relative dates are deterministic here; keep the grounding
+  // copy and controls visible rather than masking every muted paragraph.
+  await expect(assists).toHaveScreenshot("home-suggestions.png");
   await page.goto("/home/all?bucket=backlog");
   await page.locator("#all-items article").first().waitFor();
   await page.waitForTimeout(300);
