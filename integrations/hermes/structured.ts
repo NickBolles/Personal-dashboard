@@ -80,42 +80,130 @@ export function parseStructured<T>(label: string, output: string | null | undefi
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Run one structured request end to end. Always cleans up its session. */
-export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
-  const conn = hermesConn();
-  const deadline = Date.now() + (req.timeoutMs ?? 120_000);
-  const { session } = await HermesSessionClient.create(conn, { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE });
+/** Bound transport AND awaiting it; abort is not confirmation that Hermes stopped. */
+async function within<T>(deadline: number, call: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error("sync_deadline");
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("sync_deadline"));
+    }, remaining);
+  });
   try {
-    await HermesSessionClient.update(conn, session.id, { hidden: true }).catch(() => undefined);
-    const run = await HermesExecutionClient.start(conn, {
-      sessionId: session.id,
-      input: req.task,
-      idempotencyKey: crypto.randomUUID(),
-      instructions: structuredInstructions(req.source, req.example),
-      conversationHistory: [],
-    });
-    for (;;) {
-      const status = await HermesExecutionClient.status(conn, run.run_id);
-      if (status.status === "completed") return parseStructured(req.label, status.output, req.schema);
-      if ((RUN_TERMINAL as readonly string[]).includes(status.status)) {
-        throw new UpstreamError(req.label, "bad_response", `Hermes ${status.status} the ${req.label} request${status.error ? `: ${status.error}` : ""}`);
-      }
-      if (status.status === "waiting_for_approval") {
-        await HermesExecutionClient.stop(conn, run.run_id).catch(() => undefined);
-        throw new UpstreamError(
-          req.label,
-          "unsupported",
-          `Hermes asked for approval during the ${req.label} request, so Jarvis stopped it. Do this one in chat.`,
-        );
-      }
-      if (Date.now() > deadline) {
-        await HermesExecutionClient.stop(conn, run.run_id).catch(() => undefined);
-        throw new UpstreamError(req.label, "timeout", `Hermes did not finish the ${req.label} request in time`);
-      }
-      await sleep(pollMs());
-    }
+    return await Promise.race([call(controller.signal), timeout]);
   } finally {
-    await HermesSessionClient.remove(conn, session.id).catch(() => undefined);
+    clearTimeout(timer!);
+  }
+}
+
+/** Stop is asynchronous. Delete only after a separately observed terminal status. */
+export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
+  const startedAt = Date.now();
+  const budget = Math.min(120_000, Math.max(100, req.timeoutMs ?? 120_000));
+  const deadline = startedAt + budget;
+  // Reserve cleanup INSIDE the existing overall budget, not an added timeout.
+  const workDeadline = deadline - Math.min(10_000, budget / 4);
+  let sessionId: string | undefined;
+  let runId: string | undefined;
+  let startAttempted = false;
+  let terminal = false;
+  let lastStatus = "unknown";
+  let failure: "timeout" | "unsupported" | "bad_response" | undefined;
+  let cleanup = "retained";
+  const conn = hermesConn();
+  const observe = (status: string) => {
+    lastStatus = [...RUN_TERMINAL, "queued", "running", "stopping", "waiting_for_approval"].includes(status) ? status : "unknown";
+    terminal = (RUN_TERMINAL as readonly string[]).includes(lastStatus);
+  };
+  try {
+    const { session } = await within(workDeadline, (signal) =>
+      HermesSessionClient.create(conn, { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE }, signal),
+    );
+    sessionId = session.id;
+    await within(workDeadline, (signal) => HermesSessionClient.update(conn, session.id, { hidden: true }, signal));
+    startAttempted = true;
+    const run = await within(workDeadline, (signal) =>
+      HermesExecutionClient.start(
+        conn,
+        {
+          sessionId: session.id,
+          input: req.task,
+          idempotencyKey: crypto.randomUUID(),
+          instructions: structuredInstructions(req.source, req.example),
+          conversationHistory: [],
+        },
+        signal,
+      ),
+    );
+    runId = run.run_id;
+    while (Date.now() < workDeadline) {
+      const status = await within(workDeadline, (signal) => HermesExecutionClient.status(conn, run.run_id, signal));
+      observe(status.status);
+      if (lastStatus === "completed") return parseStructured(req.label, status.output, req.schema);
+      if (terminal) throw new Error("terminal_failure");
+      if (lastStatus === "waiting_for_approval") {
+        failure = "unsupported";
+        throw new Error("approval_required");
+      }
+      await sleep(Math.min(Math.max(50, pollMs() || 750), workDeadline - Date.now()));
+    }
+    throw new Error("sync_deadline");
+  } catch {
+    failure ??= Date.now() >= workDeadline ? "timeout" : "bad_response";
+    // Never persist provider errors, model text, prompts or schema values.
+    throw new UpstreamError(
+      req.label,
+      failure,
+      failure === "timeout"
+        ? `Hermes did not finish the ${req.label} request in time`
+        : failure === "unsupported"
+          ? `Hermes requested approval for ${req.label}; use chat instead`
+          : `Hermes could not complete the ${req.label} request`,
+    );
+  } finally {
+    if (runId && !terminal) {
+      const id = runId;
+      const waitDeadline = Math.min(deadline - Math.min(2000, budget / 20), Date.now() + 8000);
+      await within(Math.min(waitDeadline, Date.now() + 3000), (signal) => HermesExecutionClient.stop(conn, id, signal)).catch(() => undefined);
+      while (!terminal && Date.now() < waitDeadline) {
+        try {
+          observe((await within(waitDeadline, (signal) => HermesExecutionClient.status(conn, id, signal))).status);
+        } catch {
+          break;
+        }
+        if (!terminal) await sleep(Math.min(250, waitDeadline - Date.now()));
+      }
+    }
+    // A failed start response may hide an accepted run. No ID means no proof: retain.
+    // Hermes can publish cancelled/interrupted when its asyncio handler is cancelled
+    // while its executor thread still runs. Those statuses alone cannot prove quiescence.
+    const safeTerminal = lastStatus === "completed" || lastStatus === "failed";
+    if (sessionId && (safeTerminal || !startAttempted)) {
+      const id = sessionId;
+      try {
+        const result = await within(deadline, (signal) => HermesSessionClient.remove(conn, id, signal));
+        cleanup = result.deleted === true ? "deleted" : "unconfirmed";
+      } catch {
+        cleanup = "unconfirmed";
+      }
+    }
+    if (failure || cleanup !== "deleted") {
+      const safeId = (id: string | undefined) => (id && /^[a-zA-Z0-9_-]{1,128}$/.test(id) ? id : undefined);
+      const source = ["skylight", "daily_compass"].includes(req.source) ? req.source : "other";
+      // One bounded latest record per known source; no transcript or untrusted text.
+      setSetting(`hermes_sync_failure:${source}`, {
+        at: new Date().toISOString(),
+        elapsedMs: Date.now() - startedAt,
+        code: failure ?? "cleanup_unconfirmed",
+        sessionId: safeId(sessionId),
+        runId: safeId(runId),
+        status: lastStatus,
+        cleanup,
+      });
+    }
   }
 }
 

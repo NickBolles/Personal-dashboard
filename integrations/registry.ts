@@ -55,7 +55,7 @@ export const HA_DEFAULT_CONTROLS = ["lock.front_door_lock: lock", "cover.garage_
 
 /** Default structured requests Jarvis sends Hermes (Jarvis appends the JSON answer contract). */
 export const SKYLIGHT_DEFAULT_PROMPT =
-  "Read the Skylight family calendar from {from} through {to} (timezone {timezone}) and today's Skylight chores. Read only: do not create, change or complete anything.";
+  "Read the Skylight family calendar from {from} inclusive to {to} exclusive (timezone {timezone}) and chores dated {from}. Read only: do not create, change or complete anything.";
 export const COMPASS_STATUS_PROMPT = "Read my Daily Compass check-in state for {date} (timezone {timezone}). Read only: do not change anything.";
 export const COMPASS_COMPLETE_PROMPT =
   "Mark my Daily Compass check-in for {date} (timezone {timezone}) as complete, then read the state back and report what it says now.";

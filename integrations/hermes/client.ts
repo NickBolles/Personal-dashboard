@@ -62,12 +62,16 @@ export const HermesSessionClient = {
   list: (c: HermesConn, q: { limit?: number; offset?: number; includeChildren?: boolean } = {}) =>
     call(c, { path: "/api/sessions", query: { limit: q.limit ?? 50, offset: q.offset ?? 0, include_children: q.includeChildren ?? true } }, sessionListSchema),
   get: (c: HermesConn, id: string) => call(c, { path: `/api/sessions/${encodeURIComponent(id)}` }, sessionEnvelopeSchema),
-  create: (c: HermesConn, body: { title?: string; source?: string; model?: string; provider?: string }) =>
-    call(c, { path: "/api/sessions", method: "POST", body }, sessionEnvelopeSchema),
-  update: (c: HermesConn, id: string, body: { title?: string | null; archived?: boolean; pinned?: boolean; hidden?: boolean; unread?: boolean }) =>
-    call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "PATCH", body }, sessionEnvelopeSchema),
-  remove: (c: HermesConn, id: string) =>
-    call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "DELETE" }, z.object({ deleted: z.boolean().optional() }).passthrough()),
+  create: (c: HermesConn, body: { title?: string; source?: string; model?: string; provider?: string }, signal?: AbortSignal) =>
+    call(c, { path: "/api/sessions", method: "POST", body, signal }, sessionEnvelopeSchema),
+  update: (
+    c: HermesConn,
+    id: string,
+    body: { title?: string | null; archived?: boolean; pinned?: boolean; hidden?: boolean; unread?: boolean },
+    signal?: AbortSignal,
+  ) => call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "PATCH", body, signal }, sessionEnvelopeSchema),
+  remove: (c: HermesConn, id: string, signal?: AbortSignal) =>
+    call(c, { path: `/api/sessions/${encodeURIComponent(id)}`, method: "DELETE", signal }, z.object({ deleted: z.boolean().optional() }).passthrough()),
   messages: (c: HermesConn, id: string, q: { limit?: number; offset?: number; order?: "oldest" | "latest"; includeCompacted?: boolean } = {}) =>
     call(
       c,
@@ -98,7 +102,7 @@ export type StartRunInput = {
 
 /** Runs, SSE, approvals, steering, stop. */
 export const HermesExecutionClient = {
-  start: (c: HermesConn, r: StartRunInput) =>
+  start: (c: HermesConn, r: StartRunInput, signal?: AbortSignal) =>
     call(
       c,
       {
@@ -114,10 +118,12 @@ export const HermesExecutionClient = {
           ...(r.conversationHistory ? { conversation_history: r.conversationHistory } : {}),
         },
         timeoutMs: 15_000,
+        signal,
       },
       runCreatedSchema,
     ),
-  status: (c: HermesConn, runId: string) => call(c, { path: `/v1/runs/${encodeURIComponent(runId)}`, timeoutMs: 6000 }, runStatusSchema),
+  status: (c: HermesConn, runId: string, signal?: AbortSignal) =>
+    call(c, { path: `/v1/runs/${encodeURIComponent(runId)}`, timeoutMs: 6000, signal }, runStatusSchema),
   /** Opens the upstream SSE stream. Caller owns the response body. */
   events: (c: HermesConn, runId: string, lastSeq: string | undefined, signal: AbortSignal) =>
     call<Response>(c, {
@@ -127,10 +133,10 @@ export const HermesExecutionClient = {
       signal,
       timeoutMs: 24 * 60 * 60 * 1000,
     }),
-  stop: (c: HermesConn, runId: string) =>
+  stop: (c: HermesConn, runId: string, signal?: AbortSignal) =>
     call(
       c,
-      { path: `/v1/runs/${encodeURIComponent(runId)}/stop`, method: "POST" },
+      { path: `/v1/runs/${encodeURIComponent(runId)}/stop`, method: "POST", signal },
       z.object({ run_id: z.string().optional(), status: z.string() }).passthrough(),
     ),
   approve: (c: HermesConn, runId: string, body: { choice: string; request_id?: string }) =>
