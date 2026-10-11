@@ -64,6 +64,16 @@ describe("overdue triage", () => {
 });
 
 describe("plan ahead", () => {
+  it("restores a renamed calendar suggestion after wrong-assumption feedback", () => {
+    const event: CalendarEvent = { id: "same-event", title: "Alex birthday", startsAt: "2026-10-15", allDay: true, source: "skylight" };
+    const original = buildAssists(input({ events: [event] }))[0]!;
+    const muted = [{ id: original.id, fingerprint: original.provenance.fingerprint, verdict: "wrong_assumption" as const, createdAt: NOW.toISOString() }];
+    expect(buildAssists(input({ events: [event], muted }))).toEqual([]);
+    const corrected = buildAssists(input({ events: [{ ...event, title: "Sam birthday" }], muted }));
+    expect(corrected).toHaveLength(1);
+    expect(corrected[0]!.title).toContain("Sam birthday");
+    expect(corrected[0]!.provenance.fingerprint).not.toBe(original.provenance.fingerprint);
+  });
   it("never invents dates: no milestones and no calendar events means no planning card", () => {
     expect(buildAssists(input()).filter((c) => c.kind === "plan_ahead")).toEqual([]);
   });

@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nickbolles.jarvis.data.*
 import com.nickbolles.jarvis.ui.components.ActionHandlers
@@ -36,6 +37,30 @@ class HomePriorityTest {
         assists = listOf(card),
     )
     private val layout = Layout(homeSections = listOf(HomeSection("now")))
+
+    @Test fun suggestionsRemainVisibleWithNowHidden() {
+        compose.setContent {
+            JarvisTheme(dynamicColor = false) {
+                HomeContent(Loadable(home), Layout(homeSections = listOf(HomeSection("now", visible = false))), emptySet(), ActionHandlers(), {})
+            }
+        }
+        compose.onNodeWithText("Now").assertDoesNotExist()
+        compose.onNodeWithText("Suggestions").assertExists()
+        compose.onNodeWithText(card.title).assertExists()
+    }
+
+    @Test fun pendingFeedbackDisablesBothControls() {
+        val feedback = mutableListOf<String>()
+        compose.setContent {
+            JarvisTheme(dynamicColor = false) {
+                HomeContent(Loadable(home), layout, emptySet(), ActionHandlers(), {},
+                    onAssistFeedback = { _, v -> feedback += v }, feedbackBusy = setOf(card.id))
+            }
+        }
+        compose.onNodeWithText("Not now").assertIsNotEnabled().performClick()
+        compose.onNodeWithText("Less like this").assertIsNotEnabled().performClick()
+        assertTrue(feedback.isEmpty())
+    }
 
     @Test fun planningOnlyOpensADraftAndFeedbackHasExplicitTargets() {
         val captures = mutableListOf<CaptureRequest>()

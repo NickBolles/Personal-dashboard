@@ -80,6 +80,21 @@ describe("attention budget", () => {
 });
 
 describe("snoozes", () => {
+  it("hides waiting and completed items before sorting and capping, until expiry", () => {
+    const waiting = action({ id: "waiting", status: "waiting" });
+    const completed = Array.from({ length: 6 }, (_, i) => action({ id: `done-${i}`, status: "completed", updatedAt: `2026-10-10T1${i}:00:00Z` }));
+    const snoozed = new Map([
+      [waiting.id, "2026-10-10T18:00:00Z"],
+      ["done-5", "2026-10-10T18:00:00Z"],
+    ]);
+    const hidden = select([waiting, ...completed], { snoozed });
+    expect(hidden.waiting).toEqual([]);
+    expect(hidden.totals.waiting).toBe(0);
+    expect(ids(hidden.completed)).toEqual(["done-4", "done-3", "done-2", "done-1", "done-0"]);
+    const expired = select([waiting, ...completed], { snoozed, now: new Date("2026-10-10T18:00:00Z") });
+    expect(ids(expired.waiting)).toEqual([waiting.id]);
+    expect(ids(expired.completed)).toEqual(["done-5", "done-4", "done-3", "done-2", "done-1"]);
+  });
   it("hides a snoozed action until the snooze expires, and counts it meanwhile", () => {
     const a = dated("a", "2026-10-10");
     const hidden = select([a], { snoozed: new Map([["a", "2026-10-10T18:00:00Z"]]) });

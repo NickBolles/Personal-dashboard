@@ -338,7 +338,17 @@ export function HomeView() {
 
       {data ? (
         <>
-          {layout.filter((s) => s.visible && later[s.id]).map((s) => later[s.id]!(data))}
+          {layout
+            .filter((s) => s.visible)
+            .map((s) => {
+              if (later[s.id]) return later[s.id]!(data);
+              const g = groups[s.id];
+              return g && g.items(data).length ? (
+                <ul key={s.id} className="mb-6 space-y-2">
+                  <LaterGroup id={g.id} title={g.title} items={g.items(data)} />
+                </ul>
+              ) : null;
+            })}
 
           {att ? (
             <section aria-labelledby="backlog-h" className="mb-6">
@@ -359,22 +369,6 @@ export function HomeView() {
                 {att.totals.overdue ? <Badge tone="warn">{att.totals.overdue} overdue</Badge> : null}
                 <ChevronIcon className="h-5 w-5 shrink-0 text-muted" />
               </Link>
-            </section>
-          ) : null}
-
-          {layout.some((s) => s.visible && groups[s.id]) ? (
-            <section aria-labelledby="later-h" className="mb-6">
-              <h2 id="later-h" className="sr-only">
-                Later
-              </h2>
-              <ul className="space-y-2">
-                {layout
-                  .filter((s) => s.visible && groups[s.id])
-                  .map((s) => {
-                    const g = groups[s.id]!;
-                    return <LaterGroup key={s.id} id={g.id} title={g.title} items={g.items(data)} />;
-                  })}
-              </ul>
             </section>
           ) : null}
         </>

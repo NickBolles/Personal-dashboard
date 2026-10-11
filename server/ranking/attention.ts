@@ -229,6 +229,10 @@ export function selectAttention(input: AttentionInput): Attention {
   const all = dedupeActions(input.actions);
 
   let snoozedCount = 0;
+  const activelySnoozed = (a: NextAction) => {
+    const until = input.snoozed?.get(a.id);
+    return !!until && new Date(until) > input.now;
+  };
   const open: Placed[] = [];
   for (const a of all) {
     if (a.status !== "open") continue;
@@ -270,13 +274,13 @@ export function selectAttention(input: AttentionInput): Attention {
   }
 
   const critical = open.filter((p) => p.tier === "critical").length;
-  const waiting = rankActions(all.filter((a) => a.status === "waiting"));
+  const waiting = rankActions(all.filter((a) => a.status === "waiting" && !activelySnoozed(a)));
   return {
     ...out,
     overdue,
     waiting,
     completed: all
-      .filter((a) => a.status === "completed")
+      .filter((a) => a.status === "completed" && !activelySnoozed(a))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || (a.id < b.id ? -1 : 1))
       .slice(0, 5),
     totals: {

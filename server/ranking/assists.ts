@@ -166,8 +166,8 @@ function calendarPlans(input: AssistInput, today: string): Draft[] {
     const dedupe = `${e.title.toLowerCase()}|${date}`;
     if (days < 2 || seen.has(dedupe)) continue;
     seen.add(dedupe);
-    const fp = fingerprint(`${e.source}:${e.id}:${date}`);
     const title = trim(e.title, 80);
+    const fp = fingerprint(`${e.source}:${e.id}:${date}:${title}`);
     out.push({
       id: `assist:plan:event:${fp}`,
       kind: "plan_ahead",

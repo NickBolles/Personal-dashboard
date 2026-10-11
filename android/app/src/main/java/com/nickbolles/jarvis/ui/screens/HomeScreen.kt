@@ -80,6 +80,7 @@ import com.nickbolles.jarvis.ui.nav.Routes
 import com.nickbolles.jarvis.ui.nav.can
 import com.nickbolles.jarvis.ui.theme.LocalStatusColors
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -108,7 +109,27 @@ abstract class ActionViewModel(protected val graph: AppGraph) : ViewModel() {
     }
 }
 
+/** Main-thread admission happens before launch, so rapid taps cannot race recomposition. */
+internal class HomeFeedbackRequests {
+    private val _busy = MutableStateFlow<Set<String>>(emptySet())
+    val busy = _busy.asStateFlow()
+
+    fun submit(scope: CoroutineScope, id: String, requestAndRefresh: suspend () -> Unit) {
+        if (id in _busy.value) return
+        _busy.value = _busy.value + id
+        scope.launch {
+            try {
+                requestAndRefresh()
+            } finally {
+                _busy.value = _busy.value - id
+            }
+        }
+    }
+}
+
 class HomeViewModel(graph: AppGraph) : ActionViewModel(graph) {
+    private val feedbackRequests = HomeFeedbackRequests()
+    val feedbackBusy = feedbackRequests.busy
     val home = Resource(graph, "home", HomePayload.serializer()) { it.home(cached = false) }
     val prefs = graph.prefs
 
@@ -121,7 +142,7 @@ class HomeViewModel(graph: AppGraph) : ActionViewModel(graph) {
 
     /** "Not now" / "Less like this" on a suggestion: per person, reversible in Settings → Home priorities (web). */
     fun feedback(card: AssistCard, verdict: String, snoozeUntil: String?, onMessage: (String) -> Unit) {
-        viewModelScope.launch {
+        feedbackRequests.submit(viewModelScope, card.id) {
             try {
                 val r = graph.call {
                     it.homeFeedback("assist", card.id, card.category, verdict, card.provenance.fingerprint, listOf(card.basis) + card.why, card.provenance.sources, snoozeUntil)
@@ -167,6 +188,7 @@ fun HomeScreen() {
     val state by vm.home.state.collectAsState()
     val prefs by vm.prefs.state.collectAsState()
     val busy by vm.busy.collectAsState()
+    val feedbackBusy by vm.feedbackBusy.collectAsState()
     val app = LocalAppActions.current
     val clock = LocalClock.current
     val zone = LocalZone.current
@@ -178,6 +200,7 @@ fun HomeScreen() {
         actionHandlers(vm),
         onRefresh = vm::refresh,
         userName = prefs.data?.displayName,
+        feedbackBusy = feedbackBusy,
         onAssistFeedback = { card, verdict ->
             // "Not now" hides until 7:00 tomorrow, local time.
             val until = if (verdict == "not_now") {
@@ -200,6 +223,7 @@ fun HomeContent(
     onRefresh: () -> Unit,
     userName: String? = null,
     onAssistFeedback: (AssistCard, String) -> Unit = { _, _ -> },
+    feedbackBusy: Set<String> = emptySet(),
 ) {
     val app = LocalAppActions.current
     val now = LocalClock.current.now()
@@ -225,11 +249,14 @@ fun HomeContent(
                 return@LazyColumn
             }
             val totals = data.attention?.totals
+            if (layout.homeSections.none { it.id == "now" && it.visible }) {
+                assistSection(data.assists, feedbackBusy, onAssistFeedback)
+            }
             for (section in layout.homeSections.filter { it.visible }) {
                 when (section.id) {
                     "now" -> {
                         nowSection(data, busy, handlers)
-                        assistSection(data.assists, onAssistFeedback)
+                        assistSection(data.assists, feedbackBusy, onAssistFeedback)
                     }
                     "glance" -> item { GlanceSection(data) }
                     "later_today" -> compactSection("Later today", data.later.laterToday, busy, handlers)
@@ -324,10 +351,10 @@ private fun AttentionLine(a: AttentionSummary) {
     }
 }
 
-private fun LazyListScope.assistSection(cards: List<AssistCard>, onFeedback: (AssistCard, String) -> Unit) {
+private fun LazyListScope.assistSection(cards: List<AssistCard>, busy: Set<String>, onFeedback: (AssistCard, String) -> Unit) {
     if (cards.isEmpty()) return
     item { SectionHeader("Suggestions") }
-    items(cards, key = { "assist:${it.id}" }) { card -> AssistCardView(card, onFeedback) }
+    items(cards, key = { "assist:${it.id}" }) { card -> AssistCardView(card, card.id in busy, onFeedback) }
 }
 
 private fun originLabel(origin: String) = when (origin) {
@@ -343,7 +370,7 @@ private fun originLabel(origin: String) = when (origin) {
  * Reschedule-in-bulk lives on the web (Home → Review & reschedule).
  */
 @Composable
-private fun AssistCardView(card: AssistCard, onFeedback: (AssistCard, String) -> Unit) {
+private fun AssistCardView(card: AssistCard, busy: Boolean, onFeedback: (AssistCard, String) -> Unit) {
     val app = LocalAppActions.current
     val accent = when (card.tone) {
         "warn" -> LocalStatusColors.current.warn
@@ -374,8 +401,8 @@ private fun AssistCardView(card: AssistCard, onFeedback: (AssistCard, String) ->
                     ) { Text(chat.label) }
                 }
                 AdaptiveRow(stacked) { m ->
-                    OutlinedButton(onClick = { onFeedback(card, "not_now") }, modifier = m) { Text("Not now") }
-                    TextButton(onClick = { onFeedback(card, "less_like_this") }, modifier = m) { Text("Less like this") }
+                    OutlinedButton(onClick = { onFeedback(card, "not_now") }, enabled = !busy, modifier = m) { Text("Not now") }
+                    TextButton(onClick = { onFeedback(card, "less_like_this") }, enabled = !busy, modifier = m) { Text("Less like this") }
                 }
                 Text(card.basis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
