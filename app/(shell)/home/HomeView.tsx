@@ -10,6 +10,8 @@ import { kvGet, kvSet } from "@/lib/client/idb";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { formatWhen } from "@/components/actions/format";
 import { AssistCard } from "@/components/home/AssistCard";
+import { TriageDialog } from "@/components/home/TriageDialog";
+import type { AssistCard as Assist } from "@/lib/contracts";
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { Badge, Empty, ErrorNote, Spinner, cx, useOnline } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
@@ -170,6 +172,9 @@ function HomeSkeleton() {
 }
 
 export function HomeView() {
+  // Keep the reviewed selection alive across Home refetches. Successful tasks
+  // leave the suggestion (and the whole card may disappear) before Close.
+  const [triage, setTriage] = useState<Assist | null>(null);
   const online = useOnline();
   const { can } = useAccess();
   const [snapshot, setSnapshot] = useState<HomePayload>();
@@ -313,12 +318,14 @@ export function HomeView() {
           <ul className="space-y-3">
             {data.assists.map((c) => (
               <li key={c.id}>
-                <AssistCard card={c} />
+                <AssistCard card={c} onTriage={setTriage} />
               </li>
             ))}
           </ul>
         </section>
       ) : null}
+
+      {triage?.triage ? <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} /> : null}
 
       {can("hermes.chat") ? (
         <section aria-labelledby="capture-h" className="mb-6">

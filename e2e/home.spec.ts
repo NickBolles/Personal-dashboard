@@ -64,6 +64,10 @@ test("Home keeps to its attention budget and counts the rest honestly", async ({
 });
 
 test("overdue triage reschedules only the tasks picked, after confirmation and readback", async ({ page, request }) => {
+  const mutations: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && new URL(r.url()).pathname === "/api/actions") mutations.push(r.postDataJSON().actionId);
+  });
   await mock(request, "/google/tasks", { tasks: overdue(6) });
   await page.goto("/home");
   await resetTuning(page);
@@ -82,8 +86,11 @@ test("overdue triage reschedules only the tasks picked, after confirmation and r
   await review.click();
   const confirm = page.getByRole("dialog", { name: "Confirm new due date" });
   await expect(confirm).toContainText("Move 2 tasks");
+  expect(mutations).toEqual([]); // selection and review are read-only
   await confirm.getByRole("button", { name: "Confirm and reschedule" }).click();
   await expect(page.getByRole("dialog").getByText(/Now due/)).toHaveCount(2, { timeout: 15_000 });
+  expect(mutations).toHaveLength(2);
+  expect(new Set(mutations).size).toBe(2);
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Moved 2 tasks" })).toBeVisible();
 });

@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import type { AssistCard as Assist } from "@/lib/contracts";
 import { Button, ButtonLink, cx } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import { chatHref } from "./chat";
 import { FeedbackBar } from "./Feedback";
-import { TriageDialog } from "./TriageDialog";
 
 const ORIGIN_LABEL: Record<Assist["origin"], string> = {
   data: "Suggestion from your data",
@@ -25,8 +23,7 @@ const TONE_BAR: Record<Assist["tone"], string> = {
  * A deterministic suggestion. The label says where it came from; the chat
  * button only opens a prefilled, read-only planning conversation.
  */
-export function AssistCard({ card }: { card: Assist }) {
-  const [triage, setTriage] = useState(false);
+export function AssistCard({ card, onTriage }: { card: Assist; onTriage: (card: Assist) => void }) {
   const titleId = `assist-${card.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   return (
     <article aria-labelledby={titleId} data-tier={TONE_BAR[card.tone]} className="card jv-accent jv-rise flex flex-col gap-2 p-4 pl-5">
@@ -37,7 +34,7 @@ export function AssistCard({ card }: { card: Assist }) {
       <p className="text-sm text-muted">{card.body}</p>
       <div className="flex flex-wrap gap-2 pt-1">
         {card.triage ? (
-          <Button variant="primary" size="sm" onClick={() => setTriage(true)} aria-describedby={titleId}>
+          <Button variant="primary" size="sm" onClick={() => onTriage(card)} aria-describedby={titleId}>
             Review &amp; reschedule
           </Button>
         ) : null}
@@ -75,7 +72,6 @@ export function AssistCard({ card }: { card: Assist }) {
           />
         </div>
       </details>
-      {card.triage ? <TriageDialog open={triage} onClose={() => setTriage(false)} items={card.triage.items} chat={card.chat} /> : null}
     </article>
   );
 }
