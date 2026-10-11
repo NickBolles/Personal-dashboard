@@ -7,6 +7,7 @@ import { useInfiniteQuery, useQueryClient, type FetchInfiniteQueryOptions, type 
 import type { SessionSummary } from "@/lib/hermes";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
+import { refreshSessionLists } from "@/lib/client/session-lists";
 import { mergeSessionPages, type SessionPage } from "@/lib/session-pages";
 import { Badge, Button, ErrorNote, Spinner, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { ForkIcon, PlusIcon } from "@/components/icons";
@@ -36,7 +37,9 @@ export function useSessions(archived = false) {
     // every loaded page on focus/reconnect. Refresh below restarts one window.
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchOnMount: false,
+    // A creation outside /chat invalidates an inactive cache. Honor that
+    // explicit refresh on return, but do not refetch merely stale history.
+    refetchOnMount: (query) => query.state.isInvalidated,
     retry: false,
   });
   const refresh = async () => {
@@ -54,6 +57,7 @@ export function useSessions(archived = false) {
 
 export function NewConversationButton({ className }: { className?: string }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const online = useOnline();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -69,6 +73,8 @@ export function NewConversationButton({ className }: { className?: string }) {
         try {
           const s = await api.post<SessionSummary>("/api/hermes/sessions", { backend });
           router.push(`/chat/${encodeURIComponent(s.id)}`);
+          // Creation succeeded: list refresh must not delay or undo navigation.
+          void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
         } catch (err) {
           toast((err as Error).message, "danger");
         } finally {

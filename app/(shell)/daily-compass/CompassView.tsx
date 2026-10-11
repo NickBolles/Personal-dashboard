@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/client/api";
+import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { CompassState } from "@/integrations/types";
 import { relativeTime } from "@/lib/time";
 import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, useOnline, useToast } from "@/components/ui";
@@ -19,7 +20,10 @@ export function CompassView() {
   });
   const start = useMutation({
     mutationFn: () => api.post<{ sessionId: string; runId?: string }>("/api/daily-compass/start"),
-    onSuccess: (r) => router.push(`/chat/${encodeURIComponent(r.sessionId)}${r.runId ? `?run=${encodeURIComponent(r.runId)}` : ""}`),
+    onSuccess: (r) => {
+      router.push(`/chat/${encodeURIComponent(r.sessionId)}${r.runId ? `?run=${encodeURIComponent(r.runId)}` : ""}`);
+      void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
+    },
     onError: (e) => toast((e as Error).message, "danger"),
   });
   const complete = useMutation({
