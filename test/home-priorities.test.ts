@@ -382,6 +382,47 @@ describe("feedback route", () => {
     expect((await tuning()).body.snoozed.map((s) => s.id)).not.toContain(id);
   });
 
+  it("retains persistent mutes beyond 500 newer events and only loads unexpired temporary mutes", async () => {
+    const card = (await home(owner)).assists!.find((c) => c.id === "assist:overdue_triage")!;
+    expect(card).toBeDefined();
+    const now = new Date();
+    const row = (id: string, verdict: string, days: number) => ({
+      id,
+      userId: owner,
+      idempotencyKey: id,
+      targetKind: "assist",
+      targetId: id,
+      category: "assist:overdue_triage",
+      verdict,
+      fingerprint: "fp",
+      provenance: "{}",
+      createdAt: new Date(now.getTime() - days * DAY).toISOString(),
+    });
+    getDb()
+      .insert(schema.homeFeedback)
+      .values([
+        { ...row("persistent", "wrong_assumption", 30), targetId: card.id, fingerprint: card.provenance.fingerprint },
+        row("expired", "not_helpful", 14),
+        ...Array.from({ length: 501 }, (_, i) => row(`newer-${i}`, "not_helpful", 1)),
+      ])
+      .run();
+    const muted = loadTuning(owner, now).muted;
+    expect(muted).toHaveLength(502);
+    expect(muted.some((m) => m.id === card.id && m.fingerprint === card.provenance.fingerprint)).toBe(true);
+    expect(muted.some((m) => m.id === "expired")).toBe(false);
+    expect(loadTuning(partner, now).muted).toHaveLength(0);
+    expect((await home(owner)).assists?.some((c) => c.id === card.id)).toBe(false);
+    expect(
+      (
+        await call(feedbackIdRoute.DELETE, "/api/home/feedback/persistent", owner, {
+          method: "DELETE",
+          params: { id: "persistent" },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await home(owner)).assists?.some((c) => c.id === card.id)).toBe(true);
+  });
+
   it("only the owner can delete a feedback row", async () => {
     await feedback(owner, { target: { kind: "assist", id: "assist:overdue_triage", category: "assist:overdue_triage" }, verdict: "helpful" });
     const t = await call<{ feedback: { id: string }[] }>(tuningRoute.GET, "/api/home/tuning", owner);

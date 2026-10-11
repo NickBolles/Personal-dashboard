@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, or } from "drizzle-orm";
 import { ACTION_SOURCES, type ActionSource, type NextAction } from "@/lib/contracts";
 import { ASSIST_CATEGORIES, categoryLabel, MAX_WEIGHT, MIN_WEIGHT, VERDICT_LABELS, type FeedbackVerdict } from "@/lib/attention";
 import { addDays, DAY, localDate, startOfLocalDay } from "@/lib/time";
@@ -8,7 +8,7 @@ import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
 import { can, type Capable } from "@/server/access";
 import { actionFingerprint } from "@/server/ranking/attention";
-import type { Milestone, MutedCard } from "@/server/ranking/assists";
+import { NOT_HELPFUL_DAYS, type Milestone, type MutedCard } from "@/server/ranking/assists";
 
 /**
  * Per-person Home tuning: feedback rows (immutable), category weights, snoozes
@@ -20,7 +20,6 @@ type Viewer = Capable & { id: string };
 
 export const MAX_SNOOZE_DAYS = 90;
 export const MAX_MILESTONES = 50;
-const MUTE_LOOKBACK = 500;
 
 export type Tuning = {
   weights: Record<string, number>;
@@ -53,9 +52,19 @@ export function loadTuning(userId: string, now = new Date()): Tuning {
       createdAt: schema.homeFeedback.createdAt,
     })
     .from(schema.homeFeedback)
-    .where(and(eq(schema.homeFeedback.userId, userId), inArray(schema.homeFeedback.verdict, ["not_helpful", "wrong_assumption"])))
+    .where(
+      and(
+        eq(schema.homeFeedback.userId, userId),
+        or(
+          eq(schema.homeFeedback.verdict, "wrong_assumption"),
+          and(
+            eq(schema.homeFeedback.verdict, "not_helpful"),
+            gt(schema.homeFeedback.createdAt, new Date(now.getTime() - NOT_HELPFUL_DAYS * DAY).toISOString()),
+          ),
+        ),
+      ),
+    )
     .orderBy(desc(schema.homeFeedback.createdAt))
-    .limit(MUTE_LOOKBACK)
     .all() as MutedCard[];
   return { weights, snoozed, acknowledged, pinned, muted, milestones: listMilestones(userId) };
 }
