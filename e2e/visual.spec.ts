@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa } from "./helpers";
+import { homeVisual } from "./fixtures/home";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -19,11 +20,25 @@ for (const [name, path] of [
   ["more", "/more"],
 ] as const) {
   test(`visual: ${name}`, async ({ page }) => {
+    if (name === "home") {
+      // /__mock/reset cannot undo Jarvis-owned Compass completion from pages.spec.
+      // Isolate the visual contract, including cached/live reads, from that DB and
+      // wall-clock freshness. Real provider/selector behavior is tested separately.
+      await page.clock.setFixedTime(new Date(homeVisual.generatedAt));
+      await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
+    }
     await page.goto(path);
     await page.locator("h1").first().waitFor();
+    if (name === "home") {
+      await expect(page.locator("section[aria-labelledby=now-h] article h3")).toHaveText(homeVisual.now.map((a) => a.title));
+      await expect(page.getByText("Last updated", { exact: false })).toHaveCount(0);
+    }
     await page.waitForTimeout(800);
     await page.waitForTimeout(500);
-    await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+    // Playwright also masks invisible matches. Hidden feedback paragraphs inside
+    // closed disclosures can otherwise paint over unrelated card titles/badges.
+    const masks = name === "home" ? MASK.map((m) => `${m}:visible`) : MASK;
+    await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false, mask: masks.map((m) => page.locator(m)) });
   });
 }
 
