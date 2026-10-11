@@ -1,12 +1,23 @@
 import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
-import { ACTION_SOURCES, SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomePayload, type NextAction, type SourceStatus } from "@/lib/contracts";
+import {
+  ACTION_SOURCES,
+  SOURCE_LABELS,
+  type ActionSource,
+  type AttentionSummary,
+  type CalendarEvent,
+  type HomePayload,
+  type SourceStatus,
+} from "@/lib/contracts";
+import { ATTENTION_VERSION } from "@/lib/attention";
 import { iso, localDate, startOfLocalDay, DAY } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
 import { getPreferences } from "@/server/settings";
 import { boundedAll } from "@/server/http/fetch";
 import { UpstreamError } from "@/server/http/errors";
-import { dedupeActions, partitionForHome } from "@/server/ranking";
+import { BUDGET, selectAttention, type Attention } from "@/server/ranking/attention";
+import { buildAssists } from "@/server/ranking/assists";
+import { demotedActions, loadTuning } from "@/server/home-tuning";
 import { ADAPTERS } from "@/integrations";
 import { isConfigured, resolveIntegration } from "@/integrations/store";
 import type { AdapterContext, SourceData } from "@/integrations/types";
@@ -184,28 +195,19 @@ export function scopeResult(user: Viewer, r: SourceResult): SourceResult | undef
   return { ...r, data };
 }
 
-function applyPrefs(actions: NextAction[], now: Date, userId: string) {
-  if (!actions.length) return actions;
-  const prefs = getDb()
-    .select()
-    .from(schema.actionPrefs)
-    .where(
-      and(
-        eq(schema.actionPrefs.userId, userId),
-        inArray(
-          schema.actionPrefs.actionId,
-          actions.map((a) => a.id),
-        ),
-      ),
-    )
-    .all();
-  const map = new Map(prefs.map((p) => [p.actionId, p]));
-  return actions
-    .filter((a) => {
-      const p = map.get(a.id);
-      return !(p?.hiddenUntil && new Date(p.hiddenUntil) > now);
-    })
-    .map((a) => (map.get(a.id)?.pinned ? { ...a, pinned: true } : a));
+/**
+ * Today's Daily Compass focus as far as Jarvis honestly knows it. Undefined for
+ * people who don't use Daily Compass (it's private) or when it isn't set up.
+ */
+export function compassFocus(r: SourceResult | undefined, ctx: AdapterContext): AttentionSummary["compass"] {
+  if (!r || ["unconfigured", "disabled"].includes(r.status.state)) return undefined;
+  const c = r.data?.compass;
+  if (!c) return { state: "unavailable", focus: [] };
+  const asOf = c.asOf ?? r.status.fetchedAt;
+  if (c.date !== ctx.today) return { state: "outdated", focus: [], asOf };
+  const stale = r.status.state !== "ok" || undefined;
+  if (!c.priorities?.length) return { state: "no_focus", focus: [], asOf, stale };
+  return { state: "focus", focus: c.priorities.slice(0, 5), asOf, stale };
 }
 
 export function nextEvent(events: CalendarEvent[], ctx: AdapterContext): CalendarEvent | undefined {
@@ -232,26 +234,55 @@ export async function collectSources(opts: { live: boolean; sources?: ActionSour
   return { ctx, results };
 }
 
-/** Home for one person: only the modules they can see, with their own pins and acknowledgements. */
-export async function getHome(user: Viewer, opts: { live: boolean }): Promise<HomePayload> {
+/**
+ * Home for one person: only the modules they can see, ranked within the
+ * attention budget (server/ranking/attention.ts) with their own pins, snoozes,
+ * Daily Compass focus and feedback. `attention` holds every bucket in full for
+ * paging and search; the payload carries the budgeted preview.
+ */
+export async function homeSelection(user: Viewer, opts: { live: boolean }): Promise<{ payload: HomePayload; attention: Attention }> {
   const visible = ACTION_SOURCES.filter((s) => sourceVisible(user, s));
   const collected = await collectSources({ live: opts.live, sources: visible });
   const ctx = collected.ctx;
   const results = collected.results.map((r) => scopeResult(user, r)!).filter(Boolean);
   const all = results.flatMap((r) => r.data?.actions ?? []);
-  const actions = dedupeActions(applyPrefs(all, ctx.now, user.id));
-  const parts = partitionForHome(actions, ctx.now);
   const byKey = Object.fromEntries(results.map((r) => [r.status.source, r])) as Record<ActionSource, SourceResult>;
   const events = [...(byKey.skylight?.data?.events ?? []), ...(byKey.home_assistant?.data?.events ?? [])];
   const compass = byKey.daily_compass?.data?.compass;
-  return {
+  const focus = compassFocus(byKey.daily_compass, ctx);
+
+  const tuning = loadTuning(user.id, ctx.now);
+  const attention = selectAttention({
+    actions: all,
+    now: ctx.now,
+    timezone: ctx.timezone,
+    snoozed: tuning.snoozed,
+    pinned: tuning.pinned,
+    focus: focus?.state === "focus" ? focus.focus : undefined,
+    weights: tuning.weights,
+    demoted: demotedActions(all, tuning.muted),
+  });
+  const assists = buildAssists({
+    now: ctx.now,
+    timezone: ctx.timezone,
+    overdue: attention.overdue.filter((a) => a.rank?.tier !== "critical"),
+    events,
+    milestones: tuning.milestones,
+    canChat: can(user, "hermes.chat"),
+    canReschedule: can(user, "todos.edit"),
+    snoozed: tuning.snoozed,
+    muted: tuning.muted,
+    weights: tuning.weights,
+  });
+
+  const payload: HomePayload = {
     generatedAt: iso(ctx.now),
-    now: parts.now,
+    now: attention.now,
     later: {
-      laterToday: parts.laterToday,
-      upcoming: parts.upcoming.slice(0, 15),
-      waitingOn: parts.waitingOn,
-      recentlyCompleted: parts.recentlyCompleted,
+      laterToday: attention.today,
+      upcoming: attention.upcoming.slice(0, BUDGET.upcoming),
+      waitingOn: attention.waiting,
+      recentlyCompleted: attention.completed,
     },
     glance: {
       nextEvent: nextEvent(events, ctx),
@@ -261,7 +292,20 @@ export async function getHome(user: Viewer, opts: { live: boolean }): Promise<Ho
       homeExceptions: (byKey.home_assistant?.data?.homeExceptions ?? []).filter((e) => e.severity !== "info" || e.state === "unavailable"),
     },
     sources: results.map((r) => r.status),
+    attention: {
+      version: ATTENTION_VERSION,
+      budget: BUDGET,
+      totals: attention.totals,
+      overBudget: attention.overBudget,
+      ...(focus ? { compass: focus } : {}),
+    },
+    assists,
   };
+  return { payload, attention };
+}
+
+export async function getHome(user: Viewer, opts: { live: boolean }): Promise<HomePayload> {
+  return (await homeSelection(user, opts)).payload;
 }
 
 export function setActionPref(userId: string, actionId: string, patch: { pinned?: boolean; hiddenUntil?: string | null }) {

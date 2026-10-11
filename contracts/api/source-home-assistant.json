@@ -3,8 +3,8 @@
     "source": "home_assistant",
     "label": "Home Assistant",
     "state": "ok",
-    "fetchedAt": "2026-10-06T14:51:56.624Z",
-    "staleAfter": "2026-10-06T14:56:56.624Z",
+    "fetchedAt": "2026-10-11T06:30:33.880Z",
+    "staleAfter": "2026-10-11T06:35:33.880Z",
     "fromCache": true
   },
   "data": {
@@ -14,8 +14,8 @@
       {
         "id": "ha:calendar.family_calendar:evt-77:",
         "title": "Soccer practice",
-        "startsAt": "2026-10-06T18:00:00.000Z",
-        "endsAt": "2026-10-06T19:00:00.000Z",
+        "startsAt": "2026-10-11T18:00:00.000Z",
+        "endsAt": "2026-10-11T19:00:00.000Z",
         "allDay": false,
         "location": "Field 3",
         "calendar": "calendar.family_calendar",
@@ -24,8 +24,8 @@
       {
         "id": "ha:calendar.family_calendar:hol-1:",
         "title": "School holiday",
-        "startsAt": "2026-10-08",
-        "endsAt": "2026-10-09",
+        "startsAt": "2026-10-13",
+        "endsAt": "2026-10-14",
         "allDay": true,
         "calendar": "calendar.family_calendar",
         "source": "home_assistant"
@@ -33,7 +33,7 @@
     ],
     "extra": {
       "health": {
-        "checkedAt": "2026-10-06T14:51:56.622Z",
+        "checkedAt": "2026-10-11T06:30:33.878Z",
         "entities": 16,
         "unavailable": 1,
         "unknown": 0,

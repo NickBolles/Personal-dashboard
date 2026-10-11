@@ -13,4 +13,5 @@
 - Phone API calls authenticate with `Authorization: Bearer jdv_…` device tokens (server/devices.ts); `api()` skips CSRF for them and never falls back to cookies.
 - Access is by capability (`lib/modules.ts`): pass `cap` to `api()`, call `requirePage()` in pages, gate UI with `useAccess()` (web) / `can()` (Android). Hiding in the UI is never the check.
 - Chat goes through `server/assistant` (Hermes or Claude by id prefix `loc_`/`lrn_`), never straight to `integrations/hermes/service` from routes.
+- Home ranking is the pure selector in `server/ranking/attention.ts` (+ `assists.ts` for suggestion cards); rules and feedback effects in docs/home-priorities.md. Feedback only changes per-person ranking, never source data; suggestions never call a model.
 - Finance: integer cents, pure engine in `lib/finance/`, rules in docs/finance.md. Never send finance to the AI layer; notifications carry no amounts or names.

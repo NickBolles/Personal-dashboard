@@ -6,7 +6,7 @@
 //   /fcm/*      Firebase OAuth + FCM v1 (phone push)
 //   /monarch/*  Monarch Money GraphQL (finance balances)
 //   /anthropic/* Anthropic Messages API (Claude-direct conversations)
-//   /__mock/*   control plane (reset, fail, speed)
+//   /__mock/*   control plane (reset, fail, speed, google/tasks)
 import http from "node:http";
 import { createHermes } from "./hermes.mjs";
 import { createPaperclip } from "./paperclip.mjs";
@@ -63,6 +63,10 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           for (const s of [].concat(body.services ?? [])) control.fail.add(s);
           for (const s of [].concat(body.restore ?? [])) control.fail.delete(s);
           return json(res, 200, { failing: [...control.fail] });
+        }
+        if (path === "/google/tasks") {
+          const body = await readBody(req);
+          return json(res, 200, { added: services.google.addTasks([].concat(body.tasks ?? [])) });
         }
         if (path === "/speed") {
           const body = await readBody(req);

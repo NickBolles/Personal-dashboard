@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-10-06T14:51:55.346Z",
+  "generatedAt": "2026-10-11T06:30:31.805Z",
   "unread": 1,
   "next": [
     {
-      "id": "home_assistant:cover.garage_door@2026-10-06T14:09:54.422Z",
+      "id": "home_assistant:cover.garage_door@2026-10-11T05:48:30.530Z",
       "source": "home_assistant",
       "title": "Garage door: Open for 42 min",
       "detail": "State: open",
@@ -18,7 +18,7 @@
       "href": "/home-control?entity=cover.garage_door"
     },
     {
-      "id": "paperclip:950f3895-193f-4fea-8a4e-8b8e2a41cc3b",
+      "id": "paperclip:cbea9dde-656b-4c30-a666-31561fc19e89",
       "source": "paperclip",
       "title": "PAP-221 Decide config token storage",
       "detail": "Waiting for your review in Paperclip",
@@ -30,29 +30,12 @@
       "href": "https://paperclip.example.com/PAP/issues/PAP-221"
     },
     {
-      "id": "todos:gt-1",
-      "source": "todos",
-      "title": "Renew car registration",
-      "detail": "DMV online",
-      "priorityReason": "overdue",
-      "dueAt": "2026-10-05T04:59:00.000Z",
-      "dueIsDate": true,
-      "primaryAction": {
-        "kind": "complete",
-        "label": "Done"
-      },
-      "secondaryActions": [
-        "snooze"
-      ],
-      "href": "/todos#todo-gt-1"
-    },
-    {
-      "id": "daily_compass:2026-10-06",
+      "id": "daily_compass:2026-10-11",
       "source": "daily_compass",
       "title": "Daily Compass check-in",
       "detail": "Window open until 23:59",
       "priorityReason": "checkin_window",
-      "dueAt": "2026-10-07T04:59:00.000Z",
+      "dueAt": "2026-10-12T04:59:00.000Z",
       "primaryAction": {
         "kind": "open",
         "label": "Start"
@@ -63,29 +46,45 @@
       "href": "/daily-compass"
     },
     {
-      "id": "skylight:55780859-2026-10-06-1800",
+      "id": "skylight:55780859-2026-10-11-1800",
       "source": "skylight",
       "title": "♻️ Take out recycling",
       "detail": "Skylight chore",
       "priorityReason": "today",
-      "dueAt": "2026-10-06T23:00:00.000Z",
+      "dueAt": "2026-10-11T23:00:00.000Z",
       "primaryAction": {
         "kind": "open",
         "label": "Open Skylight"
       },
       "href": "https://app.ourskylight.com/"
+    },
+    {
+      "id": "todos:gt-2",
+      "source": "todos",
+      "title": "Call plumber about water heater",
+      "priorityReason": "today",
+      "dueAt": "2026-10-12T04:59:00.000Z",
+      "dueIsDate": true,
+      "primaryAction": {
+        "kind": "complete",
+        "label": "Done"
+      },
+      "secondaryActions": [
+        "snooze"
+      ],
+      "href": "/todos#todo-gt-2"
     }
   ],
   "nextEvent": {
     "title": "Dentist — Will",
-    "startsAt": "2026-10-06T16:30:00.000Z",
-    "endsAt": "2026-10-06T17:30:00.000Z",
+    "startsAt": "2026-10-11T16:30:00.000Z",
+    "endsAt": "2026-10-11T17:30:00.000Z",
     "allDay": false,
     "location": "Main St Dental",
     "source": "skylight"
   },
   "compass": {
-    "date": "2026-10-06",
+    "date": "2026-10-11",
     "completed": false,
     "inWindow": true,
     "windowLabel": "00:00–23:59"

@@ -20,6 +20,21 @@ export function localDate(at: Date | number, timeZone: string) {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+/** Calendar-date arithmetic on YYYY-MM-DD (no timezone or DST involved). */
+export function addDays(date: string, days: number) {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+}
+
+/** Whole calendar days from `from` to `to` (YYYY-MM-DD); negative when `to` is earlier. */
+export function daysBetween(from: string, to: string) {
+  const ms = (s: string) => {
+    const [y, m, d] = s.split("-").map(Number);
+    return Date.UTC(y!, m! - 1, d!);
+  };
+  return Math.round((ms(to) - ms(from)) / DAY);
+}
+
 /** Minutes since local midnight in the given timezone. */
 export function localMinutes(at: Date | number, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-GB", {

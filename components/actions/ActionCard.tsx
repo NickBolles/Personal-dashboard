@@ -2,12 +2,15 @@
 
 import { useAccess } from "@/components/access";
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_LABELS, type NextAction, type PrimaryActionKind } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
-import { Badge, Button, ButtonLink, OverflowMenu, SourceBadge, useNow, useOnline, useToast, type MenuItem, type Tone } from "@/components/ui";
+import { Badge, Button, ButtonLink, OverflowMenu, SourceBadge, cx, useNow, useOnline, useToast, type MenuItem, type Tone } from "@/components/ui";
+import { ChevronIcon } from "@/components/icons";
+import { FeedbackBar } from "@/components/home/Feedback";
 import { formatDue } from "./format";
 
 const REASON_TONE: Record<NextAction["priorityReason"], Tone> = {
@@ -35,18 +38,25 @@ export function useActionMutation() {
   });
 }
 
-export function ActionCard({ action, compact }: { action: NextAction; compact?: boolean }) {
+/**
+ * One action. `explain` (Home) adds the tier accent and a "Why this?"
+ * disclosure with the ranking's reasons and per-person feedback.
+ */
+export function ActionCard({ action, compact, explain }: { action: NextAction; compact?: boolean; explain?: boolean }) {
   const router = useRouter();
   const online = useOnline();
   const m = useActionMutation();
   const { can } = useAccess();
   const now = useNow();
+  const [done, setDone] = useState(false);
   const stale = new Date(action.staleAfter).getTime() < now;
   const due = formatDue(action, now);
   const primary = action.primaryAction;
   const titleId = `act-${action.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+  const rank = explain ? action.rank : undefined;
 
-  const run = (kind: PrimaryActionKind | "pin" | "unpin") => m.mutate({ actionId: action.id, kind });
+  // "Done" only shows after the server confirmed (readback); the card then leaves on refetch.
+  const run = (kind: PrimaryActionKind | "pin" | "unpin") => m.mutate({ actionId: action.id, kind }, { onSuccess: () => kind === "complete" && setDone(true) });
   const askHermes = () =>
     router.push(
       `/chat?new=1&context=${encodeURIComponent(`${action.title}${action.detail ? ` — ${action.detail}` : ""} [${action.source}:${action.sourceId}]`)}`,
@@ -70,13 +80,14 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
   ];
 
   return (
-    <article aria-labelledby={titleId} className="card flex flex-col gap-2 p-4">
+    <article aria-labelledby={titleId} data-tier={rank?.tier} className={cx("card flex flex-col gap-2 p-4", rank && "jv-accent pl-5", done && "jv-done")}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <SourceBadge source={action.source} />
             <Badge tone={REASON_TONE[action.priorityReason]}>{PRIORITY_LABELS[action.priorityReason]}</Badge>
             {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
+            {rank?.tier === "compass" ? <Badge tone="accent">Compass focus</Badge> : null}
           </div>
           <h3 id={titleId} className="text-base font-semibold leading-snug">
             {action.external ? (
@@ -109,15 +120,52 @@ export function ActionCard({ action, compact }: { action: NextAction; compact?: 
               variant="primary"
               size="sm"
               busy={m.isPending}
-              disabled={!online}
+              disabled={!online || done}
               title={!online ? "Unavailable offline" : undefined}
               onClick={() => run(primary.kind)}
               aria-describedby={titleId}
             >
-              {primary.label}
+              {done ? (
+                <>
+                  <svg className="jv-check h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Done
+                </>
+              ) : (
+                primary.label
+              )}
             </Button>
           )}
         </div>
+      ) : null}
+      {rank && action.why?.length ? (
+        <details className="jv-why group -mx-1">
+          <summary className="tap inline-flex items-center gap-1 rounded-[8px] px-1 text-xs font-medium text-muted hover:text-text">
+            <span>Why this?</span>
+            <span className="sr-only"> ({action.title})</span>
+            <ChevronIcon className="h-4 w-4 transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="jv-rise space-y-3 px-1 pb-1 pt-1">
+            <ul className="space-y-0.5 text-sm text-muted">
+              {action.why.map((w) => (
+                <li key={w}>· {w}</li>
+              ))}
+            </ul>
+            <FeedbackBar
+              canHide={rank.tier !== "critical"}
+              target={{
+                kind: "action",
+                id: action.id,
+                category: rank.category,
+                title: action.title,
+                fingerprint: rank.fingerprint,
+                why: action.why,
+                sources: [action.source],
+              }}
+            />
+          </div>
+        </details>
       ) : null}
     </article>
   );

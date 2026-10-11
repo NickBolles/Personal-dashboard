@@ -6,7 +6,8 @@ The web app is still there for desktop and for setup (connections, onboarding). 
 
 ## What you can do from the app
 
-- **Home**: Now, the household glance (next event, Daily Compass, home status) and Later. Swipe a card right to complete (or acknowledge) and left to snooze. ⋮ opens Pin, Open, and **Ask Hermes about this**. Pull to refresh. The last copy shows instantly, also offline, and is labelled when it's saved data.
+- **Home**: Now, suggestions, the household glance (next event, Daily Compass, home status) and Later. The server's attention budget applies: Now ≤ 3, Later today ≤ 5, the next two weeks as "3 of N", and a counted backlog row. Cards show their first two ranking reasons ("Why: …"). Suggestion cards offer **Ask** (opens the capture sheet with a draft and the card's context; nothing runs until you send), **Not now** (hidden until 7:00 tomorrow) and **Less like this**. Swipe a card right to complete (or acknowledge) and left to snooze. ⋮ opens Pin, Open, and **Ask Hermes about this**. Pull to refresh. The last copy shows instantly, also offline, and is labelled when it's saved data.
+  Still web-only: the full backlog list, overdue **Review & reschedule**, per-card "Why this?" feedback on actions, and Settings → Home priorities.
 - **Ask Hermes about anything**: "Ask Hermes" on Home, any card, Skylight, Home controls, Todos and Daily Compass. Attach chips (**Today, Skylight, Home, Todos, Daily Compass, Initiatives**) make the server attach a fresh snapshot of that source to your question. "Is the garage open, and do I have time before soccer?" with Home + Skylight attached gives Hermes both.
 - **Chat**: conversations, live replies, tool activity, inline **approval** buttons (allow once, this conversation, always, deny) and **Stop**.
 - **Alerts**: inbox and all, swipe right = handled, left = dismiss, Mark all read. The badge counts unread actionable alerts.

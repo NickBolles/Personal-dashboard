@@ -243,6 +243,16 @@ fun ActionCard(action: NextAction, handlers: ActionHandlers, modifier: Modifier 
                     Text(action.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     val meta = listOfNotNull(action.detail, due).joinToString(" · ")
                     if (meta.isNotBlank()) Text(meta, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    // Home's ranking reasons (server/ranking/attention.ts), first two.
+                    if (action.why.isNotEmpty()) {
+                        Text(
+                            "Why: " + action.why.take(2).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                     action.primaryAction?.let { p ->
                         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(onClick = { handlers.onPrimary(action) }, enabled = !busy) { Text(if (busy) "Working…" else p.label) }

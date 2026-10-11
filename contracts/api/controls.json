@@ -5,9 +5,9 @@
       "name": "Front door lock",
       "domain": "lock",
       "state": "locked",
-      "lastChanged": "2026-10-06T14:46:55.368Z",
-      "observedAt": "2026-10-06T14:51:56.111Z",
-      "stateToken": "466973782d8fd5fa",
+      "lastChanged": "2026-10-11T06:25:31.848Z",
+      "observedAt": "2026-10-11T06:30:32.620Z",
+      "stateToken": "3070de0267541244",
       "services": [
         {
           "service": "lock",
@@ -21,9 +21,9 @@
       "name": "Garage door",
       "domain": "cover",
       "state": "open",
-      "lastChanged": "2026-10-06T14:09:55.368Z",
-      "observedAt": "2026-10-06T14:51:56.111Z",
-      "stateToken": "f52d3ace305dfc92",
+      "lastChanged": "2026-10-11T05:48:31.848Z",
+      "observedAt": "2026-10-11T06:30:32.620Z",
+      "stateToken": "9cf17e86eeda46f5",
       "services": [
         {
           "service": "close_cover",
@@ -37,9 +37,9 @@
       "name": "Garage door 2",
       "domain": "cover",
       "state": "closed",
-      "lastChanged": "2026-10-06T14:46:55.368Z",
-      "observedAt": "2026-10-06T14:51:56.111Z",
-      "stateToken": "eb034ef3e98fa83f",
+      "lastChanged": "2026-10-11T06:25:31.848Z",
+      "observedAt": "2026-10-11T06:30:32.620Z",
+      "stateToken": "8704bbd3bc1b5d36",
       "services": [
         {
           "service": "close_cover",
@@ -49,5 +49,5 @@
       ]
     }
   ],
-  "fetchedAt": "2026-10-06T14:51:56.111Z"
+  "fetchedAt": "2026-10-11T06:30:32.621Z"
 }

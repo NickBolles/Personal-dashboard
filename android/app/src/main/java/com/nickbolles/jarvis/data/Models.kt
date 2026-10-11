@@ -46,6 +46,61 @@ data class NextAction(
     val pinned: Boolean = false,
     val primaryAction: PrimaryAction? = null,
     val secondaryActions: List<String> = emptyList(),
+    /** Home only: plain reasons for its place (server/ranking/attention.ts). */
+    val why: List<String> = emptyList(),
+    val rank: ActionRank? = null,
+)
+
+@Serializable
+data class ActionRank(val tier: String = "", val bucket: String = "", val category: String = "", val fingerprint: String = "")
+
+@Serializable
+data class AttentionBudget(val now: Int = 3, val today: Int = 5, val upcoming: Int = 3)
+
+@Serializable
+data class AttentionTotals(
+    val open: Int = 0,
+    val now: Int = 0,
+    val today: Int = 0,
+    val upcoming: Int = 0,
+    val backlog: Int = 0,
+    val overdue: Int = 0,
+    val snoozed: Int = 0,
+    val waiting: Int = 0,
+)
+
+@Serializable
+data class CompassFocus(val state: String = "", val focus: List<String> = emptyList(), val asOf: String? = null, val stale: Boolean = false)
+
+@Serializable
+data class AttentionSummary(
+    val version: Int = 1,
+    val budget: AttentionBudget = AttentionBudget(),
+    val totals: AttentionTotals = AttentionTotals(),
+    val overBudget: Int = 0,
+    val compass: CompassFocus? = null,
+)
+
+@Serializable
+data class AssistProvenance(val version: Int = 1, val fingerprint: String = "", val sources: List<String> = emptyList(), val generatedAt: String? = null)
+
+@Serializable
+data class AssistChat(val label: String, val draft: String, val context: String)
+
+/** A deterministic Home suggestion (lib/contracts.ts AssistCard). AI only runs if the person sends the chat. */
+@Serializable
+data class AssistCard(
+    val id: String,
+    val kind: String = "",
+    val category: String = "",
+    val title: String,
+    val body: String = "",
+    val basis: String = "",
+    val origin: String = "data",
+    val tone: String = "neutral",
+    val why: List<String> = emptyList(),
+    val provenance: AssistProvenance = AssistProvenance(),
+    val chat: AssistChat? = null,
 )
 
 @Serializable
@@ -107,6 +162,8 @@ data class HomePayload(
     val later: LaterGroups = LaterGroups(),
     val glance: HouseholdGlance = HouseholdGlance(),
     val sources: List<SourceStatus> = emptyList(),
+    val attention: AttentionSummary? = null,
+    val assists: List<AssistCard> = emptyList(),
 )
 
 @Serializable

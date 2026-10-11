@@ -4,6 +4,8 @@ import { expectNoHorizontalOverflow } from "./helpers";
 
 const PAGES = [
   "/home",
+  "/home/all?bucket=backlog",
+  "/settings/home",
   "/chat",
   "/chat/sess_morning",
   "/alerts",

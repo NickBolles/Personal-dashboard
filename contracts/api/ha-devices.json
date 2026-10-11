@@ -1,5 +1,5 @@
 {
-  "fetchedAt": "2026-10-06T14:51:56.721Z",
+  "fetchedAt": "2026-10-11T06:30:34.014Z",
   "lightControl": "all",
   "doors": [
     {
@@ -7,8 +7,8 @@
       "name": "Back door",
       "kind": "door",
       "state": "off",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "cae255785eafcce8",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "a355dd69243d2320",
       "services": []
     },
     {
@@ -16,8 +16,8 @@
       "name": "Front door",
       "kind": "door",
       "state": "off",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "9d2ec5a1d5448eeb",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "5eefd6a4c13fa846",
       "services": []
     },
     {
@@ -25,8 +25,8 @@
       "name": "Front door lock",
       "kind": "lock",
       "state": "locked",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "8c6688266f216e7b",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "512d1767d66b0edd",
       "services": [
         {
           "service": "lock",
@@ -40,8 +40,8 @@
       "name": "Garage door",
       "kind": "garage",
       "state": "open",
-      "lastChanged": "2026-10-06T14:09:56.643Z",
-      "stateToken": "94805a0ec4bfb352",
+      "lastChanged": "2026-10-11T05:48:33.906Z",
+      "stateToken": "b6da0084bfeba3dc",
       "services": [
         {
           "service": "close_cover",
@@ -55,8 +55,8 @@
       "name": "Garage door 2",
       "kind": "garage",
       "state": "closed",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "5921b6d02820ea94",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "5ef5055889dceb9a",
       "services": [
         {
           "service": "close_cover",
@@ -72,9 +72,9 @@
       "name": "Kitchen lights",
       "kind": "light",
       "state": "on",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
       "brightness": 80,
-      "stateToken": "f395da954c340b76",
+      "stateToken": "120f32c40584e1e6",
       "services": [
         {
           "service": "turn_on",
@@ -93,8 +93,8 @@
       "name": "Living room lamp",
       "kind": "light",
       "state": "off",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "263b418cc86ba608",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "76c12e644787806b",
       "services": [
         {
           "service": "turn_on",
@@ -113,8 +113,8 @@
       "name": "Porch light",
       "kind": "light",
       "state": "off",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "15114f5218402b99",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "327f549b373e1f22",
       "services": [
         {
           "service": "turn_on",
@@ -135,8 +135,8 @@
       "name": "Driveway camera",
       "kind": "camera",
       "state": "recording",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "e3a7163a84774818",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "f7a420178e34c231",
       "services": []
     },
     {
@@ -144,8 +144,8 @@
       "name": "Front door camera",
       "kind": "camera",
       "state": "idle",
-      "lastChanged": "2026-10-06T14:46:56.643Z",
-      "stateToken": "50c17f91b6e5dee8",
+      "lastChanged": "2026-10-11T06:25:33.906Z",
+      "stateToken": "7d911bb54f2bcfa3",
       "services": []
     }
   ]
