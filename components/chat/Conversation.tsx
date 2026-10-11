@@ -1,4 +1,5 @@
 "use client";
+import { refreshSessionLists } from "@/lib/client/session-lists";
 
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -74,7 +75,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     (s: RunState) => {
       announce(s.phase === "completed" ? `${who} finished responding` : `Run ${PHASE_LABEL[s.phase].label.toLowerCase()}`);
       setLastOutcome(s.phase);
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      refreshSessionLists(qc);
       qc.invalidateQueries({ queryKey: ["home"] });
       // Once the durable transcript includes this turn, drop the live copy (keeps failure notices).
       qc.refetchQueries({ queryKey: ["session", sessionId] }).then(() => {
@@ -124,7 +125,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       setContext([]);
       announce(`Message sent. ${who} is responding.`);
       run.start(r.runId);
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      refreshSessionLists(qc);
       return true;
     } catch (err) {
       setPendingInput(undefined);
@@ -160,7 +161,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     try {
       await api.patch(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`, body);
       qc.invalidateQueries({ queryKey: ["session", sessionId] });
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      refreshSessionLists(qc);
       toast(msg, "ok");
     } catch (err) {
       toast((err as Error).message, "danger");

@@ -56,13 +56,22 @@ class JarvisApi(
 
     fun authed(builder: Request.Builder): Request.Builder = token?.let { builder.header("Authorization", "Bearer $it") } ?: builder
 
-    private suspend fun <T> send(method: String, path: String, body: JsonElement?, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> send(method: String, path: String, body: JsonElement?, serializer: KSerializer<T>, cancellable: Boolean = false): T = withContext(Dispatchers.IO) {
         val req = authed(Request.Builder().url(url(path)))
             .header("Accept", "application/json")
             .method(method, body?.let { JarvisJson.encodeToString(JsonElement.serializer(), it).toRequestBody(JSON_TYPE) } ?: if (method == "GET") null else "{}".toRequestBody(JSON_TYPE))
             .build()
         val res = try {
-            http.newCall(req).execute()
+            if (!cancellable) http.newCall(req).execute() else kotlinx.coroutines.suspendCancellableCoroutine<okhttp3.Response> { continuation ->
+                val call = http.newCall(req)
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: IOException) { continuation.resumeWith(Result.failure(e)) }
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        continuation.resume(response) { _, value, _ -> value.close() }
+                    }
+                })
+            }
         } catch (e: IOException) {
             throw ApiException(0, "network", "Can't reach Jarvis (${e.message ?: "network error"})")
         }
@@ -128,7 +137,7 @@ class JarvisApi(
 
     /* --------------------------------------------------------------- chat */
 
-    suspend fun sessions() = get("/api/hermes/sessions", SessionsResponse.serializer())
+    suspend fun sessions(offset: Int = 0) = send("GET", "/api/hermes/sessions?offset=$offset", null, SessionsResponse.serializer(), cancellable = true)
 
     suspend fun session(id: String) = get("/api/hermes/sessions/$id", SessionDetail.serializer())
 

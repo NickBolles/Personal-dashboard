@@ -1,4 +1,5 @@
 "use client";
+import { refreshSessionLists } from "@/lib/client/session-lists";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
@@ -17,7 +18,7 @@ export function RenameDialog({ open, onClose, session }: { open: boolean; onClos
     mutationFn: () => api.patch(`/api/hermes/sessions/${encodeURIComponent(session.id)}`, { title: title.trim() || null }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["session", session.id] });
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      refreshSessionLists(qc);
       toast("Renamed", "ok");
       onClose();
     },
@@ -88,7 +89,7 @@ export function ForkDialog({
         idempotencyKey: key,
       }),
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ["sessions"] });
+      refreshSessionLists(qc);
       qc.invalidateQueries({ queryKey: ["session", session.id] });
       toast(
         fromMessage

@@ -66,7 +66,7 @@ import com.nickbolles.jarvis.data.ApprovalRequest
 import com.nickbolles.jarvis.data.ContextSource
 import com.nickbolles.jarvis.data.JarvisApi
 import com.nickbolles.jarvis.data.Loadable
-import com.nickbolles.jarvis.data.Resource
+
 import com.nickbolles.jarvis.data.RunEvent
 import com.nickbolles.jarvis.data.RunStream
 import com.nickbolles.jarvis.data.SessionDetail
@@ -90,10 +90,35 @@ import kotlinx.coroutines.launch
 
 /* ---------------------------------------------------------------- list */
 
-class ChatListViewModel(graph: AppGraph) : ViewModel() {
-    val sessions = Resource(graph, "sessions", SessionsResponse.serializer()) { it.sessions() }
-    fun refresh() {
-        viewModelScope.launch { sessions.refresh() }
+class ChatListViewModel(private val graph: AppGraph) : ViewModel() {
+    private val _state = MutableStateFlow(Loadable(data = graph.store.readCache("sessions", SessionsResponse.serializer()), fromCache = true))
+    val state = _state.asStateFlow()
+    private var loadJob: Job? = null
+    private var failedOffset = 0
+
+    fun refresh() { loadJob?.cancel(); load(0) }
+    fun retry() { if (loadJob?.isActive != true) load(failedOffset) }
+    fun loadMore() {
+        if (loadJob?.isActive == true || _state.value.fromCache) return
+        _state.value.data?.nextOffset?.let { load(it) }
+    }
+    private fun load(offset: Int) {
+        failedOffset = offset
+        loadJob = viewModelScope.launch {
+            _state.update { it.copy(loading = true, error = null) }
+            try {
+                val page = graph.call { it.sessions(offset) }
+                if (page.unavailable.isNotEmpty() && !_state.value.data?.sessions.isNullOrEmpty()) {
+                    throw ApiException(502, "upstream_unavailable", "Hermes is unavailable. Previously loaded conversations may be stale.")
+                }
+                val data = if (offset == 0) page else _state.value.data?.append(page) ?: page
+                // A bounded offline preview, not a resumable/full snapshot.
+                graph.store.writeCache("sessions", SessionsResponse.serializer(), data.copy(sessions = data.sessions.take(200), nextOffset = null))
+                _state.value = Loadable(data = data)
+            } catch (e: ApiException) {
+                _state.update { it.copy(loading = false, error = e.message) }
+            }
+        }
     }
 }
 
@@ -101,23 +126,29 @@ class ChatListViewModel(graph: AppGraph) : ViewModel() {
 fun ChatListScreen() {
     val graph = AppGraph.get(LocalContext.current)
     val vm: ChatListViewModel = viewModel { ChatListViewModel(graph) }
-    val state by vm.sessions.state.collectAsState()
+    val state by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.refresh() }
-    ChatListContent(state, vm::refresh)
+    ChatListContent(state, vm::refresh, vm::loadMore, vm::retry)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatListContent(state: Loadable<SessionsResponse>, onRefresh: () -> Unit) {
+fun ChatListContent(state: Loadable<SessionsResponse>, onRefresh: () -> Unit, onLoadMore: () -> Unit = {}, onRetry: () -> Unit = onRefresh) {
     val app = LocalAppActions.current
     val now = LocalClock.current.now()
     Box(Modifier.fillMaxSize()) {
         PullToRefreshBox(isRefreshing = state.loading && state.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { Text("Hermes", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() }) }
-                state.error?.let { item { StatusBanner(it, tone = if (state.data != null) "warn" else "danger", onRetry = onRefresh) } }
+                state.error?.let { item { StatusBanner(it, tone = if (state.data != null) "warn" else "danger", onRetry = onRetry) } }
+                if (state.loading) item { Text("Loading conversations…") }
+                if (state.data != null && (state.fromCache || state.error != null)) item { Text("Showing saved conversations — this list may be stale or incomplete.") }
+                if (state.data?.unavailable?.isNotEmpty() == true) item { StatusBanner("Hermes is unavailable. Showing local conversations only.", tone = "warn", onRetry = onRefresh) }
                 val list = state.data?.sessions.orEmpty().sortedWith(compareByDescending<SessionSummary> { it.pinned }.thenByDescending { it.lastActiveAt ?: "" })
-                if (state.data != null && list.isEmpty()) item { EmptyState("No conversations yet", "Ask Hermes anything — or ask about your Skylight calendar or your home.") }
+                if (state.data != null && list.isEmpty()) item { EmptyState(if (state.data.nextOffset != null) "No conversations in this page" else "No conversations yet", "Ask Hermes anything — or load more conversations.") }
+                if (state.data?.nextOffset != null && !state.fromCache) item {
+                    OutlinedButton(onClick = onLoadMore, enabled = !state.loading) { Text("Load more conversations") }
+                }
                 items(list, key = { it.id }) { s ->
                     Surface(onClick = { app.navigate(Routes.conversation(s.id)) }, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
