@@ -20,8 +20,10 @@ import {
 
 export type HermesConn = { baseUrl: string; apiKey?: string };
 
-export function hermesConn(): HermesConn {
+/** Ordinary use requires enabled; only this integration's admin connection test may opt out. */
+export function hermesConn(purpose?: "admin-connection-test"): HermesConn {
   const r = resolveIntegration("hermes");
+  if (!r.enabled && purpose !== "admin-connection-test") throw new UpstreamError("Hermes", "unsupported", "Hermes is disabled");
   if (!r.config.baseUrl) throw new UpstreamError("Hermes", "unsupported", "Hermes is not configured yet");
   return { baseUrl: r.config.baseUrl, apiKey: r.secrets.apiKey };
 }
@@ -59,8 +61,19 @@ export const HermesDiscoveryClient = {
 
 /** Sessions, messages, fork, metadata. */
 export const HermesSessionClient = {
-  list: (c: HermesConn, q: { limit?: number; offset?: number; includeChildren?: boolean } = {}) =>
-    call(c, { path: "/api/sessions", query: { limit: q.limit ?? 50, offset: q.offset ?? 0, include_children: q.includeChildren ?? true } }, sessionListSchema),
+  list: (c: HermesConn, q: { limit?: number; offset?: number; includeChildren?: boolean; signal?: AbortSignal } = {}) =>
+    // List-only budget: measured HTTPS list latency was 13.9s; other calls keep
+    // their existing budgets. Smaller windows reduce shaping, not the global sort.
+    call(
+      c,
+      {
+        path: "/api/sessions",
+        timeoutMs: 20_000,
+        signal: q.signal,
+        query: { limit: q.limit ?? 50, offset: q.offset ?? 0, include_children: q.includeChildren ?? true },
+      },
+      sessionListSchema,
+    ),
   get: (c: HermesConn, id: string) => call(c, { path: `/api/sessions/${encodeURIComponent(id)}` }, sessionEnvelopeSchema),
   create: (c: HermesConn, body: { title?: string; source?: string; model?: string; provider?: string }, signal?: AbortSignal) =>
     call(c, { path: "/api/sessions", method: "POST", body, signal }, sessionEnvelopeSchema),

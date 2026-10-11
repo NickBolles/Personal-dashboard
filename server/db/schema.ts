@@ -198,9 +198,71 @@ export const actionPrefs = sqliteTable(
     actionId: text("action_id").notNull(),
     pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
     hiddenUntil: text("hidden_until"),
+    /** Explicit acknowledgement, independent of generic feedback snoozes. */
+    acknowledgedUntil: text("acknowledged_until"),
     updatedAt: text("updated_at").notNull().default(now),
   },
   (t) => [primaryKey({ columns: [t.userId, t.actionId] })],
+);
+
+/**
+ * Per-person feedback on Home cards (docs/home-priorities.md). Rows are never
+ * edited: a person can delete their own, or reset all of it.
+ */
+export const homeFeedback = sqliteTable(
+  "home_feedback",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    idempotencyKey: text("idempotency_key").notNull(),
+    /** action | assist */
+    targetKind: text("target_kind").notNull(),
+    targetId: text("target_id").notNull(),
+    category: text("category").notNull(),
+    /** helpful | not_helpful | not_now | less_like_this | wrong_assumption */
+    verdict: text("verdict").notNull(),
+    correction: text("correction"),
+    fingerprint: text("fingerprint").notNull(),
+    /** JSON {version, fingerprint, why[], sources[]}: what the card said when the person reacted */
+    provenance: text("provenance").notNull(),
+    snoozeUntil: text("snooze_until"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("home_feedback_idem_idx").on(t.userId, t.idempotencyKey), index("home_feedback_target_idx").on(t.userId, t.targetId)],
+);
+
+/** Per-person category weights the ranking reads (−2…+1, 0 = no row). */
+export const homeCategoryPrefs = sqliteTable(
+  "home_category_prefs",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    weight: integer("weight").notNull().default(0),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.category] })],
+);
+
+/** Dates a person saved for planning ahead (birthdays, anniversaries). Private to them. */
+export const homeMilestones = sqliteTable(
+  "home_milestones",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** YYYY-MM-DD; for yearly dates only month and day matter */
+    date: text("date").notNull(),
+    yearly: integer("yearly", { mode: "boolean" }).notNull().default(true),
+    leadDays: integer("lead_days").notNull().default(60),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("home_milestones_user_idx").on(t.userId)],
 );
 
 /** Built-in todo store — only used when "Jarvis" is the canonical todo provider. */

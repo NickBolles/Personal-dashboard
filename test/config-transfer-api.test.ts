@@ -47,6 +47,24 @@ it("serves no-store encrypted export and sanitized preview; explicitly applies d
   expect((await call({ operation: "apply", ...request, revision: preview.body.revision })).body).toEqual({ applied: 1, preserved: 0 });
   expect(getDb().select().from(schema.integrations).get()?.enabled).toBe(false);
 });
+it("rejects a different encrypted file or replacement choice after preview without writes", async () => {
+  const data = { version: 1, integrations: [{ kind: "hermes", config: { baseUrl: "https://previewed.invalid" }, secrets: {} }] };
+  const file = await encryptConfiguration(data, password);
+  const changedFile = await encryptConfiguration(
+    { ...data, integrations: [{ ...data.integrations[0], config: { baseUrl: "https://changed.invalid" } }] },
+    password,
+  );
+  const preview = await call({ operation: "preview", password, file, replaceExisting: false });
+  expect(preview.status).toBe(200);
+  for (const change of [
+    { file: changedFile, replaceExisting: false },
+    { file, replaceExisting: true },
+  ]) {
+    expect((await call({ operation: "apply", password, revision: preview.body.revision, ...change })).status).toBe(409);
+    expect(getDb().select().from(schema.integrations).all()).toEqual([]);
+  }
+  expect((await call({ operation: "apply", password, file, replaceExisting: false, revision: preview.body.revision })).status).toBe(200);
+});
 it("bounds request streams and rejects plaintext/unknown schema without logging", async () => {
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {

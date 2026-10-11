@@ -42,7 +42,7 @@ export function Button({
       aria-busy={busy || undefined}
       disabled={rest.disabled || busy}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+        "press inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium disabled:opacity-50 disabled:cursor-not-allowed",
         size === "md" ? "min-h-12 px-4 text-[0.95rem]" : "min-h-11 px-3 text-sm",
         VARIANTS[variant],
         className,
@@ -63,7 +63,7 @@ export function ButtonLink({
   ...rest
 }: { href: string; variant?: Variant; className?: string; children: ReactNode; external?: boolean } & Record<string, unknown>) {
   const cls = cx(
-    "inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium min-h-12 px-4 text-[0.95rem] no-underline",
+    "press inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium min-h-12 px-4 text-[0.95rem] no-underline",
     VARIANTS[variant],
     className,
   );

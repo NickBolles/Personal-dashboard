@@ -59,6 +59,66 @@ export type NextAction = {
   };
   /** Supported secondary actions (all have visible menu equivalents). */
   secondaryActions?: PrimaryActionKind[];
+  /** Home only: plain-language reasons for its place (server/ranking/attention.ts). */
+  why?: string[];
+  /** Home only: where the ranking put it, and what feedback refers to. */
+  rank?: ActionRank;
+};
+
+/** Ranking tiers, highest first (docs/home-priorities.md). */
+export type AttentionTier =
+  "critical" | "awaiting_user" | "pinned" | "compass" | "overdue_recent" | "due_soon" | "checkin_window" | "today" | "overdue_stale" | "upcoming" | "someday";
+
+export type AttentionBucket = "now" | "today" | "upcoming" | "backlog";
+
+export type ActionRank = {
+  tier: AttentionTier;
+  bucket: AttentionBucket;
+  /** feedback category, e.g. "source:todos" */
+  category: string;
+  /** changes when the item's due date or title changes (feedback provenance) */
+  fingerprint: string;
+};
+
+export type AttentionSummary = {
+  version: number;
+  budget: { now: number; today: number; upcoming: number };
+  /** counted after scoping, dedupe and snoozes; now + today + upcoming + backlog = open */
+  totals: { open: number; now: number; today: number; upcoming: number; backlog: number; overdue: number; snoozed: number; waiting: number };
+  /** critical items shown in Now beyond its budget (never hidden) */
+  overBudget: number;
+  /** Today's Daily Compass focus, only for people who use it. Never invented. */
+  compass?: {
+    state: "focus" | "no_focus" | "outdated" | "unavailable";
+    focus: string[];
+    asOf?: string;
+    stale?: boolean;
+  };
+};
+
+export type AssistKind = "overdue_triage" | "plan_ahead" | "seasonal";
+
+/**
+ * A deterministic suggestion built from data Jarvis already has (or a dated
+ * season). AI only comes in when the person opens the chat and sends.
+ */
+export type AssistCard = {
+  /** stable id; also the snooze key ("assist:…") */
+  id: string;
+  kind: AssistKind;
+  category: string;
+  title: string;
+  body: string;
+  /** where this came from, in words ("From your Todos", "Seasonal idea, not from your calendar") */
+  basis: string;
+  origin: "data" | "milestone" | "calendar" | "seasonal";
+  tone: "warn" | "accent" | "neutral";
+  why: string[];
+  provenance: { version: number; fingerprint: string; sources: string[]; generatedAt: string };
+  /** reschedulable todos (with snooze, when the person may edit); `due` is the local date */
+  triage?: { actionIds: string[]; items: { id: string; title: string; due: string }[] };
+  /** opt-in Hermes chat: prefilled draft + bounded context the person reviews before sending */
+  chat?: { label: string; draft: string; context: string };
 };
 
 export type SourceState = "ok" | "stale" | "error" | "unauthorized" | "disabled" | "unconfigured" | "refreshing";
@@ -129,7 +189,13 @@ export type HomePayload = {
   };
   glance: HouseholdGlance;
   sources: SourceStatus[];
+  /** absent in snapshots saved by older versions */
+  attention?: AttentionSummary;
+  assists?: AssistCard[];
 };
+
+/** GET /api/home/items: one bucket, ranked, paged. */
+export type HomeItemsPage = { bucket: AttentionBucket; items: NextAction[]; total: number; offset: number; nextOffset?: number };
 
 /** Home sections the user can reorder or hide (phone app and web share this layout). */
 export const HOME_SECTIONS = [

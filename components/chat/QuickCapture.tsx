@@ -1,8 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { api, newIdempotencyKey } from "@/lib/client/api";
+import { refreshSessionLists } from "@/lib/client/session-lists";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { Button, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { SendIcon } from "@/components/icons";
@@ -23,6 +25,7 @@ export function QuickCapture({
   placeholder?: string;
 }) {
   const router = useRouter();
+  const qc = useQueryClient();
   const online = useOnline();
   const { toast } = useToast();
   const [text, setText] = useState(initialText ?? "");
@@ -54,6 +57,8 @@ export function QuickCapture({
     setBusy(true);
     try {
       const session = await api.post<SessionSummary>("/api/hermes/sessions", { title: input.slice(0, 60), backend });
+      // Refresh even if the subsequent run fails; the conversation already exists.
+      void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
       const key = newIdempotencyKey("qc");
       await kvSet(`pending:${session.id}`, { input, key, context });
       await api.post(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, { input, idempotencyKey: key, context });

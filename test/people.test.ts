@@ -17,7 +17,7 @@ import { saveIntegration } from "@/integrations/store";
 import { demoPresets } from "@/integrations/demo";
 import type { IntegrationKind } from "@/integrations/registry";
 import { getPreferences, updatePreferences } from "@/server/settings";
-import { getHome, refreshSource, setActionPref } from "@/server/sources";
+import { getHome, homeSelection, refreshSource, setActionPref } from "@/server/sources";
 import { buildContext } from "@/server/context";
 import { search } from "@/server/search";
 import { notifyHolders, usersWith } from "@/server/notifications";
@@ -208,8 +208,8 @@ describe("API routes check capabilities", () => {
   });
 
   it("acting on a card needs that module's capability", async () => {
-    const home = await getHome(as(owner), { live: false });
-    const todo = [...home.now, ...home.later.laterToday, ...home.later.upcoming].find((a) => a.source === "todos")!;
+    const { attention: home } = await homeSelection(as(owner), { live: false });
+    const todo = [...home.now, ...home.today, ...home.upcoming, ...home.backlog].find((a) => a.source === "todos")!;
     expect(todo).toBeDefined();
     const r = await call(actionsRoute.POST, "/api/actions", kid, { method: "POST", body: { actionId: todo.id, kind: "complete" } });
     expect(r.status).toBe(403);

@@ -315,7 +315,8 @@ export const skylightAdapter: SourceAdapter = {
         {
           name: "Hermes connected",
           run: async () => {
-            if (!resolveIntegration("hermes").config.baseUrl) throw new Error("Connect Hermes first: Skylight is read through Hermes");
+            const h = resolveIntegration("hermes");
+            if (!h.enabled || !h.config.baseUrl) throw new Error("Enable and connect Hermes first: Skylight is read through Hermes");
             return "Skylight requests go through Hermes";
           },
         },

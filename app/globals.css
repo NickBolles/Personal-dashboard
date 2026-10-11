@@ -175,6 +175,146 @@
   }
 }
 
+/*
+ * Home: calm cards with one purposeful accent. The accent bar is decorative;
+ * every card also says its reason in text. Motion is short and subtle, and the
+ * global prefers-reduced-motion rule above turns it off.
+ */
+:root {
+  --tier-critical: var(--danger);
+  --tier-attention: var(--accent);
+  --tier-compass: #a0287a;
+  --tier-overdue: #b54708;
+  --tier-soon: var(--warn);
+  --tier-calm: var(--line-strong);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tier-compass: #f08fd0;
+    --tier-overdue: #ffab70;
+  }
+}
+
+/* No overflow clipping: cards hold dropdown menus. The bar sits inside the border. */
+.jv-accent {
+  position: relative;
+}
+
+.jv-accent::before {
+  content: "";
+  position: absolute;
+  inset: 10px auto 10px 0;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-bar, transparent);
+}
+
+.jv-accent[data-tier="critical"] {
+  --accent-bar: var(--tier-critical);
+}
+.jv-accent[data-tier="awaiting_user"],
+.jv-accent[data-tier="pinned"] {
+  --accent-bar: var(--tier-attention);
+}
+.jv-accent[data-tier="compass"] {
+  --accent-bar: var(--tier-compass);
+}
+.jv-accent[data-tier="overdue_recent"],
+.jv-accent[data-tier="overdue_stale"] {
+  --accent-bar: var(--tier-overdue);
+}
+.jv-accent[data-tier="due_soon"],
+.jv-accent[data-tier="checkin_window"] {
+  --accent-bar: var(--tier-soon);
+}
+.jv-accent[data-tier="today"] {
+  --accent-bar: var(--tier-calm);
+}
+
+/* Tactile press: a small settle, not a bounce. */
+.press {
+  transition:
+    transform 120ms ease-out,
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@keyframes jv-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.jv-rise {
+  animation: jv-rise 220ms ease-out both;
+}
+
+@keyframes jv-done {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+
+.jv-done {
+  animation: jv-done 400ms ease-out both;
+}
+
+@keyframes jv-check {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.jv-check {
+  animation: jv-check 260ms ease-out both;
+}
+
+@keyframes jv-shimmer {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.jv-skeleton {
+  background: var(--surface-2);
+  border-radius: 6px;
+  animation: jv-shimmer 1.4s ease-in-out infinite;
+}
+
+details.jv-why > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+details.jv-why > summary::-webkit-details-marker {
+  display: none;
+}
+
 @keyframes pulse-dot {
   0%,
   100% {

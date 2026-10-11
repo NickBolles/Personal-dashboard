@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inWindow, localDate, localMinutes, localTimeToInstant, parseHHMM, startOfLocalDay } from "./time";
+import { addDays, daysBetween, inWindow, localDate, localMinutes, localTimeToInstant, parseHHMM, startOfLocalDay } from "./time";
 
 describe("time helpers", () => {
   it("windows handle midnight crossing", () => {
@@ -19,5 +19,12 @@ describe("time helpers", () => {
   it("handles DST transitions", () => {
     expect(startOfLocalDay("2026-11-02", "America/Chicago").toISOString()).toBe("2026-11-02T06:00:00.000Z");
     expect(startOfLocalDay("2026-03-09", "America/Chicago").toISOString()).toBe("2026-03-09T05:00:00.000Z");
+  });
+  it("calendar-date arithmetic ignores DST and month lengths", () => {
+    expect(addDays("2026-10-31", 1)).toBe("2026-11-01");
+    expect(addDays("2026-03-08", 1)).toBe("2026-03-09");
+    expect(addDays("2026-01-01", -1)).toBe("2025-12-31");
+    expect(daysBetween("2026-10-10", "2026-12-25")).toBe(76);
+    expect(daysBetween("2026-10-10", "2026-10-08")).toBe(-2);
   });
 });

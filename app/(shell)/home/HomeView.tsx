@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { HOME_SECTIONS, type HomePayload, type HomeSectionId, type NextAction, type SourceStatus } from "@/lib/contracts";
+import { HOME_SECTIONS, type AttentionSummary, type HomePayload, type HomeSectionId, type NextAction, type SourceStatus } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
 import { kvGet, kvSet } from "@/lib/client/idb";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { formatWhen } from "@/components/actions/format";
+import { AssistCard } from "@/components/home/AssistCard";
+import { TriageDialog } from "@/components/home/TriageDialog";
+import type { AssistCard as Assist } from "@/lib/contracts";
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { Badge, Empty, ErrorNote, Spinner, cx, useOnline } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
@@ -53,6 +56,60 @@ function FreshnessStrip({ sources, refreshing, online, generatedAt }: { sources:
   );
 }
 
+function SectionTitle({ id, children, count, action }: { id: string; children: string; count?: string; action?: React.ReactNode }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-3">
+      <h2 id={id} className="text-sm font-semibold uppercase tracking-wide text-muted">
+        {children}
+        {count ? <span className="ml-1.5 font-normal normal-case tracking-normal">· {count}</span> : null}
+      </h2>
+      {action}
+    </div>
+  );
+}
+
+function SeeAll({ bucket, total, label }: { bucket: string; total: number; label: string }) {
+  return (
+    <Link
+      href={`/home/all?bucket=${bucket}`}
+      className="tap inline-flex items-center gap-0.5 rounded-[8px] px-1 text-sm font-medium text-accent hover:underline"
+    >
+      See all {total}
+      <span className="sr-only"> {label}</span>
+      <ChevronIcon className="h-4 w-4" />
+    </Link>
+  );
+}
+
+/** "3 for now · 5 today · 37 more tracked", plus today's Compass focus when there is one. */
+function AttentionLine({ a }: { a: AttentionSummary }) {
+  const t = a.totals;
+  const more = t.upcoming + t.backlog;
+  const c = a.compass;
+  return (
+    <div className="mt-1 space-y-1.5">
+      <p className="text-sm text-muted" data-dynamic>
+        {t.open === 0
+          ? "Nothing open right now."
+          : `${t.now} for now${t.today ? ` · ${t.today} later today` : ""}${more ? ` · ${more} more tracked` : ""}${t.snoozed ? ` · ${t.snoozed} hidden for now` : ""}`}
+      </p>
+      {c?.state === "focus" ? (
+        <p className="flex flex-wrap items-center gap-1.5 text-sm">
+          <span className="font-medium text-[var(--tier-compass)]">Compass focus</span>
+          {c.focus.map((f) => (
+            <span key={f} className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs">
+              {f}
+            </span>
+          ))}
+          {c.stale ? <span className="text-xs text-warn">(may be out of date)</span> : null}
+        </p>
+      ) : c?.state === "unavailable" || c?.state === "outdated" ? (
+        <p className="text-xs text-muted">Daily Compass focus isn’t available right now, so it isn’t used for ranking.</p>
+      ) : null}
+    </div>
+  );
+}
+
 function LaterGroup({ id, title, items }: { id: string; title: string; items: NextAction[] }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
@@ -85,14 +142,25 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
   );
 }
 
-const LATER_GROUPS: Partial<Record<HomeSectionId, { id: string; title: string; items: (d: HomePayload) => NextAction[] }>> = {
-  later_today: { id: "later-today", title: "Later today", items: (d) => d.later.laterToday },
-  upcoming: { id: "later-upcoming", title: "Upcoming", items: (d) => d.later.upcoming },
-  waiting: { id: "later-waiting", title: "Waiting on", items: (d) => d.later.waitingOn },
-  completed: { id: "later-done", title: "Recently completed", items: (d) => d.later.recentlyCompleted },
-};
+/** Same shape as the loaded page, so nothing jumps when data arrives. */
+function HomeSkeleton() {
+  return (
+    <div aria-hidden="true" className="space-y-3">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="card space-y-2 p-4 pl-5">
+          <div className="jv-skeleton h-3 w-28" />
+          <div className="jv-skeleton h-4 w-3/4" />
+          <div className="jv-skeleton h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function HomeView() {
+  // Keep the reviewed selection alive across Home refetches. Successful tasks
+  // leave the suggestion (and the whole card may disappear) before Close.
+  const [triage, setTriage] = useState<Assist | null>(null);
   const online = useOnline();
   const { can } = useAccess();
   const [snapshot, setSnapshot] = useState<HomePayload>();
@@ -121,40 +189,93 @@ export function HomeView() {
   // Section order/visibility is shared with the phone app (Settings → Home layout there).
   const prefs = useQuery({
     queryKey: ["preferences"],
-    queryFn: () => api.get<{ layout?: { homeSections: { id: HomeSectionId; visible: boolean }[] } }>("/api/settings"),
+    queryFn: () => api.get<{ timezone: string; layout?: { homeSections: { id: HomeSectionId; visible: boolean }[] } }>("/api/settings"),
   });
   const layout = prefs.data?.layout?.homeSections ?? HOME_SECTIONS.map((s) => ({ id: s.id as HomeSectionId, visible: true }));
   const visible = (id: HomeSectionId) => layout.find((s) => s.id === id)?.visible ?? true;
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const att = data?.attention;
+
+  const later: Partial<Record<HomeSectionId, (d: HomePayload) => React.ReactNode>> = {
+    later_today: (d) =>
+      d.later.laterToday.length ? (
+        <section key="later_today" aria-labelledby="today-h" className="mb-6">
+          <SectionTitle id="today-h" count={String(d.later.laterToday.length)}>
+            Later today
+          </SectionTitle>
+          <ol className="space-y-2">
+            {d.later.laterToday.map((a) => (
+              <li key={a.id} className="jv-rise">
+                <ActionCard action={a} explain />
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null,
+    upcoming: (d) =>
+      d.later.upcoming.length ? (
+        <section key="upcoming" aria-labelledby="upcoming-h" className="mb-6">
+          <SectionTitle
+            id="upcoming-h"
+            count={att ? `${d.later.upcoming.length} of ${att.totals.upcoming}` : undefined}
+            action={att && att.totals.upcoming > d.later.upcoming.length ? <SeeAll bucket="upcoming" total={att.totals.upcoming} label="upcoming" /> : null}
+          >
+            Next two weeks
+          </SectionTitle>
+          <ul className="space-y-2">
+            {d.later.upcoming.map((a) => (
+              <li key={a.id}>
+                <ActionCard action={a} explain />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null,
+  };
+  const groups: Partial<Record<HomeSectionId, { id: string; title: string; items: (d: HomePayload) => NextAction[] }>> = {
+    waiting: { id: "later-waiting", title: "Waiting on", items: (d) => d.later.waitingOn },
+    completed: { id: "later-done", title: "Recently completed", items: (d) => d.later.recentlyCompleted },
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <header className="mb-4">
         <p className="text-sm text-muted">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
         <h1 className="text-2xl font-semibold tracking-tight">{greeting}</h1>
+        {att ? <AttentionLine a={att} /> : null}
       </header>
 
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
       {visible("now") ? (
-        <section aria-labelledby="now-h" className="mb-6">
-          <h2 id="now-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+        <section aria-labelledby="now-h" aria-busy={!data || undefined} className="mb-6">
+          <SectionTitle id="now-h" count={att && data?.now.length ? `${data.now.length}` : undefined}>
             Now
-          </h2>
+          </SectionTitle>
           {!data ? (
-            <div className="card p-4">
-              <Spinner label="Loading your next actions…" />
-            </div>
+            <>
+              <span className="sr-only" role="status">
+                Loading your next actions…
+              </span>
+              <HomeSkeleton />
+            </>
           ) : data.now.length ? (
-            <ol className="space-y-3">
-              {data.now.map((a) => (
-                <li key={a.id}>
-                  <ActionCard action={a} />
-                </li>
-              ))}
-            </ol>
+            <>
+              <ol className="space-y-3">
+                {data.now.map((a) => (
+                  <li key={a.id} className="jv-rise">
+                    <ActionCard action={a} explain />
+                  </li>
+                ))}
+              </ol>
+              {att?.overBudget ? (
+                <p className="mt-2 text-xs text-muted">
+                  {att.overBudget} more safety {att.overBudget === 1 ? "alert" : "alerts"} than the usual {att.budget.now}: safety alerts are always shown.
+                </p>
+              ) : null}
+            </>
           ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
             <Empty title="Nothing needs you right now">
               Checked{" "}
@@ -179,6 +300,23 @@ export function HomeView() {
         </section>
       ) : null}
 
+      {data?.assists?.length ? (
+        <section aria-labelledby="assist-h" className="mb-6">
+          <SectionTitle id="assist-h">Suggestions</SectionTitle>
+          <ul className="space-y-3">
+            {data.assists.map((c) => (
+              <li key={c.id}>
+                <AssistCard card={c} onTriage={setTriage} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {triage?.triage ? (
+        <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
+      ) : null}
+
       {can("hermes.chat") ? (
         <section aria-labelledby="capture-h" className="mb-6">
           <h2 id="capture-h" className="sr-only">
@@ -189,25 +327,52 @@ export function HomeView() {
       ) : null}
 
       {data ? (
-        <section aria-labelledby="later-h" className="mb-6">
-          <h2 id="later-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Later
-          </h2>
-          <ul className="space-y-2">
-            {layout
-              .filter((s) => s.visible && LATER_GROUPS[s.id])
-              .map((s) => {
-                const g = LATER_GROUPS[s.id]!;
-                return <LaterGroup key={s.id} id={g.id} title={g.title} items={g.items(data)} />;
-              })}
-          </ul>
-          {!data.later.laterToday.length && !data.later.upcoming.length && !data.later.waitingOn.length && !data.later.recentlyCompleted.length ? (
-            <p className="text-sm text-muted">Nothing else queued.</p>
+        <>
+          {layout
+            .filter((s) => s.visible)
+            .map((s) => {
+              if (later[s.id]) return later[s.id]!(data);
+              const g = groups[s.id];
+              return g && g.items(data).length ? (
+                <ul key={s.id} className="mb-6 space-y-2">
+                  <LaterGroup id={g.id} title={g.title} items={g.items(data)} />
+                </ul>
+              ) : null;
+            })}
+
+          {att ? (
+            <section aria-labelledby="backlog-h" className="mb-6">
+              <h2 id="backlog-h" className="sr-only">
+                Backlog
+              </h2>
+              <Link href="/home/all?bucket=backlog" className="card press flex min-h-14 items-center justify-between gap-3 p-4 hover:bg-surface-2">
+                <span className="min-w-0">
+                  <span className="block font-medium">
+                    Backlog <span className="font-normal text-muted">· {att.totals.backlog}</span>
+                  </span>
+                  <span className="block text-sm text-muted">
+                    {att.totals.backlog
+                      ? "Older overdue, undated, later dates and anything over today’s limit. Nothing is deleted."
+                      : "Everything open is on Home."}
+                  </span>
+                </span>
+                {att.totals.overdue ? <Badge tone="warn">{att.totals.overdue} overdue across Home</Badge> : null}
+                <ChevronIcon className="h-5 w-5 shrink-0 text-muted" />
+              </Link>
+            </section>
           ) : null}
-        </section>
+        </>
       ) : null}
 
       {data && visible("glance") ? <Glance data={data} /> : null}
+
+      {data ? (
+        <p className="mt-6 text-center text-sm">
+          <Link href="/settings/home" className="tap inline-flex items-center rounded-[8px] px-2 text-muted underline-offset-2 hover:text-text hover:underline">
+            Tune what Home shows
+          </Link>
+        </p>
+      ) : null}
     </div>
   );
 }

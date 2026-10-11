@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNull, gt, or } from "drizzle-orm";
 import type { NextAction, PrimaryActionKind } from "@/lib/contracts";
-import { iso, localDate, MINUTE, DAY } from "@/lib/time";
+import { iso, localDate, addDays, MINUTE, DAY } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { newId } from "@/server/crypto";
@@ -124,7 +124,7 @@ export function createLocalTodo(input: { title: string; notes?: string; due?: st
 }
 
 function tomorrow(tz: string) {
-  return localDate(Date.now() + DAY, tz);
+  return addDays(localDate(Date.now(), tz), 1);
 }
 
 async function mutate(id: string, kind: PrimaryActionKind, opts: { until?: string; timezone: string }) {
@@ -153,6 +153,8 @@ async function mutate(id: string, kind: PrimaryActionKind, opts: { until?: strin
       if (!after) throw new UpstreamError("Home Assistant", "not_found", "Item disappeared");
       if (kind === "complete" && after.status !== "completed")
         throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm completion");
+      if (kind === "snooze" && after.due !== snoozeDate)
+        throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm the new due date");
       return;
     }
     case "jarvis": {

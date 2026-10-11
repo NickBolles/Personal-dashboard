@@ -13,21 +13,26 @@ import { backendAvailable, defaultBackend } from "./settings";
  * owns them (loc_/lrn_ are Claude-direct; everything else is Hermes), so the
  * routes, the web chat and the phone app don't need to care.
  */
-export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
-  const localSessions = local.listLocalSessions(user, opts);
+export async function listSessions(user: CurrentUser, opts: hermes.SessionListOptions = {}) {
+  const localSessions = (opts.offset ?? 0) === 0 ? local.listLocalSessions(user, opts) : [];
   const unavailable: string[] = [];
   let remote: SessionSummary[] = [];
+  let nextOffset: number | null = null;
   if (isConfigured("hermes")) {
     try {
-      remote = await hermes.listSessions(user, opts);
+      const page = await hermes.listSessionPage(user, opts);
+      remote = page.sessions;
+      nextOffset = page.nextOffset;
     } catch (err) {
-      // With Claude conversations to show, a slow or down Hermes doesn't blank the list.
+      if (opts.signal?.aborted) throw err;
+      // Partial success is explicit and retryable, never a terminal empty list.
       if (!localSessions.length) throw err;
       unavailable.push("Hermes");
+      nextOffset = opts.offset ?? 0;
     }
   }
   const sessions = [...remote, ...localSessions].sort((a, b) => (b.lastActiveAt ?? b.startedAt ?? "").localeCompare(a.lastActiveAt ?? a.startedAt ?? ""));
-  return { sessions, unavailable };
+  return { sessions, unavailable, nextOffset };
 }
 
 export async function createSession(user: CurrentUser, title?: string, backend?: AssistantBackend) {

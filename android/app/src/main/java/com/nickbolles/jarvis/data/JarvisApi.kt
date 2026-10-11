@@ -56,13 +56,22 @@ class JarvisApi(
 
     fun authed(builder: Request.Builder): Request.Builder = token?.let { builder.header("Authorization", "Bearer $it") } ?: builder
 
-    private suspend fun <T> send(method: String, path: String, body: JsonElement?, serializer: KSerializer<T>): T = withContext(Dispatchers.IO) {
+    private suspend fun <T> send(method: String, path: String, body: JsonElement?, serializer: KSerializer<T>, cancellable: Boolean = false): T = withContext(Dispatchers.IO) {
         val req = authed(Request.Builder().url(url(path)))
             .header("Accept", "application/json")
             .method(method, body?.let { JarvisJson.encodeToString(JsonElement.serializer(), it).toRequestBody(JSON_TYPE) } ?: if (method == "GET") null else "{}".toRequestBody(JSON_TYPE))
             .build()
         val res = try {
-            http.newCall(req).execute()
+            if (!cancellable) http.newCall(req).execute() else kotlinx.coroutines.suspendCancellableCoroutine<okhttp3.Response> { continuation ->
+                val call = http.newCall(req)
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: IOException) { continuation.resumeWith(Result.failure(e)) }
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        continuation.resume(response) { _, value, _ -> value.close() }
+                    }
+                })
+            }
         } catch (e: IOException) {
             throw ApiException(0, "network", "Can't reach Jarvis (${e.message ?: "network error"})")
         }
@@ -111,6 +120,39 @@ class JarvisApi(
     suspend fun act(actionId: String, kind: String, until: String? = null) =
         post("/api/actions", buildJsonObject { put("actionId", actionId); put("kind", kind); until?.let { put("until", it) } }, ActionResult.serializer())
 
+    /**
+     * Per-person feedback on a Home card ("not_now", "less_like_this", "helpful", …).
+     * Jarvis-local: it changes this person's ranking, never the item in its source.
+     */
+    suspend fun homeFeedback(
+        kind: String,
+        id: String,
+        category: String,
+        verdict: String,
+        fingerprint: String,
+        why: List<String>,
+        sources: List<String>,
+        snoozeUntil: String? = null,
+    ) = post(
+        "/api/home/feedback",
+        buildJsonObject {
+            put("idempotencyKey", newIdempotencyKey("fb"))
+            put("target", buildJsonObject { put("kind", kind); put("id", id); put("category", category) })
+            put("verdict", verdict)
+            snoozeUntil?.let { put("snoozeUntil", it) }
+            put(
+                "provenance",
+                buildJsonObject {
+                    put("version", 1)
+                    put("fingerprint", fingerprint.take(128).ifEmpty { "none" })
+                    put("why", buildJsonArray { why.take(6).forEach { add(JsonPrimitive(it.take(200))) } })
+                    put("sources", buildJsonArray { sources.take(8).forEach { add(JsonPrimitive(it.take(40))) } })
+                },
+            )
+        },
+        ActionResult.serializer(),
+    )
+
     suspend fun source(source: String, cached: Boolean = false) = get("/api/sources/$source${if (cached) "?cached=1" else ""}", SourceResult.serializer())
 
     suspend fun context(source: String) = get("/api/context?source=$source", ContextPreview.serializer())
@@ -128,7 +170,7 @@ class JarvisApi(
 
     /* --------------------------------------------------------------- chat */
 
-    suspend fun sessions() = get("/api/hermes/sessions", SessionsResponse.serializer())
+    suspend fun sessions(offset: Int = 0) = send("GET", "/api/hermes/sessions?offset=$offset", null, SessionsResponse.serializer(), cancellable = true)
 
     suspend fun session(id: String) = get("/api/hermes/sessions/$id", SessionDetail.serializer())
 

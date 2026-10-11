@@ -1,6 +1,6 @@
 import type { ActionSource, NextAction, PriorityReason } from "@/lib/contracts";
 import { classifyDue } from "@/server/ranking";
-import { iso, localTimeToInstant, MINUTE } from "@/lib/time";
+import { iso, addDays, startOfLocalDay, MINUTE } from "@/lib/time";
 import type { AdapterContext } from "./types";
 
 export function actionId(source: ActionSource, sourceId: string) {
@@ -9,7 +9,7 @@ export function actionId(source: ActionSource, sourceId: string) {
 
 /** Date-only due dates (Google Tasks, many todo apps) are due by end of that local day. */
 export function classifyDateOnly(date: string, ctx: AdapterContext): { reason: PriorityReason; dueAt: string } {
-  const dueAt = new Date(localTimeToInstant(date, "00:00", ctx.timezone).getTime() + 24 * 60 * MINUTE - MINUTE);
+  const dueAt = new Date(startOfLocalDay(addDays(date, 1), ctx.timezone).getTime() - MINUTE);
   if (date < ctx.today) return { reason: "overdue", dueAt: iso(dueAt) };
   if (date === ctx.today) return { reason: "today", dueAt: iso(dueAt) };
   return { reason: "upcoming", dueAt: iso(dueAt) };
