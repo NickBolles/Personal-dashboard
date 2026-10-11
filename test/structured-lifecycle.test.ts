@@ -9,6 +9,30 @@ vi.mock("@/server/settings", () => ({ getSetting: vi.fn(), setSetting: vi.fn() }
 import { HermesExecutionClient as runs, HermesSessionClient as sessions } from "@/integrations/hermes/client";
 import { runStructured } from "@/integrations/hermes/structured";
 import { setSetting } from "@/server/settings";
+import { UpstreamError } from "@/server/http/errors";
+
+it.each(["unauthorized", "unreachable", "timeout", "not_found", "conflict", "unsupported", "bad_response"] as const)(
+  "preserves %s transport classification without exposing its message",
+  async (kind) => {
+    vi.mocked(sessions.create).mockRejectedValue(new UpstreamError("Hermes", kind, "PRIVATE TOKEN"));
+    const error = await runStructured(request).catch((e) => e);
+    expect(error).toBeInstanceOf(UpstreamError);
+    expect(error.kind).toBe(kind);
+    expect(error.message).not.toContain("PRIVATE");
+    expect(setSetting).toHaveBeenCalledWith("hermes_sync_failure:skylight", expect.objectContaining({ code: kind }));
+    expect(JSON.stringify(vi.mocked(setSetting).mock.calls)).not.toContain("PRIVATE");
+    expect(runs.start).not.toHaveBeenCalled();
+  },
+);
+it("preserves unauthorized polling failures and retains the unconfirmed worker", async () => {
+  vi.mocked(runs.status).mockRejectedValue(new UpstreamError("Hermes", "unauthorized", "PRIVATE TOKEN"));
+  const error = await runStructured({ ...request, source: "daily_compass_complete" }).catch((e) => e);
+  expect(error.kind).toBe("unauthorized");
+  expect(error.message).not.toContain("PRIVATE");
+  expect(runs.stop).toHaveBeenCalledTimes(1);
+  expect(sessions.remove).not.toHaveBeenCalled();
+  expect(setSetting).toHaveBeenCalledWith("hermes_sync_failure:daily_compass", expect.objectContaining({ code: "unauthorized", cleanup: "retained" }));
+});
 const request = {
   source: "skylight",
   label: "Skylight",

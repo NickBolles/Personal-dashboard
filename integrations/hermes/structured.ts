@@ -111,7 +111,7 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
   let startAttempted = false;
   let terminal = false;
   let lastStatus = "unknown";
-  let failure: "timeout" | "unsupported" | "bad_response" | undefined;
+  let failure: UpstreamError["kind"] | undefined;
   let cleanup = "retained";
   const conn = hermesConn();
   const observe = (status: string) => {
@@ -151,17 +151,20 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
       await sleep(Math.min(Math.max(50, pollMs() || 750), workDeadline - Date.now()));
     }
     throw new Error("sync_deadline");
-  } catch {
-    failure ??= Date.now() >= workDeadline ? "timeout" : "bad_response";
+  } catch (error) {
+    // Preserve controlled transport classifications, never the upstream message.
+    failure ??= error instanceof UpstreamError ? error.kind : Date.now() >= workDeadline ? "timeout" : "bad_response";
     // Never persist provider errors, model text, prompts or schema values.
     throw new UpstreamError(
       req.label,
       failure,
       failure === "timeout"
         ? `Hermes did not finish the ${req.label} request in time`
-        : failure === "unsupported"
-          ? `Hermes requested approval for ${req.label}; use chat instead`
-          : `Hermes could not complete the ${req.label} request`,
+        : failure === "unauthorized"
+          ? `Hermes authentication failed for ${req.label}; check Hermes credentials`
+          : failure === "unsupported" && lastStatus === "waiting_for_approval"
+            ? `Hermes requested approval for ${req.label}; use chat instead`
+            : `Hermes could not complete the ${req.label} request`,
     );
   } finally {
     if (runId && !terminal) {
