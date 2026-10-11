@@ -168,7 +168,9 @@ data class SessionSummary(
 }
 
 @Serializable
-data class SessionsResponse(val sessions: List<SessionSummary> = emptyList(), val unavailable: List<String> = emptyList())
+data class SessionsResponse(val sessions: List<SessionSummary> = emptyList(), val unavailable: List<String> = emptyList(), val nextOffset: Int? = null) {
+    fun append(page: SessionsResponse) = page.copy(sessions = (sessions + page.sessions).associateBy { it.id }.values.toList())
+}
 
 /** Transcript entry; `kind` is user | assistant | tool | system. */
 @Serializable

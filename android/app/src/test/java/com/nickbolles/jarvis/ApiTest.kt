@@ -87,6 +87,27 @@ class ApiTest {
         assertEquals("1", reconnect.headers["Last-Event-ID"])
     }
 
+    @Test fun sessionsContinuePastOneHundredAndDeduplicatePins() = runBlocking {
+        val client = api()
+        var all = com.nickbolles.jarvis.data.SessionsResponse()
+        for (offset in 0..120 step 20) {
+            val rows = (offset until minOf(offset + 20, 123)).joinToString(",") { """{"id":"s$it","title":"Chat $it"}""" }
+            val next = if (offset == 120) "null" else (offset + 20).toString()
+            server.enqueue(json("""{"sessions":[$rows,{"id":"pin","title":"Pinned"}],"unavailable":[],"nextOffset":$next}"""))
+            all = all.append(client.sessions(offset))
+            assertEquals("/api/hermes/sessions?offset=$offset", server.takeRequest().target)
+        }
+        assertEquals(124, all.sessions.size)
+        assertNull(all.nextOffset)
+    }
+
+    @Test fun emptyFilteredPageIsNotTerminalAndLegacyResponseStillDecodes() = runBlocking {
+        server.enqueue(json("""{"sessions":[],"unavailable":[],"nextOffset":20}"""))
+        assertEquals(20, api().sessions().nextOffset)
+        server.enqueue(json("""{"sessions":[],"unavailable":[]}"""))
+        assertNull(api().sessions(20).nextOffset)
+    }
+
     @Test fun normalizesServerAddresses() {
         assertEquals("https://jarvis.example.com", JarvisApi.normalizeServer(" jarvis.example.com/ "))
         assertEquals("http://192.168.1.10:3000", JarvisApi.normalizeServer("http://192.168.1.10:3000"))

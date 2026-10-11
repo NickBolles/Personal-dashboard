@@ -2,31 +2,49 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { SessionSummary } from "@/lib/hermes";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
-import { kvGet, kvSet } from "@/lib/client/idb";
+import { mergeSessionPages, type SessionPage } from "@/lib/session-pages";
 import { Badge, Button, ErrorNote, Spinner, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { ForkIcon, PlusIcon } from "@/components/icons";
 import { BackendSwitch, useAssistantChoice } from "./backend";
 
 export function useSessions(archived = false) {
-  const [cached, setCached] = useState<SessionSummary[]>();
-  useEffect(() => {
-    kvGet<SessionSummary[]>("sessions:list").then((c) => c && setCached(c));
-  }, []);
-  const q = useQuery({
-    queryKey: ["sessions", archived],
-    queryFn: async () => {
-      const r = await api.get<{ sessions: SessionSummary[] }>(`/api/hermes/sessions${archived ? "?archived=1" : ""}`);
-      if (!archived) kvSet("sessions:list", r.sessions.slice(0, 50));
-      return r.sessions;
+  const client = useQueryClient();
+  const queryKey = ["sessions", archived];
+  const q = useInfiniteQuery({
+    queryKey,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam, signal }) => {
+      const page = await api.get<SessionPage>(`/api/hermes/sessions?offset=${pageParam}${archived ? "&archived=1" : ""}`, signal);
+      if (page.unavailable?.length && client.getQueryData<InfiniteData<SessionPage>>(queryKey)?.pages.some((p) => p.sessions.length)) {
+        throw new Error("Hermes is unavailable. Previously loaded conversations may be stale.");
+      }
+      return page;
     },
-    refetchInterval: 30_000,
+    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    // Each upstream list performs a global recency sort. Do not poll or refetch
+    // every loaded page on focus/reconnect. Refresh below restarts one window.
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    refetchOnMount: false,
+    retry: false,
   });
-  return { ...q, sessions: q.data ?? (archived ? undefined : cached), fromCache: !q.data && Boolean(cached) };
+  const refresh = async () => {
+    await client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData<InfiniteData<SessionPage, number>>(queryKey, (old) => old && { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) });
+    return q.refetch();
+  };
+  return {
+    ...q,
+    refetch: refresh,
+    sessions: q.data ? mergeSessionPages(q.data.pages) : undefined,
+    unavailable: q.data?.pages.at(-1)?.unavailable ?? [],
+    fromCache: Boolean(q.data && q.isError),
+  };
 }
 
 export function NewConversationButton({ className }: { className?: string }) {
@@ -62,7 +80,8 @@ export function SessionList({ compact }: { compact?: boolean }) {
   const pathname = usePathname();
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const { sessions, isLoading, error, refetch, fromCache } = useSessions(showArchived);
+  const { sessions, isLoading, error, refetch, fromCache, unavailable, hasNextPage, fetchNextPage, isFetching, isFetchNextPageError } =
+    useSessions(showArchived);
 
   const list = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -84,8 +103,16 @@ export function SessionList({ compact }: { compact?: boolean }) {
         <input type="checkbox" className="h-5 w-5" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
         Show archived
       </label>
-      {fromCache ? <p className="text-xs text-warn">Showing saved list — refreshing…</p> : null}
-      {error && !sessions ? <ErrorNote error={error} retry={() => refetch()} /> : null}
+      <Button disabled={isFetching} onClick={() => refetch()}>
+        Refresh conversations
+      </Button>
+      {fromCache ? <p className="text-xs text-warn">Showing previously loaded conversations — the list may be stale or incomplete.</p> : null}
+      {unavailable.length ? (
+        <p role="status" className="text-xs text-warn">
+          Hermes is unavailable. Showing only local conversations; retry to load Hermes.
+        </p>
+      ) : null}
+      {error ? <ErrorNote error={error} retry={() => (isFetchNextPageError ? fetchNextPage() : refetch())} /> : null}
       {isLoading && !sessions ? <Spinner label="Loading conversations…" /> : null}
       <ul className="space-y-1" aria-label="Conversations">
         {list.map((s) => {
@@ -123,7 +150,15 @@ export function SessionList({ compact }: { compact?: boolean }) {
           );
         })}
       </ul>
-      {sessions && !list.length ? <p className="text-sm text-muted">{filter ? "No matches." : "No conversations yet."}</p> : null}
+      {hasNextPage ? (
+        <Button busy={isFetching} disabled={isFetching} onClick={() => fetchNextPage()}>
+          Load more conversations
+        </Button>
+      ) : null}
+      {hasNextPage ? <p className="text-xs text-muted">More conversations may be available. Filtering searches only the loaded list.</p> : null}
+      {sessions && !list.length ? (
+        <p className="text-sm text-muted">{hasNextPage ? "No matches in the loaded conversations." : filter ? "No matches." : "No conversations yet."}</p>
+      ) : null}
     </div>
   );
 }

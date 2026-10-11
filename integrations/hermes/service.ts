@@ -101,12 +101,36 @@ function assertRunOwner(user: CurrentUser, runId: string) {
   return run;
 }
 
-export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
-  const res = await HermesSessionClient.list(hermesConn(), { limit: 100, includeChildren: true });
-  // Hidden sessions (e.g. Jarvis's own structured sync requests) never show in chat.
+export type SessionListOptions = { includeArchived?: boolean; offset?: number; signal?: AbortSignal };
+
+/** One raw upstream window per request, never scan until an owned row appears. */
+export async function listSessionPage(user: CurrentUser, opts: SessionListOptions = {}) {
+  const offset = opts.offset ?? 0;
+  // Keep the original window for old native clients; updated clients opt into 20.
+  const limit = opts.offset === undefined ? 100 : 20;
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000) {
+    throw new HttpError(400, "bad_offset", "Invalid conversation offset");
+  }
+  opts.signal?.throwIfAborted();
+  const res = await HermesSessionClient.list(hermesConn(), { limit, offset, includeChildren: true, signal: opts.signal });
+  if ((res.offset !== undefined && res.offset !== offset) || (res.limit !== undefined && res.limit !== limit)) {
+    throw new UpstreamError("Hermes", "bad_response", "Hermes returned a different conversation window");
+  }
+  // Pins can be back-filled beyond limit and upstream can under-report has_more
+  // when a pin occupies the recency window. Err toward continuation, not loss.
+  const hasMore = res.has_more === true || res.data.length >= limit;
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
-  const sessions = decorate(visible.map(normalizeSession), user);
-  return sessions.filter((s) => opts.includeArchived || !s.archived);
+  const sessions = decorate(visible.map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
+  return {
+    sessions: [...new Map(sessions.map((s) => [s.id, s])).values()],
+    // Advance by the SQL window, not the filtered count or appended pin count.
+    nextOffset: hasMore ? offset + limit : null,
+  };
+}
+
+// Existing non-chat callers retain their bounded legacy window.
+export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
+  return (await listSessionPage(user, opts)).sessions;
 }
 
 export async function getSessionDetail(user: CurrentUser, id: string) {
