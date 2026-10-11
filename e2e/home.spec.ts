@@ -1,5 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { mock, setHa } from "./helpers";
+import { expect, test, type Page } from "@playwright/test";
+import { expectNoHorizontalOverflow, mock, setHa } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -29,11 +29,115 @@ test("Now shows at most three ranked actions with provenance", async ({ page, re
 test("complete a todo only reports success after upstream readback", async ({ page, request }) => {
   await setHa(request, "cover.garage_door", "closed");
   await page.goto("/home");
-  const card = page.locator("article", { hasText: "Renew car registration" });
+  // Due today, so it's within Now or Later today (two-day-overdue tasks wait in the backlog by design).
+  const card = page.locator("article", { hasText: "Call plumber about water heater" });
   await expect(card).toBeVisible();
   await card.getByRole("button", { name: "Done" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Marked done" })).toBeVisible();
-  await expect(page.locator("section[aria-labelledby=now-h] article", { hasText: "Renew car registration" })).toHaveCount(0);
+  await expect(page.locator("article", { hasText: "Call plumber about water heater" })).toHaveCount(0);
+});
+
+async function resetTuning(page: Page) {
+  const res = await page.request.delete("/api/home/tuning", { data: { scope: "all" }, headers: { "x-jarvis-csrf": "1" } });
+  expect(res.ok()).toBeTruthy();
+}
+
+const overdue = (n: number) => Array.from({ length: n }, (_, i) => ({ title: `Overdue errand ${i + 1}`, dueDays: -(3 + i) }));
+
+test("Home keeps to its attention budget and counts the rest honestly", async ({ page, request }) => {
+  await mock(request, "/google/tasks", { tasks: overdue(12) });
+  await page.goto("/home");
+  await resetTuning(page);
+  await page.reload();
+  await expect(page.locator("section[aria-labelledby=now-h] article").first()).toBeVisible();
+  expect(await page.locator("section[aria-labelledby=now-h] article").count()).toBeLessThanOrEqual(3);
+  expect(await page.locator("section[aria-labelledby=today-h] article").count()).toBeLessThanOrEqual(5);
+  // Long-overdue errands are never promoted into Now.
+  await expect(page.locator("section[aria-labelledby=now-h] article", { hasText: "Overdue errand" })).toHaveCount(0);
+  const backlog = page.getByRole("link", { name: /Backlog/ });
+  await expect(backlog).toContainText(/overdue/);
+  await backlog.click();
+  await expect(page.getByRole("heading", { name: "All of Home" })).toBeVisible();
+  await expect(page.getByText(/\d+ items\./)).toBeVisible();
+  await expect(page.locator("#all-items article", { hasText: "Overdue errand" }).first()).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+});
+
+test.describe("household-timezone triage", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+  test("overdue triage reschedules only the tasks picked, after confirmation and readback", async ({ page, request }) => {
+    // Just after household midnight on fall-back day; the device is still Oct 31.
+    await page.clock.setFixedTime(new Date("2026-11-01T05:30:00Z"));
+    const mutations: string[] = [];
+    const dates: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/api/actions") {
+        mutations.push(r.postDataJSON().actionId);
+        dates.push(r.postDataJSON().until);
+      }
+    });
+    await mock(request, "/google/tasks", { tasks: overdue(6) });
+    await page.goto("/home");
+    await resetTuning(page);
+    await page.reload();
+    const card = page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card).toContainText("Suggestion from your data");
+    await card.getByRole("button", { name: "Review & reschedule" }).click();
+    const dialog = page.getByRole("dialog", { name: "Reschedule overdue tasks" });
+    const review = dialog.getByRole("button", { name: /Review/ });
+    await expect(review).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: "Overdue errand 1", exact: true }).check();
+    await dialog.getByRole("checkbox", { name: "Overdue errand 2", exact: true }).check();
+    await expect(review).toBeDisabled(); // no date yet
+    await expect(dialog).toContainText("Dates use household timezone: America/Chicago");
+    await expect(dialog.getByLabel("Or pick a date")).toHaveAttribute("min", "2026-11-02");
+    await dialog.getByRole("button", { name: "Tomorrow" }).click();
+    await expect(dialog.getByLabel("Or pick a date")).toHaveValue("2026-11-02");
+    await review.click();
+    const confirm = page.getByRole("dialog", { name: "Confirm new due date" });
+    await expect(confirm).toContainText("Move 2 tasks");
+    expect(mutations).toEqual([]); // selection and review are read-only
+    await confirm.getByRole("button", { name: "Confirm and reschedule" }).click();
+    await expect(page.getByRole("dialog").getByText(/Now due/)).toHaveCount(2, { timeout: 15_000 });
+    expect(mutations).toHaveLength(2);
+    expect(dates).toEqual(["2026-11-02", "2026-11-02"]);
+    expect(new Set(mutations).size).toBe(2);
+    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Moved 2 tasks" })).toBeVisible();
+  });
+});
+
+test("suggestion feedback is reversible from Settings → Home priorities", async ({ page, request }) => {
+  await mock(request, "/google/tasks", { tasks: overdue(6) });
+  await page.goto("/home");
+  await resetTuning(page);
+  await page.reload();
+  const card = page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" });
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await card.getByText("Why am I seeing this?").click();
+  await expect(card).toContainText("Counted from your Todos");
+  await card.getByRole("button", { name: "Not now" }).click();
+  await card.getByRole("button", { name: "Until tomorrow" }).click();
+  await expect(page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" })).toHaveCount(0);
+
+  await page.goto("/settings/home");
+  await expect(page.getByRole("heading", { name: "Home priorities", level: 1 })).toBeVisible();
+  const hidden = page.locator("li", { hasText: "Overdue triage suggestion" });
+  await hidden.getByRole("button", { name: "Show again" }).click();
+  await page.goto("/home");
+  await expect(page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" })).toBeVisible();
+});
+
+test("every Now card explains itself", async ({ page }) => {
+  await page.goto("/home");
+  const first = page.locator("section[aria-labelledby=now-h] article").first();
+  await expect(first).toBeVisible();
+  await first.getByText("Why this?").click();
+  await expect(first.locator("details li").first()).toBeVisible();
+  await expect(first).toHaveAttribute("data-tier", "critical");
+  await expect(first.getByText("Safety alerts can’t be hidden or ranked lower.")).toBeVisible();
+  await expect(first.getByRole("button", { name: /Not now|Less like this|Ranked wrong/ })).toHaveCount(0);
 });
 
 test("one failed source never blocks Home, and is not shown as empty", async ({ page, request }) => {

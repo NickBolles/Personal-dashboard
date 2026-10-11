@@ -22,6 +22,8 @@ export type CompassState = {
   /** Hermes-owned mode: when Hermes last read the state, and its one-line status */
   asOf?: string;
   summary?: string;
+  /** today's priorities as the check-in recorded them (Hermes/HTTP modes; optional, ≤ 5) */
+  priorities?: string[];
 };
 
 export type SourceData = {

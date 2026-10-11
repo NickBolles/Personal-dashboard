@@ -54,6 +54,7 @@ export function SettingsView() {
       : []),
     ...(isAdmin ? [{ href: "/settings/people", label: "People", desc: "Family members, the kitchen tablet, and what each can use" }] : []),
     ...(isAdmin ? [{ href: "/settings/configuration", label: "Configuration transfer", desc: "Password-encrypted integration import and export" }] : []),
+    { href: "/settings/home", label: "Home priorities", desc: "What Home shows first, hidden items, saved dates, your feedback" },
     { href: "/settings/notifications", label: "Notifications", desc: "Push on this device, quiet hours, categories" },
     { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
     ...(isAdmin ? [{ href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" }] : []),

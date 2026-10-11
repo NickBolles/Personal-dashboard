@@ -23,7 +23,7 @@ import { confirmMatch, enterBalances, finishRun, importCsv, proposeMatches, refr
 import { startRun } from "@/server/finance/runs";
 import { addActual, assertLinkableEvent, createEvent, createRevision, ensureYear, getPlan, promoteRevision } from "@/server/finance/plan";
 import { financeAdapter } from "@/integrations/finance/adapter";
-import { adapterContext, getHome } from "@/server/sources";
+import { adapterContext, homeSelection } from "@/server/sources";
 import { buildContext } from "@/server/context";
 import { userById } from "@/server/auth";
 import { issueKey } from "@/lib/finance/types";
@@ -367,8 +367,9 @@ describe("Home", () => {
 
   it("finance cards never reach the AI layer, even in the overview", async () => {
     const me = userById(nick)!;
-    const home = await getHome(me, { live: true });
-    expect([...home.now, ...home.later.laterToday, ...home.later.upcoming].some((a) => a.source === "finance")).toBe(true);
+    // Within the attention budget the card may sit in the backlog; it must be on Home somewhere.
+    const { attention } = await homeSelection(me, { live: true });
+    expect([...attention.now, ...attention.today, ...attention.upcoming, ...attention.backlog].some((a) => a.source === "finance")).toBe(true);
     const overview = await buildContext(me, ["overview"], undefined);
     expect(overview).not.toMatch(/\[finance:|check-in|Finance/);
   });

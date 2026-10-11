@@ -1,16 +1,22 @@
 package com.nickbolles.jarvis.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -19,8 +25,10 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +51,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.data.ApiException
+import com.nickbolles.jarvis.data.AssistCard
+import com.nickbolles.jarvis.data.AttentionSummary
 import com.nickbolles.jarvis.data.ContextSource
 import com.nickbolles.jarvis.data.HomePayload
 import com.nickbolles.jarvis.data.Layout
@@ -67,7 +77,10 @@ import com.nickbolles.jarvis.ui.components.relativeTime
 import com.nickbolles.jarvis.ui.nav.CaptureRequest
 import com.nickbolles.jarvis.ui.nav.LocalAppActions
 import com.nickbolles.jarvis.ui.nav.Routes
+import com.nickbolles.jarvis.ui.nav.can
+import com.nickbolles.jarvis.ui.theme.LocalStatusColors
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -96,7 +109,27 @@ abstract class ActionViewModel(protected val graph: AppGraph) : ViewModel() {
     }
 }
 
+/** Main-thread admission happens before launch, so rapid taps cannot race recomposition. */
+internal class HomeFeedbackRequests {
+    private val _busy = MutableStateFlow<Set<String>>(emptySet())
+    val busy = _busy.asStateFlow()
+
+    fun submit(scope: CoroutineScope, id: String, requestAndRefresh: suspend () -> Unit) {
+        if (id in _busy.value) return
+        _busy.value = _busy.value + id
+        scope.launch {
+            try {
+                requestAndRefresh()
+            } finally {
+                _busy.value = _busy.value - id
+            }
+        }
+    }
+}
+
 class HomeViewModel(graph: AppGraph) : ActionViewModel(graph) {
+    private val feedbackRequests = HomeFeedbackRequests()
+    val feedbackBusy = feedbackRequests.busy
     val home = Resource(graph, "home", HomePayload.serializer()) { it.home(cached = false) }
     val prefs = graph.prefs
 
@@ -105,6 +138,21 @@ class HomeViewModel(graph: AppGraph) : ActionViewModel(graph) {
     fun refresh() {
         viewModelScope.launch { home.refresh() }
         viewModelScope.launch { prefs.refresh() }
+    }
+
+    /** "Not now" / "Less like this" on a suggestion: per person, reversible in Settings → Home priorities (web). */
+    fun feedback(card: AssistCard, verdict: String, snoozeUntil: String?, onMessage: (String) -> Unit) {
+        feedbackRequests.submit(viewModelScope, card.id) {
+            try {
+                val r = graph.call {
+                    it.homeFeedback("assist", card.id, card.category, verdict, card.provenance.fingerprint, listOf(card.basis) + card.why, card.provenance.sources, snoozeUntil)
+                }
+                onMessage(r.message)
+                home.refresh()
+            } catch (e: ApiException) {
+                onMessage(e.message ?: "That didn't work")
+            }
+        }
     }
 }
 
@@ -140,8 +188,29 @@ fun HomeScreen() {
     val state by vm.home.state.collectAsState()
     val prefs by vm.prefs.state.collectAsState()
     val busy by vm.busy.collectAsState()
+    val feedbackBusy by vm.feedbackBusy.collectAsState()
+    val app = LocalAppActions.current
+    val clock = LocalClock.current
+    val zone = LocalZone.current
     LaunchedEffect(Unit) { vm.refresh() }
-    HomeContent(state, prefs.data?.layout ?: Layout(), busy, actionHandlers(vm), onRefresh = vm::refresh, userName = prefs.data?.displayName)
+    HomeContent(
+        state,
+        prefs.data?.layout ?: Layout(),
+        busy,
+        actionHandlers(vm),
+        onRefresh = vm::refresh,
+        userName = prefs.data?.displayName,
+        feedbackBusy = feedbackBusy,
+        onAssistFeedback = { card, verdict ->
+            // "Not now" hides until 7:00 tomorrow, local time.
+            val until = if (verdict == "not_now") {
+                clock.now().atZone(zone).toLocalDate().plusDays(1).atTime(7, 0).atZone(zone).toInstant().toString()
+            } else {
+                null
+            }
+            vm.feedback(card, verdict, until, app::message)
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,6 +222,8 @@ fun HomeContent(
     handlers: ActionHandlers,
     onRefresh: () -> Unit,
     userName: String? = null,
+    onAssistFeedback: (AssistCard, String) -> Unit = { _, _ -> },
+    feedbackBusy: Set<String> = emptySet(),
 ) {
     val app = LocalAppActions.current
     val now = LocalClock.current.now()
@@ -168,6 +239,7 @@ fun HomeContent(
                         style = MaterialTheme.typography.headlineMedium,
                         modifier = Modifier.semantics { heading() },
                     )
+                    data?.attention?.let { AttentionLine(it) }
                 }
             }
             item { CaptureBar { app.capture() } }
@@ -176,16 +248,30 @@ fun HomeContent(
                 item { if (state.loading) LoadingCard("Loading your next actions…") }
                 return@LazyColumn
             }
+            val totals = data.attention?.totals
+            if (layout.homeSections.none { it.id == "now" && it.visible }) {
+                assistSection(data.assists, feedbackBusy, onAssistFeedback)
+            }
             for (section in layout.homeSections.filter { it.visible }) {
                 when (section.id) {
-                    "now" -> nowSection(data, busy, handlers)
+                    "now" -> {
+                        nowSection(data, busy, handlers)
+                        assistSection(data.assists, feedbackBusy, onAssistFeedback)
+                    }
                     "glance" -> item { GlanceSection(data) }
                     "later_today" -> compactSection("Later today", data.later.laterToday, busy, handlers)
-                    "upcoming" -> compactSection("Upcoming", data.later.upcoming, busy, handlers)
+                    "upcoming" -> compactSection(
+                        "Next two weeks",
+                        data.later.upcoming,
+                        busy,
+                        handlers,
+                        count = totals?.let { "${data.later.upcoming.size} of ${it.upcoming}" },
+                    )
                     "waiting" -> compactSection("Waiting on", data.later.waitingOn, busy, handlers)
                     "completed" -> compactSection("Recently completed", data.later.recentlyCompleted, busy, handlers, done = true)
                 }
             }
+            data.attention?.let { a -> item { BacklogRow(a) } }
             item {
                 val generated = parseInstant(data.generatedAt)
                 if (generated != null) {
@@ -217,11 +303,136 @@ private fun LazyListScope.nowSection(data: HomePayload, busy: Set<String>, handl
     }
 }
 
-private fun LazyListScope.compactSection(title: String, list: List<NextAction>, busy: Set<String>, handlers: ActionHandlers, done: Boolean = false) {
+private fun LazyListScope.compactSection(
+    title: String,
+    list: List<NextAction>,
+    busy: Set<String>,
+    handlers: ActionHandlers,
+    done: Boolean = false,
+    count: String? = null,
+) {
     if (list.isEmpty()) return
-    item { SectionHeader(title) }
+    item {
+        if (count != null) {
+            SectionHeader(title) { Text(count, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        } else {
+            SectionHeader(title)
+        }
+    }
     items(list, key = { "$title:${it.id}" }) { a ->
         if (done) CompactRow(a, onClick = { handlers.onOpen(a) }) else ActionCard(a, handlers, busy = a.id in busy)
+    }
+}
+
+/** "3 for now · 5 later today · 37 more tracked", plus today's Daily Compass focus when there is one. */
+@Composable
+private fun AttentionLine(a: AttentionSummary) {
+    val t = a.totals
+    val more = t.upcoming + t.backlog
+    val line = if (t.open == 0) {
+        "Nothing open right now."
+    } else {
+        buildString {
+            append("${t.now} for now")
+            if (t.today > 0) append(" · ${t.today} later today")
+            if (more > 0) append(" · $more more tracked")
+            if (t.snoozed > 0) append(" · ${t.snoozed} hidden for now")
+        }
+    }
+    Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+    val c = a.compass
+    if (c != null && c.state == "focus" && c.focus.isNotEmpty()) {
+        Text(
+            "Compass focus: ${c.focus.joinToString(" · ")}${if (c.stale) " (may be out of date)" else ""}",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.tertiary,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+private fun LazyListScope.assistSection(cards: List<AssistCard>, busy: Set<String>, onFeedback: (AssistCard, String) -> Unit) {
+    if (cards.isEmpty()) return
+    item { SectionHeader("Suggestions") }
+    items(cards, key = { "assist:${it.id}" }) { card -> AssistCardView(card, card.id in busy, onFeedback) }
+}
+
+private fun originLabel(origin: String) = when (origin) {
+    "milestone" -> "From a date you saved"
+    "calendar" -> "From your calendar"
+    "seasonal" -> "Seasonal idea"
+    else -> "Suggestion from your data"
+}
+
+/**
+ * A deterministic suggestion. Ask opens the capture sheet with a draft and the
+ * card's bounded context attached; nothing runs until the person sends it.
+ * Reschedule-in-bulk lives on the web (Home → Review & reschedule).
+ */
+@Composable
+private fun AssistCardView(card: AssistCard, busy: Boolean, onFeedback: (AssistCard, String) -> Unit) {
+    val app = LocalAppActions.current
+    val accent = when (card.tone) {
+        "warn" -> LocalStatusColors.current.warn
+        "accent" -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.outline
+    }
+    val canAsk = can("hermes.chat")
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f ||
+        androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 360
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                Modifier
+                    .padding(vertical = 14.dp)
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .background(accent, RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp)),
+            )
+            Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(originLabel(card.origin), style = MaterialTheme.typography.labelMedium, color = accent)
+                Text(card.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
+                if (card.body.isNotBlank()) Text(card.body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val chat = card.chat
+                if (chat != null && canAsk) {
+                    FilledTonalButton(
+                        onClick = { app.capture(CaptureRequest(text = chat.draft, attached = chat.context, attachedLabel = card.title)) },
+                        modifier = Modifier.padding(top = 4.dp),
+                    ) { Text(chat.label) }
+                }
+                AdaptiveRow(stacked) { m ->
+                    OutlinedButton(onClick = { onFeedback(card, "not_now") }, enabled = !busy, modifier = m) { Text("Not now") }
+                    TextButton(onClick = { onFeedback(card, "less_like_this") }, enabled = !busy, modifier = m) { Text("Less like this") }
+                }
+                Text(card.basis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Everything not on Home is counted, never dropped. The full list opens on the web. */
+@Composable
+private fun BacklogRow(a: AttentionSummary) {
+    val app = LocalAppActions.current
+    Surface(
+        onClick = { app.message("The full backlog is on the web: Home → Backlog") },
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Backlog · ${a.totals.backlog}", style = MaterialTheme.typography.titleSmall)
+            Text(
+                if (a.totals.backlog > 0) {
+                    "Older overdue, undated and later items, counted here so nothing is lost." +
+                        if (a.totals.overdue > 0) " ${a.totals.overdue} overdue in total." else ""
+                } else {
+                    "Everything open is on Home."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

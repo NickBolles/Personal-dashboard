@@ -1,6 +1,6 @@
 import "server-only";
 import { can, type Capable } from "@/server/access";
-import { getHome, cachedSource, scopeResult, sourceVisible } from "@/server/sources";
+import { homeSelection, cachedSource, scopeResult, sourceVisible } from "@/server/sources";
 import { listSessions } from "@/integrations/hermes/service";
 import { isConfigured } from "@/integrations/store";
 import { listDevices } from "@/integrations/home-assistant/devices";
@@ -33,6 +33,7 @@ const PER_PROVIDER = 8;
 const SETTINGS_PAGES = [
   { href: "/settings", title: "Settings", keywords: "preferences name timezone passcode theme", admin: false },
   { href: "/settings/notifications", title: "Notification settings", keywords: "push quiet hours alerts categories", admin: false },
+  { href: "/settings/home", title: "Home priorities", keywords: "ranking feedback snooze suggestions birthdays saved dates tune", admin: false },
   { href: "/settings/phones", title: "Phones", keywords: "android app pair device firebase", admin: false },
   { href: "/settings/people", title: "People", keywords: "family wife kids tablet invite roles access", admin: true },
   { href: "/settings/connections", title: "Connections", keywords: "integrations hermes home assistant skylight google todos paperclip", admin: true },
@@ -71,8 +72,9 @@ const providers: SearchProvider[] = [
     label: "Home",
     visible: () => true,
     search: async (q, user) => {
-      const home = await getHome(user, { live: false });
-      const all = [...home.now, ...home.later.laterToday, ...home.later.upcoming, ...home.later.waitingOn];
+      // The whole ranked list, not just Home's budgeted preview: backlog items stay findable.
+      const { attention: h } = await homeSelection(user, { live: false });
+      const all = [...h.now, ...h.today, ...h.upcoming, ...h.backlog, ...h.waiting];
       return all.map((a) => ({
         id: `action:${a.id}`,
         kind: "action" as const,

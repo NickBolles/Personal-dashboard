@@ -16,11 +16,15 @@ import type { NextAction } from "@/lib/contracts";
 
 const STALE = 10 * MINUTE;
 
+/** Optional, bounded: today's priorities as the check-in recorded them. Home uses them to rank; never invented. */
+const prioritiesSchema = z.array(z.string().trim().min(1).max(120)).max(5).nullish();
+
 const remoteSchema = z.object({
   date: z.string(),
   completed: z.boolean(),
   completedAt: z.string().nullish(),
   url: z.string().nullish(),
+  priorities: prioritiesSchema,
 });
 
 /** Hermes-owned Daily Compass: the structured answer Jarvis requires. */
@@ -29,9 +33,16 @@ const hermesSchema = z.object({
   completed: z.boolean(),
   completedAt: z.string().nullish(),
   summary: z.string().max(500).nullish(),
+  priorities: prioritiesSchema,
 });
 type HermesCompass = z.infer<typeof hermesSchema>;
-const HERMES_EXAMPLE: HermesCompass = { date: "2026-10-01", completed: false, completedAt: null, summary: "optional one-line status" };
+const HERMES_EXAMPLE: HermesCompass = {
+  date: "2026-10-01",
+  completed: false,
+  completedAt: null,
+  summary: "optional one-line status",
+  priorities: ["only priorities the check-in actually recorded for this date; [] if none"],
+};
 
 function cfg() {
   const r = resolveIntegration("daily_compass");
@@ -101,6 +112,7 @@ export async function compassState(ctx: AdapterContext): Promise<CompassState> {
       completed: snap.data.completed,
       completedAt: snap.data.completedAt ?? undefined,
       summary: snap.data.summary ?? undefined,
+      priorities: snap.data.priorities ?? undefined,
       sessionId: localState(ctx.today)?.sessionId ?? undefined,
       inWindow: within,
       windowStart: c.windowStart,
@@ -114,6 +126,7 @@ export async function compassState(ctx: AdapterContext): Promise<CompassState> {
       date: r.date,
       completed: r.completed,
       completedAt: r.completedAt ?? undefined,
+      priorities: r.priorities ?? undefined,
       inWindow: within,
       windowStart: c.windowStart,
       windowEnd: c.windowEnd,

@@ -28,6 +28,26 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
   }
   seed();
 
+  /** Test control: add tasks due `dueDays` from today (negative = overdue). Cleared by /__mock/reset. */
+  function addTasks(list) {
+    const today = new Date();
+    const ids = [];
+    for (const [i, t] of list.slice(0, 200).entries()) {
+      const id = `gt-extra-${state.tasks.size}-${i}`;
+      state.tasks.set(id, {
+        kind: "tasks#task",
+        id,
+        title: String(t.title ?? id),
+        status: "needsAction",
+        due: t.dueDays === null || t.dueDays === undefined ? undefined : `${isoDate(addDays(today, Number(t.dueDays)))}T00:00:00.000Z`,
+        updated: new Date(Date.now() - 3600e3).toISOString(),
+        webViewLink: `https://tasks.google.com/task/${id}`,
+      });
+      ids.push(id);
+    }
+    return ids;
+  }
+
   async function handle(req, res, path, url, control) {
     const m = req.method;
     let match;
@@ -109,5 +129,5 @@ export function createGoogleTasks({ clientId, clientSecret, refreshToken }) {
     }
     return notFound(res);
   }
-  return { handle, reset: seed, state };
+  return { handle, reset: seed, state, addTasks };
 }

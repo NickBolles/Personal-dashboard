@@ -120,6 +120,39 @@ class JarvisApi(
     suspend fun act(actionId: String, kind: String, until: String? = null) =
         post("/api/actions", buildJsonObject { put("actionId", actionId); put("kind", kind); until?.let { put("until", it) } }, ActionResult.serializer())
 
+    /**
+     * Per-person feedback on a Home card ("not_now", "less_like_this", "helpful", …).
+     * Jarvis-local: it changes this person's ranking, never the item in its source.
+     */
+    suspend fun homeFeedback(
+        kind: String,
+        id: String,
+        category: String,
+        verdict: String,
+        fingerprint: String,
+        why: List<String>,
+        sources: List<String>,
+        snoozeUntil: String? = null,
+    ) = post(
+        "/api/home/feedback",
+        buildJsonObject {
+            put("idempotencyKey", newIdempotencyKey("fb"))
+            put("target", buildJsonObject { put("kind", kind); put("id", id); put("category", category) })
+            put("verdict", verdict)
+            snoozeUntil?.let { put("snoozeUntil", it) }
+            put(
+                "provenance",
+                buildJsonObject {
+                    put("version", 1)
+                    put("fingerprint", fingerprint.take(128).ifEmpty { "none" })
+                    put("why", buildJsonArray { why.take(6).forEach { add(JsonPrimitive(it.take(200))) } })
+                    put("sources", buildJsonArray { sources.take(8).forEach { add(JsonPrimitive(it.take(40))) } })
+                },
+            )
+        },
+        ActionResult.serializer(),
+    )
+
     suspend fun source(source: String, cached: Boolean = false) = get("/api/sources/$source${if (cached) "?cached=1" else ""}", SourceResult.serializer())
 
     suspend fun context(source: String) = get("/api/context?source=$source", ContextPreview.serializer())

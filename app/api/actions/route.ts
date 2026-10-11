@@ -32,7 +32,7 @@ export const POST = api<z.infer<typeof bodySchema>>(
       return { ok: true, message: body.kind === "pin" ? "Pinned" : "Unpinned" };
     }
     if (body.kind === "acknowledge") {
-      setActionPref(user.id, body.actionId, { hiddenUntil: new Date(Date.now() + 7 * DAY).toISOString() });
+      setActionPref(user.id, body.actionId, { acknowledgedUntil: new Date(Date.now() + 7 * DAY).toISOString() });
       audit({ actor: user.id, action: "action.acknowledge", source, sourceRecord: sourceId, result: "ok", correlationId });
       return { ok: true, message: "Acknowledged" };
     }
