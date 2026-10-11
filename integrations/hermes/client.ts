@@ -20,8 +20,10 @@ import {
 
 export type HermesConn = { baseUrl: string; apiKey?: string };
 
-export function hermesConn(): HermesConn {
+/** Ordinary use requires enabled; only this integration's admin connection test may opt out. */
+export function hermesConn(purpose?: "admin-connection-test"): HermesConn {
   const r = resolveIntegration("hermes");
+  if (!r.enabled && purpose !== "admin-connection-test") throw new UpstreamError("Hermes", "unsupported", "Hermes is disabled");
   if (!r.config.baseUrl) throw new UpstreamError("Hermes", "unsupported", "Hermes is not configured yet");
   return { baseUrl: r.config.baseUrl, apiKey: r.secrets.apiKey };
 }

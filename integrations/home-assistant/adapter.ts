@@ -182,8 +182,8 @@ export const homeAssistantAdapter: SourceAdapter = {
         {
           name: "Reach Home Assistant",
           run: async () => {
-            await HomeAssistantClient.ping(haConn());
-            const cfg = await HomeAssistantClient.config(haConn()).catch(() => ({ version: undefined }));
+            await HomeAssistantClient.ping(haConn("admin-connection-test"));
+            const cfg = await HomeAssistantClient.config(haConn("admin-connection-test")).catch(() => ({ version: undefined }));
             version = cfg.version ?? "";
             return version ? `Home Assistant ${version}` : "API running";
           },
@@ -193,7 +193,7 @@ export const homeAssistantAdapter: SourceAdapter = {
           run: async () => {
             const cfg = resolveIntegration("home_assistant").config;
             const watch = parseLines(cfg.watchEntities);
-            const states = await HomeAssistantClient.states(haConn());
+            const states = await HomeAssistantClient.states(haConn("admin-connection-test"));
             const found = watch.filter((w) => states.some((s) => s.entity_id === w));
             watchCount = found.length;
             const missing = watch.filter((w) => !found.includes(w));
@@ -211,7 +211,7 @@ export const homeAssistantAdapter: SourceAdapter = {
         {
           name: "List calendars",
           run: async () => {
-            const c = haConn();
+            const c = haConn("admin-connection-test");
             calendars = await import("@/server/http/fetch").then(({ upstream }) =>
               upstream<{ entity_id: string; name: string }[]>({
                 source: "Home Assistant",

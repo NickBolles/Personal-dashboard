@@ -36,7 +36,7 @@ export const hermesAdapter: SourceAdapter = {
       {
         name: "Reach API server",
         run: async () => {
-          const h = await HermesDiscoveryClient.health(hermesConn());
+          const h = await HermesDiscoveryClient.health(hermesConn("admin-connection-test"));
           version = h.version ?? "";
           return `${h.platform ?? "hermes"} ${version}`.trim();
         },
@@ -44,7 +44,7 @@ export const hermesAdapter: SourceAdapter = {
       {
         name: "Authenticate + capabilities",
         run: async () => {
-          const caps = await HermesDiscoveryClient.capabilities(hermesConn());
+          const caps = await HermesDiscoveryClient.capabilities(hermesConn("admin-connection-test"));
           const need = ["run_submission", "run_events_sse", "run_stop", "session_fork"];
           const missing = need.filter((f) => !caps.features[f]);
           if (missing.length) throw new Error(`Missing features: ${missing.join(", ")}`);
@@ -55,7 +55,7 @@ export const hermesAdapter: SourceAdapter = {
       {
         name: "List sessions",
         run: async () => {
-          const s = await HermesSessionClient.list(hermesConn(), { limit: 5 });
+          const s = await HermesSessionClient.list(hermesConn("admin-connection-test"), { limit: 5 });
           return `${s.data.length}${s.has_more ? "+" : ""} recent sessions`;
         },
       },
