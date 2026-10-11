@@ -26,3 +26,10 @@ for (const [name, path] of [
     await expect(page).toHaveScreenshot(`${name}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
   });
 }
+
+test("visual: configuration transfer", async ({ page }) => {
+  await page.goto("/settings/configuration");
+  await expect(page.getByRole("heading", { name: "Configuration transfer" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page).toHaveScreenshot("configuration-transfer.png", { fullPage: true });
+});
