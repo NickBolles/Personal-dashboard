@@ -65,6 +65,22 @@ it("retains ambiguous start failures without a run id and sanitizes errors", asy
   expect(sessions.remove).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["daily_compass", "failed", "daily_compass"],
+  ["daily_compass_complete", "failed", "daily_compass"],
+  ["daily_compass", "interrupted", "daily_compass"],
+  ["daily_compass_complete", "interrupted", "daily_compass"],
+  ["unknown_source", "failed", "other"],
+])("attributes %s %s diagnostics to %s", async (source, status, diagnosticSource) => {
+  vi.mocked(runs.status).mockResolvedValue({ run_id: "run_fixture", status });
+  await expect(runStructured({ ...request, source })).rejects.toMatchObject({ kind: "bad_response" });
+  expect(setSetting).toHaveBeenCalledExactlyOnceWith(
+    `hermes_sync_failure:${diagnosticSource}`,
+    expect.objectContaining({ code: "bad_response", status, cleanup: status === "failed" ? "deleted" : "retained" }),
+  );
+  expect(sessions.remove).toHaveBeenCalledTimes(status === "failed" ? 1 : 0);
+});
+
 it("cleans up hide failure before start without launching a visible run", async () => {
   vi.mocked(sessions.update).mockRejectedValue(new Error("PRIVATE"));
   await runStructured(request).catch(() => undefined);

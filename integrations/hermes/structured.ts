@@ -192,7 +192,7 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
     }
     if (failure || cleanup !== "deleted") {
       const safeId = (id: string | undefined) => (id && /^[a-zA-Z0-9_-]{1,128}$/.test(id) ? id : undefined);
-      const source = ["skylight", "daily_compass"].includes(req.source) ? req.source : "other";
+      const source = req.source === "daily_compass_complete" ? "daily_compass" : ["skylight", "daily_compass"].includes(req.source) ? req.source : "other";
       // One bounded latest record per known source; no transcript or untrusted text.
       setSetting(`hermes_sync_failure:${source}`, {
         at: new Date().toISOString(),
