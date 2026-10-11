@@ -128,6 +128,8 @@ export function recordFeedback(
     snoozeUntil = input.snoozeUntil ?? defaultSnooze(now, opts.timezone);
     const t = new Date(snoozeUntil).getTime();
     if (!(t > now.getTime()) || t - now.getTime() > MAX_SNOOZE_DAYS * DAY) throw new HttpError(400, "bad_snooze", `Pick a time within ${MAX_SNOOZE_DAYS} days`);
+    // Settings compares persisted timestamps as text: store a canonical UTC instant.
+    snoozeUntil = new Date(t).toISOString();
   }
 
   const id = newId("hfb");

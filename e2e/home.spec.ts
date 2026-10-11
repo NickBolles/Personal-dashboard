@@ -134,8 +134,10 @@ test("every Now card explains itself", async ({ page }) => {
   const first = page.locator("section[aria-labelledby=now-h] article").first();
   await expect(first).toBeVisible();
   await first.getByText("Why this?").click();
-  await expect(first.getByRole("group", { name: /Feedback on/ })).toBeVisible();
   await expect(first.locator("details li").first()).toBeVisible();
+  await expect(first).toHaveAttribute("data-tier", "critical");
+  await expect(first.getByText("Safety alerts can’t be hidden or ranked lower.")).toBeVisible();
+  await expect(first.getByRole("button", { name: /Not now|Less like this|Ranked wrong/ })).toHaveCount(0);
 });
 
 test("one failed source never blocks Home, and is not shown as empty", async ({ page, request }) => {

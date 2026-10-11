@@ -351,6 +351,37 @@ describe("feedback route", () => {
     expect(far.status).toBe(400);
   });
 
+  it.each(["-05:00", "+05:00"])("normalizes %s snoozes for Settings readback and Show again", async (offset) => {
+    const until = new Date(Date.now() + 3600_000).toISOString();
+    const wallTime = new Date(Date.parse(until) + (offset.startsWith("-") ? -5 : 5) * 3600_000).toISOString();
+    const supplied = wallTime.replace("Z", offset);
+    const id = "assist:overdue_triage";
+    expect(
+      (
+        await feedback(owner, {
+          target: { kind: "assist", id, category: "assist:overdue_triage" },
+          verdict: "not_now",
+          snoozeUntil: supplied,
+        })
+      ).status,
+    ).toBe(200);
+    const pref = getDb()
+      .select()
+      .from(schema.actionPrefs)
+      .where(eq(schema.actionPrefs.userId, owner))
+      .all()
+      .find((p) => p.actionId === id);
+    expect(pref?.hiddenUntil).toBe(until);
+    const row = getDb().select().from(schema.homeFeedback).where(eq(schema.homeFeedback.userId, owner)).get();
+    expect(row?.snoozeUntil).toBe(until);
+    const tuning = () => call<{ snoozed: { id: string }[] }>(tuningRoute.GET, "/api/home/tuning", owner);
+    expect((await tuning()).body.snoozed.map((s) => s.id)).toContain(id);
+    const theirs = await call<{ snoozed: { id: string }[] }>(tuningRoute.GET, "/api/home/tuning", partner);
+    expect(theirs.body.snoozed.map((s) => s.id)).not.toContain(id);
+    expect((await call(tuningRoute.DELETE, "/api/home/tuning", owner, { method: "DELETE", body: { scope: "snooze", target: id } })).status).toBe(200);
+    expect((await tuning()).body.snoozed.map((s) => s.id)).not.toContain(id);
+  });
+
   it("only the owner can delete a feedback row", async () => {
     await feedback(owner, { target: { kind: "assist", id: "assist:overdue_triage", category: "assist:overdue_triage" }, verdict: "helpful" });
     const t = await call<{ feedback: { id: string }[] }>(tuningRoute.GET, "/api/home/tuning", owner);
