@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { todosAdapter } from "@/integrations/todos/adapter";
 import { HomeAssistantClient } from "@/integrations/home-assistant/client";
 import { selectAttention } from "@/server/ranking/attention";
@@ -14,6 +14,21 @@ vi.mock("@/integrations/home-assistant/client", () => ({
 const item = { uid: "one", summary: "DST task", status: "needs_action" as const };
 const opts = { until: "2026-10-20", actor: "test", correlationId: "test" };
 beforeEach(() => vi.resetAllMocks());
+afterEach(() => vi.restoreAllMocks());
+
+it.each([
+  ["2026-03-08T05:30:00Z", "2026-03-08"], // Mar 7 23:30: +24h skips Mar 8
+  ["2026-11-01T05:30:00Z", "2026-11-02"], // Nov 1 00:30: +24h remains Nov 1
+])("default snooze advances a household calendar day across DST at %s", async (instant, due) => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(instant));
+  vi.mocked(HomeAssistantClient.todoItems).mockResolvedValue([{ ...item, due }]);
+  await expect(todosAdapter.act!("one", "snooze", { actor: "test", correlationId: "test" })).resolves.toEqual({ ok: true, message: "Snoozed" });
+  expect(HomeAssistantClient.callService).toHaveBeenCalledExactlyOnceWith(expect.anything(), "todo", "update_item", {
+    entity_id: "todo.test",
+    item: "one",
+    due_date: due,
+  });
+});
 
 it.each([
   ["2026-03-08", "2026-03-09T04:59:00.000Z"],

@@ -10,7 +10,7 @@ import {
   type SourceStatus,
 } from "@/lib/contracts";
 import { ATTENTION_VERSION } from "@/lib/attention";
-import { iso, localDate, startOfLocalDay, DAY } from "@/lib/time";
+import { iso, localDate, startOfLocalDay, addDays } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
 import { getPreferences } from "@/server/settings";
 import { boundedAll } from "@/server/http/fetch";
@@ -31,7 +31,7 @@ export const SOURCE_TIMEOUT_MS = Number(process.env.JARVIS_SOURCE_TIMEOUT_MS ?? 
 export function adapterContext(now = new Date()): AdapterContext {
   const timezone = getPreferences().timezone;
   const today = localDate(now, timezone);
-  const tomorrow = localDate(now.getTime() + DAY, timezone);
+  const tomorrow = addDays(today, 1);
   return { now, timezone, today, endOfToday: startOfLocalDay(tomorrow, timezone) };
 }
 

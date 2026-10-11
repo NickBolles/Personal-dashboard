@@ -93,6 +93,16 @@ beforeEach(async () => {
   await call(tuningRoute.DELETE, "/api/home/tuning", partner, { method: "DELETE", body: { scope: "all" } });
 });
 
+it.each([
+  ["2026-03-08T05:30:00Z", "2026-03-07", "2026-03-08T06:00:00.000Z"],
+  ["2026-11-01T05:30:00Z", "2026-11-01", "2026-11-02T06:00:00.000Z"],
+])("adapter context ends today at next household midnight across DST: %s", (instant, today, end) => {
+  const ctx = adapterContext(new Date(instant));
+  expect(ctx.timezone).toBe("America/Chicago");
+  expect(ctx.today).toBe(today);
+  expect(ctx.endOfToday.toISOString()).toBe(end);
+});
+
 describe("attention budget on /api/home", () => {
   it("keeps Now ≤ 3, Today ≤ 5, Upcoming preview ≤ 3, with totals that add up", async () => {
     const h = await home(owner);
