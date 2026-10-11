@@ -4,6 +4,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 const ORIGIN = "https://app.ourskylight.com";
 const REDIRECT = "https://ourskylight.com/welcome";
+// Public reader identity, stable across invocations without persisting credentials.
+const DEVICE_FINGERPRINT = "6943597b-e92b-4304-8141-9098794d5f01";
 const fail = () => {
   throw new Error("skylight_read_failed");
 };
@@ -136,6 +138,7 @@ export async function readSkylight(input, { env = process.env, fetchImpl = fetch
     state,
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
     code_challenge_method: "S256",
+    skylight_api_client_device_fingerprint: DEVICE_FINGERPRINT,
   }).toString();
   async function follow(url) {
     for (let i = 0; i < 8; i++) {
@@ -183,7 +186,7 @@ export async function readSkylight(input, { env = process.env, fetchImpl = fetch
         code: result.code,
         code_verifier: verifier,
         scope: "everything",
-        skylight_api_client_device_fingerprint: "hermes-jarvis-reader",
+        skylight_api_client_device_fingerprint: DEVICE_FINGERPRINT,
         skylight_api_client_device_platform: "web",
         skylight_api_client_device_name: "hermes",
         skylight_api_client_device_os_version: "linux",

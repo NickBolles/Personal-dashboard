@@ -97,6 +97,37 @@ it("performs only auth POSTs and bounded data GETs with fixture credentials", as
   expect(JSON.stringify(result)).not.toContain("fixture-token");
 });
 
+it("uses one stable UUID fingerprint for authorization and token exchange across reads", async () => {
+  const fingerprints: string[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let state = "";
+    let fingerprint = "";
+    const fetchImpl = async (url: URL, init: RequestInit) => {
+      if (url.pathname === "/oauth/authorize") {
+        state = url.searchParams.get("state")!;
+        fingerprint = url.searchParams.get("skylight_api_client_device_fingerprint")!;
+        expect(fingerprint).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+        fingerprints.push(fingerprint);
+        return new Response('<meta name="csrf-token" content="fixture-csrf">');
+      }
+      if (url.pathname === "/auth/session")
+        return new Response(null, { status: 302, headers: { location: `https://ourskylight.com/welcome?code=fixture-code&state=${state}` } });
+      if (url.pathname === "/oauth/token") {
+        expect(init.body).toBeInstanceOf(URLSearchParams);
+        expect((init.body as URLSearchParams).get("skylight_api_client_device_fingerprint")).toBe(fingerprint);
+        return Response.json({ access_token: "fixture-token" });
+      }
+      if (url.pathname.endsWith("/calendar_events") || url.pathname.endsWith("/chores")) return Response.json({ data: [] });
+      throw Error("unexpected endpoint");
+    };
+    await expect(
+      readSkylight(window, { env: { SKYLIGHT_USERNAME: "fixture", SKYLIGHT_PASSWORD: "fixture", SKYLIGHT_FRAME_ID: "123" }, fetchImpl }),
+    ).resolves.toEqual({ events: [], chores: [] });
+  }
+  expect(fingerprints).toHaveLength(2);
+  expect(fingerprints[1]).toBe(fingerprints[0]);
+});
+
 it("does not forward cookies to a malicious OAuth redirect", async () => {
   let calls = 0;
   const fetchImpl = async () => {
