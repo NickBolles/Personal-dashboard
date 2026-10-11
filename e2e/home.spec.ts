@@ -63,36 +63,49 @@ test("Home keeps to its attention budget and counts the rest honestly", async ({
   await expectNoHorizontalOverflow(page);
 });
 
-test("overdue triage reschedules only the tasks picked, after confirmation and readback", async ({ page, request }) => {
-  const mutations: string[] = [];
-  page.on("request", (r) => {
-    if (r.method() === "POST" && new URL(r.url()).pathname === "/api/actions") mutations.push(r.postDataJSON().actionId);
+test.describe("household-timezone triage", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+  test("overdue triage reschedules only the tasks picked, after confirmation and readback", async ({ page, request }) => {
+    // Just after household midnight on fall-back day; the device is still Oct 31.
+    await page.clock.setFixedTime(new Date("2026-11-01T05:30:00Z"));
+    const mutations: string[] = [];
+    const dates: string[] = [];
+    page.on("request", (r) => {
+      if (r.method() === "POST" && new URL(r.url()).pathname === "/api/actions") {
+        mutations.push(r.postDataJSON().actionId);
+        dates.push(r.postDataJSON().until);
+      }
+    });
+    await mock(request, "/google/tasks", { tasks: overdue(6) });
+    await page.goto("/home");
+    await resetTuning(page);
+    await page.reload();
+    const card = page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" });
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card).toContainText("Suggestion from your data");
+    await card.getByRole("button", { name: "Review & reschedule" }).click();
+    const dialog = page.getByRole("dialog", { name: "Reschedule overdue tasks" });
+    const review = dialog.getByRole("button", { name: /Review/ });
+    await expect(review).toBeDisabled();
+    await dialog.getByRole("checkbox", { name: "Overdue errand 1", exact: true }).check();
+    await dialog.getByRole("checkbox", { name: "Overdue errand 2", exact: true }).check();
+    await expect(review).toBeDisabled(); // no date yet
+    await expect(dialog).toContainText("Dates use household timezone: America/Chicago");
+    await expect(dialog.getByLabel("Or pick a date")).toHaveAttribute("min", "2026-11-02");
+    await dialog.getByRole("button", { name: "Tomorrow" }).click();
+    await expect(dialog.getByLabel("Or pick a date")).toHaveValue("2026-11-02");
+    await review.click();
+    const confirm = page.getByRole("dialog", { name: "Confirm new due date" });
+    await expect(confirm).toContainText("Move 2 tasks");
+    expect(mutations).toEqual([]); // selection and review are read-only
+    await confirm.getByRole("button", { name: "Confirm and reschedule" }).click();
+    await expect(page.getByRole("dialog").getByText(/Now due/)).toHaveCount(2, { timeout: 15_000 });
+    expect(mutations).toHaveLength(2);
+    expect(dates).toEqual(["2026-11-02", "2026-11-02"]);
+    expect(new Set(mutations).size).toBe(2);
+    await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Moved 2 tasks" })).toBeVisible();
   });
-  await mock(request, "/google/tasks", { tasks: overdue(6) });
-  await page.goto("/home");
-  await resetTuning(page);
-  await page.reload();
-  const card = page.locator("section[aria-labelledby=assist-h] article", { hasText: "Overdue tasks are piling up" });
-  await expect(card).toBeVisible({ timeout: 15_000 });
-  await expect(card).toContainText("Suggestion from your data");
-  await card.getByRole("button", { name: "Review & reschedule" }).click();
-  const dialog = page.getByRole("dialog", { name: "Reschedule overdue tasks" });
-  const review = dialog.getByRole("button", { name: /Review/ });
-  await expect(review).toBeDisabled();
-  await dialog.getByRole("checkbox", { name: "Overdue errand 1", exact: true }).check();
-  await dialog.getByRole("checkbox", { name: "Overdue errand 2", exact: true }).check();
-  await expect(review).toBeDisabled(); // no date yet
-  await dialog.getByRole("button", { name: "Tomorrow" }).click();
-  await review.click();
-  const confirm = page.getByRole("dialog", { name: "Confirm new due date" });
-  await expect(confirm).toContainText("Move 2 tasks");
-  expect(mutations).toEqual([]); // selection and review are read-only
-  await confirm.getByRole("button", { name: "Confirm and reschedule" }).click();
-  await expect(page.getByRole("dialog").getByText(/Now due/)).toHaveCount(2, { timeout: 15_000 });
-  expect(mutations).toHaveLength(2);
-  expect(new Set(mutations).size).toBe(2);
-  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Moved 2 tasks" })).toBeVisible();
 });
 
 test("suggestion feedback is reversible from Settings → Home priorities", async ({ page, request }) => {

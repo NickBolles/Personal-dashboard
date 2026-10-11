@@ -203,7 +203,7 @@ export function HomeView() {
   // Section order/visibility is shared with the phone app (Settings → Home layout there).
   const prefs = useQuery({
     queryKey: ["preferences"],
-    queryFn: () => api.get<{ layout?: { homeSections: { id: HomeSectionId; visible: boolean }[] } }>("/api/settings"),
+    queryFn: () => api.get<{ timezone: string; layout?: { homeSections: { id: HomeSectionId; visible: boolean }[] } }>("/api/settings"),
   });
   const layout = prefs.data?.layout?.homeSections ?? HOME_SECTIONS.map((s) => ({ id: s.id as HomeSectionId, visible: true }));
   const visible = (id: HomeSectionId) => layout.find((s) => s.id === id)?.visible ?? true;
@@ -325,7 +325,9 @@ export function HomeView() {
         </section>
       ) : null}
 
-      {triage?.triage ? <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} /> : null}
+      {triage?.triage ? (
+        <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
+      ) : null}
 
       {can("hermes.chat") ? (
         <section aria-labelledby="capture-h" className="mb-6">

@@ -30,9 +30,12 @@ vi.mock("@/components/ui", () => ({
 }));
 const items = [1, 2, 3].map((id) => ({ id: `todos:${id}`, title: `Task ${id}`, due: "2026-10-01" }));
 beforeEach(() => vi.clearAllMocks());
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 function confirm() {
-  render(<TriageDialog open onClose={vi.fn()} items={items} />);
+  render(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
   fireEvent.click(screen.getByRole("button", { name: "Select all" }));
   fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
   fireEvent.click(screen.getByRole("button", { name: "Review 3 changes" }));
@@ -89,6 +92,75 @@ it("waits for the entire batch before offering read-only reconciliation", async 
   await act(async () => finish({ ok: true }));
   await waitFor(() => expect(screen.getByRole("link", { name: "Check todo list" })).toBeTruthy());
   expect(api.post).toHaveBeenCalledTimes(3);
+});
+
+it.each([
+  ["2026-10-10T05:30:00Z", "America/Chicago", "2026-10-10", ["2026-10-11", "2026-10-17", "2026-10-12", "2026-10-24"]],
+  ["2026-03-08T06:30:00Z", "America/Chicago", "2026-03-08", ["2026-03-09", "2026-03-14", "2026-03-09", "2026-03-22"]],
+  ["2026-11-01T05:30:00Z", "America/Chicago", "2026-11-01", ["2026-11-02", "2026-11-07", "2026-11-02", "2026-11-15"]],
+  ["2026-03-09T00:30:00Z", "America/Los_Angeles", "2026-03-08", ["2026-03-09", "2026-03-14", "2026-03-09", "2026-03-22"]],
+])("uses household calendar presets and validation at %s in %s", async (instant, timezone, today, dates) => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(instant));
+  vi.mocked(api.post).mockResolvedValue({ ok: true });
+  render(<TriageDialog open onClose={vi.fn()} items={items} timezone={timezone} />);
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  const input = screen.getByLabelText("Or pick a date") as HTMLInputElement;
+  expect(input.min).toBe(dates[0]);
+  for (const [index, label] of ["Tomorrow", "Saturday", "Next Monday", "In 2 weeks"].entries()) {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(input.value).toBe(dates[index]);
+  }
+  fireEvent.change(input, { target: { value: today } });
+  expect(screen.getByRole("button", { name: "Review 3 changes" }).hasAttribute("disabled")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+  fireEvent.click(screen.getByRole("button", { name: "Review 3 changes" }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and reschedule" }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(3));
+  for (const item of items) expect(api.post).toHaveBeenCalledWith("/api/actions", { actionId: item.id, kind: "snooze", until: dates[0] });
+});
+
+it("does not guess a browser timezone before household settings load", () => {
+  render(<TriageDialog open onClose={vi.fn()} items={items} />);
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  fireEvent.change(screen.getByLabelText("Or pick a date"), { target: { value: "2099-01-01" } });
+  expect(screen.getByRole("button", { name: "Review 3 changes" }).hasAttribute("disabled")).toBe(true);
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+it("revalidates household midnight before confirming an idle dialog", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-03-08T05:59:00Z"));
+  render(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+  fireEvent.click(screen.getByRole("button", { name: "Review 3 changes" }));
+  clock.mockReturnValue(Date.parse("2026-03-08T06:01:00Z"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and reschedule" }));
+  expect(api.post).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Or pick a date").getAttribute("min")).toBe("2026-03-09");
+});
+
+it("uses settings arriving after mount without retaining browser-derived choices", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-10T05:30:00Z"));
+  const view = render(<TriageDialog open onClose={vi.fn()} items={items} />);
+  expect(screen.queryByRole("button", { name: "Tomorrow" })).toBeNull();
+  view.rerender(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
+  fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+  expect((screen.getByLabelText("Or pick a date") as HTMLInputElement).value).toBe("2026-10-11");
+});
+
+it("refreshes presets when an open dialog crosses household midnight", () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date("2026-03-08T05:59:45Z"));
+    render(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
+    fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+    expect((screen.getByLabelText("Or pick a date") as HTMLInputElement).value).toBe("2026-03-08");
+    act(() => vi.advanceTimersByTime(30_000));
+    fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+    expect((screen.getByLabelText("Or pick a date") as HTMLInputElement).value).toBe("2026-03-09");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("reports every verified success without an uncertainty warning", async () => {

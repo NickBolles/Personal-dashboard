@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { AssistCard } from "@/lib/contracts";
 import { addDays, localDate } from "@/lib/time";
@@ -11,21 +11,22 @@ import { chatHref } from "./chat";
 type Item = NonNullable<AssistCard["triage"]>["items"][number];
 type Result = { state: "pending" | "ok" | "unverified"; message?: string };
 
-function dateChoices() {
-  const today = localDate(Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+function dateChoices(today: string) {
   const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
   const fmt = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-  const saturday = addDays(today, (6 - dow + 7) % 7 || 7);
-  const monday = addDays(today, (1 - dow + 7) % 7 || 7);
+  const saturday = today ? addDays(today, (6 - dow + 7) % 7 || 7) : "";
+  const monday = today ? addDays(today, (1 - dow + 7) % 7 || 7) : "";
   return {
     today,
     fmt,
-    options: [
-      { label: "Tomorrow", date: addDays(today, 1) },
-      { label: "Saturday", date: saturday },
-      { label: "Next Monday", date: monday },
-      { label: "In 2 weeks", date: addDays(today, 14) },
-    ],
+    options: today
+      ? [
+          { label: "Tomorrow", date: addDays(today, 1) },
+          { label: "Saturday", date: saturday },
+          { label: "Next Monday", date: monday },
+          { label: "In 2 weeks", date: addDays(today, 14) },
+        ]
+      : [],
   };
 }
 
@@ -34,11 +35,32 @@ function dateChoices() {
  * then confirms. Each task goes through POST /api/actions (snooze), which only
  * reports success after the todo provider reads the new date back.
  */
-export function TriageDialog({ open, onClose, items, chat }: { open: boolean; onClose: () => void; items: Item[]; chat?: AssistCard["chat"] }) {
+export function TriageDialog({
+  open,
+  onClose,
+  items,
+  chat,
+  timezone,
+}: {
+  open: boolean;
+  onClose: () => void;
+  items: Item[];
+  chat?: AssistCard["chat"];
+  timezone?: string;
+}) {
   const online = useOnline();
   const qc = useQueryClient();
   const { toast, announce } = useToast();
-  const [choices] = useState(dateChoices);
+  const [now, setNow] = useState(Date.now);
+  // Settings supplies the same household timezone used by the todo adapters.
+  // Never fall back to the device timezone while settings are unavailable.
+  const today = timezone ? localDate(now, timezone) : "";
+  const choices = dateChoices(today);
+  useEffect(() => {
+    if (!open) return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [open]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [date, setDate] = useState("");
   const [step, setStep] = useState<"select" | "confirm" | "run">("select");
@@ -61,7 +83,20 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
     });
   const chosen = items.filter((i) => selected.has(i.id));
 
+  const validDate = !!today && /^\d{4}-\d{2}-\d{2}$/.test(date) && date > today;
+  function validateCurrentDate() {
+    const at = Date.now();
+    setNow(at);
+    if (!timezone || !validDate || date <= localDate(at, timezone)) {
+      setStep("select");
+      toast("Choose a future date in the household timezone.", "warn");
+      return false;
+    }
+    return true;
+  }
+
   async function run() {
+    if (!online || !validateCurrentDate()) return;
     setStep("run");
     setResults(Object.fromEntries(chosen.map((i) => [i.id, { state: "pending" } as Result])));
     let ok = 0;
@@ -110,7 +145,13 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
                 {chat.label} instead
               </ButtonLink>
             ) : null}
-            <Button variant="primary" disabled={!chosen.length || !date || date <= choices.today} onClick={() => setStep("confirm")}>
+            <Button
+              variant="primary"
+              disabled={!chosen.length || !validDate}
+              onClick={() => {
+                if (validateCurrentDate()) setStep("confirm");
+              }}
+            >
               Review {chosen.length || ""} {chosen.length === 1 ? "change" : "changes"}
             </Button>
           </>
@@ -119,7 +160,7 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
             <Button variant="ghost" onClick={() => setStep("select")}>
               Back
             </Button>
-            <Button variant="primary" disabled={!online} title={!online ? "Unavailable offline" : undefined} onClick={run}>
+            <Button variant="primary" disabled={!online || !timezone} title={!online ? "Unavailable offline" : undefined} onClick={run}>
               Confirm and reschedule
             </Button>
           </>
@@ -170,6 +211,9 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
           </fieldset>
           <fieldset>
             <legend className="mb-2 text-sm font-medium">New due date</legend>
+            <p className="mb-2 text-xs text-muted">
+              {timezone ? `Dates use household timezone: ${timezone}.` : "Household timezone unavailable. Refresh Home before rescheduling."}
+            </p>
             <div className="mb-2 flex flex-wrap gap-2">
               {choices.options.map((o) => (
                 <button
@@ -187,7 +231,15 @@ export function TriageDialog({ open, onClose, items, chat }: { open: boolean; on
               ))}
             </div>
             <Field id="triage-date" label="Or pick a date">
-              <input id="triage-date" type="date" className={inputCls} min={addDays(choices.today, 1)} value={date} onChange={(e) => setDate(e.target.value)} />
+              <input
+                id="triage-date"
+                type="date"
+                className={inputCls}
+                disabled={!timezone}
+                min={today ? addDays(today, 1) : undefined}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+              />
             </Field>
           </fieldset>
         </div>

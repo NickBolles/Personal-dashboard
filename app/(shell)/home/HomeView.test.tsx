@@ -7,7 +7,7 @@ import { HomeView } from "./HomeView";
 
 const state = vi.hoisted(() => ({
   home: undefined as HomePayload | undefined,
-  prefs: undefined as { layout: { homeSections: { id: HomeSectionId; visible: boolean }[] } } | undefined,
+  prefs: undefined as { timezone?: string; layout: { homeSections: { id: HomeSectionId; visible: boolean }[] } } | undefined,
 }));
 afterEach(() => {
   cleanup();
@@ -23,8 +23,8 @@ vi.mock("@/components/home/AssistCard", () => ({
   AssistCard: ({ card, onTriage }: { card: AssistCard; onTriage?: (c: AssistCard) => void }) => <button onClick={() => onTriage?.(card)}>Review tasks</button>,
 }));
 vi.mock("@/components/home/TriageDialog", () => ({
-  TriageDialog: ({ items, onClose }: { items: { id: string; title: string }[]; onClose: () => void }) => (
-    <div role="dialog">
+  TriageDialog: ({ items, onClose, timezone }: { timezone?: string; items: { id: string; title: string }[]; onClose: () => void }) => (
+    <div role="dialog" data-timezone={timezone}>
       {items.map((i) => (
         <p key={i.id}>{i.title}</p>
       ))}
@@ -92,9 +92,11 @@ it("keeps the reviewed tasks and results dialog alive after refetch removes the 
     sources: [],
     assists: [card],
   };
+  state.prefs = { timezone: "America/Chicago", layout: { homeSections: [] } };
   const view = render(<HomeView />);
   fireEvent.click(screen.getByRole("button", { name: "Review tasks" }));
   expect(screen.getByRole("dialog").textContent).toContain("Reviewed task");
+  expect(screen.getByRole("dialog").getAttribute("data-timezone")).toBe("America/Chicago");
   state.home = { ...state.home, assists: [] };
   view.rerender(<HomeView />);
   expect(screen.queryByRole("button", { name: "Review tasks" })).toBeNull();
