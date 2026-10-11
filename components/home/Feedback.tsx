@@ -102,9 +102,11 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
             Less like this
           </button>
         ) : null}
-        <button type="button" className={chip} disabled={disabled} onClick={() => setWrong(true)}>
-          {target.kind === "assist" ? "Wrong assumption…" : "Ranked wrong…"}
-        </button>
+        {canHide ? (
+          <button type="button" className={chip} disabled={disabled} onClick={() => setWrong(true)}>
+            {target.kind === "assist" ? "Wrong assumption…" : "Ranked wrong…"}
+          </button>
+        ) : null}
       </div>
       {hiding ? (
         <div id={hideId} className="jv-rise flex flex-wrap items-center gap-2 text-sm">

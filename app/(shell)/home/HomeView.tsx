@@ -142,20 +142,6 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
   );
 }
 
-function UpcomingRow({ a }: { a: NextAction }) {
-  return (
-    <li>
-      <Link href={a.href} className="press flex min-h-12 items-center gap-3 rounded-[10px] px-3 py-2 hover:bg-surface-2">
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{a.title}</span>
-          <span className="block truncate text-xs text-muted">{a.why?.join(" · ")}</span>
-        </span>
-        <ChevronIcon className="h-4 w-4 shrink-0 text-muted" />
-      </Link>
-    </li>
-  );
-}
-
 /** Same shape as the loaded page, so nothing jumps when data arrives. */
 function HomeSkeleton() {
   return (
@@ -237,9 +223,11 @@ export function HomeView() {
           >
             Next two weeks
           </SectionTitle>
-          <ul className="card divide-y divide-line p-1">
+          <ul className="space-y-2">
             {d.later.upcoming.map((a) => (
-              <UpcomingRow key={a.id} a={a} />
+              <li key={a.id}>
+                <ActionCard action={a} explain />
+              </li>
             ))}
           </ul>
         </section>

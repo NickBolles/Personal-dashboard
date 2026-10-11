@@ -14,12 +14,18 @@ afterEach(() => {
   cleanup();
   state.prefs = undefined;
 });
-vi.mock("@tanstack/react-query", () => ({ useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[0] === "home" ? state.home : state.prefs }) }));
+const mutate = vi.hoisted(() => vi.fn());
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey[0] === "home" ? state.home : state.prefs }),
+  useQueryClient: () => ({}),
+  useMutation: () => ({ mutate, isPending: false }),
+}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/access", () => ({ useAccess: () => ({ can: () => false }) }));
 vi.mock("@/lib/client/idb", () => ({ kvGet: async () => undefined, kvSet: async () => undefined }));
 vi.mock("next/link", () => ({ default: (props: ComponentProps<"a">) => <a {...props} /> }));
 vi.mock("@/components/chat/QuickCapture", () => ({ QuickCapture: () => null }));
-vi.mock("@/components/actions/ActionCard", () => ({ ActionCard: () => null }));
+
 vi.mock("@/components/home/AssistCard", () => ({
   AssistCard: ({ card, onTriage }: { card: AssistCard; onTriage?: (c: AssistCard) => void }) => <button onClick={() => onTriage?.(card)}>Review tasks</button>,
 }));
@@ -33,7 +39,9 @@ vi.mock("@/components/home/TriageDialog", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/ui", () => ({
+vi.mock("@/components/ui", async (original) => ({
+  ...(await original<typeof import("@/components/ui")>()),
+  useToast: () => ({ toast: vi.fn(), announce: vi.fn() }),
   useOnline: () => true,
   cx: (...values: unknown[]) => values.filter(Boolean).join(" "),
   Badge: ({ children }: ComponentProps<"span">) => <span>{children}</span>,
@@ -41,6 +49,47 @@ vi.mock("@/components/ui", () => ({
   Spinner: () => null,
   ErrorNote: () => null,
 }));
+
+it.each([1, 3])("exposes explanations and feedback on every upcoming preview (%i items)", (count) => {
+  const actions: NextAction[] = Array.from({ length: count }, (_, i) => ({
+    id: `todos:upcoming-${i}`,
+    sourceId: String(i),
+    source: "todos",
+    title: `Upcoming task ${i}`,
+    status: "open",
+    priorityReason: "upcoming",
+    dueAt: "2026-10-15T12:00:00Z",
+    updatedAt: "2026-10-11T12:00:00Z",
+    fetchedAt: "2026-10-11T12:00:00Z",
+    staleAfter: "2026-10-12T12:00:00Z",
+    href: "/todos",
+  }));
+  const a = selectAttention({ actions, now: new Date("2026-10-11T12:00:00Z"), timezone: "UTC" });
+  expect(a.upcoming).toHaveLength(count);
+  state.home = {
+    generatedAt: "2026-10-11T12:00:00Z",
+    now: [],
+    later: { laterToday: [], upcoming: a.upcoming, waitingOn: [], recentlyCompleted: [] },
+    glance: { homeExceptions: [] },
+    sources: [],
+    attention: { version: 1, budget: { now: 3, today: 5, upcoming: 3 }, totals: a.totals, overBudget: 0 },
+  };
+  render(<HomeView />);
+  expect(screen.queryByRole("link", { name: /See all/ })).toBeNull();
+  const disclosures = screen.getAllByText("Why this?");
+  expect(disclosures).toHaveLength(count);
+  for (const disclosure of disclosures) fireEvent.click(disclosure.closest("summary")!);
+  expect(screen.getAllByRole("button", { name: "Not now" })).toHaveLength(count);
+  expect(screen.getAllByRole("button", { name: "Less like this" })).toHaveLength(count);
+  expect(screen.getAllByRole("button", { name: "Ranked wrong…" })).toHaveLength(count);
+  fireEvent.click(screen.getAllByRole("button", { name: "Less like this" })[0]!);
+  expect(mutate).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      verdict: "less_like_this",
+      target: expect.objectContaining({ id: a.upcoming[0]!.id }),
+    }),
+  );
+});
 
 it.each([1, 4, 12])("labels the overdue total as all-Home, not the backlog count (%i tasks)", (count) => {
   const actions: NextAction[] = Array.from({ length: count }, (_, i) => ({
