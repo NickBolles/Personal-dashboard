@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AssistCard, HomePayload, HomeSectionId, NextAction } from "@/lib/contracts";
 import { HomeView } from "./HomeView";
+import { selectAttention } from "@/server/ranking/attention";
 
 const state = vi.hoisted(() => ({
   home: undefined as HomePayload | undefined,
@@ -40,6 +41,36 @@ vi.mock("@/components/ui", () => ({
   Spinner: () => null,
   ErrorNote: () => null,
 }));
+
+it.each([1, 4, 12])("labels the overdue total as all-Home, not the backlog count (%i tasks)", (count) => {
+  const actions: NextAction[] = Array.from({ length: count }, (_, i) => ({
+    id: `todos:${i}`,
+    sourceId: String(i),
+    source: "todos",
+    title: "Overdue task",
+    status: "open",
+    priorityReason: "overdue",
+    dueAt: "2026-10-10T12:00:00Z",
+    updatedAt: "2026-10-10T12:00:00Z",
+    fetchedAt: "2026-10-10T12:00:00Z",
+    staleAfter: "2026-10-12T12:00:00Z",
+    href: "/todos",
+  }));
+  const a = selectAttention({ actions, now: new Date("2026-10-11T12:00:00Z"), timezone: "America/Chicago" });
+  state.home = {
+    generatedAt: "2026-10-11T12:00:00Z",
+    now: a.now,
+    later: { laterToday: a.today, upcoming: a.upcoming, waitingOn: [], recentlyCompleted: [] },
+    glance: { homeExceptions: [] },
+    sources: [],
+    attention: { version: 1, budget: { now: 3, today: 5, upcoming: 3 }, totals: a.totals, overBudget: 0 },
+  };
+  render(<HomeView />);
+  const backlog = screen.getByRole("link", { name: /^Backlog/ });
+  expect(backlog.textContent).toContain(`Backlog · ${a.backlog.length}`);
+  expect(backlog.textContent).toContain(`${count} overdue across Home`);
+  expect(a.totals.overdue).toBeGreaterThan(a.backlog.length);
+});
 
 it("preserves configured waiting/completed order relative to today/upcoming", () => {
   const item: NextAction = {

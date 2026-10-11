@@ -139,6 +139,30 @@ it("revalidates household midnight before confirming an idle dialog", () => {
   expect(screen.getByLabelText("Or pick a date").getAttribute("min")).toBe("2026-03-09");
 });
 
+it("revalidates household midnight before Review, without waiting for the refresh timer", () => {
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-03-08T05:59:00Z"));
+  render(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+  clock.mockReturnValue(Date.parse("2026-03-08T06:01:00Z"));
+  fireEvent.click(screen.getByRole("button", { name: "Review 3 changes" }));
+  expect(screen.queryByRole("button", { name: "Confirm and reschedule" })).toBeNull();
+  expect(screen.getByLabelText("Or pick a date").getAttribute("min")).toBe("2026-03-09");
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+it("fails closed when household settings become unavailable after Review", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-03-08T05:59:00Z"));
+  const view = render(<TriageDialog open onClose={vi.fn()} items={items} timezone="America/Chicago" />);
+  fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+  fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
+  fireEvent.click(screen.getByRole("button", { name: "Review 3 changes" }));
+  view.rerender(<TriageDialog open onClose={vi.fn()} items={items} />);
+  expect(screen.getByRole("button", { name: "Confirm and reschedule" }).hasAttribute("disabled")).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and reschedule" }));
+  expect(api.post).not.toHaveBeenCalled();
+});
+
 it("uses settings arriving after mount without retaining browser-derived choices", () => {
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-10-10T05:30:00Z"));
   const view = render(<TriageDialog open onClose={vi.fn()} items={items} />);

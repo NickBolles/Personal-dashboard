@@ -368,7 +368,7 @@ export function HomeView() {
                       : "Everything open is on Home."}
                   </span>
                 </span>
-                {att.totals.overdue ? <Badge tone="warn">{att.totals.overdue} overdue</Badge> : null}
+                {att.totals.overdue ? <Badge tone="warn">{att.totals.overdue} overdue across Home</Badge> : null}
                 <ChevronIcon className="h-5 w-5 shrink-0 text-muted" />
               </Link>
             </section>

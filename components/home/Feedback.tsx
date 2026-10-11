@@ -128,7 +128,9 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
       {!canHide ? <p className="text-xs text-muted">Safety alerts can’t be hidden or ranked lower.</p> : null}
       <Dialog
         open={wrong}
-        onClose={() => setWrong(false)}
+        onClose={() => {
+          if (!fb.isPending) setWrong(false);
+        }}
         title={target.kind === "assist" ? "What did Jarvis get wrong?" : "Why is this ranked wrong?"}
         description={
           target.kind === "assist"
@@ -137,7 +139,7 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
         }
         footer={
           <>
-            <Button variant="ghost" onClick={() => setWrong(false)}>
+            <Button variant="ghost" disabled={fb.isPending} onClick={() => setWrong(false)}>
               Cancel
             </Button>
             <Button
@@ -145,9 +147,15 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
               busy={fb.isPending}
               disabled={!online}
               onClick={() => {
-                send("wrong_assumption", { correction });
-                setWrong(false);
-                setCorrection("");
+                fb.mutate(
+                  { target, verdict: "wrong_assumption", correction, key: newIdempotencyKey("fb") },
+                  {
+                    onSuccess: () => {
+                      setWrong(false);
+                      setCorrection("");
+                    },
+                  },
+                );
               }}
             >
               Send
@@ -163,6 +171,7 @@ export function FeedbackBar({ target, canHide = true, rate = false }: { target: 
             rows={3}
             className={inputCls}
             value={correction}
+            disabled={fb.isPending}
             onChange={(e) => setCorrection(e.target.value)}
             placeholder={target.kind === "assist" ? "e.g. That date is wrong, it's in March" : "e.g. Not urgent, it can wait until spring"}
           />
