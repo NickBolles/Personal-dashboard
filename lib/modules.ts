@@ -44,6 +44,17 @@ export type ModuleDef = {
 
 export const MODULES: ModuleDef[] = [
   {
+    id: "workouts",
+    label: "Workouts",
+    description: "Private training plans, quick set capture and history.",
+    sources: [],
+    viewCapability: "workouts.use",
+    routes: [{ href: "/workouts", label: "Workouts" }],
+    capabilities: [
+      { id: "workouts.use", label: "Plan and log workouts", description: "Own private workouts and JSON imports. No Notion sync.", roles: ["adult"] },
+    ],
+  },
+  {
     id: "hermes",
     label: "Hermes",
     description: "Conversations, runs and approvals with your agent.",

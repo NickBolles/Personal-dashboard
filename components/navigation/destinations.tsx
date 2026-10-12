@@ -18,6 +18,14 @@ export const PRIMARY: Dest[] = [
 ];
 
 export const DESTINATIONS: Dest[] = [
+  {
+    key: "workouts",
+    href: "/workouts",
+    label: "Workouts",
+    icon: FlagIcon,
+    match: (p) => p === "/workouts" || p.startsWith("/workouts/"),
+    caps: ["workouts.use"],
+  },
   { key: "finance", href: "/finance", label: "Finance", icon: WalletIcon, match: (p) => p.startsWith("/finance"), caps: ["finance.view"] },
   { key: "initiatives", href: "/initiatives", label: "Initiatives", icon: FlagIcon, match: (p) => p.startsWith("/initiatives"), caps: ["paperclip.view"] },
   { key: "todos", href: "/todos", label: "Todos", icon: TodoIcon, match: (p) => p.startsWith("/todos"), caps: ["todos.view"] },

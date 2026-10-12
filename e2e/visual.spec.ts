@@ -61,6 +61,51 @@ test("visual: home suggestions and the backlog", async ({ page, request }) => {
   await expect(page).toHaveScreenshot("home-all.png", { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
 });
 
+test("visual: workout builder and active capture", async ({ page }) => {
+  await page.route(/\/api\/workouts$/, (route) => route.fulfill({ json: { workouts: [] } }));
+  await page.goto("/workouts");
+  await expect(page.getByRole("button", { name: "Start workout", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page).toHaveScreenshot("workout-builder.png", { fullPage: true });
+  await page.route(/\/api\/workouts$/, (route) =>
+    route.fulfill({
+      json: {
+        workouts: [
+          {
+            id: "visual-session",
+            version: 1,
+            source: null,
+            session: {
+              date: "2026-01-10",
+              title: "Legs + Push · 35 min",
+              notes: "",
+              status: "active",
+              exercises: [
+                {
+                  name: "Leg press",
+                  unit: "lb",
+                  equipment: "machine",
+                  sets: [
+                    { weight: 30, reps: 8, done: true },
+                    { weight: 30, reps: 8, done: false },
+                    { weight: 30, reps: 8, done: false },
+                  ],
+                  best: { highest: { weight: 40, reps: 8, date: "2026-01-01" }, atLoad: { weight: 30, reps: 10, date: "2026-01-05" } },
+                  target: { weight: 30, reps: 11 },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await page.reload();
+  await expect(page.getByLabel("Leg press set 1 weight")).toHaveValue("30");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect(page).toHaveScreenshot("workout-active.png", { fullPage: true });
+});
+
 test("visual: configuration transfer", async ({ page }) => {
   await page.goto("/settings/configuration");
   await expect(page.getByRole("heading", { name: "Configuration transfer" })).toBeVisible();
