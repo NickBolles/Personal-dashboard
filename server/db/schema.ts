@@ -701,6 +701,37 @@ export const finComments = sqliteTable(
  * pin/archive/share live in session_meta like Hermes sessions; runs use the
  * shared runs table. Hermes keeps its own transcripts; these are Jarvis's.
  */
+// Private workout documents and retry receipts; no upstream/canonical data is mutated.
+export const workoutSessions = sqliteTable(
+  "workout_sessions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    document: text("document").notNull(),
+    source: text("source"),
+    sourceId: text("source_id"),
+    sourceHash: text("source_hash"),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("workout_owner_idx").on(t.userId), uniqueIndex("workout_import_idx").on(t.userId, t.sourceId)],
+);
+
+export const workoutRequests = sqliteTable(
+  "workout_requests",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestId: text("request_id").notNull(),
+    hash: text("hash").notNull(),
+    response: text("response").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.requestId] })],
+);
+
 export const aiSessions = sqliteTable("ai_sessions", {
   /** loc_… */
   id: text("id").primaryKey(),
