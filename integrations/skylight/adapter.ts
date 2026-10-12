@@ -134,15 +134,16 @@ async function frameId() {
 
 /* ------------------------------------------------------------------ via Hermes */
 
+const eventTime = z.union([z.iso.date(), z.iso.datetime({ offset: true, local: true })]);
 const hermesAnswer = z.object({
   events: z
     .array(
       z.object({
-        title: z.string(),
-        start: z.string().min(10),
-        end: z.string().nullish(),
+        title: z.string().min(1).max(500),
+        start: eventTime,
+        end: eventTime.nullish(),
         allDay: z.boolean().nullish(),
-        location: z.string().nullish(),
+        location: z.string().max(1000).nullish(),
       }),
     )
     .max(500),
@@ -150,10 +151,10 @@ const hermesAnswer = z.object({
     .array(
       z.object({
         id: z.union([z.string(), z.number()]).nullish(),
-        title: z.string(),
+        title: z.string().min(1).max(500),
         time: z
           .string()
-          .regex(/^\d{2}:\d{2}$/)
+          .regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)
           .nullish(),
         completed: z.boolean(),
       }),
@@ -174,13 +175,22 @@ function fill(template: string, vars: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (m, k: string) => vars[k] ?? m);
 }
 
+const shellArg = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
+
 export function skylightHermesRequest(ctx: AdapterContext) {
   const c = cfg();
-  const to = localDate(ctx.now.getTime() + 7 * DAY, ctx.timezone);
+  // Calendar days, not elapsed hours: DST must not shift the exclusive date.
+  const to = new Date(Date.parse(`${ctx.today}T00:00:00Z`) + 7 * DAY).toISOString().slice(0, 10);
   return {
     source: "skylight",
     label: "Skylight",
-    task: fill(c.prompt, { from: ctx.today, to, timezone: ctx.timezone }),
+    task: [
+      fill(c.prompt, { from: ctx.today, to, timezone: ctx.timezone }),
+      "Use only the installed jarvis-skylight-read helper below. Dates are from-inclusive, to-exclusive; chores are for from only.",
+      "First load skill_view(name='jarvis-skylight-read') so its declared environment is available. If setup is missing, fail without asking for credentials.",
+      `Run: node "\${HERMES_HOME:-$HOME/.hermes}/skills/jarvis-skylight-read/scripts/read.mjs" ${shellArg(ctx.today)} ${shellArg(to)} ${shellArg(ctx.timezone)}`,
+      "Return its JSON unchanged. Do not generate or write files, discover authentication, read credentials, or modify calendar/tasks. If missing or unsuccessful, return a short error; do not improvise a fallback.",
+    ].join("\n"),
     schema: hermesAnswer,
     example: EXAMPLE,
   };

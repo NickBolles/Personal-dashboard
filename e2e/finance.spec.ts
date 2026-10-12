@@ -93,10 +93,24 @@ test("finance: plan year with an event and the Plan/Actual/Forecast toggle", asy
   await expect(page.getByRole("heading", { level: 1, name: /plan$/ })).toBeVisible();
   await page.getByRole("button", { name: "Add event" }).click();
   const d = page.getByRole("dialog");
+  // The dialog's effect initializes the form after opening. Filling before it
+  // settles can copy the initial empty date into the first controlled update.
+  // CI trace showed a 400 with date:"", not a missing allocation warning.
+  const plannedDate = d.getByLabel("Planned date");
+  await expect(plannedDate).toHaveValue(/^\d{4}-01-01$/);
+  const date = await plannedDate.inputValue();
   await d.getByLabel("Event").fill("Q3 estimated tax");
   await d.getByLabel("Estimated amount").fill("-8000");
   await d.getByLabel(fund, { exact: true }).fill("-6000");
+  await expect(d.getByLabel("Event")).toHaveValue("Q3 estimated tax");
+  await expect(d.getByLabel("Estimated amount")).toHaveValue("-8000");
+  await expect(d.getByLabel(fund, { exact: true })).toHaveValue("-6000");
+  await expect(plannedDate).toHaveValue(date);
+  const saved = page.waitForResponse((r) => r.request().method() === "POST" && /\/api\/finance\/plan\/revisions\/[^/]+\/events$/.test(r.url()));
   await d.getByRole("button", { name: "Save" }).click();
+  const response = await saved;
+  expect(response.ok(), await response.text()).toBe(true);
+  expect(response.request().postDataJSON()).toMatchObject({ label: "Q3 estimated tax", date, amount: -800000 });
   await expect(page.getByText("Not fully allocated to funds")).toBeVisible();
   await page.getByRole("button", { name: "actual", exact: true }).click();
   await expect(page.getByText("Q3 estimated tax")).toHaveCount(0);
