@@ -106,7 +106,13 @@ export function WorkoutView() {
       setDraft(confirmed.session.status === "active" ? confirmed : null);
       setDirty(false);
       setPending(null);
-      setNotice(confirmed.session.status === "completed" ? "Workout finished · saved privately in Jarvis" : "Saved in Jarvis · ready to resume");
+      setNotice(
+        confirmed.session.status === "cancelled"
+          ? "Workout discarded · excluded from history and records"
+          : confirmed.session.status === "completed"
+            ? "Workout finished · saved privately in Jarvis"
+            : "Saved in Jarvis · ready to resume",
+      );
     } catch (e) {
       setError((e as Error).message);
       // Validation/conflicts cannot be retried unchanged. Keep edits, offer reload explicitly.
@@ -301,6 +307,17 @@ export function WorkoutView() {
                   </button>
                   <button className={`${primary} flex-1`} onClick={() => persist({ ...draft.session, status: "completed" })}>
                     Finish workout
+                  </button>
+                  <button
+                    className={secondary}
+                    onClick={() => {
+                      if (window.confirm("Discard this workout? It will not count toward history or records.")) {
+                        const saved = rows.find((r) => r.id === draft.id)!;
+                        persist({ ...saved.session, status: "cancelled" }, saved);
+                      }
+                    }}
+                  >
+                    Discard workout
                   </button>
                 </div>
               </fieldset>
@@ -552,16 +569,18 @@ function RecordHint({ exercise: e }: { exercise: Exercise }) {
       {e.best && (
         <>
           <p>
-            Highest load: {e.best.highest.weight} {e.unit} × {e.best.highest.reps} · {e.best.highest.date}
+            {e.equipment === "bodyweight"
+              ? `Best bodyweight: ${e.best.highest.reps} reps · ${e.best.highest.date}`
+              : `Highest load: ${e.best.highest.weight} ${e.unit} × ${e.best.highest.reps} · ${e.best.highest.date}`}
           </p>
-          {e.best.atLoad && (
+          {e.best.atLoad && e.equipment !== "bodyweight" && (
             <p>
               Best at {e.best.atLoad.weight} {e.unit}: {e.best.atLoad.reps} reps · {e.best.atLoad.date}
             </p>
           )}
           {e.target && (
             <p className="text-accent">
-              Optional: {e.target.reps} reps at {e.target.weight} {e.unit}, only with comfortable form.
+              Optional: {e.target.reps} reps {e.equipment === "bodyweight" ? "at bodyweight" : `at ${e.target.weight} ${e.unit}`}, only with comfortable form.
             </p>
           )}
         </>

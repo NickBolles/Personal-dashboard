@@ -8,6 +8,14 @@ test("workout: plan, edit, save, resume, finish and import privately", async ({ 
   await expect(page.getByLabel("Neck-friendly selection")).toBeChecked();
   await page.getByRole("button", { name: "Start workout", exact: true }).click();
   await expect(page.getByText("Saved in Jarvis · ready to resume")).toBeVisible();
+  // An empty or locally invalid draft must never require fabricated completed history.
+  await page.getByLabel("Leg press set 1 weight").fill("-1");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Discard workout", exact: true }).click();
+  await expect(page.getByText("Workout discarded · excluded from history and records")).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Start workout", exact: true }).click();
+  await expect(page.getByText("Saved in Jarvis · ready to resume")).toBeVisible();
   const weight = page.getByLabel("Leg press set 1 weight");
   await weight.fill("25");
   await page.getByLabel("Leg press set 1 reps").fill("10");

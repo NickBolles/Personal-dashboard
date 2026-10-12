@@ -43,6 +43,30 @@ beforeEach(() => {
 });
 
 describe("honest planning", () => {
+  it("uses no-added-load bodyweight rep records without inventing mass or mixing weighted sets", () => {
+    const input = { ...options, focuses: ["core" as const], equipment: ["bodyweight" as const] };
+    const exercise = generatePlan(input, [])[0];
+    const history = {
+      ...document(),
+      status: "completed" as const,
+      exercises: [
+        {
+          ...exercise,
+          sets: [
+            { reps: 10, done: true },
+            { weight: 20, reps: 14, done: true },
+            { reps: 15, done: false },
+          ],
+        },
+      ],
+    };
+    expect(sessionSchema.safeParse(history).success).toBe(true);
+    const next = generatePlan(input, [history])[0];
+    expect(next.best?.highest).toMatchObject({ weight: 0, reps: 10 });
+    expect(next.target).toEqual({ weight: 0, reps: 11 });
+    expect(next.sets[0].weight).toBeUndefined();
+    expect(generatePlan(input, [{ ...history, status: "cancelled" }])[0].best).toBeNull();
+  });
   it("preserves fractional legacy reps and unknown source fields without creating PRs", () => {
     const data = structuredClone(artifact);
     data.workouts[0].exercises[0].sets[0].reps = 8.5;
@@ -108,6 +132,17 @@ describe("honest planning", () => {
 });
 
 describe("real SQLite persistence", () => {
+  it("discards an empty active workout idempotently, rejecting stale and cross-person writes", () => {
+    const body = { requestId: "start-cancel-test", id: "session-cancel-test", version: 0, session: document() };
+    const saved = saveWorkout(owner, body);
+    const cancel = { ...body, requestId: "cancel-request", version: saved.version, session: { ...saved.session, status: "cancelled" as const } };
+    expect(() => saveWorkout(other, cancel)).toThrow(/not found/i);
+    expect(() => saveWorkout(owner, { ...cancel, version: 0 })).toThrow(/changed/i);
+    const cancelled = saveWorkout(owner, cancel);
+    expect(saveWorkout(owner, cancel)).toEqual(cancelled);
+    expect(listWorkouts(owner)[0].session.status).toBe("cancelled");
+    expect(saveWorkout(owner, { ...body, id: "replacement-test", requestId: "replacement-request" }).session.status).toBe("active");
+  });
   it("resumes privately and replays an identical request exactly once", () => {
     const body = { requestId: "save-first-request", id: "session-test", version: 0, session: document() };
     const saved = saveWorkout(owner, body);

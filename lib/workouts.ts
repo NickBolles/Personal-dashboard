@@ -37,7 +37,7 @@ export const sessionSchema = z
     date,
     title: name,
     notes: z.string().max(8000),
-    status: z.enum(["active", "completed"]),
+    status: z.enum(["active", "completed", "cancelled"]),
     exercises: z.array(exerciseSchema).min(1).max(30),
   })
   .strict()
@@ -140,8 +140,16 @@ function matchingSets(e: Exercise, history: WorkoutSession[]) {
         .filter((p) => p.name === e.name && p.equipment === e.equipment && p.unit === e.unit && (p.side ?? "") === (e.side ?? ""))
         .flatMap((p) =>
           p.sets
-            .filter((v) => v.done && v.weight !== undefined && v.reps && (v.side ?? "") === (e.side ?? "") && !v.note)
-            .map((v) => ({ weight: v.weight!, reps: v.reps!, date: s.date })),
+            .filter(
+              (v) =>
+                v.done &&
+                (e.equipment === "bodyweight" ? (v.weight ?? 0) === 0 : v.weight !== undefined) &&
+                v.reps &&
+                (v.side ?? "") === (e.side ?? "") &&
+                !v.note,
+            )
+            // Zero is a no-added-load comparison key, never an estimated body mass.
+            .map((v) => ({ weight: v.weight ?? 0, reps: v.reps!, date: s.date })),
         ),
     )
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -176,7 +184,11 @@ export function generatePlan(input: PlanOptions, history: WorkoutSession[]): Exe
     const weight = latest ? Math.min(...recent.filter((s) => s.date === latest.date).map((s) => s.weight)) : undefined;
     e.best = comparableBest(e, history, weight);
     e.target = e.best?.atLoad && e.best.atLoad.reps < 15 ? { weight: e.best.atLoad.weight, reps: e.best.atLoad.reps + 1 } : null;
-    e.sets = Array.from({ length: options.minutes === 20 ? 2 : 3 }, () => ({ ...(weight !== undefined ? { weight } : {}), reps: 8, done: false }));
+    e.sets = Array.from({ length: options.minutes === 20 ? 2 : 3 }, () => ({
+      ...(weight !== undefined && e.equipment !== "bodyweight" ? { weight } : {}),
+      reps: 8,
+      done: false,
+    }));
     return e;
   });
 }
