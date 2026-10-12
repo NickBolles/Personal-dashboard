@@ -24,6 +24,7 @@ import { track, trackIdempotencyKey } from "@/integrations/paperclip/service";
 import { tick } from "@/server/worker";
 import { updatePreferences } from "@/server/settings";
 import { clearSnapshot, extractJson, parseStructured, saveSnapshot } from "@/integrations/hermes/structured";
+import { mapHermesAnswer, skylightHermesRequest } from "@/integrations/skylight/adapter";
 import { z } from "zod";
 
 let server: Server;
@@ -252,6 +253,28 @@ describe("sources owned by Hermes (structured requests)", () => {
   };
   afterAll(() => saveIntegration("skylight", { config: { mode: "direct", prompt: "" } }));
 
+  it("Hermes Skylight prompt loads the installed reader and validates card dates", () => {
+    useSkylightViaHermes();
+    const ctx = adapterContext();
+    const request = skylightHermesRequest(ctx);
+    expect(request.task).toContain("skill_view(name='jarvis-skylight-read')");
+    expect(request.task).toContain("/skills/jarvis-skylight-read/scripts/read.mjs");
+    expect(request.task).toContain("Do not generate or write files");
+    const answer = request.schema.parse({
+      events: [{ title: "All day", start: ctx.today, allDay: true }],
+      chores: [
+        { id: "1", title: "Task", time: "07:30", completed: false },
+        { id: "2", title: "Done", completed: true },
+      ],
+    });
+    const cards = mapHermesAnswer(answer, ctx);
+    expect(cards.events![0]!.startsAt).toBe(ctx.today);
+    expect(cards.events![0]!.allDay).toBe(true);
+    expect(cards.actions.map((a) => a.title)).toEqual(["Task"]);
+    expect(() => request.schema.parse({ events: [{ title: "Bad", start: "2026-02-30" }], chores: [] })).toThrow();
+    expect(() => request.schema.parse({ events: [], chores: [{ title: "Bad", time: "25:99", completed: false }] })).toThrow();
+  });
+
   it("parses fenced JSON and fails closed on prose, error answers and contract mismatches", () => {
     expect(extractJson('```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJson('Here you go: {"a":2} hope that helps')).toEqual({ a: 2 });
@@ -300,11 +323,11 @@ describe("sources owned by Hermes (structured requests)", () => {
     useSkylightViaHermes();
     expect((await ADAPTERS.skylight.test()).ok).toBe(true);
     useSkylightViaHermes("Read Skylight FORCE_ERROR");
-    expect((await ADAPTERS.skylight.test()).summary).toMatch(/could not complete Skylight: Skylight tool is not available/);
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/could not complete the Skylight request/);
     useSkylightViaHermes("Read Skylight FORCE_PROSE");
-    expect((await ADAPTERS.skylight.test()).summary).toMatch(/did not answer Skylight with JSON/);
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/could not complete the Skylight request/);
     useSkylightViaHermes("Read Skylight FORCE_APPROVAL");
-    expect((await ADAPTERS.skylight.test()).summary).toMatch(/asked for approval/);
+    expect((await ADAPTERS.skylight.test()).summary).toMatch(/requested approval/);
     // A failed first sync is an error, never an empty calendar.
     await expect(ADAPTERS.skylight.fetch(adapterContext())).rejects.toThrow(/approval/);
     // …and Jarvis backs off instead of spending a model run on every refresh.

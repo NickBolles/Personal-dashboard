@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa } from "./helpers";
 import { homeVisual } from "./fixtures/home";
+import { alertsVisual, chatVisual, visualNow } from "./fixtures/chat-alerts";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -27,8 +28,27 @@ for (const [name, path] of [
       await page.clock.setFixedTime(new Date(homeVisual.generatedAt));
       await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
     }
+    if (name === "chat" || name === "alerts") {
+      await page.clock.setFixedTime(new Date(visualNow));
+      await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    }
+    if (name === "chat") {
+      await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatVisual }));
+    }
+    if (name === "alerts") {
+      await page.route(/\/api\/notifications(?:\?.*)?$/, (route) => route.fulfill({ json: alertsVisual }));
+    }
     await page.goto(path);
     await page.locator("h1").first().waitFor();
+    if (name === "chat") {
+      await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+      await expect(page.locator('header a[href^="/initiatives"]')).toHaveCount(0);
+      await expect(page.getByText("8:15 AM", { exact: true })).toHaveCount(2);
+    }
+    if (name === "alerts") {
+      await expect(page.locator("li[data-id] h2")).toHaveText(alertsVisual.notifications.map((n) => n.title));
+      await expect(page.getByText("3 unread actionable", { exact: true })).toBeVisible();
+    }
     if (name === "home") {
       await expect(page.locator("section[aria-labelledby=now-h] article h3")).toHaveText(homeVisual.now.map((a) => a.title));
       await expect(page.getByText("Last updated", { exact: false })).toHaveCount(0);
