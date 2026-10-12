@@ -309,7 +309,7 @@ export function WorkoutView() {
                     Finish workout
                   </button>
                   <button
-                    className={secondary}
+                    className={`${secondary} w-full sm:w-auto`}
                     onClick={() => {
                       if (window.confirm("Discard this workout? It will not count toward history or records.")) {
                         const saved = rows.find((r) => r.id === draft.id)!;

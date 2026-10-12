@@ -122,6 +122,9 @@ test("visual: workout builder and active capture", async ({ page }) => {
   );
   await page.reload();
   await expect(page.getByLabel("Leg press set 1 weight")).toHaveValue("30");
+  for (const name of ["Save edits", "Finish workout", "Discard workout"]) {
+    expect(await page.getByRole("button", { name, exact: true }).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page).toHaveScreenshot("workout-active.png", { fullPage: true });
 });
