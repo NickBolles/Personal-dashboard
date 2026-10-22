@@ -14,6 +14,11 @@ time and settings always give the same order.
 | Next two weeks | dated items in the next 14 days | preview of 3, "See all N"     |
 | Backlog        | everything else that's open     | counted, paged at `/home/all` |
 
+Cards come from the integration sources and, for people with `work.use`, from
+the Work hub: overdue validations and in-progress work due today or earlier
+(docs/work.md). Work cards are plain dated cards, so the rules below apply to
+them unchanged.
+
 Totals are counted after scoping (what this person may see), dedupe (same
 source record) and snoozes, before paging. `now + today + upcoming + backlog =
 open`. Nothing is ever completed, rescheduled or deleted by the ranking. Source
