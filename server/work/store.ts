@@ -11,7 +11,9 @@ import { requireCap } from "@/server/access";
 import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
 import {
+  applyTemplate,
   isClosed,
+  isValidationOverdue,
   parseGithubUrl,
   safeHref,
   type createItemSchema,
@@ -25,6 +27,8 @@ import {
   type TimelineRow,
   type updateItemSchema,
   type validationSchema,
+  type ValidationTemplate,
+  type validationTemplateSchema,
   type validationUpdateSchema,
   type DependencyRef,
   type TimelineDependency,
@@ -122,6 +126,7 @@ const toValidation = (r: typeof schema.workValidations.$inferSelect): WorkValida
   waiverReason: r.waiverReason,
   dueDate: r.dueDate,
   recordedAt: r.recordedAt,
+  overdue: isValidationOverdue(r, today()),
 });
 
 function event(
@@ -1059,6 +1064,67 @@ export function addValidation(user: CurrentUser, itemId: string, body: z.infer<t
   return toValidation(getDb().select().from(schema.workValidations).where(eq(schema.workValidations.id, id)).get()!);
 }
 
+// --- validation templates (per person; nothing is seeded) ---
+
+const VT = schema.workValidationTemplates;
+const toTemplate = (r: typeof VT.$inferSelect): ValidationTemplate => ({
+  id: r.id,
+  name: r.name,
+  metric: r.metric,
+  comparator: r.comparator as ValidationTemplate["comparator"],
+  threshold: r.threshold,
+  unit: r.unit,
+  dueOffsetDays: r.dueOffsetDays,
+  createdAt: r.createdAt,
+});
+
+export function listTemplates(userId: string): ValidationTemplate[] {
+  return getDb().select().from(VT).where(eq(VT.userId, userId)).orderBy(asc(VT.name), asc(VT.createdAt)).all().map(toTemplate);
+}
+
+export function createTemplate(user: CurrentUser, body: z.infer<typeof validationTemplateSchema>, correlationId: string): ValidationTemplate {
+  const count = getDb().select({ id: VT.id }).from(VT).where(eq(VT.userId, user.id)).all().length;
+  if (count >= 100) throw new HttpError(409, "too_many", "Up to 100 validation templates");
+  const id = newId();
+  getDb()
+    .insert(VT)
+    .values({
+      id,
+      userId: user.id,
+      name: body.name?.trim() || body.metric,
+      metric: body.metric,
+      comparator: body.comparator,
+      threshold: body.threshold,
+      unit: body.unit,
+      dueOffsetDays: body.dueOffsetDays ?? null,
+      createdAt: nowIso(),
+    })
+    .run();
+  audit({ actor: user.id, action: "work.template_add", source: "work", sourceRecord: id, result: "ok", correlationId });
+  return toTemplate(getDb().select().from(VT).where(eq(VT.id, id)).get()!);
+}
+
+export function deleteTemplate(user: CurrentUser, templateId: string, correlationId: string) {
+  const r = getDb()
+    .delete(VT)
+    .where(and(eq(VT.id, templateId), eq(VT.userId, user.id)))
+    .run();
+  if (!r.changes) throw new HttpError(404, "not_found", "Template not found");
+  audit({ actor: user.id, action: "work.template_remove", source: "work", sourceRecord: templateId, result: "ok", correlationId });
+  return { ok: true };
+}
+
+/** "Add from template": a new pending validation with the template's contract and due offset. */
+export function addValidationFromTemplate(user: CurrentUser, itemId: string, templateId: string, correlationId: string): WorkValidation {
+  const t = getDb()
+    .select()
+    .from(VT)
+    .where(and(eq(VT.id, templateId), eq(VT.userId, user.id)))
+    .get();
+  if (!t) throw new HttpError(404, "not_found", "Template not found");
+  return addValidation(user, itemId, applyTemplate(toTemplate(t), today()), correlationId);
+}
+
 export function updateValidation(user: CurrentUser, vid: string, body: z.infer<typeof validationUpdateSchema>, correlationId: string): WorkValidation {
   const out = getDb().transaction((tx) => {
     const { v, item } = ownedValidation(user.id, vid, tx);
@@ -1198,7 +1264,7 @@ export function timeline(userId: string, rootId: string | null): TimelineRespons
       startDate: row.startDate,
       targetDate: row.targetDate,
       overdue: !!row.targetDate && row.targetDate < t && !isClosed(row.status),
-      validationOverdue: vals.some((v) => v.itemId === row.id && v.status === "pending" && !!v.dueDate && v.dueDate < t),
+      validationOverdue: vals.some((v) => v.itemId === row.id && isValidationOverdue(v, t)),
       blocked: blocked.has(row.id),
       actuals,
     };

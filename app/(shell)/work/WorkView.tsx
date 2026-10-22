@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
+import { daysBetween } from "@/lib/time";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
@@ -14,11 +15,13 @@ import { ConversationLinkDialog, UnfiledPanel, fmtWhen, itemPaths, useConversati
 import {
   COMPARATORS,
   handoffMarkdown,
+  todayIso,
   STATUS_LABELS,
   WORK_KINDS,
   WORK_STATUSES,
   type Comparator,
   type DependencyRef,
+  type ValidationTemplate,
   type LinkKind,
   type WorkDetail,
   type WorkItem,
@@ -226,6 +229,8 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StatusBadge status={item.status} auto={item.settledKind === "auto"} />
               {item.archived ? <Badge>Archived</Badge> : null}
+              {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
+              {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
               {item.settledReason ? <span className="text-sm text-muted">{item.settledReason}</span> : null}
             </div>
           </div>
@@ -529,7 +534,9 @@ function PacketRow({ label, value }: { label: string; value: string }) {
 
 function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () => void; onReopen: () => void }) {
   const [adding, setAdding] = useState(false);
+  const [templates, setTemplates] = useState(false);
   const failed = d.validations.some((v) => v.status === "fail");
+  const overdue = d.validations.filter((v) => v.overdue).length;
   return (
     <Card>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -537,6 +544,9 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
             Add validation
+          </Button>
+          <Button size="sm" onClick={() => setTemplates(true)}>
+            Add from template
           </Button>
           {d.item.status !== "settled" ? (
             <Button size="sm" variant="primary" disabled={!d.settle.allowed} onClick={onSettle} aria-describedby={d.settle.allowed ? undefined : "settle-why"}>
@@ -558,7 +568,13 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
           </Button>
         </div>
       ) : null}
+      {overdue ? (
+        <p className="mb-2 rounded-lg bg-danger-soft p-2 text-sm text-danger" data-testid="validation-overdue">
+          {overdue} validation{overdue === 1 ? " is" : "s are"} overdue: the due date passed and it&apos;s still pending.
+        </p>
+      ) : null}
       {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
+      {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
       {d.validations.length ? (
         <ul className="space-y-3">
           {d.validations.map((v) => (
@@ -574,17 +590,29 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
 
 function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void }) {
   const [f, setF] = useState({ metric: "", comparator: "<=" as Comparator, threshold: "", unit: "", baseline: "", dueDate: "" });
+  const [asTemplate, setAsTemplate] = useState(false);
   const add = useWorkMutation(
-    () =>
-      api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations`, {
+    async () => {
+      const r = await api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations`, {
         metric: f.metric,
         comparator: f.comparator,
         threshold: Number(f.threshold),
         unit: f.unit,
         baseline: f.baseline === "" ? null : Number(f.baseline),
         dueDate: f.dueDate || null,
-      }),
-    { ok: "Validation added", onSuccess: onDone },
+      });
+      if (asTemplate)
+        await api.post("/api/work/validation-templates", {
+          metric: f.metric,
+          comparator: f.comparator,
+          threshold: Number(f.threshold),
+          unit: f.unit,
+          // The template keeps the due date as "this many days after it's applied".
+          dueOffsetDays: f.dueDate ? Math.max(0, daysBetween(todayIso(), f.dueDate)) : null,
+        });
+      return r;
+    },
+    { ok: asTemplate ? "Validation added and saved as a template" : "Validation added", onSuccess: onDone },
   );
   return (
     <form
@@ -635,7 +663,11 @@ function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void 
       <Field id="va-due" label="Due date (optional)">
         <input id="va-due" type="date" className={inputCls} value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} />
       </Field>
-      <div className="flex items-end justify-end gap-2">
+      <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
+        <input type="checkbox" checked={asTemplate} onChange={(e) => setAsTemplate(e.target.checked)} />
+        Also save as a reusable template
+      </label>
+      <div className="flex items-end justify-end gap-2 sm:col-span-2">
         <Button type="button" size="sm" onClick={onDone}>
           Cancel
         </Button>
@@ -644,6 +676,132 @@ function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void 
         </Button>
       </div>
     </form>
+  );
+}
+
+function TemplatesDialog({ itemId, onClose }: { itemId: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: ["work", "templates"], queryFn: () => api.get<{ templates: ValidationTemplate[] }>("/api/work/validation-templates") });
+  const [f, setF] = useState({ name: "", metric: "", comparator: "<=" as Comparator, threshold: "", unit: "", dueOffsetDays: "" });
+  const apply = useWorkMutation((templateId: string) => api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations/from-template`, { templateId }), {
+    ok: "Validation added from template",
+    onSuccess: onClose,
+  });
+  const create = useWorkMutation(
+    () =>
+      api.post("/api/work/validation-templates", {
+        name: f.name || undefined,
+        metric: f.metric,
+        comparator: f.comparator,
+        threshold: Number(f.threshold),
+        unit: f.unit,
+        dueOffsetDays: f.dueOffsetDays === "" ? null : Number(f.dueOffsetDays),
+      }),
+    { ok: "Template saved", onSuccess: () => setF({ name: "", metric: "", comparator: "<=", threshold: "", unit: "", dueOffsetDays: "" }) },
+  );
+  const remove = useWorkMutation((id: string) => api.del(`/api/work/validation-templates/${encodeURIComponent(id)}`), { ok: "Template deleted" });
+  const list = q.data?.templates ?? [];
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      title="Add from template"
+      description="Your reusable validation contracts. Applying one adds a pending validation."
+    >
+      {q.isPending ? <Spinner label="Loading templates…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {q.data && !list.length ? (
+        <p className="text-sm text-muted">No templates yet. Create one below, or tick “Also save as a reusable template” when adding a validation.</p>
+      ) : null}
+      {list.length ? (
+        <ul aria-label="Validation templates" className="divide-y divide-line rounded-lg border border-line">
+          {list.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-2">
+              <div className="min-w-0">
+                <p className="font-medium break-words">{t.name}</p>
+                <p className="text-xs text-muted">
+                  {t.metric} {t.comparator} {t.threshold}
+                  {t.unit ? ` ${t.unit}` : ""}
+                  {t.dueOffsetDays !== null ? ` · due ${t.dueOffsetDays} day${t.dueOffsetDays === 1 ? "" : "s"} after adding` : " · no due date"}
+                </p>
+              </div>
+              <span className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  busy={apply.isPending && apply.variables === t.id}
+                  onClick={() => apply.mutate(t.id)}
+                  aria-label={`Add ${t.name}`}
+                >
+                  Add
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => remove.mutate(t.id)} aria-label={`Delete template ${t.name}`}>
+                  Delete
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <details className="mt-3 text-sm">
+        <summary className="tap cursor-pointer text-accent">New template</summary>
+        <form
+          className="mt-2 grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate(undefined);
+          }}
+        >
+          <Field id="vt-name" label="Name (optional)">
+            <input id="vt-name" className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          </Field>
+          <Field id="vt-metric" label="Template metric">
+            <input id="vt-metric" required className={inputCls} value={f.metric} onChange={(e) => setF({ ...f, metric: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-[6rem_1fr] gap-2">
+            <Field id="vt-cmp" label="Comparator">
+              <select id="vt-cmp" className={inputCls} value={f.comparator} onChange={(e) => setF({ ...f, comparator: e.target.value as Comparator })}>
+                {COMPARATORS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field id="vt-threshold" label="Threshold">
+              <input
+                id="vt-threshold"
+                required
+                type="number"
+                step="any"
+                className={inputCls}
+                value={f.threshold}
+                onChange={(e) => setF({ ...f, threshold: e.target.value })}
+              />
+            </Field>
+          </div>
+          <Field id="vt-unit" label="Unit">
+            <input id="vt-unit" className={inputCls} value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
+          </Field>
+          <Field id="vt-offset" label="Due after (days, optional)">
+            <input
+              id="vt-offset"
+              type="number"
+              min={0}
+              step={1}
+              className={inputCls}
+              value={f.dueOffsetDays}
+              onChange={(e) => setF({ ...f, dueOffsetDays: e.target.value })}
+            />
+          </Field>
+          <div className="flex items-end justify-end">
+            <Button type="submit" size="sm" busy={create.isPending}>
+              Save template
+            </Button>
+          </div>
+        </form>
+      </details>
+    </Dialog>
   );
 }
 
@@ -662,10 +820,13 @@ function ValidationRow({ v }: { v: WorkValidation }) {
   const remove = useWorkMutation(() => api.del(url), { ok: "Validation removed" });
   const label = `${v.metric} ${v.comparator} ${v.threshold}${v.unit ? ` ${v.unit}` : ""}`;
   return (
-    <li className="rounded-lg border border-line p-3">
+    <li className={`rounded-lg border p-3 ${v.overdue ? "border-danger" : "border-line"}`} data-overdue={v.overdue || undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-medium break-words">{label}</p>
-        <Badge tone={V_TONE[v.status]}>{v.status === "pass" ? "Pass" : v.status === "fail" ? "Fail" : v.status === "waived" ? "Waived" : "Pending"}</Badge>
+        <span className="flex flex-wrap gap-1">
+          {v.overdue ? <Badge tone="danger">Overdue</Badge> : null}
+          <Badge tone={V_TONE[v.status]}>{v.status === "pass" ? "Pass" : v.status === "fail" ? "Fail" : v.status === "waived" ? "Waived" : "Pending"}</Badge>
+        </span>
       </div>
       <p className="mt-1 text-sm text-muted">
         {v.baseline !== null ? `Baseline ${v.baseline}${v.unit ? ` ${v.unit}` : ""} · ` : ""}

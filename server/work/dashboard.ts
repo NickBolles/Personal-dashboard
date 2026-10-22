@@ -7,6 +7,7 @@ import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
 import {
   isClosed,
+  isValidationOverdue,
   WIDGET_LABELS,
   type DashboardResponse,
   type DashboardWidget,
@@ -176,11 +177,26 @@ function widgetData(userId: string, kind: WidgetKind, config: WidgetConfig, ctx:
             const vs = ctx.vals.filter((v) => v.itemId === r.id);
             const pending = vs.filter((v) => v.status === "pending").length;
             const failed = vs.filter((v) => v.status === "fail").length;
-            const overdue = vs.some((v) => v.status === "pending" && v.dueDate && v.dueDate < ctx.today);
+            const overdue = vs.some((v) => isValidationOverdue(v, ctx.today));
             return item(r, [`${pending} pending`, failed ? `${failed} failed` : "", overdue ? "overdue" : ""].filter(Boolean).join(" · "));
           })
           .slice(0, 8),
       };
+    case "validation_overdue": {
+      const late = rows.map((r) => ({ r, vs: ctx.vals.filter((v) => v.itemId === r.id && isValidationOverdue(v, ctx.today)) })).filter((x) => x.vs.length > 0);
+      return {
+        kind: "overdue",
+        count: late.reduce((n, x) => n + x.vs.length, 0),
+        items: late
+          .map(({ r, vs }) => {
+            const first = vs.map((v) => v.dueDate!).sort()[0]!;
+            return { at: first, w: item(r, `${vs.length} overdue · ${vs.map((v) => v.metric).join(", ")} · due ${first}`) };
+          })
+          .sort((a, b) => a.at.localeCompare(b.at) || a.w.title.localeCompare(b.w.title))
+          .slice(0, 8)
+          .map((x) => x.w),
+      };
+    }
     case "recently_settled":
       return {
         kind: "items",

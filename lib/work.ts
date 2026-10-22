@@ -63,6 +63,7 @@ export const WIDGET_KINDS = [
   "metric",
   "custom_html",
   "recently_settled",
+  "validation_overdue",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
@@ -74,6 +75,7 @@ export const WIDGET_LABELS: Record<WidgetKind, string> = {
   metric: "Metric",
   custom_html: "Custom HTML",
   recently_settled: "Recently settled",
+  validation_overdue: "Validation overdue",
 };
 export const WIDGET_SIZES = ["sm", "md", "lg"] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
@@ -154,6 +156,19 @@ export type WorkValidation = {
   waiverReason: string | null;
   dueDate: string | null;
   recordedAt: string | null;
+  /** pending and its due date has passed (isValidationOverdue) */
+  overdue: boolean;
+};
+
+export type ValidationTemplate = {
+  id: string;
+  name: string;
+  metric: string;
+  comparator: Comparator;
+  threshold: number;
+  unit: string;
+  dueOffsetDays: number | null;
+  createdAt: string;
 };
 
 export type WorkEvent = {
@@ -250,6 +265,7 @@ export type WidgetConfig = {
 
 export type WidgetData =
   | { kind: "items"; items: WidgetItem[] }
+  | { kind: "overdue"; count: number; items: WidgetItem[] }
   | { kind: "timeline"; rows: TimelineRow[]; today: string }
   | { kind: "map"; root: MapNode | null }
   | { kind: "metric" }
@@ -376,6 +392,18 @@ export const validationUpdateSchema = z
   })
   .strict()
   .refine((v) => !v.waive || !!v.waiverReason?.trim(), { path: ["waiverReason"], message: "A waiver needs a reason" });
+
+export const validationTemplateSchema = z
+  .object({
+    name: z.string().trim().max(120).optional(),
+    metric: z.string().trim().min(1, "Metric is required").max(200),
+    comparator: z.enum(COMPARATORS),
+    threshold: num,
+    unit: z.string().trim().max(40).default(""),
+    dueOffsetDays: z.number().int().min(0).max(3650).nullable().optional(),
+  })
+  .strict();
+export const fromTemplateSchema = z.object({ templateId: id }).strict();
 
 export const settleSchema = z.object({ reason: z.string().trim().max(2000).optional() }).strict();
 export const reopenSchema = z
@@ -627,6 +655,28 @@ export function suggestFiling(
     .sort((a, b) => b.matched.length - a.matched.length || a.words - b.words || a.c.path.localeCompare(b.c.path) || a.c.id.localeCompare(b.c.id))
     .slice(0, limit)
     .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
+}
+
+// --- validation templates and overdue ---
+
+/** A validation is overdue when it's still pending and its due date has passed (local calendar day). */
+export function isValidationOverdue(v: { status: string; dueDate: string | null }, today: string) {
+  return v.status === "pending" && !!v.dueDate && v.dueDate < today;
+}
+
+/** The validation a template produces when applied on `today`. */
+export function applyTemplate(
+  t: Pick<ValidationTemplate, "metric" | "comparator" | "threshold" | "unit" | "dueOffsetDays">,
+  today: string,
+): { metric: string; comparator: Comparator; threshold: number; unit: string; baseline: null; dueDate: string | null } {
+  return {
+    metric: t.metric,
+    comparator: t.comparator,
+    threshold: t.threshold,
+    unit: t.unit,
+    baseline: null,
+    dueDate: t.dueOffsetDays === null || t.dueOffsetDays === undefined ? null : addDaysIso(today, t.dueOffsetDays),
+  };
 }
 
 // --- timeline editing ---

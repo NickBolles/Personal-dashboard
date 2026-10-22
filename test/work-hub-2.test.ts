@@ -4,7 +4,12 @@ import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { createLocalSession } from "@/server/assistant/local";
-import { filingTokens, handoffMarkdown, packetSchema, shiftDates, suggestFiling } from "@/lib/work";
+import { applyTemplate, filingTokens, handoffMarkdown, isValidationOverdue, packetSchema, shiftDates, suggestFiling } from "@/lib/work";
+import { addWidget, getDashboard } from "@/server/work/dashboard";
+import { localDate, addDays } from "@/lib/time";
+import { config } from "@/server/config";
+import * as templatesRoute from "@/app/api/work/validation-templates/route";
+import * as fromTemplateRoute from "@/app/api/work/items/[id]/validations/from-template/route";
 import { wouldCreateDependencyCycle } from "@/server/work/lifecycle";
 import * as depsRoute from "@/app/api/work/items/[id]/dependencies/route";
 import * as depRoute from "@/app/api/work/dependencies/[id]/route";
@@ -535,5 +540,81 @@ describe("timeline editing and dependencies", () => {
     const { dependency } = (await ok.json()) as { dependency: { dependencyId: string } };
     expect((await call(depRoute.DELETE as H, { user: other, method: "DELETE", params: { id: dependency.dependencyId } })).status).toBe(404);
     expect((await call(depRoute.DELETE as H, { method: "DELETE", params: { id: dependency.dependencyId } })).status).toBe(200);
+  });
+});
+
+describe("validation templates and overdue", () => {
+  it("detects overdue validations and applies templates (pure)", () => {
+    expect(isValidationOverdue({ status: "pending", dueDate: "2026-10-21" }, "2026-10-22")).toBe(true);
+    expect(isValidationOverdue({ status: "pending", dueDate: "2026-10-22" }, "2026-10-22")).toBe(false);
+    expect(isValidationOverdue({ status: "fail", dueDate: "2026-10-01" }, "2026-10-22")).toBe(false);
+    expect(isValidationOverdue({ status: "pending", dueDate: null }, "2026-10-22")).toBe(false);
+    const t = { metric: "p95 hydration", comparator: "<=" as const, threshold: 800, unit: "ms", dueOffsetDays: 14 };
+    expect(applyTemplate(t, "2026-12-25")).toEqual({
+      metric: "p95 hydration",
+      comparator: "<=",
+      threshold: 800,
+      unit: "ms",
+      baseline: null,
+      dueDate: "2027-01-08",
+    });
+    expect(applyTemplate({ ...t, dueOffsetDays: null }, "2026-12-25").dueDate).toBeNull();
+    expect(applyTemplate({ ...t, dueOffsetDays: 0 }, "2026-12-25").dueDate).toBe("2026-12-25");
+  });
+
+  it("stores per-person templates, adds validations from them, and flags overdue ones everywhere", () => {
+    const { u, area, project, v5 } = flagship();
+    const today = localDate(Date.now(), config.timezone);
+    expect(store.listTemplates(owner)).toEqual([]); // nothing seeded
+    const t = store.createTemplate(u, { metric: "p95 hydration", comparator: "<=", threshold: 800, unit: "ms", dueOffsetDays: 7 }, cid);
+    expect(t).toMatchObject({ name: "p95 hydration", dueOffsetDays: 7 });
+    expect(store.listTemplates(other)).toEqual([]);
+    const v = store.addValidationFromTemplate(u, v5.id, t.id, cid);
+    expect(v).toMatchObject({
+      metric: "p95 hydration",
+      comparator: "<=",
+      threshold: 800,
+      unit: "ms",
+      status: "pending",
+      dueDate: addDays(today, 7),
+      overdue: false,
+    });
+    expect(() => store.addValidationFromTemplate(them(), v5.id, t.id, cid)).toThrow(/not found/);
+    expect(() => store.deleteTemplate(them(), t.id, cid)).toThrow(/not found/);
+
+    // Make one overdue.
+    const late = store.addValidation(u, v5.id, { metric: "error rate", comparator: "<", threshold: 1, unit: "%", dueDate: addDays(today, -2) }, cid);
+    expect(late.overdue).toBe(true);
+    expect(
+      store
+        .getDetail(owner, v5.id)
+        .validations.filter((x) => x.overdue)
+        .map((x) => x.metric),
+    ).toEqual(["error rate"]);
+    expect(store.timeline(owner, project.id).rows.find((r) => r.id === v5.id)!.validationOverdue).toBe(true);
+    const dash = addWidget(u, { kind: "validation_overdue", config: { rootId: area.id } }, cid);
+    const w = dash.widgets.find((x) => x.kind === "validation_overdue")!;
+    expect(w.title).toBe("Validation overdue");
+    expect(w.data).toMatchObject({ kind: "overdue", count: 1, items: [{ id: v5.id, detail: `1 overdue · error rate · due ${addDays(today, -2)}` }] });
+    // Recording a value clears it.
+    store.updateValidation(u, late.id, { observed: 0.5 }, cid);
+    expect(getDashboard(owner).widgets.find((x) => x.kind === "validation_overdue")!.data).toMatchObject({ count: 0, items: [] });
+    store.deleteTemplate(u, t.id, cid);
+    expect(store.listTemplates(owner)).toEqual([]);
+  });
+
+  it("validates templates at the API", async () => {
+    const { v5 } = flagship();
+    expect((await call(templatesRoute.GET as H, { user: kid })).status).toBe(403);
+    expect((await call(templatesRoute.POST as H, { method: "POST", body: { metric: "x", comparator: "~", threshold: 1 } })).status).toBe(400);
+    expect((await call(templatesRoute.POST as H, { method: "POST", body: { metric: "x", comparator: "<", threshold: 1, dueOffsetDays: -1 } })).status).toBe(
+      400,
+    );
+    const res = await call(templatesRoute.POST as H, { method: "POST", body: { metric: "x", comparator: "<", threshold: 1 } });
+    const { template } = (await res.json()) as { template: { id: string } };
+    expect((await call(fromTemplateRoute.POST as H, { user: other, method: "POST", params: { id: v5.id }, body: { templateId: template.id } })).status).toBe(
+      404,
+    );
+    expect((await call(fromTemplateRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { templateId: template.id } })).status).toBe(200);
   });
 });

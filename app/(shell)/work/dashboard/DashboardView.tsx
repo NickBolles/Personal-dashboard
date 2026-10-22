@@ -25,7 +25,16 @@ import {
 
 const SIZE_CLS: Record<WidgetSize, string> = { sm: "lg:col-span-1", md: "md:col-span-2 lg:col-span-2", lg: "md:col-span-2 lg:col-span-3" };
 const SIZE_LABEL: Record<WidgetSize, string> = { sm: "Small", md: "Medium", lg: "Large" };
-const SCOPED: WidgetKind[] = ["priorities", "next_actions", "awaiting_validation", "recently_settled", "timeline", "project_map", "custom_html"];
+const SCOPED: WidgetKind[] = [
+  "priorities",
+  "next_actions",
+  "awaiting_validation",
+  "recently_settled",
+  "timeline",
+  "project_map",
+  "custom_html",
+  "validation_overdue",
+];
 
 export function DashboardView() {
   const q = useQuery({ queryKey: ["work", "dashboard"], queryFn: () => api.get<DashboardResponse>("/api/work/dashboard") });
@@ -140,6 +149,31 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
       </ul>
     );
   }
+  if (d.kind === "overdue")
+    return (
+      <div>
+        <p className="flex items-baseline gap-2">
+          <span className={cx("text-3xl font-semibold tabular-nums", d.count ? "text-danger" : "")} data-testid="overdue-count">
+            {d.count}
+          </span>
+          <span className="text-sm text-muted">validation{d.count === 1 ? "" : "s"} past due</span>
+        </p>
+        {d.items.length ? (
+          <ul className="mt-2 divide-y divide-line">
+            {d.items.map((i) => (
+              <li key={i.id} className="py-2">
+                <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="font-medium break-words hover:underline">
+                  {i.title}
+                </Link>
+                {i.detail ? <p className="text-sm break-words text-muted">{i.detail}</p> : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1 text-sm text-muted">Nothing overdue.</p>
+        )}
+      </div>
+    );
   if (d.kind === "timeline")
     return d.rows.length ? <Gantt rows={d.rows} today={d.today} zoom="month" compact /> : <p className="text-sm text-muted">No dated work.</p>;
   if (d.kind === "map") return d.root ? <MiniMap node={d.root} /> : <p className="text-sm text-muted">Choose an area or project in Configure.</p>;

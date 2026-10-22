@@ -918,6 +918,27 @@ export const workEvents = sqliteTable(
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
 );
 
+/** Per-person reusable validation templates ("Add from template"). Nothing is seeded. */
+export const workValidationTemplates = sqliteTable(
+  "work_validation_templates",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    metric: text("metric").notNull(),
+    /** <= | >= | < | > | = */
+    comparator: text("comparator").notNull(),
+    threshold: real("threshold").notNull(),
+    unit: text("unit").notNull().default(""),
+    /** due date = the day it's applied + this many days (null: no due date) */
+    dueOffsetDays: integer("due_offset_days"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("work_validation_templates_owner_idx").on(t.userId)],
+);
+
 /** "item depends on item" (blocked-by). Cycle-safe (server/work/lifecycle.ts); drawn as Gantt connectors. */
 export const workDependencies = sqliteTable(
   "work_dependencies",
