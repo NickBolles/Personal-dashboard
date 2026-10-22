@@ -144,13 +144,12 @@ export function ConversationLinkDialog({ item, linkedHere, onClose }: { item: Wo
 }
 
 /** "Unfiled conversations": recent chats not linked to any work item, with one-click filing. */
-export function UnfiledPanel({ items, onFiled }: { items: WorkItem[]; onFiled: (itemId: string) => void }) {
+export function UnfiledPanel({ items }: { items: WorkItem[] }) {
   const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled") });
   const [all, setAll] = useState(false);
   const [filing, setFiling] = useState<UnfiledConversation | null>(null);
   const file = useWorkMutation((v: { sessionId: string; itemId: string | null }) => api.post<{ itemId: string }>("/api/work/conversations/file", v), {
     ok: "Filed",
-    onSuccess: (r) => onFiled(r.itemId),
   });
   const list = q.data?.conversations ?? [];
   const shown = all ? list : list.slice(0, 5);
@@ -188,20 +187,20 @@ export function UnfiledPanel({ items, onFiled }: { items: WorkItem[]; onFiled: (
                     variant="primary"
                     busy={file.isPending && file.variables?.itemId === top.id && file.variables?.sessionId === c.id}
                     onClick={() => file.mutate({ sessionId: c.id, itemId: top.id })}
-                    aria-label={`File ${c.title} under ${top.title}`}
+                    aria-label={`File under ${top.title}: ${c.title}`}
                     title={`Shares the words: ${top.matched.join(", ")}`}
                   >
                     File under {top.title}
                   </Button>
                 ) : null}
-                <Button size="sm" onClick={() => setFiling(c)} aria-label={`File ${c.title} under…`}>
+                <Button size="sm" onClick={() => setFiling(c)} aria-label={`File under…: ${c.title}`}>
                   File under…
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => file.mutate({ sessionId: c.id, itemId: null })}
-                  aria-label={`File ${c.title} in Miscellaneous`}
+                  aria-label={`File in Miscellaneous: ${c.title}`}
                 >
                   File in Miscellaneous
                 </Button>

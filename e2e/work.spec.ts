@@ -248,3 +248,259 @@ test("work dashboard: native widgets and a sandboxed custom HTML widget", async 
   await page.getByRole("button", { name: "Remove Sandbox probe" }).click();
   await expect(page.getByRole("region", { name: "Sandbox probe" })).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------- phase 2
+
+type Item = { id: string; title: string; parentId: string | null; archived: boolean; startDate: string | null; targetDate: string | null };
+
+async function seedFlagship(page: Page) {
+  const post = async (path: string, data: unknown) => {
+    const r = await appPost(page, path, data);
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return r.json();
+  };
+  const { item: area } = await post("/api/work/items", { kind: "area", title: "Momentum Bets" });
+  const { item: project } = await post("/api/work/items", { kind: "project", title: "Criteria evaluator", parentId: area.id });
+  const ids: Record<string, string> = { area: area.id, project: project.id };
+  for (const t of ["V2 baseline", "V3 parity", "V4 lessons", "V5 evaluator contract"]) {
+    const { item } = await post("/api/work/items", { kind: "thread", title: t, parentId: project.id });
+    ids[t] = item.id;
+  }
+  return { ids, post };
+}
+
+async function items(page: Page) {
+  const res = await page.request.get("/api/work/items");
+  return ((await res.json()) as { items: Item[] }).items;
+}
+
+/** Drag with real pointer events from one element's centre to a point inside another. */
+async function dragTo(page: Page, from: ReturnType<Page["locator"]>, to: ReturnType<Page["locator"]>, at: { x: number; y: number } = { x: 0.5, y: 0.5 }) {
+  await from.scrollIntoViewIfNeeded();
+  const a = (await from.boundingBox())!;
+  const b = (await to.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  const tx = b.x + b.width * at.x;
+  const ty = b.y + b.height * at.y;
+  await page.mouse.move(a.x + a.width / 2 + 8, a.y + a.height / 2 + 8, { steps: 3 });
+  await page.mouse.move(tx, ty, { steps: 12 });
+  await page.mouse.up();
+}
+
+test("work: conversation picker, unfiled filing, continue in a new conversation (draft only), drag-and-drop and undo", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { ids, post } = await seedFlagship(page);
+  const nonce = Date.now().toString(36);
+  const picked = await post("/api/hermes/sessions", { title: `Picker check ${nonce}`, backend: "hermes" });
+  const unfiled = await post("/api/hermes/sessions", { title: `V5 evaluator hydration notes ${nonce}`, backend: "hermes" });
+  const loose = await post("/api/hermes/sessions", { title: `Loose thought ${nonce}`, backend: "hermes" });
+
+  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await expect(page.getByRole("heading", { level: 2, name: "V5 evaluator contract" })).toBeVisible();
+
+  // Picker: search your conversations and link one (no pasting ids).
+  await page.getByRole("button", { name: "Link conversation" }).click();
+  const dialog = page.getByRole("dialog", { name: "Link a conversation" });
+  await dialog.getByLabel("Search conversations").fill(`Picker check ${nonce}`);
+  await dialog.getByRole("button", { name: `Link Picker check ${nonce}` }).click();
+  await expect(dialog).toHaveCount(0);
+  const links = page.getByRole("article").locator("li", { hasText: `Picker check ${nonce}` });
+  await expect(links.first()).toContainText("Last activity");
+  await expect(links.first().getByRole("link", { name: /Open conversation/ })).toHaveAttribute("href", `/chat/${picked.id}`);
+
+  // Unfiled conversations: deterministic suggestion → one-click filing.
+  const inbox = page.getByRole("region", { name: "Unfiled conversations" });
+  await expect(inbox).toContainText(`V5 evaluator hydration notes ${nonce}`);
+  await expect(inbox).not.toContainText(`Picker check ${nonce}`);
+  await inbox.getByRole("button", { name: `File under V5 evaluator contract: V5 evaluator hydration notes ${nonce}` }).click();
+  await expect(inbox).not.toContainText(`V5 evaluator hydration notes ${nonce}`);
+  await expect(page.getByRole("article")).toContainText(`V5 evaluator hydration notes ${nonce}`);
+  await inbox.getByRole("button", { name: `File in Miscellaneous: Loose thought ${nonce}` }).click();
+  await expect(inbox).not.toContainText(`Loose thought ${nonce}`);
+  expect(unfiled.id).toBeTruthy();
+  expect(loose.id).toBeTruthy();
+
+  // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
+  await page.getByRole("button", { name: "Continue in new conversation" }).click();
+  const cont = page.getByRole("dialog", { name: "Continue in a new conversation" });
+  await expect(cont.getByTestId("continue-preview")).toContainText("# Handoff: V5 evaluator contract");
+  await cont.getByRole("button", { name: "Create conversation" }).click();
+  await expect(page).toHaveURL(/\/chat\/[^/?]+$/);
+  const sessionId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop()!);
+  const composer = page.locator("#composer");
+  await expect(composer).toHaveValue(/# Handoff: V5 evaluator contract/);
+  await expect(composer).toHaveValue(/\*\*Where:\*\* Momentum Bets › Criteria evaluator › V5 evaluator contract/);
+  await page.waitForTimeout(500);
+  const detail = (await (await page.request.get(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`)).json()) as { timeline: unknown[] };
+  expect(detail.timeline).toEqual([]);
+  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await expect(page.getByRole("article").getByText("started from the handoff", { exact: false })).toBeVisible();
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("tabpanel")).toContainText("Continued in a new conversation (handoff, no packet yet)");
+  await expect(page.getByRole("tabpanel")).toContainText("Handed off to");
+
+  // Drag-and-drop: drop V2 onto the middle of V4 → it becomes V4's child (moved_from recorded).
+  const handle = page.locator(`[data-drag-handle="${ids["V2 baseline"]}"]`);
+  const target = page.locator(`[data-row-id="${ids["V4 lessons"]}"]`);
+  await dragTo(page, handle, target);
+  await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V2 baseline"])?.parentId).toBe(ids["V4 lessons"]);
+  // Undo (shown for ~10 s) puts it back.
+  const undo = page.getByRole("status").filter({ hasText: "Moved" });
+  await expect(undo).toBeVisible();
+  await undo.getByRole("button", { name: "Undo" }).click();
+  await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V2 baseline"])?.parentId).toBe(ids.project);
+
+  // Reorder by dragging onto the top edge of V2: V5 goes first among the project's children.
+  await dragTo(page, page.locator(`[data-drag-handle="${ids["V5 evaluator contract"]}"]`), page.locator(`[data-row-id="${ids["V2 baseline"]}"]`), {
+    x: 0.5,
+    y: 0.1,
+  });
+  await expect
+    .poll(async () =>
+      (await items(page))
+        .filter((i) => i.parentId === ids.project)
+        .map((i) => i.title)
+        .join("|"),
+    )
+    .toBe("V5 evaluator contract|V2 baseline|V3 parity|V4 lessons");
+
+  // Undo an archive from the item menu.
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
+  await expect.poll(async () => (await items(page)).some((i) => i.id === ids["V5 evaluator contract"])).toBe(false);
+  await page.getByRole("status").filter({ hasText: "Archived" }).getByRole("button", { name: "Undo" }).click();
+  await expect.poll(async () => (await items(page)).some((i) => i.id === ids["V5 evaluator contract"])).toBe(true);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("work: timeline date editing and dependencies, validation templates, the map", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { ids, post } = await seedFlagship(page);
+  const patch = async (id: string, data: unknown) => {
+    const r = await page.request.patch(`/api/work/items/${id}`, { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+  };
+  const day = (n: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  await patch(ids["V4 lessons"], { startDate: day(0), targetDate: day(3) });
+  await patch(ids["V5 evaluator contract"], { startDate: day(4), targetDate: day(8) });
+  await post(`/api/work/items/${ids["V5 evaluator contract"]}/dependencies`, { dependsOnId: ids["V4 lessons"] });
+
+  await page.goto(`/work/timeline?root=${ids.project}`);
+  await expect(page.locator("[data-connectors]")).toHaveAttribute("data-connectors", "1");
+  // Drag V5's bar two days later (weeks zoom: 28 px a day).
+  const bar = page.locator(`[data-bar="${ids["V5 evaluator contract"]}"]`);
+  await bar.scrollIntoViewIfNeeded();
+  const box = (await bar.boundingBox())!;
+  // Grab the right part of the bar (the sticky label column can cover its left part), away from the end handle.
+  const gx = box.x + box.width - 24;
+  await page.mouse.move(gx, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(gx + 56, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V5 evaluator contract"])?.startDate).toBe(day(6));
+  expect((await items(page)).find((i) => i.id === ids["V5 evaluator contract"])?.targetDate).toBe(day(10));
+
+  // Keyboard/form alternative: the table's Edit dates.
+  await page.getByRole("button", { name: "Show as table" }).click();
+  await page.getByRole("button", { name: "Edit dates for V4 lessons" }).click();
+  const dd = page.getByRole("dialog", { name: "Dates for V4 lessons" });
+  await dd.getByLabel("Target date").fill(day(5));
+  await dd.getByRole("button", { name: "Save dates" }).click();
+  await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V4 lessons"])?.targetDate).toBe(day(5));
+  await expect(page.getByRole("table", { name: "Work timeline" })).toContainText("Blocked");
+
+  // Item detail: blocked-by, date events, a validation from a template, overdue highlighting.
+  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await expect(page.getByRole("article")).toContainText("Blocked by");
+  await expect(page.getByRole("article").getByRole("button", { name: "V4 lessons", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Add from template" }).click();
+  const td = page.getByRole("dialog", { name: "Add from template" });
+  await td.getByText("New template").click();
+  await td.getByLabel("Template metric").fill("p95 hydration");
+  await td.getByLabel("Threshold").fill("800");
+  await td.getByLabel("Unit").fill("ms");
+  await td.getByLabel("Due after (days, optional)").fill("7");
+  await td.getByRole("button", { name: "Save template" }).click();
+  await td.getByRole("button", { name: "Add p95 hydration" }).click();
+  await expect(page.getByText("p95 hydration <= 800 ms", { exact: true })).toBeVisible();
+  await post(`/api/work/items/${ids["V5 evaluator contract"]}/validations`, {
+    metric: "error rate",
+    comparator: "<",
+    threshold: 1,
+    unit: "%",
+    dueDate: day(-2),
+  });
+  await page.reload();
+  await expect(page.getByTestId("validation-overdue")).toContainText("1 validation is overdue");
+  await expect(page.locator("[data-overdue]")).toContainText("error rate");
+  await page.getByRole("tab", { name: "Activity" }).click();
+  await expect(page.getByRole("tabpanel")).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
+
+  // Map: read-only graph with relation and status filters, list alternative, click → item.
+  await page.goto(`/work/map?root=${ids.area}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
+  const svg = page.getByRole("group", { name: "Work map: Momentum Bets" });
+  await expect(svg).toHaveAttribute("data-map-nodes", "6");
+  await expect(svg.locator('[data-edge="depends_on"]')).toHaveCount(1);
+  await page.getByLabel("Contains").uncheck();
+  await expect(svg.locator('[data-edge="tree"]')).toHaveCount(0);
+  await page.getByLabel("Status").selectOption("settled");
+  await expect(svg).toHaveAttribute("data-map-nodes", "0");
+  await page.getByLabel("Status").selectOption("all");
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await page.getByRole("button", { name: "Show as list" }).click();
+  await expect(page.getByRole("main")).toContainText("Depends on");
+  await page.getByRole("button", { name: "Show map" }).click();
+  await page.getByRole("button", { name: "Fit" }).click();
+  await svg.getByRole("link", { name: /^V4 lessons,/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/work\\?item=${ids["V4 lessons"]}`));
+  await expect(page.getByRole("heading", { level: 2, name: "V4 lessons" })).toBeVisible();
+});
+
+test("work dashboard: resize, drag reorder and the new widgets", async ({ page }) => {
+  const { ids, post } = await seedFlagship(page);
+  await post(`/api/work/items/${ids["V5 evaluator contract"]}/validations`, {
+    metric: "p95 hydration",
+    comparator: "<=",
+    threshold: 800,
+    unit: "ms",
+    dueDate: "2020-01-01",
+  });
+  await page.goto("/work/dashboard");
+  await page.getByRole("button", { name: "Edit dashboard" }).click();
+  for (const [kind, extra] of [
+    ["validation_overdue", null],
+    ["map_snapshot", "Momentum Bets"],
+    ["unfiled_conversations", null],
+  ] as const) {
+    await page.getByRole("button", { name: "Add widget" }).click();
+    await page.getByLabel("Widget type").selectOption(kind);
+    if (extra) await page.getByLabel("Area or project").selectOption({ label: extra });
+    await page.getByRole("dialog").getByRole("button", { name: "Add widget" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  }
+  await expect(page.getByRole("region", { name: "Validation overdue" }).getByTestId("overdue-count")).not.toHaveText("0");
+  await expect(page.getByRole("region", { name: "Validation overdue" })).toContainText("V5 evaluator contract");
+  await expect(page.getByRole("region", { name: "Map snapshot" }).locator("svg[data-map-nodes]")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Unfiled conversations" })).toContainText("not filed under any work");
+
+  // Resize: S / M / L in edit mode.
+  const widgetLi = (title: string) => page.locator("li[data-widget-index]").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  await page.getByRole("group", { name: "Size of Priorities" }).getByRole("button", { name: "Large" }).click();
+  await expect(widgetLi("Priorities")).toHaveAttribute("data-size", "lg");
+  await expect(page.getByRole("group", { name: "Size of Priorities" }).getByRole("button", { name: "Large" })).toHaveAttribute("aria-pressed", "true");
+
+  // Drag reorder: the second widget onto the first one's slot (the ↑/↓ buttons are the keyboard way).
+  const order = async () => ((await (await page.request.get("/api/work/dashboard")).json()) as { widgets: { title: string }[] }).widgets.map((w) => w.title);
+  const before = await order();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await dragTo(page, page.locator('li[data-widget-index="1"] [data-widget-handle]'), page.locator('li[data-widget-index="0"]'), { x: 0.5, y: 0.3 });
+  await expect.poll(async () => (await order())[0]).toBe(before[1]);
+  expect((await order())[1]).toBe(before[0]);
+  await expectNoHorizontalOverflow(page);
+});

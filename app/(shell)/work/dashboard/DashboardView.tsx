@@ -38,6 +38,7 @@ const SCOPED: WidgetKind[] = [
   "project_map",
   "custom_html",
   "validation_overdue",
+  "map_snapshot",
 ];
 
 export function DashboardView() {
@@ -189,13 +190,13 @@ function WidgetCard({
                     aria-pressed={w.size === sz}
                     onClick={() => resize.mutate(sz)}
                     title={SIZE_LABEL[sz]}
-                    aria-label={`${SIZE_LABEL[sz]}`}
                     className={cx(
                       "min-h-11 min-w-9 px-2 text-xs font-medium",
                       w.size === sz ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2",
                     )}
                   >
-                    {sz.toUpperCase()}
+                    <span aria-hidden="true">{sz.toUpperCase()}</span>
+                    <span className="sr-only">{SIZE_LABEL[sz]}</span>
                   </button>
                 ))}
               </div>

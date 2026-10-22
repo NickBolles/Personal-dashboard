@@ -294,11 +294,6 @@ export function WorkTree({
         Filter work
       </label>
       <input id="work-tree-filter" type="search" className={inputCls} placeholder="Filter work…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-      {drag?.active ? (
-        <p className="text-xs text-muted" aria-hidden="true">
-          Drop on the top or bottom edge of a row to place it before or after; on the middle to put it inside. Esc cancels.
-        </p>
-      ) : null}
       {order.length ? (
         <ul role="tree" aria-label="Work items" className="space-y-0.5">
           {render(null, 1)}
@@ -306,6 +301,12 @@ export function WorkTree({
       ) : (
         <p className="p-2 text-sm text-muted">{filter ? "Nothing matches." : "No work yet."}</p>
       )}
+      {/* Below the tree so showing it never shifts the rows under the pointer. */}
+      {drag?.active ? (
+        <p className="text-xs text-muted" aria-hidden="true">
+          Drop on the top or bottom edge of a row to place it before or after; on the middle to put it inside. Esc cancels.
+        </p>
+      ) : null}
     </div>
   );
 }

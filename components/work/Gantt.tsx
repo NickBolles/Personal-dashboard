@@ -242,7 +242,8 @@ export function Gantt({
 
 export function TimelineTable({ rows, onEditDates }: { rows: TimelineRow[]; onEditDates?: (r: TimelineRow) => void }) {
   return (
-    <div data-scroll-x className="overflow-x-auto">
+    // relative: keeps absolutely positioned descendants (sr-only text) inside the scroll box.
+    <div data-scroll-x className="relative overflow-x-auto">
       <table className="w-full text-left text-sm">
         <caption className="sr-only">Work timeline</caption>
         <thead className="text-xs text-muted">

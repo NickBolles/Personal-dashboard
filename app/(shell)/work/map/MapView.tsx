@@ -45,7 +45,7 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
       <PageHeader title="Map" subtitle="A read-only picture of how work relates: containment, forks, splits, follow-ups and dependencies. Edit in the tree." />
       <Card className="mb-4 space-y-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 sm:max-w-sm">
+          <div className="w-full min-w-0 sm:w-72">
             <Field id="map-root" label="Area or project">
               <select id="map-root" className={inputCls} value={root} onChange={(e) => choose(e.target.value)}>
                 <option value="">All areas</option>
@@ -57,7 +57,7 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
               </select>
             </Field>
           </div>
-          <div className="min-w-0 sm:w-56">
+          <div className="w-full min-w-0 sm:w-56">
             <Field id="map-status" label="Status">
               <select id="map-status" className={inputCls} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
                 <option value="all">All statuses</option>

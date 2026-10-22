@@ -91,7 +91,7 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
               Show archived
             </label>
           </Card>
-          {canChat && items.data ? <UnfiledPanel items={list.filter((i) => !i.archived)} onFiled={select} /> : null}
+          {canChat && items.data ? <UnfiledPanel items={list.filter((i) => !i.archived)} /> : null}
         </div>
         <div className="min-w-0">
           {current ? (
