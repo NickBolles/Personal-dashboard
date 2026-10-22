@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BellIcon, BrainIcon, CalendarIcon, ChatIcon, CompassIcon, FlagIcon, HomeIcon, HouseIcon, TodoIcon, WalletIcon } from "@/components/icons";
+import { BellIcon, BrainIcon, CalendarIcon, ChatIcon, CompassIcon, FlagIcon, HomeIcon, HouseIcon, TodoIcon, WalletIcon, WorkIcon } from "@/components/icons";
 
 export type Dest = {
   key: string;
@@ -18,6 +18,7 @@ export const PRIMARY: Dest[] = [
 ];
 
 export const DESTINATIONS: Dest[] = [
+  { key: "work", href: "/work", label: "Work", icon: WorkIcon, match: (p) => p === "/work" || p.startsWith("/work/"), caps: ["work.use"] },
   {
     key: "workouts",
     href: "/workouts",
