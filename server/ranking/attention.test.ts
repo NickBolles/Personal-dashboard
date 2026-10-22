@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NextAction } from "@/lib/contracts";
 import { BUDGET, matchFocus, selectAttention, type AttentionInput } from "./attention";
+import { workHomeActions } from "@/server/work/home-rules";
 
 const TZ = "America/Chicago";
 // Saturday 2026-10-10, 12:00 in Chicago (CDT, UTC-5).
@@ -242,5 +243,37 @@ describe("counting and identity", () => {
     const s = select([dated("t", "2026-10-10")]);
     expect(s.now[0]!.rank).toMatchObject({ tier: "today", bucket: "now", category: "source:todos" });
     expect(s.now[0]!.rank!.fingerprint).toMatch(/\S/);
+  });
+});
+
+describe("work source", () => {
+  const ctx = { now: NOON, timezone: TZ, today: "2026-10-10", endOfToday: new Date("2026-10-11T05:00:00Z") };
+  const row = (id: string, status: string, targetDate: string | null = null) => ({
+    id,
+    title: id,
+    status,
+    nextAction: "Do it",
+    targetDate,
+    updatedAt: "2026-10-09T10:00:00Z",
+  });
+
+  it("ranks Work cards like any dated card inside the Now ≤ 3 budget", () => {
+    const work = workHomeActions(
+      [row("w-late", "in_progress", "2026-10-09"), row("w-today", "in_progress", "2026-10-10"), row("w-val", "awaiting_validation")],
+      [{ itemId: "w-val", metric: "p95", status: "pending", dueDate: "2026-10-08" }],
+      ctx,
+    );
+    expect(work.map((a) => a.source)).toEqual(["work", "work", "work"]);
+    const s = select([...work, dated("yday-0", "2026-10-09"), dated("yday-1", "2026-10-09"), dated("t-0", "2026-10-10")]);
+    expect(s.now).toHaveLength(BUDGET.now);
+    expect(s.totals.open).toBe(6);
+    expect(s.totals.now + s.totals.today + s.totals.upcoming + s.totals.backlog).toBe(6);
+    // Overdue since yesterday outranks today; the validation two days late is long-overdue.
+    const tier = (id: string) => [...s.now, ...s.today, ...s.backlog].find((a) => a.id === id)?.rank?.tier;
+    expect(tier("work:target:w-late")).toBe("overdue_recent");
+    expect(tier("work:target:w-today")).toBe("today");
+    expect(tier("work:validation:w-val")).toBe("overdue_stale");
+    expect(s.now.every((a) => a.rank!.bucket === "now")).toBe(true);
+    expect([...s.now, ...s.today].find((a) => a.id === "work:target:w-late")!.rank!.category).toBe("source:work");
   });
 });

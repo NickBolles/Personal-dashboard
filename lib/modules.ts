@@ -47,7 +47,7 @@ export const MODULES: ModuleDef[] = [
     id: "work",
     label: "Work",
     description: "Private hierarchy of AI-assisted work: handoffs, PR links, validation and a dashboard.",
-    sources: [],
+    sources: ["work"],
     viewCapability: "work.use",
     routes: [
       { href: "/work", label: "Work" },

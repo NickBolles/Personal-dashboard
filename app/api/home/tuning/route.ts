@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { HttpError } from "@/server/http/errors";
-import { ACTION_SOURCES, type ActionSource } from "@/lib/contracts";
+import { HOME_SOURCES, type ActionSource } from "@/lib/contracts";
 import { CATEGORY_PATTERN, categoryLabel, MAX_WEIGHT, MIN_WEIGHT, tunableCategories } from "@/lib/attention";
 import { hermesBrief, resetTuning, setCategoryWeight, tuningView } from "@/server/home-tuning";
 import { homeSelection, sourceVisible } from "@/server/sources";
@@ -11,7 +11,7 @@ import { can, type Capable } from "@/server/access";
 export const dynamic = "force-dynamic";
 
 function categoriesFor(user: Capable) {
-  return tunableCategories(ACTION_SOURCES.filter((s) => sourceVisible(user, s)));
+  return tunableCategories(HOME_SOURCES.filter((s) => sourceVisible(user, s)));
 }
 
 /** Everything this person has told Home, plus the knobs (Settings → Home priorities). */
@@ -63,7 +63,7 @@ export const DELETE = api<z.infer<typeof deleteSchema>>(
   ({ body, user }) => {
     const target = body.scope === "category" ? (body.category ?? body.target) : body.target;
     if ((body.scope === "category" || body.scope === "snooze") && !target) throw new HttpError(400, "missing_target", "Say what to reset");
-    if (body.scope === "category" && target && target.startsWith("source:") && !ACTION_SOURCES.includes(target.slice(7) as ActionSource))
+    if (body.scope === "category" && target && target.startsWith("source:") && !HOME_SOURCES.includes(target.slice(7) as ActionSource))
       throw new HttpError(400, "bad_category", "Unknown category");
     resetTuning(user.id, body.scope, target);
     return { ok: true };

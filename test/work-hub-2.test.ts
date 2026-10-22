@@ -14,6 +14,9 @@ import { wouldCreateDependencyCycle } from "@/server/work/lifecycle";
 import { filterMap, layoutMap, MAP_NODE, MAP_RELATIONS, type MapGraphNode } from "@/lib/work-map";
 import { mapGraph } from "@/server/work/map";
 import * as mapRoute from "@/app/api/work/map/route";
+import { workHomeActions } from "@/server/work/home-rules";
+import { adapterContext, homeSelection } from "@/server/sources";
+import { userById } from "@/server/auth";
 import * as depsRoute from "@/app/api/work/items/[id]/dependencies/route";
 import * as depRoute from "@/app/api/work/dependencies/[id]/route";
 import { getSessionDetail } from "@/server/assistant";
@@ -689,5 +692,61 @@ describe("map", () => {
     expect((await call(mapRoute.GET as H, { user: other, query: `?root=${area.id}` })).status).toBe(404);
     expect((await call(mapRoute.GET as H, { user: kid })).status).toBe(403);
     expect((await call(mapRoute.GET as H, { query: `?root=${area.id}` })).status).toBe(200);
+  });
+});
+
+describe("Home attention: Work source", () => {
+  const ctx = { now: new Date("2026-10-22T17:00:00Z"), timezone: "America/Chicago", today: "2026-10-22", endOfToday: new Date("2026-10-23T05:00:00Z") };
+  const row = (id: string, status: string, targetDate: string | null = null) => ({
+    id,
+    title: `T ${id}`,
+    status,
+    nextAction: "",
+    targetDate,
+    updatedAt: "2026-10-20T00:00:00Z",
+  });
+
+  it("makes cards only for overdue validations and in-progress work due today or earlier (pure)", () => {
+    const rows = [
+      row("a", "awaiting_validation"),
+      row("b", "awaiting_validation"),
+      row("c", "in_progress", "2026-10-22"),
+      row("d", "in_progress", "2026-10-20"),
+      row("e", "in_progress", "2026-10-23"),
+      row("f", "ready", "2026-10-01"),
+      row("g", "settled", "2026-10-01"),
+    ];
+    const vals = [
+      { itemId: "a", metric: "p95", status: "pending", dueDate: "2026-10-21" },
+      { itemId: "a", metric: "errors", status: "pending", dueDate: "2026-10-19" },
+      { itemId: "a", metric: "ok", status: "pass", dueDate: "2026-10-01" },
+      { itemId: "b", metric: "p95", status: "pending", dueDate: "2026-10-22" },
+    ];
+    const out = workHomeActions(rows, vals, ctx);
+    expect(out.map((a) => [a.id, a.priorityReason])).toEqual([
+      ["work:target:c", "today"],
+      ["work:target:d", "overdue"],
+      ["work:validation:a", "overdue"],
+    ]);
+    const v = out.find((a) => a.id === "work:validation:a")!;
+    expect(v).toMatchObject({ source: "work", title: "Validate: T a", detail: "2 validations overdue: errors, p95", href: "/work?item=a", dueIsDate: true });
+    // Due on the earliest overdue date (end of that local day).
+    expect(v.dueAt).toBe("2026-10-20T04:59:00.000Z");
+    expect(workHomeActions([...rows].reverse(), vals, ctx)).toEqual(out);
+  });
+
+  it("appears on Home only for people with work.use", async () => {
+    const { u, v5 } = flagship();
+    const today = adapterContext().today;
+    store.updateItem(u, v5.id, { nextAction: "Ship it", targetDate: today }, cid);
+    store.updateItem(u, v5.id, { status: "in_progress" }, cid);
+    const mine = await homeSelection(userById(owner)!, { live: false });
+    const all = [...mine.attention.now, ...mine.attention.today, ...mine.attention.upcoming, ...mine.attention.backlog];
+    expect(all.find((a) => a.source === "work")).toMatchObject({ id: `work:target:${v5.id}`, href: `/work?item=${v5.id}` });
+    expect(mine.payload.now.length).toBeLessThanOrEqual(3);
+    const theirs = await homeSelection(userById(kid)!, { live: false });
+    expect([...theirs.attention.now, ...theirs.attention.today, ...theirs.attention.backlog].some((a) => a.source === "work")).toBe(false);
+    const otherAdult = await homeSelection(userById(other)!, { live: false });
+    expect([...otherAdult.attention.now, ...otherAdult.attention.today].some((a) => a.source === "work")).toBe(false);
   });
 });

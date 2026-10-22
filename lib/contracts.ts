@@ -4,9 +4,14 @@
  * contained there.
  */
 
-export type ActionSource = "hermes" | "paperclip" | "todos" | "skylight" | "daily_compass" | "home_assistant" | "finance";
+/** Sources with an integration adapter (fetched, snapshotted, status-reported). */
+export type AdapterSource = "hermes" | "paperclip" | "todos" | "skylight" | "daily_compass" | "home_assistant" | "finance";
+/** Everything that can put a card on Home: the adapters plus Jarvis' own per-person Work hub. */
+export type ActionSource = AdapterSource | "work";
 
-export const ACTION_SOURCES: ActionSource[] = ["hermes", "paperclip", "todos", "skylight", "daily_compass", "home_assistant", "finance"];
+export const ACTION_SOURCES: AdapterSource[] = ["hermes", "paperclip", "todos", "skylight", "daily_compass", "home_assistant", "finance"];
+/** Every Home card source, for feedback and tuning (Work is computed per person, not fetched). */
+export const HOME_SOURCES: ActionSource[] = [...ACTION_SOURCES, "work"];
 
 export const SOURCE_LABELS: Record<ActionSource, string> = {
   hermes: "Hermes",
@@ -16,6 +21,7 @@ export const SOURCE_LABELS: Record<ActionSource, string> = {
   daily_compass: "Daily Compass",
   home_assistant: "Home Assistant",
   finance: "Finance",
+  work: "Work",
 };
 
 export type PriorityReason = "critical" | "awaiting_user" | "overdue" | "due_soon" | "checkin_window" | "today" | "upcoming";

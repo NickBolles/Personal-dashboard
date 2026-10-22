@@ -1,4 +1,4 @@
-import type { ActionSource, CalendarEvent, HomeException, NextAction, PrimaryActionKind } from "@/lib/contracts";
+import type { AdapterSource, CalendarEvent, HomeException, NextAction, PrimaryActionKind } from "@/lib/contracts";
 import type { TestResult } from "./registry";
 
 export type AdapterContext = {
@@ -42,7 +42,7 @@ export type SourceData = {
 export type ActOptions = { until?: string; correlationId: string; actor: string };
 
 export interface SourceAdapter {
-  source: ActionSource;
+  source: AdapterSource;
   /** how long fetched data is considered fresh */
   staleAfterMs: number;
   fetch(ctx: AdapterContext): Promise<SourceData>;

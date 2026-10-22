@@ -4,6 +4,7 @@ import {
   ACTION_SOURCES,
   SOURCE_LABELS,
   type ActionSource,
+  type AdapterSource,
   type AttentionSummary,
   type CalendarEvent,
   type HomePayload,
@@ -22,6 +23,7 @@ import { ADAPTERS } from "@/integrations";
 import { isConfigured, resolveIntegration } from "@/integrations/store";
 import type { AdapterContext, SourceData } from "@/integrations/types";
 import { can, type Capable } from "@/server/access";
+import { workHomeActionsFor } from "@/server/work/home";
 import { moduleForSource, sourceCapability } from "@/lib/modules";
 
 type Viewer = Capable & { id: string };
@@ -93,7 +95,7 @@ export function cachedSource(source: ActionSource, now = new Date()): SourceResu
 }
 
 /** Fetch one source live; on failure fall back to the last-known snapshot with an honest state. */
-export async function refreshSource(source: ActionSource, ctx = adapterContext()): Promise<SourceResult> {
+export async function refreshSource(source: AdapterSource, ctx = adapterContext()): Promise<SourceResult> {
   const nc = notConfigured(source);
   if (nc) return nc;
   const adapter = ADAPTERS[source];
@@ -220,7 +222,7 @@ export function nextEvent(events: CalendarEvent[], ctx: AdapterContext): Calenda
     })[0];
 }
 
-export async function collectSources(opts: { live: boolean; sources?: ActionSource[] } = { live: true }) {
+export async function collectSources(opts: { live: boolean; sources?: AdapterSource[] } = { live: true }) {
   const ctx = adapterContext();
   const list = opts.sources ?? ACTION_SOURCES;
   const results = opts.live
@@ -245,7 +247,8 @@ export async function homeSelection(user: Viewer, opts: { live: boolean }): Prom
   const collected = await collectSources({ live: opts.live, sources: visible });
   const ctx = collected.ctx;
   const results = collected.results.map((r) => scopeResult(user, r)!).filter(Boolean);
-  const all = results.flatMap((r) => r.data?.actions ?? []);
+  // Work is Jarvis' own per-person data: computed here (local, no fetch) for people with work.use.
+  const all = [...results.flatMap((r) => r.data?.actions ?? []), ...(can(user, "work.use") ? workHomeActionsFor(user.id, ctx) : [])];
   const byKey = Object.fromEntries(results.map((r) => [r.status.source, r])) as Record<ActionSource, SourceResult>;
   const events = [...(byKey.skylight?.data?.events ?? []), ...(byKey.home_assistant?.data?.events ?? [])];
   const compass = byKey.daily_compass?.data?.compass;

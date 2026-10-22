@@ -1,5 +1,5 @@
 import "server-only";
-import type { ActionSource } from "@/lib/contracts";
+import type { AdapterSource } from "@/lib/contracts";
 import type { SourceAdapter } from "./types";
 import { hermesAdapter } from "./hermes/adapter";
 import { todosAdapter } from "./todos/adapter";
@@ -9,7 +9,7 @@ import { skylightAdapter } from "./skylight/adapter";
 import { paperclipAdapter } from "./paperclip/service";
 import { financeAdapter } from "./finance/adapter";
 
-export const ADAPTERS: Record<ActionSource, SourceAdapter> = {
+export const ADAPTERS: Record<AdapterSource, SourceAdapter> = {
   hermes: hermesAdapter,
   todos: todosAdapter,
   daily_compass: dailyCompassAdapter,
@@ -20,5 +20,5 @@ export const ADAPTERS: Record<ActionSource, SourceAdapter> = {
 };
 
 export function getAdapter(source: string): SourceAdapter | undefined {
-  return ADAPTERS[source as ActionSource];
+  return ADAPTERS[source as AdapterSource];
 }
