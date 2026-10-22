@@ -26,6 +26,9 @@ const PAGES = [
   "/finance/funds",
   "/finance/plan",
   "/finance/checkin?all=1",
+  "/work",
+  "/work/timeline",
+  "/work/dashboard",
 ];
 
 for (const path of PAGES) {
