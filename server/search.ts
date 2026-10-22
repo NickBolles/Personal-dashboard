@@ -14,6 +14,8 @@ import { listCheckins } from "@/server/finance/checkins";
 import { listYears, revisionsFor } from "@/server/finance/plan";
 import { getDb, schema } from "@/server/db";
 import { monthName } from "@/server/finance/common";
+import { listItems as listWorkItems } from "@/server/work/store";
+import { STATUS_LABELS } from "@/lib/work";
 
 /**
  * One search across every module the person can see. Each provider is gated
@@ -207,6 +209,23 @@ const providers: SearchProvider[] = [
         })),
       ),
     ],
+  },
+  {
+    id: "work",
+    label: "Work",
+    visible: (u) => can(u, "work.use"),
+    search: (q, user) =>
+      listWorkItems(user.id, { includeArchived: true })
+        .filter((i) => !i.builtIn)
+        .map((i) => ({
+          id: `work:${i.id}`,
+          kind: "work" as const,
+          module: "work",
+          title: i.title,
+          subtitle: [STATUS_LABELS[i.status], i.nextAction ? `Next: ${i.nextAction}` : i.summary].filter(Boolean).join(" · ").slice(0, 160),
+          href: `/work?item=${encodeURIComponent(i.id)}`,
+          _s: matchScore(q, i.title, i.summary, i.nextAction),
+        })),
   },
   {
     id: "people",
