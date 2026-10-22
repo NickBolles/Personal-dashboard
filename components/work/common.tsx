@@ -12,9 +12,10 @@ const TABS = [
   { href: "/work", label: "Tree", match: (p: string) => p === "/work" },
   { href: "/work/timeline", label: "Timeline", match: (p: string) => p.startsWith("/work/timeline") },
   { href: "/work/dashboard", label: "Dashboard", match: (p: string) => p.startsWith("/work/dashboard") },
+  { href: "/work/map", label: "Map", match: (p: string) => p.startsWith("/work/map") },
 ];
 
-/** Work section chrome: Tree / Timeline / Dashboard tabs. */
+/** Work section chrome: Tree / Timeline / Dashboard / Map tabs. */
 export function WorkShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   return (

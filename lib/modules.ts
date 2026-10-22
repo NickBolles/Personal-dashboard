@@ -53,6 +53,7 @@ export const MODULES: ModuleDef[] = [
       { href: "/work", label: "Work" },
       { href: "/work/timeline", label: "Work timeline" },
       { href: "/work/dashboard", label: "Work dashboard" },
+      { href: "/work/map", label: "Work map" },
     ],
     capabilities: [
       {

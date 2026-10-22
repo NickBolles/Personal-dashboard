@@ -11,6 +11,9 @@ import { config } from "@/server/config";
 import * as templatesRoute from "@/app/api/work/validation-templates/route";
 import * as fromTemplateRoute from "@/app/api/work/items/[id]/validations/from-template/route";
 import { wouldCreateDependencyCycle } from "@/server/work/lifecycle";
+import { filterMap, layoutMap, MAP_NODE, MAP_RELATIONS, type MapGraphNode } from "@/lib/work-map";
+import { mapGraph } from "@/server/work/map";
+import * as mapRoute from "@/app/api/work/map/route";
 import * as depsRoute from "@/app/api/work/items/[id]/dependencies/route";
 import * as depRoute from "@/app/api/work/dependencies/[id]/route";
 import { getSessionDetail } from "@/server/assistant";
@@ -616,5 +619,75 @@ describe("validation templates and overdue", () => {
       404,
     );
     expect((await call(fromTemplateRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { templateId: template.id } })).status).toBe(200);
+  });
+});
+
+describe("map", () => {
+  const n = (id: string, parentId: string | null, sortOrder = 0, title = id): MapGraphNode => ({
+    id,
+    title,
+    kind: "thread",
+    status: "captured",
+    parentId,
+    sortOrder,
+  });
+  const graph = [n("area", null), n("p", "area", 0), n("a", "p", 0), n("b", "p", 1), n("c", "p", 2), n("q", "area", 1), n("d", "q", 0), n("lone", "missing")];
+
+  it("lays out a layered tree deterministically, parents centred over children (pure)", () => {
+    const l = layoutMap(graph);
+    const step = MAP_NODE.w + MAP_NODE.gapX;
+    expect(l.positions.a).toEqual({ x: 0, y: 2 * (MAP_NODE.h + MAP_NODE.gapY) });
+    expect(l.positions.c!.x).toBe(2 * step);
+    expect(l.positions.p!.x).toBe(step); // centred over a..c
+    expect(l.positions.area!.y).toBe(0);
+    expect(l.positions.a!.y).toBe(2 * (MAP_NODE.h + MAP_NODE.gapY));
+    expect(l.positions.lone).toEqual({ x: 4 * step, y: 0 }); // parent not in view: its own tree
+    // Same picture whatever order the nodes come in.
+    for (let i = 0; i < 5; i++) {
+      const shuffled = [...graph].sort(() => Math.random() - 0.5);
+      expect(layoutMap(shuffled)).toEqual(l);
+    }
+    // No two nodes share a spot.
+    const spots = Object.values(l.positions).map((p) => `${p.x},${p.y}`);
+    expect(new Set(spots).size).toBe(spots.length);
+    expect(layoutMap([])).toEqual({ positions: {}, width: MAP_NODE.w, height: MAP_NODE.h });
+  });
+
+  it("filters by relation and status (pure)", () => {
+    const edges = [
+      { id: "1", from: "p", to: "a", relation: "tree" as const },
+      { id: "2", from: "a", to: "b", relation: "forked_from" as const },
+      { id: "3", from: "c", to: "d", relation: "depends_on" as const },
+    ];
+    const g = { nodes: graph.map((x) => (x.id === "c" ? { ...x, status: "settled" as const } : x)), edges };
+    const all = filterMap(g, new Set(MAP_RELATIONS), () => true);
+    expect(all.edges.map((e) => e.id)).toEqual(["1", "2", "3"]);
+    expect(filterMap(g, new Set(["tree"] as const), () => true).edges.map((e) => e.id)).toEqual(["1"]);
+    const open = filterMap(g, new Set(MAP_RELATIONS), (s) => s !== "settled");
+    expect(open.nodes.some((x) => x.id === "c")).toBe(false);
+    expect(open.edges.map((e) => e.id)).toEqual(["1", "2"]);
+  });
+
+  it("builds the graph from tree, lineage and dependencies, scoped to the owner", async () => {
+    const { u, area, project, v4, v5 } = flagship();
+    const bug = store.splitItem(u, v5.id, { title: "Hydration perf bug" }, cid);
+    const fork = store.forkItem(u, v5.id, undefined, cid);
+    store.addDependency(u, v5.id, v4.id, cid);
+    store.moveItem(u, bug.id, project.id, cid); // a move is placement history, not a relation
+    const g = mapGraph(owner, area.id);
+    expect(g.root).toEqual({ id: area.id, title: "Momentum Bets" });
+    expect(g.nodes[0]!.id).toBe(area.id);
+    const rel = (r: string) => g.edges.filter((e) => e.relation === r).map((e) => [e.from, e.to]);
+    expect(rel("split_from")).toEqual([[v5.id, bug.id]]);
+    expect(rel("forked_from")).toEqual([[v5.id, fork.id]]);
+    expect(rel("depends_on")).toEqual([[v4.id, v5.id]]);
+    expect(rel("tree")).toContainEqual([project.id, bug.id]);
+    expect(g.edges.some((e) => (e.relation as string) === "moved_from")).toBe(false);
+    expect(g.truncated).toBe(false);
+    expect(mapGraph(owner, null).nodes.some((x) => x.title === "Miscellaneous")).toBe(true);
+    expect(() => mapGraph(other, area.id)).toThrow(/not found/);
+    expect((await call(mapRoute.GET as H, { user: other, query: `?root=${area.id}` })).status).toBe(404);
+    expect((await call(mapRoute.GET as H, { user: kid })).status).toBe(403);
+    expect((await call(mapRoute.GET as H, { query: `?root=${area.id}` })).status).toBe(200);
   });
 });

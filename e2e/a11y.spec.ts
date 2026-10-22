@@ -29,6 +29,7 @@ const PAGES = [
   "/work",
   "/work/timeline",
   "/work/dashboard",
+  "/work/map",
 ];
 
 for (const path of PAGES) {
