@@ -918,6 +918,25 @@ export const workEvents = sqliteTable(
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
 );
 
+/** "item depends on item" (blocked-by). Cycle-safe (server/work/lifecycle.ts); drawn as Gantt connectors. */
+export const workDependencies = sqliteTable(
+  "work_dependencies",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    dependsOnId: text("depends_on_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("work_dependencies_pair_idx").on(t.itemId, t.dependsOnId), index("work_dependencies_on_idx").on(t.dependsOnId)],
+);
+
 /**
  * Structural operations that can be undone (move, reorder, archive, split/fork
  * creation). Undo is only allowed for the latest operation on an item, within

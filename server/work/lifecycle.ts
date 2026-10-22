@@ -115,3 +115,23 @@ export function wouldCreateCycle(parents: Map<string, string | null>, id: string
 export function nextPacketVersion(existing: { version: number }[]) {
   return existing.reduce((m, p) => Math.max(m, p.version), 0) + 1;
 }
+
+/**
+ * Would "item depends on dependsOn" close a loop? True when they're the same
+ * item or dependsOn already (transitively) depends on item.
+ */
+export function wouldCreateDependencyCycle(edges: { itemId: string; dependsOnId: string }[], itemId: string, dependsOnId: string) {
+  if (itemId === dependsOnId) return true;
+  const next = new Map<string, string[]>();
+  for (const e of edges) next.set(e.itemId, [...(next.get(e.itemId) ?? []), e.dependsOnId]);
+  const seen = new Set<string>();
+  const stack = [dependsOnId];
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (cur === itemId) return true;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    stack.push(...(next.get(cur) ?? []));
+  }
+  return false;
+}

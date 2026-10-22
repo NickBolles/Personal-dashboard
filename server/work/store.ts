@@ -26,6 +26,8 @@ import {
   type updateItemSchema,
   type validationSchema,
   type validationUpdateSchema,
+  type DependencyRef,
+  type TimelineDependency,
   type WorkDetail,
   type WorkEvent,
   type WorkItem,
@@ -37,7 +39,16 @@ import {
   type WorkValidation,
 } from "@/lib/work";
 import type { z } from "zod";
-import { evaluateValidation, LifecycleError, nextPacketVersion, onImplementationMerged, planTransition, settleGate, wouldCreateCycle } from "./lifecycle";
+import {
+  evaluateValidation,
+  LifecycleError,
+  nextPacketVersion,
+  onImplementationMerged,
+  planTransition,
+  settleGate,
+  wouldCreateCycle,
+  wouldCreateDependencyCycle,
+} from "./lifecycle";
 import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
@@ -160,9 +171,33 @@ function siblingOrder(rows: ItemRow[], parentId: string | null) {
     .map((r) => r.id);
 }
 
-/** Dependencies touching an item (none until work_dependencies exists). */
-function dependencyCount(_db: Db, _itemId: string) {
-  return 0;
+/** Dependencies touching an item (either side). */
+function dependencyCount(db: Db, itemId: string) {
+  const D = schema.workDependencies;
+  return db
+    .select({ id: D.id })
+    .from(D)
+    .where(or(eq(D.itemId, itemId), eq(D.dependsOnId, itemId)))
+    .all().length;
+}
+
+function dependencyRefs(userId: string, itemId: string, db: Db, byId: Map<string, ItemRow>) {
+  const D = schema.workDependencies;
+  const rows = db.select().from(D).where(eq(D.userId, userId)).all();
+  const ref = (depId: string, otherId: string): DependencyRef | null => {
+    const o = byId.get(otherId);
+    return o ? { dependencyId: depId, id: o.id, title: o.title, status: o.status as WorkStatus, open: !isClosed(o.status) } : null;
+  };
+  return {
+    blockedBy: rows
+      .filter((r) => r.itemId === itemId)
+      .map((r) => ref(r.id, r.dependsOnId))
+      .filter((x): x is DependencyRef => !!x),
+    blocking: rows
+      .filter((r) => r.dependsOnId === itemId)
+      .map((r) => ref(r.id, r.itemId))
+      .filter((x): x is DependencyRef => !!x),
+  };
 }
 
 /** The built-in Miscellaneous area, created on first use. */
@@ -288,6 +323,7 @@ export function getDetail(userId: string, id: string): WorkDetail {
     })),
     settle: settleGate(packets[0] ?? null, validations as { status: WorkValidation["status"] }[]),
     githubRefresh: githubRefreshEnabled(),
+    ...dependencyRefs(userId, id, db, byId),
   };
 }
 
@@ -375,6 +411,13 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       transition = { from: row.status, to: status };
       event(tx, id, user.id, { kind: "status", from: row.status, to: status, reason });
     }
+    const start = fields.startDate === undefined ? row.startDate : fields.startDate;
+    const target = fields.targetDate === undefined ? row.targetDate : fields.targetDate;
+    if (start !== row.startDate || target !== row.targetDate)
+      event(tx, id, user.id, {
+        kind: "dates",
+        reason: `Dates: start ${row.startDate ?? "—"} → ${start ?? "—"}, target ${row.targetDate ?? "—"} → ${target ?? "—"}`,
+      });
     if (fields.archived !== undefined && fields.archived !== row.archived) {
       event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
       recordOp(tx, user.id, id, fields.archived ? "archive" : "unarchive", { archived: row.archived }, out);
@@ -659,6 +702,49 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     detail: { op: opId, kind: result.kind, outcome: result.outcome },
   });
   return { ...result, item: result.outcome === "deleted" ? null : toItem(ownedItem(user.id, result.itemId)) };
+}
+
+/** "item depends on dependsOn" (blocked-by). Cycle-safe; both items must be yours. */
+export function addDependency(user: CurrentUser, itemId: string, dependsOnId: string, correlationId: string): DependencyRef {
+  const D = schema.workDependencies;
+  const out = getDb().transaction((tx) => {
+    ownedItem(user.id, itemId, tx);
+    const other = ownedItem(user.id, dependsOnId, tx);
+    const edges = tx.select().from(D).where(eq(D.userId, user.id)).all();
+    if (edges.some((e) => e.itemId === itemId && e.dependsOnId === dependsOnId)) throw new HttpError(409, "exists", "Already a dependency");
+    if (wouldCreateDependencyCycle(edges, itemId, dependsOnId)) throw new HttpError(409, "cycle", "That would make a dependency loop");
+    const id = newId();
+    tx.insert(D).values({ id, userId: user.id, itemId, dependsOnId, createdAt: nowIso() }).run();
+    event(tx, itemId, user.id, { kind: "dependency", reason: `Now depends on “${other.title}”` });
+    return { id, other };
+  });
+  audit({
+    actor: user.id,
+    action: "work.dependency_add",
+    source: "work",
+    sourceRecord: itemId,
+    result: "ok",
+    correlationId,
+    detail: { dependsOn: dependsOnId },
+  });
+  return { dependencyId: out.id, id: out.other.id, title: out.other.title, status: out.other.status as WorkStatus, open: !isClosed(out.other.status) };
+}
+
+export function removeDependency(user: CurrentUser, dependencyId: string, correlationId: string) {
+  const D = schema.workDependencies;
+  const dep = getDb()
+    .select()
+    .from(D)
+    .where(and(eq(D.id, dependencyId), eq(D.userId, user.id)))
+    .get();
+  if (!dep) throw new HttpError(404, "not_found", "Dependency not found");
+  const other = getDb().select({ title: T.title }).from(T).where(eq(T.id, dep.dependsOnId)).get();
+  getDb().transaction((tx) => {
+    tx.delete(D).where(eq(D.id, dependencyId)).run();
+    event(tx, dep.itemId, user.id, { kind: "dependency", reason: `No longer depends on “${other?.title ?? "an item"}”` });
+  });
+  audit({ actor: user.id, action: "work.dependency_remove", source: "work", sourceRecord: dep.itemId, result: "ok", correlationId });
+  return { ok: true };
 }
 
 export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof packetSchema>, correlationId: string): WorkPacket {
@@ -1087,6 +1173,13 @@ export function timeline(userId: string, rootId: string | null): TimelineRespons
   const events = ids.length ? db.select().from(schema.workEvents).where(inArray(schema.workEvents.itemId, ids)).orderBy(asc(schema.workEvents.at)).all() : [];
   const vals = ids.length ? db.select().from(schema.workValidations).where(inArray(schema.workValidations.itemId, ids)).all() : [];
   const t = today();
+  const all = new Map(allRows(userId, db).map((r) => [r.id, r]));
+  const deps = db.select().from(schema.workDependencies).where(eq(schema.workDependencies.userId, userId)).all();
+  const inView = new Set(ids);
+  const blocked = new Set(deps.filter((d) => all.has(d.dependsOnId) && !isClosed(all.get(d.dependsOnId)!.status)).map((d) => d.itemId));
+  const dependencies: TimelineDependency[] = deps
+    .filter((d) => inView.has(d.itemId) && inView.has(d.dependsOnId))
+    .map((d) => ({ id: d.id, from: d.dependsOnId, to: d.itemId }));
   const rows: TimelineRow[] = tree.map(({ row, depth }) => {
     const ev = events.filter((e) => e.itemId === row.id);
     const started = ev.find((e) => e.toStatus === "in_progress");
@@ -1106,6 +1199,7 @@ export function timeline(userId: string, rootId: string | null): TimelineRespons
       targetDate: row.targetDate,
       overdue: !!row.targetDate && row.targetDate < t && !isClosed(row.status),
       validationOverdue: vals.some((v) => v.itemId === row.id && v.status === "pending" && !!v.dueDate && v.dueDate < t),
+      blocked: blocked.has(row.id),
       actuals,
     };
   });
@@ -1114,7 +1208,7 @@ export function timeline(userId: string, rootId: string | null): TimelineRespons
     .filter((r) => r.kind === "area" || r.kind === "project")
     .map((r) => ({ id: r.id, title: r.title, kind: r.kind as WorkKind }));
   const root = rootId ? tree[0]?.row : null;
-  return { root: root ? { id: root.id, title: root.title } : null, roots, rows, today: t };
+  return { root: root ? { id: root.id, title: root.title } : null, roots, rows, dependencies, today: t };
 }
 
 /** Visible (not archived, not under an archived branch) items in tree order, with their validations. */

@@ -10,7 +10,7 @@ import { WorkTree } from "@/components/work/WorkTree";
 import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
-import { ConversationLinkDialog, UnfiledPanel, fmtWhen, useConversations } from "@/components/work/conversations";
+import { ConversationLinkDialog, UnfiledPanel, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import {
   COMPARATORS,
   handoffMarkdown,
@@ -18,6 +18,7 @@ import {
   WORK_KINDS,
   WORK_STATUSES,
   type Comparator,
+  type DependencyRef,
   type LinkKind,
   type WorkDetail,
   type WorkItem,
@@ -337,6 +338,7 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
             <EditItem key={item.updatedAt} item={item} />
             <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
             <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
+            <Dependencies d={d} items={items} onSelect={onSelect} />
             <Links d={d} canChat={canChat} />
           </>
         ) : tab === "activity" ? (
@@ -735,6 +737,77 @@ function ValidationRow({ v }: { v: WorkValidation }) {
         </Field>
       </Dialog>
     </li>
+  );
+}
+
+function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void }) {
+  const [dest, setDest] = useState("");
+  const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
+    ok: "Dependency added",
+    onSuccess: () => setDest(""),
+  });
+  const remove = useWorkMutation((depId: string) => api.del(`/api/work/dependencies/${encodeURIComponent(depId)}`), { ok: "Dependency removed" });
+  const taken = new Set([d.item.id, ...d.blockedBy.map((b) => b.id)]);
+  const options = itemPaths(
+    items.filter((i) => i.parentId !== null && !i.archived),
+    taken,
+  );
+  const openBlockers = d.blockedBy.filter((b) => b.open).length;
+  const row = (r: DependencyRef, label: string) => (
+    <li key={r.dependencyId} className="flex flex-wrap items-center justify-between gap-2 py-1">
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <button type="button" className="tap min-w-0 text-left break-words text-accent underline" onClick={() => onSelect(r.id)}>
+          {r.title}
+        </button>
+        <StatusBadge status={r.status} />
+      </span>
+      <Button size="sm" variant="ghost" onClick={() => remove.mutate(r.dependencyId)} aria-label={`${label} ${r.title}: remove`}>
+        Remove
+      </Button>
+    </li>
+  );
+  return (
+    <Card>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">Dependencies</h3>
+        {openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : null}
+      </div>
+      <h4 className="text-xs font-medium tracking-wide text-muted uppercase">Blocked by</h4>
+      {d.blockedBy.length ? (
+        <ul className="divide-y divide-line">{d.blockedBy.map((r) => row(r, "Blocked by"))}</ul>
+      ) : (
+        <p className="text-sm text-muted">Nothing. Add work this has to wait for.</p>
+      )}
+      {d.blocking.length ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium tracking-wide text-muted uppercase">Blocks</h4>
+          <ul className="divide-y divide-line">{d.blocking.map((r) => row(r, "Blocks"))}</ul>
+        </>
+      ) : null}
+      <form
+        className="mt-3 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (dest) add.mutate(undefined);
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <Field id="dep-add" label="Depends on">
+            <select id="dep-add" className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Button type="submit" size="sm" disabled={!dest} busy={add.isPending}>
+          Add dependency
+        </Button>
+      </form>
+    </Card>
   );
 }
 

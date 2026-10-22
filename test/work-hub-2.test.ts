@@ -4,7 +4,10 @@ import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { createLocalSession } from "@/server/assistant/local";
-import { filingTokens, handoffMarkdown, packetSchema, suggestFiling } from "@/lib/work";
+import { filingTokens, handoffMarkdown, packetSchema, shiftDates, suggestFiling } from "@/lib/work";
+import { wouldCreateDependencyCycle } from "@/server/work/lifecycle";
+import * as depsRoute from "@/app/api/work/items/[id]/dependencies/route";
+import * as depRoute from "@/app/api/work/dependencies/[id]/route";
 import { getSessionDetail } from "@/server/assistant";
 import { recentAudit } from "@/server/audit";
 import * as continueRoute from "@/app/api/work/items/[id]/continue/route";
@@ -445,5 +448,92 @@ describe("undo for structural operations", () => {
     expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id }, csrf: false })).status).toBe(403);
     expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id } })).status).toBe(200);
     expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id } })).status).toBe(409);
+  });
+});
+
+describe("timeline editing and dependencies", () => {
+  it("snaps bar drags to days without crossing the other end (pure)", () => {
+    const d = { startDate: "2026-10-05", targetDate: "2026-10-10" };
+    expect(shiftDates(d, "move", 3)).toEqual({ startDate: "2026-10-08", targetDate: "2026-10-13" });
+    expect(shiftDates(d, "move", -5.4)).toEqual({ startDate: "2026-09-30", targetDate: "2026-10-05" });
+    expect(shiftDates(d, "start", 2)).toEqual({ startDate: "2026-10-07", targetDate: "2026-10-10" });
+    expect(shiftDates(d, "start", 9)).toEqual({ startDate: "2026-10-10", targetDate: "2026-10-10" });
+    expect(shiftDates(d, "end", -9)).toEqual({ startDate: "2026-10-05", targetDate: "2026-10-05" });
+    expect(shiftDates(d, "end", 0.4)).toEqual(d);
+    expect(shiftDates({ startDate: null, targetDate: "2026-12-31" }, "move", 1)).toEqual({ startDate: null, targetDate: "2027-01-01" });
+    expect(shiftDates({ startDate: "2026-10-05", targetDate: null }, "end", 1)).toEqual({ startDate: "2026-10-06", targetDate: null });
+  });
+
+  it("refuses dependency loops (pure)", () => {
+    const edges = [
+      { itemId: "b", dependsOnId: "a" },
+      { itemId: "c", dependsOnId: "b" },
+    ];
+    expect(wouldCreateDependencyCycle(edges, "a", "c")).toBe(true);
+    expect(wouldCreateDependencyCycle(edges, "a", "a")).toBe(true);
+    expect(wouldCreateDependencyCycle(edges, "c", "a")).toBe(false);
+    expect(wouldCreateDependencyCycle(edges, "d", "c")).toBe(false);
+    expect(
+      wouldCreateDependencyCycle(
+        [
+          { itemId: "x", dependsOnId: "y" },
+          { itemId: "y", dependsOnId: "x" },
+        ],
+        "z",
+        "x",
+      ),
+    ).toBe(false);
+  });
+
+  it("stores dependencies, shows blocked-by, draws connectors and records date edits", () => {
+    const { u, project, v2, v3, v4, v5 } = flagship();
+    const dep = store.addDependency(u, v5.id, v4.id, cid);
+    store.addDependency(u, v4.id, v3.id, cid);
+    expect(() => store.addDependency(u, v3.id, v5.id, cid)).toThrow(/loop/);
+    expect(() => store.addDependency(u, v5.id, v4.id, cid)).toThrow(/Already/);
+    expect(() => store.addDependency(them(), v5.id, v2.id, cid)).toThrow(/not found/);
+    let d = store.getDetail(owner, v5.id);
+    expect(d.blockedBy).toEqual([{ dependencyId: dep.dependencyId, id: v4.id, title: "V4 lessons", status: "captured", open: true }]);
+    expect(store.getDetail(owner, v4.id).blocking.map((b) => b.title)).toEqual(["V5 evaluator contract"]);
+    expect(d.events[0]).toMatchObject({ kind: "dependency", reason: "Now depends on “V4 lessons”" });
+
+    store.updateItem(u, v5.id, { startDate: "2026-10-05", targetDate: "2026-10-10" }, cid);
+    d = store.getDetail(owner, v5.id);
+    expect(d.events[0]).toMatchObject({ kind: "dates", reason: "Dates: start — → 2026-10-05, target — → 2026-10-10" });
+    let t = store.timeline(owner, project.id);
+    expect(t.dependencies.map((x) => [x.from, x.to])).toEqual(
+      expect.arrayContaining([
+        [v4.id, v5.id],
+        [v3.id, v4.id],
+      ]),
+    );
+    expect(t.rows.find((r) => r.id === v5.id)!.blocked).toBe(true);
+    // A closed blocker no longer blocks.
+    store.updateItem(u, v4.id, { status: "abandoned" }, cid);
+    t = store.timeline(owner, project.id);
+    expect(t.rows.find((r) => r.id === v5.id)!.blocked).toBe(false);
+    expect(t.rows.find((r) => r.id === v4.id)!.blocked).toBe(true);
+    store.removeDependency(u, dep.dependencyId, cid);
+    expect(store.getDetail(owner, v5.id).blockedBy).toEqual([]);
+    expect(() => store.removeDependency(u, dep.dependencyId, cid)).toThrow(/not found/);
+  });
+
+  it("a split child with a dependency is archived, not deleted, on undo", () => {
+    const { u, v4, v5 } = flagship();
+    const out: store.OpOut = {};
+    const bug = store.splitItem(u, v5.id, { title: "Hydration perf bug" }, cid, out);
+    store.addDependency(u, v4.id, bug.id, cid);
+    expect(store.undoOp(u, out.op!.id, cid).outcome).toBe("archived");
+  });
+
+  it("checks dependencies at the API", async () => {
+    const { v4, v5 } = flagship();
+    expect((await call(depsRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { dependsOnId: v5.id } })).status).toBe(409);
+    expect((await call(depsRoute.POST as H, { user: other, method: "POST", params: { id: v5.id }, body: { dependsOnId: v4.id } })).status).toBe(404);
+    const ok = await call(depsRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { dependsOnId: v4.id } });
+    expect(ok.status).toBe(200);
+    const { dependency } = (await ok.json()) as { dependency: { dependencyId: string } };
+    expect((await call(depRoute.DELETE as H, { user: other, method: "DELETE", params: { id: dependency.dependencyId } })).status).toBe(404);
+    expect((await call(depRoute.DELETE as H, { method: "DELETE", params: { id: dependency.dependencyId } })).status).toBe(200);
   });
 });

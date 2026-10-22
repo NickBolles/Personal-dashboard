@@ -191,7 +191,11 @@ export type WorkDetail = {
   lineage: (WorkLineage & { childTitle: string | null; parentTitle: string | null })[];
   settle: { allowed: boolean; reason: string | null };
   githubRefresh: boolean;
+  /** what this item waits on, and what waits on it */
+  blockedBy: DependencyRef[];
+  blocking: DependencyRef[];
 };
+export type DependencyRef = { dependencyId: string; id: string; title: string; status: WorkStatus; open: boolean };
 
 export type TimelineRow = {
   id: string;
@@ -203,13 +207,18 @@ export type TimelineRow = {
   targetDate: string | null;
   overdue: boolean;
   validationOverdue: boolean;
+  /** depends on work that isn't closed yet */
+  blocked: boolean;
   actuals: { kind: "started" | "merged" | "settled"; at: string }[];
 };
 
+export type TimelineDependency = { id: string; from: string; to: string };
 export type TimelineResponse = {
   root: { id: string; title: string } | null;
   roots: { id: string; title: string; kind: WorkKind }[];
   rows: TimelineRow[];
+  /** "to depends on from", both among `rows` */
+  dependencies: TimelineDependency[];
   today: string;
 };
 
@@ -334,6 +343,8 @@ export const continueSchema = z.object({ backend: z.enum(["hermes", "claude"]).o
 
 export const githubRefreshSchema = z.object({ itemId: id.optional() }).strict();
 export type GithubRefreshResult = { enabled: boolean; checked: number; changed: number; errors: number };
+
+export const dependencySchema = z.object({ dependsOnId: id }).strict();
 
 export const linkStateSchema = z.object({ externalState: z.enum(EXTERNAL_STATES) }).strict();
 
@@ -616,6 +627,39 @@ export function suggestFiling(
     .sort((a, b) => b.matched.length - a.matched.length || a.words - b.words || a.c.path.localeCompare(b.c.path) || a.c.id.localeCompare(b.c.id))
     .slice(0, limit)
     .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
+}
+
+// --- timeline editing ---
+
+function addDaysIso(date: string, n: number) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Dragging a Gantt bar, snapped to whole days. "move" shifts both dates (or
+ * the only one); "start"/"end" resize one edge but never past the other.
+ */
+export function shiftDates(
+  d: { startDate: string | null; targetDate: string | null },
+  mode: "move" | "start" | "end",
+  days: number,
+): { startDate: string | null; targetDate: string | null } {
+  const n = Math.round(days);
+  if (!n) return { startDate: d.startDate, targetDate: d.targetDate };
+  const sh = (x: string | null) => (x ? addDaysIso(x, n) : null);
+  if (mode === "move" || !d.startDate || !d.targetDate) {
+    if (mode === "start" && d.startDate && !d.targetDate) return { startDate: sh(d.startDate), targetDate: null };
+    if (mode === "end" && d.targetDate && !d.startDate) return { startDate: null, targetDate: sh(d.targetDate) };
+    return { startDate: sh(d.startDate), targetDate: sh(d.targetDate) };
+  }
+  if (mode === "start") {
+    const s = addDaysIso(d.startDate, n);
+    return { startDate: s > d.targetDate ? d.targetDate : s, targetDate: d.targetDate };
+  }
+  const t = addDaysIso(d.targetDate, n);
+  return { startDate: d.startDate, targetDate: t < d.startDate ? d.startDate : t };
 }
 
 export function todayIso(now = new Date()) {
