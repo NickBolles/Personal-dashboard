@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 /**
  * Jarvis-owned persistence only. Hermes sessions/messages, Paperclip issues and
@@ -759,4 +759,182 @@ export const aiMessages = sqliteTable(
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [index("ai_messages_session_idx").on(t.sessionId, t.createdAt)],
+);
+
+/**
+ * Work hub (docs/work.md): a private, per-person hierarchy of AI-assisted work.
+ * Areas are top-level items (parent_id null). Packets, lineage and events are
+ * append-only; GitHub stays the system of record for PR state (links only mirror it).
+ */
+export const workItems = sqliteTable(
+  "work_items",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parentId: text("parent_id"),
+    /** area | project | thread | investigation | note */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    nextAction: text("next_action").notNull().default(""),
+    /** lib/work.ts WORK_STATUSES */
+    status: text("status").notNull().default("captured"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    startDate: text("start_date"),
+    targetDate: text("target_date"),
+    completedAt: text("completed_at"),
+    /** manual | auto */
+    settledKind: text("settled_kind"),
+    settledReason: text("settled_reason"),
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+    /** "misc" for the built-in Miscellaneous area */
+    systemKey: text("system_key"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("work_items_owner_idx").on(t.userId, t.parentId), uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey)],
+);
+
+export const workLinks = sqliteTable(
+  "work_links",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    /** chat_session | github_pr | github_issue | url */
+    kind: text("kind").notNull(),
+    /** session id, or owner/repo#number for GitHub */
+    targetId: text("target_id"),
+    url: text("url"),
+    title: text("title").notNull().default(""),
+    /** source | implementation | evidence | reference */
+    role: text("role").notNull().default("reference"),
+    /** open | merged | closed */
+    externalState: text("external_state"),
+    stateChangedAt: text("state_changed_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("work_links_item_idx").on(t.itemId)],
+);
+
+export const workLineage = sqliteTable(
+  "work_lineage",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    childId: text("child_id").notNull(),
+    /** the related source item (fork/split source; the previous parent for a move) */
+    parentId: text("parent_id"),
+    /** forked_from | split_from | moved_from | handoff_from */
+    relation: text("relation").notNull(),
+    note: text("note"),
+    fromParentId: text("from_parent_id"),
+    toParentId: text("to_parent_id"),
+    actor: text("actor").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("work_lineage_child_idx").on(t.childId), index("work_lineage_parent_idx").on(t.parentId)],
+);
+
+export const workPackets = sqliteTable(
+  "work_packets",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    objective: text("objective").notNull(),
+    inScope: text("in_scope").notNull().default(""),
+    outOfScope: text("out_of_scope").notNull().default(""),
+    acceptanceCriteria: text("acceptance_criteria").notNull().default(""),
+    decisions: text("decisions").notNull().default(""),
+    openQuestions: text("open_questions").notNull().default(""),
+    context: text("context").notNull().default(""),
+    validationRequired: integer("validation_required", { mode: "boolean" }).notNull().default(true),
+    noValidationReason: text("no_validation_reason"),
+    createdAt: text("created_at").notNull().default(now),
+    createdBy: text("created_by").notNull(),
+  },
+  (t) => [uniqueIndex("work_packets_version_idx").on(t.itemId, t.version)],
+);
+
+export const workValidations = sqliteTable(
+  "work_validations",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    metric: text("metric").notNull(),
+    /** <= | >= | < | > | = */
+    comparator: text("comparator").notNull(),
+    threshold: real("threshold").notNull(),
+    unit: text("unit").notNull().default(""),
+    baseline: real("baseline"),
+    observed: real("observed"),
+    evidenceUrl: text("evidence_url"),
+    notes: text("notes"),
+    /** pending | pass | fail | waived */
+    status: text("status").notNull().default("pending"),
+    waiverReason: text("waiver_reason"),
+    dueDate: text("due_date"),
+    recordedAt: text("recorded_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("work_validations_item_idx").on(t.itemId)],
+);
+
+export const workEvents = sqliteTable(
+  "work_events",
+  {
+    id: text("id").primaryKey(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    /** status | created | merged | closed | packet | validation | link | edit */
+    kind: text("kind").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    reason: text("reason"),
+    actor: text("actor").notNull(),
+    at: text("at").notNull().default(now),
+  },
+  (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
+);
+
+export const dashboards = sqliteTable("dashboards", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull().default("Dashboard"),
+  createdAt: text("created_at").notNull().default(now),
+  updatedAt: text("updated_at").notNull().default(now),
+});
+
+export const dashboardWidgets = sqliteTable(
+  "dashboard_widgets",
+  {
+    id: text("id").primaryKey(),
+    dashboardId: text("dashboard_id")
+      .notNull()
+      .references(() => dashboards.id, { onDelete: "cascade" }),
+    /** lib/work.ts WIDGET_KINDS */
+    kind: text("kind").notNull(),
+    title: text("title").notNull(),
+    config: text("config").notNull().default("{}"),
+    position: integer("position").notNull().default(0),
+    /** sm | md | lg */
+    size: text("size").notNull().default("md"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("dashboard_widgets_idx").on(t.dashboardId, t.position)],
 );

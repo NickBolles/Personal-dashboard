@@ -1,5 +1,5 @@
 /** Global search (Ctrl K on the web, Search on the phone). */
-export type SearchKind = "page" | "action" | "event" | "conversation" | "device" | "person" | "finance" | "setting";
+export type SearchKind = "page" | "action" | "event" | "conversation" | "device" | "person" | "finance" | "setting" | "work";
 
 export type SearchResult = {
   id: string;

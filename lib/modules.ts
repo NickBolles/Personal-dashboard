@@ -44,6 +44,26 @@ export type ModuleDef = {
 
 export const MODULES: ModuleDef[] = [
   {
+    id: "work",
+    label: "Work",
+    description: "Private hierarchy of AI-assisted work: handoffs, PR links, validation and a dashboard.",
+    sources: [],
+    viewCapability: "work.use",
+    routes: [
+      { href: "/work", label: "Work" },
+      { href: "/work/timeline", label: "Work timeline" },
+      { href: "/work/dashboard", label: "Work dashboard" },
+    ],
+    capabilities: [
+      {
+        id: "work.use",
+        label: "Organize work",
+        description: "Own private work items, packets, validations and dashboard. No AI calls; GitHub is read-only.",
+        roles: ["adult"],
+      },
+    ],
+  },
+  {
     id: "workouts",
     label: "Workouts",
     description: "Private training plans, quick set capture and history.",

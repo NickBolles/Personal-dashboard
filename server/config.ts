@@ -75,4 +75,8 @@ export const config = {
   get maxBodyBytes() {
     return Number(process.env.JARVIS_MAX_BODY_BYTES ?? 256 * 1024);
   },
+  /** Optional read-only GitHub token for Work hub PR refresh (never sent to browsers). */
+  get githubToken() {
+    return process.env.JARVIS_GITHUB_TOKEN?.trim() || "";
+  },
 };

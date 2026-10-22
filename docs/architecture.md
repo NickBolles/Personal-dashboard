@@ -21,15 +21,16 @@ Jarvis (Next.js 16 standalone, one container)
 
 ## Ownership
 
-| System                 | Owns                                                                                                                                                               | Jarvis keeps                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Hermes                 | sessions, messages, runs, approvals, memory, cron                                                                                                                  | run tracking rows (until terminal), lineage for "fork from here", drafts (browser) |
-| Paperclip              | initiatives, issues, status, blockers, assignments                                                                                                                 | `entity_links` (conversation ↔ issue) only                                         |
-| Google Tasks / HA todo | todo records                                                                                                                                                       | nothing (optional _built-in_ list when "Jarvis" is the canonical provider)         |
-| Home Assistant         | device state                                                                                                                                                       | exception snapshots, health counts, audit of controls (never shared with Hermes)   |
-| Skylight (via Hermes)  | calendar, chores                                                                                                                                                   | validated structured-answer snapshots (`hermes_snapshot:skylight`)                 |
-| Daily Compass (Hermes) | check-in state                                                                                                                                                     | validated structured-answer snapshots; check-in conversation id                    |
-| Jarvis                 | alerts inbox, push subscriptions, preferences, links, audit, people, finance check-ins and plan, Claude-direct conversations, Home feedback/tuning and saved dates | all of it in SQLite                                                                |
+| System                 | Owns                                                                                                                                                               | Jarvis keeps                                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| Hermes                 | sessions, messages, runs, approvals, memory, cron                                                                                                                  | run tracking rows (until terminal), lineage for "fork from here", drafts (browser)              |
+| Paperclip              | initiatives, issues, status, blockers, assignments                                                                                                                 | `entity_links` (conversation ↔ issue) only                                                      |
+| Google Tasks / HA todo | todo records                                                                                                                                                       | nothing (optional _built-in_ list when "Jarvis" is the canonical provider)                      |
+| Home Assistant         | device state                                                                                                                                                       | exception snapshots, health counts, audit of controls (never shared with Hermes)                |
+| Skylight (via Hermes)  | calendar, chores                                                                                                                                                   | validated structured-answer snapshots (`hermes_snapshot:skylight`)                              |
+| Daily Compass (Hermes) | check-in state                                                                                                                                                     | validated structured-answer snapshots; check-in conversation id                                 |
+| Work hub (Jarvis)      | work items (areas → projects → threads), lineage, immutable work packets, validations, work events, dashboards and widgets (docs/work.md)                          | all of it in SQLite, per person; GitHub PR state is only mirrored (manual or read-only refresh) |
+| Jarvis                 | alerts inbox, push subscriptions, preferences, links, audit, people, finance check-ins and plan, Claude-direct conversations, Home feedback/tuning and saved dates | all of it in SQLite                                                                             |
 
 ## Key flows
 
@@ -52,6 +53,8 @@ Jarvis (Next.js 16 standalone, one container)
 **Search** (`server/search.ts`): Ctrl K or `/` on the web and Search on the phone. Each module registers a provider; results are filtered by capability, and a slow provider is reported as partial and never blocks the others.
 
 **Assistant backends** (`server/assistant/`): Hermes or Claude direct (Anthropic API, `server/assistant/local.ts`) for chat, picked per conversation. Claude conversation and run ids start with `loc_`/`lrn_`, so every chat route dispatches by id and streams the same RunEvents. Claude runs use adaptive thinking, low effort by default for speed, and the API's server-side fallback on refusals. Its conversations live in `ai_sessions`/`ai_messages`. Hermes-owned features (Skylight, Daily Compass, Brain) stay on Hermes.
+
+**Work** (docs/work.md): a private, per-person hierarchy of AI-assisted work at `/work` (tree + detail), `/work/timeline` (Gantt) and `/work/dashboard` (widgets). Lifecycle rules are pure functions in `server/work/lifecycle.ts`; a merged implementation PR moves work to _Awaiting validation_ unless its packet explicitly needs none. No model calls. Custom HTML widgets run only in `<iframe sandbox="allow-scripts" srcdoc>` with a deny-all CSP.
 
 **Finance** (docs/finance.md): a pure engine in `lib/finance/`, storage in `fin_*` tables, balances from manual entry, CSV or Monarch. It feeds Home a status card with no amounts (`integrations/finance/adapter.ts`).
 
