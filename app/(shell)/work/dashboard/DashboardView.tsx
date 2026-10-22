@@ -7,7 +7,7 @@ import { api } from "@/lib/client/api";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls } from "@/components/ui";
 import { CustomHtmlWidget } from "@/components/work/CustomHtmlWidget";
 import { Gantt } from "@/components/work/Gantt";
-import { StatusBadge, StatusDot, fmtDate, useWorkMutation } from "@/components/work/common";
+import { StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import {
   CUSTOM_HTML_MAX_BYTES,
   safeHref,
@@ -32,6 +32,7 @@ export function DashboardView() {
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [configuring, setConfiguring] = useState<DashboardWidget | null>(null);
+  useGithubAutoRefresh(!!q.data?.githubRefresh);
   return (
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
       <PageHeader

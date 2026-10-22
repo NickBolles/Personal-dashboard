@@ -7,7 +7,7 @@ import { api } from "@/lib/client/api";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
-import { StatusBadge, fmtDate, useWorkMutation } from "@/components/work/common";
+import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { ConversationLinkDialog, UnfiledPanel, fmtWhen, useConversations } from "@/components/work/conversations";
 import {
@@ -166,6 +166,7 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
   const close = () => setDialog(null);
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
+  useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
 
   if (q.isPending) return <Spinner label="Loading…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
@@ -733,10 +734,12 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
       ) : (
         <p className="text-sm text-muted">Link the conversation this came from, the PR that implements it, or evidence.</p>
       )}
-      {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr") ? (
+      {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
         <p className="mt-2 text-xs text-muted">
           Set JARVIS_GITHUB_TOKEN on the server to refresh PR state from GitHub (read-only). Until then, mark it yourself.
         </p>
+      ) : d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
+        <p className="mt-2 text-xs text-muted">PR and issue states refresh from GitHub (read-only) when you open this item, at most every 5 minutes.</p>
       ) : null}
     </Card>
   );
@@ -744,7 +747,9 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
 
 function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; lastActive?: string | null }) {
   const url = `/api/work/links/${encodeURIComponent(l.id)}`;
-  const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), { ok: "PR state updated" });
+  const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), {
+    ok: l.kind === "github_issue" ? "Issue state updated" : "PR state updated",
+  });
   const remove = useWorkMutation(() => api.del(url), { ok: "Link removed" });
   const pull = useWorkMutation(() => api.post(`${url}/refresh`), { ok: "Refreshed from GitHub" });
   const name = l.title || l.targetId || l.url || "";
@@ -757,6 +762,11 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
             {l.lineage === "handoff_from" ? " · started from the handoff" : ""}
           </p>
           <p className="font-medium break-words">{name}</p>
+          {(l.kind === "github_pr" || l.kind === "github_issue") && l.checkedAt ? (
+            <p className={`text-xs ${l.checkError ? "text-danger" : "text-muted"}`}>
+              {l.checkError ? `GitHub check failed ${fmtWhen(l.checkedAt)}: ${l.checkError}` : `Checked on GitHub ${fmtWhen(l.checkedAt)}`}
+            </p>
+          ) : null}
           {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
         </div>
         {l.externalState ? (
@@ -783,7 +793,12 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
             Mark closed
           </Button>
         ) : null}
-        {l.kind === "github_pr" && refresh ? (
+        {l.kind === "github_issue" ? (
+          <Button size="sm" onClick={() => state.mutate(l.externalState === "closed" ? "open" : "closed")} busy={state.isPending}>
+            {l.externalState === "closed" ? "Mark open" : "Mark closed"}
+          </Button>
+        ) : null}
+        {(l.kind === "github_pr" || l.kind === "github_issue") && refresh ? (
           <Button size="sm" onClick={() => pull.mutate(undefined)} busy={pull.isPending}>
             Refresh
           </Button>
@@ -1259,6 +1274,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
                     ? `Created${e.reason ? `: ${e.reason}` : ""}`
                     : (e.reason ?? e.kind)}
               </span>
+              {e.source === "github" ? <Badge>GitHub</Badge> : null}
             </li>
           ))}
         </ol>

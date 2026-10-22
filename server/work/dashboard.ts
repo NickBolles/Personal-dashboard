@@ -24,6 +24,7 @@ import {
 } from "@/lib/work";
 import type { z } from "zod";
 import { ensureMiscellaneous, itemsWithValidations, subtree, timeline } from "./store";
+import { githubRefreshEnabled } from "./github";
 
 /**
  * Per-person dashboard. Native widgets are computed here from work data only
@@ -228,7 +229,7 @@ export function getDashboard(userId: string): DashboardResponse {
     .filter((r) => r.kind === "area" || r.kind === "project")
     .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.localeCompare(b.createdAt))
     .map((r) => ({ id: r.id, title: r.title, kind: r.kind as WorkKind }));
-  return { id: d.id, title: d.title, widgets, areas };
+  return { id: d.id, title: d.title, widgets, areas, githubRefresh: githubRefreshEnabled() };
 }
 
 function checkRoot(userId: string, rootId: string | null | undefined) {

@@ -819,6 +819,10 @@ export const workLinks = sqliteTable(
     lineage: text("lineage"),
     /** the packet the handoff was written from (null when the item had none) */
     packetId: text("packet_id"),
+    /** last read-only GitHub readback attempt (throttles automatic refresh) */
+    checkedAt: text("checked_at"),
+    /** why the last readback failed (cleared on success) */
+    checkError: text("check_error"),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [index("work_links_item_idx").on(t.itemId)],
@@ -907,6 +911,8 @@ export const workEvents = sqliteTable(
     toStatus: text("to_status"),
     reason: text("reason"),
     actor: text("actor").notNull(),
+    /** where a change came from: manual | github (read-only refresh); null for ordinary edits */
+    source: text("source"),
     at: text("at").notNull().default(now),
   },
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],

@@ -113,6 +113,9 @@ export type WorkLink = {
   role: LinkRole;
   externalState: ExternalState | null;
   stateChangedAt: string | null;
+  /** last read-only GitHub readback and why it failed, if it did */
+  checkedAt: string | null;
+  checkError: string | null;
   /** "handoff_from" when the conversation was started from this item's handoff */
   lineage: "handoff_from" | null;
   packetId: string | null;
@@ -161,6 +164,8 @@ export type WorkEvent = {
   toStatus: string | null;
   reason: string | null;
   actor: string;
+  /** manual | github (read-only refresh) | null */
+  source: string | null;
   at: string;
 };
 
@@ -242,7 +247,14 @@ export type WidgetData =
   | { kind: "custom_html"; snapshot: WorkSnapshot | null };
 
 export type DashboardWidget = { id: string; kind: WidgetKind; title: string; size: WidgetSize; position: number; config: WidgetConfig; data: WidgetData };
-export type DashboardResponse = { id: string; title: string; widgets: DashboardWidget[]; areas: { id: string; title: string; kind: WorkKind }[] };
+export type DashboardResponse = {
+  id: string;
+  title: string;
+  widgets: DashboardWidget[];
+  areas: { id: string; title: string; kind: WorkKind }[];
+  /** JARVIS_GITHUB_TOKEN is set: the dashboard refreshes linked PR/issue states (read-only) on load */
+  githubRefresh: boolean;
+};
 
 // --- request schemas ---
 
@@ -317,6 +329,9 @@ export const linkSchema = z
 
 /** "Continue in new conversation": which assistant answers (default: the household setting). */
 export const continueSchema = z.object({ backend: z.enum(["hermes", "claude"]).optional() }).strict();
+
+export const githubRefreshSchema = z.object({ itemId: id.optional() }).strict();
+export type GithubRefreshResult = { enabled: boolean; checked: number; changed: number; errors: number };
 
 export const linkStateSchema = z.object({ externalState: z.enum(EXTERNAL_STATES) }).strict();
 

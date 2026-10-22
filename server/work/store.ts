@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { audit } from "@/server/audit";
@@ -16,6 +16,7 @@ import {
   safeHref,
   type createItemSchema,
   type ExternalState,
+  type GithubRefreshResult,
   type linkSchema,
   type packetSchema,
   type splitSchema,
@@ -36,7 +37,9 @@ import {
 } from "@/lib/work";
 import type { z } from "zod";
 import { evaluateValidation, LifecycleError, nextPacketVersion, onImplementationMerged, planTransition, settleGate, wouldCreateCycle } from "./lifecycle";
-import { fetchPullState, githubRefreshEnabled } from "./github";
+import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
+import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
+import { boundedAll } from "@/server/http/fetch";
 
 /**
  * Work hub store (docs/work.md). Every read and write is scoped to the owner:
@@ -107,9 +110,24 @@ const toValidation = (r: typeof schema.workValidations.$inferSelect): WorkValida
   recordedAt: r.recordedAt,
 });
 
-function event(db: Db, itemId: string, actor: string, e: { kind: string; from?: string | null; to?: string | null; reason?: string | null }) {
+function event(
+  db: Db,
+  itemId: string,
+  actor: string,
+  e: { kind: string; from?: string | null; to?: string | null; reason?: string | null; source?: "manual" | "github" | null },
+) {
   db.insert(schema.workEvents)
-    .values({ id: newId(), itemId, actor, kind: e.kind, fromStatus: e.from ?? null, toStatus: e.to ?? null, reason: e.reason ?? null, at: nowIso() })
+    .values({
+      id: newId(),
+      itemId,
+      actor,
+      kind: e.kind,
+      fromStatus: e.from ?? null,
+      toStatus: e.to ?? null,
+      reason: e.reason ?? null,
+      source: e.source ?? null,
+      at: nowIso(),
+    })
     .run();
 }
 
@@ -604,6 +622,7 @@ export function setLinkState(user: CurrentUser, linkId: string, state: ExternalS
     event(tx, item.id, user.id, {
       kind: state === "merged" ? "merged" : state === "closed" ? "closed" : "link",
       reason: `${label} ${state}${via === "github" ? " (read from GitHub)" : ""}`,
+      source: via,
     });
     if (!(state === "merged" && link.kind === "github_pr" && link.role === "implementation")) return { itemId: item.id, transition: null };
     const plan = onImplementationMerged({
@@ -619,7 +638,7 @@ export function setLinkState(user: CurrentUser, linkId: string, state: ExternalS
       .set({ ...patch, updatedAt: nowIso() })
       .where(eq(T.id, item.id))
       .run();
-    event(tx, item.id, user.id, { kind: "status", from: item.status, to: plan.status, reason });
+    event(tx, item.id, user.id, { kind: "status", from: item.status, to: plan.status, reason, source: via });
     return { itemId: item.id, transition: { from: item.status, to: plan.status, reason } };
   });
   audit({ actor: user.id, action: "work.link_state", source: "work", sourceRecord: linkId, result: "ok", correlationId, detail: { state, via } });
@@ -638,20 +657,80 @@ export function removeLink(user: CurrentUser, linkId: string, correlationId: str
   return { ok: true };
 }
 
-/** Read-only GitHub readback; the token never leaves the server. */
-export async function refreshLink(user: CurrentUser, linkId: string, correlationId: string) {
-  const { link } = ownedLink(user.id, linkId);
-  if (link.kind !== "github_pr" || !link.url) throw new HttpError(400, "not_pr", "Only pull requests can be refreshed");
-  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Set JARVIS_GITHUB_TOKEN to refresh from GitHub");
-  const ref = parseGithubUrl(link.url)!;
-  const remote = await fetchPullState(ref);
-  if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`)
+/** Read one PR/issue from GitHub (read-only) and apply it through the merge rules. */
+async function readBack(user: CurrentUser, link: typeof schema.workLinks.$inferSelect, correlationId: string) {
+  const ref = parseGithubUrl(link.url ?? "");
+  if (!ref) throw new HttpError(400, "github_url", "Not a GitHub link");
+  try {
+    const remote = link.kind === "github_pr" ? await fetchPullState(ref) : await fetchIssueState(ref);
+    const db = getDb();
+    const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
+    if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
+    db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
+    return setLinkState(user, link.id, remote.state, correlationId, "github");
+  } catch (e) {
     getDb()
       .update(schema.workLinks)
-      .set({ title: `${remote.title} (#${ref.number})` })
-      .where(eq(schema.workLinks.id, linkId))
+      .set({ checkedAt: nowIso(), checkError: (e as Error).message.slice(0, 300) })
+      .where(eq(schema.workLinks.id, link.id))
       .run();
-  return setLinkState(user, linkId, remote.state, correlationId, "github");
+    throw e;
+  }
+}
+
+/** Read-only GitHub readback of one link (the Refresh button); the token never leaves the server. */
+export async function refreshLink(user: CurrentUser, linkId: string, correlationId: string) {
+  const { link } = ownedLink(user.id, linkId);
+  if ((link.kind !== "github_pr" && link.kind !== "github_issue") || !link.url)
+    throw new HttpError(400, "not_github", "Only GitHub pull requests and issues can be refreshed");
+  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Set JARVIS_GITHUB_TOKEN to refresh from GitHub");
+  return readBack(user, link, correlationId);
+}
+
+/**
+ * Automatic refresh on item view and dashboard load (only with JARVIS_GITHUB_TOKEN).
+ * Throttled per link (server/work/refresh-rules.ts): each due link is claimed
+ * with a conditional update first, so concurrent requests never read the same
+ * link twice; then at most 4 GitHub reads run at once. Results go through
+ * setLinkState, which ignores unchanged states, so a merge applies exactly once.
+ */
+export async function autoRefreshLinks(user: CurrentUser, scope: { itemId?: string }, correlationId: string, now = new Date()): Promise<GithubRefreshResult> {
+  if (!githubRefreshEnabled()) return { enabled: false, checked: 0, changed: 0, errors: 0 };
+  if (scope.itemId) ownedItem(user.id, scope.itemId);
+  const db = getDb();
+  const L = schema.workLinks;
+  const links = db
+    .select({ link: L })
+    .from(L)
+    .innerJoin(T, eq(T.id, L.itemId))
+    .where(and(eq(T.userId, user.id), inArray(L.kind, ["github_pr", "github_issue"]), ...(scope.itemId ? [eq(L.itemId, scope.itemId)] : [])))
+    .all()
+    .map((r) => r.link);
+  const due = dueForRefresh(links, now);
+  const cutoff = claimCutoff(now);
+  const claimed = due.filter(
+    (id) =>
+      db
+        .update(L)
+        .set({ checkedAt: now.toISOString() })
+        .where(and(eq(L.id, id), or(isNull(L.checkedAt), lt(L.checkedAt, cutoff))))
+        .run().changes === 1,
+  );
+  const byId = new Map(links.map((l) => [l.id, l]));
+  const results = await boundedAll(
+    claimed.map((id) => async () => {
+      const before = byId.get(id)!;
+      const after = await readBack(user, before, correlationId);
+      return after.externalState !== before.externalState;
+    }),
+    REFRESH_PARALLELISM,
+  );
+  return {
+    enabled: true,
+    checked: claimed.length,
+    changed: results.filter((r) => r.status === "fulfilled" && r.value).length,
+    errors: results.filter((r) => r.status === "rejected").length,
+  };
 }
 
 export function addValidation(user: CurrentUser, itemId: string, body: z.infer<typeof validationSchema>, correlationId: string): WorkValidation {

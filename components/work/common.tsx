@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge, cx, useToast, type Tone } from "@/components/ui";
-import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
+import { api } from "@/lib/client/api";
+import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/work";
 
 const TABS = [
   { href: "/work", label: "Tree", match: (p: string) => p === "/work" },
@@ -104,4 +105,26 @@ export function fmtDate(d: string | null | undefined) {
   if (!d) return "—";
   const [y, m, day] = d.slice(0, 10).split("-").map(Number);
   return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+/**
+ * Read-only GitHub refresh when an item is viewed or the dashboard loads. The
+ * server throttles per link and caps each request, so remounts are cheap.
+ * Failures stay quiet here: each link shows its own last check result.
+ */
+export function useGithubAutoRefresh(enabled: boolean, itemId?: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    let live = true;
+    api
+      .post<GithubRefreshResult>("/api/work/github/refresh", itemId ? { itemId } : {})
+      .then((r) => {
+        if (live && r.changed) qc.invalidateQueries({ queryKey: ["work"] });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [enabled, itemId, qc]);
 }

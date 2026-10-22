@@ -8,6 +8,8 @@ import { filingTokens, handoffMarkdown, packetSchema, suggestFiling } from "@/li
 import { getSessionDetail } from "@/server/assistant";
 import { recentAudit } from "@/server/audit";
 import * as continueRoute from "@/app/api/work/items/[id]/continue/route";
+import * as ghRefreshRoute from "@/app/api/work/github/refresh/route";
+import { dueForRefresh, REFRESH_INTERVAL_MS } from "@/server/work/refresh-rules";
 import * as store from "@/server/work/store";
 import * as conversations from "@/server/work/conversations";
 import * as conversationsRoute from "@/app/api/work/conversations/route";
@@ -167,5 +169,110 @@ describe("continue in a new conversation", () => {
     expect((await call(continueRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { backend: "claude" } })).status).toBe(409);
     expect(store.getDetail(owner, v5.id).links).toEqual([]);
     expect((await call(continueRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { backend: "gpt" } })).status).toBe(400);
+  });
+});
+
+describe("automatic GitHub refresh", () => {
+  it("picks due links: GitHub only, not merged PRs, throttled per link, oldest first, capped", () => {
+    const now = new Date("2026-10-22T12:00:00Z");
+    const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
+    const l = (id: string, kind: string, externalState: string | null, checkedAt: string | null, url: string | null = "https://github.com/o/r/pull/1") => ({
+      id,
+      kind,
+      url,
+      externalState,
+      checkedAt,
+    });
+    const links = [
+      l("a", "github_pr", "open", null),
+      l("b", "github_pr", "merged", null),
+      l("c", "github_issue", "closed", ago(REFRESH_INTERVAL_MS)),
+      l("d", "github_pr", "open", ago(REFRESH_INTERVAL_MS - 1)),
+      l("e", "url", null, null),
+      l("f", "github_pr", "closed", ago(10 * REFRESH_INTERVAL_MS)),
+      l("g", "github_pr", "open", null, null),
+    ];
+    expect(dueForRefresh(links, now)).toEqual(["a", "f", "c"]);
+    expect(dueForRefresh(links, now, { max: 2 })).toEqual(["a", "f"]);
+    expect(dueForRefresh([...links].reverse(), now)).toEqual(["a", "f", "c"]);
+  });
+
+  it("refreshes at most 10 links per request with at most 4 in flight, and applies a merge exactly once", async () => {
+    const { u, project, v5 } = flagship();
+    const impl = await store.addLink(u, v5.id, { kind: "github_pr", url: "https://github.com/o/r/pull/100" }, cid);
+    const issue = await store.addLink(u, v5.id, { kind: "github_issue", url: "https://github.com/o/r/issues/200" }, cid);
+    for (let n = 1; n <= 10; n++) await store.addLink(u, project.id, { kind: "github_pr", url: `https://github.com/o/r/pull/${n}`, role: "reference" }, cid);
+    expect(await store.autoRefreshLinks(u, {}, cid)).toEqual({ enabled: false, checked: 0, changed: 0, errors: 0 });
+
+    vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-test-value");
+    let inFlight = 0;
+    let peak = 0;
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        expect(init.method).toBe("GET");
+        urls.push(url);
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        if (url.endsWith("/pulls/100")) return Response.json({ state: "closed", merged: true, title: "Evaluator V5" });
+        if (url.endsWith("/issues/200")) return Response.json({ state: "closed", title: "Tracking issue" });
+        if (url.endsWith("/pulls/7")) return new Response("nope", { status: 500 });
+        return Response.json({ state: "open", merged: false });
+      }),
+    );
+    const t0 = new Date();
+    const first = await store.autoRefreshLinks(u, {}, cid, t0);
+    expect(first).toMatchObject({ enabled: true, checked: 10 });
+    expect(peak).toBeLessThanOrEqual(4);
+    expect(peak).toBeGreaterThan(1);
+    const second = await store.autoRefreshLinks(u, {}, cid, t0);
+    expect(second.checked).toBe(2); // the two never-checked links; everything else is throttled
+    expect(await store.autoRefreshLinks(u, {}, cid, t0)).toMatchObject({ checked: 0 });
+    expect(new Set(urls).size).toBe(urls.length); // nothing read twice inside the window
+    expect(urls).toContain("https://api.github.com/repos/o/r/issues/200");
+
+    let d = store.getDetail(owner, v5.id);
+    expect(d.item.status).toBe("awaiting_validation");
+    expect(d.links.find((l) => l.id === impl.id)).toMatchObject({ externalState: "merged", title: "Evaluator V5 (#100)", checkError: null });
+    expect(d.links.find((l) => l.id === issue.id)).toMatchObject({ externalState: "closed" });
+    const statusEvents = () => store.getDetail(owner, v5.id).events.filter((e) => e.kind === "status");
+    expect(statusEvents()).toHaveLength(1);
+    expect(statusEvents()[0]).toMatchObject({ toStatus: "awaiting_validation", source: "github" });
+    expect(d.events.find((e) => e.kind === "merged")).toMatchObject({ source: "github" });
+    const failed = store.getDetail(owner, project.id).links.find((l) => l.url?.endsWith("/pull/7"))!;
+    expect(failed.checkError).toMatch(/GitHub answered 500/);
+
+    // After the interval, open links are read again; the merged PR is final and never re-read; no second transition.
+    const later = new Date(t0.getTime() + REFRESH_INTERVAL_MS + 1000);
+    const again = await store.autoRefreshLinks(u, { itemId: v5.id }, cid, later);
+    expect(again).toMatchObject({ checked: 1, changed: 0 }); // only the issue
+    expect(statusEvents()).toHaveLength(1);
+    d = store.getDetail(owner, v5.id);
+    expect(d.item.status).toBe("awaiting_validation");
+  });
+
+  it("concurrent refreshes claim each link once", async () => {
+    const { u, v5 } = flagship();
+    for (let n = 1; n <= 6; n++) await store.addLink(u, v5.id, { kind: "github_pr", url: `https://github.com/o/r/pull/${n}` }, cid);
+    vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-test-value");
+    const fetchMock = vi.fn(async () => Response.json({ state: "closed", merged: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const now = new Date();
+    const [a, b] = await Promise.all([store.autoRefreshLinks(u, {}, cid, now), store.autoRefreshLinks(u, {}, cid, now)]);
+    expect(a.checked + b.checked).toBe(6);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(store.getDetail(owner, v5.id).events.filter((e) => e.kind === "status" && e.toStatus === "awaiting_validation")).toHaveLength(1);
+  });
+
+  it("is scoped to your items at the API", async () => {
+    const { v5 } = flagship();
+    expect((await call(ghRefreshRoute.POST as H, { method: "POST", body: {} })).status).toBe(200);
+    expect((await call(ghRefreshRoute.POST as H, { user: kid, method: "POST", body: {} })).status).toBe(403);
+    vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-test-value");
+    expect((await call(ghRefreshRoute.POST as H, { user: other, method: "POST", body: { itemId: v5.id } })).status).toBe(404);
+    expect((await call(ghRefreshRoute.POST as H, { method: "POST", body: { itemId: v5.id, x: 1 } })).status).toBe(400);
   });
 });
