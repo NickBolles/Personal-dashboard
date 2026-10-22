@@ -4,8 +4,9 @@ import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { createLocalSession } from "@/server/assistant/local";
-import { applyTemplate, filingTokens, handoffMarkdown, isValidationOverdue, packetSchema, shiftDates, suggestFiling } from "@/lib/work";
-import { addWidget, getDashboard } from "@/server/work/dashboard";
+import { moveToIndex, applyTemplate, filingTokens, handoffMarkdown, isValidationOverdue, packetSchema, shiftDates, suggestFiling } from "@/lib/work";
+import { addWidget, getDashboard, updateWidget } from "@/server/work/dashboard";
+import * as widgetRoute from "@/app/api/work/dashboard/widgets/[id]/route";
 import { localDate, addDays } from "@/lib/time";
 import { config } from "@/server/config";
 import * as templatesRoute from "@/app/api/work/validation-templates/route";
@@ -748,5 +749,48 @@ describe("Home attention: Work source", () => {
     expect([...theirs.attention.now, ...theirs.attention.today, ...theirs.attention.backlog].some((a) => a.source === "work")).toBe(false);
     const otherAdult = await homeSelection(userById(other)!, { live: false });
     expect([...otherAdult.attention.now, ...otherAdult.attention.today].some((a) => a.source === "work")).toBe(false);
+  });
+});
+
+describe("dashboard upgrades", () => {
+  it("moves a widget to an index (pure)", () => {
+    expect(moveToIndex(["a", "b", "c", "d"], "a", 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveToIndex(["a", "b", "c", "d"], "d", 0)).toEqual(["d", "a", "b", "c"]);
+    expect(moveToIndex(["a", "b", "c"], "b", 99)).toEqual(["a", "c", "b"]);
+    expect(moveToIndex(["a", "b"], "x", 0)).toEqual(["a", "b"]);
+  });
+
+  it("resizes, drag-reorders and serves the new widgets; custom HTML is unchanged", () => {
+    const { u, area, v5 } = flagship();
+    store.splitItem(u, v5.id, { title: "Hydration perf bug" }, cid);
+    let d = getDashboard(owner);
+    const first = d.widgets[0]!;
+    d = updateWidget(u, first.id, { size: "lg" }, cid);
+    expect(d.widgets[0]).toMatchObject({ id: first.id, size: "lg" });
+    d = updateWidget(u, first.id, { position: 2 }, cid);
+    expect(d.widgets.map((w) => w.id).indexOf(first.id)).toBe(2);
+    expect(d.widgets.map((w) => w.position)).toEqual([0, 1, 2, 3]);
+    d = addWidget(u, { kind: "unfiled_conversations" }, cid);
+    expect(d.widgets.at(-1)).toMatchObject({ kind: "unfiled_conversations", title: "Unfiled conversations", data: { kind: "unfiled" } });
+    d = addWidget(u, { kind: "map_snapshot" }, cid);
+    expect(d.widgets.at(-1)!.data).toEqual({ kind: "map_snapshot", graph: null });
+    d = addWidget(u, { kind: "map_snapshot", config: { rootId: area.id } }, cid);
+    const snap = d.widgets.at(-1)!.data as { kind: "map_snapshot"; graph: { nodes: { title: string }[]; edges: { relation: string }[] } };
+    expect(snap.graph.nodes.map((n) => n.title)).toContain("Hydration perf bug");
+    expect(snap.graph.edges.some((e) => e.relation === "split_from")).toBe(true);
+    d = addWidget(u, { kind: "validation_overdue" }, cid);
+    expect(d.widgets.at(-1)!.size).toBe("sm");
+    // Custom HTML: same sandbox model (no snapshot unless opted in).
+    d = addWidget(u, { kind: "custom_html", config: { html: "<p>x</p>" } }, cid);
+    expect(d.widgets.at(-1)!.data).toEqual({ kind: "custom_html", snapshot: null });
+  });
+
+  it("validates widget updates at the API", async () => {
+    const d = getDashboard(owner);
+    const id = d.widgets[0]!.id;
+    expect((await call(widgetRoute.PATCH as H, { method: "PATCH", params: { id }, body: { size: "xl" } })).status).toBe(400);
+    expect((await call(widgetRoute.PATCH as H, { method: "PATCH", params: { id }, body: { position: -1 } })).status).toBe(400);
+    expect((await call(widgetRoute.PATCH as H, { user: other, method: "PATCH", params: { id }, body: { position: 1 } })).status).toBe(404);
+    expect((await call(widgetRoute.PATCH as H, { method: "PATCH", params: { id }, body: { position: 1, size: "sm" } })).status).toBe(200);
   });
 });

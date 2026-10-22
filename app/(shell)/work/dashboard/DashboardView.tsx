@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls } from "@/components/ui";
 import { CustomHtmlWidget } from "@/components/work/CustomHtmlWidget";
+import { MapCanvas } from "@/components/work/WorkMap";
+import { fmtWhen } from "@/components/work/conversations";
+import { useAccess } from "@/components/access";
 import { Gantt } from "@/components/work/Gantt";
 import { StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import {
@@ -18,6 +21,7 @@ import {
   type DashboardResponse,
   type DashboardWidget,
   type MapNode,
+  type UnfiledResponse,
   type WidgetConfig,
   type WidgetKind,
   type WidgetSize,
@@ -42,6 +46,10 @@ export function DashboardView() {
   const [adding, setAdding] = useState(false);
   const [configuring, setConfiguring] = useState<DashboardWidget | null>(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh);
+  const [drag, setDrag] = useState<WidgetDrag | null>(null);
+  const reorder = useWorkMutation((v: { id: string; position: number }) =>
+    api.patch(`/api/work/dashboard/widgets/${encodeURIComponent(v.id)}`, { position: v.position }),
+  );
   return (
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -67,7 +75,18 @@ export function DashboardView() {
         q.data.widgets.length ? (
           <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {q.data.widgets.map((w, i) => (
-              <WidgetCard key={w.id} w={w} editing={editing} first={i === 0} last={i === q.data.widgets.length - 1} onConfigure={() => setConfiguring(w)} />
+              <WidgetCard
+                key={w.id}
+                w={w}
+                index={i}
+                editing={editing}
+                first={i === 0}
+                last={i === q.data.widgets.length - 1}
+                onConfigure={() => setConfiguring(w)}
+                drag={drag}
+                setDrag={setDrag}
+                onDrop={(id, position) => reorder.mutate({ id, position })}
+              />
             ))}
           </ul>
         ) : (
@@ -80,32 +99,106 @@ export function DashboardView() {
   );
 }
 
+type WidgetDrag = { id: string; x: number; y: number; active: boolean; over: number | null };
+
 function WidgetCard({
   w,
+  index,
   editing,
   first,
   last,
   onConfigure,
+  drag,
+  setDrag,
+  onDrop,
 }: {
   w: DashboardWidget;
+  index: number;
   editing: boolean;
   first: boolean;
   last: boolean;
   onConfigure: () => void;
+  drag: WidgetDrag | null;
+  setDrag: (d: WidgetDrag | null) => void;
+  onDrop: (id: string, position: number) => void;
 }) {
   const url = `/api/work/dashboard/widgets/${encodeURIComponent(w.id)}`;
   const move = useWorkMutation((direction: "up" | "down") => api.patch(url, { direction }));
+  const resize = useWorkMutation((size: WidgetSize) => api.patch(url, { size }));
   const remove = useWorkMutation(() => api.del(url), { ok: "Widget removed" });
   const headingId = `widget-${w.id}`;
+  const mine = drag?.id === w.id;
+  const overIndex = (x: number, y: number) => {
+    const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-widget-index]");
+    return el ? Number(el.dataset.widgetIndex) : null;
+  };
+  const handlers = {
+    onPointerDown: (e: ReactPointerEvent<HTMLSpanElement>) => {
+      if (e.button !== 0) return;
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      setDrag({ id: w.id, x: e.clientX, y: e.clientY, active: false, over: null });
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLSpanElement>) => {
+      if (!mine || !drag) return;
+      const active = drag.active || Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4;
+      if (active) setDrag({ ...drag, active, over: overIndex(e.clientX, e.clientY) });
+    },
+    onPointerUp: () => {
+      if (mine && drag?.active && drag.over !== null && drag.over !== index) onDrop(w.id, drag.over);
+      setDrag(null);
+    },
+    onPointerCancel: () => setDrag(null),
+  };
   return (
-    <li className={cx("min-w-0", SIZE_CLS[w.size])}>
-      <Card as="section" aria-labelledby={headingId} className="h-full" data-widget={w.kind}>
+    <li className={cx("min-w-0", SIZE_CLS[w.size], mine && drag?.active && "opacity-50")} data-widget-index={index} data-size={w.size}>
+      <Card
+        as="section"
+        aria-labelledby={headingId}
+        className={cx("h-full", drag?.active && drag.over === index && !mine && "ring-2 ring-accent")}
+        data-widget={w.kind}
+      >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 id={headingId} className="font-semibold">
+          <h2 id={headingId} className="flex items-center gap-1 font-semibold">
+            {editing ? (
+              <span
+                aria-hidden="true"
+                title="Drag to reorder"
+                data-widget-handle={w.id}
+                className="inline-flex h-9 w-6 cursor-grab touch-none items-center justify-center text-muted select-none active:cursor-grabbing"
+                {...handlers}
+              >
+                <svg viewBox="0 0 12 16" className="h-4 w-3" fill="currentColor">
+                  <circle cx="3" cy="3" r="1.3" />
+                  <circle cx="9" cy="3" r="1.3" />
+                  <circle cx="3" cy="8" r="1.3" />
+                  <circle cx="9" cy="8" r="1.3" />
+                  <circle cx="3" cy="13" r="1.3" />
+                  <circle cx="9" cy="13" r="1.3" />
+                </svg>
+              </span>
+            ) : null}
             {w.title}
           </h2>
           {editing ? (
             <div className="flex flex-wrap gap-1">
+              <div role="group" aria-label={`Size of ${w.title}`} className="inline-flex overflow-hidden rounded-xl border border-line-strong">
+                {WIDGET_SIZES.map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    aria-pressed={w.size === sz}
+                    onClick={() => resize.mutate(sz)}
+                    title={SIZE_LABEL[sz]}
+                    aria-label={`${SIZE_LABEL[sz]}`}
+                    className={cx(
+                      "min-h-11 min-w-9 px-2 text-xs font-medium",
+                      w.size === sz ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2",
+                    )}
+                  >
+                    {sz.toUpperCase()}
+                  </button>
+                ))}
+              </div>
               <Button size="sm" variant="ghost" disabled={first} onClick={() => move.mutate("up")} aria-label={`Move ${w.title} earlier`}>
                 ↑
               </Button>
@@ -124,6 +217,42 @@ function WidgetCard({
         <WidgetBody w={w} />
       </Card>
     </li>
+  );
+}
+
+function UnfiledWidget() {
+  const canChat = useAccess().can("hermes.chat");
+  const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled"), enabled: canChat });
+  if (!canChat) return <p className="text-sm text-muted">Conversations need chat access.</p>;
+  if (q.isPending) return <Spinner label="Loading conversations…" />;
+  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  const d = q.data;
+  return (
+    <div>
+      <p className="flex items-baseline gap-2">
+        <span className="text-3xl font-semibold tabular-nums">{d.total}</span>
+        <span className="text-sm text-muted">not filed under any work</span>
+      </p>
+      {d.unavailable.length ? <p className="text-sm text-warn">{d.unavailable.join(", ")} didn&apos;t answer.</p> : null}
+      <ul className="mt-2 divide-y divide-line">
+        {d.conversations.slice(0, 5).map((c) => (
+          <li key={c.id} className="py-2">
+            <Link href={`/chat/${encodeURIComponent(c.id)}`} className="font-medium break-words hover:underline">
+              {c.title}
+            </Link>
+            <p className="text-xs text-muted">
+              {fmtWhen(c.lastActiveAt)}
+              {c.suggestions[0] ? ` · maybe ${c.suggestions[0].title}` : ""}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-sm">
+        <Link href="/work" className="text-accent underline">
+          File them in Work
+        </Link>
+      </p>
+    </div>
   );
 }
 
@@ -201,6 +330,21 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
       </div>
     );
   }
+  if (d.kind === "unfiled") return <UnfiledWidget />;
+  if (d.kind === "map_snapshot")
+    return d.graph && d.graph.nodes.length ? (
+      <div>
+        <MapCanvas nodes={d.graph.nodes} edges={d.graph.edges} interactive={false} height={200} label={`Map of ${d.graph.root?.title ?? "work"}`} />
+        <p className="mt-2 text-sm">
+          <Link href={`/work/map?root=${encodeURIComponent(d.graph.root?.id ?? "")}`} className="text-accent underline">
+            Open the map<span className="sr-only"> of {d.graph.root?.title}</span>
+          </Link>
+          {d.graph.truncated ? <span className="text-xs text-muted"> · showing the first {d.graph.nodes.length} items</span> : null}
+        </p>
+      </div>
+    ) : (
+      <p className="text-sm text-muted">Choose an area or project in Configure.</p>
+    );
   return <CustomHtmlWidget html={w.config.html ?? ""} title={w.title} snapshot={d.snapshot} />;
 }
 
@@ -288,7 +432,11 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
           </Field>
         </div>
         {SCOPED.includes(kind) ? (
-          <Field id="wg-root" label="Area or project" hint={kind === "project_map" ? "Required for the map." : "Leave empty for all of your work."}>
+          <Field
+            id="wg-root"
+            label="Area or project"
+            hint={kind === "project_map" || kind === "map_snapshot" ? "Required for the map." : "Leave empty for all of your work."}
+          >
             <select id="wg-root" className={inputCls} value={c.rootId ?? ""} onChange={(e) => setC({ ...c, rootId: e.target.value || null })}>
               <option value="">All work</option>
               {areas.map((a) => (

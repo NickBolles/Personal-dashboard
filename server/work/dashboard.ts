@@ -8,6 +8,7 @@ import type { CurrentUser } from "@/server/auth";
 import {
   isClosed,
   isValidationOverdue,
+  moveToIndex,
   WIDGET_LABELS,
   type DashboardResponse,
   type DashboardWidget,
@@ -26,6 +27,7 @@ import {
 import type { z } from "zod";
 import { ensureMiscellaneous, itemsWithValidations, subtree, timeline } from "./store";
 import { githubRefreshEnabled } from "./github";
+import { mapGraph } from "./map";
 
 /**
  * Per-person dashboard. Native widgets are computed here from work data only
@@ -216,6 +218,28 @@ function widgetData(userId: string, kind: WidgetKind, config: WidgetConfig, ctx:
       return { kind: "metric" };
     case "custom_html":
       return { kind: "custom_html", snapshot: config.injectData ? workSnapshot(userId, config.rootId) : null };
+    case "unfiled_conversations":
+      return { kind: "unfiled" };
+    case "map_snapshot": {
+      if (!config.rootId) return { kind: "map_snapshot", graph: null };
+      try {
+        const g = mapGraph(userId, config.rootId);
+        // A small picture: the first 40 items is plenty for a widget.
+        const keep = new Set(g.nodes.slice(0, 40).map((n) => n.id));
+        return {
+          kind: "map_snapshot",
+          graph: {
+            ...g,
+            roots: [],
+            nodes: g.nodes.filter((n) => keep.has(n.id)),
+            edges: g.edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
+            truncated: g.truncated || g.nodes.length > keep.size,
+          },
+        };
+      } catch {
+        return { kind: "map_snapshot", graph: null };
+      }
+    }
   }
 }
 
@@ -267,7 +291,7 @@ export function addWidget(user: CurrentUser, body: z.infer<typeof widgetCreateSc
       dashboardId: d.id,
       kind: body.kind,
       title: body.title?.trim() || WIDGET_LABELS[body.kind],
-      size: body.size ?? (body.kind === "timeline" || body.kind === "custom_html" ? "lg" : "md"),
+      size: body.size ?? (body.kind === "timeline" || body.kind === "custom_html" ? "lg" : body.kind === "validation_overdue" ? "sm" : "md"),
       position: count,
       config: JSON.stringify(body.config ?? {}),
     })
@@ -285,12 +309,13 @@ export function updateWidget(user: CurrentUser, id: string, body: z.infer<typeof
     if (body.size) patch.size = body.size;
     if (body.config) patch.config = JSON.stringify(body.config);
     tx.update(W).set(patch).where(eq(W.id, id)).run();
-    if (body.direction) {
+    if (body.direction || body.position !== undefined) {
       const all = tx.select().from(W).where(eq(W.dashboardId, d.id)).orderBy(asc(W.position), asc(W.createdAt)).all();
-      const i = all.findIndex((x) => x.id === w.id);
-      const j = body.direction === "up" ? i - 1 : i + 1;
-      if (j >= 0 && j < all.length) [all[i], all[j]] = [all[j]!, all[i]!];
-      all.forEach((x, n) => tx.update(W).set({ position: n }).where(eq(W.id, x.id)).run());
+      const ids = all.map((x) => x.id);
+      const i = ids.indexOf(w.id);
+      const target = body.position !== undefined ? body.position : body.direction === "up" ? i - 1 : i + 1;
+      const order = target < 0 ? ids : moveToIndex(ids, w.id, target);
+      order.forEach((id, n) => tx.update(W).set({ position: n }).where(eq(W.id, id)).run());
     }
   });
   audit({ actor: user.id, action: "work.widget_update", source: "work", sourceRecord: id, result: "ok", correlationId, detail: { kind: w.kind } });

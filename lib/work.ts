@@ -3,6 +3,7 @@
  * server (server/work) and the web UI. No server imports. Rules: docs/work.md.
  */
 import { z } from "zod";
+import type { MapGraph } from "./work-map";
 
 export const WORK_KINDS = ["area", "project", "thread", "investigation", "note"] as const;
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -64,6 +65,8 @@ export const WIDGET_KINDS = [
   "custom_html",
   "recently_settled",
   "validation_overdue",
+  "unfiled_conversations",
+  "map_snapshot",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
@@ -76,6 +79,8 @@ export const WIDGET_LABELS: Record<WidgetKind, string> = {
   custom_html: "Custom HTML",
   recently_settled: "Recently settled",
   validation_overdue: "Validation overdue",
+  unfiled_conversations: "Unfiled conversations",
+  map_snapshot: "Map snapshot",
 };
 export const WIDGET_SIZES = ["sm", "md", "lg"] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
@@ -269,7 +274,10 @@ export type WidgetData =
   | { kind: "timeline"; rows: TimelineRow[]; today: string }
   | { kind: "map"; root: MapNode | null }
   | { kind: "metric" }
-  | { kind: "custom_html"; snapshot: WorkSnapshot | null };
+  | { kind: "custom_html"; snapshot: WorkSnapshot | null }
+  /** loaded by the widget itself from /api/work/conversations/unfiled (needs hermes.chat) */
+  | { kind: "unfiled" }
+  | { kind: "map_snapshot"; graph: MapGraph | null };
 
 export type DashboardWidget = { id: string; kind: WidgetKind; title: string; size: WidgetSize; position: number; config: WidgetConfig; data: WidgetData };
 export type DashboardResponse = {
@@ -438,6 +446,8 @@ export const widgetUpdateSchema = z
     size: z.enum(WIDGET_SIZES).optional(),
     config: widgetConfigSchema.optional(),
     direction: z.enum(["up", "down"]).optional(),
+    /** drag-and-drop: the widget's new 0-based position */
+    position: z.number().int().min(0).max(1000).optional(),
   })
   .strict();
 
@@ -677,6 +687,14 @@ export function applyTemplate(
     baseline: null,
     dueDate: t.dueOffsetDays === null || t.dueOffsetDays === undefined ? null : addDaysIso(today, t.dueOffsetDays),
   };
+}
+
+/** `ids` with `id` moved to `index` (clamped); used for widget drag-and-drop. */
+export function moveToIndex(ids: string[], id: string, index: number) {
+  if (!ids.includes(id)) return [...ids];
+  const rest = ids.filter((x) => x !== id);
+  const i = Math.max(0, Math.min(Math.trunc(index), rest.length));
+  return [...rest.slice(0, i), id, ...rest.slice(i)];
 }
 
 // --- timeline editing ---
