@@ -10,6 +10,8 @@ import { recentAudit } from "@/server/audit";
 import * as continueRoute from "@/app/api/work/items/[id]/continue/route";
 import * as ghRefreshRoute from "@/app/api/work/github/refresh/route";
 import { dueForRefresh, REFRESH_INTERVAL_MS } from "@/server/work/refresh-rules";
+import { descendantsOf, planPlacement } from "@/server/work/tree-rules";
+import * as placeRoute from "@/app/api/work/items/[id]/place/route";
 import * as store from "@/server/work/store";
 import * as conversations from "@/server/work/conversations";
 import * as conversationsRoute from "@/app/api/work/conversations/route";
@@ -274,5 +276,64 @@ describe("automatic GitHub refresh", () => {
     vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-test-value");
     expect((await call(ghRefreshRoute.POST as H, { user: other, method: "POST", body: { itemId: v5.id } })).status).toBe(404);
     expect((await call(ghRefreshRoute.POST as H, { method: "POST", body: { itemId: v5.id, x: 1 } })).status).toBe(400);
+  });
+});
+
+describe("drag-and-drop placement", () => {
+  it("plans sibling order with clamping and keeps Miscellaneous last (pure)", () => {
+    const sib = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "misc", builtIn: true }];
+    expect(planPlacement(sib, "x", 0)).toEqual(["x", "a", "b", "c", "misc"]);
+    expect(planPlacement(sib, "b", 0)).toEqual(["b", "a", "c", "misc"]);
+    expect(planPlacement(sib, "a", 2)).toEqual(["b", "c", "a", "misc"]);
+    expect(planPlacement(sib, "a", 99)).toEqual(["b", "c", "a", "misc"]);
+    expect(planPlacement(sib, "a", -3)).toEqual(["a", "b", "c", "misc"]);
+    const parents = new Map<string, string | null>([
+      ["area", null],
+      ["p", "area"],
+      ["t", "p"],
+      ["t2", "t"],
+      ["other", "area"],
+    ]);
+    expect([...descendantsOf(parents, "p")].sort()).toEqual(["p", "t", "t2"]);
+  });
+
+  it("reorders among siblings and re-parents cycle-safely with moved_from lineage", () => {
+    const { u, area, project, v2, v3, v4, v5 } = flagship();
+    const kids = (pid: string) =>
+      store
+        .listItems(owner)
+        .filter((i) => i.parentId === pid)
+        .map((i) => i.title);
+    store.placeItem(u, v5.id, { parentId: project.id, index: 0 }, cid);
+    expect(kids(project.id)).toEqual(["V5 evaluator contract", "V2 baseline", "V3 parity", "V4 lessons"]);
+    expect(store.getDetail(owner, v5.id).events[0]).toMatchObject({ kind: "reordered" });
+    expect(store.getDetail(owner, v5.id).lineage).toEqual([]);
+
+    store.placeItem(u, v2.id, { parentId: v4.id, index: 0 }, cid);
+    expect(kids(v4.id)).toEqual(["V2 baseline"]);
+    expect(store.getDetail(owner, v2.id).lineage[0]).toMatchObject({ relation: "moved_from", fromParentId: project.id, toParentId: v4.id });
+    expect(() => store.placeItem(u, project.id, { parentId: v4.id, index: 0 }, cid)).toThrow(/inside itself/);
+    expect(() => store.placeItem(u, v3.id, { parentId: null, index: 0 }, cid)).toThrow(/Only areas/);
+    const misc = store.listItems(owner).find((i) => i.builtIn)!;
+    expect(() => store.placeItem(u, misc.id, { parentId: null, index: 0 }, cid)).toThrow(/built in/);
+    // Areas: Miscellaneous stays last even when dropped "after" it.
+    const second = store.createItem(u, { kind: "area", title: "Home" }, cid);
+    store.placeItem(u, area.id, { parentId: null, index: 99 }, cid);
+    expect(
+      store
+        .listItems(owner)
+        .filter((i) => i.parentId === null)
+        .map((i) => i.title),
+    ).toEqual([second.title, "Momentum Bets", "Miscellaneous"]);
+  });
+
+  it("validates at the API", async () => {
+    const { project, v5 } = flagship();
+    expect((await call(placeRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { parentId: project.id, index: -1 } })).status).toBe(400);
+    expect((await call(placeRoute.POST as H, { user: other, method: "POST", params: { id: v5.id }, body: { parentId: project.id, index: 0 } })).status).toBe(
+      404,
+    );
+    expect((await call(placeRoute.POST as H, { method: "POST", params: { id: project.id }, body: { parentId: v5.id, index: 0 } })).status).toBe(409);
+    expect((await call(placeRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { parentId: project.id, index: 1 } })).status).toBe(200);
   });
 });

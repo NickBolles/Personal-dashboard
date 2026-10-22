@@ -19,6 +19,7 @@ import {
   type GithubRefreshResult,
   type linkSchema,
   type packetSchema,
+  type placeSchema,
   type splitSchema,
   type TimelineResponse,
   type TimelineRow,
@@ -39,6 +40,7 @@ import type { z } from "zod";
 import { evaluateValidation, LifecycleError, nextPacketVersion, onImplementationMerged, planTransition, settleGate, wouldCreateCycle } from "./lifecycle";
 import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
+import { planPlacement } from "./tree-rules";
 import { boundedAll } from "@/server/http/fetch";
 
 /**
@@ -380,6 +382,52 @@ export function moveItem(user: CurrentUser, id: string, parentId: string | null,
     event(tx, id, user.id, { kind: "moved" });
   });
   audit({ actor: user.id, action: "work.move", source: "work", sourceRecord: id, result: "ok", correlationId, detail: { to: parentId } });
+  return toItem(ownedItem(user.id, id));
+}
+
+/**
+ * Drag-and-drop: put an item at `index` among the (unarchived) children of
+ * `parentId`. Re-parenting is cycle-safe and records `moved_from` like Move.
+ */
+export function placeItem(user: CurrentUser, id: string, body: z.infer<typeof placeSchema>, correlationId: string): WorkItem {
+  const { parentId, index } = body;
+  const moved = getDb().transaction((tx) => {
+    const row = ownedItem(user.id, id, tx);
+    if (row.systemKey) throw new HttpError(409, "built_in", "Miscellaneous is built in");
+    if (parentId === null && row.kind !== "area") throw new HttpError(400, "top_level", "Only areas can sit at the top level");
+    if (parentId) ownedItem(user.id, parentId, tx);
+    const rows = allRows(user.id, tx);
+    const parents = new Map(rows.map((r) => [r.id, r.parentId]));
+    if (wouldCreateCycle(parents, id, parentId)) throw new HttpError(409, "cycle", "Can't move an item inside itself");
+    const siblings = rows.filter((r) => r.parentId === parentId && !r.archived && r.id !== id).sort(byOrder);
+    const order = planPlacement(
+      siblings.map((r) => ({ id: r.id, builtIn: !!r.systemKey })),
+      id,
+      index,
+    );
+    const moved = parentId !== row.parentId;
+    if (moved) {
+      tx.update(T).set({ parentId, updatedAt: nowIso() }).where(eq(T.id, id)).run();
+      lineage(tx, user.id, { childId: id, parentId: row.parentId, relation: "moved_from", fromParentId: row.parentId, toParentId: parentId, actor: user.id });
+      event(tx, id, user.id, { kind: "moved" });
+    }
+    order.forEach((sid, n) => {
+      const r = sid === id ? row : siblings.find((x) => x.id === sid);
+      if (r?.systemKey) return; // Miscellaneous stays last among areas
+      tx.update(T).set({ sortOrder: n }).where(eq(T.id, sid)).run();
+    });
+    if (!moved) event(tx, id, user.id, { kind: "reordered" });
+    return moved;
+  });
+  audit({
+    actor: user.id,
+    action: moved ? "work.move" : "work.reorder",
+    source: "work",
+    sourceRecord: id,
+    result: "ok",
+    correlationId,
+    detail: { to: parentId, index },
+  });
   return toItem(ownedItem(user.id, id));
 }
 

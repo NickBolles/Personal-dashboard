@@ -39,6 +39,11 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
   const [selected, setSelected] = useState<string | null>(initialItem ?? null);
   const [newArea, setNewArea] = useState(false);
   const canChat = useAccess().can("hermes.chat");
+  const place = useWorkMutation(
+    (v: { id: string; parentId: string | null; index: number }) =>
+      api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+    { ok: "Moved" },
+  );
 
   const select = (id: string) => {
     setSelected(id);
@@ -66,7 +71,11 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
         <div className="min-w-0 space-y-4 self-start">
           <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
             <h2 className="sr-only">Work tree</h2>
-            {items.isPending ? <Spinner label="Loading work…" /> : <WorkTree items={list} selected={current} onSelect={select} />}
+            {items.isPending ? (
+              <Spinner label="Loading work…" />
+            ) : (
+              <WorkTree items={list} selected={current} onSelect={select} onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })} />
+            )}
             <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
               <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
               Show archived

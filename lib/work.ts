@@ -296,6 +296,8 @@ export const updateItemSchema = z
   .strict();
 
 export const moveSchema = z.object({ parentId: id.nullable() }).strict();
+/** Drag-and-drop: position among the new parent's unarchived children (0 = first). */
+export const placeSchema = z.object({ parentId: id.nullable(), index: z.number().int().min(0).max(100_000) }).strict();
 export const reorderSchema = z.object({ direction: z.enum(["up", "down"]) }).strict();
 export const forkSchema = z.object({ title: title.optional() }).strict();
 export const splitSchema = z.object({ title, summary: longText.optional(), kind: z.enum(WORK_KINDS).optional() }).strict();
