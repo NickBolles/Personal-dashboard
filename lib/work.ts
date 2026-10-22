@@ -505,6 +505,96 @@ export function handoffMarkdown(d: Pick<WorkDetail, "item" | "breadcrumb" | "pac
   return lines.join("\n");
 }
 
+// --- conversations: picker, unfiled inbox and deterministic filing suggestions ---
+
+export type ConversationBackend = "hermes" | "claude";
+export type ConversationOption = {
+  id: string;
+  title: string;
+  preview: string | null;
+  lastActiveAt: string | null;
+  backend: ConversationBackend;
+  /** someone else's shared conversation (read-only) */
+  readOnly: boolean;
+  /** your work items this conversation is already linked to */
+  linkedItems: { id: string; title: string }[];
+};
+export type ConversationsResponse = { conversations: ConversationOption[]; unavailable: string[] };
+export type FilingSuggestion = { id: string; title: string; path: string; matched: string[] };
+export type UnfiledConversation = ConversationOption & { suggestions: FilingSuggestion[] };
+export type UnfiledResponse = { conversations: UnfiledConversation[]; total: number; unavailable: string[] };
+
+/** File a conversation under an item; `itemId: null` files it in Miscellaneous. */
+export const fileConversationSchema = z
+  .object({ sessionId: z.string().trim().min(1).max(200), itemId: id.nullable(), role: z.enum(LINK_ROLES).optional() })
+  .strict();
+
+const FILING_STOP = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "about",
+  "from",
+  "into",
+  "onto",
+  "your",
+  "our",
+  "this",
+  "that",
+  "then",
+  "than",
+  "what",
+  "how",
+  "why",
+  "can",
+  "you",
+  "new",
+  "chat",
+  "conversation",
+  "untitled",
+  "help",
+  "please",
+]);
+
+/** Significant lowercase words: 3+ letters, or 2+ characters containing a digit ("v5", "q3"). */
+export function filingTokens(s: string) {
+  return [
+    ...new Set(
+      s
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/\p{M}/gu, "")
+        .split(/[^a-z0-9]+/)
+        .filter((t) => (t.length >= 3 || (t.length >= 2 && /\d/.test(t))) && !FILING_STOP.has(t)),
+    ),
+  ];
+}
+
+/**
+ * Deterministic "file under…" suggestions: items whose title shares exact
+ * significant words with the conversation title. No model, no fuzzy matching.
+ * Order: most shared words → fewer title words (more specific) → path → id.
+ */
+export function suggestFiling(
+  conversationTitle: string,
+  candidates: { id: string; title: string; path: string; status: WorkStatus; builtIn?: boolean }[],
+  limit = 3,
+): FilingSuggestion[] {
+  const want = new Set(filingTokens(conversationTitle));
+  if (!want.size) return [];
+  return candidates
+    .filter((c) => !c.builtIn && !isClosed(c.status))
+    .map((c) => {
+      const words = filingTokens(c.title);
+      return { c, words: words.length, matched: words.filter((w) => want.has(w)) };
+    })
+    .filter((x) => x.matched.length > 0)
+    .sort((a, b) => b.matched.length - a.matched.length || a.words - b.words || a.c.path.localeCompare(b.c.path) || a.c.id.localeCompare(b.c.id))
+    .slice(0, limit)
+    .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
+}
+
 export function todayIso(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }

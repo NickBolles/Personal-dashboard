@@ -491,6 +491,12 @@ export async function addLink(user: CurrentUser, itemId: string, body: z.infer<t
   let values: Omit<typeof schema.workLinks.$inferInsert, "id" | "itemId">;
   if (body.kind === "chat_session") {
     const sessionId = parseSessionRef(body.targetId || body.url || "");
+    const dup = getDb()
+      .select({ id: schema.workLinks.id })
+      .from(schema.workLinks)
+      .where(and(eq(schema.workLinks.itemId, itemId), eq(schema.workLinks.kind, "chat_session"), eq(schema.workLinks.targetId, sessionId)))
+      .get();
+    if (dup) throw new HttpError(409, "already_linked", "That conversation is already linked here");
     let title = body.title || "";
     try {
       // Also the access check: you can only link conversations you can open.

@@ -8,6 +8,7 @@ import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Pag
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
 import { StatusBadge, fmtDate, useWorkMutation } from "@/components/work/common";
+import { ConversationLinkDialog, UnfiledPanel, fmtWhen, useConversations } from "@/components/work/conversations";
 import {
   COMPARATORS,
   handoffMarkdown,
@@ -36,6 +37,7 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
   const items = useItems(archived);
   const [selected, setSelected] = useState<string | null>(initialItem ?? null);
   const [newArea, setNewArea] = useState(false);
+  const canChat = useAccess().can("hermes.chat");
 
   const select = (id: string) => {
     setSelected(id);
@@ -60,14 +62,17 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
       />
       {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(260px,320px)_1fr]">
-        <Card className="min-w-0 self-start p-3 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
-          <h2 className="sr-only">Work tree</h2>
-          {items.isPending ? <Spinner label="Loading work…" /> : <WorkTree items={list} selected={current} onSelect={select} />}
-          <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
-            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-            Show archived
-          </label>
-        </Card>
+        <div className="min-w-0 space-y-4 self-start">
+          <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
+            <h2 className="sr-only">Work tree</h2>
+            {items.isPending ? <Spinner label="Loading work…" /> : <WorkTree items={list} selected={current} onSelect={select} />}
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
+              <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+              Show archived
+            </label>
+          </Card>
+          {canChat && items.data ? <UnfiledPanel items={list.filter((i) => !i.archived)} onFiled={select} /> : null}
+        </div>
         <div className="min-w-0">
           {current ? (
             <ItemDetail key={current} id={current} items={list} onSelect={select} />
@@ -306,7 +311,7 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
             <EditItem key={item.updatedAt} item={item} />
             <PacketCard d={d} onRevise={() => setDialog("packet")} />
             <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
-            <Links d={d} />
+            <Links d={d} canChat={canChat} />
           </>
         ) : tab === "activity" ? (
           <Activity d={d} onSelect={onSelect} />
@@ -343,7 +348,14 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
-      {dialog === "github_pr" || dialog === "chat_session" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
+      {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
+      {dialog === "chat_session" ? (
+        <ConversationLinkDialog
+          item={item}
+          onClose={close}
+          linkedHere={new Set(d.links.filter((l) => l.kind === "chat_session").map((l) => l.targetId ?? ""))}
+        />
+      ) : null}
     </article>
   );
 }
@@ -698,14 +710,17 @@ function linkLabel(l: WorkLink) {
   return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
 }
 
-function Links({ d }: { d: WorkDetail }) {
+function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
+  const hasChat = d.links.some((l) => l.kind === "chat_session");
+  const convs = useConversations(canChat && hasChat);
+  const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
   return (
     <Card>
       <h3 className="mb-2 font-semibold">Links</h3>
       {d.links.length ? (
         <ul className="space-y-2">
           {d.links.map((l) => (
-            <LinkRow key={l.id} l={l} refresh={d.githubRefresh} />
+            <LinkRow key={l.id} l={l} refresh={d.githubRefresh} lastActive={l.kind === "chat_session" ? activity.get(l.targetId ?? "") : undefined} />
           ))}
         </ul>
       ) : (
@@ -720,7 +735,7 @@ function Links({ d }: { d: WorkDetail }) {
   );
 }
 
-function LinkRow({ l, refresh }: { l: WorkLink; refresh: boolean }) {
+function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; lastActive?: string | null }) {
   const url = `/api/work/links/${encodeURIComponent(l.id)}`;
   const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), { ok: "PR state updated" });
   const remove = useWorkMutation(() => api.del(url), { ok: "Link removed" });
@@ -734,6 +749,7 @@ function LinkRow({ l, refresh }: { l: WorkLink; refresh: boolean }) {
             {linkLabel(l)} · {l.role}
           </p>
           <p className="font-medium break-words">{name}</p>
+          {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
         </div>
         {l.externalState ? (
           <Badge tone={l.externalState === "merged" ? "ok" : l.externalState === "closed" ? "neutral" : "accent"}>{l.externalState}</Badge>
