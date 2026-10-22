@@ -41,6 +41,7 @@ import { evaluateValidation, LifecycleError, nextPacketVersion, onImplementation
 import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
+import { isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
 import { boundedAll } from "@/server/http/fetch";
 
 /**
@@ -137,6 +138,31 @@ function lineage(db: Db, userId: string, l: Omit<typeof schema.workLineage.$infe
   db.insert(schema.workLineage)
     .values({ id: newId(), userId, ...l })
     .run();
+}
+
+/** Filled in by structural mutations so routes can offer Undo (server/work/undo-rules.ts). */
+export type OpOut = { op?: { id: string; kind: UndoKind; label: string } };
+
+function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
+  const id = newId("op");
+  db.insert(schema.workOps)
+    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: nowIso() })
+    .run();
+  if (out) out.op = { id, kind, label: UNDO_LABELS[kind] };
+  return id;
+}
+
+/** Unarchived children of `parentId` in tree order (what reorder and undo work on). */
+function siblingOrder(rows: ItemRow[], parentId: string | null) {
+  return rows
+    .filter((r) => r.parentId === parentId && !r.archived)
+    .sort(byOrder)
+    .map((r) => r.id);
+}
+
+/** Dependencies touching an item (none until work_dependencies exists). */
+function dependencyCount(_db: Db, _itemId: string) {
+  return 0;
 }
 
 /** The built-in Miscellaneous area, created on first use. */
@@ -283,6 +309,7 @@ function insertItem(
   v: { parentId: string | null; kind: WorkKind; title: string; summary?: string; nextAction?: string; startDate?: string | null; targetDate?: string | null },
 ) {
   const id = newId("wk");
+  const at = nowIso();
   db.insert(T)
     .values({
       id,
@@ -295,6 +322,8 @@ function insertItem(
       startDate: v.startDate ?? null,
       targetDate: v.targetDate ?? null,
       sortOrder: nextSort(userId, v.parentId, db),
+      createdAt: at,
+      updatedAt: at,
     })
     .run();
   return id;
@@ -319,7 +348,7 @@ export function createItem(user: CurrentUser, body: z.infer<typeof createItemSch
   return toItem(ownedItem(user.id, id));
 }
 
-export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string): WorkItem {
+export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
   const { status, reason, ...fields } = body;
   const result = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
@@ -346,7 +375,10 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       transition = { from: row.status, to: status };
       event(tx, id, user.id, { kind: "status", from: row.status, to: status, reason });
     }
-    if (fields.archived !== undefined && fields.archived !== row.archived) event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
+    if (fields.archived !== undefined && fields.archived !== row.archived) {
+      event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
+      recordOp(tx, user.id, id, fields.archived ? "archive" : "unarchive", { archived: row.archived }, out);
+    }
     tx.update(T).set(patch).where(eq(T.id, id)).run();
     return transition;
   });
@@ -365,15 +397,17 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
   return toItem(ownedItem(user.id, id));
 }
 
-export function moveItem(user: CurrentUser, id: string, parentId: string | null, correlationId: string): WorkItem {
+export function moveItem(user: CurrentUser, id: string, parentId: string | null, correlationId: string, out?: OpOut): WorkItem {
   getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey) throw new HttpError(409, "built_in", "Miscellaneous is built in");
     if (parentId === row.parentId) return;
     if (parentId === null && row.kind !== "area") throw new HttpError(400, "top_level", "Only areas can sit at the top level");
     if (parentId) ownedItem(user.id, parentId, tx);
-    const parents = new Map(allRows(user.id, tx).map((r) => [r.id, r.parentId]));
+    const rows = allRows(user.id, tx);
+    const parents = new Map(rows.map((r) => [r.id, r.parentId]));
     if (wouldCreateCycle(parents, id, parentId)) throw new HttpError(409, "cycle", "Can't move an item inside itself");
+    recordOp(tx, user.id, id, "move", { fromParentId: row.parentId, toParentId: parentId, prevOrder: siblingOrder(rows, row.parentId) }, out);
     tx.update(T)
       .set({ parentId, sortOrder: nextSort(user.id, parentId, tx), updatedAt: nowIso() })
       .where(eq(T.id, id))
@@ -389,7 +423,7 @@ export function moveItem(user: CurrentUser, id: string, parentId: string | null,
  * Drag-and-drop: put an item at `index` among the (unarchived) children of
  * `parentId`. Re-parenting is cycle-safe and records `moved_from` like Move.
  */
-export function placeItem(user: CurrentUser, id: string, body: z.infer<typeof placeSchema>, correlationId: string): WorkItem {
+export function placeItem(user: CurrentUser, id: string, body: z.infer<typeof placeSchema>, correlationId: string, out?: OpOut): WorkItem {
   const { parentId, index } = body;
   const moved = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
@@ -406,6 +440,14 @@ export function placeItem(user: CurrentUser, id: string, body: z.infer<typeof pl
       index,
     );
     const moved = parentId !== row.parentId;
+    recordOp(
+      tx,
+      user.id,
+      id,
+      moved ? "move" : "reorder",
+      { fromParentId: row.parentId, toParentId: parentId, prevOrder: siblingOrder(rows, row.parentId) },
+      out,
+    );
     if (moved) {
       tx.update(T).set({ parentId, updatedAt: nowIso() }).where(eq(T.id, id)).run();
       lineage(tx, user.id, { childId: id, parentId: row.parentId, relation: "moved_from", fromParentId: row.parentId, toParentId: parentId, actor: user.id });
@@ -431,7 +473,7 @@ export function placeItem(user: CurrentUser, id: string, body: z.infer<typeof pl
   return toItem(ownedItem(user.id, id));
 }
 
-export function reorderItem(user: CurrentUser, id: string, direction: "up" | "down"): WorkItem[] {
+export function reorderItem(user: CurrentUser, id: string, direction: "up" | "down", out?: OpOut): WorkItem[] {
   getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     const siblings = allRows(user.id, tx)
@@ -440,6 +482,9 @@ export function reorderItem(user: CurrentUser, id: string, direction: "up" | "do
     const i = siblings.findIndex((s) => s.id === id);
     const j = direction === "up" ? i - 1 : i + 1;
     if (j < 0 || j >= siblings.length) return;
+    if (siblings[j]!.systemKey) return; // nothing moves past Miscellaneous
+    recordOp(tx, user.id, id, "reorder", { fromParentId: row.parentId, toParentId: row.parentId, prevOrder: siblings.map((x) => x.id) }, out);
+    event(tx, id, user.id, { kind: "reordered" });
     [siblings[i], siblings[j]] = [siblings[j]!, siblings[i]!];
     siblings.forEach((s, n) => {
       if (s.systemKey) return; // Miscellaneous stays last among areas
@@ -449,7 +494,7 @@ export function reorderItem(user: CurrentUser, id: string, direction: "up" | "do
   return listItems(user.id);
 }
 
-export function forkItem(user: CurrentUser, id: string, title: string | undefined, correlationId: string): WorkItem {
+export function forkItem(user: CurrentUser, id: string, title: string | undefined, correlationId: string, out?: OpOut): WorkItem {
   const forkId = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey || row.parentId === null) throw new HttpError(409, "fork_area", "Areas can't be forked");
@@ -471,13 +516,14 @@ export function forkItem(user: CurrentUser, id: string, title: string | undefine
         .run();
     lineage(tx, user.id, { childId: forkId, parentId: id, relation: "forked_from", actor: user.id });
     event(tx, forkId, user.id, { kind: "created", to: "captured", reason: `Forked from “${row.title}”` });
+    recordOp(tx, user.id, forkId, "fork", { sourceId: id, copiedLinks: sources.length }, out);
     return forkId;
   });
   audit({ actor: user.id, action: "work.fork", source: "work", sourceRecord: forkId, result: "ok", correlationId, detail: { from: id } });
   return toItem(ownedItem(user.id, forkId));
 }
 
-export function splitItem(user: CurrentUser, id: string, body: z.infer<typeof splitSchema>, correlationId: string): WorkItem {
+export function splitItem(user: CurrentUser, id: string, body: z.infer<typeof splitSchema>, correlationId: string, out?: OpOut): WorkItem {
   const childId = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     const childId = insertItem(tx, user.id, {
@@ -488,10 +534,131 @@ export function splitItem(user: CurrentUser, id: string, body: z.infer<typeof sp
     });
     lineage(tx, user.id, { childId, parentId: id, relation: "split_from", note: body.summary ? body.summary.slice(0, 500) : null, actor: user.id });
     event(tx, childId, user.id, { kind: "created", to: "captured", reason: `Split from “${row.title}”` });
+    recordOp(tx, user.id, childId, "split", { sourceId: id, copiedLinks: 0 }, out);
     return childId;
   });
   audit({ actor: user.id, action: "work.split", source: "work", sourceRecord: childId, result: "ok", correlationId, detail: { from: id } });
   return toItem(ownedItem(user.id, childId));
+}
+
+function restoreOrder(tx: Db, rows: ItemRow[], parentId: string | null, prevOrder: string[], movingId: string) {
+  const current = siblingOrder(rows, parentId).filter((x) => x !== movingId);
+  const wanted = prevOrder.filter((x) => x === movingId || current.includes(x));
+  const order = [...wanted, ...current.filter((x) => !wanted.includes(x))];
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  order.forEach((sid, n) => {
+    if (byId.get(sid)?.systemKey) return;
+    tx.update(T).set({ sortOrder: n }).where(eq(T.id, sid)).run();
+  });
+}
+
+/**
+ * Undo a structural operation. Allowed once, only while it is still the latest
+ * structural operation on its item, within the undo window (undo-rules.ts).
+ * Split/fork undo deletes the new item only if untouched; otherwise archives it.
+ */
+export function undoOp(user: CurrentUser, opId: string, correlationId: string, now = new Date()) {
+  const result = getDb().transaction((tx) => {
+    const op = tx
+      .select()
+      .from(schema.workOps)
+      .where(and(eq(schema.workOps.id, opId), eq(schema.workOps.userId, user.id)))
+      .get();
+    if (!op) throw new HttpError(404, "not_found", "Nothing to undo");
+    const latest = latestOp(
+      tx
+        .select()
+        .from(schema.workOps)
+        .where(and(eq(schema.workOps.userId, user.id), eq(schema.workOps.itemId, op.itemId)))
+        .all(),
+    );
+    const check = undoCheck(op, latest?.id ?? null, now);
+    if (!check.ok) throw new HttpError(409, check.code, check.message);
+    const payload = JSON.parse(op.payload) as {
+      fromParentId?: string | null;
+      toParentId?: string | null;
+      prevOrder?: string[];
+      archived?: boolean;
+      copiedLinks?: number;
+    };
+    const row = ownedItem(user.id, op.itemId, tx);
+    tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+    const kind = op.kind as UndoKind;
+    let outcome: "restored" | "deleted" | "archived" = "restored";
+    if (kind === "move" || kind === "reorder") {
+      const from = payload.fromParentId ?? null;
+      if (row.parentId !== (payload.toParentId ?? null)) throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
+      if (from !== row.parentId) {
+        if (from) ownedItem(user.id, from, tx);
+        const parents = new Map(allRows(user.id, tx).map((r) => [r.id, r.parentId]));
+        if (wouldCreateCycle(parents, row.id, from)) throw new HttpError(409, "cycle", "Can't move an item inside itself");
+        tx.update(T).set({ parentId: from, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
+        lineage(tx, user.id, {
+          childId: row.id,
+          parentId: row.parentId,
+          relation: "moved_from",
+          note: "Undo",
+          fromParentId: row.parentId,
+          toParentId: from,
+          actor: user.id,
+        });
+      }
+      restoreOrder(tx, allRows(user.id, tx), from, payload.prevOrder ?? [], row.id);
+      event(tx, row.id, user.id, { kind: "undo", reason: kind === "move" ? "Undid move" : "Undid reorder" });
+    } else if (kind === "archive" || kind === "unarchive") {
+      tx.update(T).set({ archived: !!payload.archived, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
+      event(tx, row.id, user.id, { kind: "undo", reason: kind === "archive" ? "Undid archive" : "Undid unarchive" });
+    } else {
+      const count = (table: typeof schema.workPackets | typeof schema.workValidations | typeof schema.workLinks) =>
+        tx.select({ id: table.id }).from(table).where(eq(table.itemId, row.id)).all().length;
+      const untouched = isUntouched({
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        eventKinds: tx
+          .select({ kind: schema.workEvents.kind })
+          .from(schema.workEvents)
+          .where(eq(schema.workEvents.itemId, row.id))
+          .all()
+          .map((e) => e.kind),
+        children: allRows(user.id, tx).filter((r) => r.parentId === row.id).length,
+        packets: count(schema.workPackets),
+        validations: count(schema.workValidations),
+        links: count(schema.workLinks),
+        copiedLinks: payload.copiedLinks ?? 0,
+        dependencies: dependencyCount(tx, row.id),
+        derived: tx
+          .select({ id: schema.workLineage.id })
+          .from(schema.workLineage)
+          .where(and(eq(schema.workLineage.userId, user.id), eq(schema.workLineage.parentId, row.id)))
+          .all().length,
+      });
+      const source = (payload as { sourceId?: string }).sourceId;
+      if (untouched) {
+        // Nothing happened to it yet: remove it and the lineage edge its creation wrote.
+        tx.delete(schema.workLineage)
+          .where(and(eq(schema.workLineage.userId, user.id), eq(schema.workLineage.childId, row.id)))
+          .run();
+        tx.delete(T).where(eq(T.id, row.id)).run();
+        if (source) event(tx, source, user.id, { kind: "undo", reason: `Undid ${kind}: removed “${row.title}”` });
+        outcome = "deleted";
+      } else {
+        tx.update(T).set({ archived: true, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
+        event(tx, row.id, user.id, { kind: "undo", reason: `Undid ${kind}: archived because it had changed since` });
+        outcome = "archived";
+      }
+    }
+    return { itemId: row.id, kind, outcome };
+  });
+  audit({
+    actor: user.id,
+    action: "work.undo",
+    source: "work",
+    sourceRecord: result.itemId,
+    result: "ok",
+    correlationId,
+    detail: { op: opId, kind: result.kind, outcome: result.outcome },
+  });
+  return { ...result, item: result.outcome === "deleted" ? null : toItem(ownedItem(user.id, result.itemId)) };
 }
 
 export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof packetSchema>, correlationId: string): WorkPacket {

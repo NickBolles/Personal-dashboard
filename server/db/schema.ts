@@ -918,6 +918,29 @@ export const workEvents = sqliteTable(
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
 );
 
+/**
+ * Structural operations that can be undone (move, reorder, archive, split/fork
+ * creation). Undo is only allowed for the latest operation on an item, within
+ * a short window, and once (server/work/undo-rules.ts).
+ */
+export const workOps = sqliteTable(
+  "work_ops",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    /** move | reorder | archive | unarchive | split | fork */
+    kind: text("kind").notNull(),
+    /** JSON: what undo needs (previous parent and sibling order, copied link count, …) */
+    payload: text("payload").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(now),
+    undoneAt: text("undone_at"),
+  },
+  (t) => [index("work_ops_item_idx").on(t.userId, t.itemId, t.createdAt)],
+);
+
 export const dashboards = sqliteTable("dashboards", {
   id: text("id").primaryKey(),
   userId: text("user_id")

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
@@ -9,6 +9,7 @@ import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
 import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
+import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, UnfiledPanel, fmtWhen, useConversations } from "@/components/work/conversations";
 import {
   COMPARATORS,
@@ -39,10 +40,15 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
   const [selected, setSelected] = useState<string | null>(initialItem ?? null);
   const [newArea, setNewArea] = useState(false);
   const canChat = useAccess().can("hermes.chat");
+  const [undo, setUndo] = useState<UndoOp | null>(null);
+  const clearUndo = useCallback(() => setUndo(null), []);
+  const onOp = useCallback((op: UndoOp | null | undefined) => {
+    if (op) setUndo(op);
+  }, []);
   const place = useWorkMutation(
     (v: { id: string; parentId: string | null; index: number }) =>
-      api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
-    { ok: "Moved" },
+      api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+    { onSuccess: (r) => onOp(r.op) },
   );
 
   const select = (id: string) => {
@@ -85,13 +91,14 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
         </div>
         <div className="min-w-0">
           {current ? (
-            <ItemDetail key={current} id={current} items={list} onSelect={select} />
+            <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} />
           ) : (
             <Empty title="Pick something from the tree">Or start a new area. Items without a home go to Miscellaneous.</Empty>
           )}
         </div>
       </div>
       <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
+      {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
   );
 }
@@ -166,12 +173,20 @@ function NewItemDialog({
 
 type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
 
-function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; onSelect: (id: string) => void }) {
+type OnOp = (op: UndoOp | null | undefined) => void;
+
+function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem[]; onSelect: (id: string) => void; onOp: OnOp }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const [tab, setTab] = useState<"overview" | "activity" | "children">("overview");
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const patch = useWorkMutation((body: Record<string, unknown>) => api.patch(`/api/work/items/${encodeURIComponent(id)}`, body), { ok: "Saved" });
-  const reorder = useWorkMutation((direction: "up" | "down") => api.post(`/api/work/items/${encodeURIComponent(id)}/reorder`, { direction }));
+  const patch = useWorkMutation((body: Record<string, unknown>) => api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}`, body), {
+    onSuccess: (r) => onOp(r.op),
+    ok: "Saved",
+  });
+  const reorder = useWorkMutation(
+    (direction: "up" | "down") => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}/reorder`, { direction }),
+    { onSuccess: (r) => onOp(r.op) },
+  );
   const close = () => setDialog(null);
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
@@ -353,9 +368,9 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
       </div>
 
       <NewItemDialog open={dialog === "child"} onClose={close} parent={item} onCreated={(i) => onSelect(i.id)} />
-      <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} />
-      <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} />
-      <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} />
+      <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} onOp={onOp} />
+      <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} onOp={onOp} />
+      <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} onOp={onOp} />
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
       {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
@@ -892,19 +907,21 @@ function ForkDialog({
   item,
   chat,
   onCreated,
+  onOp,
 }: {
   open: boolean;
   onClose: () => void;
   item: WorkItem;
   chat?: WorkLink;
   onCreated: (id: string) => void;
+  onOp: OnOp;
 }) {
   const [title, setTitle] = useState(`${item.title} (fork)`);
-  const fork = useWorkMutation(() => api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(item.id)}/fork`, { title }), {
-    ok: "Forked",
+  const fork = useWorkMutation(() => api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/fork`, { title }), {
     onSuccess: (r) => {
       onClose();
       onCreated(r.item.id);
+      onOp(r.op);
     },
   });
   return (
@@ -938,16 +955,31 @@ function ForkDialog({
   );
 }
 
-function SplitDialog({ open, onClose, item, onCreated }: { open: boolean; onClose: () => void; item: WorkItem; onCreated: (id: string) => void }) {
+function SplitDialog({
+  open,
+  onClose,
+  item,
+  onCreated,
+  onOp,
+}: {
+  open: boolean;
+  onClose: () => void;
+  item: WorkItem;
+  onCreated: (id: string) => void;
+  onOp: OnOp;
+}) {
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
-  const split = useWorkMutation(() => api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(item.id)}/split`, { title, summary }), {
-    ok: "Split into a child",
-    onSuccess: (r) => {
-      onClose();
-      onCreated(r.item.id);
+  const split = useWorkMutation(
+    () => api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/split`, { title, summary }),
+    {
+      onSuccess: (r) => {
+        onClose();
+        onCreated(r.item.id);
+        onOp(r.op);
+      },
     },
-  });
+  );
   return (
     <Dialog
       open={open}
@@ -982,7 +1014,7 @@ function SplitDialog({ open, onClose, item, onCreated }: { open: boolean; onClos
   );
 }
 
-function MoveDialog({ open, onClose, item, items }: { open: boolean; onClose: () => void; item: WorkItem; items: WorkItem[] }) {
+function MoveDialog({ open, onClose, item, items, onOp }: { open: boolean; onClose: () => void; item: WorkItem; items: WorkItem[]; onOp: OnOp }) {
   const [dest, setDest] = useState("");
   // Exclude the item and its descendants (the server also refuses cycles).
   const banned = new Set<string>([item.id]);
@@ -1006,10 +1038,15 @@ function MoveDialog({ open, onClose, item, items }: { open: boolean; onClose: ()
     .filter((i) => !banned.has(i.id) && i.id !== item.parentId && i.kind !== "note")
     .map((i) => ({ id: i.id, label: path(i) }))
     .sort((a, b) => a.label.localeCompare(b.label));
-  const move = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(item.id)}/move`, { parentId: dest === "__top" ? null : dest }), {
-    ok: "Moved",
-    onSuccess: onClose,
-  });
+  const move = useWorkMutation(
+    () => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/move`, { parentId: dest === "__top" ? null : dest }),
+    {
+      onSuccess: (r) => {
+        onClose();
+        onOp(r.op);
+      },
+    },
+  );
   return (
     <Dialog
       open={open}

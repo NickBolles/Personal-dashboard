@@ -12,6 +12,9 @@ import * as ghRefreshRoute from "@/app/api/work/github/refresh/route";
 import { dueForRefresh, REFRESH_INTERVAL_MS } from "@/server/work/refresh-rules";
 import { descendantsOf, planPlacement } from "@/server/work/tree-rules";
 import * as placeRoute from "@/app/api/work/items/[id]/place/route";
+import * as undoRoute from "@/app/api/work/ops/[id]/undo/route";
+import * as moveRoute from "@/app/api/work/items/[id]/move/route";
+import { isUntouched, latestOp, undoCheck, UNDO_WINDOW_MS } from "@/server/work/undo-rules";
 import * as store from "@/server/work/store";
 import * as conversations from "@/server/work/conversations";
 import * as conversationsRoute from "@/app/api/work/conversations/route";
@@ -335,5 +338,112 @@ describe("drag-and-drop placement", () => {
     );
     expect((await call(placeRoute.POST as H, { method: "POST", params: { id: project.id }, body: { parentId: v5.id, index: 0 } })).status).toBe(409);
     expect((await call(placeRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { parentId: project.id, index: 1 } })).status).toBe(200);
+  });
+});
+
+describe("undo for structural operations", () => {
+  it("allows undo once, only for the item's latest operation, within the window (pure)", () => {
+    const now = new Date("2026-10-22T12:00:00Z");
+    const op = { id: "b", createdAt: "2026-10-22T11:59:00.000Z", undoneAt: null };
+    expect(undoCheck(op, "b", now)).toEqual({ ok: true });
+    expect(undoCheck({ ...op, undoneAt: "2026-10-22T11:59:30.000Z" }, "b", now)).toMatchObject({ ok: false, code: "already_undone" });
+    expect(undoCheck(op, "c", now)).toMatchObject({ ok: false, code: "superseded" });
+    expect(undoCheck(op, "b", new Date(now.getTime() + UNDO_WINDOW_MS))).toMatchObject({ ok: false, code: "expired" });
+    expect(
+      latestOp([{ id: "a", createdAt: "2026-10-22T11:00:00.000Z", undoneAt: null }, { id: "c", createdAt: "2026-10-22T11:59:00.000Z", undoneAt: null }, op])
+        ?.id,
+    ).toBe("c");
+    expect(latestOp([])).toBeNull();
+    const base = { createdAt: "t", updatedAt: "t", eventKinds: ["created"], children: 0, packets: 0, validations: 0, links: 1, copiedLinks: 1 };
+    expect(isUntouched(base)).toBe(true);
+    expect(isUntouched({ ...base, updatedAt: "t2" })).toBe(false);
+    expect(isUntouched({ ...base, eventKinds: ["created", "link"] })).toBe(false);
+    expect(isUntouched({ ...base, links: 2 })).toBe(false);
+    expect(isUntouched({ ...base, children: 1 })).toBe(false);
+    expect(isUntouched({ ...base, packets: 1 })).toBe(false);
+    expect(isUntouched({ ...base, validations: 1 })).toBe(false);
+    expect(isUntouched({ ...base, dependencies: 1 })).toBe(false);
+    expect(isUntouched({ ...base, derived: 1 })).toBe(false);
+  });
+
+  it("undoes move, reorder and archive, and refuses stale or repeated undo", () => {
+    const { u, area, project, v2, v3, v4 } = flagship();
+    const kids = (pid: string) =>
+      store
+        .listItems(owner)
+        .filter((i) => i.parentId === pid)
+        .map((i) => i.title);
+    const out: store.OpOut = {};
+    store.moveItem(u, v3.id, area.id, cid, out);
+    expect(out.op).toMatchObject({ kind: "move", label: "Moved" });
+    const r = store.undoOp(u, out.op!.id, cid);
+    expect(r).toMatchObject({ outcome: "restored", item: { parentId: project.id } });
+    expect(kids(project.id)).toEqual(["V2 baseline", "V3 parity", "V4 lessons", "V5 evaluator contract"]);
+    const lin = store.getDetail(owner, v3.id).lineage.filter((l) => l.relation === "moved_from");
+    expect(lin.map((l) => [l.fromParentId, l.toParentId, l.note])).toEqual([
+      [area.id, project.id, "Undo"],
+      [project.id, area.id, null],
+    ]);
+    expect(store.getDetail(owner, v3.id).events[0]).toMatchObject({ kind: "undo", reason: "Undid move" });
+    expect(() => store.undoOp(u, out.op!.id, cid)).toThrow(/Already undone/);
+
+    // A later operation on the same item makes the earlier one unsafe to undo.
+    const first: store.OpOut = {};
+    store.placeItem(u, v4.id, { parentId: project.id, index: 0 }, cid, first);
+    expect(first.op?.kind).toBe("reorder");
+    const second: store.OpOut = {};
+    store.reorderItem(u, v4.id, "down", second);
+    expect(() => store.undoOp(u, first.op!.id, cid)).toThrow(/changed this item since/);
+    store.undoOp(u, second.op!.id, cid);
+    expect(kids(project.id)).toEqual(["V4 lessons", "V2 baseline", "V3 parity", "V5 evaluator contract"]);
+
+    const arch: store.OpOut = {};
+    store.updateItem(u, v2.id, { archived: true }, cid, arch);
+    expect(arch.op?.kind).toBe("archive");
+    expect(kids(project.id)).not.toContain("V2 baseline");
+    store.undoOp(u, arch.op!.id, cid);
+    expect(kids(project.id)).toContain("V2 baseline");
+    // Too late.
+    const late: store.OpOut = {};
+    store.updateItem(u, v2.id, { archived: true }, cid, late);
+    expect(() => store.undoOp(u, late.op!.id, cid, new Date(Date.now() + UNDO_WINDOW_MS + 1000))).toThrow(/Too late/);
+    // Plain edits don't create undoable operations.
+    const edit: store.OpOut = {};
+    store.updateItem(u, v3.id, { title: "V3 parity check" }, cid, edit);
+    expect(edit.op).toBeUndefined();
+  });
+
+  it("undoing a split/fork deletes the new item if untouched, otherwise archives it", async () => {
+    const { u, v5 } = flagship();
+    const s1: store.OpOut = {};
+    const bug = store.splitItem(u, v5.id, { title: "Hydration perf bug" }, cid, s1);
+    expect(store.undoOp(u, s1.op!.id, cid)).toMatchObject({ outcome: "deleted", item: null });
+    expect(() => store.getDetail(owner, bug.id)).toThrow(/not found/);
+    expect(store.getDetail(owner, v5.id).lineage).toEqual([]);
+    expect(store.getDetail(owner, v5.id).events[0]).toMatchObject({ kind: "undo", reason: "Undid split: removed “Hydration perf bug”" });
+
+    await store.addLink(u, v5.id, { kind: "url", url: "https://example.com/spec", role: "source" }, cid);
+    const f1: store.OpOut = {};
+    const fork = store.forkItem(u, v5.id, undefined, cid, f1);
+    // A copied source link doesn't count as a change...
+    const f2: store.OpOut = {};
+    const fork2 = store.forkItem(u, v5.id, "Second fork", cid, f2);
+    expect(store.undoOp(u, f2.op!.id, cid).outcome).toBe("deleted");
+    // ...but an edit does: then undo archives instead of deleting.
+    store.updateItem(u, fork.id, { summary: "Started exploring" }, cid);
+    expect(store.undoOp(u, f1.op!.id, cid)).toMatchObject({ outcome: "archived", item: { archived: true } });
+    expect(() => store.getDetail(owner, fork2.id)).toThrow(/not found/);
+  });
+
+  it("returns ops from routes and scopes undo to the owner", async () => {
+    const { area, v5 } = flagship();
+    const res = await call(moveRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { parentId: area.id } });
+    const { op } = (await res.json()) as { op: { id: string; kind: string } };
+    expect(op.kind).toBe("move");
+    expect((await call(undoRoute.POST as H, { user: other, method: "POST", params: { id: op.id } })).status).toBe(404);
+    expect((await call(undoRoute.POST as H, { user: kid, method: "POST", params: { id: op.id } })).status).toBe(403);
+    expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id }, csrf: false })).status).toBe(403);
+    expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id } })).status).toBe(200);
+    expect((await call(undoRoute.POST as H, { method: "POST", params: { id: op.id } })).status).toBe(409);
   });
 });
