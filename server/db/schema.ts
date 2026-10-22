@@ -815,6 +815,10 @@ export const workLinks = sqliteTable(
     /** open | merged | closed */
     externalState: text("external_state"),
     stateChangedAt: text("state_changed_at"),
+    /** "handoff_from": a conversation started from this item's handoff ("Continue in new conversation") */
+    lineage: text("lineage"),
+    /** the packet the handoff was written from (null when the item had none) */
+    packetId: text("packet_id"),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [index("work_links_item_idx").on(t.itemId)],

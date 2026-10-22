@@ -113,6 +113,9 @@ export type WorkLink = {
   role: LinkRole;
   externalState: ExternalState | null;
   stateChangedAt: string | null;
+  /** "handoff_from" when the conversation was started from this item's handoff */
+  lineage: "handoff_from" | null;
+  packetId: string | null;
   createdAt: string;
 };
 
@@ -311,6 +314,9 @@ export const linkSchema = z
     role: z.enum(LINK_ROLES).optional(),
   })
   .strict();
+
+/** "Continue in new conversation": which assistant answers (default: the household setting). */
+export const continueSchema = z.object({ backend: z.enum(["hermes", "claude"]).optional() }).strict();
 
 export const linkStateSchema = z.object({ externalState: z.enum(EXTERNAL_STATES) }).strict();
 

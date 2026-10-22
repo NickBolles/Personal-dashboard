@@ -8,6 +8,7 @@ import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Pag
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
 import { StatusBadge, fmtDate, useWorkMutation } from "@/components/work/common";
+import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { ConversationLinkDialog, UnfiledPanel, fmtWhen, useConversations } from "@/components/work/conversations";
 import {
   COMPARATORS,
@@ -154,7 +155,7 @@ function NewItemDialog({
   );
 }
 
-type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | LinkKind;
+type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
 
 function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; onSelect: (id: string) => void }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
@@ -309,7 +310,7 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
         {tab === "overview" ? (
           <>
             <EditItem key={item.updatedAt} item={item} />
-            <PacketCard d={d} onRevise={() => setDialog("packet")} />
+            <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
             <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
             <Links d={d} canChat={canChat} />
           </>
@@ -346,6 +347,7 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
       <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} />
       <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} />
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
+      {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
       {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
@@ -415,7 +417,7 @@ function EditItem({ item }: { item: WorkItem }) {
   );
 }
 
-function PacketCard({ d, onRevise }: { d: WorkDetail; onRevise: () => void }) {
+function PacketCard({ d, onRevise, onContinue }: { d: WorkDetail; onRevise: () => void; onContinue?: () => void }) {
   const { toast } = useToast();
   // Client-only: this card renders after the detail query resolves in the browser.
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -437,6 +439,11 @@ function PacketCard({ d, onRevise }: { d: WorkDetail; onRevise: () => void }) {
           <Button size="sm" onClick={copy}>
             Copy handoff
           </Button>
+          {onContinue ? (
+            <Button size="sm" onClick={onContinue}>
+              Continue in new conversation
+            </Button>
+          ) : null}
           {p ? (
             <Button size="sm" onClick={onRevise}>
               New revision
@@ -747,6 +754,7 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
         <div className="min-w-0">
           <p className="text-xs text-muted">
             {linkLabel(l)} · {l.role}
+            {l.lineage === "handoff_from" ? " · started from the handoff" : ""}
           </p>
           <p className="font-medium break-words">{name}</p>
           {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
@@ -1189,6 +1197,26 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
     <>
       <Card>
         <h3 className="mb-2 font-semibold">Lineage</h3>
+        {d.links.some((l) => l.lineage === "handoff_from") ? (
+          <ul className="mb-2 space-y-1 text-sm">
+            {d.links
+              .filter((l) => l.lineage === "handoff_from")
+              .map((l) => {
+                const p = d.packets.find((x) => x.id === l.packetId);
+                return (
+                  <li key={l.id}>
+                    Handed off to{" "}
+                    <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="tap text-accent underline">
+                      {l.title}
+                    </Link>{" "}
+                    <span className="text-muted">
+                      · {p ? `packet v${p.version}` : "no packet"} · {fmtDate(l.createdAt)}
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+        ) : null}
         {d.lineage.length ? (
           <ul className="space-y-1 text-sm">
             {d.lineage.map((l) => {
@@ -1212,7 +1240,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
               );
             })}
           </ul>
-        ) : (
+        ) : d.links.some((l) => l.lineage === "handoff_from") ? null : (
           <p className="text-sm text-muted">No forks, splits or moves.</p>
         )}
       </Card>

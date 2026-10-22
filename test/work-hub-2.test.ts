@@ -4,7 +4,10 @@ import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { createLocalSession } from "@/server/assistant/local";
-import { filingTokens, suggestFiling } from "@/lib/work";
+import { filingTokens, handoffMarkdown, packetSchema, suggestFiling } from "@/lib/work";
+import { getSessionDetail } from "@/server/assistant";
+import { recentAudit } from "@/server/audit";
+import * as continueRoute from "@/app/api/work/items/[id]/continue/route";
 import * as store from "@/server/work/store";
 import * as conversations from "@/server/work/conversations";
 import * as conversationsRoute from "@/app/api/work/conversations/route";
@@ -130,5 +133,39 @@ describe("conversations (picker, unfiled, filing)", () => {
     expect((await call(fileRoute.POST as H, { method: "POST", body: { sessionId: "x", itemId: null }, csrf: false })).status).toBe(403);
     expect((await call(fileRoute.POST as H, { method: "POST", body: { sessionId: "x" } })).status).toBe(400);
     expect((await call(conversationsRoute.GET as H, { query: "?q=v5" })).status).toBe(200);
+  });
+});
+
+describe("continue in a new conversation", () => {
+  it("creates a conversation via the assistant layer, links it as source with handoff_from lineage, and sends nothing", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-test-value");
+    const { u, v5 } = flagship();
+    store.createPacket(u, v5.id, packetSchema.parse({ objective: "Define V5", nextAction: "Open the PR" }), cid);
+    const p2 = store.createPacket(u, v5.id, packetSchema.parse({ objective: "Define V5 (rev)", nextAction: "Open the PR" }), cid);
+    const r = await store.continueInConversation(u, v5.id, "claude", cid);
+    expect(r.session.id).toMatch(/^loc_/);
+    expect(r.link).toMatchObject({ kind: "chat_session", role: "source", lineage: "handoff_from", packetId: p2.id, targetId: r.session.id });
+    const d = store.getDetail(owner, v5.id);
+    expect(d.events.find((e) => e.kind === "handoff")?.reason).toBe("Continued in a new conversation (handoff from packet v2)");
+    expect(recentAudit(50).some((a) => a.action === "work.handoff")).toBe(true);
+    // The draft is only pre-filled in the browser: the conversation has no messages and no run.
+    const s = await getSessionDetail(u, r.session.id);
+    expect(s.timeline).toEqual([]);
+    expect(s.session.activeRun).toBeUndefined();
+    // The handoff the browser pre-fills is the same Markdown as "Copy handoff".
+    expect(handoffMarkdown(d, "https://jarvis.test")).toContain("# Handoff: V5 evaluator contract");
+    // Forking doesn't copy the handoff lineage.
+    const fork = store.forkItem(u, v5.id, undefined, cid);
+    expect(store.getDetail(owner, fork.id).links[0]).toMatchObject({ lineage: null, packetId: null });
+  });
+
+  it("needs work.use, hermes.chat, ownership and an available backend", async () => {
+    const { v5 } = flagship();
+    expect((await call(continueRoute.POST as H, { user: kid, method: "POST", params: { id: v5.id }, body: {} })).status).toBe(403);
+    expect((await call(continueRoute.POST as H, { user: other, method: "POST", params: { id: v5.id }, body: {} })).status).toBe(404);
+    // Claude isn't set up in this test: refused, and no link is written.
+    expect((await call(continueRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { backend: "claude" } })).status).toBe(409);
+    expect(store.getDetail(owner, v5.id).links).toEqual([]);
+    expect((await call(continueRoute.POST as H, { method: "POST", params: { id: v5.id }, body: { backend: "gpt" } })).status).toBe(400);
   });
 });

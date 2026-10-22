@@ -6,7 +6,9 @@ import { audit } from "@/server/audit";
 import { config } from "@/server/config";
 import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
-import { getSessionDetail } from "@/server/assistant";
+import { createSession as createConversation, getSessionDetail } from "@/server/assistant";
+import { requireCap } from "@/server/access";
+import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
 import {
   isClosed,
@@ -85,6 +87,7 @@ const toLink = (r: typeof schema.workLinks.$inferSelect): WorkLink => ({
   kind: r.kind as WorkLink["kind"],
   role: r.role as WorkLink["role"],
   externalState: r.externalState as ExternalState | null,
+  lineage: r.lineage === "handoff_from" ? "handoff_from" : null,
 });
 const toPacket = (r: typeof schema.workPackets.$inferSelect): WorkPacket => ({ ...r });
 const toValidation = (r: typeof schema.workValidations.$inferSelect): WorkValidation => ({
@@ -398,7 +401,7 @@ export function forkItem(user: CurrentUser, id: string, title: string | undefine
       .all();
     for (const l of sources)
       tx.insert(schema.workLinks)
-        .values({ ...l, id: newId(), itemId: forkId, createdAt: nowIso() })
+        .values({ ...l, id: newId(), itemId: forkId, lineage: null, packetId: null, createdAt: nowIso() })
         .run();
     lineage(tx, user.id, { childId: forkId, parentId: id, relation: "forked_from", actor: user.id });
     event(tx, forkId, user.id, { kind: "created", to: "captured", reason: `Forked from “${row.title}”` });
@@ -546,6 +549,47 @@ export async function addLink(user: CurrentUser, itemId: string, body: z.infer<t
     detail: { kind: values.kind, target: values.targetId },
   });
   return toLink(getDb().select().from(schema.workLinks).where(eq(schema.workLinks.id, id)).get()!);
+}
+
+/**
+ * "Continue in new conversation": a new Hermes or Claude conversation through
+ * the assistant layer, linked as a `source` with `handoff_from` lineage. The
+ * handoff is only a draft in the browser; nothing is sent to the assistant here.
+ */
+export async function continueInConversation(user: CurrentUser, itemId: string, backend: AssistantBackend | undefined, correlationId: string) {
+  requireCap(user, "hermes.chat");
+  const row = ownedItem(user.id, itemId);
+  const packet = latestPacket(itemId);
+  const session = await createConversation(user, `Continue: ${row.title}`.slice(0, 200), backend);
+  const id = newId();
+  const via = packet ? `handoff from packet v${packet.version}` : "handoff, no packet yet";
+  getDb().transaction((tx) => {
+    tx.insert(schema.workLinks)
+      .values({
+        id,
+        itemId,
+        kind: "chat_session",
+        targetId: session.id,
+        url: null,
+        title: session.title || `Continue: ${row.title}`,
+        role: "source",
+        lineage: "handoff_from",
+        packetId: packet?.id ?? null,
+        createdAt: nowIso(),
+      })
+      .run();
+    event(tx, itemId, user.id, { kind: "handoff", reason: `Continued in a new conversation (${via})` });
+  });
+  audit({
+    actor: user.id,
+    action: "work.handoff",
+    source: "work",
+    sourceRecord: itemId,
+    result: "ok",
+    correlationId,
+    detail: { session: session.id, packet: packet?.version ?? null },
+  });
+  return { session: { id: session.id, title: session.title }, link: toLink(getDb().select().from(schema.workLinks).where(eq(schema.workLinks.id, id)).get()!) };
 }
 
 /** Apply a PR/issue state change (manual or read back from GitHub), including merge handling. */
