@@ -12,6 +12,7 @@ import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
 import {
   applyTemplate,
+  areaValidationDefault,
   isClosed,
   isValidationOverdue,
   parseGithubUrl,
@@ -99,6 +100,7 @@ export function toItem(r: ItemRow): WorkItem {
     settledReason: r.settledReason,
     archived: r.archived,
     builtIn: !!r.systemKey,
+    validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -293,6 +295,23 @@ function validationsOf(itemId: string, db: Db = getDb()) {
   return db.select().from(schema.workValidations).where(eq(schema.workValidations.itemId, itemId)).orderBy(asc(schema.workValidations.createdAt)).all();
 }
 
+/** The top-level area an item lives under (itself for an area). */
+function areaOf(row: ItemRow, byId: Map<string, ItemRow>): ItemRow | null {
+  let cur: ItemRow | undefined = row;
+  for (let n = 0; cur && cur.parentId && n < 100; n++) cur = byId.get(cur.parentId);
+  return cur && !cur.parentId ? cur : null;
+}
+
+function validationDefaultFor(row: ItemRow, byId: Map<string, ItemRow>): WorkDetail["validationDefault"] {
+  const area = areaOf(row, byId);
+  return {
+    value: areaValidationDefault(area),
+    explicit: area?.validationDefault === "required" || area?.validationDefault === "optional",
+    areaId: area?.id ?? null,
+    areaTitle: area?.title ?? null,
+  };
+}
+
 export function getDetail(userId: string, id: string): WorkDetail {
   const db = getDb();
   const row = ownedItem(userId, id, db);
@@ -327,6 +346,7 @@ export function getDetail(userId: string, id: string): WorkDetail {
       parentTitle: l.parentId ? (byId.get(l.parentId)?.title ?? null) : null,
     })),
     settle: settleGate(packets[0] ?? null, validations as { status: WorkValidation["status"] }[]),
+    validationDefault: validationDefaultFor(row, byId),
     githubRefresh: githubRefreshEnabled(),
     ...dependencyRefs(userId, id, db, byId),
   };
@@ -394,6 +414,8 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
   const result = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey && (fields.archived || (fields.kind && fields.kind !== "area"))) throw new HttpError(409, "built_in", "Miscellaneous is built in");
+    if (fields.validationDefault !== undefined && row.parentId !== null)
+      throw new HttpError(400, "not_area", "The validation default is an area setting; change it on the area");
     checkDates(fields.startDate === undefined ? row.startDate : fields.startDate, fields.targetDate === undefined ? row.targetDate : fields.targetDate);
     const nextAction = fields.nextAction ?? row.nextAction;
     if ((row.status === "ready" || row.status === "in_progress") && !status && !nextAction.trim())
@@ -422,6 +444,11 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       event(tx, id, user.id, {
         kind: "dates",
         reason: `Dates: start ${row.startDate ?? "—"} → ${start ?? "—"}, target ${row.targetDate ?? "—"} → ${target ?? "—"}`,
+      });
+    if (fields.validationDefault !== undefined && fields.validationDefault !== row.validationDefault)
+      event(tx, id, user.id, {
+        kind: "edit",
+        reason: `Validation default: ${fields.validationDefault ?? `by rule (${areaValidationDefault({ ...row, validationDefault: null })})`}`,
       });
     if (fields.archived !== undefined && fields.archived !== row.archived) {
       event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
@@ -758,6 +785,12 @@ export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof
     const existing = tx.select({ version: schema.workPackets.version }).from(schema.workPackets).where(eq(schema.workPackets.itemId, id)).all();
     const version = nextPacketVersion(existing);
     const pid = newId();
+    // Omitted → the area's default (Miscellaneous/Home optional, others required, or the area's own setting).
+    const vd = validationDefaultFor(row, new Map(allRows(user.id, tx).map((r) => [r.id, r])));
+    const validationRequired = body.validationRequired ?? vd.value === "required";
+    const noValidationReason = validationRequired
+      ? null
+      : body.noValidationReason?.trim() || `Validation is optional in ${vd.areaTitle ?? "this area"} (area default)`;
     tx.insert(schema.workPackets)
       .values({
         id: pid,
@@ -770,8 +803,8 @@ export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof
         decisions: body.decisions,
         openQuestions: body.openQuestions,
         context: body.context,
-        validationRequired: body.validationRequired,
-        noValidationReason: body.validationRequired ? null : (body.noValidationReason?.trim() ?? null),
+        validationRequired,
+        noValidationReason,
         createdBy: user.id,
         createdAt: nowIso(),
       })

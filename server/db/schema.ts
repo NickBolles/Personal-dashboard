@@ -791,6 +791,8 @@ export const workItems = sqliteTable(
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     /** "misc" for the built-in Miscellaneous area */
     systemKey: text("system_key"),
+    /** areas only: required | optional; null = by rule (Miscellaneous and Home optional, others required; lib/work.ts areaValidationDefault) */
+    validationDefault: text("validation_default"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

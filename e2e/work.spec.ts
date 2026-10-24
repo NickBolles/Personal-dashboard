@@ -191,13 +191,17 @@ test("work dashboard: native widgets and a sandboxed custom HTML widget", async 
   const { link } = await post(`/api/work/items/${v5.id}/links`, { kind: "github_pr", url: "https://github.com/o/r/pull/7" });
   const merged = await page.request.patch(`/api/work/links/${link.id}`, { data: { externalState: "merged" }, headers: { "x-jarvis-csrf": "1" } });
   expect(merged.ok()).toBeTruthy();
+  // Auto-settle: never. The merge leaves it ready to settle; settling is a manual action.
+  const detail = await (await page.request.get(`/api/work/items/${v5.id}`)).json();
+  expect(detail.item.status).toBe("ready_to_settle");
+  await post(`/api/work/items/${v5.id}/settle`, { reason: "Docs merged and read" });
 
   await page.goto("/work/dashboard");
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   const settled = page.getByRole("region", { name: "Recently settled" });
   await expect(settled).toContainText("V5 evaluator contract");
-  await expect(settled).toContainText("Auto-settled");
-  await expect(settled).toContainText("PR #7 merged; no validation required");
+  await expect(settled).not.toContainText("Auto-settled");
+  await expect(settled).toContainText("Docs merged and read");
 
   await page.getByRole("button", { name: "Edit dashboard" }).click();
   await page.getByRole("button", { name: "Add widget" }).click();

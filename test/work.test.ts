@@ -36,12 +36,13 @@ describe("lifecycle (pure)", () => {
     expect(onImplementationMerged({ ...base, latestPacket: { validationRequired: true } })).toMatchObject({ status: "awaiting_validation", settledKind: null });
     // No packet: validation defaults to required.
     expect(onImplementationMerged({ ...base, latestPacket: null })).toMatchObject({ status: "awaiting_validation" });
+    // Auto-settle: never. No validation needed → ready to settle, and the person settles it.
     expect(onImplementationMerged({ ...base, latestPacket: { validationRequired: false } })).toEqual({
-      status: "settled",
-      settledKind: "auto",
-      settledReason: "PR #42 merged; no validation required",
-      completedAt: AT,
-      reason: "PR #42 merged; no validation required",
+      status: "ready_to_settle",
+      settledKind: null,
+      settledReason: null,
+      completedAt: null,
+      reason: "PR #42 merged; no validation required. Settle when you're satisfied",
     });
     // Pending (or failed) validations still gate, even with "no validation required".
     expect(onImplementationMerged({ ...base, latestPacket: { validationRequired: false }, validations: [{ status: "pending" }] })).toMatchObject({
@@ -51,9 +52,15 @@ describe("lifecycle (pure)", () => {
       status: "awaiting_validation",
     });
     expect(onImplementationMerged({ ...base, latestPacket: { validationRequired: false }, validations: [{ status: "pass" }] })).toMatchObject({
-      status: "settled",
-      settledKind: "auto",
+      status: "ready_to_settle",
+      settledKind: null,
     });
+    // No input ever produces a settlement.
+    for (const status of ["captured", "in_progress", "in_review", "reopened", "on_hold", "ready_to_settle"] as const)
+      for (const latestPacket of [null, { validationRequired: true }, { validationRequired: false }])
+        for (const validations of [[], [{ status: "pass" as const }], [{ status: "waived" as const }], [{ status: "pending" as const }]])
+          expect(onImplementationMerged({ ...base, status, latestPacket, validations })?.status ?? null).not.toBe("settled");
+    expect(onImplementationMerged({ ...base, status: "ready_to_settle", latestPacket: { validationRequired: false } })).toBeNull();
     // Closed work and work already waiting are left alone.
     expect(onImplementationMerged({ ...base, status: "settled", latestPacket: null })).toBeNull();
     expect(onImplementationMerged({ ...base, status: "awaiting_validation", latestPacket: null })).toBeNull();
@@ -174,7 +181,9 @@ describe("pure helpers", () => {
     const p = { objective: "Ship V5", nextAction: "Open PR" };
     expect(packetSchema.safeParse({ ...p, validationRequired: false }).success).toBe(false);
     expect(packetSchema.parse({ ...p, validationRequired: false, noValidationReason: "Docs only" }).validationRequired).toBe(false);
-    expect(packetSchema.parse(p)).toMatchObject({ validationRequired: true, status: "in_progress" });
+    // Omitted: the store applies the item's area default (test/work-hub-3.test.ts).
+    expect(packetSchema.parse(p)).toMatchObject({ status: "in_progress" });
+    expect(packetSchema.parse(p).validationRequired).toBeUndefined();
   });
 });
 
@@ -268,7 +277,7 @@ describe("store (real SQLite)", () => {
     expect(t.rows.find((r) => r.id === v5.id)!.actuals.map((a) => a.kind)).toEqual(["started", "merged"]);
   });
 
-  it("auto-settles a merged PR when the packet declares no validation, and reopens in one step", async () => {
+  it("never auto-settles: a merged PR with no validation needed waits for a manual settle", async () => {
     const { u, v5 } = flagship();
     store.createPacket(
       u,
@@ -278,7 +287,14 @@ describe("store (real SQLite)", () => {
     );
     const link = await store.addLink(u, v5.id, { kind: "github_pr", url: "https://github.com/o/r/pull/9" }, cid);
     store.setLinkState(u, link.id, "merged", cid);
-    expect(store.getDetail(owner, v5.id).item).toMatchObject({ status: "settled", settledKind: "auto", settledReason: "PR #9 merged; no validation required" });
+    expect(store.getDetail(owner, v5.id).item).toMatchObject({ status: "ready_to_settle", settledKind: null, settledReason: null, completedAt: null });
+    expect(store.getDetail(owner, v5.id).settle.allowed).toBe(true);
+    expect(store.getDetail(owner, v5.id).events.find((e) => e.kind === "status")).toMatchObject({ toStatus: "ready_to_settle" });
+    // The same merge again is a no-op.
+    store.setLinkState(u, link.id, "merged", cid);
+    expect(store.getDetail(owner, v5.id).events.filter((e) => e.kind === "status")).toHaveLength(2);
+    // Settling is a manual action and records settled_kind = manual.
+    expect(store.settleItem(u, v5.id, "Looks right", cid)).toMatchObject({ status: "settled", settledKind: "manual", settledReason: "Looks right" });
     expect(store.reopenItem(u, v5.id, { reason: "Not done" }, cid).item.status).toBe("reopened");
     // A reference PR (not implementation) never changes item state.
     const ref = await store.addLink(u, v5.id, { kind: "github_pr", url: "https://github.com/o/r/pull/10", role: "reference" }, cid);

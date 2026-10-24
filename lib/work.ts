@@ -15,6 +15,8 @@ export const WORK_STATUSES = [
   "in_progress",
   "in_review",
   "awaiting_validation",
+  /** an implementation PR merged and nothing needs validating: waiting for the person to settle it (never automatic) */
+  "ready_to_settle",
   "settled",
   "reopened",
   "on_hold",
@@ -30,6 +32,7 @@ export const STATUS_LABELS: Record<WorkStatus, string> = {
   in_progress: "In progress",
   in_review: "In review",
   awaiting_validation: "Awaiting validation",
+  ready_to_settle: "Ready to settle",
   settled: "Settled",
   reopened: "Reopened",
   on_hold: "On hold",
@@ -102,13 +105,33 @@ export type WorkItem = {
   startDate: string | null;
   targetDate: string | null;
   completedAt: string | null;
+  /** "auto" only on rows settled before phase 3 (legacy, read-only): nothing settles automatically any more */
   settledKind: "manual" | "auto" | null;
   settledReason: string | null;
   archived: boolean;
   builtIn: boolean;
+  /** areas: the explicit validation default (null = by rule, see areaValidationDefault) */
+  validationDefault: ValidationDefault | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export const VALIDATION_DEFAULTS = ["required", "optional"] as const;
+export type ValidationDefault = (typeof VALIDATION_DEFAULTS)[number];
+
+/**
+ * Whether new packets under an area require validation by default (owner
+ * decision): an explicit per-area setting wins; otherwise Miscellaneous and an
+ * area titled or keyed "Home" are optional and every other area is required.
+ */
+export function areaValidationDefault(
+  area: { title: string; systemKey?: string | null; validationDefault?: string | null } | null | undefined,
+): ValidationDefault {
+  if (!area) return "required";
+  if (area.validationDefault === "required" || area.validationDefault === "optional") return area.validationDefault;
+  if (area.systemKey === "misc" || area.systemKey === "home") return "optional";
+  return area.title.trim().toLowerCase() === "home" ? "optional" : "required";
+}
 
 export type WorkLink = {
   id: string;
@@ -210,6 +233,8 @@ export type WorkDetail = {
   events: WorkEvent[];
   lineage: (WorkLineage & { childTitle: string | null; parentTitle: string | null })[];
   settle: { allowed: boolean; reason: string | null };
+  /** the packet form's preselected "validation required" for this item, from its area */
+  validationDefault: { value: ValidationDefault; explicit: boolean; areaId: string | null; areaTitle: string | null };
   githubRefresh: boolean;
   /** what this item waits on, and what waits on it */
   blockedBy: DependencyRef[];
@@ -325,6 +350,8 @@ export const updateItemSchema = z
     startDate: dateSchema.nullable().optional(),
     targetDate: dateSchema.nullable().optional(),
     archived: z.boolean().optional(),
+    /** areas only; null goes back to the rule (Miscellaneous/Home optional, others required) */
+    validationDefault: z.enum(VALIDATION_DEFAULTS).nullable().optional(),
   })
   .strict();
 
@@ -344,13 +371,17 @@ export const packetSchema = z
     decisions: longText.default(""),
     openQuestions: longText.default(""),
     context: longText.default(""),
-    validationRequired: z.boolean().default(true),
+    /** omitted: the item's area default (areaValidationDefault) */
+    validationRequired: z.boolean().optional(),
     noValidationReason: z.string().max(2000).optional(),
     nextAction: z.string().trim().min(1, "Next action is required").max(2000),
     status: z.enum(["ready", "in_progress"]).default("in_progress"),
   })
   .strict()
-  .refine((p) => p.validationRequired || !!p.noValidationReason?.trim(), { path: ["noValidationReason"], message: "Say why no validation is needed" });
+  .refine((p) => p.validationRequired !== false || !!p.noValidationReason?.trim(), {
+    path: ["noValidationReason"],
+    message: "Say why no validation is needed",
+  });
 
 export const linkSchema = z
   .object({

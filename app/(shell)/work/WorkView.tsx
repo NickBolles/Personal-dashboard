@@ -13,6 +13,7 @@ import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, UnfiledPanel, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import {
+  areaValidationDefault,
   COMPARATORS,
   handoffMarkdown,
   todayIso,
@@ -275,6 +276,20 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
             />
           </div>
         </div>
+        {item.status === "ready_to_settle" ? (
+          <div
+            role="status"
+            data-testid="settle-prompt"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-ok bg-ok-soft p-3 text-sm"
+          >
+            <span className="min-w-0">
+              <strong>PR merged — settle?</strong> Nothing needs validating. Jarvis never settles on its own: settle when you&apos;re satisfied.
+            </span>
+            <Button size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed}>
+              Settle now
+            </Button>
+          </div>
+        ) : null}
         <div className="rounded-[10px] bg-surface-2 p-3">
           <p className="text-xs font-medium tracking-wide text-muted uppercase">Next action</p>
           <p className="mt-0.5 break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
@@ -340,7 +355,7 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-4">
         {tab === "overview" ? (
           <>
-            <EditItem key={item.updatedAt} item={item} />
+            <EditItem key={item.updatedAt} item={item} validationDefault={d.validationDefault} />
             <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
             <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
             <Dependencies d={d} items={items} onSelect={onSelect} />
@@ -394,24 +409,36 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
   );
 }
 
-function EditItem({ item }: { item: WorkItem }) {
+function EditItem({ item, validationDefault }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] }) {
+  const isArea = item.parentId === null;
   const [f, setF] = useState({
     title: item.title,
     summary: item.summary,
     nextAction: item.nextAction,
     startDate: item.startDate ?? "",
     targetDate: item.targetDate ?? "",
+    validationDefault: (item.validationDefault ?? "") as "" | "required" | "optional",
   });
   const save = useWorkMutation(
-    () => api.patch(`/api/work/items/${encodeURIComponent(item.id)}`, { ...f, startDate: f.startDate || null, targetDate: f.targetDate || null }),
+    () => {
+      const { validationDefault: vd, ...rest } = f;
+      return api.patch(`/api/work/items/${encodeURIComponent(item.id)}`, {
+        ...rest,
+        startDate: f.startDate || null,
+        targetDate: f.targetDate || null,
+        ...(isArea && vd !== (item.validationDefault ?? "") ? { validationDefault: vd || null } : {}),
+      });
+    },
     { ok: "Saved" },
   );
+  const ruleDefault = areaValidationDefault({ ...item, validationDefault: null, systemKey: item.builtIn ? "misc" : null });
   const dirty =
     f.title !== item.title ||
     f.summary !== item.summary ||
     f.nextAction !== item.nextAction ||
     f.startDate !== (item.startDate ?? "") ||
-    f.targetDate !== (item.targetDate ?? "");
+    f.targetDate !== (item.targetDate ?? "") ||
+    (isArea && f.validationDefault !== (item.validationDefault ?? ""));
   return (
     <Card>
       <h3 className="mb-3 font-semibold">Details</h3>
@@ -439,6 +466,29 @@ function EditItem({ item }: { item: WorkItem }) {
             <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
           </Field>
         </div>
+        {isArea ? (
+          <Field
+            id="wi-vdefault"
+            label="Validation for new packets"
+            hint="What “Start focused work” preselects for everything in this area. You can override it per packet."
+          >
+            <select
+              id="wi-vdefault"
+              className={inputCls}
+              value={f.validationDefault}
+              onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
+            >
+              <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
+              <option value="required">Required</option>
+              <option value="optional">Optional</option>
+            </select>
+          </Field>
+        ) : (
+          <p className="text-xs text-muted" data-testid="validation-default-note">
+            New packets here {validationDefault.value === "required" ? "require" : "don't require"} validation by default
+            {validationDefault.areaTitle ? ` (set on ${validationDefault.areaTitle})` : ""}.
+          </p>
+        )}
         <div className="flex justify-end">
           <Button type="submit" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
             Save details
@@ -1323,8 +1373,10 @@ function PacketDialog({ open, onClose, d }: { open: boolean; onClose: () => void
     context: prev?.context ?? "",
     nextAction: d.item.nextAction,
     status: (d.item.status === "ready" ? "ready" : "in_progress") as "ready" | "in_progress",
-    validationRequired: prev?.validationRequired ?? true,
-    noValidationReason: prev?.noValidationReason ?? "",
+    // First packet: the area's default; revisions keep what the previous packet said.
+    validationRequired: prev?.validationRequired ?? d.validationDefault.value === "required",
+    noValidationReason:
+      prev?.noValidationReason ?? (d.validationDefault.value === "optional" ? `Validation is optional in ${d.validationDefault.areaTitle ?? "this area"}` : ""),
   });
   const [f, setF] = useState(init);
   const save = useWorkMutation(
@@ -1400,6 +1452,10 @@ function PacketDialog({ open, onClose, d }: { open: boolean; onClose: () => void
           <input type="checkbox" checked={f.validationRequired} onChange={(e) => setF({ ...f, validationRequired: e.target.checked })} />
           Validation required before settling
         </label>
+        <p className="-mt-2 text-xs text-muted">
+          Default in {d.validationDefault.areaTitle ?? "this area"}: {d.validationDefault.value}
+          {d.validationDefault.explicit ? " (set on the area)" : ""}.
+        </p>
         {!f.validationRequired ? (
           <Field id="pk-novalidation" label="Why no validation is needed">
             <input

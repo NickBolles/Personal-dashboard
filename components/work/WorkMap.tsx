@@ -16,6 +16,7 @@ export const STATUS_VAR: Record<WorkStatus, string> = {
   in_progress: "var(--accent)",
   in_review: "var(--accent)",
   awaiting_validation: "var(--warn)",
+  ready_to_settle: "var(--ok)",
   settled: "var(--ok)",
   reopened: "var(--danger)",
   on_hold: "var(--line)",
