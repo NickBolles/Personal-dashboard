@@ -6,6 +6,7 @@
 //   /fcm/*      Firebase OAuth + FCM v1 (phone push)
 //   /monarch/*  Monarch Money GraphQL (finance balances)
 //   /anthropic/* Anthropic Messages API (Claude-direct conversations)
+//   /github/*   GitHub REST (read-only subset for the Work hub; JARVIS_GITHUB_API_URL)
 //   /__mock/*   control plane (reset, fail, speed, google/tasks)
 import http from "node:http";
 import { createHermes } from "./hermes.mjs";
@@ -16,6 +17,7 @@ import { createGoogleTasks } from "./google-tasks.mjs";
 import { createFcm } from "./fcm.mjs";
 import { createMonarch } from "./monarch.mjs";
 import { createAnthropic } from "./anthropic.mjs";
+import { createGithub } from "./github.mjs";
 import { json, readBody, bearerOk, isoDate } from "./util.mjs";
 
 export const MOCK_CREDENTIALS = {
@@ -43,6 +45,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
     fcm: createFcm(),
     monarch: createMonarch({ token: c.monarchToken }),
     anthropic: createAnthropic({ apiKey: c.anthropicKey }),
+    github: createGithub(),
   };
   const compass = { completed: new Map() };
 
@@ -95,6 +98,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
       if (prefix === "fcm") return await services.fcm.handle(req, res, path, url, control);
       if (prefix === "monarch") return await services.monarch.handle(req, res, path, url, control);
       if (prefix === "anthropic") return await services.anthropic.handle(req, res, path, url, control);
+      if (prefix === "github") return await services.github.handle(req, res, path, url, control);
       if (prefix === "compass") {
         if (control.fail.has("daily_compass")) return json(res, 503, { error: "unavailable" });
         if (!bearerOk(req, c.compassToken)) return json(res, 401, { error: "unauthorized" });

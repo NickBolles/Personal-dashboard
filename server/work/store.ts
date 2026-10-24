@@ -951,6 +951,23 @@ export async function continueInConversation(user: CurrentUser, itemId: string, 
 
 /** Apply a PR/issue state change (manual or read back from GitHub), including merge handling. */
 export function setLinkState(user: CurrentUser, linkId: string, state: ExternalState, correlationId: string, via: "manual" | "github" = "manual") {
+  return applyLinkState(user.id, user.id, linkId, state, correlationId, via);
+}
+
+/**
+ * setLinkState for a link owned by `ownerId`, acted on by `actor` (the person,
+ * or "github" for the poller and webhooks). Idempotent: an unchanged state is
+ * a no-op, so a merge transition applies exactly once whoever sees it first.
+ */
+export function applyLinkState(
+  ownerId: string,
+  actor: string,
+  linkId: string,
+  state: ExternalState,
+  correlationId: string,
+  via: "manual" | "github" = "manual",
+) {
+  const user = { id: ownerId };
   const outcome = getDb().transaction((tx) => {
     const { link, item } = ownedLink(user.id, linkId, tx);
     if (link.kind !== "github_pr" && link.kind !== "github_issue") throw new HttpError(400, "not_github", "Only GitHub links have a state");
@@ -958,7 +975,7 @@ export function setLinkState(user: CurrentUser, linkId: string, state: ExternalS
     tx.update(schema.workLinks).set({ externalState: state, stateChangedAt: nowIso() }).where(eq(schema.workLinks.id, linkId)).run();
     const number = Number(link.targetId?.split("#")[1]) || null;
     const label = `${link.kind === "github_pr" ? "PR" : "Issue"} #${number ?? "?"}`;
-    event(tx, item.id, user.id, {
+    event(tx, item.id, actor, {
       kind: state === "merged" ? "merged" : state === "closed" ? "closed" : "link",
       reason: `${label} ${state}${via === "github" ? " (read from GitHub)" : ""}`,
       source: via,
@@ -977,12 +994,12 @@ export function setLinkState(user: CurrentUser, linkId: string, state: ExternalS
       .set({ ...patch, updatedAt: nowIso() })
       .where(eq(T.id, item.id))
       .run();
-    event(tx, item.id, user.id, { kind: "status", from: item.status, to: plan.status, reason, source: via });
+    event(tx, item.id, actor, { kind: "status", from: item.status, to: plan.status, reason, source: via });
     return { itemId: item.id, transition: { from: item.status, to: plan.status, reason } };
   });
-  audit({ actor: user.id, action: "work.link_state", source: "work", sourceRecord: linkId, result: "ok", correlationId, detail: { state, via } });
+  if (outcome) audit({ actor, action: "work.link_state", source: "work", sourceRecord: linkId, result: "ok", correlationId, detail: { state, via } });
   if (outcome?.transition)
-    audit({ actor: user.id, action: "work.status", source: "work", sourceRecord: outcome.itemId, result: "ok", correlationId, detail: outcome.transition });
+    audit({ actor, action: "work.status", source: "work", sourceRecord: outcome.itemId, result: "ok", correlationId, detail: outcome.transition });
   return toLink(ownedLink(user.id, linkId).link);
 }
 
@@ -997,7 +1014,7 @@ export function removeLink(user: CurrentUser, linkId: string, correlationId: str
 }
 
 /** Read one PR/issue from GitHub (read-only) and apply it through the merge rules. */
-async function readBack(user: CurrentUser, link: typeof schema.workLinks.$inferSelect, correlationId: string) {
+export async function readBack(owner: { id: string }, link: typeof schema.workLinks.$inferSelect, correlationId: string, actor = owner.id) {
   const ref = parseGithubUrl(link.url ?? "");
   if (!ref) throw new HttpError(400, "github_url", "Not a GitHub link");
   try {
@@ -1006,7 +1023,7 @@ async function readBack(user: CurrentUser, link: typeof schema.workLinks.$inferS
     const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
     if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
     db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
-    return setLinkState(user, link.id, remote.state, correlationId, "github");
+    return applyLinkState(owner.id, actor, link.id, remote.state, correlationId, "github");
   } catch (e) {
     getDb()
       .update(schema.workLinks)
@@ -1022,7 +1039,7 @@ export async function refreshLink(user: CurrentUser, linkId: string, correlation
   const { link } = ownedLink(user.id, linkId);
   if ((link.kind !== "github_pr" && link.kind !== "github_issue") || !link.url)
     throw new HttpError(400, "not_github", "Only GitHub pull requests and issues can be refreshed");
-  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Set JARVIS_GITHUB_TOKEN to refresh from GitHub");
+  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Add a GitHub connection (Settings → Connections) to refresh from GitHub");
   return readBack(user, link, correlationId);
 }
 

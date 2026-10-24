@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { INTEGRATIONS, type PublicIntegration } from "@/integrations/registry";
 import { IntegrationForm } from "@/components/integrations/IntegrationForm";
+import { GithubConnections } from "@/components/integrations/GithubConnections";
 import { Badge, PageHeader, cx } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 
@@ -54,6 +55,28 @@ export function ConnectionsView() {
             </li>
           );
         })}
+        <li id="github" className="card">
+          <h2>
+            <button
+              type="button"
+              aria-expanded={open === "github"}
+              aria-controls="panel-github"
+              onClick={() => setOpen(open === "github" ? null : "github")}
+              className="flex min-h-16 w-full items-center justify-between gap-2 p-4 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block font-semibold">GitHub</span>
+                <span className="block truncate text-sm text-muted">Read-only PR and issue state for the Work hub, one token per owner</span>
+              </span>
+              <ChevronIcon className={cx("h-5 w-5 shrink-0 transition-transform", open === "github" && "rotate-90")} />
+            </button>
+          </h2>
+          {open === "github" ? (
+            <div id="panel-github" className="border-t border-line p-4">
+              <GithubConnections />
+            </div>
+          ) : null}
+        </li>
       </ul>
     </div>
   );

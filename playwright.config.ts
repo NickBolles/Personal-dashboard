@@ -73,6 +73,8 @@ export default defineConfig({
         PORT: String(PORT),
         JARVIS_MOCK_UPSTREAM_URL: MOCK_URL,
         JARVIS_ANTHROPIC_BASE_URL: `${MOCK_URL}/anthropic`,
+        // GitHub reads go to the mock (tests never reach api.github.com).
+        JARVIS_GITHUB_API_URL: `${MOCK_URL}/github`,
         JARVIS_SETUP_CODE: "E2E-SETUP",
         JARVIS_WORKER_INTERVAL_MS: "3600000",
         JARVIS_SECURE_COOKIES: "false",

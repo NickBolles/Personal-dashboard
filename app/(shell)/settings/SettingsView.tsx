@@ -50,7 +50,7 @@ export function SettingsView() {
 
   const links = [
     ...(isAdmin
-      ? [{ href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass, Finance" }]
+      ? [{ href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass, Finance, GitHub" }]
       : []),
     ...(isAdmin ? [{ href: "/settings/people", label: "People", desc: "Family members, the kitchen tablet, and what each can use" }] : []),
     ...(isAdmin ? [{ href: "/settings/configuration", label: "Configuration transfer", desc: "Password-encrypted integration import and export" }] : []),

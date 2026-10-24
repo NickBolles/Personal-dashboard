@@ -353,7 +353,7 @@ describe("store (real SQLite)", () => {
   it("refreshes PR state read-only from GitHub only when a token is configured", async () => {
     const { u, v5 } = flagship();
     const link = await store.addLink(u, v5.id, { kind: "github_pr", url: "https://github.com/o/r/pull/5" }, cid);
-    await expect(store.refreshLink(u, link.id, cid)).rejects.toThrow(/JARVIS_GITHUB_TOKEN/);
+    await expect(store.refreshLink(u, link.id, cid)).rejects.toThrow(/Add a GitHub connection/);
     expect(store.getDetail(owner, v5.id).githubRefresh).toBe(false);
     vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-test-value");
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ state: "closed", merged: true, title: "Evaluator V5" }));

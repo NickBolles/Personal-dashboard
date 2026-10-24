@@ -698,6 +698,59 @@ export function suggestFiling(
     .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
 }
 
+// --- Work inbox (assigned GitHub issues, quick captures, unfiled conversations) ---
+
+export type InboxEntry = {
+  id: string;
+  source: "github_issue" | "capture";
+  title: string;
+  note: string;
+  url: string | null;
+  /** owner/repo for GitHub issues */
+  repo: string | null;
+  number: number | null;
+  /** why it's in the inbox */
+  reason: string;
+  createdAt: string;
+};
+export type InboxResponse = {
+  items: InboxEntry[];
+  /** unfiled conversations (needs hermes.chat; empty otherwise) */
+  conversations: UnfiledConversation[];
+  conversationsTotal: number;
+  unavailable: string[];
+  /** everything waiting: items + unfiled conversations */
+  count: number;
+};
+
+export const captureSchema = z.object({ text: z.string().trim().min(1, "Write something to capture").max(2000) }).strict();
+/** Accept an inbox entry: file it as a new Work item under `parentId` (null = Miscellaneous). */
+export const inboxAcceptSchema = z
+  .object({
+    parentId: id.nullable(),
+    title: z.string().trim().min(1).max(200).optional(),
+    /** how the issue relates to the new item (GitHub issues only) */
+    role: z.enum(["implementation", "reference"]).optional(),
+  })
+  .strict();
+export const dismissConversationSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
+
+// --- Today (the /work front door) ---
+
+export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
+export type TodayResponse = {
+  today: string;
+  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number };
+  /** 1–3 things to pick up again */
+  continue: TodayCard[];
+  /** awaiting validation, earliest due first */
+  proofDue: TodayCard[];
+  /** a merged PR and nothing to validate: waiting for you to settle */
+  readyToSettle: TodayCard[];
+  /** in-progress work whose target date passed */
+  overdue: TodayCard[];
+};
+
 // --- validation templates and overdue ---
 
 /** A validation is overdue when it's still pending and its due date has passed (local calendar day). */
