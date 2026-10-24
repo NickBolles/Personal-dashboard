@@ -70,6 +70,8 @@ export const WIDGET_KINDS = [
   "validation_overdue",
   "unfiled_conversations",
   "map_snapshot",
+  "kpis",
+  "status_lanes",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
@@ -84,7 +86,12 @@ export const WIDGET_LABELS: Record<WidgetKind, string> = {
   validation_overdue: "Validation overdue",
   unfiled_conversations: "Unfiled conversations",
   map_snapshot: "Map snapshot",
+  kpis: "Pulse",
+  status_lanes: "Status lanes",
 };
+
+/** Lanes of the "Status lanes" dashboard widget (a filterable overview, never navigation). */
+export const LANE_STATUSES: WorkStatus[] = ["exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "settled"];
 export const WIDGET_SIZES = ["sm", "md", "lg"] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
 
@@ -302,7 +309,9 @@ export type WidgetData =
   | { kind: "custom_html"; snapshot: WorkSnapshot | null }
   /** loaded by the widget itself from /api/work/conversations/unfiled (needs hermes.chat) */
   | { kind: "unfiled" }
-  | { kind: "map_snapshot"; graph: MapGraph | null };
+  | { kind: "map_snapshot"; graph: MapGraph | null }
+  | { kind: "kpis"; inProgress: number; awaitingValidation: number; overdue: number; inReview: number; readyToSettle: number; settled7d: number }
+  | { kind: "lanes"; lanes: { status: WorkStatus; count: number; items: WidgetItem[] }[] };
 
 export type DashboardWidget = { id: string; kind: WidgetKind; title: string; size: WidgetSize; position: number; config: WidgetConfig; data: WidgetData };
 export type DashboardResponse = {

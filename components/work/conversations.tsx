@@ -144,13 +144,15 @@ export function ConversationLinkDialog({ item, linkedHere, onClose }: { item: Wo
 }
 
 /** "Unfiled conversations": recent chats not linked to any work item, with one-click filing. */
-export function UnfiledPanel({ items }: { items: WorkItem[] }) {
+export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismissable?: boolean }) {
   const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled") });
   const [all, setAll] = useState(false);
   const [filing, setFiling] = useState<UnfiledConversation | null>(null);
   const file = useWorkMutation((v: { sessionId: string; itemId: string | null }) => api.post<{ itemId: string }>("/api/work/conversations/file", v), {
     ok: "Filed",
   });
+  // Hides it from the Work inbox; only the id is remembered (Hermes keeps the conversation).
+  const dismiss = useWorkMutation((sessionId: string) => api.post("/api/work/inbox/conversations/dismiss", { sessionId }), { ok: "Dismissed" });
   const list = q.data?.conversations ?? [];
   const shown = all ? list : list.slice(0, 5);
   return (
@@ -204,6 +206,11 @@ export function UnfiledPanel({ items }: { items: WorkItem[] }) {
                 >
                   File in Miscellaneous
                 </Button>
+                {dismissable ? (
+                  <Button size="sm" variant="ghost" onClick={() => dismiss.mutate(c.id)} aria-label={`Dismiss: ${c.title}`}>
+                    Dismiss
+                  </Button>
+                ) : null}
               </div>
             </li>
           );

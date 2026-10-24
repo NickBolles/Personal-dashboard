@@ -8,6 +8,7 @@ import type { SearchResponse, SearchResult } from "@/lib/search";
 import { moduleFor } from "@/lib/modules";
 import { cx, Spinner } from "@/components/ui";
 import { SearchIcon } from "@/components/icons";
+import { matchCommands, useCommands, type Command } from "@/components/navigation/commands";
 
 /** Any page can open search: window.dispatchEvent(new Event(OPEN_SEARCH_EVENT)). */
 export const OPEN_SEARCH_EVENT = "jarvis:search";
@@ -36,7 +37,11 @@ function useDebounced<T>(value: T, ms: number) {
 /**
  * Ctrl K / "/" search across everything the person can see: pages, Home cards,
  * calendar events, conversations, home devices, finance items (never amounts)
- * and, for admins, people. Arrow keys move, Enter opens, Escape closes.
+ * and, for admins, people. It is also the command palette: commands (Go to
+ * Today/Inbox/…, Capture to Inbox, Start focused work, Record validation,
+ * Continue in conversation) are listed first, filtered by what you type; the
+ * command dock's action map runs the same commands. Arrow keys move, Enter
+ * opens, Escape closes.
  */
 export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
@@ -53,6 +58,10 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     staleTime: 15_000,
   });
   const results = useMemo(() => (debounced ? (res.data?.results ?? []) : []), [res.data, debounced]);
+  const allCommands = useCommands();
+  const commands = useMemo(() => matchCommands(allCommands, q.trim()).filter((c) => c.id !== "search"), [allCommands, q]);
+  type Row = { kind: "command"; c: Command } | { kind: "result"; r: SearchResult };
+  const rows: Row[] = [...commands.map((c) => ({ kind: "command" as const, c })), ...results.map((r) => ({ kind: "result" as const, r }))];
 
   useEffect(() => {
     if (!open) return;
@@ -64,10 +73,11 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   }, [open]);
 
   if (!open) return null;
-  const go = (r: SearchResult | undefined) => {
-    if (!r) return;
+  const go = (row: Row | undefined) => {
+    if (!row) return;
     onClose();
-    router.push(r.href);
+    if (row.kind === "command") row.c.run();
+    else router.push(row.r.href);
   };
 
   return (
@@ -81,12 +91,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
           <input
             ref={input}
             role="combobox"
-            aria-expanded={results.length > 0}
+            aria-expanded={rows.length > 0}
             aria-controls={listId}
-            aria-activedescendant={results[active] ? `${listId}-${active}` : undefined}
+            aria-activedescendant={rows[active] ? `${listId}-${active}` : undefined}
             aria-autocomplete="list"
             aria-label="Search Jarvis"
-            placeholder="Search pages, events, conversations, devices…"
+            placeholder="Search, or type a command (“today”, “capture”, “validate”)…"
             className="min-h-14 w-full bg-transparent text-base outline-none"
             value={q}
             onChange={(e) => {
@@ -99,13 +109,13 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                 onClose();
               } else if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setActive((i) => Math.min(i + 1, results.length - 1));
+                setActive((i) => Math.min(i + 1, rows.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActive((i) => Math.max(i - 1, 0));
               } else if (e.key === "Enter") {
                 e.preventDefault();
-                go(results[active]);
+                go(rows[active]);
               }
             }}
           />
@@ -114,31 +124,41 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             Esc
           </button>
         </div>
-        <ul id={listId} role="listbox" aria-label="Results" className="max-h-[60vh] overflow-y-auto py-1">
-          {results.map((r, i) => (
+        <ul id={listId} role="listbox" aria-label="Commands and results" className="max-h-[60vh] overflow-y-auto py-1">
+          {rows.map((row, i) => (
             <li
-              key={r.id}
+              key={row.kind === "command" ? `cmd:${row.c.id}` : row.r.id}
               id={`${listId}-${i}`}
               role="option"
               aria-selected={i === active}
+              data-command={row.kind === "command" ? row.c.id : undefined}
               onMouseEnter={() => setActive(i)}
-              onClick={() => go(r)}
+              onClick={() => go(row)}
               className={cx("flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2", i === active && "bg-accent-soft")}
             >
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{r.title}</span>
-                {r.subtitle ? <span className="block truncate text-sm text-muted">{r.subtitle}</span> : null}
-              </span>
-              <span className="shrink-0 text-xs text-muted">
-                {KIND_LABEL[r.kind]}
-                {r.module !== "jarvis" && moduleFor(r.module) ? ` · ${moduleFor(r.module)!.label}` : ""}
-              </span>
+              {row.kind === "command" ? (
+                <>
+                  <span className="min-w-0 flex-1 truncate font-medium">{row.c.label}</span>
+                  <span className="shrink-0 text-xs text-muted">Command · {row.c.group}</span>
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{row.r.title}</span>
+                    {row.r.subtitle ? <span className="block truncate text-sm text-muted">{row.r.subtitle}</span> : null}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted">
+                    {KIND_LABEL[row.r.kind]}
+                    {row.r.module !== "jarvis" && moduleFor(row.r.module) ? ` · ${moduleFor(row.r.module)!.label}` : ""}
+                  </span>
+                </>
+              )}
             </li>
           ))}
         </ul>
         <div className="border-t border-line px-3 py-2 text-xs text-muted" role="status">
           {!debounced
-            ? "Type to search. ↑↓ to move, Enter to open."
+            ? "Type to search or filter commands. ↑↓ to move, Enter to open. Hold the dock orb (or Ctrl+.) for the action map."
             : res.isError
               ? `Search failed: ${(res.error as Error).message}`
               : res.data && !results.length

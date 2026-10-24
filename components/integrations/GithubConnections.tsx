@@ -149,7 +149,8 @@ function ConnectionRow({ c }: { c: PublicGithubConnection }) {
   const [confirm, setConfirm] = useState(false);
   const test = useGithubMutation(() => api.post<GithubTestResult>(`/api/github/connections/${encodeURIComponent(c.id)}/test`));
   const remove = useGithubMutation(() => api.del(`/api/github/connections/${encodeURIComponent(c.id)}`), { ok: "Token removed" });
-  const last = test.data ?? c.lastTest;
+  // The saved result (refreshed after Test, cleared when the token is replaced).
+  const last = c.lastTest;
   return (
     <li className="rounded-lg border border-line p-3" data-testid="gh-connection">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -361,6 +362,10 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
 function PollSettings({ s }: { s: GithubSettingsResponse }) {
   const [minutes, setMinutes] = useState(String(s.pollMinutes));
   const save = useGithubMutation(() => api.patch("/api/github", { pollMinutes: Number(minutes) }), { ok: "Saved" });
+  const now = useGithubMutation(
+    () => api.post<{ links: { checked: number; changed: number }; issues: { synced: number; errors: number } }>("/api/github/poll"),
+    { onSuccess: () => undefined },
+  );
   return (
     <section aria-labelledby="gh-poll" className="space-y-2">
       <h3 id="gh-poll" className="font-semibold">
@@ -390,7 +395,16 @@ function PollSettings({ s }: { s: GithubSettingsResponse }) {
         <Button type="submit" size="sm" busy={save.isPending} disabled={minutes === String(s.pollMinutes) || minutes === ""}>
           Save
         </Button>
+        <Button type="button" size="sm" busy={now.isPending} disabled={!s.connections.length && !s.envToken} onClick={() => now.mutate(undefined)}>
+          Check now
+        </Button>
       </form>
+      {now.data ? (
+        <p role="status" className="text-sm" data-testid="gh-poll-result">
+          Read {now.data.links.checked} linked PRs/issues ({now.data.links.changed} changed); {now.data.issues.synced} assigned issues
+          {now.data.issues.errors ? `, ${now.data.issues.errors} failed` : ""}.
+        </p>
+      ) : null}
       <p className="text-xs text-muted">
         0 turns it off. At most 50 links per check, each at most every 5 minutes; Jarvis waits when GitHub rate-limits.{" "}
         {s.poller.running ? "Running" : "Not running"}

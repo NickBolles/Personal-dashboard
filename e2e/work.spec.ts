@@ -99,7 +99,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await page.getByLabel("GitHub PR URL").fill("https://github.com/NickBolles/momentum-bets/pull/128");
   await page.getByRole("button", { name: "Add link" }).click();
   await expect(page.getByText("NickBolles/momentum-bets#128", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Set JARVIS_GITHUB_TOKEN/)).toBeVisible();
+  await expect(page.getByText(/Add a GitHub token \(Settings → Connections → GitHub\)/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Mark merged" }).click();
   await expect(badge("awaiting_validation")).toBeVisible();
@@ -313,17 +313,22 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect(links.first()).toContainText("Last activity");
   await expect(links.first().getByRole("link", { name: /Open conversation/ })).toHaveAttribute("href", `/chat/${picked.id}`);
 
-  // Unfiled conversations: deterministic suggestion → one-click filing.
+  // Unfiled conversations live in the Work inbox (phase 3): deterministic suggestion → one-click filing.
+  await page
+    .getByRole("navigation", { name: "Work views" })
+    .getByRole("button", { name: /^Inbox/ })
+    .click();
   const inbox = page.getByRole("region", { name: "Unfiled conversations" });
   await expect(inbox).toContainText(`V5 evaluator hydration notes ${nonce}`);
   await expect(inbox).not.toContainText(`Picker check ${nonce}`);
   await inbox.getByRole("button", { name: `File under V5 evaluator contract: V5 evaluator hydration notes ${nonce}` }).click();
   await expect(inbox).not.toContainText(`V5 evaluator hydration notes ${nonce}`);
-  await expect(page.getByRole("article")).toContainText(`V5 evaluator hydration notes ${nonce}`);
   await inbox.getByRole("button", { name: `File in Miscellaneous: Loose thought ${nonce}` }).click();
   await expect(inbox).not.toContainText(`Loose thought ${nonce}`);
   expect(unfiled.id).toBeTruthy();
   expect(loose.id).toBeTruthy();
+  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await expect(page.getByRole("article")).toContainText(`V5 evaluator hydration notes ${nonce}`);
 
   // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
   await page.getByRole("button", { name: "Continue in new conversation" }).click();

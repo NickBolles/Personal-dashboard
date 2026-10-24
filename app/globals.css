@@ -171,7 +171,8 @@
 
 @media (min-width: 1024px) {
   .pb-nav {
-    padding-bottom: 2rem;
+    /* room for the floating command dock */
+    padding-bottom: 6.5rem;
   }
 }
 
@@ -327,4 +328,44 @@ details.jv-why > summary::-webkit-details-marker {
 
 .typing-dot {
   animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+/*
+ * Command dock (components/navigation/CommandDock.tsx): the orb and the radial
+ * action map. Motion is short; prefers-reduced-motion turns it off.
+ */
+.dock-orb {
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6b3fc4));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
+  -webkit-touch-callout: none;
+}
+.dock-orb:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+.dock-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  border-top-color: var(--accent);
+  opacity: 0;
+}
+.dock-charging .dock-ring {
+  opacity: 1;
+  animation: dock-spin 0.32s linear forwards;
+}
+@keyframes dock-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.dock-petal {
+  animation: dock-petal-in 0.16s ease-out both;
+}
+@keyframes dock-petal-in {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
 }

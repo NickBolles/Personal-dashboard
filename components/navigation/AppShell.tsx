@@ -10,6 +10,9 @@ import { GearIcon, MoreIcon, PanelIcon, SearchIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
+import { CommandDock } from "./CommandDock";
+import { OPEN_CAPTURE_EVENT } from "./commands";
+import { CaptureDialog } from "@/components/work/inbox";
 
 const MORE: Dest = {
   key: "more",
@@ -81,6 +84,13 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
   const destinations = DESTINATIONS.filter((d) => allowed(d, capabilities));
   const [searchOpen, setSearchOpen] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const canWork = capabilities.includes("work.use");
+  useEffect(() => {
+    const onCapture = () => setCapturing(true);
+    window.addEventListener(OPEN_CAPTURE_EVENT, onCapture);
+    return () => window.removeEventListener(OPEN_CAPTURE_EVENT, onCapture);
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -206,14 +216,38 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         {children}
       </main>
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
+
+      {/* Desktop command dock: centre-bottom of the content column. Hidden on conversation
+          pages, where the composer owns the bottom edge (⌘/Ctrl+. and ⌘/Ctrl+K still work there). */}
+      {!pathname.startsWith("/chat/") ? (
+        <div
+          role="toolbar"
+          aria-label="Command dock"
+          className="pointer-events-none fixed bottom-5 z-40 hidden -translate-x-1/2 lg:flex"
+          style={{ left: `calc(50% + ${collapsed ? 36 : 130}px)` }}
+        >
+          <span className="pointer-events-auto">
+            <CommandDock variant="float" />
+          </span>
+        </div>
+      ) : null}
 
       {/* Mobile bottom bar: fixed four items */}
       <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <ul className={cx("mx-auto grid max-w-xl overflow-hidden", primary.length === 3 ? "grid-cols-4" : "grid-cols-3")}>
-          {[...primary, MORE].map((d) => {
+        <ul className={cx("mx-auto grid max-w-xl overflow-hidden", primary.length === 3 ? "grid-cols-5" : "grid-cols-4")}>
+          {[...primary, MORE].map((d, i, all) => {
             const active = d.key === "more" ? MORE.match(pathname) && !primary.some((p) => p.match(pathname)) : d.match(pathname);
             const Icon = d.icon;
-            return (
+            // The command dock is the centre item of the bar (never overlapping it).
+            const dock =
+              i === Math.floor(all.length / 2) ? (
+                <li key="dock" className="flex min-h-[60px] items-center justify-center">
+                  <CommandDock variant="bar" />
+                </li>
+              ) : null;
+            return [
+              dock,
               <li key={d.key}>
                 <Link
                   href={d.key === "more" ? "/more" : hrefFor(d)}
@@ -230,8 +264,8 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                   </span>
                   <span className="block max-w-full truncate px-1">{d.label}</span>
                 </Link>
-              </li>
-            );
+              </li>,
+            ];
           })}
         </ul>
       </nav>

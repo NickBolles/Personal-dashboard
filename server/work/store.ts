@@ -972,6 +972,8 @@ export function applyLinkState(
     const { link, item } = ownedLink(user.id, linkId, tx);
     if (link.kind !== "github_pr" && link.kind !== "github_issue") throw new HttpError(400, "not_github", "Only GitHub links have a state");
     if (link.externalState === state) return null;
+    // A merged PR is final on GitHub: a (possibly stale) readback never un-merges it.
+    if (via === "github" && link.kind === "github_pr" && link.externalState === "merged") return null;
     tx.update(schema.workLinks).set({ externalState: state, stateChangedAt: nowIso() }).where(eq(schema.workLinks.id, linkId)).run();
     const number = Number(link.targetId?.split("#")[1]) || null;
     const label = `${link.kind === "github_pr" ? "PR" : "Issue"} #${number ?? "?"}`;
@@ -1023,6 +1025,9 @@ export async function readBack(owner: { id: string }, link: typeof schema.workLi
     const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
     if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
     db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
+    // Changed meanwhile (a webhook or a manual mark landed while we were reading)? Keep the newer state.
+    const now = db.select({ s: schema.workLinks.externalState }).from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get();
+    if (now && now.s !== link.externalState) return toLink(db.select().from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get()!);
     return applyLinkState(owner.id, actor, link.id, remote.state, correlationId, "github");
   } catch (e) {
     getDb()

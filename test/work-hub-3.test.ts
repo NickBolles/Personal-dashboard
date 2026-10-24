@@ -29,6 +29,7 @@ import * as connections from "@/server/work/github-connections";
 import { pollTick, pollerConfigured } from "@/server/work/github-poller";
 import * as inbox from "@/server/work/inbox";
 import { today } from "@/server/work/today";
+import { addWidget, getDashboard } from "@/server/work/dashboard";
 import * as githubRoute from "@/app/api/github/route";
 import * as connectionsRoute from "@/app/api/github/connections/route";
 import * as connectionRoute from "@/app/api/github/connections/[id]/route";
@@ -743,5 +744,16 @@ describe("Work inbox and Today", () => {
     expect((await call(todayRoute.GET as H)).status).toBe(200);
     expect((await call(todayRoute.GET as H, { user: kid })).status).toBe(403);
     expect(today(other).kpis).toEqual({ inProgress: 0, awaitingValidation: 0, overdue: 0, mergedNotSettled: 0 });
+
+    // Command Center dashboard widgets: Pulse (KPIs) and Status lanes (overview/filter, scoped like the others).
+    const pulse = addWidget(u, { kind: "kpis" }, cid).widgets.at(-1)!;
+    const lanes = addWidget(u, { kind: "status_lanes", config: { rootId: mb.id } }, cid).widgets.at(-1)!;
+    expect([pulse.size, lanes.size]).toEqual(["lg", "lg"]);
+    const d = getDashboard(owner);
+    expect(d.widgets.find((w) => w.id === pulse.id)!.data).toMatchObject({ kind: "kpis", inProgress: 1, awaitingValidation: 1, readyToSettle: 1, overdue: 1 });
+    const l = d.widgets.find((w) => w.id === lanes.id)!.data as { kind: "lanes"; lanes: { status: string; count: number; items: { title: string }[] }[] };
+    expect(l.lanes.map((x) => x.status)).toEqual(["exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "settled"]);
+    expect(l.lanes.find((x) => x.status === "ready_to_settle")).toMatchObject({ count: 1, items: [{ title: "Docs" }] });
+    expect(l.lanes.find((x) => x.status === "in_progress")!.items.map((i) => i.title)).toEqual(["V5"]);
   });
 });
