@@ -268,7 +268,15 @@ export function Dialog({
           </div>
         ) : null}
         <div className="mt-4">{children}</div>
-        {footer ? <div className="mt-5 flex flex-wrap justify-end gap-2">{footer}</div> : null}
+        {/* Phones: the primary action stays reachable (sticky) however long the form is. */}
+        {footer ? (
+          <div
+            data-dialog-footer
+            className="sticky -bottom-5 z-10 -mx-5 mt-5 -mb-5 flex flex-wrap justify-end gap-2 border-t border-line bg-surface px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0"
+          >
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -384,7 +392,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="polite" aria-atomic="true" className="sr-only">
         {announcement}
       </div>
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-24">
         {toasts.map((t) => (
           <div
             key={t.id}

@@ -11,8 +11,11 @@ import { WorkTree } from "@/components/work/WorkTree";
 import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
-import { ConversationLinkDialog, UnfiledPanel, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
+import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
+import { TodayView, useInbox } from "@/components/work/today";
+import { CaptureDialog, InboxView } from "@/components/work/inbox";
 import {
+  areaValidationDefault,
   COMPARATORS,
   handoffMarkdown,
   todayIso,
@@ -38,12 +41,24 @@ function useItems(archived: boolean) {
   return useQuery({ queryKey: ["work", "items", archived], queryFn: () => api.get<{ items: WorkItem[] }>(`/api/work/items${archived ? "?archived=1" : ""}`) });
 }
 
-export function WorkView({ initialItem }: { initialItem?: string }) {
+export type WorkViewKind = "today" | "inbox";
+type View = { kind: "today" } | { kind: "inbox" } | { kind: "item"; id: string; action?: string };
+
+/**
+ * /work (Command Center): the left rail holds Today, Inbox and the area tree;
+ * the centre is Today (the front door), the Inbox, or an item's workspace. On
+ * phones the order is Today/Inbox switch → content → tree, so what you came
+ * for is first and the tree is one scroll away.
+ */
+export function WorkView({ initialItem, initialView, initialAction }: { initialItem?: string; initialView?: WorkViewKind; initialAction?: string }) {
   const [archived, setArchived] = useState(false);
   const items = useItems(archived);
-  const [selected, setSelected] = useState<string | null>(initialItem ?? null);
+  const [view, setView] = useState<View>(
+    initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView === "inbox" ? "inbox" : "today" },
+  );
   const [newArea, setNewArea] = useState(false);
-  const canChat = useAccess().can("hermes.chat");
+  const [capturing, setCapturing] = useState(false);
+  const inbox = useInbox();
   const [undo, setUndo] = useState<UndoOp | null>(null);
   const clearUndo = useCallback(() => setUndo(null), []);
   const onOp = useCallback((op: UndoOp | null | undefined) => {
@@ -55,15 +70,44 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
     { onSuccess: (r) => onOp(r.op) },
   );
 
-  const select = (id: string) => {
-    setSelected(id);
+  const go = (next: View) => {
+    setView(next);
     const url = new URL(window.location.href);
-    url.searchParams.set("item", id);
+    url.searchParams.delete("item");
+    url.searchParams.delete("view");
+    url.searchParams.delete("do");
+    if (next.kind === "item") url.searchParams.set("item", next.id);
+    else if (next.kind === "inbox") url.searchParams.set("view", "inbox");
     window.history.replaceState(null, "", url);
+    // Phones: the content sits above the tree, so bring it into view.
+    if (window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
   };
+  const select = (id: string) => go({ kind: "item", id });
+  const openWith = (id: string, action?: string) => go({ kind: "item", id, action });
 
   const list = items.data?.items ?? [];
-  const current = selected && list.some((i) => i.id === selected) ? selected : null;
+  const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
+  const inboxCount = inbox.data?.count;
+  const railBtn = (kind: WorkViewKind, label: string, count?: number) => {
+    const active = view.kind === kind;
+    return (
+      <li>
+        <button
+          type="button"
+          aria-current={active ? "page" : undefined}
+          onClick={() => go({ kind })}
+          className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-sm font-medium ${active ? "bg-accent-soft text-accent" : "text-text hover:bg-surface-2"}`}
+        >
+          <span>{label}</span>
+          {count ? (
+            <span className="rounded-full bg-accent px-2 text-xs leading-5 font-semibold text-accent-contrast" aria-label={`${count} waiting`}>
+              {count}
+            </span>
+          ) : null}
+        </button>
+      </li>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
@@ -71,16 +115,40 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
         title="Work"
         subtitle="Areas, projects and threads of AI-assisted work. Private to you."
         actions={
-          <Button size="sm" variant="primary" onClick={() => setNewArea(true)}>
-            New area
-          </Button>
+          <>
+            <Button size="sm" onClick={() => setCapturing(true)}>
+              Capture
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => setNewArea(true)}>
+              New area
+            </Button>
+          </>
         }
       />
       {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[minmax(260px,320px)_1fr]">
-        <div className="min-w-0 space-y-4 self-start">
-          <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
-            <h2 className="sr-only">Work tree</h2>
+      <div className="grid gap-4 lg:grid-cols-[minmax(260px,320px)_1fr] lg:grid-rows-[auto_1fr]">
+        <nav aria-label="Work views" className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <ul className="card grid grid-cols-2 gap-1 p-1 lg:grid-cols-1">
+            {railBtn("today", "Today")}
+            {railBtn("inbox", "Inbox", inboxCount)}
+          </ul>
+        </nav>
+        <div id="work-content" className="min-w-0 scroll-mt-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          {view.kind === "today" ? (
+            <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
+          ) : view.kind === "inbox" ? (
+            <InboxView items={list} onOpenItem={select} />
+          ) : current ? (
+            <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} initialAction={view.kind === "item" ? view.action : undefined} />
+          ) : items.isPending || items.isFetching ? (
+            <Spinner label="Loading…" />
+          ) : (
+            <Empty title="That item isn't here">It may be archived or belong to someone else.</Empty>
+          )}
+        </div>
+        <div className="min-w-0 self-start lg:col-start-1 lg:row-start-2">
+          <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto">
+            <h2 className="mb-1 px-1 text-xs font-medium tracking-wide text-muted uppercase">Areas</h2>
             {items.isPending ? (
               <Spinner label="Loading work…" />
             ) : (
@@ -91,17 +159,10 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
               Show archived
             </label>
           </Card>
-          {canChat && items.data ? <UnfiledPanel items={list.filter((i) => !i.archived)} /> : null}
-        </div>
-        <div className="min-w-0">
-          {current ? (
-            <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} />
-          ) : (
-            <Empty title="Pick something from the tree">Or start a new area. Items without a home go to Miscellaneous.</Empty>
-          )}
         </div>
       </div>
       <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
+      {capturing ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
       {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
   );
@@ -179,10 +240,25 @@ type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settl
 
 type OnOp = (op: UndoOp | null | undefined) => void;
 
-function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem[]; onSelect: (id: string) => void; onOp: OnOp }) {
+function ItemDetail({
+  id,
+  items,
+  onSelect,
+  onOp,
+  initialAction,
+}: {
+  id: string;
+  items: WorkItem[];
+  onSelect: (id: string) => void;
+  onOp: OnOp;
+  /** from the command palette / Today: packet | continue | settle | validate */
+  initialAction?: string;
+}) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const [tab, setTab] = useState<"overview" | "activity" | "children">("overview");
-  const [dialog, setDialog] = useState<DialogKind>(null);
+  const [dialog, setDialog] = useState<DialogKind>(
+    initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
+  );
   const patch = useWorkMutation((body: Record<string, unknown>) => api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}`, body), {
     onSuccess: (r) => onOp(r.op),
     ok: "Saved",
@@ -194,6 +270,7 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
   const close = () => setDialog(null);
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
+  if (dialog === "continue" && !canChat) setDialog(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
 
   if (q.isPending) return <Spinner label="Loading…" />;
@@ -275,6 +352,20 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
             />
           </div>
         </div>
+        {item.status === "ready_to_settle" ? (
+          <div
+            role="status"
+            data-testid="settle-prompt"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-ok bg-ok-soft p-3 text-sm"
+          >
+            <span className="min-w-0">
+              <strong>PR merged — settle?</strong> Nothing needs validating. Jarvis never settles on its own: settle when you&apos;re satisfied.
+            </span>
+            <Button size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed}>
+              Settle now
+            </Button>
+          </div>
+        ) : null}
         <div className="rounded-[10px] bg-surface-2 p-3">
           <p className="text-xs font-medium tracking-wide text-muted uppercase">Next action</p>
           <p className="mt-0.5 break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
@@ -340,9 +431,9 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-4">
         {tab === "overview" ? (
           <>
-            <EditItem key={item.updatedAt} item={item} />
+            <EditItem key={item.updatedAt} item={item} validationDefault={d.validationDefault} />
             <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
-            <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
+            <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
             <Dependencies d={d} items={items} onSelect={onSelect} />
             <Links d={d} canChat={canChat} />
           </>
@@ -394,24 +485,36 @@ function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem
   );
 }
 
-function EditItem({ item }: { item: WorkItem }) {
+function EditItem({ item, validationDefault }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] }) {
+  const isArea = item.parentId === null;
   const [f, setF] = useState({
     title: item.title,
     summary: item.summary,
     nextAction: item.nextAction,
     startDate: item.startDate ?? "",
     targetDate: item.targetDate ?? "",
+    validationDefault: (item.validationDefault ?? "") as "" | "required" | "optional",
   });
   const save = useWorkMutation(
-    () => api.patch(`/api/work/items/${encodeURIComponent(item.id)}`, { ...f, startDate: f.startDate || null, targetDate: f.targetDate || null }),
+    () => {
+      const { validationDefault: vd, ...rest } = f;
+      return api.patch(`/api/work/items/${encodeURIComponent(item.id)}`, {
+        ...rest,
+        startDate: f.startDate || null,
+        targetDate: f.targetDate || null,
+        ...(isArea && vd !== (item.validationDefault ?? "") ? { validationDefault: vd || null } : {}),
+      });
+    },
     { ok: "Saved" },
   );
+  const ruleDefault = areaValidationDefault({ ...item, validationDefault: null, systemKey: item.builtIn ? "misc" : null });
   const dirty =
     f.title !== item.title ||
     f.summary !== item.summary ||
     f.nextAction !== item.nextAction ||
     f.startDate !== (item.startDate ?? "") ||
-    f.targetDate !== (item.targetDate ?? "");
+    f.targetDate !== (item.targetDate ?? "") ||
+    (isArea && f.validationDefault !== (item.validationDefault ?? ""));
   return (
     <Card>
       <h3 className="mb-3 font-semibold">Details</h3>
@@ -439,6 +542,29 @@ function EditItem({ item }: { item: WorkItem }) {
             <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
           </Field>
         </div>
+        {isArea ? (
+          <Field
+            id="wi-vdefault"
+            label="Validation for new packets"
+            hint="What “Start focused work” preselects for everything in this area. You can override it per packet."
+          >
+            <select
+              id="wi-vdefault"
+              className={inputCls}
+              value={f.validationDefault}
+              onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
+            >
+              <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
+              <option value="required">Required</option>
+              <option value="optional">Optional</option>
+            </select>
+          </Field>
+        ) : (
+          <p className="text-xs text-muted" data-testid="validation-default-note">
+            New packets here {validationDefault.value === "required" ? "require" : "don't require"} validation by default
+            {validationDefault.areaTitle ? ` (set on ${validationDefault.areaTitle})` : ""}.
+          </p>
+        )}
         <div className="flex justify-end">
           <Button type="submit" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
             Save details
@@ -532,13 +658,13 @@ function PacketRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () => void; onReopen: () => void }) {
+function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; onSettle: () => void; onReopen: () => void; focusRecord?: boolean }) {
   const [adding, setAdding] = useState(false);
   const [templates, setTemplates] = useState(false);
   const failed = d.validations.some((v) => v.status === "fail");
   const overdue = d.validations.filter((v) => v.overdue).length;
   return (
-    <Card>
+    <Card id="work-validations" className="scroll-mt-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold">Validation</h3>
         <div className="flex flex-wrap gap-2">
@@ -577,8 +703,19 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
       {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
       {d.validations.length ? (
         <ul className="space-y-3">
-          {d.validations.map((v) => (
-            <ValidationRow key={v.id} v={v} />
+          {d.validations.map((v, i) => (
+            <ValidationRow
+              key={v.id}
+              v={v}
+              focus={
+                !!focusRecord &&
+                i ===
+                  Math.max(
+                    0,
+                    d.validations.findIndex((x) => x.status === "pending" || x.status === "fail"),
+                  )
+              }
+            />
           ))}
         </ul>
       ) : (
@@ -807,7 +944,7 @@ function TemplatesDialog({ itemId, onClose }: { itemId: string; onClose: () => v
 
 const V_TONE = { pending: "neutral", pass: "ok", fail: "danger", waived: "warn" } as const;
 
-function ValidationRow({ v }: { v: WorkValidation }) {
+function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   const [observed, setObserved] = useState(v.observed?.toString() ?? "");
   const [evidence, setEvidence] = useState(v.evidenceUrl ?? "");
   const [waiving, setWaiving] = useState(false);
@@ -852,6 +989,15 @@ function ValidationRow({ v }: { v: WorkValidation }) {
           </label>
           <input
             id={`obs-${v.id}`}
+            ref={(el) => {
+              // "Record result" from Today or the command palette lands here.
+              if (el && focus && document.activeElement !== el && !el.dataset.focused) {
+                el.dataset.focused = "1";
+                el.scrollIntoView({ block: "center" });
+                el.focus({ preventScroll: true });
+              }
+            }}
+            inputMode="decimal"
             aria-label={`Observed value for ${v.metric}`}
             type="number"
             step="any"
@@ -994,10 +1140,13 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
       )}
       {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
         <p className="mt-2 text-xs text-muted">
-          Set JARVIS_GITHUB_TOKEN on the server to refresh PR state from GitHub (read-only). Until then, mark it yourself.
+          Add a GitHub token (Settings → Connections → GitHub) to refresh PR state from GitHub (read-only). Until then, mark it yourself.
         </p>
       ) : d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
-        <p className="mt-2 text-xs text-muted">PR and issue states refresh from GitHub (read-only) when you open this item, at most every 5 minutes.</p>
+        <p className="mt-2 text-xs text-muted">
+          PR and issue states refresh from GitHub (read-only) when you open this item, on the scheduled check and from webhooks, at most every 5 minutes per
+          link.
+        </p>
       ) : null}
     </Card>
   );
@@ -1323,8 +1472,10 @@ function PacketDialog({ open, onClose, d }: { open: boolean; onClose: () => void
     context: prev?.context ?? "",
     nextAction: d.item.nextAction,
     status: (d.item.status === "ready" ? "ready" : "in_progress") as "ready" | "in_progress",
-    validationRequired: prev?.validationRequired ?? true,
-    noValidationReason: prev?.noValidationReason ?? "",
+    // First packet: the area's default; revisions keep what the previous packet said.
+    validationRequired: prev?.validationRequired ?? d.validationDefault.value === "required",
+    noValidationReason:
+      prev?.noValidationReason ?? (d.validationDefault.value === "optional" ? `Validation is optional in ${d.validationDefault.areaTitle ?? "this area"}` : ""),
   });
   const [f, setF] = useState(init);
   const save = useWorkMutation(
@@ -1400,6 +1551,10 @@ function PacketDialog({ open, onClose, d }: { open: boolean; onClose: () => void
           <input type="checkbox" checked={f.validationRequired} onChange={(e) => setF({ ...f, validationRequired: e.target.checked })} />
           Validation required before settling
         </label>
+        <p className="-mt-2 text-xs text-muted">
+          Default in {d.validationDefault.areaTitle ?? "this area"}: {d.validationDefault.value}
+          {d.validationDefault.explicit ? " (set on the area)" : ""}.
+        </p>
         {!f.validationRequired ? (
           <Field id="pk-novalidation" label="Why no validation is needed">
             <input

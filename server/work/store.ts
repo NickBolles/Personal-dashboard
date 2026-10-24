@@ -12,6 +12,7 @@ import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
 import {
   applyTemplate,
+  areaValidationDefault,
   isClosed,
   isValidationOverdue,
   parseGithubUrl,
@@ -99,6 +100,7 @@ export function toItem(r: ItemRow): WorkItem {
     settledReason: r.settledReason,
     archived: r.archived,
     builtIn: !!r.systemKey,
+    validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -293,6 +295,23 @@ function validationsOf(itemId: string, db: Db = getDb()) {
   return db.select().from(schema.workValidations).where(eq(schema.workValidations.itemId, itemId)).orderBy(asc(schema.workValidations.createdAt)).all();
 }
 
+/** The top-level area an item lives under (itself for an area). */
+function areaOf(row: ItemRow, byId: Map<string, ItemRow>): ItemRow | null {
+  let cur: ItemRow | undefined = row;
+  for (let n = 0; cur && cur.parentId && n < 100; n++) cur = byId.get(cur.parentId);
+  return cur && !cur.parentId ? cur : null;
+}
+
+function validationDefaultFor(row: ItemRow, byId: Map<string, ItemRow>): WorkDetail["validationDefault"] {
+  const area = areaOf(row, byId);
+  return {
+    value: areaValidationDefault(area),
+    explicit: area?.validationDefault === "required" || area?.validationDefault === "optional",
+    areaId: area?.id ?? null,
+    areaTitle: area?.title ?? null,
+  };
+}
+
 export function getDetail(userId: string, id: string): WorkDetail {
   const db = getDb();
   const row = ownedItem(userId, id, db);
@@ -327,6 +346,7 @@ export function getDetail(userId: string, id: string): WorkDetail {
       parentTitle: l.parentId ? (byId.get(l.parentId)?.title ?? null) : null,
     })),
     settle: settleGate(packets[0] ?? null, validations as { status: WorkValidation["status"] }[]),
+    validationDefault: validationDefaultFor(row, byId),
     githubRefresh: githubRefreshEnabled(),
     ...dependencyRefs(userId, id, db, byId),
   };
@@ -394,6 +414,8 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
   const result = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey && (fields.archived || (fields.kind && fields.kind !== "area"))) throw new HttpError(409, "built_in", "Miscellaneous is built in");
+    if (fields.validationDefault !== undefined && row.parentId !== null)
+      throw new HttpError(400, "not_area", "The validation default is an area setting; change it on the area");
     checkDates(fields.startDate === undefined ? row.startDate : fields.startDate, fields.targetDate === undefined ? row.targetDate : fields.targetDate);
     const nextAction = fields.nextAction ?? row.nextAction;
     if ((row.status === "ready" || row.status === "in_progress") && !status && !nextAction.trim())
@@ -422,6 +444,11 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       event(tx, id, user.id, {
         kind: "dates",
         reason: `Dates: start ${row.startDate ?? "—"} → ${start ?? "—"}, target ${row.targetDate ?? "—"} → ${target ?? "—"}`,
+      });
+    if (fields.validationDefault !== undefined && fields.validationDefault !== row.validationDefault)
+      event(tx, id, user.id, {
+        kind: "edit",
+        reason: `Validation default: ${fields.validationDefault ?? `by rule (${areaValidationDefault({ ...row, validationDefault: null })})`}`,
       });
     if (fields.archived !== undefined && fields.archived !== row.archived) {
       event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
@@ -758,6 +785,12 @@ export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof
     const existing = tx.select({ version: schema.workPackets.version }).from(schema.workPackets).where(eq(schema.workPackets.itemId, id)).all();
     const version = nextPacketVersion(existing);
     const pid = newId();
+    // Omitted → the area's default (Miscellaneous/Home optional, others required, or the area's own setting).
+    const vd = validationDefaultFor(row, new Map(allRows(user.id, tx).map((r) => [r.id, r])));
+    const validationRequired = body.validationRequired ?? vd.value === "required";
+    const noValidationReason = validationRequired
+      ? null
+      : body.noValidationReason?.trim() || `Validation is optional in ${vd.areaTitle ?? "this area"} (area default)`;
     tx.insert(schema.workPackets)
       .values({
         id: pid,
@@ -770,8 +803,8 @@ export function createPacket(user: CurrentUser, id: string, body: z.infer<typeof
         decisions: body.decisions,
         openQuestions: body.openQuestions,
         context: body.context,
-        validationRequired: body.validationRequired,
-        noValidationReason: body.validationRequired ? null : (body.noValidationReason?.trim() ?? null),
+        validationRequired,
+        noValidationReason,
         createdBy: user.id,
         createdAt: nowIso(),
       })
@@ -918,14 +951,33 @@ export async function continueInConversation(user: CurrentUser, itemId: string, 
 
 /** Apply a PR/issue state change (manual or read back from GitHub), including merge handling. */
 export function setLinkState(user: CurrentUser, linkId: string, state: ExternalState, correlationId: string, via: "manual" | "github" = "manual") {
+  return applyLinkState(user.id, user.id, linkId, state, correlationId, via);
+}
+
+/**
+ * setLinkState for a link owned by `ownerId`, acted on by `actor` (the person,
+ * or "github" for the poller and webhooks). Idempotent: an unchanged state is
+ * a no-op, so a merge transition applies exactly once whoever sees it first.
+ */
+export function applyLinkState(
+  ownerId: string,
+  actor: string,
+  linkId: string,
+  state: ExternalState,
+  correlationId: string,
+  via: "manual" | "github" = "manual",
+) {
+  const user = { id: ownerId };
   const outcome = getDb().transaction((tx) => {
     const { link, item } = ownedLink(user.id, linkId, tx);
     if (link.kind !== "github_pr" && link.kind !== "github_issue") throw new HttpError(400, "not_github", "Only GitHub links have a state");
     if (link.externalState === state) return null;
+    // A merged PR is final on GitHub: a (possibly stale) readback never un-merges it.
+    if (via === "github" && link.kind === "github_pr" && link.externalState === "merged") return null;
     tx.update(schema.workLinks).set({ externalState: state, stateChangedAt: nowIso() }).where(eq(schema.workLinks.id, linkId)).run();
     const number = Number(link.targetId?.split("#")[1]) || null;
     const label = `${link.kind === "github_pr" ? "PR" : "Issue"} #${number ?? "?"}`;
-    event(tx, item.id, user.id, {
+    event(tx, item.id, actor, {
       kind: state === "merged" ? "merged" : state === "closed" ? "closed" : "link",
       reason: `${label} ${state}${via === "github" ? " (read from GitHub)" : ""}`,
       source: via,
@@ -944,12 +996,12 @@ export function setLinkState(user: CurrentUser, linkId: string, state: ExternalS
       .set({ ...patch, updatedAt: nowIso() })
       .where(eq(T.id, item.id))
       .run();
-    event(tx, item.id, user.id, { kind: "status", from: item.status, to: plan.status, reason, source: via });
+    event(tx, item.id, actor, { kind: "status", from: item.status, to: plan.status, reason, source: via });
     return { itemId: item.id, transition: { from: item.status, to: plan.status, reason } };
   });
-  audit({ actor: user.id, action: "work.link_state", source: "work", sourceRecord: linkId, result: "ok", correlationId, detail: { state, via } });
+  if (outcome) audit({ actor, action: "work.link_state", source: "work", sourceRecord: linkId, result: "ok", correlationId, detail: { state, via } });
   if (outcome?.transition)
-    audit({ actor: user.id, action: "work.status", source: "work", sourceRecord: outcome.itemId, result: "ok", correlationId, detail: outcome.transition });
+    audit({ actor, action: "work.status", source: "work", sourceRecord: outcome.itemId, result: "ok", correlationId, detail: outcome.transition });
   return toLink(ownedLink(user.id, linkId).link);
 }
 
@@ -964,7 +1016,7 @@ export function removeLink(user: CurrentUser, linkId: string, correlationId: str
 }
 
 /** Read one PR/issue from GitHub (read-only) and apply it through the merge rules. */
-async function readBack(user: CurrentUser, link: typeof schema.workLinks.$inferSelect, correlationId: string) {
+export async function readBack(owner: { id: string }, link: typeof schema.workLinks.$inferSelect, correlationId: string, actor = owner.id) {
   const ref = parseGithubUrl(link.url ?? "");
   if (!ref) throw new HttpError(400, "github_url", "Not a GitHub link");
   try {
@@ -973,7 +1025,10 @@ async function readBack(user: CurrentUser, link: typeof schema.workLinks.$inferS
     const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
     if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
     db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
-    return setLinkState(user, link.id, remote.state, correlationId, "github");
+    // Changed meanwhile (a webhook or a manual mark landed while we were reading)? Keep the newer state.
+    const now = db.select({ s: schema.workLinks.externalState }).from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get();
+    if (now && now.s !== link.externalState) return toLink(db.select().from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get()!);
+    return applyLinkState(owner.id, actor, link.id, remote.state, correlationId, "github");
   } catch (e) {
     getDb()
       .update(schema.workLinks)
@@ -989,7 +1044,7 @@ export async function refreshLink(user: CurrentUser, linkId: string, correlation
   const { link } = ownedLink(user.id, linkId);
   if ((link.kind !== "github_pr" && link.kind !== "github_issue") || !link.url)
     throw new HttpError(400, "not_github", "Only GitHub pull requests and issues can be refreshed");
-  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Set JARVIS_GITHUB_TOKEN to refresh from GitHub");
+  if (!githubRefreshEnabled()) throw new HttpError(409, "github_not_configured", "Add a GitHub connection (Settings → Connections) to refresh from GitHub");
   return readBack(user, link, correlationId);
 }
 

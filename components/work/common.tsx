@@ -52,6 +52,7 @@ export const STATUS_TONE: Record<WorkStatus, Tone> = {
   in_progress: "accent",
   in_review: "accent",
   awaiting_validation: "warn",
+  ready_to_settle: "accent",
   settled: "ok",
   reopened: "danger",
   on_hold: "neutral",
@@ -67,6 +68,7 @@ export const STATUS_FILL: Record<WorkStatus, string> = {
   in_progress: "bg-accent",
   in_review: "bg-accent",
   awaiting_validation: "bg-warn",
+  ready_to_settle: "bg-ok",
   settled: "bg-ok",
   reopened: "bg-danger",
   on_hold: "bg-line",
@@ -82,7 +84,8 @@ export function StatusBadge({ status, auto }: { status: WorkStatus; auto?: boole
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-status={status}>
       <Badge tone={STATUS_TONE[status]}>{STATUS_LABELS[status]}</Badge>
-      {auto && status === "settled" ? <Badge tone="accent">Auto-settled</Badge> : null}
+      {/* Rows settled automatically before phase 3; nothing creates them any more. */}
+      {auto && status === "settled" ? <Badge tone="neutral">Auto-settled (legacy)</Badge> : null}
     </span>
   );
 }

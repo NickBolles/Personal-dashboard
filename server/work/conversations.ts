@@ -92,7 +92,16 @@ export async function unfiledConversations(user: CurrentUser): Promise<UnfiledRe
     return parts.join(" › ");
   };
   const candidates = items.map((i) => ({ id: i.id, title: i.title, path: path(i.id), status: i.status as WorkStatus, builtIn: i.builtIn }));
-  const open = sessions.filter((s) => !s.archived && !s.readOnly && !linked.has(s.id));
+  // Dismissed from the Work inbox (only the id is kept; Hermes owns the conversation).
+  const dismissed = new Set(
+    getDb()
+      .select({ id: schema.workInbox.externalId })
+      .from(schema.workInbox)
+      .where(and(eq(schema.workInbox.userId, user.id), eq(schema.workInbox.source, "conversation")))
+      .all()
+      .map((r) => r.id),
+  );
+  const open = sessions.filter((s) => !s.archived && !s.readOnly && !linked.has(s.id) && !dismissed.has(s.id));
   return {
     total: open.length,
     unavailable,

@@ -26,7 +26,7 @@ export function UndoBar({ op, onDone, onUndone }: { op: UndoOp; onDone: () => vo
     },
   });
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(144px+env(safe-area-inset-bottom))] z-[61] flex justify-center px-4 lg:bottom-24">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(144px+env(safe-area-inset-bottom))] z-[61] flex justify-center px-4 lg:bottom-40">
       <div role="status" className="pointer-events-auto flex max-w-md items-center gap-3 rounded-xl border border-line bg-surface px-4 py-2 text-sm shadow-lg">
         <span>{op.label}</span>
         <Button size="sm" variant="primary" busy={undo.isPending} onClick={() => undo.mutate(undefined)}>

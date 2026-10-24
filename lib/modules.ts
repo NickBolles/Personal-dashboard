@@ -51,6 +51,7 @@ export const MODULES: ModuleDef[] = [
     viewCapability: "work.use",
     routes: [
       { href: "/work", label: "Work" },
+      { href: "/work?view=inbox", label: "Work inbox" },
       { href: "/work/timeline", label: "Work timeline" },
       { href: "/work/dashboard", label: "Work dashboard" },
       { href: "/work/map", label: "Work map" },

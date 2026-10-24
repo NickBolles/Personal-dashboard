@@ -15,6 +15,8 @@ export const WORK_STATUSES = [
   "in_progress",
   "in_review",
   "awaiting_validation",
+  /** an implementation PR merged and nothing needs validating: waiting for the person to settle it (never automatic) */
+  "ready_to_settle",
   "settled",
   "reopened",
   "on_hold",
@@ -30,6 +32,7 @@ export const STATUS_LABELS: Record<WorkStatus, string> = {
   in_progress: "In progress",
   in_review: "In review",
   awaiting_validation: "Awaiting validation",
+  ready_to_settle: "Ready to settle",
   settled: "Settled",
   reopened: "Reopened",
   on_hold: "On hold",
@@ -67,6 +70,8 @@ export const WIDGET_KINDS = [
   "validation_overdue",
   "unfiled_conversations",
   "map_snapshot",
+  "kpis",
+  "status_lanes",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
@@ -81,7 +86,12 @@ export const WIDGET_LABELS: Record<WidgetKind, string> = {
   validation_overdue: "Validation overdue",
   unfiled_conversations: "Unfiled conversations",
   map_snapshot: "Map snapshot",
+  kpis: "Pulse",
+  status_lanes: "Status lanes",
 };
+
+/** Lanes of the "Status lanes" dashboard widget (a filterable overview, never navigation). */
+export const LANE_STATUSES: WorkStatus[] = ["exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "settled"];
 export const WIDGET_SIZES = ["sm", "md", "lg"] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
 
@@ -102,13 +112,33 @@ export type WorkItem = {
   startDate: string | null;
   targetDate: string | null;
   completedAt: string | null;
+  /** "auto" only on rows settled before phase 3 (legacy, read-only): nothing settles automatically any more */
   settledKind: "manual" | "auto" | null;
   settledReason: string | null;
   archived: boolean;
   builtIn: boolean;
+  /** areas: the explicit validation default (null = by rule, see areaValidationDefault) */
+  validationDefault: ValidationDefault | null;
   createdAt: string;
   updatedAt: string;
 };
+
+export const VALIDATION_DEFAULTS = ["required", "optional"] as const;
+export type ValidationDefault = (typeof VALIDATION_DEFAULTS)[number];
+
+/**
+ * Whether new packets under an area require validation by default (owner
+ * decision): an explicit per-area setting wins; otherwise Miscellaneous and an
+ * area titled or keyed "Home" are optional and every other area is required.
+ */
+export function areaValidationDefault(
+  area: { title: string; systemKey?: string | null; validationDefault?: string | null } | null | undefined,
+): ValidationDefault {
+  if (!area) return "required";
+  if (area.validationDefault === "required" || area.validationDefault === "optional") return area.validationDefault;
+  if (area.systemKey === "misc" || area.systemKey === "home") return "optional";
+  return area.title.trim().toLowerCase() === "home" ? "optional" : "required";
+}
 
 export type WorkLink = {
   id: string;
@@ -210,6 +240,8 @@ export type WorkDetail = {
   events: WorkEvent[];
   lineage: (WorkLineage & { childTitle: string | null; parentTitle: string | null })[];
   settle: { allowed: boolean; reason: string | null };
+  /** the packet form's preselected "validation required" for this item, from its area */
+  validationDefault: { value: ValidationDefault; explicit: boolean; areaId: string | null; areaTitle: string | null };
   githubRefresh: boolean;
   /** what this item waits on, and what waits on it */
   blockedBy: DependencyRef[];
@@ -277,7 +309,9 @@ export type WidgetData =
   | { kind: "custom_html"; snapshot: WorkSnapshot | null }
   /** loaded by the widget itself from /api/work/conversations/unfiled (needs hermes.chat) */
   | { kind: "unfiled" }
-  | { kind: "map_snapshot"; graph: MapGraph | null };
+  | { kind: "map_snapshot"; graph: MapGraph | null }
+  | { kind: "kpis"; inProgress: number; awaitingValidation: number; overdue: number; inReview: number; readyToSettle: number; settled7d: number }
+  | { kind: "lanes"; lanes: { status: WorkStatus; count: number; items: WidgetItem[] }[] };
 
 export type DashboardWidget = { id: string; kind: WidgetKind; title: string; size: WidgetSize; position: number; config: WidgetConfig; data: WidgetData };
 export type DashboardResponse = {
@@ -325,6 +359,8 @@ export const updateItemSchema = z
     startDate: dateSchema.nullable().optional(),
     targetDate: dateSchema.nullable().optional(),
     archived: z.boolean().optional(),
+    /** areas only; null goes back to the rule (Miscellaneous/Home optional, others required) */
+    validationDefault: z.enum(VALIDATION_DEFAULTS).nullable().optional(),
   })
   .strict();
 
@@ -344,13 +380,17 @@ export const packetSchema = z
     decisions: longText.default(""),
     openQuestions: longText.default(""),
     context: longText.default(""),
-    validationRequired: z.boolean().default(true),
+    /** omitted: the item's area default (areaValidationDefault) */
+    validationRequired: z.boolean().optional(),
     noValidationReason: z.string().max(2000).optional(),
     nextAction: z.string().trim().min(1, "Next action is required").max(2000),
     status: z.enum(["ready", "in_progress"]).default("in_progress"),
   })
   .strict()
-  .refine((p) => p.validationRequired || !!p.noValidationReason?.trim(), { path: ["noValidationReason"], message: "Say why no validation is needed" });
+  .refine((p) => p.validationRequired !== false || !!p.noValidationReason?.trim(), {
+    path: ["noValidationReason"],
+    message: "Say why no validation is needed",
+  });
 
 export const linkSchema = z
   .object({
@@ -666,6 +706,59 @@ export function suggestFiling(
     .slice(0, limit)
     .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
 }
+
+// --- Work inbox (assigned GitHub issues, quick captures, unfiled conversations) ---
+
+export type InboxEntry = {
+  id: string;
+  source: "github_issue" | "capture";
+  title: string;
+  note: string;
+  url: string | null;
+  /** owner/repo for GitHub issues */
+  repo: string | null;
+  number: number | null;
+  /** why it's in the inbox */
+  reason: string;
+  createdAt: string;
+};
+export type InboxResponse = {
+  items: InboxEntry[];
+  /** unfiled conversations (needs hermes.chat; empty otherwise) */
+  conversations: UnfiledConversation[];
+  conversationsTotal: number;
+  unavailable: string[];
+  /** everything waiting: items + unfiled conversations */
+  count: number;
+};
+
+export const captureSchema = z.object({ text: z.string().trim().min(1, "Write something to capture").max(2000) }).strict();
+/** Accept an inbox entry: file it as a new Work item under `parentId` (null = Miscellaneous). */
+export const inboxAcceptSchema = z
+  .object({
+    parentId: id.nullable(),
+    title: z.string().trim().min(1).max(200).optional(),
+    /** how the issue relates to the new item (GitHub issues only) */
+    role: z.enum(["implementation", "reference"]).optional(),
+  })
+  .strict();
+export const dismissConversationSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
+
+// --- Today (the /work front door) ---
+
+export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
+export type TodayResponse = {
+  today: string;
+  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number };
+  /** 1–3 things to pick up again */
+  continue: TodayCard[];
+  /** awaiting validation, earliest due first */
+  proofDue: TodayCard[];
+  /** a merged PR and nothing to validate: waiting for you to settle */
+  readyToSettle: TodayCard[];
+  /** in-progress work whose target date passed */
+  overdue: TodayCard[];
+};
 
 // --- validation templates and overdue ---
 

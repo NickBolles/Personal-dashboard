@@ -19,6 +19,7 @@ type ValidationLike = { status: ValidationStatus };
 
 export type SettledPatch = {
   status: WorkStatus;
+  /** new settlements are always "manual"; "auto" only exists on legacy rows */
   settledKind: "manual" | "auto" | null;
   settledReason: string | null;
   completedAt: string | null;
@@ -34,9 +35,12 @@ export function settleGate(latestPacket: PacketLike, validations: ValidationLike
 }
 
 /**
- * A linked implementation PR merged. A merge is not proof of outcome: unless
- * the latest packet explicitly says no validation is needed (and nothing is
- * pending), the item waits for validation instead of settling.
+ * A linked implementation PR merged. A merge is not proof of outcome, and
+ * settling is always the person's call (owner decision: auto-settle never):
+ * unless the latest packet explicitly says no validation is needed (and
+ * nothing is pending), the item waits for validation; otherwise it becomes
+ * `ready_to_settle` and the item shows a "PR merged — settle?" prompt.
+ * Nothing here ever returns `settled`.
  */
 export function onImplementationMerged(input: {
   status: WorkStatus;
@@ -54,8 +58,14 @@ export function onImplementationMerged(input: {
     if (input.status === "awaiting_validation") return null;
     return { status: "awaiting_validation", settledKind: null, settledReason: null, completedAt: null, reason: `${pr} merged; awaiting validation` };
   }
-  const reason = `${pr} merged; no validation required`;
-  return { status: "settled", settledKind: "auto", settledReason: reason, completedAt: input.at, reason };
+  if (input.status === "ready_to_settle") return null;
+  return {
+    status: "ready_to_settle",
+    settledKind: null,
+    settledReason: null,
+    completedAt: null,
+    reason: `${pr} merged; no validation required. Settle when you're satisfied`,
+  };
 }
 
 /** Recording an observed value decides pass/fail; a waiver needs a reason. */

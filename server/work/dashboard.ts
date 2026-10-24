@@ -8,6 +8,7 @@ import type { CurrentUser } from "@/server/auth";
 import {
   isClosed,
   isValidationOverdue,
+  LANE_STATUSES,
   moveToIndex,
   WIDGET_LABELS,
   type DashboardResponse,
@@ -220,6 +221,33 @@ function widgetData(userId: string, kind: WidgetKind, config: WidgetConfig, ctx:
       return { kind: "custom_html", snapshot: config.injectData ? workSnapshot(userId, config.rootId) : null };
     case "unfiled_conversations":
       return { kind: "unfiled" };
+    case "kpis": {
+      const work = rows.filter((r) => r.kind !== "area");
+      const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const lateVal = new Set(ctx.vals.filter((v) => isValidationOverdue(v, ctx.today)).map((v) => v.itemId));
+      const count = (s: string) => work.filter((r) => r.status === s).length;
+      return {
+        kind: "kpis",
+        inProgress: count("in_progress"),
+        awaitingValidation: count("awaiting_validation"),
+        overdue: work.filter((r) => !isClosed(r.status) && ((!!r.targetDate && r.targetDate < ctx.today) || lateVal.has(r.id))).length,
+        inReview: count("in_review"),
+        readyToSettle: count("ready_to_settle"),
+        settled7d: work.filter((r) => r.status === "settled" && (r.completedAt ?? "") >= weekAgo).length,
+      };
+    }
+    case "status_lanes": {
+      const work = rows.filter((r) => r.kind !== "area");
+      return {
+        kind: "lanes",
+        lanes: LANE_STATUSES.map((status) => {
+          const inLane = work
+            .filter((r) => r.status === status)
+            .sort((a, b) => (status === "settled" ? (b.completedAt ?? "").localeCompare(a.completedAt ?? "") : b.updatedAt.localeCompare(a.updatedAt)));
+          return { status, count: inLane.length, items: inLane.slice(0, 6).map((r) => item(r)) };
+        }),
+      };
+    }
     case "map_snapshot": {
       if (!config.rootId) return { kind: "map_snapshot", graph: null };
       try {
@@ -291,7 +319,7 @@ export function addWidget(user: CurrentUser, body: z.infer<typeof widgetCreateSc
       dashboardId: d.id,
       kind: body.kind,
       title: body.title?.trim() || WIDGET_LABELS[body.kind],
-      size: body.size ?? (body.kind === "timeline" || body.kind === "custom_html" ? "lg" : body.kind === "validation_overdue" ? "sm" : "md"),
+      size: body.size ?? (["timeline", "custom_html", "kpis", "status_lanes"].includes(body.kind) ? "lg" : body.kind === "validation_overdue" ? "sm" : "md"),
       position: count,
       config: JSON.stringify(body.config ?? {}),
     })

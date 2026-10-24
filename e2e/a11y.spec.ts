@@ -27,6 +27,7 @@ const PAGES = [
   "/finance/plan",
   "/finance/checkin?all=1",
   "/work",
+  "/work?view=inbox",
   "/work/timeline",
   "/work/dashboard",
   "/work/map",

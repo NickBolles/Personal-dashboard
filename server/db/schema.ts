@@ -791,6 +791,8 @@ export const workItems = sqliteTable(
     archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     /** "misc" for the built-in Miscellaneous area */
     systemKey: text("system_key"),
+    /** areas only: required | optional; null = by rule (Miscellaneous and Home optional, others required; lib/work.ts areaValidationDefault) */
+    validationDefault: text("validation_default"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -980,6 +982,84 @@ export const workOps = sqliteTable(
   },
   (t) => [index("work_ops_item_idx").on(t.userId, t.itemId, t.createdAt)],
 );
+
+/**
+ * GitHub connections for the Work hub (Settings → Connections → GitHub): one
+ * read-only token per GitHub owner (user or org). The token is AES-256-GCM
+ * encrypted (server/crypto.ts) and never returned to a browser; only its last
+ * four characters are shown.
+ */
+export const githubConnections = sqliteTable(
+  "github_connections",
+  {
+    id: text("id").primaryKey(),
+    label: text("label").notNull(),
+    /** GitHub user or organization login, as entered */
+    owner: text("owner").notNull(),
+    /** lowercase owner: one connection per owner */
+    ownerKey: text("owner_key").notNull(),
+    tokenCipher: text("token_cipher").notNull(),
+    tokenLast4: text("token_last4").notNull(),
+    /** JSON array of repository names under `owner`; empty = every repo the token can see */
+    repos: text("repos").notNull().default("[]"),
+    /** the Jarvis person whose Work inbox receives this token's assigned issues */
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** GitHub login of the token (from the last Test), used for assigned-issue webhooks */
+    login: text("login"),
+    lastTestAt: text("last_test_at"),
+    lastTestOk: integer("last_test_ok", { mode: "boolean" }),
+    lastTestResult: text("last_test_result"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("github_connections_owner_idx").on(t.ownerKey)],
+);
+
+/**
+ * Work inbox (docs/work.md): GitHub issues assigned to you, quick captures and
+ * dismissed conversations (id only: Hermes owns conversation content).
+ * Accepting files it as a Work item; dismissing hides it for good.
+ */
+export const workInbox = sqliteTable(
+  "work_inbox",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** github_issue | capture | conversation (a dismissed unfiled conversation; id only) */
+    source: text("source").notNull(),
+    /** GitHub issue node id, or the conversation id; null for captures */
+    externalId: text("external_id"),
+    connectionId: text("connection_id"),
+    title: text("title").notNull().default(""),
+    note: text("note").notNull().default(""),
+    url: text("url"),
+    /** owner/repo for GitHub issues */
+    repo: text("repo"),
+    number: integer("number"),
+    /** open | closed (closed or unassigned issues leave the inbox) */
+    state: text("state").notNull().default("open"),
+    /** why it's here, shown on the row */
+    reason: text("reason").notNull().default(""),
+    dismissedAt: text("dismissed_at"),
+    acceptedAt: text("accepted_at"),
+    acceptedItemId: text("accepted_item_id"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("work_inbox_external_idx").on(t.userId, t.source, t.externalId), index("work_inbox_owner_idx").on(t.userId, t.state)],
+);
+
+/** X-GitHub-Delivery ids already handled by the read-only webhook (dedupe; pruned after 7 days). */
+export const workGithubDeliveries = sqliteTable("work_github_deliveries", {
+  id: text("id").primaryKey(),
+  event: text("event").notNull(),
+  outcome: text("outcome").notNull().default(""),
+  receivedAt: text("received_at").notNull().default(now),
+});
 
 export const dashboards = sqliteTable("dashboards", {
   id: text("id").primaryKey(),

@@ -11,9 +11,11 @@ import { fmtWhen } from "@/components/work/conversations";
 import { useAccess } from "@/components/access";
 import { Gantt } from "@/components/work/Gantt";
 import { StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { KpiStrip } from "@/components/work/today";
 import {
   CUSTOM_HTML_MAX_BYTES,
   safeHref,
+  STATUS_LABELS,
   utf8Bytes,
   WIDGET_KINDS,
   WIDGET_LABELS,
@@ -25,6 +27,7 @@ import {
   type WidgetConfig,
   type WidgetKind,
   type WidgetSize,
+  type WorkStatus,
 } from "@/lib/work";
 
 const SIZE_CLS: Record<WidgetSize, string> = { sm: "lg:col-span-1", md: "md:col-span-2 lg:col-span-2", lg: "md:col-span-2 lg:col-span-3" };
@@ -39,6 +42,8 @@ const SCOPED: WidgetKind[] = [
   "custom_html",
   "validation_overdue",
   "map_snapshot",
+  "kpis",
+  "status_lanes",
 ];
 
 export function DashboardView() {
@@ -257,6 +262,61 @@ function UnfiledWidget() {
   );
 }
 
+/** Status lanes: an overview with lane filters (owner decision: lanes are widgets/filters, not navigation). */
+function StatusLanes({ lanes }: { lanes: Extract<DashboardWidget["data"], { kind: "lanes" }>["lanes"] }) {
+  const [only, setOnly] = useState<WorkStatus | null>(null);
+  const shown = only ? lanes.filter((l) => l.status === only) : lanes.filter((l) => l.count > 0);
+  return (
+    <div>
+      <div role="group" aria-label="Filter lanes" className="mb-2 flex flex-wrap gap-1">
+        {lanes.map((l) => (
+          <button
+            key={l.status}
+            type="button"
+            aria-pressed={only === l.status}
+            onClick={() => setOnly(only === l.status ? null : l.status)}
+            className={cx(
+              "tap inline-flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium",
+              only === l.status ? "border-accent bg-accent-soft text-accent" : "border-line text-muted hover:bg-surface-2",
+            )}
+          >
+            <StatusDot status={l.status} />
+            {STATUS_LABELS[l.status]} <span className="tabular-nums">{l.count}</span>
+          </button>
+        ))}
+      </div>
+      {shown.length ? (
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {shown.map((l) => (
+            <section key={l.status} aria-label={`${STATUS_LABELS[l.status]} lane`} className="min-w-0 rounded-lg bg-surface-2 p-2" data-lane={l.status}>
+              <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted">
+                <StatusDot status={l.status} />
+                {STATUS_LABELS[l.status]} · {l.count}
+              </h4>
+              {l.items.length ? (
+                <ul className="space-y-1">
+                  {l.items.map((i) => (
+                    <li key={i.id}>
+                      <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="card block p-2 text-sm break-words hover:underline">
+                        {i.title}
+                      </Link>
+                    </li>
+                  ))}
+                  {l.count > l.items.length ? <li className="text-xs text-muted">+{l.count - l.items.length} more</li> : null}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted">Empty</p>
+              )}
+            </section>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted">No work in these lanes.</p>
+      )}
+    </div>
+  );
+}
+
 function WidgetBody({ w }: { w: DashboardWidget }) {
   const d = w.data;
   if (d.kind === "items") {
@@ -332,6 +392,19 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
     );
   }
   if (d.kind === "unfiled") return <UnfiledWidget />;
+  if (d.kind === "kpis")
+    return (
+      <KpiStrip
+        kpis={[
+          { key: "in_progress", label: "In progress", value: d.inProgress, tone: "accent" },
+          { key: "awaiting_validation", label: "Awaiting proof", value: d.awaitingValidation, tone: "warn" },
+          { key: "overdue", label: "Overdue", value: d.overdue, tone: "danger" },
+          { key: "in_review", label: "In review", value: d.inReview, tone: "accent" },
+          { key: "ready_to_settle", label: "Ready to settle", value: d.readyToSettle, tone: "ok" },
+        ]}
+      />
+    );
+  if (d.kind === "lanes") return <StatusLanes lanes={d.lanes} />;
   if (d.kind === "map_snapshot")
     return d.graph && d.graph.nodes.length ? (
       <div>
