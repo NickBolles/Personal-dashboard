@@ -3,6 +3,7 @@
  * server (server/work) and the web UI. No server imports. Rules: docs/work.md.
  */
 import { z } from "zod";
+import type { MapGraph } from "./work-map";
 
 export const WORK_KINDS = ["area", "project", "thread", "investigation", "note"] as const;
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -63,6 +64,9 @@ export const WIDGET_KINDS = [
   "metric",
   "custom_html",
   "recently_settled",
+  "validation_overdue",
+  "unfiled_conversations",
+  "map_snapshot",
 ] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
 export const WIDGET_LABELS: Record<WidgetKind, string> = {
@@ -74,6 +78,9 @@ export const WIDGET_LABELS: Record<WidgetKind, string> = {
   metric: "Metric",
   custom_html: "Custom HTML",
   recently_settled: "Recently settled",
+  validation_overdue: "Validation overdue",
+  unfiled_conversations: "Unfiled conversations",
+  map_snapshot: "Map snapshot",
 };
 export const WIDGET_SIZES = ["sm", "md", "lg"] as const;
 export type WidgetSize = (typeof WIDGET_SIZES)[number];
@@ -113,6 +120,12 @@ export type WorkLink = {
   role: LinkRole;
   externalState: ExternalState | null;
   stateChangedAt: string | null;
+  /** last read-only GitHub readback and why it failed, if it did */
+  checkedAt: string | null;
+  checkError: string | null;
+  /** "handoff_from" when the conversation was started from this item's handoff */
+  lineage: "handoff_from" | null;
+  packetId: string | null;
   createdAt: string;
 };
 
@@ -148,6 +161,19 @@ export type WorkValidation = {
   waiverReason: string | null;
   dueDate: string | null;
   recordedAt: string | null;
+  /** pending and its due date has passed (isValidationOverdue) */
+  overdue: boolean;
+};
+
+export type ValidationTemplate = {
+  id: string;
+  name: string;
+  metric: string;
+  comparator: Comparator;
+  threshold: number;
+  unit: string;
+  dueOffsetDays: number | null;
+  createdAt: string;
 };
 
 export type WorkEvent = {
@@ -158,6 +184,8 @@ export type WorkEvent = {
   toStatus: string | null;
   reason: string | null;
   actor: string;
+  /** manual | github (read-only refresh) | null */
+  source: string | null;
   at: string;
 };
 
@@ -183,7 +211,11 @@ export type WorkDetail = {
   lineage: (WorkLineage & { childTitle: string | null; parentTitle: string | null })[];
   settle: { allowed: boolean; reason: string | null };
   githubRefresh: boolean;
+  /** what this item waits on, and what waits on it */
+  blockedBy: DependencyRef[];
+  blocking: DependencyRef[];
 };
+export type DependencyRef = { dependencyId: string; id: string; title: string; status: WorkStatus; open: boolean };
 
 export type TimelineRow = {
   id: string;
@@ -195,13 +227,18 @@ export type TimelineRow = {
   targetDate: string | null;
   overdue: boolean;
   validationOverdue: boolean;
+  /** depends on work that isn't closed yet */
+  blocked: boolean;
   actuals: { kind: "started" | "merged" | "settled"; at: string }[];
 };
 
+export type TimelineDependency = { id: string; from: string; to: string };
 export type TimelineResponse = {
   root: { id: string; title: string } | null;
   roots: { id: string; title: string; kind: WorkKind }[];
   rows: TimelineRow[];
+  /** "to depends on from", both among `rows` */
+  dependencies: TimelineDependency[];
   today: string;
 };
 
@@ -233,13 +270,24 @@ export type WidgetConfig = {
 
 export type WidgetData =
   | { kind: "items"; items: WidgetItem[] }
+  | { kind: "overdue"; count: number; items: WidgetItem[] }
   | { kind: "timeline"; rows: TimelineRow[]; today: string }
   | { kind: "map"; root: MapNode | null }
   | { kind: "metric" }
-  | { kind: "custom_html"; snapshot: WorkSnapshot | null };
+  | { kind: "custom_html"; snapshot: WorkSnapshot | null }
+  /** loaded by the widget itself from /api/work/conversations/unfiled (needs hermes.chat) */
+  | { kind: "unfiled" }
+  | { kind: "map_snapshot"; graph: MapGraph | null };
 
 export type DashboardWidget = { id: string; kind: WidgetKind; title: string; size: WidgetSize; position: number; config: WidgetConfig; data: WidgetData };
-export type DashboardResponse = { id: string; title: string; widgets: DashboardWidget[]; areas: { id: string; title: string; kind: WorkKind }[] };
+export type DashboardResponse = {
+  id: string;
+  title: string;
+  widgets: DashboardWidget[];
+  areas: { id: string; title: string; kind: WorkKind }[];
+  /** JARVIS_GITHUB_TOKEN is set: the dashboard refreshes linked PR/issue states (read-only) on load */
+  githubRefresh: boolean;
+};
 
 // --- request schemas ---
 
@@ -281,6 +329,8 @@ export const updateItemSchema = z
   .strict();
 
 export const moveSchema = z.object({ parentId: id.nullable() }).strict();
+/** Drag-and-drop: position among the new parent's unarchived children (0 = first). */
+export const placeSchema = z.object({ parentId: id.nullable(), index: z.number().int().min(0).max(100_000) }).strict();
 export const reorderSchema = z.object({ direction: z.enum(["up", "down"]) }).strict();
 export const forkSchema = z.object({ title: title.optional() }).strict();
 export const splitSchema = z.object({ title, summary: longText.optional(), kind: z.enum(WORK_KINDS).optional() }).strict();
@@ -312,6 +362,14 @@ export const linkSchema = z
   })
   .strict();
 
+/** "Continue in new conversation": which assistant answers (default: the household setting). */
+export const continueSchema = z.object({ backend: z.enum(["hermes", "claude"]).optional() }).strict();
+
+export const githubRefreshSchema = z.object({ itemId: id.optional() }).strict();
+export type GithubRefreshResult = { enabled: boolean; checked: number; changed: number; errors: number };
+
+export const dependencySchema = z.object({ dependsOnId: id }).strict();
+
 export const linkStateSchema = z.object({ externalState: z.enum(EXTERNAL_STATES) }).strict();
 
 const num = z.number().finite();
@@ -342,6 +400,18 @@ export const validationUpdateSchema = z
   })
   .strict()
   .refine((v) => !v.waive || !!v.waiverReason?.trim(), { path: ["waiverReason"], message: "A waiver needs a reason" });
+
+export const validationTemplateSchema = z
+  .object({
+    name: z.string().trim().max(120).optional(),
+    metric: z.string().trim().min(1, "Metric is required").max(200),
+    comparator: z.enum(COMPARATORS),
+    threshold: num,
+    unit: z.string().trim().max(40).default(""),
+    dueOffsetDays: z.number().int().min(0).max(3650).nullable().optional(),
+  })
+  .strict();
+export const fromTemplateSchema = z.object({ templateId: id }).strict();
 
 export const settleSchema = z.object({ reason: z.string().trim().max(2000).optional() }).strict();
 export const reopenSchema = z
@@ -376,6 +446,8 @@ export const widgetUpdateSchema = z
     size: z.enum(WIDGET_SIZES).optional(),
     config: widgetConfigSchema.optional(),
     direction: z.enum(["up", "down"]).optional(),
+    /** drag-and-drop: the widget's new 0-based position */
+    position: z.number().int().min(0).max(1000).optional(),
   })
   .strict();
 
@@ -503,6 +575,159 @@ export function handoffMarkdown(d: Pick<WorkDetail, "item" | "breadcrumb" | "pac
     lines.push(`- [${l.role}] ${l.title || l.targetId || href}${href ? ` — ${href}` : ""}${l.externalState ? ` (${l.externalState})` : ""}`);
   }
   return lines.join("\n");
+}
+
+// --- conversations: picker, unfiled inbox and deterministic filing suggestions ---
+
+export type ConversationBackend = "hermes" | "claude";
+export type ConversationOption = {
+  id: string;
+  title: string;
+  preview: string | null;
+  lastActiveAt: string | null;
+  backend: ConversationBackend;
+  /** someone else's shared conversation (read-only) */
+  readOnly: boolean;
+  /** your work items this conversation is already linked to */
+  linkedItems: { id: string; title: string }[];
+};
+export type ConversationsResponse = { conversations: ConversationOption[]; unavailable: string[] };
+export type FilingSuggestion = { id: string; title: string; path: string; matched: string[] };
+export type UnfiledConversation = ConversationOption & { suggestions: FilingSuggestion[] };
+export type UnfiledResponse = { conversations: UnfiledConversation[]; total: number; unavailable: string[] };
+
+/** File a conversation under an item; `itemId: null` files it in Miscellaneous. */
+export const fileConversationSchema = z
+  .object({ sessionId: z.string().trim().min(1).max(200), itemId: id.nullable(), role: z.enum(LINK_ROLES).optional() })
+  .strict();
+
+const FILING_STOP = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "about",
+  "from",
+  "into",
+  "onto",
+  "your",
+  "our",
+  "this",
+  "that",
+  "then",
+  "than",
+  "what",
+  "how",
+  "why",
+  "can",
+  "you",
+  "new",
+  "chat",
+  "conversation",
+  "untitled",
+  "help",
+  "please",
+]);
+
+/** Significant lowercase words: 3+ letters, or 2+ characters containing a digit ("v5", "q3"). */
+export function filingTokens(s: string) {
+  return [
+    ...new Set(
+      s
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/\p{M}/gu, "")
+        .split(/[^a-z0-9]+/)
+        .filter((t) => (t.length >= 3 || (t.length >= 2 && /\d/.test(t))) && !FILING_STOP.has(t)),
+    ),
+  ];
+}
+
+/**
+ * Deterministic "file under…" suggestions: items whose title shares exact
+ * significant words with the conversation title. No model, no fuzzy matching.
+ * Order: most shared words → fewer title words (more specific) → path → id.
+ */
+export function suggestFiling(
+  conversationTitle: string,
+  candidates: { id: string; title: string; path: string; status: WorkStatus; builtIn?: boolean }[],
+  limit = 3,
+): FilingSuggestion[] {
+  const want = new Set(filingTokens(conversationTitle));
+  if (!want.size) return [];
+  return candidates
+    .filter((c) => !c.builtIn && !isClosed(c.status))
+    .map((c) => {
+      const words = filingTokens(c.title);
+      return { c, words: words.length, matched: words.filter((w) => want.has(w)) };
+    })
+    .filter((x) => x.matched.length > 0)
+    .sort((a, b) => b.matched.length - a.matched.length || a.words - b.words || a.c.path.localeCompare(b.c.path) || a.c.id.localeCompare(b.c.id))
+    .slice(0, limit)
+    .map((x) => ({ id: x.c.id, title: x.c.title, path: x.c.path, matched: x.matched }));
+}
+
+// --- validation templates and overdue ---
+
+/** A validation is overdue when it's still pending and its due date has passed (local calendar day). */
+export function isValidationOverdue(v: { status: string; dueDate: string | null }, today: string) {
+  return v.status === "pending" && !!v.dueDate && v.dueDate < today;
+}
+
+/** The validation a template produces when applied on `today`. */
+export function applyTemplate(
+  t: Pick<ValidationTemplate, "metric" | "comparator" | "threshold" | "unit" | "dueOffsetDays">,
+  today: string,
+): { metric: string; comparator: Comparator; threshold: number; unit: string; baseline: null; dueDate: string | null } {
+  return {
+    metric: t.metric,
+    comparator: t.comparator,
+    threshold: t.threshold,
+    unit: t.unit,
+    baseline: null,
+    dueDate: t.dueOffsetDays === null || t.dueOffsetDays === undefined ? null : addDaysIso(today, t.dueOffsetDays),
+  };
+}
+
+/** `ids` with `id` moved to `index` (clamped); used for widget drag-and-drop. */
+export function moveToIndex(ids: string[], id: string, index: number) {
+  if (!ids.includes(id)) return [...ids];
+  const rest = ids.filter((x) => x !== id);
+  const i = Math.max(0, Math.min(Math.trunc(index), rest.length));
+  return [...rest.slice(0, i), id, ...rest.slice(i)];
+}
+
+// --- timeline editing ---
+
+function addDaysIso(date: string, n: number) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Dragging a Gantt bar, snapped to whole days. "move" shifts both dates (or
+ * the only one); "start"/"end" resize one edge but never past the other.
+ */
+export function shiftDates(
+  d: { startDate: string | null; targetDate: string | null },
+  mode: "move" | "start" | "end",
+  days: number,
+): { startDate: string | null; targetDate: string | null } {
+  const n = Math.round(days);
+  if (!n) return { startDate: d.startDate, targetDate: d.targetDate };
+  const sh = (x: string | null) => (x ? addDaysIso(x, n) : null);
+  if (mode === "move" || !d.startDate || !d.targetDate) {
+    if (mode === "start" && d.startDate && !d.targetDate) return { startDate: sh(d.startDate), targetDate: null };
+    if (mode === "end" && d.targetDate && !d.startDate) return { startDate: null, targetDate: sh(d.targetDate) };
+    return { startDate: sh(d.startDate), targetDate: sh(d.targetDate) };
+  }
+  if (mode === "start") {
+    const s = addDaysIso(d.startDate, n);
+    return { startDate: s > d.targetDate ? d.targetDate : s, targetDate: d.targetDate };
+  }
+  const t = addDaysIso(d.targetDate, n);
+  return { startDate: d.startDate, targetDate: t < d.startDate ? d.startDate : t };
 }
 
 export function todayIso(now = new Date()) {

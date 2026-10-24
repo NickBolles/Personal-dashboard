@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, gt, isNotNull, isNull, or } from "drizzle-orm";
-import { ACTION_SOURCES, type ActionSource, type NextAction } from "@/lib/contracts";
+import { HOME_SOURCES, type ActionSource, type NextAction } from "@/lib/contracts";
 import { ASSIST_CATEGORIES, categoryLabel, MAX_WEIGHT, MIN_WEIGHT, VERDICT_LABELS, type FeedbackVerdict } from "@/lib/attention";
 import { addDays, DAY, localDate, startOfLocalDay } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
@@ -92,7 +92,7 @@ export type FeedbackResult = { ok: true; id: string; message: string; duplicate?
 function checkTarget(user: Viewer, t: FeedbackInput["target"], sourceVisible: (u: Capable, s: ActionSource) => boolean) {
   if (t.kind === "action") {
     const source = t.id.slice(0, t.id.indexOf(":")) as ActionSource;
-    if (!ACTION_SOURCES.includes(source)) throw new HttpError(400, "bad_target", "Unknown source");
+    if (!HOME_SOURCES.includes(source)) throw new HttpError(400, "bad_target", "Unknown source");
     if (t.category !== `source:${source}`) throw new HttpError(400, "bad_category", "Category doesn't match the item");
     if (!sourceVisible(user, source)) throw new HttpError(403, "forbidden", "You don't have access to that.");
     return;

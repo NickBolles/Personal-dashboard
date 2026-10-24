@@ -1,20 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
+import { daysBetween } from "@/lib/time";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
-import { StatusBadge, fmtDate, useWorkMutation } from "@/components/work/common";
+import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { ContinueDialog } from "@/components/work/ContinueDialog";
+import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { ConversationLinkDialog, UnfiledPanel, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import {
   COMPARATORS,
   handoffMarkdown,
+  todayIso,
   STATUS_LABELS,
   WORK_KINDS,
   WORK_STATUSES,
   type Comparator,
+  type DependencyRef,
+  type ValidationTemplate,
   type LinkKind,
   type WorkDetail,
   type WorkItem,
@@ -36,6 +43,17 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
   const items = useItems(archived);
   const [selected, setSelected] = useState<string | null>(initialItem ?? null);
   const [newArea, setNewArea] = useState(false);
+  const canChat = useAccess().can("hermes.chat");
+  const [undo, setUndo] = useState<UndoOp | null>(null);
+  const clearUndo = useCallback(() => setUndo(null), []);
+  const onOp = useCallback((op: UndoOp | null | undefined) => {
+    if (op) setUndo(op);
+  }, []);
+  const place = useWorkMutation(
+    (v: { id: string; parentId: string | null; index: number }) =>
+      api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+    { onSuccess: (r) => onOp(r.op) },
+  );
 
   const select = (id: string) => {
     setSelected(id);
@@ -60,23 +78,31 @@ export function WorkView({ initialItem }: { initialItem?: string }) {
       />
       {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(260px,320px)_1fr]">
-        <Card className="min-w-0 self-start p-3 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
-          <h2 className="sr-only">Work tree</h2>
-          {items.isPending ? <Spinner label="Loading work…" /> : <WorkTree items={list} selected={current} onSelect={select} />}
-          <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
-            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-            Show archived
-          </label>
-        </Card>
+        <div className="min-w-0 space-y-4 self-start">
+          <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
+            <h2 className="sr-only">Work tree</h2>
+            {items.isPending ? (
+              <Spinner label="Loading work…" />
+            ) : (
+              <WorkTree items={list} selected={current} onSelect={select} onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })} />
+            )}
+            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
+              <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+              Show archived
+            </label>
+          </Card>
+          {canChat && items.data ? <UnfiledPanel items={list.filter((i) => !i.archived)} /> : null}
+        </div>
         <div className="min-w-0">
           {current ? (
-            <ItemDetail key={current} id={current} items={list} onSelect={select} />
+            <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} />
           ) : (
             <Empty title="Pick something from the tree">Or start a new area. Items without a home go to Miscellaneous.</Empty>
           )}
         </div>
       </div>
       <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
+      {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
   );
 }
@@ -149,17 +175,26 @@ function NewItemDialog({
   );
 }
 
-type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | LinkKind;
+type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
 
-function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; onSelect: (id: string) => void }) {
+type OnOp = (op: UndoOp | null | undefined) => void;
+
+function ItemDetail({ id, items, onSelect, onOp }: { id: string; items: WorkItem[]; onSelect: (id: string) => void; onOp: OnOp }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const [tab, setTab] = useState<"overview" | "activity" | "children">("overview");
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const patch = useWorkMutation((body: Record<string, unknown>) => api.patch(`/api/work/items/${encodeURIComponent(id)}`, body), { ok: "Saved" });
-  const reorder = useWorkMutation((direction: "up" | "down") => api.post(`/api/work/items/${encodeURIComponent(id)}/reorder`, { direction }));
+  const patch = useWorkMutation((body: Record<string, unknown>) => api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}`, body), {
+    onSuccess: (r) => onOp(r.op),
+    ok: "Saved",
+  });
+  const reorder = useWorkMutation(
+    (direction: "up" | "down") => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}/reorder`, { direction }),
+    { onSuccess: (r) => onOp(r.op) },
+  );
   const close = () => setDialog(null);
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
+  useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
 
   if (q.isPending) return <Spinner label="Loading…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
@@ -194,6 +229,8 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <StatusBadge status={item.status} auto={item.settledKind === "auto"} />
               {item.archived ? <Badge>Archived</Badge> : null}
+              {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
+              {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
               {item.settledReason ? <span className="text-sm text-muted">{item.settledReason}</span> : null}
             </div>
           </div>
@@ -304,9 +341,10 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
         {tab === "overview" ? (
           <>
             <EditItem key={item.updatedAt} item={item} />
-            <PacketCard d={d} onRevise={() => setDialog("packet")} />
+            <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
             <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} />
-            <Links d={d} />
+            <Dependencies d={d} items={items} onSelect={onSelect} />
+            <Links d={d} canChat={canChat} />
           </>
         ) : tab === "activity" ? (
           <Activity d={d} onSelect={onSelect} />
@@ -337,13 +375,21 @@ function ItemDetail({ id, items, onSelect }: { id: string; items: WorkItem[]; on
       </div>
 
       <NewItemDialog open={dialog === "child"} onClose={close} parent={item} onCreated={(i) => onSelect(i.id)} />
-      <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} />
-      <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} />
-      <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} />
+      <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} onOp={onOp} />
+      <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} onOp={onOp} />
+      <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} onOp={onOp} />
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
+      {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
-      {dialog === "github_pr" || dialog === "chat_session" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
+      {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
+      {dialog === "chat_session" ? (
+        <ConversationLinkDialog
+          item={item}
+          onClose={close}
+          linkedHere={new Set(d.links.filter((l) => l.kind === "chat_session").map((l) => l.targetId ?? ""))}
+        />
+      ) : null}
     </article>
   );
 }
@@ -403,7 +449,7 @@ function EditItem({ item }: { item: WorkItem }) {
   );
 }
 
-function PacketCard({ d, onRevise }: { d: WorkDetail; onRevise: () => void }) {
+function PacketCard({ d, onRevise, onContinue }: { d: WorkDetail; onRevise: () => void; onContinue?: () => void }) {
   const { toast } = useToast();
   // Client-only: this card renders after the detail query resolves in the browser.
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -425,6 +471,11 @@ function PacketCard({ d, onRevise }: { d: WorkDetail; onRevise: () => void }) {
           <Button size="sm" onClick={copy}>
             Copy handoff
           </Button>
+          {onContinue ? (
+            <Button size="sm" onClick={onContinue}>
+              Continue in new conversation
+            </Button>
+          ) : null}
           {p ? (
             <Button size="sm" onClick={onRevise}>
               New revision
@@ -483,7 +534,9 @@ function PacketRow({ label, value }: { label: string; value: string }) {
 
 function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () => void; onReopen: () => void }) {
   const [adding, setAdding] = useState(false);
+  const [templates, setTemplates] = useState(false);
   const failed = d.validations.some((v) => v.status === "fail");
+  const overdue = d.validations.filter((v) => v.overdue).length;
   return (
     <Card>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -491,6 +544,9 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
             Add validation
+          </Button>
+          <Button size="sm" onClick={() => setTemplates(true)}>
+            Add from template
           </Button>
           {d.item.status !== "settled" ? (
             <Button size="sm" variant="primary" disabled={!d.settle.allowed} onClick={onSettle} aria-describedby={d.settle.allowed ? undefined : "settle-why"}>
@@ -512,7 +568,13 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
           </Button>
         </div>
       ) : null}
+      {overdue ? (
+        <p className="mb-2 rounded-lg bg-danger-soft p-2 text-sm text-danger" data-testid="validation-overdue">
+          {overdue} validation{overdue === 1 ? " is" : "s are"} overdue: the due date passed and it&apos;s still pending.
+        </p>
+      ) : null}
       {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
+      {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
       {d.validations.length ? (
         <ul className="space-y-3">
           {d.validations.map((v) => (
@@ -528,17 +590,29 @@ function Validations({ d, onSettle, onReopen }: { d: WorkDetail; onSettle: () =>
 
 function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void }) {
   const [f, setF] = useState({ metric: "", comparator: "<=" as Comparator, threshold: "", unit: "", baseline: "", dueDate: "" });
+  const [asTemplate, setAsTemplate] = useState(false);
   const add = useWorkMutation(
-    () =>
-      api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations`, {
+    async () => {
+      const r = await api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations`, {
         metric: f.metric,
         comparator: f.comparator,
         threshold: Number(f.threshold),
         unit: f.unit,
         baseline: f.baseline === "" ? null : Number(f.baseline),
         dueDate: f.dueDate || null,
-      }),
-    { ok: "Validation added", onSuccess: onDone },
+      });
+      if (asTemplate)
+        await api.post("/api/work/validation-templates", {
+          metric: f.metric,
+          comparator: f.comparator,
+          threshold: Number(f.threshold),
+          unit: f.unit,
+          // The template keeps the due date as "this many days after it's applied".
+          dueOffsetDays: f.dueDate ? Math.max(0, daysBetween(todayIso(), f.dueDate)) : null,
+        });
+      return r;
+    },
+    { ok: asTemplate ? "Validation added and saved as a template" : "Validation added", onSuccess: onDone },
   );
   return (
     <form
@@ -589,7 +663,11 @@ function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void 
       <Field id="va-due" label="Due date (optional)">
         <input id="va-due" type="date" className={inputCls} value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} />
       </Field>
-      <div className="flex items-end justify-end gap-2">
+      <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
+        <input type="checkbox" checked={asTemplate} onChange={(e) => setAsTemplate(e.target.checked)} />
+        Also save as a reusable template
+      </label>
+      <div className="flex items-end justify-end gap-2 sm:col-span-2">
         <Button type="button" size="sm" onClick={onDone}>
           Cancel
         </Button>
@@ -598,6 +676,132 @@ function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void 
         </Button>
       </div>
     </form>
+  );
+}
+
+function TemplatesDialog({ itemId, onClose }: { itemId: string; onClose: () => void }) {
+  const q = useQuery({ queryKey: ["work", "templates"], queryFn: () => api.get<{ templates: ValidationTemplate[] }>("/api/work/validation-templates") });
+  const [f, setF] = useState({ name: "", metric: "", comparator: "<=" as Comparator, threshold: "", unit: "", dueOffsetDays: "" });
+  const apply = useWorkMutation((templateId: string) => api.post(`/api/work/items/${encodeURIComponent(itemId)}/validations/from-template`, { templateId }), {
+    ok: "Validation added from template",
+    onSuccess: onClose,
+  });
+  const create = useWorkMutation(
+    () =>
+      api.post("/api/work/validation-templates", {
+        name: f.name || undefined,
+        metric: f.metric,
+        comparator: f.comparator,
+        threshold: Number(f.threshold),
+        unit: f.unit,
+        dueOffsetDays: f.dueOffsetDays === "" ? null : Number(f.dueOffsetDays),
+      }),
+    { ok: "Template saved", onSuccess: () => setF({ name: "", metric: "", comparator: "<=", threshold: "", unit: "", dueOffsetDays: "" }) },
+  );
+  const remove = useWorkMutation((id: string) => api.del(`/api/work/validation-templates/${encodeURIComponent(id)}`), { ok: "Template deleted" });
+  const list = q.data?.templates ?? [];
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      title="Add from template"
+      description="Your reusable validation contracts. Applying one adds a pending validation."
+    >
+      {q.isPending ? <Spinner label="Loading templates…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {q.data && !list.length ? (
+        <p className="text-sm text-muted">No templates yet. Create one below, or tick “Also save as a reusable template” when adding a validation.</p>
+      ) : null}
+      {list.length ? (
+        <ul aria-label="Validation templates" className="divide-y divide-line rounded-lg border border-line">
+          {list.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 p-2">
+              <div className="min-w-0">
+                <p className="font-medium break-words">{t.name}</p>
+                <p className="text-xs text-muted">
+                  {t.metric} {t.comparator} {t.threshold}
+                  {t.unit ? ` ${t.unit}` : ""}
+                  {t.dueOffsetDays !== null ? ` · due ${t.dueOffsetDays} day${t.dueOffsetDays === 1 ? "" : "s"} after adding` : " · no due date"}
+                </p>
+              </div>
+              <span className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  busy={apply.isPending && apply.variables === t.id}
+                  onClick={() => apply.mutate(t.id)}
+                  aria-label={`Add ${t.name}`}
+                >
+                  Add
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => remove.mutate(t.id)} aria-label={`Delete template ${t.name}`}>
+                  Delete
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <details className="mt-3 text-sm">
+        <summary className="tap cursor-pointer text-accent">New template</summary>
+        <form
+          className="mt-2 grid gap-3 sm:grid-cols-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate(undefined);
+          }}
+        >
+          <Field id="vt-name" label="Name (optional)">
+            <input id="vt-name" className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          </Field>
+          <Field id="vt-metric" label="Template metric">
+            <input id="vt-metric" required className={inputCls} value={f.metric} onChange={(e) => setF({ ...f, metric: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-[6rem_1fr] gap-2">
+            <Field id="vt-cmp" label="Comparator">
+              <select id="vt-cmp" className={inputCls} value={f.comparator} onChange={(e) => setF({ ...f, comparator: e.target.value as Comparator })}>
+                {COMPARATORS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field id="vt-threshold" label="Threshold">
+              <input
+                id="vt-threshold"
+                required
+                type="number"
+                step="any"
+                className={inputCls}
+                value={f.threshold}
+                onChange={(e) => setF({ ...f, threshold: e.target.value })}
+              />
+            </Field>
+          </div>
+          <Field id="vt-unit" label="Unit">
+            <input id="vt-unit" className={inputCls} value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })} />
+          </Field>
+          <Field id="vt-offset" label="Due after (days, optional)">
+            <input
+              id="vt-offset"
+              type="number"
+              min={0}
+              step={1}
+              className={inputCls}
+              value={f.dueOffsetDays}
+              onChange={(e) => setF({ ...f, dueOffsetDays: e.target.value })}
+            />
+          </Field>
+          <div className="flex items-end justify-end">
+            <Button type="submit" size="sm" busy={create.isPending}>
+              Save template
+            </Button>
+          </div>
+        </form>
+      </details>
+    </Dialog>
   );
 }
 
@@ -616,10 +820,13 @@ function ValidationRow({ v }: { v: WorkValidation }) {
   const remove = useWorkMutation(() => api.del(url), { ok: "Validation removed" });
   const label = `${v.metric} ${v.comparator} ${v.threshold}${v.unit ? ` ${v.unit}` : ""}`;
   return (
-    <li className="rounded-lg border border-line p-3">
+    <li className={`rounded-lg border p-3 ${v.overdue ? "border-danger" : "border-line"}`} data-overdue={v.overdue || undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-medium break-words">{label}</p>
-        <Badge tone={V_TONE[v.status]}>{v.status === "pass" ? "Pass" : v.status === "fail" ? "Fail" : v.status === "waived" ? "Waived" : "Pending"}</Badge>
+        <span className="flex flex-wrap gap-1">
+          {v.overdue ? <Badge tone="danger">Overdue</Badge> : null}
+          <Badge tone={V_TONE[v.status]}>{v.status === "pass" ? "Pass" : v.status === "fail" ? "Fail" : v.status === "waived" ? "Waived" : "Pending"}</Badge>
+        </span>
       </div>
       <p className="mt-1 text-sm text-muted">
         {v.baseline !== null ? `Baseline ${v.baseline}${v.unit ? ` ${v.unit}` : ""} · ` : ""}
@@ -694,35 +901,113 @@ function ValidationRow({ v }: { v: WorkValidation }) {
   );
 }
 
+function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void }) {
+  const [dest, setDest] = useState("");
+  const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
+    ok: "Dependency added",
+    onSuccess: () => setDest(""),
+  });
+  const remove = useWorkMutation((depId: string) => api.del(`/api/work/dependencies/${encodeURIComponent(depId)}`), { ok: "Dependency removed" });
+  const taken = new Set([d.item.id, ...d.blockedBy.map((b) => b.id)]);
+  const options = itemPaths(
+    items.filter((i) => i.parentId !== null && !i.archived),
+    taken,
+  );
+  const openBlockers = d.blockedBy.filter((b) => b.open).length;
+  const row = (r: DependencyRef, label: string) => (
+    <li key={r.dependencyId} className="flex flex-wrap items-center justify-between gap-2 py-1">
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <button type="button" className="tap min-w-0 text-left break-words text-accent underline" onClick={() => onSelect(r.id)}>
+          {r.title}
+        </button>
+        <StatusBadge status={r.status} />
+      </span>
+      <Button size="sm" variant="ghost" onClick={() => remove.mutate(r.dependencyId)} aria-label={`${label} ${r.title}: remove`}>
+        Remove
+      </Button>
+    </li>
+  );
+  return (
+    <Card>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">Dependencies</h3>
+        {openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : null}
+      </div>
+      <h4 className="text-xs font-medium tracking-wide text-muted uppercase">Blocked by</h4>
+      {d.blockedBy.length ? (
+        <ul className="divide-y divide-line">{d.blockedBy.map((r) => row(r, "Blocked by"))}</ul>
+      ) : (
+        <p className="text-sm text-muted">Nothing. Add work this has to wait for.</p>
+      )}
+      {d.blocking.length ? (
+        <>
+          <h4 className="mt-3 text-xs font-medium tracking-wide text-muted uppercase">Blocks</h4>
+          <ul className="divide-y divide-line">{d.blocking.map((r) => row(r, "Blocks"))}</ul>
+        </>
+      ) : null}
+      <form
+        className="mt-3 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (dest) add.mutate(undefined);
+        }}
+      >
+        <div className="min-w-0 flex-1">
+          <Field id="dep-add" label="Depends on">
+            <select id="dep-add" className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
+              <option value="">Choose…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Button type="submit" size="sm" disabled={!dest} busy={add.isPending}>
+          Add dependency
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
 function linkLabel(l: WorkLink) {
   return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
 }
 
-function Links({ d }: { d: WorkDetail }) {
+function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
+  const hasChat = d.links.some((l) => l.kind === "chat_session");
+  const convs = useConversations(canChat && hasChat);
+  const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
   return (
     <Card>
       <h3 className="mb-2 font-semibold">Links</h3>
       {d.links.length ? (
         <ul className="space-y-2">
           {d.links.map((l) => (
-            <LinkRow key={l.id} l={l} refresh={d.githubRefresh} />
+            <LinkRow key={l.id} l={l} refresh={d.githubRefresh} lastActive={l.kind === "chat_session" ? activity.get(l.targetId ?? "") : undefined} />
           ))}
         </ul>
       ) : (
         <p className="text-sm text-muted">Link the conversation this came from, the PR that implements it, or evidence.</p>
       )}
-      {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr") ? (
+      {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
         <p className="mt-2 text-xs text-muted">
           Set JARVIS_GITHUB_TOKEN on the server to refresh PR state from GitHub (read-only). Until then, mark it yourself.
         </p>
+      ) : d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
+        <p className="mt-2 text-xs text-muted">PR and issue states refresh from GitHub (read-only) when you open this item, at most every 5 minutes.</p>
       ) : null}
     </Card>
   );
 }
 
-function LinkRow({ l, refresh }: { l: WorkLink; refresh: boolean }) {
+function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; lastActive?: string | null }) {
   const url = `/api/work/links/${encodeURIComponent(l.id)}`;
-  const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), { ok: "PR state updated" });
+  const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), {
+    ok: l.kind === "github_issue" ? "Issue state updated" : "PR state updated",
+  });
   const remove = useWorkMutation(() => api.del(url), { ok: "Link removed" });
   const pull = useWorkMutation(() => api.post(`${url}/refresh`), { ok: "Refreshed from GitHub" });
   const name = l.title || l.targetId || l.url || "";
@@ -732,8 +1017,15 @@ function LinkRow({ l, refresh }: { l: WorkLink; refresh: boolean }) {
         <div className="min-w-0">
           <p className="text-xs text-muted">
             {linkLabel(l)} · {l.role}
+            {l.lineage === "handoff_from" ? " · started from the handoff" : ""}
           </p>
           <p className="font-medium break-words">{name}</p>
+          {(l.kind === "github_pr" || l.kind === "github_issue") && l.checkedAt ? (
+            <p className={`text-xs ${l.checkError ? "text-danger" : "text-muted"}`}>
+              {l.checkError ? `GitHub check failed ${fmtWhen(l.checkedAt)}: ${l.checkError}` : `Checked on GitHub ${fmtWhen(l.checkedAt)}`}
+            </p>
+          ) : null}
+          {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
         </div>
         {l.externalState ? (
           <Badge tone={l.externalState === "merged" ? "ok" : l.externalState === "closed" ? "neutral" : "accent"}>{l.externalState}</Badge>
@@ -759,7 +1051,12 @@ function LinkRow({ l, refresh }: { l: WorkLink; refresh: boolean }) {
             Mark closed
           </Button>
         ) : null}
-        {l.kind === "github_pr" && refresh ? (
+        {l.kind === "github_issue" ? (
+          <Button size="sm" onClick={() => state.mutate(l.externalState === "closed" ? "open" : "closed")} busy={state.isPending}>
+            {l.externalState === "closed" ? "Mark open" : "Mark closed"}
+          </Button>
+        ) : null}
+        {(l.kind === "github_pr" || l.kind === "github_issue") && refresh ? (
           <Button size="sm" onClick={() => pull.mutate(undefined)} busy={pull.isPending}>
             Refresh
           </Button>
@@ -844,19 +1141,21 @@ function ForkDialog({
   item,
   chat,
   onCreated,
+  onOp,
 }: {
   open: boolean;
   onClose: () => void;
   item: WorkItem;
   chat?: WorkLink;
   onCreated: (id: string) => void;
+  onOp: OnOp;
 }) {
   const [title, setTitle] = useState(`${item.title} (fork)`);
-  const fork = useWorkMutation(() => api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(item.id)}/fork`, { title }), {
-    ok: "Forked",
+  const fork = useWorkMutation(() => api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/fork`, { title }), {
     onSuccess: (r) => {
       onClose();
       onCreated(r.item.id);
+      onOp(r.op);
     },
   });
   return (
@@ -890,16 +1189,31 @@ function ForkDialog({
   );
 }
 
-function SplitDialog({ open, onClose, item, onCreated }: { open: boolean; onClose: () => void; item: WorkItem; onCreated: (id: string) => void }) {
+function SplitDialog({
+  open,
+  onClose,
+  item,
+  onCreated,
+  onOp,
+}: {
+  open: boolean;
+  onClose: () => void;
+  item: WorkItem;
+  onCreated: (id: string) => void;
+  onOp: OnOp;
+}) {
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
-  const split = useWorkMutation(() => api.post<{ item: WorkItem }>(`/api/work/items/${encodeURIComponent(item.id)}/split`, { title, summary }), {
-    ok: "Split into a child",
-    onSuccess: (r) => {
-      onClose();
-      onCreated(r.item.id);
+  const split = useWorkMutation(
+    () => api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/split`, { title, summary }),
+    {
+      onSuccess: (r) => {
+        onClose();
+        onCreated(r.item.id);
+        onOp(r.op);
+      },
     },
-  });
+  );
   return (
     <Dialog
       open={open}
@@ -934,7 +1248,7 @@ function SplitDialog({ open, onClose, item, onCreated }: { open: boolean; onClos
   );
 }
 
-function MoveDialog({ open, onClose, item, items }: { open: boolean; onClose: () => void; item: WorkItem; items: WorkItem[] }) {
+function MoveDialog({ open, onClose, item, items, onOp }: { open: boolean; onClose: () => void; item: WorkItem; items: WorkItem[]; onOp: OnOp }) {
   const [dest, setDest] = useState("");
   // Exclude the item and its descendants (the server also refuses cycles).
   const banned = new Set<string>([item.id]);
@@ -958,10 +1272,15 @@ function MoveDialog({ open, onClose, item, items }: { open: boolean; onClose: ()
     .filter((i) => !banned.has(i.id) && i.id !== item.parentId && i.kind !== "note")
     .map((i) => ({ id: i.id, label: path(i) }))
     .sort((a, b) => a.label.localeCompare(b.label));
-  const move = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(item.id)}/move`, { parentId: dest === "__top" ? null : dest }), {
-    ok: "Moved",
-    onSuccess: onClose,
-  });
+  const move = useWorkMutation(
+    () => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/move`, { parentId: dest === "__top" ? null : dest }),
+    {
+      onSuccess: (r) => {
+        onClose();
+        onOp(r.op);
+      },
+    },
+  );
   return (
     <Dialog
       open={open}
@@ -1173,6 +1492,26 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
     <>
       <Card>
         <h3 className="mb-2 font-semibold">Lineage</h3>
+        {d.links.some((l) => l.lineage === "handoff_from") ? (
+          <ul className="mb-2 space-y-1 text-sm">
+            {d.links
+              .filter((l) => l.lineage === "handoff_from")
+              .map((l) => {
+                const p = d.packets.find((x) => x.id === l.packetId);
+                return (
+                  <li key={l.id}>
+                    Handed off to{" "}
+                    <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="tap text-accent underline">
+                      {l.title}
+                    </Link>{" "}
+                    <span className="text-muted">
+                      · {p ? `packet v${p.version}` : "no packet"} · {fmtDate(l.createdAt)}
+                    </span>
+                  </li>
+                );
+              })}
+          </ul>
+        ) : null}
         {d.lineage.length ? (
           <ul className="space-y-1 text-sm">
             {d.lineage.map((l) => {
@@ -1196,7 +1535,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
               );
             })}
           </ul>
-        ) : (
+        ) : d.links.some((l) => l.lineage === "handoff_from") ? null : (
           <p className="text-sm text-muted">No forks, splits or moves.</p>
         )}
       </Card>
@@ -1215,6 +1554,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
                     ? `Created${e.reason ? `: ${e.reason}` : ""}`
                     : (e.reason ?? e.kind)}
               </span>
+              {e.source === "github" ? <Badge>GitHub</Badge> : null}
             </li>
           ))}
         </ol>

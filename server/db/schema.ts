@@ -815,6 +815,14 @@ export const workLinks = sqliteTable(
     /** open | merged | closed */
     externalState: text("external_state"),
     stateChangedAt: text("state_changed_at"),
+    /** "handoff_from": a conversation started from this item's handoff ("Continue in new conversation") */
+    lineage: text("lineage"),
+    /** the packet the handoff was written from (null when the item had none) */
+    packetId: text("packet_id"),
+    /** last read-only GitHub readback attempt (throttles automatic refresh) */
+    checkedAt: text("checked_at"),
+    /** why the last readback failed (cleared on success) */
+    checkError: text("check_error"),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [index("work_links_item_idx").on(t.itemId)],
@@ -903,9 +911,74 @@ export const workEvents = sqliteTable(
     toStatus: text("to_status"),
     reason: text("reason"),
     actor: text("actor").notNull(),
+    /** where a change came from: manual | github (read-only refresh); null for ordinary edits */
+    source: text("source"),
     at: text("at").notNull().default(now),
   },
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
+);
+
+/** Per-person reusable validation templates ("Add from template"). Nothing is seeded. */
+export const workValidationTemplates = sqliteTable(
+  "work_validation_templates",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    metric: text("metric").notNull(),
+    /** <= | >= | < | > | = */
+    comparator: text("comparator").notNull(),
+    threshold: real("threshold").notNull(),
+    unit: text("unit").notNull().default(""),
+    /** due date = the day it's applied + this many days (null: no due date) */
+    dueOffsetDays: integer("due_offset_days"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("work_validation_templates_owner_idx").on(t.userId)],
+);
+
+/** "item depends on item" (blocked-by). Cycle-safe (server/work/lifecycle.ts); drawn as Gantt connectors. */
+export const workDependencies = sqliteTable(
+  "work_dependencies",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    dependsOnId: text("depends_on_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("work_dependencies_pair_idx").on(t.itemId, t.dependsOnId), index("work_dependencies_on_idx").on(t.dependsOnId)],
+);
+
+/**
+ * Structural operations that can be undone (move, reorder, archive, split/fork
+ * creation). Undo is only allowed for the latest operation on an item, within
+ * a short window, and once (server/work/undo-rules.ts).
+ */
+export const workOps = sqliteTable(
+  "work_ops",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: text("item_id").notNull(),
+    /** move | reorder | archive | unarchive | split | fork */
+    kind: text("kind").notNull(),
+    /** JSON: what undo needs (previous parent and sibling order, copied link count, …) */
+    payload: text("payload").notNull().default("{}"),
+    createdAt: text("created_at").notNull().default(now),
+    undoneAt: text("undone_at"),
+  },
+  (t) => [index("work_ops_item_idx").on(t.userId, t.itemId, t.createdAt)],
 );
 
 export const dashboards = sqliteTable("dashboards", {

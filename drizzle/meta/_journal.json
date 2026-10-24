@@ -64,6 +64,41 @@
       "when": 1792635851812,
       "tag": "0008_work_hub",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792667504054,
+      "tag": "0009_work_handoff_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792667669064,
+      "tag": "0010_work_github_refresh",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792668144326,
+      "tag": "0011_work_ops",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792668457693,
+      "tag": "0012_work_dependencies",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1792668759245,
+      "tag": "0013_work_validation_templates",
+      "breakpoints": true
     }
   ]
 }

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Card, Empty, ErrorNote, Field, PageHeader, Spinner, inputCls } from "@/components/ui";
+import { Button, Card, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, inputCls } from "@/components/ui";
 import { Gantt, TimelineTable, type Zoom } from "@/components/work/Gantt";
-import type { TimelineResponse } from "@/lib/work";
+import { fmtDate, useWorkMutation } from "@/components/work/common";
+import type { TimelineResponse, TimelineRow } from "@/lib/work";
 
 export function TimelineView({ initialRoot }: { initialRoot?: string }) {
   const [root, setRoot] = useState(initialRoot ?? "");
@@ -15,6 +16,12 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
     queryKey: ["work", "timeline", root],
     queryFn: () => api.get<TimelineResponse>(`/api/work/timeline${root ? `?root=${encodeURIComponent(root)}` : ""}`),
   });
+  const [editing, setEditing] = useState<TimelineRow | null>(null);
+  const dates = useWorkMutation(
+    (v: { id: string; startDate: string | null; targetDate: string | null }) =>
+      api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { startDate: v.startDate, targetDate: v.targetDate }),
+    { ok: "Dates saved" },
+  );
   const choose = (id: string) => {
     setRoot(id);
     const url = new URL(window.location.href);
@@ -55,7 +62,16 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
       ) : q.data && q.data.rows.length ? (
         <Card className="p-2 sm:p-3">
           <h2 className="sr-only">{q.data.root ? q.data.root.title : "All areas"}</h2>
-          {table ? <TimelineTable rows={q.data.rows} /> : <Gantt rows={q.data.rows} today={q.data.today} zoom={zoom} />}
+          {table ? (
+            <TimelineTable rows={q.data.rows} onEditDates={setEditing} />
+          ) : (
+            <Gantt rows={q.data.rows} today={q.data.today} zoom={zoom} dependencies={q.data.dependencies} onDates={(id, d) => dates.mutate({ id, ...d })} />
+          )}
+          {!table ? (
+            <p className="mt-2 text-xs text-muted">
+              Drag a bar to move it, or drag its ends to change the dates. To type dates instead, use Show as table → Edit dates.
+            </p>
+          ) : null}
           <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" aria-label="Legend">
             <li className="flex items-center gap-1">
               <span aria-hidden="true" className="inline-block h-2.5 w-5 rounded bg-accent opacity-80" /> Planned (status colour)
@@ -75,11 +91,63 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
             <li className="flex items-center gap-1">
               <span aria-hidden="true" className="inline-block h-2.5 w-5 rounded ring-2 ring-danger" /> Overdue
             </li>
+            <li className="flex items-center gap-1">
+              <span aria-hidden="true" className="inline-block h-px w-5 bg-muted" /> Depends on (arrow points to the waiting item)
+            </li>
           </ul>
         </Card>
       ) : (
         <Empty title="Nothing to plot">Add work items, then give them start and target dates.</Empty>
       )}
+      {editing ? (
+        <DatesDialog
+          row={editing}
+          busy={dates.isPending}
+          onClose={() => setEditing(null)}
+          onSave={(d) => dates.mutate({ id: editing.id, ...d }, { onSuccess: () => setEditing(null) })}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function DatesDialog({
+  row,
+  busy,
+  onClose,
+  onSave,
+}: {
+  row: TimelineRow;
+  busy: boolean;
+  onClose: () => void;
+  onSave: (d: { startDate: string | null; targetDate: string | null }) => void;
+}) {
+  const [start, setStart] = useState(row.startDate ?? "");
+  const [target, setTarget] = useState(row.targetDate ?? "");
+  const invalid = !!start && !!target && target < start;
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Dates for ${row.title}`}
+      description={`Now: ${fmtDate(row.startDate)} to ${fmtDate(row.targetDate)}. Changes are recorded in the item's activity.`}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" busy={busy} disabled={invalid} onClick={() => onSave({ startDate: start || null, targetDate: target || null })}>
+            Save dates
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field id="tl-start" label="Start date">
+          <input id="tl-start" data-autofocus type="date" className={inputCls} value={start} onChange={(e) => setStart(e.target.value)} />
+        </Field>
+        <Field id="tl-target" label="Target date" error={invalid ? "Target is before the start" : undefined}>
+          <input id="tl-target" type="date" className={inputCls} value={target} onChange={(e) => setTarget(e.target.value)} />
+        </Field>
+      </div>
+    </Dialog>
   );
 }

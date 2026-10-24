@@ -1,16 +1,35 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { cx, inputCls } from "@/components/ui";
 import { STATUS_LABELS, type WorkItem } from "@/lib/work";
 import { StatusDot } from "./common";
+
+type DropPos = "before" | "after" | "inside";
+type Drag = { id: string; x: number; y: number; active: boolean; target: { id: string; pos: DropPos } | null };
 
 /**
  * Nested work tree (WAI-ARIA tree pattern): one tab stop, arrows move,
  * Right/Left expand/collapse (or go to parent), Enter/Space selects.
  * Rows hold no buttons so treeitems never nest interactive content.
+ *
+ * Drag-and-drop (pointer events, mouse/pen/touch) uses the grip on each row:
+ * drop on the top or bottom quarter of a row to place before/after it, or the
+ * middle to put it inside. Escape cancels. The keyboard equivalents are the
+ * item's "Move up", "Move down" and "Move…" actions.
  */
-export function WorkTree({ items, selected, onSelect }: { items: WorkItem[]; selected: string | null; onSelect: (id: string) => void }) {
+export function WorkTree({
+  items,
+  selected,
+  onSelect,
+  onPlace,
+}: {
+  items: WorkItem[];
+  selected: string | null;
+  onSelect: (id: string) => void;
+  onPlace?: (id: string, parentId: string | null, index: number) => void;
+}) {
+  const [drag, setDrag] = useState<Drag | null>(null);
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [focusId, setFocusId] = useState<string | null>(selected);
@@ -112,6 +131,98 @@ export function WorkTree({ items, selected, onSelect }: { items: WorkItem[]; sel
     e.stopPropagation();
   }
 
+  // --- drag and drop ---
+  const subtreeOf = (id: string) => {
+    const out = new Set([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const i of items)
+        if (i.parentId && out.has(i.parentId) && !out.has(i.id)) {
+          out.add(i.id);
+          grew = true;
+        }
+    }
+    return out;
+  };
+  function dropTarget(d: Drag, x: number, y: number): Drag["target"] {
+    const el = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]");
+    const id = el?.dataset.rowId;
+    if (!el || !id) return null;
+    const target = byId.get(id);
+    const moving = byId.get(d.id);
+    if (!target || !moving || subtreeOf(d.id).has(id)) return null;
+    const r = el.getBoundingClientRect();
+    const rel = (y - r.top) / Math.max(1, r.height);
+    let pos: DropPos = rel < 0.28 ? "before" : rel > 0.72 ? "after" : "inside";
+    if (pos === "inside" && target.kind === "note") pos = rel < 0.5 ? "before" : "after";
+    // Only areas sit at the top level; Miscellaneous stays last.
+    if (pos !== "inside" && target.parentId === null && moving.kind !== "area") pos = "inside";
+    if (pos === "after" && target.builtIn) pos = "before";
+    if (pos === "inside" && target.kind === "note") return null;
+    return { id, pos };
+  }
+  function drop(d: Drag) {
+    const t = d.target;
+    if (!t || !onPlace) return;
+    const target = byId.get(t.id)!;
+    if (t.pos === "inside") {
+      const n = (kids.get(t.id) ?? []).filter((k) => k.id !== d.id && !k.archived).length;
+      onPlace(d.id, t.id, n);
+      return;
+    }
+    const parent = target.parentId;
+    const sibs = (kids.get(parent) ?? []).filter((k) => k.id !== d.id && !k.archived);
+    const i = sibs.findIndex((k) => k.id === t.id);
+    onPlace(d.id, parent, Math.max(0, i) + (t.pos === "after" ? 1 : 0));
+  }
+  useEffect(() => {
+    if (!drag?.active) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setDrag(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drag?.active]);
+  const grip = (i: WorkItem) =>
+    onPlace && !i.builtIn ? (
+      <span
+        aria-hidden="true"
+        title="Drag to move"
+        data-drag-handle={i.id}
+        className="inline-flex h-9 w-5 shrink-0 cursor-grab touch-none items-center justify-center text-muted select-none active:cursor-grabbing"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e: ReactPointerEvent<HTMLSpanElement>) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          setDrag({ id: i.id, x: e.clientX, y: e.clientY, active: false, target: null });
+        }}
+        onPointerMove={(e) => {
+          if (!drag || drag.id !== i.id) return;
+          const active = drag.active || Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 4;
+          if (!active) return;
+          setDrag({ ...drag, active, target: dropTarget(drag, e.clientX, e.clientY) });
+        }}
+        onPointerUp={(e) => {
+          if (!drag || drag.id !== i.id) return;
+          e.currentTarget.releasePointerCapture?.(e.pointerId);
+          if (drag.active) drop(drag);
+          setDrag(null);
+        }}
+        onPointerCancel={() => setDrag(null)}
+      >
+        <svg viewBox="0 0 12 16" className="h-4 w-3" fill="currentColor">
+          <circle cx="3" cy="3" r="1.3" />
+          <circle cx="9" cy="3" r="1.3" />
+          <circle cx="3" cy="8" r="1.3" />
+          <circle cx="9" cy="8" r="1.3" />
+          <circle cx="3" cy="13" r="1.3" />
+          <circle cx="9" cy="13" r="1.3" />
+        </svg>
+      </span>
+    ) : null;
+
   const render = (parent: string | null, level: number) => {
     const list = (kids.get(parent) ?? []).filter((i) => !visibleSet || visibleSet.has(i.id));
     return list.map((i) => {
@@ -143,13 +254,19 @@ export function WorkTree({ items, selected, onSelect }: { items: WorkItem[]; sel
           className="outline-none [&:focus-visible>div]:ring-2 [&:focus-visible>div]:ring-[var(--focus)]"
         >
           <div
+            data-row-id={i.id}
             className={cx(
-              "flex min-h-11 cursor-pointer items-center gap-2 rounded-lg pr-2 text-sm",
+              "relative flex min-h-11 cursor-pointer items-center gap-2 rounded-lg pr-2 text-sm",
               selected === i.id ? "bg-accent-soft text-accent font-medium" : "hover:bg-surface-2",
               i.archived && "opacity-60",
+              drag?.active && drag.id === i.id && "opacity-50",
+              drag?.active && drag.target?.id === i.id && drag.target.pos === "inside" && "ring-2 ring-accent",
+              drag?.active && drag.target?.id === i.id && drag.target.pos === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
+              drag?.active && drag.target?.id === i.id && drag.target.pos === "after" && "shadow-[inset_0_-2px_0_var(--accent)]",
             )}
             style={{ paddingLeft: `${(level - 1) * 14 + 4}px` }}
           >
+            {grip(i)}
             <span
               aria-hidden="true"
               className={cx("inline-flex h-7 w-6 shrink-0 items-center justify-center text-muted", !hasKids && "invisible")}
@@ -184,6 +301,12 @@ export function WorkTree({ items, selected, onSelect }: { items: WorkItem[]; sel
       ) : (
         <p className="p-2 text-sm text-muted">{filter ? "Nothing matches." : "No work yet."}</p>
       )}
+      {/* Below the tree so showing it never shifts the rows under the pointer. */}
+      {drag?.active ? (
+        <p className="text-xs text-muted" aria-hidden="true">
+          Drop on the top or bottom edge of a row to place it before or after; on the middle to put it inside. Esc cancels.
+        </p>
+      ) : null}
     </div>
   );
 }
