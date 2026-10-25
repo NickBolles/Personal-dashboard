@@ -38,6 +38,7 @@ export function useCommands(): Command[] {
   const { toast } = useToast();
   const work = can("work.use");
   const chat = can("hermes.chat");
+  const ai = work && can("work.ai");
   return useMemo(() => {
     const go = (href: string) => () => router.push(href);
     const onItem = (action: string, fallback: string) => () => {
@@ -96,9 +97,25 @@ export function useCommands(): Command[] {
           keywords: "continue conversation handoff hermes claude",
           run: onItem("continue", "Pick an item first, then continue it in a new conversation."),
         },
+      ...(ai
+        ? (
+            [
+              ["research", "Research this", "ai research sources options"],
+              ["plan", "Make a plan", "ai plan steps children"],
+              ["schedule", "Suggest a time", "ai schedule calendar slot time"],
+              ["draft", "Draft…", "ai draft write email message"],
+            ] as const
+          ).map(([k, label, keywords]) => ({
+            id: `work.ai.${k}`,
+            label,
+            group: "Work" as const,
+            keywords,
+            run: onItem(`ai:${k}`, "Open an item first, then use ✦ Get started."),
+          }))
+        : []),
     ];
     return list.filter((c): c is Command => !!c);
-  }, [router, work, chat, toast]);
+  }, [router, work, chat, ai, toast]);
 }
 
 /** Commands whose label or keywords contain every word of `q`. Empty query → all of them. */

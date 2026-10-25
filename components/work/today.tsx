@@ -144,8 +144,34 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           { key: "overdue", label: "Overdue", value: t.kpis.overdue, tone: "danger" },
           { key: "inbox", label: "In the inbox", value: inboxCount, tone: "accent", onClick: onInbox },
           { key: "merged", label: "Merged, not settled", value: t.kpis.mergedNotSettled, tone: "ok" },
+          // Shown only when something is waiting, so the strip is unchanged for people without AI reports.
+          ...(t.kpis.reportsReady ? [{ key: "reports", label: "Reports ready", value: t.kpis.reportsReady, tone: "accent" as const }] : []),
         ]}
       />
+      {t.readyForYou?.length ? (
+        <section aria-labelledby="today-ready" className="card" data-testid="today-ready">
+          <h3 id="today-ready" className="font-semibold">
+            Ready for you
+          </h3>
+          <ul className="wk-rows">
+            {t.readyForYou.map((r) => (
+              <li key={r.reportId}>
+                <a
+                  className="tap flex min-w-0 flex-col py-2 hover:bg-surface-2"
+                  href={
+                    r.itemId
+                      ? `/areas?item=${encodeURIComponent(r.itemId)}&report=${encodeURIComponent(r.reportId)}`
+                      : `/areas?view=inbox&entry=${encodeURIComponent(r.inboxId ?? "")}`
+                  }
+                >
+                  <span className="truncate text-[14px] font-medium">✦ {r.title}</span>
+                  {r.summary ? <span className="line-clamp-1 text-[13px] text-muted">{r.summary}</span> : null}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <CardList
         id="today-continue"
         title="Continue"

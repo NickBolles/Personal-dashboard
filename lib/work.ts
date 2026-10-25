@@ -915,7 +915,9 @@ export const dismissConversationSchema = z.object({ sessionId: z.string().trim()
 export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
 export type TodayResponse = {
   today: string;
-  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number };
+  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number; reportsReady?: number };
+  /** phase 5: up to 3 unread AI reports (items and inbox), newest first */
+  readyForYou?: { reportId: string; title: string; summary: string; kind: string; itemId: string | null; inboxId: string | null }[];
   /** 1–3 things to pick up again */
   continue: TodayCard[];
   /** awaiting validation, earliest due first */

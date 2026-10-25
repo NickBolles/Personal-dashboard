@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { isClosed, isValidationOverdue, type TodayCard, type TodayResponse, type WorkStatus } from "@/lib/work";
 import { itemsWithValidations, recentAutoSettled, settleReview } from "./store";
@@ -80,9 +80,29 @@ export function today(userId: string, now = new Date()): TodayResponse {
     .slice(0, 3)
     .map((r) => card(r));
 
+  const R = schema.aiReports;
+  const unread = getDb()
+    .select({ id: R.id, title: R.title, summary: R.summary, kind: R.kind, subjectType: R.subjectType, subjectId: R.subjectId })
+    .from(R)
+    .where(and(eq(R.userId, userId), isNull(R.readAt), isNull(R.archivedAt), isNull(R.supersededBy)))
+    .orderBy(desc(R.createdAt))
+    .all();
   return {
+    ...(unread.length
+      ? {
+          readyForYou: unread.slice(0, 3).map((r) => ({
+            reportId: r.id,
+            title: r.title,
+            summary: r.summary.slice(0, 200),
+            kind: r.kind,
+            itemId: r.subjectType === "work_item" ? r.subjectId : null,
+            inboxId: r.subjectType === "inbox" ? r.subjectId : null,
+          })),
+        }
+      : {}),
     today: t,
     kpis: {
+      ...(unread.length ? { reportsReady: unread.length } : {}),
       inProgress: work.filter((r) => r.status === "in_progress").length,
       awaitingValidation: work.filter((r) => r.status === "awaiting_validation").length,
       overdue: overdueRows.length,
