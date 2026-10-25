@@ -111,7 +111,7 @@ Per connection, the poller reads `GET /issues?filter=assigned&state=open` (open 
 
 The **Inbox** (`?view=inbox`, `GET /api/work/inbox`) holds assigned GitHub issues, quick captures (`POST /api/work/inbox`, also from the command dock) and your unfiled conversations (phase 2 data, with File under… / File in Miscellaneous / Dismiss). Every row says where it came from and why it's there, with File/Accept, Dismiss and Open. Deterministic only: no AI triage. Dismissing a conversation stores only its id (Hermes owns conversations; Jarvis renders and links them, nothing else is copied).
 
-On phones the order is Today/Inbox switch → content → tree. `?item=<id>&do=packet|continue|settle|validate` (used by the palette and Today) opens that action on the item.
+Desktop is a full-width workbench (Direction C): a left pane (Today, Inbox, area tree with status dots), the centre (Today, Inbox or the item workspace) and, from 1280 px, a read-only **context rail** (Today: due soon, on hold, keys; an item: validation, PRs, lineage, dates, conversations; actions stay in the workspace). Density lives in `components/work/work.css` (scoped to `.work-ui`): compact rows/controls only for fine pointers, 44 px targets on touch. On phones the order is Today/Inbox switch → content → tree. `?item=<id>&do=packet|continue|settle|validate` (used by the palette and Today) opens that action on the item.
 
 ## Command dock and palette
 

@@ -5,7 +5,7 @@ import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { addDays, daysBetween } from "@/lib/time";
 import { cx } from "@/components/ui";
 import { shiftDates, STATUS_LABELS, todayIso, type TimelineDependency, type TimelineRow } from "@/lib/work";
-import { STATUS_FILL, StatusBadge, fmtDate } from "./common";
+import { STATUS_FILL, StatusBadge, StatusDot, fmtDate } from "./common";
 
 export type Zoom = "week" | "month";
 const PX: Record<Zoom, number> = { week: 28, month: 8 };
@@ -45,8 +45,24 @@ function ticks(start: string, days: number, zoom: Zoom) {
   return out;
 }
 
-const ROW_H = 37; // h-9 row + 1px border
-const HEAD_H = 29; // h-7 header + 1px border
+const ROW_H = 33; // h-8 row + 1px border
+const HEAD_H = 33; // h-8 header + 1px border
+
+/** Bars: a status-coloured hairline with a soft fill (artifact `.bar.*`). */
+const BAR_CLS: Record<TimelineRow["status"], string> = {
+  captured: "border-dashed border-line-strong bg-surface",
+  exploring: "border-dashed border-line-strong bg-surface",
+  ready: "border-dashed border-accent bg-surface",
+  in_progress: "border-accent bg-accent-soft",
+  in_review: "border-[var(--violet)] bg-[var(--violet-soft)]",
+  awaiting_validation: "border-warn bg-warn-soft",
+  ready_to_settle: "border-ok bg-ok-soft",
+  settled: "border-ok bg-ok-soft",
+  reopened: "border-danger bg-danger-soft",
+  on_hold: "border-line-strong bg-surface-2 opacity-60",
+  superseded: "border-line-strong bg-surface-2 opacity-60",
+  abandoned: "border-line-strong bg-surface-2 opacity-60",
+};
 
 type DragMode = "move" | "start" | "end";
 type BarDrag = { id: string; mode: DragMode; x: number; days: number };
@@ -77,7 +93,8 @@ export function Gantt({
   const px = PX[zoom];
   const width = days * px;
   const x = (date: string) => daysBetween(start, date) * px;
-  const labelW = compact ? "8rem" : "11rem";
+  // Narrower on phones so the chart keeps most of the width.
+  const labelW = compact ? "9rem" : "clamp(8.5rem, 30vw, 15rem)";
   const dated = (r: TimelineRow) => (drag && drag.id === r.id ? { ...r, ...shiftDates(r, drag.mode, drag.days) } : r);
   const index = new Map(rows.map((r, i) => [r.id, i]));
   const bar = (r: TimelineRow) => {
@@ -108,15 +125,19 @@ export function Gantt({
     if (onDates && (next.startDate !== r.startDate || next.targetDate !== r.targetDate)) onDates(r.id, next);
   };
   return (
-    <div data-scroll-x className="max-w-full overflow-x-auto rounded-lg border border-line">
+    <div data-scroll-x className="max-w-full overflow-x-auto rounded-[10px] border border-line bg-surface">
       <div className="relative" style={{ width: `calc(${labelW} + ${width}px)`, minWidth: "100%" }}>
-        <div className="flex border-b border-line bg-surface-2 text-xs text-muted">
-          <div className="sticky left-0 z-20 shrink-0 bg-surface-2 px-2 py-1 font-medium" style={{ width: labelW }}>
+        <div className="flex border-b border-line bg-surface text-[11.5px] text-muted">
+          <div className="wk-label sticky left-0 z-20 flex h-8 shrink-0 items-center border-r border-line bg-surface px-2.5" style={{ width: labelW }}>
             Item
           </div>
-          <div className="relative h-7" style={{ width }}>
+          <div className="relative h-8" style={{ width }}>
             {ticks(start, days, zoom).map((t) => (
-              <span key={t.day} className="absolute top-1 border-l border-line pl-1 whitespace-nowrap" style={{ left: t.day * px }}>
+              <span
+                key={t.day}
+                className="absolute top-0 flex h-8 items-center border-l border-line pl-1 whitespace-nowrap tabular-nums"
+                style={{ left: t.day * px }}
+              >
                 {t.label}
               </span>
             ))}
@@ -137,18 +158,22 @@ export function Gantt({
               .filter(Boolean)
               .join(", ");
             return (
-              <li key={r.id} className="flex border-b border-line last:border-b-0" data-row={r.id}>
-                <div className="sticky left-0 z-10 shrink-0 bg-surface px-2 py-1.5" style={{ width: labelW }}>
+              <li key={r.id} className={cx("flex border-b border-line last:border-b-0", r.depth === 0 && "bg-surface-2")} data-row={r.id}>
+                <div
+                  className={cx("sticky left-0 z-10 flex h-8 shrink-0 items-center border-r border-line px-2.5", r.depth === 0 ? "bg-surface-2" : "bg-surface")}
+                  style={{ width: labelW }}
+                >
                   <Link
                     href={`/work?item=${encodeURIComponent(r.id)}`}
-                    className="block truncate text-sm hover:underline"
-                    style={{ paddingLeft: `${Math.min(r.depth, 6) * 10}px` }}
+                    className={cx("flex min-w-0 items-center gap-1.5 text-[13px] hover:underline", r.depth === 0 && "font-semibold")}
+                    style={{ paddingLeft: `${Math.min(r.depth, 6) * 12}px` }}
                     aria-label={`${r.title}: ${desc}`}
                   >
-                    {r.title}
+                    {r.depth === 0 ? null : <StatusDot status={r.status} />}
+                    <span className="truncate">{r.title}</span>
                   </Link>
                 </div>
-                <div className="relative h-9" style={{ width }} aria-hidden="true">
+                <div className="relative h-8" style={{ width }} aria-hidden="true">
                   {b ? (
                     <div
                       title={onDates ? `${desc}. Drag to move; drag an end to change that date.` : desc}
@@ -158,25 +183,27 @@ export function Gantt({
                       onPointerUp={() => endDrag(r)}
                       onPointerCancel={() => setDrag(null)}
                       className={cx(
-                        "absolute top-2 h-5 rounded",
-                        STATUS_FILL[r.status],
+                        "absolute top-1.5 h-5 overflow-hidden rounded-md",
+                        b.both ? cx("border-[1.5px]", BAR_CLS[r.status]) : cx("w-3 rotate-45", STATUS_FILL[r.status]),
                         r.overdue && "ring-2 ring-danger ring-offset-1 ring-offset-[var(--surface)]",
-                        b.both ? "opacity-80" : "w-3 rotate-45",
                         onDates && "cursor-grab touch-none active:cursor-grabbing",
                         drag?.id === r.id && "opacity-60 ring-2 ring-accent",
                       )}
-                      style={b.both ? { left: b.left, width: Math.max(px, b.right - b.left) } : { left: b.left + px / 2 - 6, width: 12, height: 12, top: 12 }}
+                      style={b.both ? { left: b.left, width: Math.max(px, b.right - b.left) } : { left: b.left + px / 2 - 6, width: 12, height: 12, top: 10 }}
                     >
+                      {b.both && !compact && b.right - b.left > 60 ? (
+                        <span className="pointer-events-none block truncate px-2 text-[11px] leading-[17px] text-text">{r.title}</span>
+                      ) : null}
                       {onDates && b.both ? (
                         <>
-                          <span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l bg-black/15" />
-                          <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r bg-black/15" />
+                          <span className="absolute inset-y-0 left-0 w-2 cursor-ew-resize" />
+                          <span className="absolute inset-y-0 right-0 w-2 cursor-ew-resize" />
                         </>
                       ) : null}
                     </div>
                   ) : null}
                   {r.validationOverdue ? (
-                    <span className="absolute top-1 right-1 rounded bg-warn-soft px-1 text-[10px] font-semibold text-warn" title="Validation overdue">
+                    <span className="absolute top-1.5 right-1 rounded bg-warn-soft px-1 text-[10px] font-semibold text-warn" title="Validation overdue">
                       !
                     </span>
                   ) : null}
@@ -184,7 +211,7 @@ export function Gantt({
                     <span
                       key={`${a.kind}-${i}`}
                       title={`${ACTUAL[a.kind].label} ${fmtDate(localDay(a.at))}`}
-                      className={cx("pointer-events-none absolute top-3.5 h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]", ACTUAL[a.kind].cls)}
+                      className={cx("pointer-events-none absolute top-[11px] h-2.5 w-2.5 rounded-full border-2 border-[var(--surface)]", ACTUAL[a.kind].cls)}
                       style={{ left: x(localDay(a.at)) + px / 2 - 5 }}
                     />
                   ))}
@@ -232,9 +259,11 @@ export function Gantt({
         ) : null}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 bottom-0 z-0 w-px bg-danger"
+          className="pointer-events-none absolute top-0 bottom-0 z-[6] w-px bg-danger"
           style={{ left: `calc(${labelW} + ${x(today) + px / 2}px)` }}
-        />
+        >
+          {!compact ? <span className="absolute top-0.5 left-1 text-[10.5px] font-bold text-danger">Today</span> : null}
+        </div>
       </div>
     </div>
   );
@@ -244,27 +273,27 @@ export function TimelineTable({ rows, onEditDates }: { rows: TimelineRow[]; onEd
   return (
     // relative: keeps absolutely positioned descendants (sr-only text) inside the scroll box.
     <div data-scroll-x className="relative overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-[13px]">
         <caption className="sr-only">Work timeline</caption>
-        <thead className="text-xs text-muted">
+        <thead className="wk-label">
           <tr>
-            <th scope="col" className="p-2">
+            <th scope="col" className="px-2.5 py-1.5">
               Item
             </th>
-            <th scope="col" className="p-2">
+            <th scope="col" className="px-2.5 py-1.5">
               Status
             </th>
-            <th scope="col" className="p-2">
+            <th scope="col" className="px-2.5 py-1.5">
               Start
             </th>
-            <th scope="col" className="p-2">
+            <th scope="col" className="px-2.5 py-1.5">
               Target
             </th>
-            <th scope="col" className="p-2">
+            <th scope="col" className="px-2.5 py-1.5">
               Actual
             </th>
             {onEditDates ? (
-              <th scope="col" className="p-2">
+              <th scope="col" className="px-2.5 py-1.5">
                 <span className="sr-only">Actions</span>
               </th>
             ) : null}
@@ -273,7 +302,7 @@ export function TimelineTable({ rows, onEditDates }: { rows: TimelineRow[]; onEd
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-t border-line">
-              <th scope="row" className="p-2 font-normal">
+              <th scope="row" className="px-2.5 py-1.5 font-normal">
                 <Link href={`/work?item=${encodeURIComponent(r.id)}`} className="hover:underline" style={{ paddingLeft: `${Math.min(r.depth, 6) * 10}px` }}>
                   {r.title}
                 </Link>
@@ -281,14 +310,14 @@ export function TimelineTable({ rows, onEditDates }: { rows: TimelineRow[]; onEd
                 {r.validationOverdue ? <span className="ml-2 text-xs font-medium text-warn">Validation overdue</span> : null}
                 {r.blocked ? <span className="ml-2 text-xs font-medium text-muted">Blocked</span> : null}
               </th>
-              <td className="p-2">
+              <td className="px-2.5 py-1.5">
                 <StatusBadge status={r.status} />
               </td>
-              <td className="p-2">{fmtDate(r.startDate)}</td>
-              <td className="p-2">{fmtDate(r.targetDate)}</td>
-              <td className="p-2">{r.actuals.map((a) => `${ACTUAL[a.kind].label} ${fmtDate(localDay(a.at))}`).join("; ") || "—"}</td>
+              <td className="px-2.5 py-1.5">{fmtDate(r.startDate)}</td>
+              <td className="px-2.5 py-1.5">{fmtDate(r.targetDate)}</td>
+              <td className="px-2.5 py-1.5">{r.actuals.map((a) => `${ACTUAL[a.kind].label} ${fmtDate(localDay(a.at))}`).join("; ") || "—"}</td>
               {onEditDates ? (
-                <td className="p-2">
+                <td className="px-2.5 py-1.5">
                   <button type="button" className="tap min-h-11 rounded-lg px-2 text-accent underline" onClick={() => onEditDates(r)}>
                     Edit dates<span className="sr-only"> for {r.title}</span>
                   </button>

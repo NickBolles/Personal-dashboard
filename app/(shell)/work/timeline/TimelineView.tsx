@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Card, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, inputCls } from "@/components/ui";
+import { Button, Dialog, Empty, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
 import { Gantt, TimelineTable, type Zoom } from "@/components/work/Gantt";
-import { fmtDate, useWorkMutation } from "@/components/work/common";
+import { WorkPageHeader, fmtDate, useWorkMutation } from "@/components/work/common";
 import type { TimelineResponse, TimelineRow } from "@/lib/work";
 
 export function TimelineView({ initialRoot }: { initialRoot?: string }) {
@@ -30,37 +30,44 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
     window.history.replaceState(null, "", url);
   };
   return (
-    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-      <PageHeader title="Timeline" subtitle="Planned dates as bars; started, merged and settled markers come from what actually happened." />
-      <Card className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 sm:max-w-sm">
-          <Field id="tl-root" label="Area or project">
-            <select id="tl-root" className={inputCls} value={root} onChange={(e) => choose(e.target.value)}>
-              <option value="">All areas</option>
-              {q.data?.roots.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
-                </option>
+    <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+      <WorkPageHeader
+        eyebrow={`Plan vs. actual · ${q.data?.root ? q.data.root.title : "all areas"}`}
+        title="Timeline"
+        subtitle="Planned dates as bars; started, merged and settled markers come from what actually happened."
+        actions={
+          <>
+            <div className="min-w-0">
+              <label htmlFor="tl-root" className="sr-only">
+                Area or project
+              </label>
+              <select id="tl-root" className={`${inputCls} min-w-44`} value={root} onChange={(e) => choose(e.target.value)}>
+                <option value="">All areas</option>
+                {q.data?.roots.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div role="group" aria-label="Zoom" className="flex gap-1">
+              {(["week", "month"] as const).map((z) => (
+                <Button key={z} size="sm" variant={zoom === z ? "primary" : "secondary"} aria-pressed={zoom === z} onClick={() => setZoom(z)}>
+                  {z === "week" ? "Weeks" : "Months"}
+                </Button>
               ))}
-            </select>
-          </Field>
-        </div>
-        <div role="group" aria-label="Zoom" className="flex gap-1">
-          {(["week", "month"] as const).map((z) => (
-            <Button key={z} size="sm" variant={zoom === z ? "primary" : "secondary"} aria-pressed={zoom === z} onClick={() => setZoom(z)}>
-              {z === "week" ? "Weeks" : "Months"}
+            </div>
+            <Button size="sm" aria-pressed={table} onClick={() => setTable((t) => !t)}>
+              {table ? "Show chart" : "Show as table"}
             </Button>
-          ))}
-        </div>
-        <Button size="sm" aria-pressed={table} onClick={() => setTable((t) => !t)}>
-          {table ? "Show chart" : "Show as table"}
-        </Button>
-      </Card>
+          </>
+        }
+      />
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.isPending ? (
         <Spinner label="Loading timeline…" />
       ) : q.data && q.data.rows.length ? (
-        <Card className="p-2 sm:p-3">
+        <div className="min-w-0">
           <h2 className="sr-only">{q.data.root ? q.data.root.title : "All areas"}</h2>
           {table ? (
             <TimelineTable rows={q.data.rows} onEditDates={setEditing} />
@@ -72,9 +79,9 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
               Drag a bar to move it, or drag its ends to change the dates. To type dates instead, use Show as table → Edit dates.
             </p>
           ) : null}
-          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" aria-label="Legend">
+          <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted" aria-label="Legend">
             <li className="flex items-center gap-1">
-              <span aria-hidden="true" className="inline-block h-2.5 w-5 rounded bg-accent opacity-80" /> Planned (status colour)
+              <span aria-hidden="true" className="inline-block h-2.5 w-5 rounded border-[1.5px] border-accent bg-accent-soft" /> Planned (status colour)
             </li>
             <li className="flex items-center gap-1">
               <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full bg-accent" /> Started
@@ -95,7 +102,7 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
               <span aria-hidden="true" className="inline-block h-px w-5 bg-muted" /> Depends on (arrow points to the waiting item)
             </li>
           </ul>
-        </Card>
+        </div>
       ) : (
         <Empty title="Nothing to plot">Add work items, then give them start and target dates.</Empty>
       )}

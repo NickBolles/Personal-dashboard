@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls } from "@/components/ui";
+import { Badge, Button, Dialog, Empty, ErrorNote, Field, Spinner, cx, inputCls } from "@/components/ui";
 import { CustomHtmlWidget } from "@/components/work/CustomHtmlWidget";
 import { MapCanvas } from "@/components/work/WorkMap";
 import { fmtWhen } from "@/components/work/conversations";
 import { useAccess } from "@/components/access";
 import { Gantt } from "@/components/work/Gantt";
-import { StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { StatusBadge, StatusDot, WorkPageHeader, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { KpiStrip } from "@/components/work/today";
 import {
   CUSTOM_HTML_MAX_BYTES,
@@ -30,7 +30,11 @@ import {
   type WorkStatus,
 } from "@/lib/work";
 
-const SIZE_CLS: Record<WidgetSize, string> = { sm: "lg:col-span-1", md: "md:col-span-2 lg:col-span-2", lg: "md:col-span-2 lg:col-span-3" };
+const SIZE_CLS: Record<WidgetSize, string> = {
+  sm: "lg:col-span-6 xl:col-span-4",
+  md: "md:col-span-2 lg:col-span-6 xl:col-span-8",
+  lg: "md:col-span-2 lg:col-span-12",
+};
 const SIZE_LABEL: Record<WidgetSize, string> = { sm: "Small", md: "Medium", lg: "Large" };
 const SCOPED: WidgetKind[] = [
   "priorities",
@@ -57,8 +61,9 @@ export function DashboardView() {
     api.patch(`/api/work/dashboard/widgets/${encodeURIComponent(v.id)}`, { position: v.position }),
   );
   return (
-    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-      <PageHeader
+    <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+      <WorkPageHeader
+        eyebrow="Dashboard · yours"
         title="Dashboard"
         subtitle="Your work at a glance. Widgets read Jarvis work data only."
         actions={
@@ -79,7 +84,7 @@ export function DashboardView() {
         <Spinner label="Loading dashboard…" />
       ) : q.data ? (
         q.data.widgets.length ? (
-          <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
             {q.data.widgets.map((w, i) => (
               <WidgetCard
                 key={w.id}
@@ -157,14 +162,17 @@ function WidgetCard({
   };
   return (
     <li className={cx("min-w-0", SIZE_CLS[w.size], mine && drag?.active && "opacity-50")} data-widget-index={index} data-size={w.size}>
-      <Card
-        as="section"
+      <section
         aria-labelledby={headingId}
-        className={cx("h-full", drag?.active && drag.over === index && !mine && "ring-2 ring-accent")}
+        className={cx(
+          "wk-card h-full p-3.5",
+          editing && "outline-2 outline-offset-2 outline-dashed outline-line-strong",
+          drag?.active && drag.over === index && !mine && "ring-2 ring-accent",
+        )}
         data-widget={w.kind}
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 id={headingId} className="flex items-center gap-1 font-semibold">
+          <h2 id={headingId} className="flex items-center gap-1 text-[14px] font-semibold">
             {editing ? (
               <span
                 aria-hidden="true"
@@ -221,7 +229,7 @@ function WidgetCard({
           ) : null}
         </div>
         <WidgetBody w={w} />
-      </Card>
+      </section>
     </li>
   );
 }
@@ -236,11 +244,11 @@ function UnfiledWidget() {
   return (
     <div>
       <p className="flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tabular-nums">{d.total}</span>
+        <span className="text-2xl font-semibold tabular-nums">{d.total}</span>
         <span className="text-sm text-muted">not filed under any work</span>
       </p>
       {d.unavailable.length ? <p className="text-sm text-warn">{d.unavailable.join(", ")} didn&apos;t answer.</p> : null}
-      <ul className="mt-2 divide-y divide-line">
+      <ul className="wk-rows mt-1.5">
         {d.conversations.slice(0, 5).map((c) => (
           <li key={c.id} className="py-2">
             <Link href={`/chat/${encodeURIComponent(c.id)}`} className="font-medium break-words hover:underline">
@@ -322,18 +330,26 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
   if (d.kind === "items") {
     if (!d.items.length) return <p className="text-sm text-muted">Nothing here right now.</p>;
     return (
-      <ul className="divide-y divide-line">
+      <ul className="wk-rows">
         {d.items.map((i) => (
-          <li key={i.id} className="py-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="min-w-0 font-medium break-words hover:underline">
-                {i.title}
+          <li key={i.id} className="py-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <Link
+                href={`/work?item=${encodeURIComponent(i.id)}`}
+                className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium break-words hover:underline"
+              >
+                <StatusDot status={i.status} />
+                <span className="min-w-0">{i.title}</span>
               </Link>
-              <StatusBadge status={i.status} auto={i.settledKind === "auto"} />
+              <span className="flex items-center gap-2">
+                {i.targetDate && w.kind === "priorities" ? <span className="text-xs text-muted tabular-nums">Target {fmtDate(i.targetDate)}</span> : null}
+                <StatusBadge status={i.status} auto={i.settledKind === "auto"} />
+              </span>
             </div>
-            {w.kind === "next_actions" || w.kind === "priorities" ? <p className="text-sm break-words text-muted">{i.nextAction || "No next action"}</p> : null}
-            {i.detail ? <p className="text-sm break-words text-muted">{i.detail}</p> : null}
-            {i.targetDate && w.kind === "priorities" ? <p className="text-xs text-muted">Target {fmtDate(i.targetDate)}</p> : null}
+            {w.kind === "next_actions" || w.kind === "priorities" ? (
+              <p className="pl-4 text-xs break-words text-muted">{i.nextAction || "No next action"}</p>
+            ) : null}
+            {i.detail ? <p className="pl-4 text-xs break-words text-muted">{i.detail}</p> : null}
           </li>
         ))}
       </ul>
@@ -343,13 +359,13 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
     return (
       <div>
         <p className="flex items-baseline gap-2">
-          <span className={cx("text-3xl font-semibold tabular-nums", d.count ? "text-danger" : "")} data-testid="overdue-count">
+          <span className={cx("text-2xl font-semibold tabular-nums", d.count ? "text-danger" : "")} data-testid="overdue-count">
             {d.count}
           </span>
           <span className="text-sm text-muted">validation{d.count === 1 ? "" : "s"} past due</span>
         </p>
         {d.items.length ? (
-          <ul className="mt-2 divide-y divide-line">
+          <ul className="wk-rows mt-1.5">
             {d.items.map((i) => (
               <li key={i.id} className="py-2">
                 <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="font-medium break-words hover:underline">
@@ -371,7 +387,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
     const href = w.config.href ? safeHref(w.config.href) : null;
     return (
       <div>
-        <p className="text-3xl font-semibold tabular-nums">{w.config.value || "—"}</p>
+        <p className="text-2xl font-semibold tabular-nums">{w.config.value || "—"}</p>
         {w.config.label ? <p className="text-sm text-muted">{w.config.label}</p> : null}
         {w.config.target ? <Badge className="mt-2">Target {w.config.target}</Badge> : null}
         {href ? (
