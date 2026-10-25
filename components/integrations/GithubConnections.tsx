@@ -6,6 +6,7 @@ import { api } from "@/lib/client/api";
 import { fineGrainedTokenUrl, parseRepoList, type GithubSettingsResponse, type GithubTestResult, type PublicGithubConnection } from "@/lib/github";
 import { Badge, Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
+import { GithubAppSection } from "./GithubApp";
 
 /**
  * Settings → Connections → GitHub (admin). One read-only token per GitHub
@@ -37,14 +38,17 @@ export function GithubConnections() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-muted">
-        Read-only access for the Work hub: linked PR and issue state, and issues assigned to you (into the Work inbox). Jarvis only ever reads; it never writes
-        to GitHub. Add one token per GitHub owner (your user, each organization).
+        Read-only access for the Work hub: linked PR, CI and issue state, and issues assigned to you (into the Work inbox). Jarvis only ever reads; it never
+        writes to GitHub. Use the GitHub App, or one token per GitHub owner (your user, each organization). For each repository Jarvis uses the App first, then
+        a token.
       </p>
       {s.envToken ? (
         <p className="rounded-lg bg-surface-2 p-2 text-sm">
           <Badge>Fallback</Badge> <code>JARVIS_GITHUB_TOKEN</code> is set on the server and is used for owners without a connection.
         </p>
       ) : null}
+
+      <GithubAppSection s={s} />
 
       <section aria-labelledby="gh-tokens">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -301,9 +305,10 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
         Webhook (optional, read-only)
       </h3>
       <p className="text-sm text-muted">
-        GitHub can tell Jarvis the moment a linked PR or issue changes. Jarvis doesn&apos;t register it for you: in the repository or organization settings, add
-        a webhook with this URL, content type <code>application/json</code>, this secret, and the events “Pull requests” and “Issues”. Jarvis checks the
-        signature on every delivery and only updates PRs and issues already linked to Work items.
+        The GitHub App sends its webhooks here with its own secret; nothing to set up. Without the App (tokens only), GitHub can still tell Jarvis the moment a
+        linked PR or issue changes. Jarvis doesn&apos;t register it for you: in the repository or organization settings, add a webhook with this URL, content
+        type <code>application/json</code>, this secret, and the events “Pull requests” and “Issues”. Jarvis checks the signature on every delivery and only
+        updates PRs and issues already linked to Work items.
       </p>
       <Field id="gh-webhook-url" label="Payload URL">
         <div className="flex gap-2">

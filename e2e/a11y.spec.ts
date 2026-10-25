@@ -15,6 +15,7 @@ const PAGES = [
   "/initiatives",
   "/settings",
   "/settings/connections",
+  "/settings/connections#github",
   "/settings/notifications",
   "/settings/phones",
   "/brain",

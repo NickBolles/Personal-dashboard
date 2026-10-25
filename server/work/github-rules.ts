@@ -135,13 +135,13 @@ function repoOf(payload: Obj): { owner: string; repo: string } | null {
   return m ? { owner: m[1]!, repo: m[2]! } : null;
 }
 
-/** pull_request / issues payloads → what Jarvis needs (null for anything else or malformed). */
+/** pull_request / pull_request_review / issues payloads → what Jarvis needs (null for anything else or malformed). */
 export function parseWebhookEvent(event: string, payload: unknown): PullEvent | IssueEvent | null {
   const p = obj(payload);
   if (!p) return null;
   const repo = repoOf(p);
   if (!repo) return null;
-  if (event === "pull_request") {
+  if (event === "pull_request" || event === "pull_request_review") {
     const pr = obj(p.pull_request);
     const number = Number(pr?.number ?? p.number);
     if (!pr || !Number.isInteger(number) || number <= 0) return null;

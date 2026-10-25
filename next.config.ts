@@ -18,7 +18,8 @@ const securityHeaders = [
       "manifest-src 'self'",
       "frame-ancestors 'none'",
       "base-uri 'self'",
-      "form-action 'self' https://accounts.google.com",
+      // GitHub: the "Create GitHub App" manifest form posts to github.com (docs/github-app.md).
+      "form-action 'self' https://accounts.google.com https://github.com",
     ].join("; "),
   },
 ];

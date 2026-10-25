@@ -314,7 +314,7 @@ describe("GitHub connections (admin settings)", () => {
     // The stored value is encrypted.
     const row = getDb().select().from(schema.githubConnections).get()!;
     expect(row.tokenCipher).not.toContain(TOKEN_A);
-    expect(resolveGithubToken("momentumbets", "web")?.token).toBe(TOKEN_A);
+    expect((await resolveGithubToken("momentumbets", "web"))?.token).toBe(TOKEN_A);
 
     // One connection per owner.
     expect((await call(connectionsRoute.POST as H, { method: "POST", body: { label: "Dup", owner: "MomentumBets", token: TOKEN_B } })).status).toBe(409);
@@ -326,7 +326,7 @@ describe("GitHub connections (admin settings)", () => {
     const patchedText = await patched.text();
     expect(patchedText).not.toContain(TOKEN_B);
     expect(JSON.parse(patchedText).connection).toMatchObject({ label: "Momentum org", tokenHint: "•••• 0002" });
-    expect(resolveGithubToken("momentumbets", "web")?.token).toBe(TOKEN_B);
+    expect((await resolveGithubToken("momentumbets", "web"))?.token).toBe(TOKEN_B);
 
     // Not admin → 403 everywhere; signed out → 401.
     for (const u of [other, kid]) {
@@ -337,7 +337,7 @@ describe("GitHub connections (admin settings)", () => {
     expect((await call(githubRoute.GET as H, { user: null })).status).toBe(401);
 
     expect((await call(connectionRoute.DELETE as H, { method: "DELETE", params: { id: connection.id } })).status).toBe(200);
-    expect(resolveGithubToken("momentumbets", "web")).toBeNull();
+    expect(await resolveGithubToken("momentumbets", "web")).toBeNull();
 
     const audits = recentAudit(100).filter((a) => a.action.startsWith("github."));
     expect(audits.map((a) => a.action).sort()).toEqual(["github.connection_add", "github.connection_remove", "github.connection_update"]);
@@ -397,12 +397,12 @@ describe("GitHub connections (admin settings)", () => {
   it("resolves tokens per owner with JARVIS_GITHUB_TOKEN as the fallback, and refresh uses them", async () => {
     addConnection({ owner: "momentumbets", token: TOKEN_A });
     addConnection({ owner: "NickBolles", token: TOKEN_B, repos: ["jarvis"] });
-    expect(resolveGithubToken("MOMENTUMBETS", "x")).toMatchObject({ token: TOKEN_A, source: "connection" });
-    expect(resolveGithubToken("nickbolles", "jarvis")).toMatchObject({ token: TOKEN_B });
-    expect(resolveGithubToken("nickbolles", "dotfiles")).toBeNull(); // outside the allowlist, no env
+    expect(await resolveGithubToken("MOMENTUMBETS", "x")).toMatchObject({ token: TOKEN_A, source: "connection" });
+    expect(await resolveGithubToken("nickbolles", "jarvis")).toMatchObject({ token: TOKEN_B });
+    expect(await resolveGithubToken("nickbolles", "dotfiles")).toBeNull(); // outside the allowlist, no env
     vi.stubEnv("JARVIS_GITHUB_TOKEN", "synthetic-env-value");
-    expect(resolveGithubToken("nickbolles", "dotfiles")).toMatchObject({ token: "synthetic-env-value", source: "env" });
-    expect(resolveGithubToken("someone-else")).toMatchObject({ source: "env" });
+    expect(await resolveGithubToken("nickbolles", "dotfiles")).toMatchObject({ token: "synthetic-env-value", source: "env" });
+    expect(await resolveGithubToken("someone-else")).toMatchObject({ source: "env" });
 
     const u = me();
     const mb = store.createItem(u, { kind: "area", title: "Momentum Bets" }, cid);

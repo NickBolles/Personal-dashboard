@@ -110,6 +110,7 @@ const toLink = (r: typeof schema.workLinks.$inferSelect): WorkLink => ({
   kind: r.kind as WorkLink["kind"],
   role: r.role as WorkLink["role"],
   externalState: r.externalState as ExternalState | null,
+  checksState: r.checksState === "success" || r.checksState === "failure" || r.checksState === "pending" ? r.checksState : null,
   lineage: r.lineage === "handoff_from" ? "handoff_from" : null,
 });
 const toPacket = (r: typeof schema.workPackets.$inferSelect): WorkPacket => ({ ...r });
@@ -1024,6 +1025,7 @@ export async function readBack(owner: { id: string }, link: typeof schema.workLi
     const db = getDb();
     const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
     if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
+    if ("checks" in remote && remote.checks) Object.assign(patch, { checksState: remote.checks, checksAt: nowIso() });
     db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
     // Changed meanwhile (a webhook or a manual mark landed while we were reading)? Keep the newer state.
     const now = db.select({ s: schema.workLinks.externalState }).from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get();

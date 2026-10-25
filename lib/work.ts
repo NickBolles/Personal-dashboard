@@ -50,6 +50,8 @@ export const LINK_ROLES = ["source", "implementation", "evidence", "reference"] 
 export type LinkRole = (typeof LINK_ROLES)[number];
 export const EXTERNAL_STATES = ["open", "merged", "closed"] as const;
 export type ExternalState = (typeof EXTERNAL_STATES)[number];
+/** Combined CI state of a PR's head commit: green, red or still running. */
+export type ChecksState = "success" | "failure" | "pending";
 export const LINEAGE_RELATIONS = ["forked_from", "split_from", "moved_from", "handoff_from"] as const;
 export type LineageRelation = (typeof LINEAGE_RELATIONS)[number];
 
@@ -153,6 +155,9 @@ export type WorkLink = {
   /** last read-only GitHub readback and why it failed, if it did */
   checkedAt: string | null;
   checkError: string | null;
+  /** PRs: combined CI state of the head commit (check suites + commit statuses), null = unknown */
+  checksState: ChecksState | null;
+  checksAt: string | null;
   /** "handoff_from" when the conversation was started from this item's handoff */
   lineage: "handoff_from" | null;
   packetId: string | null;

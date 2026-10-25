@@ -29,6 +29,7 @@ RUN groupadd --system --gid 1001 jarvis && useradd --system --uid 1001 --gid jar
   && mkdir -p /data && chown jarvis:jarvis /data
 COPY --from=build --chown=jarvis:jarvis /app/.next/standalone ./
 COPY --from=build --chown=jarvis:jarvis /app/scripts/backup.mjs ./scripts/backup.mjs
+COPY --from=build --chown=jarvis:jarvis /app/scripts/import-github-app.mjs ./scripts/import-github-app.mjs
 USER jarvis
 VOLUME ["/data"]
 EXPOSE 3000
