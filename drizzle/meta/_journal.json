@@ -127,6 +127,13 @@
       "when": 1792937747976,
       "tag": "0017_auth_failures_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792944682767,
+      "tag": "0018_areas",
+      "breakpoints": true
     }
   ]
 }
