@@ -247,7 +247,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
     // Schedule estimation never gets calendar data or extra sources.
     const vars = {
       title,
-      goal: ctx.detail.item.nextAction || ctx.detail.packets.at(-1)?.objective || ctx.detail.item.summary,
+      goal: ctx.detail.item.nextAction || ctx.detail.packets[0]?.objective || ctx.detail.item.summary,
       areaTitle,
       defaultRepo: ctx.detail.area?.settings.defaultRepo,
       draftKind: params.draftKind,

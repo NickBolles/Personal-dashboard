@@ -34,7 +34,7 @@ export function formatItemContext(d: WorkDetail, reports: { kind: string; summar
   const untrusted: string[] = [];
   if (it.summary) untrusted.push(`Summary: ${it.summary}`);
   if (it.nextAction) untrusted.push(`Next action: ${it.nextAction}`);
-  const p = d.packets.at(-1);
+  const p = d.packets[0]; // getDetail orders packets newest version first
   if (p)
     untrusted.push(
       [
