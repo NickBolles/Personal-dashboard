@@ -240,7 +240,17 @@ export function CaptureSheet({
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <input ref={fileRef} id={`${id}-files`} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => addFiles(e.target.files)} />
+          <input
+            ref={fileRef}
+            id={`${id}-files`}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            aria-label="Attach images"
+            tabIndex={-1}
+            onChange={(e) => addFiles(e.target.files)}
+          />
           <Button type="button" size="sm" variant="ghost" onClick={() => fileRef.current?.click()}>
             Attach
           </Button>
