@@ -6,6 +6,7 @@ import { getSetting, setSetting } from "@/server/settings";
 import { processSingleton } from "@/server/singleton";
 import { HermesExecutionClient, HermesSessionClient, hermesConn } from "./client";
 import { RUN_TERMINAL } from "./types";
+import { extractJson, parseStructured, sleep, within } from "./jobs";
 
 /**
  * Structured requests: some sources (Skylight, Daily Compass) are owned by
@@ -40,64 +41,8 @@ export function structuredInstructions(source: string, example: unknown) {
   ].join("\n");
 }
 
-/** Pull the first JSON object out of a reply, tolerating code fences or stray prose. */
-export function extractJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = (fenced ?? text).trim();
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    const start = candidate.indexOf("{");
-    const end = candidate.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(candidate.slice(start, end + 1));
-    throw new Error("no JSON object in reply");
-  }
-}
-
-const errorAnswer = z.object({ error: z.string().min(1) });
-
-export function parseStructured<T>(label: string, output: string | null | undefined, schema: z.ZodType<T>): T {
-  if (!output?.trim()) throw new UpstreamError(label, "bad_response", `Hermes returned no answer for ${label}`);
-  let raw: unknown;
-  try {
-    raw = extractJson(output);
-  } catch {
-    throw new UpstreamError(label, "bad_response", `Hermes did not answer ${label} with JSON`);
-  }
-  const err = errorAnswer.safeParse(raw);
-  if (err.success) throw new UpstreamError(label, "bad_response", `Hermes could not complete ${label}: ${err.data.error.slice(0, 200)}`);
-  const parsed = schema.safeParse(raw);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    throw new UpstreamError(
-      label,
-      "bad_response",
-      `Hermes answer for ${label} didn't match the contract (${issue?.path.join(".") || "root"}: ${issue?.message})`,
-    );
-  }
-  return parsed.data;
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Bound transport AND awaiting it; abort is not confirmation that Hermes stopped. */
-async function within<T>(deadline: number, call: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const remaining = deadline - Date.now();
-  if (remaining <= 0) throw new Error("sync_deadline");
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      reject(new Error("sync_deadline"));
-    }, remaining);
-  });
-  try {
-    return await Promise.race([call(controller.signal), timeout]);
-  } finally {
-    clearTimeout(timer!);
-  }
-}
+// JSON extraction/validation and the bounded-call helper are shared with the AI job runner (./jobs.ts).
+export { extractJson, parseStructured };
 
 /** Stop is asynchronous. Delete only after a separately observed terminal status. */
 export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {

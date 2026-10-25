@@ -188,7 +188,12 @@ export type AreaSettings = {
   settlePolicy: SettlePolicy;
   /** days without activity before a suggestion (suggest) or an automatic settle (auto_after_quiet) */
   quietDays: number;
+  /** phase 5 AI actions: allowed (default) | triage_only | excluded. A Finance area is always excluded (server/ai/rules.ts). */
+  aiPolicy: AiPolicy;
 };
+
+export const AI_POLICIES = ["allowed", "triage_only", "excluded"] as const;
+export type AiPolicy = (typeof AI_POLICIES)[number];
 
 export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   agentMode: null,
@@ -200,6 +205,7 @@ export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   contextSources: [],
   settlePolicy: "suggest",
   quietDays: 3,
+  aiPolicy: "allowed",
 };
 
 const repoRe = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -221,6 +227,7 @@ export const areaSettingsSchema = z
     contextSources: z.array(z.enum(CONTEXT_SOURCES)).max(CONTEXT_SOURCES.length),
     settlePolicy: z.enum(SETTLE_POLICIES),
     quietDays: z.number().int().min(1).max(90),
+    aiPolicy: z.enum(AI_POLICIES),
   })
   .partial()
   .strict();
@@ -880,6 +887,19 @@ export type InboxEntry = {
   /** why it's in the inbox */
   reason: string;
   createdAt: string;
+  /** phase 5 captures only (absent for GitHub issues) */
+  capture?: {
+    channel: string | null;
+    triageState: "none" | "queued" | "done" | "failed" | "skipped";
+    triageSkipReason: string | null;
+    suggestedTitle: string | null;
+    suggestedKind: string | null;
+    suggestion: { parentId: string; title: string; path: string; confidence: number | null; reason: string | null } | null;
+    sensitivity: "none" | "personal" | "finance" | "credentials";
+    report: { id: string; title: string; summary: string } | null;
+    attachments: { id: string; kind: "image" | "text"; mime: string; bytes: number; width: number | null; height: number | null; url: string }[];
+    investigating: boolean;
+  };
 };
 export type InboxResponse = {
   items: InboxEntry[];
@@ -891,7 +911,13 @@ export type InboxResponse = {
   count: number;
 };
 
-export const captureSchema = z.object({ text: z.string().trim().min(1, "Write something to capture").max(2000) }).strict();
+export const captureSchema = z
+  .object({
+    text: z.string().trim().min(1, "Write something to capture").max(8000),
+    /** phase 5: per-capture AI follow-up (default from Settings → AI) */
+    investigate: z.enum(["auto", "triage_only", "off"]).optional(),
+  })
+  .strict();
 /** Accept an inbox entry: file it as a new Work item under `parentId` (null = Miscellaneous). */
 export const inboxAcceptSchema = z
   .object({
@@ -899,6 +925,8 @@ export const inboxAcceptSchema = z
     title: z.string().trim().min(1).max(200).optional(),
     /** how the issue relates to the new item (GitHub issues only) */
     role: z.enum(["implementation", "reference"]).optional(),
+    /** phase 5: file under the AI triage suggestion (parent + title) */
+    useSuggestion: z.boolean().optional(),
   })
   .strict();
 export const dismissConversationSchema = z.object({ sessionId: z.string().trim().min(1).max(200) }).strict();
@@ -908,7 +936,9 @@ export const dismissConversationSchema = z.object({ sessionId: z.string().trim()
 export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
 export type TodayResponse = {
   today: string;
-  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number };
+  kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number; reportsReady?: number };
+  /** phase 5: up to 3 unread AI reports (items and inbox), newest first */
+  readyForYou?: { reportId: string; title: string; summary: string; kind: string; itemId: string | null; inboxId: string | null }[];
   /** 1–3 things to pick up again */
   continue: TodayCard[];
   /** awaiting validation, earliest due first */

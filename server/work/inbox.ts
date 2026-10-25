@@ -1,5 +1,7 @@
 import "server-only";
-import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { attachmentsFor, createCapture, moveCaptureToItem } from "@/server/capture";
+import { repointReports } from "@/server/ai/reports";
 import type { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
@@ -22,7 +24,7 @@ import { addLink, createItem, ensureMiscellaneous } from "./store";
 const I = schema.workInbox;
 const nowIso = () => new Date().toISOString();
 
-const toEntry = (r: typeof I.$inferSelect): InboxEntry => ({
+const toEntry = (r: typeof I.$inferSelect, extra?: CaptureExtras): InboxEntry => ({
   id: r.id,
   source: r.source as InboxEntry["source"],
   title: r.title,
@@ -32,7 +34,87 @@ const toEntry = (r: typeof I.$inferSelect): InboxEntry => ({
   number: r.number,
   reason: r.reason,
   createdAt: r.createdAt,
+  ...(r.source === "capture"
+    ? {
+        capture: {
+          channel: r.channel,
+          triageState: r.triageState as NonNullable<InboxEntry["capture"]>["triageState"],
+          triageSkipReason: r.triageSkipReason,
+          suggestedTitle: r.suggestedTitle,
+          suggestedKind: r.suggestedKind,
+          suggestion: extra?.suggestion ?? null,
+          sensitivity: r.sensitivity as NonNullable<InboxEntry["capture"]>["sensitivity"],
+          report: extra?.report ?? null,
+          attachments: extra?.attachments ?? [],
+          investigating: extra?.investigating ?? false,
+        },
+      }
+    : {}),
 });
+
+type CaptureExtras = {
+  suggestion: NonNullable<InboxEntry["capture"]>["suggestion"];
+  report: NonNullable<InboxEntry["capture"]>["report"];
+  attachments: NonNullable<InboxEntry["capture"]>["attachments"];
+  investigating: boolean;
+};
+
+/** Suggestions are validated against the person's live tree when read; reports and attachments joined in. */
+function captureExtras(userId: string, rows: (typeof I.$inferSelect)[]) {
+  const caps = rows.filter((r) => r.source === "capture");
+  const out = new Map<string, CaptureExtras>();
+  if (!caps.length) return out;
+  const db = getDb();
+  const items = db
+    .select({ id: schema.workItems.id, title: schema.workItems.title, parentId: schema.workItems.parentId, archived: schema.workItems.archived })
+    .from(schema.workItems)
+    .where(eq(schema.workItems.userId, userId))
+    .all();
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const pathOf = (id: string) => {
+    const parts: string[] = [];
+    for (let c = byId.get(id); c && parts.length < 6; c = c.parentId ? byId.get(c.parentId) : undefined) parts.unshift(c.title);
+    return parts.join(" › ");
+  };
+  const atts = attachmentsFor(caps.map((r) => r.id));
+  const reportIds = caps.map((r) => r.latestReportId).filter((x): x is string => !!x);
+  const reports = reportIds.length
+    ? new Map(
+        db
+          .select({ id: schema.aiReports.id, title: schema.aiReports.title, summary: schema.aiReports.summary })
+          .from(schema.aiReports)
+          .where(inArray(schema.aiReports.id, reportIds))
+          .all()
+          .map((r) => [r.id, r]),
+      )
+    : new Map();
+  const active = new Set(
+    db
+      .select({ s: schema.aiJobs.subjectId })
+      .from(schema.aiJobs)
+      .where(
+        and(
+          eq(schema.aiJobs.userId, userId),
+          eq(schema.aiJobs.kind, "investigate"),
+          inArray(schema.aiJobs.state, ["queued", "running", "waiting_approval", "cancelling"]),
+        ),
+      )
+      .all()
+      .map((r) => r.s),
+  );
+  for (const r of caps) {
+    const p = r.suggestedParentId ? byId.get(r.suggestedParentId) : undefined;
+    const rep = r.latestReportId ? reports.get(r.latestReportId) : undefined;
+    out.set(r.id, {
+      suggestion:
+        p && !p.archived ? { parentId: p.id, title: p.title, path: pathOf(p.id), confidence: r.suggestionConfidence, reason: r.suggestionReason } : null,
+      report: rep ? { id: rep.id, title: rep.title, summary: rep.summary.slice(0, 200) } : null,
+      attachments: atts.get(r.id) ?? [],
+      investigating: active.has(r.id),
+    });
+  }
+  return out;
+}
 
 /** Waiting entries: open, neither accepted nor dismissed. Conversations are listed live from Hermes. */
 function waiting(userId: string) {
@@ -45,7 +127,19 @@ function waiting(userId: string) {
 }
 
 export function inboxEntries(userId: string): InboxEntry[] {
-  return waiting(userId).slice(0, 200).map(toEntry);
+  const rows = waiting(userId).slice(0, 200);
+  const extras = captureExtras(userId, rows);
+  return rows.map((r) => toEntry(r, extras.get(r.id)));
+}
+
+export function inboxEntry(userId: string, id: string): InboxEntry {
+  const r = getDb()
+    .select()
+    .from(I)
+    .where(and(eq(I.id, id), eq(I.userId, userId)))
+    .get();
+  if (!r) throw new HttpError(404, "not_found", "Inbox entry not found");
+  return toEntry(r, captureExtras(userId, [r]).get(r.id));
 }
 
 export async function getInbox(user: CurrentUser): Promise<InboxResponse> {
@@ -123,25 +217,11 @@ export function applyIssueAssignment(userId: string, connectionId: string, is: A
   return "removed";
 }
 
+/** The dock/inbox quick capture: a thin wrapper over the phase-5 capture path (same triage rules). */
 export function capture(user: CurrentUser, body: z.infer<typeof captureSchema>, correlationId: string): InboxEntry {
-  const [first, ...rest] = body.text.split(/\r?\n/);
-  const id = newId("inb");
-  const at = nowIso();
-  getDb()
-    .insert(I)
-    .values({
-      id,
-      userId: user.id,
-      source: "capture",
-      title: first!.trim().slice(0, 200) || "Capture",
-      note: [first!.length > 200 ? first!.slice(200) : "", ...rest].join("\n").trim(),
-      reason: "You captured it",
-      createdAt: at,
-      updatedAt: at,
-    })
-    .run();
-  audit({ actor: user.id, action: "work.inbox_capture", source: "work", sourceRecord: id, result: "ok", correlationId });
-  return toEntry(getDb().select().from(I).where(eq(I.id, id)).get()!);
+  const r = createCapture(user, { text: body.text, channel: "web", investigate: body.investigate }, [], { channel: "web", correlationId });
+  audit({ actor: user.id, action: "work.inbox_capture", source: "work", sourceRecord: r.entryId, result: "ok", correlationId });
+  return inboxEntry(user.id, r.entryId);
 }
 
 function ownedEntry(userId: string, id: string) {
@@ -159,13 +239,22 @@ export async function acceptEntry(user: CurrentUser, id: string, body: z.infer<t
   const r = ownedEntry(user.id, id);
   if (r.acceptedAt) throw new HttpError(409, "already_accepted", "Already filed");
   if (r.dismissedAt) throw new HttpError(409, "dismissed", "This was dismissed");
-  const parentId = body.parentId ?? ensureMiscellaneous(user.id).id;
+  // useSuggestion: the triage suggestion (validated as one of your live items) and its clean title.
+  const suggested =
+    body.useSuggestion && r.suggestedParentId
+      ? getDb()
+          .select({ id: schema.workItems.id })
+          .from(schema.workItems)
+          .where(and(eq(schema.workItems.id, r.suggestedParentId), eq(schema.workItems.userId, user.id), eq(schema.workItems.archived, false)))
+          .get()?.id
+      : undefined;
+  const parentId = suggested ?? body.parentId ?? ensureMiscellaneous(user.id).id;
   const item = createItem(
     user,
     {
       kind: "thread",
       parentId,
-      title: body.title ?? r.title,
+      title: body.title ?? (body.useSuggestion && r.suggestedTitle ? r.suggestedTitle : r.title),
       summary: r.source === "capture" ? r.note : `From GitHub: ${r.repo ?? ""}#${r.number ?? ""}`,
     },
     correlationId,
@@ -178,6 +267,24 @@ export async function acceptEntry(user: CurrentUser, id: string, body: z.infer<t
       correlationId,
     );
   getDb().update(I).set({ acceptedAt: nowIso(), acceptedItemId: item.id, updatedAt: nowIso() }).where(eq(I.id, id)).run();
+  if (r.source === "capture") {
+    // Reports and attachments move with the entry; the investigation conversation is linked as the source.
+    for (const rep of repointReports(user.id, id, item.id))
+      if (rep.conversationId)
+        getDb()
+          .insert(schema.workLinks)
+          .values({
+            id: newId(),
+            itemId: item.id,
+            kind: "chat_session",
+            targetId: rep.conversationId,
+            title: `✦ ${rep.title}`.slice(0, 300),
+            role: "source",
+            lineage: "ai_action",
+          })
+          .run();
+    moveCaptureToItem(r, item.id);
+  }
   audit({
     actor: user.id,
     action: "work.inbox_accept",

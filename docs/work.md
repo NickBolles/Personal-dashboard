@@ -247,3 +247,19 @@ Sharing stays read-only for the household. Share/unshare writes `conversation.sh
 ### Not yet
 
 Real Hermes profile routing (the API takes `instructions`, not a profile), syncing archive state from Hermes into nodes, a resizable tree pane, phone-specific composer sheet, workflow-run validations, AI triage (phase 5).
+
+## AI actions, reports and capture (phase 5)
+
+Jarvis runs background AI work through Hermes and keeps the validated result as a **report** on the item.
+Everything here needs the `work.ai` capability (admin only by default; grant it per person in Settings → People)
+and Settings → AI → Enabled (off until the owner turns it on).
+
+- **Task actions** (item header "✦ Get started", the item's ⋯ menu, palette "Research this / Make a plan / Suggest a time / Draft…"):
+  - _Research it_ and _Draft it_ → report with sources and next actions; the research conversation is filed under the item (`chat_session`, role `evidence`, lineage `ai_action`) and can be continued.
+  - _Make a plan_ → 3–12 steps; **Create N child items** is one undoable operation (`ai_plan_create`: untouched children are deleted, changed ones archived).
+  - _Suggest a time_ → a fast model estimates duration/windows; Jarvis finds 3 free slots in Home Assistant + Skylight calendars on the server (calendar data never goes to AI). **Set dates** writes start/target dates. Calendar writes are off (owner decision).
+- **Jobs** (`ai_jobs`): queued → running → succeeded/failed/cancelled, with `waiting_approval`, `cancelling` (ends `cancelled` only after Hermes confirms) and `budget_blocked`. The runner (`server/ai/runner.ts`) is separate from the general worker, leases jobs, and after a restart adopts a started run by its run id instead of starting another.
+- **Budget**: $5/day household budget; per-job caps triage $0.03, standard $0.75, deep $2.50. Over budget a job waits (`budget_blocked`) until the next local day or **Run anyway** (audited `ai.budget_override`). Usage: Settings → AI (CSV/JSON export).
+- **Capture** (`POST /api/capture`, capture sheet, `/capture`, PWA share with images, HTTP Shortcuts with a capture token): lands in the Inbox, then (with `work.ai`) a cheap **triage** (clean title, kind, suggested area with confidence) and, when worthwhile (confidence ≥ 0.6), an **investigation** report. Inbox rows offer **File under <area> · 82%**, **✦ Report ready**, Investigate. Offline captures wait on the phone and are sent exactly once.
+- **Finance never goes to AI**: Finance areas (and any area set to `excluded`) offer no AI actions; finance-looking or credential-looking text is not sent ("Not sent to AI: looks like finance"). Owner can **Send anyway** for finance heuristic matches outside an excluded area (confirm + audit); never for credentials.
+- **Report ready** pushes (`ai_report`, on by default, batched above 3 per 10 minutes) are delivered by the standalone push dispatcher even with `JARVIS_DISABLE_WORKER=true`.

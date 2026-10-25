@@ -7,7 +7,8 @@ import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
 import { useInbox } from "@/components/work/today";
-import { useAskHermes } from "@/components/chat/useAskHermes";
+import { CaptureSheet } from "@/components/capture/CaptureSheet";
+import { CaptureExtras } from "@/components/capture/CaptureExtras";
 import type { InboxEntry, WorkItem } from "@/lib/work";
 
 /**
@@ -32,7 +33,6 @@ export function CaptureForm({
   askable?: boolean;
 }) {
   const [text, setText] = useState(initialText ?? "");
-  const { ask, busy: asking } = useAskHermes();
   const save = useWorkMutation(() => api.post("/api/work/inbox", { text }), {
     ok: "Captured to the inbox",
     onSuccess: () => {
@@ -77,43 +77,7 @@ export function CaptureForm({
         </Button>
       </form>
     );
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (text.trim()) save.mutate(undefined);
-      }}
-    >
-      <Field id="capture-sheet-text" label="Capture to inbox" hint="First line becomes the title. File it later.">
-        <textarea
-          id="capture-sheet-text"
-          data-autofocus={autoFocus || undefined}
-          className={`${inputCls} min-h-20 text-base`}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Something to look at later…"
-        />
-      </Field>
-      <div className="flex justify-end gap-2">
-        {askable ? (
-          <Button
-            type="button"
-            disabled={!text.trim() || save.isPending}
-            busy={asking}
-            onClick={async () => {
-              if (await ask(text)) onDone?.();
-            }}
-          >
-            Ask Hermes instead
-          </Button>
-        ) : null}
-        <Button type="submit" variant="primary" disabled={!text.trim() || asking} busy={save.isPending}>
-          Capture
-        </Button>
-      </div>
-    </form>
-  );
+  return <CaptureSheet onDone={() => onDone?.()} autoFocus={autoFocus} initial={initialText ? { text: initialText } : undefined} askable={askable} />;
 }
 
 /** The capture sheet (dock, palette, share target): Inbox by default, "Ask Hermes" as the alternative. */
@@ -191,6 +155,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                   <span>{fmtWhen(e.createdAt)}</span>
                   <span>Why: {e.reason}</span>
                 </p>
+                {e.capture ? <CaptureExtras entry={e} onAccepted={onOpenItem} /> : null}
               </div>
               <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">
                 <Button

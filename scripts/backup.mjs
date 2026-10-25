@@ -24,6 +24,9 @@ await db.backup(path.join(dest, "jarvis.db"));
 db.close();
 const key = path.join(dataDir, "secret.key");
 if (fs.existsSync(key)) fs.copyFileSync(key, path.join(dest, "secret.key"));
+// Capture attachments (phase 5, decision D10): included in backups.
+const captures = path.join(dataDir, "captures");
+if (fs.existsSync(captures)) fs.cpSync(captures, path.join(dest, "captures"), { recursive: true });
 fs.chmodSync(dest, 0o700);
 
 // Verify the copy opens and has our tables.

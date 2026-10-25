@@ -72,3 +72,13 @@ Backups (`scripts/backup.mjs`) contain the encrypted DB **and** the key file: st
 ## Audit
 
 `audit_log` records actor, action, source record, result (`ok`/`error`/`rejected`/`pending`) and correlation ID for: Hermes starts/stops/approvals/steers/renames/forks, HA controls and light switches, todo mutations, finance writes (before/after), people and capability changes, Paperclip track/unlink, integration changes, passcode change. Values that look like credentials are redacted before storage. View it at Settings → Activity log.
+
+## Phase 5: AI jobs, capture tokens, attachments
+
+- **Capture tokens** (`jcap_…`): sha256 at rest, shown once, label + prefix hint only afterwards; accepted **only** by `POST /api/capture` and `GET /api/capture/:id` (own captures). `resolveUser()` only knows `jdv_` device tokens, so a `jcap_` bearer gets 401 everywhere else (tested on home, work items, Hermes sessions, finance). Expiry (default 1 year), revoke (next request), per-token rate limits (30/h, 300/day → 429 + retry-after), failed-auth throttle (`ip:capture:<ip>`, `global:capture`), audit `capture_token.create|revoke` without the value. Managed from a browser session only.
+- **`/api/capture`**: explicit CSRF on the cookie path; body streamed with a 25 MB cap before multipart parsing; ≤ 4 files ≤ 10 MB; magic-byte sniffing (PNG/JPEG/WebP/GIF/plain text; SVG/HTML refused, declared type must match → 415); files written 0600 under `${JARVIS_DATA_DIR}/captures/<user>/<random id>` (never user-controlled, never under `public/`); served owner-only with `nosniff`, `no-store, private` and a sandbox CSP. Jarvis never fetches captured URLs (no SSRF surface).
+- **Finance guard** (`server/ai/rules.ts#financeGuard`), checked at enqueue and again at execution: Finance areas are always excluded (pure rule, not just UI); finance/credential heuristics skip AI. A unit test walks the static import graph of `server/ai/**` and asserts no finance module is reachable.
+- **Prompt injection posture**: untrusted text in `<data>` blocks, read-only instructions, hidden jobs stop on any approval request, outputs zod-validated, source URLs restricted to public http(s), Markdown rendered without raw HTML or images (`components/work/ai/SafeMarkdown.tsx`).
+- **No model text in job rows**: `ai_jobs` keeps controlled error codes/messages only; the validated report is the only stored model output.
+- **Budget** bounds total spend (and a leaked capture token, which can also be `triage_only`/`off`).
+- Rollback: Settings → AI → Enabled off stops the runner (queued jobs stay); removing `work.ai` hides everything; capture keeps working deterministically.

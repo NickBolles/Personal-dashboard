@@ -8,7 +8,7 @@ import type { Role } from "@/lib/modules";
  * server enforces the same capabilities on every API call; this is only so
  * nobody is shown something they can't do.
  */
-export type Access = { role: Role; capabilities: string[]; modules: string[] };
+export type Access = { role: Role; capabilities: string[]; modules: string[]; userId?: string };
 
 const AccessContext = createContext<Access>({ role: "admin", capabilities: [], modules: [] });
 

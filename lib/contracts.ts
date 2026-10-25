@@ -228,7 +228,7 @@ export type WidgetSummary = {
 export type NotificationSeverity = "info" | "normal" | "high" | "critical";
 
 export type NotificationCategory =
-  "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "finance" | "integration_failure" | "info";
+  "hermes_input" | "hermes_complete" | "ha_critical" | "overdue" | "daily_compass" | "finance" | "integration_failure" | "ai_report" | "info";
 
 export const NOTIFICATION_CATEGORIES: {
   id: NotificationCategory;
@@ -241,6 +241,13 @@ export const NOTIFICATION_CATEGORIES: {
     id: "hermes_input",
     label: "Hermes needs your input",
     description: "Approvals and questions from a running Hermes task.",
+    defaultPush: true,
+    bypassQuietHours: false,
+  },
+  {
+    id: "ai_report",
+    label: "AI report ready",
+    description: "A background report or investigation finished.",
     defaultPush: true,
     bypassQuietHours: false,
   },

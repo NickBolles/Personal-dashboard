@@ -19,6 +19,8 @@ import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { TodayView, useInbox } from "@/components/work/today";
 import { CaptureDialog, InboxView } from "@/components/work/inbox";
+import { ActionSheet, GetStarted, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
+import type { AiActionKind } from "@/lib/ai";
 import {
   areaValidationDefault,
   COMPARATORS,
@@ -684,6 +686,12 @@ function ItemDetail({
     { onSuccess: (r) => onOp(r.op) },
   );
   const close = () => setDialog(null);
+  const [aiSheet, setAiSheet] = useState<AiActionKind | null>(
+    initialAction?.startsWith("ai:") && ["research", "plan", "schedule", "draft"].includes(initialAction.slice(3))
+      ? (initialAction.slice(3) as AiActionKind)
+      : null,
+  );
+  const aiItems = useAiMenuItems(id, setAiSheet);
   const wide = useWide();
   const phone = usePhone();
   // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
@@ -793,6 +801,7 @@ function ItemDetail({
                   disabled: item.builtIn,
                   danger: !item.archived,
                 },
+                ...aiItems,
               ]}
             />
           </div>
@@ -815,7 +824,9 @@ function ItemDetail({
           <p className="wk-label shrink-0">Next action</p>
           <p className="min-w-0 text-[14px] break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
         </div>
+        <JobChip itemId={item.id} />
         <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {item.kind !== "conversation" ? <GetStarted itemId={item.id} areaId={d.area?.id ?? null} /> : null}
           {item.kind === "conversation" && item.sessionId && canChat ? (
             <ButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
               Open conversation
@@ -930,6 +941,7 @@ function ItemDetail({
                   onToggle={toggle("deps")}
                 />
                 <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+                <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
               </>
             ) : tab === "activity" ? (
               <Activity d={d} onSelect={onSelect} />
@@ -974,6 +986,7 @@ function ItemDetail({
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
       {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
+      {aiSheet ? <ActionSheet itemId={item.id} areaId={d.area?.id ?? null} action={aiSheet} onClose={() => setAiSheet(null)} /> : null}
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
       {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
       {dialog === "chat_session" ? (

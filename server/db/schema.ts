@@ -1070,10 +1070,196 @@ export const workInbox = sqliteTable(
     dismissedAt: text("dismissed_at"),
     acceptedAt: text("accepted_at"),
     acceptedItemId: text("accepted_item_id"),
+    /** captures (phase 5): web | pwa_share | android | shortcut | voice | api */
+    channel: text("channel"),
+    deviceId: text("device_id"),
+    captureTokenId: text("capture_token_id"),
+    /** offline replays dedupe on (user_id, client_capture_id) */
+    clientCaptureId: text("client_capture_id"),
+    /** none | queued | done | failed | skipped */
+    triageState: text("triage_state").notNull().default("none"),
+    triageSkipReason: text("triage_skip_reason"),
+    suggestedTitle: text("suggested_title"),
+    suggestedKind: text("suggested_kind"),
+    /** a work item id; validated against the person's tree when read */
+    suggestedParentId: text("suggested_parent_id"),
+    suggestionConfidence: real("suggestion_confidence"),
+    suggestionReason: text("suggestion_reason"),
+    /** none | personal | finance | credentials */
+    sensitivity: text("sensitivity").notNull().default("none"),
+    latestReportId: text("latest_report_id"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
-  (t) => [uniqueIndex("work_inbox_external_idx").on(t.userId, t.source, t.externalId), index("work_inbox_owner_idx").on(t.userId, t.state)],
+  (t) => [
+    uniqueIndex("work_inbox_external_idx").on(t.userId, t.source, t.externalId),
+    index("work_inbox_owner_idx").on(t.userId, t.state),
+    uniqueIndex("work_inbox_client_capture_idx").on(t.userId, t.clientCaptureId),
+    index("work_inbox_token_idx").on(t.captureTokenId, t.createdAt),
+  ],
+);
+
+/**
+ * Background AI jobs (phase 5, docs/work.md "AI actions"). Rows never store
+ * prompts, model output or provider error text: only controlled codes and
+ * messages. Outputs persist solely as validated ai_reports.
+ */
+export const aiJobs = sqliteTable(
+  "ai_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** research | plan | schedule | draft | triage | investigate */
+    kind: text("kind").notNull(),
+    /** work_item | inbox */
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    areaId: text("area_id"),
+    /** lib/ai.ts JOB_STATES */
+    state: text("state").notNull().default("queued"),
+    /** triage | work */
+    lane: text("lane").notNull(),
+    /** triage | standard | deep */
+    tier: text("tier").notNull(),
+    model: text("model"),
+    hermesProfile: text("hermes_profile"),
+    visibleSession: integer("visible_session", { mode: "boolean" }).notNull().default(false),
+    hermesSessionId: text("hermes_session_id"),
+    hermesRunId: text("hermes_run_id"),
+    idempotencyKey: text("idempotency_key").notNull(),
+    params: text("params").notNull().default("{}"),
+    promptVersion: text("prompt_version").notNull(),
+    attempt: integer("attempt").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(2),
+    notBefore: text("not_before").notNull().default(now),
+    leaseOwner: text("lease_owner"),
+    leaseUntil: text("lease_until"),
+    cancelRequestedAt: text("cancel_requested_at"),
+    budgetOverride: integer("budget_override", { mode: "boolean" }).notNull().default(false),
+    estimateUsd: real("estimate_usd").notNull().default(0),
+    costUsd: real("cost_usd"),
+    /** hermes_actual | hermes_estimate | jarvis_estimate */
+    costSource: text("cost_source"),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    reportId: text("report_id"),
+    createdAt: text("created_at").notNull().default(now),
+    startedAt: text("started_at"),
+    finishedAt: text("finished_at"),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("ai_jobs_idem_idx").on(t.idempotencyKey),
+    index("ai_jobs_claim_idx").on(t.state, t.lane, t.notBefore),
+    index("ai_jobs_subject_idx").on(t.userId, t.subjectType, t.subjectId, t.createdAt),
+    index("ai_jobs_ledger_idx").on(t.userId, t.finishedAt),
+  ],
+);
+
+/** Validated AI reports (research, plan, schedule, draft, investigate), owned by Jarvis and exportable. */
+export const aiReports = sqliteTable(
+  "ai_reports",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jobId: text("job_id").notNull(),
+    kind: text("kind").notNull(),
+    subjectType: text("subject_type").notNull(),
+    subjectId: text("subject_id").notNull(),
+    originInboxId: text("origin_inbox_id"),
+    title: text("title").notNull(),
+    summary: text("summary").notNull().default(""),
+    bodyMd: text("body_md").notNull().default(""),
+    structured: text("structured").notNull().default("{}"),
+    /** low | medium | high */
+    confidence: text("confidence").notNull().default("low"),
+    model: text("model"),
+    promptVersion: text("prompt_version").notNull(),
+    costUsd: real("cost_usd"),
+    conversationId: text("conversation_id"),
+    readAt: text("read_at"),
+    pinnedAt: text("pinned_at"),
+    archivedAt: text("archived_at"),
+    /** JSON { value: useful | not_useful, note? } */
+    feedback: text("feedback"),
+    supersededBy: text("superseded_by"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("ai_reports_subject_idx").on(t.userId, t.subjectType, t.subjectId, t.createdAt), index("ai_reports_unread_idx").on(t.userId, t.readAt)],
+);
+
+export const aiReportSources = sqliteTable(
+  "ai_report_sources",
+  {
+    reportId: text("report_id")
+      .notNull()
+      .references(() => aiReports.id, { onDelete: "cascade" }),
+    idx: integer("idx").notNull(),
+    /** web | github | work_item | conversation | attachment | calendar */
+    kind: text("kind").notNull().default("web"),
+    url: text("url"),
+    title: text("title").notNull().default(""),
+    quote: text("quote"),
+    accessedAt: text("accessed_at"),
+  },
+  (t) => [primaryKey({ columns: [t.reportId, t.idx] })],
+);
+
+/** Files attached to captures. Stored outside public/ under the data dir; served only by the authenticated route. */
+export const captureAttachments = sqliteTable(
+  "capture_attachments",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inboxId: text("inbox_id")
+      .notNull()
+      .references(() => workInbox.id, { onDelete: "cascade" }),
+    /** image | text */
+    kind: text("kind").notNull(),
+    mime: text("mime").notNull(),
+    bytes: integer("bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    storageKey: text("storage_key").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    /** the work item it was re-pointed to when the entry was filed */
+    itemId: text("item_id"),
+    createdAt: text("created_at").notNull().default(now),
+    deletedAt: text("deleted_at"),
+  },
+  (t) => [index("capture_attachments_inbox_idx").on(t.inboxId)],
+);
+
+/** Capture-only bearer tokens (jcap_…) for HTTP Shortcuts/Tasker. sha256 at rest, shown once. */
+export const captureTokens = sqliteTable(
+  "capture_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    prefixHint: text("prefix_hint").notNull(),
+    ratePerHour: integer("rate_per_hour").notNull().default(30),
+    ratePerDay: integer("rate_per_day").notNull().default(300),
+    /** inherit | triage_only | off */
+    investigateMode: text("investigate_mode").notNull().default("inherit"),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+    lastUsedAt: text("last_used_at"),
+    useCount: integer("use_count").notNull().default(0),
+    revokedAt: text("revoked_at"),
+  },
+  (t) => [uniqueIndex("capture_tokens_hash_idx").on(t.tokenHash), index("capture_tokens_owner_idx").on(t.userId)],
 );
 
 /**

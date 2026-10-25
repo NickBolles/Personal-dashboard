@@ -181,7 +181,4 @@ export function startWorker() {
   console.log(`[jarvis] background worker started (every ${config.workerIntervalMs / 1000}s)`);
 }
 
-export function workerStatus() {
-  const w = g.__jarvisWorker;
-  return w ? { running: true, lastRun: w.lastRun, lastError: w.lastError } : { running: false };
-}
+export { workerStatus } from "./status";

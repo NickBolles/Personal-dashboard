@@ -91,3 +91,17 @@ How it's tested:
 - **Live**: `scripts/android-live-check.sh` pairs, asks about Skylight + Home, streams a run, completes a todo, closes the garage with readback, handles an alert, signs out.
 
 CI (`.github/workflows/android.yml`) runs all but the live check on every change under `android/` or `contracts/api/`, uploads screenshot diffs when one changes, and builds the signed APK. Run it manually with **record screenshots** to commit new baselines.
+
+## Capture from automations (phase 5)
+
+Settings → Phones → **Capture tokens** creates a capture-only token (shown once). HTTP Shortcuts recipe:
+
+```
+POST https://<jarvis>/api/capture
+Authorization: Bearer jcap_…
+Content-Type: application/json
+
+{"text": "{clipboard}", "channel": "shortcut", "clientCaptureId": "{uuid}"}
+```
+
+Multipart works too (`files` fields, PNG/JPEG/WebP/GIF ≤ 10 MB, ≤ 4). Tasker: HTTP Request action with the same header. The native app's capture parity (share images to Inbox, QS tile, offline WorkManager queue, `ai_report` push actions) is phase 5b and not built yet.

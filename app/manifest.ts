@@ -21,14 +21,22 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
+      { name: "Capture", url: "/capture", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Inbox", url: "/areas?view=inbox", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Ask Hermes", short_name: "Hermes", url: "/chat?new=1", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Alerts", url: "/alerts", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Home controls", short_name: "Home", url: "/home-control", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
+    // POST with files: public/sw.js stages the share in IndexedDB and opens /share?staged=<id>.
     share_target: {
-      action: "/share",
-      method: "GET",
-      params: { title: "title", text: "text", url: "url" },
+      action: "/share-target",
+      method: "POST",
+      enctype: "multipart/form-data",
+      params: {
+        title: "title",
+        text: "text",
+        url: "url",
+        files: [{ name: "files", accept: ["image/png", "image/jpeg", "image/webp", "image/gif", ".png", ".jpg", ".jpeg", ".webp", "text/plain", ".txt"] }],
+      },
     },
   } as MetadataRoute.Manifest;
 }
