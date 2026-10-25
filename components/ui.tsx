@@ -22,11 +22,20 @@ export function cx(...c: (string | false | null | undefined)[]) {
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent text-accent-contrast border-transparent hover:opacity-90",
-  secondary: "bg-surface text-text border-line-strong hover:bg-surface-2",
+  primary: "bg-accent text-accent-contrast border-accent font-semibold shadow-[0_1px_0_rgb(0_0_0/0.06)] hover:opacity-90",
+  secondary: "bg-surface text-text border-line hover:border-line-strong hover:bg-surface-2",
   ghost: "bg-transparent text-text border-transparent hover:bg-surface-2",
-  danger: "bg-danger text-white border-transparent hover:opacity-90 dark:text-black",
+  danger: "bg-danger text-white border-transparent font-semibold hover:opacity-90 dark:text-black",
 };
+
+/** Touch keeps 44px targets; a desktop pointer gets the compact sizes. */
+const SIZES = {
+  md: "min-h-11 px-4 text-[0.9375rem] dense:min-h-9 dense:px-3.5 dense:text-[0.875rem]",
+  sm: "min-h-11 px-3 text-sm dense:min-h-[30px] dense:px-2.5",
+} as const;
+
+const BUTTON_BASE =
+  "press inline-flex items-center justify-center gap-1.5 rounded-[9px] border font-medium leading-tight no-underline disabled:opacity-50 disabled:cursor-not-allowed";
 
 export function Button({
   variant = "secondary",
@@ -37,17 +46,7 @@ export function Button({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: "sm" | "md"; busy?: boolean }) {
   return (
-    <button
-      {...rest}
-      aria-busy={busy || undefined}
-      disabled={rest.disabled || busy}
-      className={cx(
-        "press inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium disabled:opacity-50 disabled:cursor-not-allowed",
-        size === "md" ? "min-h-12 px-4 text-[0.95rem]" : "min-h-11 px-3 text-sm",
-        VARIANTS[variant],
-        className,
-      )}
-    >
+    <button {...rest} aria-busy={busy || undefined} disabled={rest.disabled || busy} className={cx(BUTTON_BASE, SIZES[size], VARIANTS[variant], className)}>
       {busy ? <Spinner /> : null}
       {children}
     </button>
@@ -57,16 +56,13 @@ export function Button({
 export function ButtonLink({
   href,
   variant = "secondary",
+  size = "md",
   className,
   children,
   external,
   ...rest
-}: { href: string; variant?: Variant; className?: string; children: ReactNode; external?: boolean } & Record<string, unknown>) {
-  const cls = cx(
-    "press inline-flex items-center justify-center gap-2 rounded-[10px] border font-medium min-h-12 px-4 text-[0.95rem] no-underline",
-    VARIANTS[variant],
-    className,
-  );
+}: { href: string; variant?: Variant; size?: "sm" | "md"; className?: string; children: ReactNode; external?: boolean } & Record<string, unknown>) {
+  const cls = cx(BUTTON_BASE, SIZES[size], VARIANTS[variant], className);
   if (external) {
     return (
       <a href={href} target="_blank" rel="noreferrer noopener" className={cls} {...rest}>
@@ -101,22 +97,83 @@ export function Card({
   ...rest
 }: { children: ReactNode; className?: string; as?: "section" | "article" | "div" | "li" } & Record<string, unknown>) {
   return (
-    <As className={cx("card p-4", className)} {...rest}>
+    <As className={cx("card p-3.5", className)} {...rest}>
       {children}
     </As>
   );
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+/**
+ * Page frame. App pages use the available width on desktop (`wide`, ~1240px);
+ * `medium` suits single lists, `narrow` reading/forms, `full` multi-pane layouts.
+ */
+export function Page({ children, className, width = "wide" }: { children: ReactNode; className?: string; width?: "narrow" | "medium" | "wide" | "full" }) {
   return (
-    <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <div
+      className={cx(
+        "mx-auto w-full px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5",
+        width === "narrow" ? "max-w-3xl" : width === "medium" ? "max-w-[1040px]" : width === "wide" ? "max-w-[1240px]" : "",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+  eyebrow,
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  /** Optional uppercase micro-label above the title (date, breadcrumb…). */
+  eyebrow?: ReactNode;
+}) {
+  return (
+    <header className="mb-4 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {eyebrow ? <div className="eyebrow mb-1">{eyebrow}</div> : null}
+        <h1 className="text-[1.25rem] leading-7 font-semibold tracking-[-0.01em]">{title}</h1>
         {subtitle ? <p className="mt-0.5 text-sm text-muted">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   );
+}
+
+/** Uppercase micro-label heading for a section, with an optional count and trailing action. */
+export function SectionLabel({
+  id,
+  children,
+  count,
+  action,
+  as: As = "h2",
+  className,
+}: {
+  id?: string;
+  children: ReactNode;
+  count?: ReactNode;
+  action?: ReactNode;
+  as?: "h2" | "h3" | "p";
+  className?: string;
+}) {
+  return (
+    <div className={cx("mb-1.5 flex min-h-6 items-center justify-between gap-3", className)}>
+      <As id={id} className="eyebrow">
+        {children}
+        {count !== undefined && count !== null && count !== "" ? <span className="ml-1.5 font-normal tracking-normal">· {count}</span> : null}
+      </As>
+      {action}
+    </div>
+  );
+}
+
+export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
+  return <kbd className={cx("kbd", className)}>{children}</kbd>;
 }
 
 const SOURCE_DOT: Record<string, string> = {
@@ -139,22 +196,35 @@ export function SourceBadge({ source }: { source: ActionSource | "jarvis" }) {
   );
 }
 
-export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent";
+export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent" | "violet";
 const TONES: Record<Tone, string> = {
   neutral: "bg-surface-2 text-muted border-line",
   ok: "bg-ok-soft text-ok border-transparent",
   warn: "bg-warn-soft text-warn border-transparent",
   danger: "bg-danger-soft text-danger border-transparent",
   accent: "bg-accent-soft text-accent border-transparent",
+  violet: "bg-violet-soft text-violet border-transparent",
 };
 
-export function Badge({ tone = "neutral", children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={cx("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium", TONES[tone], className)}>{children}</span>;
+/** Status pill. `dot` adds the artifact's leading status dot. */
+export function Badge({ tone = "neutral", children, className, dot }: { tone?: Tone; children: ReactNode; className?: string; dot?: boolean }) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center gap-1 rounded-full border px-2 text-xs leading-[1.125rem] font-semibold",
+        dot && "pill-dot gap-1.5",
+        TONES[tone],
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-[var(--radius)] border border-dashed border-line-strong p-5 text-center">
+    <div className="rounded-[var(--radius)] border border-dashed border-line-strong px-4 py-5 text-center">
       <p className="font-medium">{title}</p>
       {children ? <div className="mt-1 text-sm text-muted">{children}</div> : null}
       {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
@@ -167,7 +237,7 @@ export function ErrorNote({ error, retry }: { error: unknown; retry?: () => void
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] border border-danger bg-danger-soft p-3 text-sm text-danger"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
     >
       <span>{msg}</span>
       {retry ? (
@@ -255,11 +325,11 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         className={cx(
-          "relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-surface p-5 shadow-xl sm:rounded-2xl",
+          "relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-surface p-4 shadow-[var(--shadow-pop)] sm:rounded-[14px] sm:p-5",
           size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >
-        <h2 id={titleId} className="text-lg font-semibold">
+        <h2 id={titleId} className="text-base font-semibold">
           {title}
         </h2>
         {description ? (
@@ -267,12 +337,12 @@ export function Dialog({
             {description}
           </div>
         ) : null}
-        <div className="mt-4">{children}</div>
+        <div className="mt-3">{children}</div>
         {/* Phones: the primary action stays reachable (sticky) however long the form is. */}
         {footer ? (
           <div
             data-dialog-footer
-            className="sticky -bottom-5 z-10 -mx-5 mt-5 -mb-5 flex flex-wrap justify-end gap-2 border-t border-line bg-surface px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0"
+            className="sticky -bottom-4 z-10 -mx-4 mt-4 -mb-4 flex flex-wrap justify-end gap-2 border-t border-line bg-surface px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:static sm:mx-0 sm:mb-0 sm:border-0 sm:p-0"
           >
             {footer}
           </div>
@@ -327,9 +397,9 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="tap inline-flex items-center justify-center rounded-[10px] text-muted hover:bg-surface-2"
+        className="tap inline-flex items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
       >
-        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="5" cy="12" r="1.8" fill="currentColor" />
           <circle cx="12" cy="12" r="1.8" fill="currentColor" />
           <circle cx="19" cy="12" r="1.8" fill="currentColor" />
@@ -342,7 +412,7 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
           role="menu"
           aria-label={label}
           onKeyDown={onKey}
-          className="absolute right-0 z-40 mt-1 min-w-48 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-lg"
+          className="absolute right-0 z-40 mt-1 min-w-48 overflow-hidden rounded-[10px] border border-line bg-surface p-1 shadow-[var(--shadow-pop)]"
         >
           {items.map((it) => (
             <li key={it.label} role="none">
@@ -354,7 +424,10 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
                   setOpen(false);
                   it.onSelect();
                 }}
-                className={cx("block min-h-11 w-full px-4 text-left text-sm hover:bg-surface-2 disabled:opacity-50", it.danger && "text-danger")}
+                className={cx(
+                  "block min-h-11 w-full rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50 dense:min-h-8 dense:px-2.5",
+                  it.danger && "text-danger",
+                )}
               >
                 {it.label}
               </button>
@@ -398,9 +471,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role="status"
             className={cx(
-              "pointer-events-auto max-w-md rounded-xl border px-4 py-3 text-sm shadow-lg",
-              TONES[t.tone],
-              t.tone === "neutral" && "bg-surface text-text",
+              "pointer-events-auto max-w-md rounded-[10px] border px-3.5 py-2.5 text-sm font-medium shadow-[var(--shadow-pop)]",
+              t.tone === "neutral" ? "border-transparent bg-text text-bg" : TONES[t.tone],
             )}
           >
             {t.text}
@@ -466,4 +538,4 @@ export function Field({ label, hint, children, id, error }: { label: string; hin
 }
 
 export const inputCls =
-  "block w-full min-h-12 rounded-[10px] border border-line-strong bg-surface px-3 py-2 text-base text-text placeholder:text-muted disabled:opacity-60";
+  "block w-full min-h-11 rounded-[8px] border border-line-strong bg-surface px-3 py-2 text-base text-text placeholder:text-muted disabled:opacity-60 dense:min-h-9 dense:px-2.5 dense:py-1.5 dense:text-[0.875rem]";

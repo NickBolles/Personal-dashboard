@@ -393,7 +393,7 @@ export function PeopleView() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<{ user: { id: string } }>("/api/auth/me") });
   const [adding, setAdding] = useState(false);
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader
         title="People"
         subtitle="Everyone has their own conversations, alerts and Home layout. Household things are shared by what you allow here."

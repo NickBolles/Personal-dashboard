@@ -13,9 +13,9 @@ export function ConnectionsView() {
   const q = useQuery({ queryKey: ["integrations"], queryFn: () => api.get<{ integrations: PublicIntegration[] }>("/api/integrations") });
   const [open, setOpen] = useState<string | null>(() => (typeof window !== "undefined" ? window.location.hash.slice(1) || null : null));
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[880px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
-      <ul className="space-y-2">
+      <ul className="space-y-1.5">
         {INTEGRATIONS.map((d) => {
           const i = q.data?.integrations.find((x) => x.kind === d.kind);
           const isOpen = open === d.kind;
@@ -27,7 +27,7 @@ export function ConnectionsView() {
                   aria-expanded={isOpen}
                   aria-controls={`panel-${d.kind}`}
                   onClick={() => setOpen(isOpen ? null : d.kind)}
-                  className="flex min-h-16 w-full items-center justify-between gap-2 p-4 text-left"
+                  className="flex min-h-14 w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left dense:min-h-12"
                 >
                   <span className="min-w-0">
                     <span className="block font-semibold">{d.label}</span>
@@ -48,7 +48,7 @@ export function ConnectionsView() {
                 </button>
               </h2>
               {isOpen ? (
-                <div id={`panel-${d.kind}`} className="border-t border-line p-4">
+                <div id={`panel-${d.kind}`} className="border-t border-line p-3.5">
                   <IntegrationForm kind={d.kind} />
                 </div>
               ) : null}
@@ -62,7 +62,7 @@ export function ConnectionsView() {
               aria-expanded={open === "github"}
               aria-controls="panel-github"
               onClick={() => setOpen(open === "github" ? null : "github")}
-              className="flex min-h-16 w-full items-center justify-between gap-2 p-4 text-left"
+              className="flex min-h-14 w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left dense:min-h-12"
             >
               <span className="min-w-0">
                 <span className="block font-semibold">GitHub</span>
@@ -72,7 +72,7 @@ export function ConnectionsView() {
             </button>
           </h2>
           {open === "github" ? (
-            <div id="panel-github" className="border-t border-line p-4">
+            <div id="panel-github" className="border-t border-line p-3.5">
               <GithubConnections />
             </div>
           ) : null}

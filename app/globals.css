@@ -21,10 +21,15 @@
   --warn-soft: #fff3de;
   --ok: #1d6b3a;
   --ok-soft: #e5f4ea;
+  --violet: #6b3fc4;
+  --violet-soft: #f0e9ff;
   --focus: #2749d8;
   --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.04);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.05);
+  /* Raised surfaces only (menus, dialogs, palette). */
+  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.08), 0 20px 60px rgb(0 0 0 / 0.18);
+  --brand-gradient: linear-gradient(135deg, var(--accent), var(--violet));
   color-scheme: light;
 }
 
@@ -46,11 +51,21 @@
     --warn-soft: #33260f;
     --ok: #7fd49a;
     --ok-soft: #15301f;
+    --violet: #c4a8ff;
+    --violet-soft: #2a2145;
     --focus: #8fa6ff;
     --shadow: none;
+    --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.55);
     color-scheme: dark;
   }
 }
+
+/*
+ * Density: phones and touch screens keep ≥44px targets; a desktop pointer
+ * (lg + pointer:fine) gets the compact "command center" sizing. Use the
+ * `dense:` variant for anything that should tighten only there.
+ */
+@custom-variant dense (@media (min-width: 1024px) and (pointer: fine));
 
 @theme inline {
   --color-bg: var(--bg);
@@ -69,9 +84,22 @@
   --color-warn-soft: var(--warn-soft);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius-card: var(--radius);
+  /* Type scale: hierarchy comes from weight and colour, not size. text-base stays 16px (inputs: no iOS zoom). */
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.375rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.5rem;
+  --text-2xl: 1.3125rem;
+  --text-2xl--line-height: 1.75rem;
 }
 
 @layer base {
@@ -96,10 +124,19 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-sans);
-    font-size: 1rem;
+    font-size: 0.9375rem;
     line-height: 1.5;
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  @media (min-width: 1024px) and (pointer: fine) {
+    body {
+      font-size: 0.875rem;
+      line-height: 1.45;
+    }
   }
 
   :focus-visible {
@@ -110,6 +147,10 @@
 
   a {
     color: inherit;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
 }
 
@@ -136,16 +177,82 @@
   border: 0;
 }
 
-/* Touch-safe targets: 48px preferred, never below 44px. */
-.tap {
-  min-height: 44px;
-  min-width: 44px;
-}
+/*
+ * Shared surfaces and type primitives (ported from the Work design artifact).
+ * In the components layer so utilities on the same element still win.
+ */
+@layer components {
+  /* Touch-safe targets: 44px on touch; compact on a desktop pointer. */
+  .tap {
+    min-height: 44px;
+    min-width: 44px;
+  }
 
-.card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  @media (min-width: 1024px) and (pointer: fine) {
+    .tap {
+      min-height: 32px;
+      min-width: 32px;
+    }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  /* Uppercase micro-label for sections and blocks. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    min-width: 1.25rem;
+    justify-content: center;
+    padding: 0 0.3125rem;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+
+  /* Status dot inside a pill/badge. */
+  .pill-dot::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.85;
+    flex: none;
+  }
+
+  /* Hairline list: rows separated by 1px lines, no per-row card chrome. */
+  .rows > * + * {
+    border-top: 1px solid var(--line);
+  }
+
+  .brand-mark {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: var(--brand-gradient);
+    flex: none;
+  }
 }
 
 .prose-chat {

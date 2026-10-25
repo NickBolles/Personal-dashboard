@@ -79,74 +79,88 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
     },
   ];
 
+  const primaryButton =
+    primary && !compact ? (
+      primary.kind === "open" ? (
+        <ButtonLink href={action.href} external={action.external} variant="primary" size="sm" aria-describedby={titleId}>
+          {primary.label}
+        </ButtonLink>
+      ) : (
+        <Button
+          variant="primary"
+          size="sm"
+          busy={m.isPending}
+          disabled={!online || done}
+          title={!online ? "Unavailable offline" : undefined}
+          onClick={() => run(primary.kind)}
+          aria-describedby={titleId}
+        >
+          {done ? (
+            <>
+              <svg className="jv-check h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Done
+            </>
+          ) : (
+            primary.label
+          )}
+        </Button>
+      )
+    ) : null;
+
+  // Phones: title/meta beside the menu, primary action below. Wider: one row — content, action, menu.
   return (
-    <article aria-labelledby={titleId} data-tier={rank?.tier} className={cx("card flex flex-col gap-2 p-4", rank && "jv-accent pl-5", done && "jv-done")}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <SourceBadge source={action.source} />
-            <Badge tone={REASON_TONE[action.priorityReason]}>{PRIORITY_LABELS[action.priorityReason]}</Badge>
-            {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
-            {rank?.tier === "compass" ? <Badge tone="accent">Compass focus</Badge> : null}
-          </div>
-          <h3 id={titleId} className="text-base font-semibold leading-snug">
-            {action.external ? (
-              <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
-                {action.title}
-              </a>
-            ) : (
-              <Link href={action.href} className="hover:underline">
-                {action.title}
-              </Link>
-            )}
-          </h3>
-          {!compact && action.detail ? <p className="text-sm text-muted">{action.detail}</p> : null}
+    <article
+      aria-labelledby={titleId}
+      data-tier={rank?.tier}
+      className={cx(
+        "card grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-2 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center dense:py-2.5",
+        rank && "jv-accent pl-4",
+        done && "jv-done",
+      )}
+    >
+      <div className="col-start-1 row-start-1 min-w-0 space-y-0.5">
+        <h3 id={titleId} className="text-[0.9375rem] leading-snug font-semibold dense:text-[0.875rem]">
+          {action.external ? (
+            <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
+              {action.title}
+            </a>
+          ) : (
+            <Link href={action.href} className="hover:underline">
+              {action.title}
+            </Link>
+          )}
+        </h3>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <SourceBadge source={action.source} />
+          <Badge tone={REASON_TONE[action.priorityReason]} dot>
+            {PRIORITY_LABELS[action.priorityReason]}
+          </Badge>
+          {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
+          {rank?.tier === "compass" ? <Badge tone="violet">Compass focus</Badge> : null}
+        </div>
+        {!compact && action.detail ? <p className="text-sm text-muted">{action.detail}</p> : null}
+        {due || stale ? (
           <p className="text-xs text-muted">
             {due ? <span>{due}</span> : null}
             {due && stale ? " · " : null}
             {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
           </p>
-        </div>
+        ) : null}
+      </div>
+      <div className="col-start-2 row-start-1 self-start sm:col-start-3 sm:self-center">
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
-      {primary && !compact ? (
-        <div className="flex gap-2">
-          {primary.kind === "open" ? (
-            <ButtonLink href={action.href} external={action.external} variant="primary" className="min-h-11 text-sm" aria-describedby={titleId}>
-              {primary.label}
-            </ButtonLink>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              busy={m.isPending}
-              disabled={!online || done}
-              title={!online ? "Unavailable offline" : undefined}
-              onClick={() => run(primary.kind)}
-              aria-describedby={titleId}
-            >
-              {done ? (
-                <>
-                  <svg className="jv-check h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  Done
-                </>
-              ) : (
-                primary.label
-              )}
-            </Button>
-          )}
-        </div>
-      ) : null}
+      {primaryButton ? <div className="col-start-1 row-start-2 flex gap-2 sm:col-start-2 sm:row-start-1">{primaryButton}</div> : null}
       {rank && action.why?.length ? (
-        <details className="jv-why group -mx-1">
-          <summary className="tap inline-flex items-center gap-1 rounded-[8px] px-1 text-xs font-medium text-muted hover:text-text">
+        <details className="jv-why group col-span-full -mx-1 -mt-1">
+          <summary className="tap inline-flex items-center gap-1 rounded-[6px] px-1 text-xs font-medium text-muted hover:text-text dense:min-h-6">
             <span>Why this?</span>
             <span className="sr-only"> ({action.title})</span>
-            <ChevronIcon className="h-4 w-4 transition-transform group-open:rotate-90" />
+            <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
           </summary>
-          <div className="jv-rise space-y-3 px-1 pb-1 pt-1">
+          <div className="jv-rise space-y-3 px-1 pt-1 pb-1">
             <ul className="space-y-0.5 text-sm text-muted">
               {action.why.map((w) => (
                 <li key={w}>· {w}</li>

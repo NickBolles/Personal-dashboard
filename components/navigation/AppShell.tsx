@@ -78,7 +78,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const hrefFor = useNavMemory(pathname);
   const online = useOnline();
   const unread = useUnreadCount().data?.unread ?? 0;
-  const [collapsed, setCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
   const { capabilities } = useAccess();
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
@@ -111,7 +111,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   }, []);
 
   useEffect(() => {
-    setCollapsed(localStorage.getItem("jarvis:rail") !== "expanded");
+    setCollapsed(localStorage.getItem("jarvis:rail") === "collapsed");
   }, []);
   const toggleRail = () => {
     setCollapsed((c) => {
@@ -125,13 +125,14 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       <span
         aria-hidden="true"
         data-dynamic
-        className="absolute -right-1 -top-1 min-w-5 rounded-full bg-danger px-1 text-center text-[11px] font-semibold leading-5 text-white dark:text-black"
+        className="absolute -right-1.5 -top-1.5 min-w-[18px] rounded-full bg-danger px-1 text-center text-[10px] leading-[18px] font-semibold text-white dark:text-black"
       >
         {unread > 99 ? "99+" : unread}
       </span>
     ) : null;
   const badgeLabel = unread > 0 ? `, ${unread} unread` : "";
 
+  // Rail rows keep a 44px hit area (touch laptops; e2e a11y contract) but read as compact rows.
   const railItem = (d: Dest) => {
     const active = d.match(pathname);
     const Icon = d.icon;
@@ -143,19 +144,24 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
           title={collapsed ? d.label : undefined}
           className={cx(
-            "relative flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium",
-            active ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
+            "group relative flex min-h-11 items-center gap-2.5 rounded-[8px] px-2.5 text-[0.875rem]",
+            active ? "bg-surface font-semibold text-text shadow-[var(--shadow)] ring-1 ring-line" : "text-muted hover:bg-surface hover:text-text",
             collapsed && "justify-center px-0",
           )}
         >
           <span className="relative">
-            <Icon className="h-6 w-6" />
-            {d.key === "alerts" ? badge : null}
+            <Icon className={cx("h-[18px] w-[18px]", active ? "text-accent" : "")} />
+            {d.key === "alerts" && collapsed ? badge : null}
           </span>
-          <span className={collapsed ? "sr-only" : ""}>
+          <span className={collapsed ? "sr-only" : "min-w-0 flex-1 truncate"}>
             {d.label}
-            {d.key === "alerts" ? badgeLabel : ""}
+            {d.key === "alerts" ? <span className="sr-only">{badgeLabel}</span> : null}
           </span>
+          {d.key === "alerts" && !collapsed && unread > 0 ? (
+            <span aria-hidden="true" data-dynamic className="rounded-full bg-warn-soft px-1.5 text-[11px] leading-[18px] font-bold text-warn">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          ) : null}
         </Link>
       </li>
     );
@@ -166,18 +172,26 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       {/* Desktop / tablet rail */}
       <nav
         aria-label="Primary"
-        className={cx("sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface px-2 py-3 lg:flex", collapsed ? "w-[72px]" : "w-[260px]")}
+        className={cx(
+          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface-2 px-2.5 py-2.5 lg:flex",
+          collapsed ? "w-[64px]" : "w-[232px]",
+        )}
       >
-        <div className={cx("mb-3 flex items-center", collapsed ? "justify-center" : "justify-between px-2")}>
-          {!collapsed ? <span className="text-lg font-semibold tracking-tight">Jarvis</span> : null}
+        <div className={cx("mb-1 flex items-center", collapsed ? "justify-center" : "justify-between pl-1.5")}>
+          {!collapsed ? (
+            <span className="flex items-center gap-2 text-[0.9375rem] font-bold tracking-[-0.01em]">
+              <span aria-hidden="true" className="brand-mark" />
+              Jarvis
+            </span>
+          ) : null}
           <button
             type="button"
             onClick={toggleRail}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             aria-expanded={!collapsed}
-            className="tap inline-flex items-center justify-center rounded-xl text-muted hover:bg-surface-2"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface hover:text-text"
           >
-            <PanelIcon className="h-5 w-5" />
+            <PanelIcon className="h-[18px] w-[18px]" />
           </button>
         </div>
         <button
@@ -185,23 +199,31 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           onClick={() => setSearchOpen(true)}
           title={collapsed ? "Search (Ctrl K)" : undefined}
           className={cx(
-            "mb-2 flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted hover:bg-surface-2 hover:text-text",
-            collapsed && "justify-center px-0",
+            "mb-2 flex min-h-11 w-full items-center gap-2 rounded-[9px] text-[0.8125rem] text-muted hover:text-text",
+            collapsed ? "justify-center hover:bg-surface" : "border border-line bg-surface px-2.5 shadow-[var(--shadow)] hover:border-line-strong",
           )}
         >
-          <SearchIcon className="h-6 w-6" />
-          <span className={collapsed ? "sr-only" : "flex flex-1 items-center justify-between"}>
-            Search
-            {!collapsed ? <kbd className="rounded border border-line px-1.5 text-[11px]">Ctrl K</kbd> : null}
+          <SearchIcon className="h-4 w-4 shrink-0" />
+          <span className={collapsed ? "sr-only" : "flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap"}>
+            Search…
+            {!collapsed ? <kbd className="kbd">Ctrl K</kbd> : null}
           </span>
         </button>
-        <ul className="space-y-1">{primary.map(railItem)}</ul>
-        <hr className="my-3 border-line" />
-        <ul className="space-y-1">{destinations.map(railItem)}</ul>
-        <div className="mt-auto space-y-1">
-          <p className={cx("flex min-h-10 items-center gap-2 px-3 text-xs text-muted", collapsed && "justify-center px-0")} role="status">
-            <span aria-hidden="true" className={cx("h-2 w-2 rounded-full", online ? "bg-ok" : "bg-warn")} />
-            <span className={collapsed ? "sr-only" : ""}>{online ? `Online · ${userName}` : "Offline"}</span>
+        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+          <ul>{primary.map(railItem)}</ul>
+          {collapsed ? (
+            <hr className="my-2 border-line" />
+          ) : (
+            <p aria-hidden="true" className="eyebrow px-2.5 pt-3 pb-1">
+              Spaces
+            </p>
+          )}
+          <ul>{destinations.map(railItem)}</ul>
+        </div>
+        <div className="mt-2 border-t border-line pt-2">
+          <p className={cx("flex min-h-7 items-center gap-2 px-2.5 text-xs text-muted", collapsed && "justify-center px-0")} role="status">
+            <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full", online ? "bg-ok" : "bg-warn")} />
+            <span className={collapsed ? "sr-only" : "truncate"}>{online ? `Online · ${userName}` : "Offline"}</span>
           </p>
           <ul>{railItem(SETTINGS)}</ul>
         </div>
@@ -225,7 +247,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           role="toolbar"
           aria-label="Command dock"
           className="pointer-events-none fixed bottom-5 z-40 hidden -translate-x-1/2 lg:flex"
-          style={{ left: `calc(50% + ${collapsed ? 36 : 130}px)` }}
+          style={{ left: `calc(50% + ${collapsed ? 32 : 116}px)` }}
         >
           <span className="pointer-events-auto">
             <CommandDock variant="float" />
@@ -254,12 +276,12 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                   aria-current={active ? "page" : undefined}
                   aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
                   className={cx(
-                    "flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[12px] font-medium",
+                    "flex min-h-[60px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
                     active ? "text-accent" : "text-muted",
                   )}
                 >
                   <span className="relative">
-                    <Icon className="h-6 w-6" />
+                    <Icon className="h-[22px] w-[22px]" />
                     {d.key === "alerts" ? badge : null}
                   </span>
                   <span className="block max-w-full truncate px-1">{d.label}</span>

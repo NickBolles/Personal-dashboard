@@ -74,7 +74,7 @@ export function QuickCapture({
 
   return (
     <form
-      className="card flex items-end gap-2 p-2"
+      className="card flex items-end gap-2 p-1.5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
@@ -96,7 +96,7 @@ export function QuickCapture({
             submit();
           }
         }}
-        className={cx(inputCls, "max-h-40 min-h-12 resize-none border-transparent bg-transparent")}
+        className={cx(inputCls, "max-h-40 resize-none border-transparent bg-transparent")}
       />
       <Button type="submit" variant="primary" aria-label="Send to Hermes" busy={busy} disabled={!text.trim()} className="shrink-0">
         {!busy ? <SendIcon className="h-5 w-5" /> : null}

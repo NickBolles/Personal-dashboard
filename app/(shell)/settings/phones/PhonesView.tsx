@@ -56,7 +56,7 @@ export function PhonesView() {
   const list = devices.data?.devices ?? [];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Phones" subtitle="The Jarvis Android app: pair it, see where you're signed in, set up notifications." />
 
       <Card>
