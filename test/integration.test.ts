@@ -221,8 +221,8 @@ describe("adapters against the mock upstreams", () => {
   });
 
   it("paperclip: tracking the same initiative from two conversations creates it once", async () => {
-    const a = await track({ mode: "create", sessionId: "s1", title: "Enable v6" }, userId, "t1");
-    const b = await track({ mode: "create", sessionId: "s2", title: "enable v6 " }, userId, "t2");
+    const a = await track({ mode: "create", sessionId: "s1", title: "Enable v6" }, userById(userId)!, "t1");
+    const b = await track({ mode: "create", sessionId: "s2", title: "enable v6 " }, userById(userId)!, "t2");
     expect(b.issue.id).toBe(a.issue.id);
     expect(a.created).toBe(true);
     expect(b.deduplicated).toBe(true);

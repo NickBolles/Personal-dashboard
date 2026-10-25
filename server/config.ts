@@ -72,6 +72,11 @@ export const config = {
   get maxStreams() {
     return Number(process.env.JARVIS_MAX_STREAMS ?? 16);
   },
+  /** Reverse proxies in front of Jarvis that append to X-Forwarded-For (Traefik = 1; 0 = ignore the header). */
+  get trustedProxyHops() {
+    const n = Number(process.env.JARVIS_TRUSTED_PROXY_HOPS ?? 1);
+    return Number.isInteger(n) && n >= 0 ? n : 1;
+  },
   get maxBodyBytes() {
     return Number(process.env.JARVIS_MAX_BODY_BYTES ?? 256 * 1024);
   },

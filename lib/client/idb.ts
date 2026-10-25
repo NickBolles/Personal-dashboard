@@ -89,6 +89,11 @@ export async function rememberSession(id: string, data: unknown, limit = 10) {
   await kvSet(`session:${id}`, { savedAt: new Date().toISOString(), data });
 }
 
+/**
+ * Forget everything this device holds for the signed-in person: IndexedDB
+ * (chat snapshots, drafts), `jarvis:` localStorage fallbacks and the service
+ * worker's page cache. Run on "Clear local cache" and on sign-out.
+ */
 export async function clearAllLocal() {
   try {
     if (hasIdb()) indexedDB.deleteDatabase(DB);
@@ -97,6 +102,23 @@ export async function clearAllLocal() {
   }
   try {
     for (const k of Object.keys(localStorage)) if (k.startsWith("jarvis:")) localStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
+  await clearPageCaches();
+}
+
+/** Drop cached page HTML (kept by public/sw.js); static assets can stay. */
+export async function clearPageCaches() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage("CLEAR_PRIVATE");
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (typeof caches !== "undefined") {
+      for (const k of await caches.keys()) if (k.endsWith("-pages")) await caches.delete(k);
+    }
   } catch {
     /* ignore */
   }

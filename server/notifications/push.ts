@@ -1,10 +1,11 @@
 import "server-only";
 import webpush from "web-push";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { decrypt, encrypt, newId } from "@/server/crypto";
 import { config } from "@/server/config";
 import { getSetting, setSetting, getPreferences } from "@/server/settings";
+import { HttpError } from "@/server/http/errors";
 import { inWindow, localMinutes } from "@/lib/time";
 import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
 import { pendingPushes, setPushState, unreadActionableCount } from "./index";
@@ -33,7 +34,27 @@ export type PushPayload = {
   severity: string;
 };
 
+/**
+ * Web Push endpoints must belong to a real browser push service. Anything else
+ * would let a signed-in person make Jarvis POST to arbitrary (internal) URLs.
+ */
+const PUSH_HOSTS = ["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com"];
+const PUSH_HOST_SUFFIXES = [".notify.windows.com", ".push.services.mozilla.com"];
+
+export function isAllowedPushEndpoint(endpoint: string) {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return false;
+  const host = url.hostname.toLowerCase();
+  return PUSH_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some((s) => host.endsWith(s) && /^[a-z0-9.-]+$/.test(host));
+}
+
 export function saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }, userAgent?: string | null) {
+  if (!isAllowedPushEndpoint(sub.endpoint)) throw new HttpError(400, "push_endpoint", "That isn't a browser push service address.");
   const values = {
     id: newId("push"),
     userId,
@@ -50,8 +71,12 @@ export function saveSubscription(userId: string, sub: { endpoint: string; keys: 
     .run();
 }
 
-export function removeSubscription(endpoint: string) {
-  getDb().delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.endpoint, endpoint)).run();
+export function removeSubscription(endpoint: string, userId?: string) {
+  const T = schema.pushSubscriptions;
+  getDb()
+    .delete(T)
+    .where(userId ? and(eq(T.endpoint, endpoint), eq(T.userId, userId)) : eq(T.endpoint, endpoint))
+    .run();
 }
 
 export function listSubscriptions(userId: string) {
@@ -59,7 +84,10 @@ export function listSubscriptions(userId: string) {
 }
 
 export async function sendToUser(userId: string, payload: PushPayload, opts: { urgency?: "high" | "normal" | "low" } = {}) {
-  const subs = listSubscriptions(userId);
+  const all = listSubscriptions(userId);
+  // Endpoints saved before the allowlist existed are dropped, never contacted.
+  for (const s of all) if (!isAllowedPushEndpoint(s.endpoint)) removeSubscription(s.endpoint);
+  const subs = all.filter((s) => isAllowedPushEndpoint(s.endpoint));
   if (!subs.length) return { sent: 0, failed: 0, total: 0 };
   const vapid = getVapid();
   let sent = 0;

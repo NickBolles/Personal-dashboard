@@ -4,7 +4,7 @@ import { deleteLink } from "@/integrations/paperclip/service";
 /** Removes only Jarvis' relationship record. Paperclip work is never closed or deleted. */
 export const DELETE = api<undefined, { id: string }>(
   ({ params, user, correlationId }) => {
-    deleteLink(params.id, user.id, correlationId);
+    deleteLink(params.id, user, correlationId);
     return { ok: true };
   },
   { cap: "paperclip.track" },

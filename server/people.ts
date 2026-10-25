@@ -131,6 +131,10 @@ export function updatePerson(id: string, patch: PersonPatch, actorId: string) {
     throw new HttpError(409, "last_admin", "Jarvis needs at least one admin.");
   }
   if (id === actorId && patch.disabled) throw new HttpError(409, "self", "You can't disable yourself.");
+  if (losesAdmin && id === getOwner()?.id) {
+    // Ownership decides who passcode-only sign-in checks and who owns Hermes-direct conversations.
+    throw new HttpError(409, "owner", "The person who set up Jarvis stays an active admin.");
+  }
   const set: Partial<typeof schema.users.$inferInsert> = {};
   if (patch.name !== undefined) set.name = patch.name.trim();
   if (patch.username !== undefined) {

@@ -6,7 +6,7 @@ import { audit } from "@/server/audit";
 import { config } from "@/server/config";
 import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
-import { createSession as createConversation, getSessionDetail } from "@/server/assistant";
+import { createSession as createConversation, getSessionDetail, sessionAccess } from "@/server/assistant";
 import { requireCap } from "@/server/access";
 import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
@@ -927,6 +927,9 @@ export async function addLink(user: CurrentUser, itemId: string, body: z.infer<t
     } catch (e) {
       if (e instanceof HttpError && (e.status === 403 || e.status === 404 || e.status === 400)) throw new HttpError(404, "not_found", "Conversation not found");
       if (e instanceof Error && "kind" in e && (e as { kind: string }).kind === "not_found") throw new HttpError(404, "not_found", "Conversation not found");
+      // Hermes is slow or down: never skip the access check. Jarvis' own record
+      // of who owns/shares the conversation still decides; anyone else is refused.
+      if (!sessionAccess(user, sessionId)) throw new HttpError(503, "hermes_unavailable", "Can't verify that conversation right now. Try again shortly.");
       title = title || `Conversation ${sessionId}`;
     }
     values = { kind: "chat_session", targetId: sessionId, url: null, title, role: body.role ?? "source" };

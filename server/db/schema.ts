@@ -21,6 +21,18 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull().default(now),
 });
 
+/**
+ * Failed sign-in counters (server/auth/throttle.ts): per client, per account
+ * and global. Times are epoch milliseconds.
+ */
+export const authFailures = sqliteTable("auth_failures", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  firstAt: integer("first_at").notNull(),
+  lastAt: integer("last_at").notNull(),
+  lockedUntil: integer("locked_until").notNull().default(0),
+});
+
 /** Per-person capability grants/revocations on top of their role's defaults. */
 export const userCapabilities = sqliteTable(
   "user_capabilities",
