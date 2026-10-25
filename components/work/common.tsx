@@ -8,44 +8,38 @@ import { Badge, cx, useToast, type Tone } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/work";
 
-const TABS = [
-  { href: "/work", label: "Tree", match: (p: string) => p === "/work" },
-  { href: "/work/timeline", label: "Timeline", match: (p: string) => p.startsWith("/work/timeline") },
-  { href: "/work/dashboard", label: "Dashboard", match: (p: string) => p.startsWith("/work/dashboard") },
-  { href: "/work/map", label: "Map", match: (p: string) => p.startsWith("/work/map") },
+const VIEWS = [
+  { href: "/areas", label: "Tree", match: (p: string) => p === "/areas" },
+  { href: "/areas/timeline", label: "Timeline", match: (p: string) => p.startsWith("/areas/timeline") },
+  { href: "/areas/dashboard", label: "Dashboard", match: (p: string) => p.startsWith("/areas/dashboard") },
+  { href: "/areas/map", label: "Map", match: (p: string) => p.startsWith("/areas/map") },
 ];
 
 /**
- * Work section chrome: one slim full-width bar with the brand mark and the
- * Tree / Timeline / Dashboard / Map tabs. `.work-ui` scopes the hub's density
- * rules (components/work/work.css).
+ * Areas section wrapper. There is no separate top bar any more (design review
+ * D3: app rail + one secondary nav): the Tree / Timeline / Dashboard / Map
+ * views are a segmented control in each page's header. `.work-ui` scopes the
+ * hub's density rules (components/work/work.css).
  */
 export function WorkShell({ children }: { children: ReactNode }) {
+  return <div className="work-ui">{children}</div>;
+}
+
+/** Tree · Timeline · Dashboard · Map as one compact segmented control (in the page header). */
+export function AreasViewSwitch({ className }: { className?: string }) {
   const path = usePathname();
   return (
-    <div className="work-ui">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line bg-surface px-3 py-1 sm:px-5">
-        <span className="hidden items-center gap-2 text-sm font-semibold sm:inline-flex" aria-hidden="true">
-          <i className="inline-block h-[18px] w-[18px] rounded-[6px] bg-[linear-gradient(135deg,var(--accent),var(--violet))]" />
-          Work
-        </span>
-        <nav aria-label="Work">
-          <ul className="flex flex-wrap gap-0.5">
-            {TABS.map((t) => (
-              <li key={t.href}>
-                <Link href={t.href} aria-current={t.match(path) ? "page" : undefined} className="wk-navlink">
-                  {t.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <span className="ml-auto hidden items-center gap-1.5 text-xs text-muted xl:inline-flex">
-          <kbd className="wk-kbd">Ctrl K</kbd> jump or do · private to you
-        </span>
-      </div>
-      {children}
-    </div>
+    <nav aria-label="Areas views" className={className}>
+      <ul className="seg">
+        {VIEWS.map((t) => (
+          <li key={t.href}>
+            <Link href={t.href} aria-current={t.match(path) ? "page" : undefined} className="seg-item">
+              {t.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -55,13 +49,16 @@ export function WorkShell({ children }: { children: ReactNode }) {
  */
 export function WorkPageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-      <div className="min-w-0">
-        {eyebrow ? <p className="wk-eyebrow">{eyebrow}</p> : null}
-        <h1 className="text-xl leading-tight font-semibold tracking-tight">{title}</h1>
-        {subtitle ? <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p> : null}
+    <header className="mb-3 space-y-2">
+      <AreasViewSwitch />
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0">
+          {eyebrow ? <p className="wk-eyebrow">{eyebrow}</p> : null}
+          <h1 className="text-xl leading-tight font-semibold tracking-tight">{title}</h1>
+          {subtitle ? <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p> : null}
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   );
 }
@@ -132,11 +129,11 @@ export function StatusDot({ status }: { status: WorkStatus }) {
 export function StatusBadge({ status, auto }: { status: WorkStatus; auto?: boolean }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-status={status}>
-      <span className="wk-pill" data-s={status}>
+      <span className="status-pill" data-s={status}>
         {STATUS_LABELS[status]}
       </span>
-      {/* Rows settled automatically before phase 3; nothing creates them any more. */}
-      {auto && status === "settled" ? <Badge tone="neutral">Auto-settled (legacy)</Badge> : null}
+      {/* Settled by an area's auto_after_quiet policy (or before phase 3). */}
+      {auto && status === "settled" ? <Badge tone="neutral">Auto-settled</Badge> : null}
     </span>
   );
 }

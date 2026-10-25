@@ -200,12 +200,12 @@ export function MapCanvas({
               return interactive ? (
                 <g key={n.id} transform={`translate(${p.x},${p.y})`}>
                   <a
-                    href={`/work?item=${encodeURIComponent(n.id)}`}
+                    href={`/areas?item=${encodeURIComponent(n.id)}`}
                     aria-label={`${n.title}, ${STATUS_LABELS[n.status]}`}
                     data-node={n.id}
                     onClick={(e) => {
                       e.preventDefault();
-                      router.push(`/work?item=${encodeURIComponent(n.id)}`);
+                      router.push(`/areas?item=${encodeURIComponent(n.id)}`);
                     }}
                     className="focus:outline-none [&:focus-visible>rect:first-of-type]:stroke-[var(--focus)] [&:focus-visible>rect:first-of-type]:stroke-[4]"
                   >
@@ -247,7 +247,7 @@ export function MapList({ nodes, edges }: { nodes: MapGraphNode[]; edges: MapEdg
       {(kids.get(parent) ?? []).map((n) => (
         <li key={n.id} className="py-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/work?item=${encodeURIComponent(n.id)}`} className="font-medium break-words hover:underline">
+            <Link href={`/areas?item=${encodeURIComponent(n.id)}`} className="font-medium break-words hover:underline">
               {n.title}
             </Link>
             <StatusBadge status={n.status} />
@@ -257,7 +257,7 @@ export function MapList({ nodes, edges }: { nodes: MapGraphNode[]; edges: MapEdg
               {links(n.id).map((l) => (
                 <li key={l.key}>
                   {l.text}{" "}
-                  <Link href={`/work?item=${encodeURIComponent(l.other!.id)}`} className="text-accent underline">
+                  <Link href={`/areas?item=${encodeURIComponent(l.other!.id)}`} className="text-accent underline">
                     {l.other!.title}
                   </Link>
                 </li>

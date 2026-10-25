@@ -57,10 +57,14 @@ test("settings: connections show verified state; notifications categories toggle
   await page.getByRole("checkbox", { name: /Informational/ }).uncheck();
 });
 
-test("share target pre-fills a Hermes capture", async ({ page }) => {
+test("share target opens the Inbox capture sheet, with Ask Hermes as the alternative", async ({ page }) => {
   await page.goto("/share?title=Recipe&text=Try%20this&url=https%3A%2F%2Fexample.com");
-  await expect(page).toHaveURL(/\/chat\?new=1/);
-  await expect(page.getByLabel("Ask Hermes or capture something")).toHaveValue(/Recipe\nTry this\nhttps:\/\/example.com/);
+  await expect(page).toHaveURL(/\/areas\?view=inbox&capture=/);
+  const sheet = page.getByRole("dialog", { name: "Capture" });
+  await expect(sheet.getByLabel("Capture to inbox")).toHaveValue(/Recipe\nTry this\nhttps:\/\/example.com/);
+  await expect(sheet.getByRole("button", { name: "Ask Hermes instead" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
 });
 
 test("manifest is installable-grade", async ({ request }) => {

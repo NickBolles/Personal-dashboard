@@ -20,7 +20,7 @@ type Val = { itemId: string; metric: string; status: string; dueDate: string | n
 export function workHomeActions(rows: Row[], vals: Val[], ctx: AdapterContext): NextAction[] {
   const out: NextAction[] = [];
   for (const r of rows) {
-    const href = `/work?item=${encodeURIComponent(r.id)}`;
+    const href = `/areas?item=${encodeURIComponent(r.id)}`;
     if (r.status === "awaiting_validation") {
       const late = vals.filter((v) => v.itemId === r.id && isValidationOverdue(v, ctx.today));
       if (late.length) {

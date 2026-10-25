@@ -262,7 +262,7 @@ function UnfiledWidget() {
         ))}
       </ul>
       <p className="mt-2 text-sm">
-        <Link href="/work" className="text-accent underline">
+        <Link href="/areas" className="text-accent underline">
           File them in Work
         </Link>
       </p>
@@ -305,7 +305,7 @@ function StatusLanes({ lanes }: { lanes: Extract<DashboardWidget["data"], { kind
                 <ul className="space-y-1">
                   {l.items.map((i) => (
                     <li key={i.id}>
-                      <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="card block p-2 text-sm break-words hover:underline">
+                      <Link href={`/areas?item=${encodeURIComponent(i.id)}`} className="card block p-2 text-sm break-words hover:underline">
                         {i.title}
                       </Link>
                     </li>
@@ -335,7 +335,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
           <li key={i.id} className="py-1.5">
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               <Link
-                href={`/work?item=${encodeURIComponent(i.id)}`}
+                href={`/areas?item=${encodeURIComponent(i.id)}`}
                 className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium break-words hover:underline"
               >
                 <StatusDot status={i.status} />
@@ -368,7 +368,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
           <ul className="wk-rows mt-1.5">
             {d.items.map((i) => (
               <li key={i.id} className="py-2">
-                <Link href={`/work?item=${encodeURIComponent(i.id)}`} className="font-medium break-words hover:underline">
+                <Link href={`/areas?item=${encodeURIComponent(i.id)}`} className="font-medium break-words hover:underline">
                   {i.title}
                 </Link>
                 {i.detail ? <p className="text-sm break-words text-muted">{i.detail}</p> : null}
@@ -426,7 +426,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
       <div>
         <MapCanvas nodes={d.graph.nodes} edges={d.graph.edges} interactive={false} height={200} label={`Map of ${d.graph.root?.title ?? "work"}`} />
         <p className="mt-2 text-sm">
-          <Link href={`/work/map?root=${encodeURIComponent(d.graph.root?.id ?? "")}`} className="text-accent underline">
+          <Link href={`/areas/map?root=${encodeURIComponent(d.graph.root?.id ?? "")}`} className="text-accent underline">
             Open the map<span className="sr-only"> of {d.graph.root?.title}</span>
           </Link>
           {d.graph.truncated ? <span className="text-xs text-muted"> · showing the first {d.graph.nodes.length} items</span> : null}
@@ -441,7 +441,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
 function MiniMap({ node, depth = 0 }: { node: MapNode; depth?: number }) {
   return (
     <div className={depth ? "border-l border-line pl-3" : ""}>
-      <Link href={`/work?item=${encodeURIComponent(node.id)}`} className="flex min-h-8 items-center gap-2 text-sm hover:underline">
+      <Link href={`/areas?item=${encodeURIComponent(node.id)}`} className="flex min-h-8 items-center gap-2 text-sm hover:underline">
         <StatusDot status={node.status} />
         <span className={cx("break-words", depth === 0 && "font-semibold")}>{node.title}</span>
       </Link>

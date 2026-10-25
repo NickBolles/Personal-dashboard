@@ -7,6 +7,7 @@ import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
 import { useInbox } from "@/components/work/today";
+import { useAskHermes } from "@/components/chat/useAskHermes";
 import type { InboxEntry, WorkItem } from "@/lib/work";
 
 /**
@@ -14,8 +15,24 @@ import type { InboxEntry, WorkItem } from "@/lib/work";
  * conversations. Each row says where it came from and why it's here, with
  * File/Accept, Dismiss and Open. Deterministic: nothing is triaged by a model.
  */
-export function CaptureForm({ onDone, autoFocus, inline }: { onDone?: () => void; autoFocus?: boolean; /** one compact row (the inbox) */ inline?: boolean }) {
-  const [text, setText] = useState("");
+export function CaptureForm({
+  onDone,
+  autoFocus,
+  inline,
+  initialText,
+  askable,
+}: {
+  onDone?: () => void;
+  autoFocus?: boolean;
+  /** one compact row (the inbox) */
+  inline?: boolean;
+  /** prefilled (the share sheet) */
+  initialText?: string;
+  /** offer "Ask Hermes instead" (needs hermes.chat) */
+  askable?: boolean;
+}) {
+  const [text, setText] = useState(initialText ?? "");
+  const { ask, busy: asking } = useAskHermes();
   const save = useWorkMutation(() => api.post("/api/work/inbox", { text }), {
     ok: "Captured to the inbox",
     onSuccess: () => {
@@ -68,9 +85,9 @@ export function CaptureForm({ onDone, autoFocus, inline }: { onDone?: () => void
         if (text.trim()) save.mutate(undefined);
       }}
     >
-      <Field id="capture-text" label="Capture to inbox" hint="First line becomes the title. File it later.">
+      <Field id="capture-sheet-text" label="Capture to inbox" hint="First line becomes the title. File it later.">
         <textarea
-          id="capture-text"
+          id="capture-sheet-text"
           data-autofocus={autoFocus || undefined}
           className={`${inputCls} min-h-20 text-base`}
           value={text}
@@ -78,8 +95,20 @@ export function CaptureForm({ onDone, autoFocus, inline }: { onDone?: () => void
           placeholder="Something to look at later…"
         />
       </Field>
-      <div className="flex justify-end">
-        <Button type="submit" variant="primary" disabled={!text.trim()} busy={save.isPending}>
+      <div className="flex justify-end gap-2">
+        {askable ? (
+          <Button
+            type="button"
+            disabled={!text.trim() || save.isPending}
+            busy={asking}
+            onClick={async () => {
+              if (await ask(text)) onDone?.();
+            }}
+          >
+            Ask Hermes instead
+          </Button>
+        ) : null}
+        <Button type="submit" variant="primary" disabled={!text.trim() || asking} busy={save.isPending}>
           Capture
         </Button>
       </div>
@@ -87,10 +116,12 @@ export function CaptureForm({ onDone, autoFocus, inline }: { onDone?: () => void
   );
 }
 
-export function CaptureDialog({ onClose }: { onClose: () => void }) {
+/** The capture sheet (dock, palette, share target): Inbox by default, "Ask Hermes" as the alternative. */
+export function CaptureDialog({ onClose, initialText }: { onClose: () => void; initialText?: string }) {
+  const canChat = useAccess().can("hermes.chat");
   return (
-    <Dialog open onClose={onClose} title="Capture" description="Goes to the Work inbox. Nothing is sent anywhere.">
-      <CaptureForm onDone={onClose} autoFocus />
+    <Dialog open onClose={onClose} title="Capture" description="Goes to your Inbox. Nothing is sent anywhere unless you ask Hermes.">
+      <CaptureForm onDone={onClose} autoFocus initialText={initialText} askable={canChat} />
     </Dialog>
   );
 }

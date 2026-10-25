@@ -22,7 +22,7 @@ const KIND_LABEL: Record<SearchResult["kind"], string> = {
   device: "Device",
   person: "Person",
   finance: "Finance",
-  work: "Work",
+  work: "Areas",
 };
 
 function useDebounced<T>(value: T, ms: number) {

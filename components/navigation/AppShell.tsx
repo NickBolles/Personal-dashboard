@@ -11,7 +11,8 @@ import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
-import { OPEN_CAPTURE_EVENT } from "./commands";
+import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
+import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
 
 const MORE: Dest = {
@@ -74,13 +75,13 @@ export function useUnreadCount() {
 }
 
 /*
- * Rail state. Outside Work the rail is expanded unless the person collapsed it
- * ("jarvis:rail"). Work is a three-pane workbench (tree + centre + context
- * rail), so below 1600px its routes default to the icon rail; an explicit
- * choice made there is remembered separately ("jarvis:rail:work").
+ * Rail state: one global state everywhere (design review D3), so moving
+ * between Home and Areas never shifts the layout. Default: the icon rail up
+ * to 1440px wide, expanded above; the person's explicit choice ("jarvis:rail")
+ * wins and is remembered.
  */
 const RAIL_EVENT = "jarvis:rail-change";
-const WIDE_RAIL = "(min-width: 1600px)";
+const WIDE_RAIL = "(min-width: 1441px)";
 function subscribeRail(cb: () => void) {
   const m = window.matchMedia(WIDE_RAIL);
   m.addEventListener("change", cb);
@@ -99,24 +100,21 @@ function readPref(key: string) {
     return null;
   }
 }
-function useRail(pathname: string) {
-  const isWork = pathname === "/work" || pathname.startsWith("/work/");
+function useRail() {
   const wide = useSyncExternalStore(
     subscribeRail,
     () => window.matchMedia(WIDE_RAIL).matches,
     () => false,
   );
-  const compactWork = isWork && !wide;
-  const key = compactWork ? "jarvis:rail:work" : "jarvis:rail";
   const pref = useSyncExternalStore(
     subscribeRail,
-    () => readPref(key),
+    () => readPref("jarvis:rail"),
     () => null,
   );
-  const collapsed = compactWork ? pref !== "expanded" : pref === "collapsed";
+  const collapsed = pref === "collapsed" || (pref !== "expanded" && !wide);
   const toggle = () => {
     try {
-      localStorage.setItem(key, collapsed ? "expanded" : "collapsed");
+      localStorage.setItem("jarvis:rail", collapsed ? "expanded" : "collapsed");
     } catch {
       /* private mode: no memory */
     }
@@ -130,7 +128,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const hrefFor = useNavMemory(pathname);
   const online = useOnline();
   const unread = useUnreadCount().data?.unread ?? 0;
-  const { collapsed, toggle: toggleRail } = useRail(pathname);
+  const { collapsed, toggle: toggleRail } = useRail();
   const mainRef = useRef<HTMLElement>(null);
   const { capabilities } = useAccess();
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
@@ -138,10 +136,20 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const [searchOpen, setSearchOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const canWork = capabilities.includes("work.use");
+  const newChat = useAskHermes();
+  const startChat = useRef(newChat.start);
+  useEffect(() => {
+    startChat.current = newChat.start;
+  });
   useEffect(() => {
     const onCapture = () => setCapturing(true);
+    const onNewChat = (e: Event) => void startChat.current({ areaId: (e as CustomEvent<{ areaId?: string | null }>).detail?.areaId ?? null });
     window.addEventListener(OPEN_CAPTURE_EVENT, onCapture);
-    return () => window.removeEventListener(OPEN_CAPTURE_EVENT, onCapture);
+    window.addEventListener(NEW_CHAT_EVENT, onNewChat);
+    return () => {
+      window.removeEventListener(OPEN_CAPTURE_EVENT, onCapture);
+      window.removeEventListener(NEW_CHAT_EVENT, onNewChat);
+    };
   }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -216,7 +224,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         aria-label="Primary"
         className={cx(
           "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface-2 px-2.5 py-2.5 lg:flex",
-          collapsed ? "w-[64px]" : "w-[232px]",
+          collapsed ? "w-[66px]" : "w-[232px]",
         )}
       >
         <div className={cx("mb-1 flex items-center", collapsed ? "justify-center" : "justify-between pl-1.5")}>

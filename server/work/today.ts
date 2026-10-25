@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { isClosed, isValidationOverdue, type TodayCard, type TodayResponse, type WorkStatus } from "@/lib/work";
-import { itemsWithValidations } from "./store";
+import { itemsWithValidations, recentAutoSettled, settleReview } from "./store";
 
 /**
  * Today, the /work front door (owner decision: /work opens on Today /
@@ -12,7 +12,9 @@ import { itemsWithValidations } from "./store";
 
 const CONTINUE_STATUSES = new Set<WorkStatus>(["in_progress", "ready", "reopened", "in_review"]);
 
-export function today(userId: string): TodayResponse {
+export function today(userId: string, now = new Date()): TodayResponse {
+  // Area settle policies first (auto_after_quiet may settle something; suggest lists candidates).
+  const review = settleReview(userId, now);
   const { rows, vals, today: t } = itemsWithValidations(userId);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const path = (id: string) => {
@@ -93,5 +95,13 @@ export function today(userId: string): TodayResponse {
       .slice(0, 5)
       .map((r) => card(r, { detail: "PR merged — settle?" })),
     overdue: overdueRows.slice(0, 5).map((r) => card(r, { due: r.targetDate, detail: overdueVal.has(r.id) ? "Validation overdue" : "Past its target date" })),
+    settleSuggestions: review.suggest
+      .map((id) => byId.get(id))
+      .filter((r): r is (typeof rows)[number] => !!r && r.status !== "ready_to_settle")
+      .slice(0, 5)
+      .map((r) => card(r, { detail: "PR merged · validations pass · quiet — settle?" })),
+    autoSettled: recentAutoSettled(userId, now)
+      .slice(0, 5)
+      .map(({ row, opId }) => ({ ...card(row), detail: row.settledReason ?? "Settled automatically", opId })),
   };
 }

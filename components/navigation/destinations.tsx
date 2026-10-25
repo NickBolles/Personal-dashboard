@@ -1,5 +1,18 @@
 import type { ReactNode } from "react";
-import { BellIcon, BrainIcon, CalendarIcon, ChatIcon, CompassIcon, FlagIcon, HomeIcon, HouseIcon, TodoIcon, WalletIcon, WorkIcon } from "@/components/icons";
+import {
+  AreasIcon,
+  BellIcon,
+  BrainIcon,
+  CalendarIcon,
+  ChatIcon,
+  CompassIcon,
+  DumbbellIcon,
+  FlagIcon,
+  HomeIcon,
+  HouseIcon,
+  TodoIcon,
+  WalletIcon,
+} from "@/components/icons";
 
 export type Dest = {
   key: string;
@@ -9,21 +22,37 @@ export type Dest = {
   match: (p: string) => boolean;
   /** shown only to people holding one of these capabilities (lib/modules.ts) */
   caps?: string[];
+  /** hidden from people holding any of these (a richer destination replaces it) */
+  hideWithCaps?: string[];
 };
 
+const isAreas = (p: string) => p === "/areas" || p.startsWith("/areas/") || p === "/work" || p.startsWith("/work/");
+
+/**
+ * Primary destinations. Areas is one tree for work and conversations (phase 4):
+ * people who organize work get Areas (which includes the conversations
+ * view); everyone else who chats keeps the plain Hermes list.
+ */
 export const PRIMARY: Dest[] = [
   { key: "home", href: "/home", label: "Home", icon: HomeIcon, match: (p) => p === "/home" || p === "/" },
-  { key: "chat", href: "/chat", label: "Hermes", icon: ChatIcon, match: (p) => p.startsWith("/chat"), caps: ["hermes.chat"] },
+  {
+    key: "areas",
+    href: "/areas",
+    label: "Areas",
+    icon: AreasIcon,
+    match: (p) => isAreas(p) || p.startsWith("/chat"),
+    caps: ["work.use"],
+  },
+  { key: "chat", href: "/chat", label: "Hermes", icon: ChatIcon, match: (p) => p.startsWith("/chat"), caps: ["hermes.chat"], hideWithCaps: ["work.use"] },
   { key: "alerts", href: "/alerts", label: "Alerts", icon: BellIcon, match: (p) => p.startsWith("/alerts") },
 ];
 
 export const DESTINATIONS: Dest[] = [
-  { key: "work", href: "/work", label: "Work", icon: WorkIcon, match: (p) => p === "/work" || p.startsWith("/work/"), caps: ["work.use"] },
   {
     key: "workouts",
     href: "/workouts",
     label: "Workouts",
-    icon: FlagIcon,
+    icon: DumbbellIcon,
     match: (p) => p === "/workouts" || p.startsWith("/workouts/"),
     caps: ["workouts.use"],
   },
@@ -40,9 +69,10 @@ export const DESTINATIONS: Dest[] = [
     caps: ["daily_compass.use"],
   },
   {
+    // "House", not a second "Home" (design review D2).
     key: "home-control",
     href: "/home-control",
-    label: "Home",
+    label: "House",
     icon: HouseIcon,
     match: (p) => p.startsWith("/home-control"),
     caps: ["home_assistant.view", "home_assistant.calendar"],
@@ -51,5 +81,6 @@ export const DESTINATIONS: Dest[] = [
 ];
 
 export function allowed(d: Dest, capabilities: string[]) {
+  if (d.hideWithCaps?.some((c) => capabilities.includes(c))) return false;
   return !d.caps || d.caps.some((c) => capabilities.includes(c));
 }

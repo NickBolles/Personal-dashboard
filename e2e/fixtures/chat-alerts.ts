@@ -71,3 +71,42 @@ export const alertsVisual = {
   ],
   unread: 3,
 } satisfies { notifications: JarvisNotification[]; unread: number };
+
+/** The Areas pane beside the conversation: a fixed tree, so the snapshot never depends on other specs' data. */
+const node = (id: string, parentId: string | null, kind: string, title: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  parentId,
+  kind,
+  title,
+  summary: "",
+  nextAction: "",
+  status: "exploring",
+  sortOrder: 0,
+  startDate: null,
+  targetDate: null,
+  completedAt: null,
+  settledKind: null,
+  settledReason: null,
+  archived: false,
+  builtIn: false,
+  validationDefault: null,
+  sessionId: null,
+  settings: null,
+  createdAt: visualNow,
+  updatedAt: visualNow,
+  ...extra,
+});
+export const areasVisual = {
+  items: [
+    node("wk_mb", null, "area", "Momentum Bets", { sortOrder: 0 }),
+    node("wk_ce", "wk_mb", "project", "Criteria evaluator", { status: "in_progress" }),
+    node("wk_v5", "wk_ce", "thread", "V5 evaluator contract", { status: "awaiting_validation" }),
+    node("wk_cv", "wk_v5", "conversation", "Lock the V5 rubric", { sessionId: "sess_rubric" }),
+    node("wk_home", null, "area", "Home", { sortOrder: 1 }),
+    node("wk_garage", "wk_home", "thread", "Garage cleanup", { status: "planned" }),
+    node("wk_misc", null, "area", "Miscellaneous", { builtIn: true, sortOrder: 2 }),
+    node("wk_cm", "wk_misc", "conversation", "Dinner ideas", { sessionId: "sess_dinner" }),
+  ],
+  linkedConversations: [{ itemId: "wk_garage", sessionId: "sess_garage", title: "Shelving options" }],
+};
+export const inboxVisual = { items: [], conversations: [], conversationsTotal: 0, unavailable: [], count: 2 };

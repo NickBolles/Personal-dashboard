@@ -9,7 +9,7 @@ test("assistant: a Claude conversation next to Hermes", async ({ page }) => {
 
   await page.goto("/chat");
   await page.getByRole("group", { name: "Ask" }).first().getByRole("button", { name: "Claude" }).click();
-  await page.getByLabel("Ask Hermes or capture something").fill("What should we cook tonight?");
+  await page.getByLabel("Ask Hermes", { exact: true }).fill("What should we cook tonight?");
   await page.getByRole("button", { name: "Send to Hermes" }).click();
   await page.waitForURL(/\/chat\/loc_/);
   const sessionId = new URL(page.url()).pathname.split("/").pop()!;

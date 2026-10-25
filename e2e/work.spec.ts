@@ -49,16 +49,16 @@ test.beforeEach(async ({ page }) => {
 
 test("work: organize, hand off, merge, validate, settle and reopen", async ({ page }) => {
   test.setTimeout(120_000);
-  await page.goto("/more");
-  await page.getByRole("link", { name: "Work", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Work" })).toBeVisible();
+  await page.goto("/home");
+  await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "Areas", exact: true }).first().click();
+  await expect(page.getByRole("heading", { level: 1, name: "Areas" })).toBeVisible();
   await expect(treeItem(page, "Miscellaneous")).toBeVisible();
 
   await page.getByRole("button", { name: "New area" }).click();
   await page.getByRole("dialog").getByLabel("Title", { exact: true }).fill("Momentum Bets");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Momentum Bets" })).toBeVisible();
-  await expect(page).toHaveURL(/\/work\?item=wk_/);
+  await expect(page).toHaveURL(/\/areas\?item=wk_/);
 
   await newChild(page, "Momentum Bets", "Criteria evaluator");
   for (const t of ["V2 baseline", "V3 parity", "V4 lessons", "V5 evaluator contract"]) await newChild(page, "Criteria evaluator", t);
@@ -172,7 +172,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   );
 
   // Timeline: the evaluator project, chart and table, row → item.
-  await page.goto("/work/timeline");
+  await page.goto("/areas/timeline");
   await page.getByLabel("Area or project").selectOption({ label: "Criteria evaluator" });
   await expect(page.getByRole("link", { name: /^V5 evaluator contract: / })).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -181,7 +181,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(table).toContainText("V5 evaluator contract");
   await expect(table).toContainText("PR merged");
   await table.getByRole("link", { name: "V4 lessons" }).click();
-  await expect(page).toHaveURL(/\/work\?item=/);
+  await expect(page).toHaveURL(/\/areas\?item=/);
   await expect(page.getByRole("heading", { level: 2, name: "V4 lessons" })).toBeVisible();
 });
 
@@ -209,7 +209,7 @@ test("work dashboard: native widgets and a sandboxed custom HTML widget", async 
   expect(detail.item.status).toBe("ready_to_settle");
   await post(`/api/work/items/${v5.id}/settle`, { reason: "Docs merged and read" });
 
-  await page.goto("/work/dashboard");
+  await page.goto("/areas/dashboard");
   await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
   const settled = page.getByRole("region", { name: "Recently settled" });
   await expect(settled).toContainText("V5 evaluator contract");
@@ -313,7 +313,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   const unfiled = await post("/api/hermes/sessions", { title: `V5 evaluator hydration notes ${nonce}`, backend: "hermes" });
   const loose = await post("/api/hermes/sessions", { title: `Loose thought ${nonce}`, backend: "hermes" });
 
-  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
   await expect(page.getByRole("heading", { level: 2, name: "V5 evaluator contract" })).toBeVisible();
 
   // Picker: search your conversations and link one (no pasting ids).
@@ -326,22 +326,26 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect(links.first()).toContainText("Last activity");
   await expect(links.first().getByRole("link", { name: /Open conversation/ })).toHaveAttribute("href", `/chat/${picked.id}`);
 
-  // Unfiled conversations live in the Work inbox (phase 3): deterministic suggestion → one-click filing.
-  await page
-    .getByRole("navigation", { name: "Work views" })
-    .getByRole("button", { name: /^Inbox/ })
+  // New chats land in Miscellaneous with zero filing; the conversations view's Unfiled filter files them in one tap.
+  await page.goto("/chat?view=unfiled");
+  const conv = (t: string) => page.locator("[data-conversation]", { hasText: t });
+  await expect(conv(`V5 evaluator hydration notes ${nonce}`)).toBeVisible();
+  await expect(conv(`Loose thought ${nonce}`)).toContainText("Miscellaneous");
+  // Linked to V5 above, so it counts as filed.
+  await expect(conv(`Picker check ${nonce}`)).toHaveCount(0);
+  await conv(`V5 evaluator hydration notes ${nonce}`)
+    .getByRole("button", { name: `File under V5 evaluator contract: V5 evaluator hydration notes ${nonce}` })
     .click();
-  const inbox = page.getByRole("region", { name: "Unfiled conversations" });
-  await expect(inbox).toContainText(`V5 evaluator hydration notes ${nonce}`);
-  await expect(inbox).not.toContainText(`Picker check ${nonce}`);
-  await inbox.getByRole("button", { name: `File under V5 evaluator contract: V5 evaluator hydration notes ${nonce}` }).click();
-  await expect(inbox).not.toContainText(`V5 evaluator hydration notes ${nonce}`);
-  await inbox.getByRole("button", { name: `File in Miscellaneous: Loose thought ${nonce}` }).click();
-  await expect(inbox).not.toContainText(`Loose thought ${nonce}`);
+  await expect(conv(`V5 evaluator hydration notes ${nonce}`)).toHaveCount(0);
+  await page.getByRole("button", { name: "All conversations" }).click();
+  await expect(conv(`V5 evaluator hydration notes ${nonce}`)).toContainText("V5 evaluator contract");
   expect(unfiled.id).toBeTruthy();
   expect(loose.id).toBeTruthy();
-  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
-  await expect(page.getByRole("article")).toContainText(`V5 evaluator hydration notes ${nonce}`);
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
+  await showTree(page);
+  // The filed chat is now a conversation node under V5; the linked one is a child row too.
+  await expect(treeItem(page, `V5 evaluator hydration notes ${nonce}`)).toHaveAttribute("aria-label", /conversation/);
+  await expect(page.getByRole("treeitem", { name: `Picker check ${nonce}, linked conversation` })).toBeVisible();
 
   // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
   await page.getByRole("button", { name: "Continue in new conversation" }).click();
@@ -356,7 +360,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await page.waitForTimeout(500);
   const detail = (await (await page.request.get(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`)).json()) as { timeline: unknown[] };
   expect(detail.timeline).toEqual([]);
-  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
   await openSection(page, "work-links");
   await expect(page.getByRole("article").getByText("started from the handoff", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Activity" }).click();
@@ -414,7 +418,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await patch(ids["V5 evaluator contract"], { startDate: day(4), targetDate: day(8) });
   await post(`/api/work/items/${ids["V5 evaluator contract"]}/dependencies`, { dependsOnId: ids["V4 lessons"] });
 
-  await page.goto(`/work/timeline?root=${ids.project}`);
+  await page.goto(`/areas/timeline?root=${ids.project}`);
   await expect(page.locator("[data-connectors]")).toHaveAttribute("data-connectors", "1");
   // Drag V5's bar two days later (weeks zoom: 28 px a day).
   const bar = page.locator(`[data-bar="${ids["V5 evaluator contract"]}"]`);
@@ -439,7 +443,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await expect(page.getByRole("table", { name: "Work timeline" })).toContainText("Blocked");
 
   // Item detail: blocked-by, date events, a validation from a template, overdue highlighting.
-  await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
   await expect(page.getByRole("article")).toContainText("Blocked by");
   await expect(page.getByRole("article").getByRole("button", { name: "V4 lessons", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Add from template" }).click();
@@ -466,7 +470,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await expect(page.getByRole("tabpanel")).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
 
   // Map: read-only graph with relation and status filters, list alternative, click → item.
-  await page.goto(`/work/map?root=${ids.area}`);
+  await page.goto(`/areas/map?root=${ids.area}`);
   await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
   const svg = page.getByRole("group", { name: "Work map: Momentum Bets" });
   await expect(svg).toHaveAttribute("data-map-nodes", "6");
@@ -482,7 +486,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await page.getByRole("button", { name: "Show map" }).click();
   await page.getByRole("button", { name: "Fit" }).click();
   await svg.getByRole("link", { name: /^V4 lessons,/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/work\\?item=${ids["V4 lessons"]}`));
+  await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids["V4 lessons"]}`));
   await expect(page.getByRole("heading", { level: 2, name: "V4 lessons" })).toBeVisible();
 });
 
@@ -495,7 +499,7 @@ test("work dashboard: resize, drag reorder and the new widgets", async ({ page }
     unit: "ms",
     dueDate: "2020-01-01",
   });
-  await page.goto("/work/dashboard");
+  await page.goto("/areas/dashboard");
   await page.getByRole("button", { name: "Edit dashboard" }).click();
   for (const [kind, extra] of [
     ["validation_overdue", null],

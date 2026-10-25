@@ -317,7 +317,7 @@ export function HomeView() {
             <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
           ) : null}
 
-          {can("hermes.chat") ? (
+          {can("hermes.chat") || can("work.use") ? (
             <section aria-labelledby="capture-h" className="mb-5">
               <h2 id="capture-h" className="sr-only">
                 Quick capture

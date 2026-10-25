@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa } from "./helpers";
 import { homeVisual } from "./fixtures/home";
-import { alertsVisual, chatVisual, visualNow } from "./fixtures/chat-alerts";
+import { alertsVisual, areasVisual, chatVisual, inboxVisual, visualNow } from "./fixtures/chat-alerts";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -34,6 +34,8 @@ for (const [name, path] of [
     }
     if (name === "chat") {
       await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatVisual }));
+      await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+      await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
     }
     if (name === "alerts") {
       await page.route(/\/api\/notifications(?:\?.*)?$/, (route) => route.fulfill({ json: alertsVisual }));

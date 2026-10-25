@@ -5,8 +5,22 @@
 import { z } from "zod";
 import type { MapGraph } from "./work-map";
 
-export const WORK_KINDS = ["area", "project", "thread", "investigation", "note"] as const;
+export const WORK_KINDS = ["area", "project", "thread", "investigation", "note", "conversation"] as const;
 export type WorkKind = (typeof WORK_KINDS)[number];
+/**
+ * Kinds a person creates with the item form. `conversation` nodes are created
+ * only by starting or filing a conversation (they carry its session id).
+ */
+export const CREATABLE_KINDS = ["area", "project", "thread", "investigation", "note"] as const;
+export type CreatableKind = (typeof CREATABLE_KINDS)[number];
+export const KIND_LABELS: Record<WorkKind, string> = {
+  area: "Area",
+  project: "Project",
+  thread: "Thread",
+  investigation: "Investigation",
+  note: "Note",
+  conversation: "Conversation",
+};
 
 export const WORK_STATUSES = [
   "captured",
@@ -114,16 +128,118 @@ export type WorkItem = {
   startDate: string | null;
   targetDate: string | null;
   completedAt: string | null;
-  /** "auto" only on rows settled before phase 3 (legacy, read-only): nothing settles automatically any more */
+  /** "auto" = settled by the area's auto_after_quiet settle policy (undoable for 7 days), or before phase 3 */
   settledKind: "manual" | "auto" | null;
   settledReason: string | null;
   archived: boolean;
   builtIn: boolean;
   /** areas: the explicit validation default (null = by rule, see areaValidationDefault) */
   validationDefault: ValidationDefault | null;
+  /** conversation nodes: the Hermes or Claude-direct session (Hermes owns the content) */
+  sessionId: string | null;
+  /** areas only: agent mode, defaults and settle policy (null = defaults, see DEFAULT_AREA_SETTINGS) */
+  settings: AreaSettings | null;
   createdAt: string;
   updatedAt: string;
 };
+
+// --- Areas: per-area settings (phase 4) ---
+
+/** What Jarvis may attach automatically as context (server/context.ts builds them; never Finance). */
+export const CONTEXT_SOURCES = ["overview", "skylight", "home_assistant", "todos", "daily_compass", "paperclip"] as const;
+export type ContextSource = (typeof CONTEXT_SOURCES)[number];
+export const CONTEXT_SOURCE_LABELS: Record<ContextSource, string> = {
+  overview: "Today overview",
+  skylight: "Skylight calendar",
+  home_assistant: "Home Assistant",
+  todos: "Todos",
+  daily_compass: "Daily Compass",
+  paperclip: "Paperclip",
+};
+
+/**
+ * Settle policy per area (owner decision, phase 4): `manual` never suggests,
+ * `suggest` (default) shows deterministic "ready to settle?" suggestions,
+ * `auto_after_quiet` settles once the signals have held for the quiet period
+ * (opt-in per area, always undoable).
+ */
+export const SETTLE_POLICIES = ["manual", "suggest", "auto_after_quiet"] as const;
+export type SettlePolicy = (typeof SETTLE_POLICIES)[number];
+export const SETTLE_POLICY_LABELS: Record<SettlePolicy, string> = {
+  manual: "Manual — never suggest",
+  suggest: "Suggest when ready (default)",
+  auto_after_quiet: "Settle automatically after a quiet period",
+};
+
+export type AreaSettings = {
+  /** Hermes agent mode label (e.g. a profile such as "momentumchief"); sent to Hermes as run instructions */
+  agentMode: string | null;
+  /** extra instructions for Hermes runs in this area */
+  instructions: string | null;
+  /** which assistant new conversations in this area use (null = the household default) */
+  defaultBackend: "hermes" | "claude" | null;
+  /** model (and Hermes provider) for runs in this area when the conversation has no override */
+  defaultModel: string | null;
+  defaultProvider: string | null;
+  /** owner/repo: scopes the # picker and PR links */
+  defaultRepo: string | null;
+  /** attached to every message in this area's conversations */
+  contextSources: ContextSource[];
+  settlePolicy: SettlePolicy;
+  /** days without activity before a suggestion (suggest) or an automatic settle (auto_after_quiet) */
+  quietDays: number;
+};
+
+export const DEFAULT_AREA_SETTINGS: AreaSettings = {
+  agentMode: null,
+  instructions: null,
+  defaultBackend: null,
+  defaultModel: null,
+  defaultProvider: null,
+  defaultRepo: null,
+  contextSources: [],
+  settlePolicy: "suggest",
+  quietDays: 3,
+};
+
+const repoRe = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+const optText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .nullable()
+    .transform((v) => (v ? v : null));
+export const areaSettingsSchema = z
+  .object({
+    agentMode: optText(80),
+    instructions: optText(2000),
+    defaultBackend: z.enum(["hermes", "claude"]).nullable(),
+    defaultModel: optText(120),
+    defaultProvider: optText(100),
+    defaultRepo: optText(201).refine((v) => v === null || repoRe.test(v), "Use owner/repo"),
+    contextSources: z.array(z.enum(CONTEXT_SOURCES)).max(CONTEXT_SOURCES.length),
+    settlePolicy: z.enum(SETTLE_POLICIES),
+    quietDays: z.number().int().min(1).max(90),
+  })
+  .partial()
+  .strict();
+
+/** Stored JSON → full settings (unknown or invalid fields fall back to the defaults). */
+export function parseAreaSettings(json: string | null | undefined): AreaSettings {
+  if (!json) return { ...DEFAULT_AREA_SETTINGS };
+  try {
+    const raw = JSON.parse(json) as Record<string, unknown>;
+    const out = { ...DEFAULT_AREA_SETTINGS };
+    for (const [k, v] of Object.entries(raw)) {
+      const one = areaSettingsSchema.safeParse({ [k]: v });
+      if (one.success) Object.assign(out, one.data);
+    }
+    return out;
+  } catch {
+    return { ...DEFAULT_AREA_SETTINGS };
+  }
+}
 
 export const VALIDATION_DEFAULTS = ["required", "optional"] as const;
 export type ValidationDefault = (typeof VALIDATION_DEFAULTS)[number];
@@ -247,6 +363,8 @@ export type WorkDetail = {
   settle: { allowed: boolean; reason: string | null };
   /** the packet form's preselected "validation required" for this item, from its area */
   validationDefault: { value: ValidationDefault; explicit: boolean; areaId: string | null; areaTitle: string | null };
+  /** the item's area settings (its own for an area) */
+  area: { id: string; title: string; builtIn: boolean; settings: AreaSettings } | null;
   githubRefresh: boolean;
   /** what this item waits on, and what waits on it */
   blockedBy: DependencyRef[];
@@ -344,7 +462,7 @@ const id = z.string().min(1).max(80);
 export const createItemSchema = z
   .object({
     parentId: id.nullable().optional(),
-    kind: z.enum(WORK_KINDS),
+    kind: z.enum(CREATABLE_KINDS),
     title,
     summary: longText.optional(),
     nextAction: z.string().max(2000).optional(),
@@ -358,7 +476,7 @@ export const updateItemSchema = z
     title: title.optional(),
     summary: longText.optional(),
     nextAction: z.string().max(2000).optional(),
-    kind: z.enum(WORK_KINDS).optional(),
+    kind: z.enum(CREATABLE_KINDS).optional(),
     status: z.enum(WORK_STATUSES).optional(),
     reason: z.string().max(2000).optional(),
     startDate: dateSchema.nullable().optional(),
@@ -366,6 +484,8 @@ export const updateItemSchema = z
     archived: z.boolean().optional(),
     /** areas only; null goes back to the rule (Miscellaneous/Home optional, others required) */
     validationDefault: z.enum(VALIDATION_DEFAULTS).nullable().optional(),
+    /** areas only: merged into the stored settings */
+    settings: areaSettingsSchema.optional(),
   })
   .strict();
 
@@ -374,7 +494,7 @@ export const moveSchema = z.object({ parentId: id.nullable() }).strict();
 export const placeSchema = z.object({ parentId: id.nullable(), index: z.number().int().min(0).max(100_000) }).strict();
 export const reorderSchema = z.object({ direction: z.enum(["up", "down"]) }).strict();
 export const forkSchema = z.object({ title: title.optional() }).strict();
-export const splitSchema = z.object({ title, summary: longText.optional(), kind: z.enum(WORK_KINDS).optional() }).strict();
+export const splitSchema = z.object({ title, summary: longText.optional(), kind: z.enum(CREATABLE_KINDS).optional() }).strict();
 
 export const packetSchema = z
   .object({
@@ -635,15 +755,49 @@ export type ConversationOption = {
   readOnly: boolean;
   /** your work items this conversation is already linked to */
   linkedItems: { id: string; title: string }[];
+  /** where it sits in the Areas tree: its conversation node, or the first item linking it; null = not in the tree */
+  placement: ConversationPlacement | null;
+  /** Shared with the household (read-only for others) */
+  shared: boolean;
 };
+export type ConversationPlacement = {
+  /** the conversation node (kind `conversation`), if it has one */
+  nodeId: string | null;
+  /** the item it sits under (or is linked from) */
+  parentId: string;
+  /** "Area › Project" */
+  path: string;
+  /** only in Miscellaneous (directly): counts as unfiled */
+  inMisc: boolean;
+};
+export const CONVERSATION_FILTERS = ["all", "unfiled"] as const;
+export type ConversationFilter = (typeof CONVERSATION_FILTERS)[number];
 export type ConversationsResponse = { conversations: ConversationOption[]; unavailable: string[] };
+/** The conversations view of the Areas tree (All / Unfiled), newest first. */
+export type ConversationListResponse = {
+  conversations: (ConversationOption & { suggestions: FilingSuggestion[] })[];
+  /** unfiled = not in the tree, or only in Miscellaneous */
+  unfiledCount: number;
+  unavailable: string[];
+};
+/** A conversation linked to a work item (work_links), shown as a child row of that item in the tree. */
+export type LinkedConversationRow = { itemId: string; sessionId: string; title: string };
+export type ItemsResponse = { items: WorkItem[]; linkedConversations: LinkedConversationRow[] };
 export type FilingSuggestion = { id: string; title: string; path: string; matched: string[] };
 export type UnfiledConversation = ConversationOption & { suggestions: FilingSuggestion[] };
 export type UnfiledResponse = { conversations: UnfiledConversation[]; total: number; unavailable: string[] };
 
-/** File a conversation under an item; `itemId: null` files it in Miscellaneous. */
+/**
+ * File a conversation under an item; `itemId: null` files it in Miscellaneous.
+ * It becomes (or moves) the conversation's node in the tree.
+ */
 export const fileConversationSchema = z
-  .object({ sessionId: z.string().trim().min(1).max(200), itemId: id.nullable(), role: z.enum(LINK_ROLES).optional() })
+  .object({
+    sessionId: z.string().trim().min(1).max(200),
+    itemId: id.nullable(),
+    role: z.enum(LINK_ROLES).optional(),
+    title: z.string().trim().max(200).optional(),
+  })
   .strict();
 
 const FILING_STOP = new Set([
@@ -763,6 +917,10 @@ export type TodayResponse = {
   readyToSettle: TodayCard[];
   /** in-progress work whose target date passed */
   overdue: TodayCard[];
+  /** deterministic "ready to settle?" suggestions (area settle policy `suggest`) */
+  settleSuggestions: TodayCard[];
+  /** settled automatically by an area's `auto_after_quiet` policy in the last 7 days, with the undo op */
+  autoSettled: (TodayCard & { opId: string | null })[];
 };
 
 // --- validation templates and overdue ---

@@ -164,7 +164,7 @@ export function Gantt({
                   style={{ width: labelW }}
                 >
                   <Link
-                    href={`/work?item=${encodeURIComponent(r.id)}`}
+                    href={`/areas?item=${encodeURIComponent(r.id)}`}
                     className={cx("flex min-w-0 items-center gap-1.5 text-[13px] hover:underline", r.depth === 0 && "font-semibold")}
                     style={{ paddingLeft: `${Math.min(r.depth, 6) * 12}px` }}
                     aria-label={`${r.title}: ${desc}`}
@@ -303,7 +303,7 @@ export function TimelineTable({ rows, onEditDates }: { rows: TimelineRow[]; onEd
           {rows.map((r) => (
             <tr key={r.id} className="border-t border-line">
               <th scope="row" className="px-2.5 py-1.5 font-normal">
-                <Link href={`/work?item=${encodeURIComponent(r.id)}`} className="hover:underline" style={{ paddingLeft: `${Math.min(r.depth, 6) * 10}px` }}>
+                <Link href={`/areas?item=${encodeURIComponent(r.id)}`} className="hover:underline" style={{ paddingLeft: `${Math.min(r.depth, 6) * 10}px` }}>
                   {r.title}
                 </Link>
                 {r.overdue ? <span className="ml-2 text-xs font-medium text-danger">Overdue</span> : null}

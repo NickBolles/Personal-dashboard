@@ -2,7 +2,8 @@
 import { refreshSessionLists } from "@/lib/client/session-lists";
 
 import Link from "next/link";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
@@ -13,7 +14,27 @@ import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToas
 import { ChevronIcon, ForkIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
-import { ContextPicker, ForkDialog, ModelDialog, RenameDialog, TrackDialog } from "./dialogs";
+import { ContextPicker, ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
+import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
+import { useAskHermes } from "./useAskHermes";
+import { ModelSelectDialog } from "@/components/areas/ModelPicker";
+import { FileUnderDialog } from "@/components/work/conversations";
+import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
+import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsResponse } from "@/lib/work";
+
+/** GET /api/hermes/sessions/:id/area */
+type AreaContext =
+  | { enabled: false }
+  | {
+      enabled: true;
+      placement: ConversationPlacement | null;
+      node: { id: string; status: string } | null;
+      suggestions: FilingSuggestion[];
+      area: { id: string; title: string; builtIn: boolean } | null;
+      settings: AreaSettings | null;
+    };
+
+const CONTEXT_MARK = "\n\n---\nContext from Jarvis:";
 
 type Detail = {
   session: SessionSummary;
@@ -63,13 +84,27 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
-  const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file">(null);
+  const router = useRouter();
+  const newChat = useAskHermes();
   const [forkFrom, setForkFrom] = useState<TimelineItem>();
   const [model, setModel] = useState<{ model?: string; provider?: string }>({});
   const [context, setContext] = useState<{ label: string; ref: string }[]>([]);
   const [lastOutcome, setLastOutcome] = useState<RunPhase>();
   const clearRunRef = useRef<() => void>(() => {});
   const who = detail?.session.source === "claude" ? "Claude" : "Hermes";
+  const canAreas = can("work.use");
+  const areaQ = useQuery({
+    queryKey: ["work", "conversation-area", sessionId, detail?.session.title ?? ""],
+    queryFn: () => api.get<AreaContext>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/area?title=${encodeURIComponent(detail?.session.title ?? "")}`),
+    enabled: canAreas && !!detail && !detail.session.readOnly,
+  });
+  const areaCtx = areaQ.data?.enabled ? areaQ.data : null;
+  const treeItems = useQuery({
+    queryKey: ["work", "items", false],
+    queryFn: () => api.get<ItemsResponse>("/api/work/items"),
+    enabled: dialog === "file",
+  });
 
   const onTerminal = useCallback(
     (s: RunState) => {
@@ -168,6 +203,44 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     }
   };
 
+  const fileTo = async (itemId: string | null, title?: string) => {
+    try {
+      await api.post("/api/work/conversations/file", { sessionId, itemId });
+      qc.invalidateQueries({ queryKey: ["work"] });
+      toast(title ? `Filed under ${title}` : "Filed", "ok");
+      return true;
+    } catch (err) {
+      toast((err as Error).message, "danger");
+      return false;
+    }
+  };
+
+  /** `/` commands from the composer (each is also reachable from the menu or the header). */
+  const runCommand = (id: CommandId) => {
+    const itemFor = areaCtx?.node?.id ?? areaCtx?.placement?.parentId ?? null;
+    switch (id) {
+      case "model":
+        return setDialog("model");
+      case "context":
+        return setDialog("context");
+      case "fork":
+        setForkFrom(undefined);
+        return setDialog("fork");
+      case "file":
+        return canAreas ? setDialog("file") : toast("Filing needs Areas.", "neutral");
+      case "share":
+        return patch({ shared: !session?.shared }, session?.shared ? "Only you can see this conversation now" : "Shared with the household (read-only)");
+      case "new":
+        return void newChat.start({ areaId: areaCtx?.placement?.parentId ?? null });
+      case "mode":
+        return void newChat.start({ backend: session?.source === "claude" ? "hermes" : "claude", areaId: areaCtx?.placement?.parentId ?? null });
+      case "handoff":
+      case "settle":
+        if (!itemFor) return toast("File this conversation first (/file), then hand off or settle it.", "neutral");
+        return router.push(`/areas?item=${encodeURIComponent(itemFor)}&do=${id === "handoff" ? "continue" : "settle"}`);
+    }
+  };
+
   // --- scrolling: follow output unless the user scrolled up ---
   const bottomRef = useRef<HTMLDivElement>(null);
   const [detached, setDetached] = useState(false);
@@ -201,7 +274,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   const phase = run.state.runId ? run.state.phase : lastOutcome;
   const liveActive = run.active;
-  const showLive = Boolean(run.state.runId) && (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
+  // A completed run's reply can land in the refetched transcript one render before the live copy is
+  // cleared (onTerminal's refetch → clear); don't show the same reply twice in that window.
+  const liveText = (run.state.text || run.state.output || "").trim();
+  const lastAssistant = [...detail.timeline].reverse().find((t) => t.kind === "assistant");
+  const liveInTranscript =
+    run.state.phase === "completed" && Boolean(liveText) && Boolean(lastAssistant && "text" in lastAssistant && lastAssistant.text.trim() === liveText);
+  const showLive =
+    Boolean(run.state.runId) &&
+    !liveInTranscript &&
+    (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
@@ -213,6 +295,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         { label: "Rename", onSelect: () => setDialog("rename") },
         fork,
         { label: "Model…", onSelect: () => setDialog("model") },
+        ...(canAreas ? [{ label: "File under…", onSelect: () => setDialog("file") }] : []),
         ...(can("paperclip.track") ? [{ label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online }] : []),
         {
           label: session!.pinned ? "Unpin" : "Pin",
@@ -254,7 +337,51 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
                 {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                 {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
-                {readOnly ? <Badge>Shared with you · read only</Badge> : session!.shared ? <Badge tone="accent">Shared with the household</Badge> : null}
+                {readOnly ? (
+                  <Badge>Shared with you · read only</Badge>
+                ) : session!.shared ? (
+                  <span className="chip" data-tone="accent" data-testid="shared-chip">
+                    Shared with household ·
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      disabled={!online}
+                      onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
+                    >
+                      Stop sharing
+                    </button>
+                  </span>
+                ) : null}
+                {areaCtx ? (
+                  <span className="inline-flex flex-wrap items-center gap-1" data-testid="area-chip">
+                    <button
+                      type="button"
+                      className="chip cursor-pointer hover:border-line-strong"
+                      title={areaCtx.placement?.path ?? "Not in Areas yet"}
+                      onClick={() => setDialog("file")}
+                      aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
+                    >
+                      <span aria-hidden="true">▸</span> {areaCtx.placement?.path || "Not in Areas"}
+                    </button>
+                    {areaCtx.suggestions.slice(0, 2).map((sg) => (
+                      <button
+                        key={sg.id}
+                        type="button"
+                        className="chip cursor-pointer"
+                        data-tone="accent"
+                        title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
+                        onClick={() => fileTo(sg.id, sg.title)}
+                      >
+                        File under {sg.title}
+                      </button>
+                    ))}
+                    {areaCtx.node ? (
+                      <Link className="chip hover:border-line-strong" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
+                        Properties
+                      </Link>
+                    ) : null}
+                  </span>
+                ) : null}
                 {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
                 {detail.parent ? (
                   <span className="inline-flex items-center gap-1">
@@ -345,21 +472,56 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
             onSend={send}
             onSteer={steer}
             onStop={run.stop}
+            onCommand={runCommand}
+            repo={areaCtx?.settings?.defaultRepo ?? null}
+            modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
+            onModel={() => setDialog("model")}
           />
         )}
 
         <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
         <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
         <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
-        <ModelDialog
-          open={dialog === "model"}
-          onClose={() => setDialog(null)}
-          value={model}
-          onChange={(m) => {
-            setModel(m);
-            kvSet(`model:${sessionId}`, m);
-          }}
-        />
+        {dialog === "model" ? (
+          <ModelSelectDialog
+            open
+            onClose={() => setDialog(null)}
+            backend={session!.source === "claude" ? "claude" : "hermes"}
+            value={model}
+            onChange={(m) => {
+              setModel(m);
+              kvSet(`model:${sessionId}`, m);
+            }}
+            area={
+              areaCtx?.area && !areaCtx.area.builtIn
+                ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
+                : null
+            }
+            onAreaDefault={(m) =>
+              areaCtx?.area &&
+              api
+                .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
+                  settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
+                })
+                .then(() => {
+                  qc.invalidateQueries({ queryKey: ["work"] });
+                  toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
+                })
+                .catch((e: Error) => toast(e.message, "danger"))
+            }
+          />
+        ) : null}
+        {dialog === "file" ? (
+          <FileUnderDialog
+            c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
+            items={treeItems.data?.items ?? []}
+            busy={false}
+            onClose={() => setDialog(null)}
+            onFile={async (itemId) => {
+              if (await fileTo(itemId)) setDialog(null);
+            }}
+          />
+        ) : null}
         <ContextPicker
           open={dialog === "context"}
           onClose={() => setDialog(null)}
@@ -379,7 +541,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
       <li className="group flex flex-col items-end gap-1">
         <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
           <span className="sr-only">You said: </span>
-          <p className="prose-chat select-text">{item.text}</p>
+          <UserText text={item.text} />
         </div>
         <MessageMeta time={time} onFork={onFork} who="your message" />
       </li>
@@ -432,6 +594,37 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
     <li className="text-center text-xs text-muted">
       <p className="prose-chat">{item.text}</p>
     </li>
+  );
+}
+
+/**
+ * A sent message: reference tokens render as chips; the context Jarvis
+ * attached (snapshots of references and sources) folds into a disclosure.
+ */
+function UserText({ text }: { text: string }) {
+  const at = text.indexOf(CONTEXT_MARK);
+  const body = at >= 0 ? text.slice(0, at) : text;
+  const ctx = at >= 0 ? text.slice(at + CONTEXT_MARK.length).trim() : "";
+  return (
+    <>
+      <p className="prose-chat select-text">
+        {splitReferences(body).map((p, i) =>
+          "ref" in p ? (
+            <span key={i} className="chip mx-0.5" data-tone="accent" data-ref={`${p.ref.type}:${p.ref.id}`}>
+              {displayRef(p.ref)}
+            </span>
+          ) : (
+            <span key={i}>{p.text}</span>
+          ),
+        )}
+      </p>
+      {ctx ? (
+        <details className="mt-1 text-xs text-muted">
+          <summary className="cursor-pointer">Context Jarvis attached</summary>
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words">{ctx}</pre>
+        </details>
+      ) : null}
+    </>
   );
 }
 
@@ -579,6 +772,10 @@ function Composer({
   onSend,
   onSteer,
   onStop,
+  onCommand,
+  repo: areaRepo,
+  modelLabel,
+  onModel,
 }: {
   sessionId: string;
   phase?: RunPhase;
@@ -589,6 +786,11 @@ function Composer({
   onSend: (text: string, key: string) => Promise<boolean>;
   onSteer: (text: string) => Promise<boolean>;
   onStop: () => void;
+  onCommand: (id: CommandId) => void;
+  /** the area's default repo (the # picker's scope) */
+  repo: string | null;
+  modelLabel: string;
+  onModel: () => void;
 }) {
   const who = useContext(AssistantName);
   const [text, setText] = useState("");
@@ -598,6 +800,19 @@ function Composer({
   const ta = useRef<HTMLTextAreaElement>(null);
   const running = phase !== undefined && !isTerminal(phase);
   const canSteer = phase === "running";
+  // @ / # / picker state: the trigger at the caret, the highlighted row, picked references.
+  const [trigger, setTrigger] = useState<Trigger | null>(null);
+  const [active, setActive] = useState(0);
+  const [picked, setPicked] = useState<Reference[]>([]);
+  const [repo, setRepo] = useState<string | null>(areaRepo);
+  const [seenRepo, setSeenRepo] = useState(areaRepo);
+  if (areaRepo !== seenRepo) {
+    setSeenRepo(areaRepo);
+    setRepo(areaRepo);
+  }
+  const listId = useId();
+  const { rows, loading, partial, searched } = useTriggerRows(trigger, repo);
+  const activeIdx = Math.min(active, Math.max(0, rows.length - 1));
 
   // Drafts persist per session across refresh/navigation.
   useEffect(() => {
@@ -622,21 +837,79 @@ function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [text]);
 
+  const syncTrigger = (value: string, caret: number) => {
+    const t = triggerAt(value, caret);
+    setTrigger(t);
+    if (!t || t.sigil !== trigger?.sigil || t.query !== trigger?.query) setActive(0);
+  };
+
+  const replaceTrigger = (insert: string) => {
+    if (!trigger) return;
+    const next = text.slice(0, trigger.start) + insert + text.slice(trigger.end);
+    setText(next);
+    setTrigger(null);
+    const caret = trigger.start + insert.length;
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(caret, caret);
+    });
+  };
+
+  const pick = (row: PickerRow) => {
+    if (!trigger) return;
+    if (row.kind === "command") {
+      replaceTrigger("");
+      onCommand(row.id);
+      return;
+    }
+    if (row.kind === "ref") {
+      const r: Reference = { type: row.option.type, id: row.option.id, label: row.option.label };
+      setPicked((p) => (p.some((x) => x.type === r.type && x.id === r.id) ? p : [...p, r]));
+      replaceTrigger(`${displayRef(r)} `);
+    }
+  };
+
+  const filterTo = (type: string) => {
+    if (!trigger) return;
+    const q = trigger.query.replace(/^[a-z]+:/i, "");
+    const insert = `@${type}:${q}`;
+    const next = text.slice(0, trigger.start) + insert + text.slice(trigger.end);
+    setText(next);
+    const caret = trigger.start + insert.length;
+    setTrigger({ sigil: "@", query: `${type}:${q}`, start: trigger.start, end: caret });
+    setActive(0);
+    requestAnimationFrame(() => {
+      ta.current?.focus();
+      ta.current?.setSelectionRange(caret, caret);
+    });
+  };
+
   const submit = async () => {
     const input = text.trim();
     if (!input || busy || !online) return;
+    // A bare command typed in full ("/fork") runs instead of sending.
+    const cmd = input.match(/^\/([a-z]+)$/i)?.[1]?.toLowerCase();
+    if (cmd && rows.some((r) => r.row.kind === "command" && r.row.id === cmd)) {
+      setText("");
+      setTrigger(null);
+      onCommand(cmd as CommandId);
+      return;
+    }
     setBusy(true);
     let ok: boolean;
+    const encoded = encodeMessage(input, picked).text;
     if (running) {
-      ok = canSteer ? await onSteer(input) : false;
+      ok = canSteer ? await onSteer(encoded) : false;
     } else {
       const key = pendingKey.current ?? newIdempotencyKey("run");
       pendingKey.current = key;
-      ok = await onSend(input, key);
+      ok = await onSend(encoded, key);
       if (ok) pendingKey.current = undefined;
     }
     if (ok) {
       setText("");
+      setPicked([]);
+      setTrigger(null);
       await kvDel(`draft:${sessionId}`);
     }
     setBusy(false);
@@ -648,33 +921,53 @@ function Composer({
       ? "Answer the approval first"
       : running
         ? "Add guidance…"
-        : `Message ${who}`;
+        : `Message ${who} — @ reference, # PR, / command`;
+  const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
   return (
     <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6 lg:bottom-0">
-      {context.length ? (
-        <ul className="mb-2 flex flex-wrap gap-1" aria-label="Attached context">
-          {context.map((c) => (
-            <li key={c.ref}>
-              <button
-                type="button"
-                onClick={() => onRemoveContext(c.ref)}
-                className="min-h-9 rounded-full border border-line bg-surface px-3 text-xs dense:min-h-7"
-                aria-label={`Remove context ${c.label}`}
-              >
-                {c.label} ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <div className="mb-1.5 flex flex-wrap items-center gap-1">
+        <button
+          type="button"
+          className="chip cursor-pointer hover:border-line-strong"
+          onClick={onModel}
+          aria-label={`Model: ${modelLabel}. Change`}
+          data-testid="model-chip"
+        >
+          <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
+        </button>
+        {context.map((c) => (
+          <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
+            {c.label} ✕
+          </button>
+        ))}
+        <span className="ml-auto hidden text-[11px] text-muted lg:inline">
+          <kbd className="kbd">@</kbd> reference · <kbd className="kbd">#</kbd> PR · <kbd className="kbd">/</kbd> command
+        </span>
+      </div>
       <form
-        className="flex items-end gap-2"
+        className="relative flex items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
+        {open ? (
+          <TriggerPopover
+            trigger={trigger!}
+            rows={rows}
+            active={activeIdx}
+            loading={loading}
+            partial={partial}
+            repo={repo}
+            searched={searched}
+            onRepo={setRepo}
+            onPick={pick}
+            onHover={setActive}
+            onFilter={filterTo}
+            listId={listId}
+          />
+        ) : null}
         <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3">
           +
         </Button>
@@ -687,8 +980,41 @@ function Composer({
           rows={1}
           value={text}
           placeholder={placeholder}
-          onChange={(e) => setText(e.target.value)}
+          aria-controls={open ? listId : undefined}
+          aria-autocomplete="list"
+          aria-activedescendant={open && rows.length ? `${listId}-${activeIdx}` : undefined}
+          onChange={(e) => {
+            setText(e.target.value);
+            syncTrigger(e.target.value, e.target.selectionStart ?? e.target.value.length);
+          }}
+          onSelect={(e) => {
+            const el = e.currentTarget;
+            if (trigger) syncTrigger(el.value, el.selectionStart ?? el.value.length);
+          }}
+          onBlur={() => setTimeout(() => setTrigger(null), 150)}
           onKeyDown={(e) => {
+            if (open && rows.length) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setActive((a) => (a + 1) % rows.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setActive((a) => (a - 1 + rows.length) % rows.length);
+                return;
+              }
+              if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                e.preventDefault();
+                pick(rows[activeIdx]!.row);
+                return;
+              }
+            }
+            if (open && e.key === "Escape") {
+              e.preventDefault();
+              setTrigger(null);
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               submit();

@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
-import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
 import { ChevronIcon } from "@/components/icons";
-import { Block, StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { AreasViewSwitch, Block, StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { AreaSettingsCard } from "@/components/areas/AreaSettings";
+import { useAskHermes } from "@/components/chat/useAskHermes";
+import { ChatIcon, PlusIcon } from "@/components/icons";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -18,13 +22,15 @@ import { CaptureDialog, InboxView } from "@/components/work/inbox";
 import {
   areaValidationDefault,
   COMPARATORS,
+  CREATABLE_KINDS,
+  KIND_LABELS,
   handoffMarkdown,
   todayIso,
   STATUS_LABELS,
-  WORK_KINDS,
   WORK_STATUSES,
   type Comparator,
   type DependencyRef,
+  type ItemsResponse,
   type ValidationTemplate,
   type LinkKind,
   type WorkDetail,
@@ -35,11 +41,11 @@ import {
   type WorkValidation,
 } from "@/lib/work";
 
-const KIND_LABEL: Record<WorkKind, string> = { area: "Area", project: "Project", thread: "Thread", investigation: "Investigation", note: "Note" };
+const KIND_LABEL = KIND_LABELS;
 const textareaCls = `${inputCls} min-h-24`;
 
 function useItems(archived: boolean) {
-  return useQuery({ queryKey: ["work", "items", archived], queryFn: () => api.get<{ items: WorkItem[] }>(`/api/work/items${archived ? "?archived=1" : ""}`) });
+  return useQuery({ queryKey: ["work", "items", archived], queryFn: () => api.get<ItemsResponse>(`/api/work/items${archived ? "?archived=1" : ""}`) });
 }
 
 export type WorkViewKind = "today" | "inbox";
@@ -53,14 +59,29 @@ type View = { kind: "today" } | { kind: "inbox" } | { kind: "item"; id: string; 
  * for is first; on an item the tree folds behind the header's Areas toggle
  * (it opens above the item and closes once you pick something).
  */
-export function WorkView({ initialItem, initialView, initialAction }: { initialItem?: string; initialView?: WorkViewKind; initialAction?: string }) {
+export function WorkView({
+  initialItem,
+  initialView,
+  initialAction,
+  initialCapture,
+}: {
+  initialItem?: string;
+  initialView?: WorkViewKind;
+  initialAction?: string;
+  /** the share target's text: opens the capture sheet prefilled */
+  initialCapture?: string;
+}) {
+  const router = useRouter();
+  const { can } = useAccess();
+  const canChat = can("hermes.chat");
+  const newChat = useAskHermes();
   const [archived, setArchived] = useState(false);
   const items = useItems(archived);
   const [view, setView] = useState<View>(
     initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView === "inbox" ? "inbox" : "today" },
   );
   const [newArea, setNewArea] = useState(false);
-  const [capturing, setCapturing] = useState(false);
+  const [capturing, setCapturing] = useState<boolean | string>(initialCapture ? initialCapture : false);
   const [treeOpen, setTreeOpen] = useState(false);
   const inbox = useInbox();
   const [undo, setUndo] = useState<UndoOp | null>(null);
@@ -87,7 +108,12 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
     // Phones: the content sits above the tree, so bring it into view.
     if (window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
   };
-  const select = (id: string) => go({ kind: "item", id });
+  const openConversation = (sessionId: string) => router.push(`/chat/${encodeURIComponent(sessionId)}`);
+  const select = (id: string) => {
+    const it = items.data?.items.find((i) => i.id === id);
+    if (it?.kind === "conversation" && it.sessionId && canChat) openConversation(it.sessionId);
+    else go({ kind: "item", id });
+  };
   const openWith = (id: string, action?: string) => go({ kind: "item", id, action });
 
   const wide = useWide();
@@ -119,26 +145,47 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
-        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+        <header className="wk-pane-head mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-1">
           <div className="min-w-0">
-            <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Work</h1>
-            <p className="text-xs text-muted lg:sr-only">Areas, projects and threads of AI-assisted work. Private to you.</p>
+            <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
+            <p className="text-xs text-muted lg:sr-only">Work and conversations in one private tree.</p>
           </div>
-          <div className="flex shrink-0 gap-1.5">
+          {/* Narrow desktop pane: the actions drop to their own row (title stays visible). */}
+          <div className="wk-pane-actions flex shrink-0 gap-1">
+            {canChat ? (
+              <Button size="sm" variant="primary" busy={newChat.busy} onClick={() => newChat.start()} title="New chat (lands in Miscellaneous)">
+                New chat
+              </Button>
+            ) : null}
             <Button size="sm" onClick={() => setCapturing(true)}>
               Capture
             </Button>
-            <Button size="sm" variant="primary" onClick={() => setNewArea(true)}>
-              New area
+            <Button size="sm" variant="ghost" onClick={() => setNewArea(true)} aria-label="New area" title="New area">
+              <PlusIcon className="h-4 w-4" />
             </Button>
           </div>
         </header>
-        <nav aria-label="Work views">
+        <AreasViewSwitch className="seg-fill mb-2 px-1" />
+        <nav aria-label="Areas sections">
           <ul
-            className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${view.kind === "item" ? "grid-cols-3" : "grid-cols-2"}`}
+            className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${
+              (view.kind === "item" ? 1 : 0) + (canChat ? 1 : 0) === 2
+                ? "grid-cols-4"
+                : (view.kind === "item" ? 1 : 0) + (canChat ? 1 : 0) === 1
+                  ? "grid-cols-3"
+                  : "grid-cols-2"
+            }`}
           >
             {railBtn("today", "Today", "☀")}
             {railBtn("inbox", "Inbox", "↓", inboxCount)}
+            {canChat ? (
+              <li>
+                <Link href="/chat" className="wk-side-nav">
+                  <ChatIcon className="h-4 w-4 shrink-0 text-muted" />
+                  <span>Chats</span>
+                </Link>
+              </li>
+            ) : null}
             {view.kind === "item" ? (
               <li className="lg:hidden">
                 <button
@@ -198,7 +245,14 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
           {items.isPending ? (
             <Spinner label="Loading work…" />
           ) : (
-            <WorkTree items={list} selected={current} onSelect={select} onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })} />
+            <WorkTree
+              items={list}
+              linked={items.data?.linkedConversations}
+              selected={current}
+              onSelect={select}
+              onOpenConversation={canChat ? openConversation : undefined}
+              onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
+            />
           )}
           <label className="mt-2 flex min-h-11 items-center gap-2 px-1 text-[13px] text-muted">
             <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
@@ -207,7 +261,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
         </div>
       </div>
       <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
-      {capturing ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
+      {capturing ? <CaptureDialog initialText={typeof capturing === "string" ? capturing : undefined} onClose={() => setCapturing(false)} /> : null}
       {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
   );
@@ -406,7 +460,7 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
                   {v.overdue ? <span className="block text-xs font-medium text-danger">overdue · due {shortDate(v.dueDate!)}</span> : null}
                   {!v.overdue && v.dueDate && v.status === "pending" ? <span className="block text-xs text-muted">due {shortDate(v.dueDate)}</span> : null}
                 </span>
-                <span className="wk-pill shrink-0 text-[11px]" data-s={V_STATE[v.status]?.s}>
+                <span className="status-pill shrink-0 text-[11px]" data-s={V_STATE[v.status]?.s}>
                   {V_STATE[v.status]?.text ?? v.status}
                 </span>
               </li>
@@ -442,7 +496,7 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
                     </a>
                     {l.externalState ? (
                       <span
-                        className="wk-pill shrink-0 text-[11px]"
+                        className="status-pill shrink-0 text-[11px]"
                         data-s={l.externalState === "merged" ? "settled" : l.externalState === "open" ? "in_review" : "on_hold"}
                       >
                         {l.externalState}
@@ -582,7 +636,7 @@ function NewItemDialog({
         {parent ? (
           <Field id="ni-kind" label="Kind">
             <select id="ni-kind" className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as WorkKind)}>
-              {WORK_KINDS.filter((k) => k !== "area").map((k) => (
+              {CREATABLE_KINDS.filter((k) => k !== "area").map((k) => (
                 <option key={k} value={k}>
                   {KIND_LABEL[k]}
                 </option>
@@ -645,6 +699,7 @@ function ItemDetail({
   }
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
+  const newChat = useAskHermes();
   if (dialog === "continue" && !canChat) setDialog(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
 
@@ -761,9 +816,19 @@ function ItemDetail({
           <p className="min-w-0 text-[14px] break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <Button size="sm" variant="primary" onClick={() => setDialog("packet")}>
+          {item.kind === "conversation" && item.sessionId && canChat ? (
+            <ButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
+              Open conversation
+            </ButtonLink>
+          ) : null}
+          <Button size="sm" variant={item.kind === "conversation" ? "secondary" : "primary"} onClick={() => setDialog("packet")}>
             Start focused work
           </Button>
+          {canChat ? (
+            <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+              New chat here
+            </Button>
+          ) : null}
           <Button size="sm" onClick={() => setDialog("child")}>
             New child
           </Button>
@@ -839,15 +904,18 @@ function ItemDetail({
                     <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
                   );
                   // Phones lead with proof and the packet; the editable details fold away below.
+                  const settings = isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null;
                   return phone ? (
                     <>
                       {validations}
                       {packet}
                       {edit}
+                      {settings}
                     </>
                   ) : (
                     <>
                       {edit}
+                      {settings}
                       {packet}
                       {validations}
                     </>

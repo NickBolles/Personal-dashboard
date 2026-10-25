@@ -222,3 +222,24 @@ export const WorkIcon = ({ className }: P) =>
     </>,
     className,
   );
+
+/** Workouts (distinct from Initiatives' flag). */
+export const DumbbellIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11" />
+    </>,
+    className,
+  );
+
+/** Areas: one tree for work and conversations. */
+export const AreasIcon = ({ className }: P) =>
+  base(
+    <>
+      <rect x="3" y="3.5" width="7" height="5" rx="1.5" />
+      <rect x="13" y="10" width="8" height="4.5" rx="1.5" />
+      <rect x="13" y="16.5" width="8" height="4.5" rx="1.5" />
+      <path d="M6.5 8.5v10.25H13M6.5 12.25H13" />
+    </>,
+    className,
+  );

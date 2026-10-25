@@ -3,9 +3,14 @@
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { SessionList } from "@/components/chat/SessionList";
 import { BackendSwitch } from "@/components/chat/backend";
+import { ConversationsView } from "@/components/areas/ConversationsView";
+import { useAccess } from "@/components/access";
 import { Kbd, Page, PageHeader } from "@/components/ui";
 
-export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; context?: string; draft?: string }) {
+/** /chat: with Areas, the conversations view of the tree (All / Unfiled); otherwise the plain Hermes list. */
+export function ChatIndex({ startNew, context, draft, view }: { startNew?: boolean; context?: string; draft?: string; view?: string }) {
+  const { can } = useAccess();
+  if (can("work.use")) return <ConversationsView startNew={startNew} context={context} draft={draft} initialFilter={view === "unfiled" ? "unfiled" : "all"} />;
   return (
     <Page width="narrow">
       <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." actions={<BackendSwitch />} />
@@ -18,6 +23,7 @@ export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; co
         ) : null}
         <QuickCapture
           key={draft ?? "q"}
+          mode="ask"
           initialText={draft}
           context={context}
           placeholder={startNew || context ? "What should Hermes do with this?" : undefined}

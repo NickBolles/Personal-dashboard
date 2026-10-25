@@ -45,16 +45,17 @@ export type ModuleDef = {
 export const MODULES: ModuleDef[] = [
   {
     id: "work",
-    label: "Work",
-    description: "Private hierarchy of AI-assisted work: handoffs, PR links, validation and a dashboard.",
+    label: "Areas",
+    description: "One private tree for AI-assisted work and conversations: handoffs, PR links, validation and a dashboard.",
     sources: ["work"],
     viewCapability: "work.use",
     routes: [
-      { href: "/work", label: "Work" },
-      { href: "/work?view=inbox", label: "Work inbox" },
-      { href: "/work/timeline", label: "Work timeline" },
-      { href: "/work/dashboard", label: "Work dashboard" },
-      { href: "/work/map", label: "Work map" },
+      { href: "/areas", label: "Areas" },
+      { href: "/areas?view=inbox", label: "Inbox" },
+      { href: "/chat", label: "Conversations" },
+      { href: "/areas/timeline", label: "Timeline" },
+      { href: "/areas/dashboard", label: "Dashboard" },
+      { href: "/areas/map", label: "Map" },
     ],
     capabilities: [
       {
@@ -129,7 +130,7 @@ export const MODULES: ModuleDef[] = [
     sources: ["home_assistant"],
     viewCapability: "home_assistant.calendar",
     actionsCapability: "home_assistant.view",
-    routes: [{ href: "/home-control", label: "Home" }],
+    routes: [{ href: "/home-control", label: "House" }],
     contextSource: "home_assistant",
     capabilities: [
       { id: "home_assistant.calendar", label: "Household calendar", description: "Calendar events from Home Assistant.", roles: ["adult", "kid", "household"] },

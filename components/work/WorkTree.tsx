@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { cx, inputCls } from "@/components/ui";
-import { STATUS_LABELS, type WorkItem } from "@/lib/work";
+import { STATUS_LABELS, type LinkedConversationRow, type WorkItem } from "@/lib/work";
+import { ChatIcon } from "@/components/icons";
 import { StatusDot } from "./common";
 
 type DropPos = "before" | "after" | "inside";
@@ -17,18 +18,71 @@ type Drag = { id: string; x: number; y: number; active: boolean; target: { id: s
  * drop on the top or bottom quarter of a row to place before/after it, or the
  * middle to put it inside. Escape cancels. The keyboard equivalents are the
  * item's "Move up", "Move down" and "Move…" actions.
+ *
+ * Areas (phase 4): conversations live in the same tree. Conversation nodes
+ * (kind `conversation`) behave like any item (drag, nest, move); a
+ * conversation an item merely links (work_links) shows as a read-only child
+ * row of that item. Selecting either opens the conversation.
  */
 export function WorkTree({
-  items,
+  items: realItems,
   selected,
   onSelect,
   onPlace,
+  linked = [],
+  onOpenConversation,
+  selectedSession,
 }: {
   items: WorkItem[];
   selected: string | null;
   onSelect: (id: string) => void;
   onPlace?: (id: string, parentId: string | null, index: number) => void;
+  /** conversations linked to items, shown as their child rows */
+  linked?: LinkedConversationRow[];
+  /** open a conversation (node or linked row); without it conversation rows select like items */
+  onOpenConversation?: (sessionId: string) => void;
+  /** the open conversation (highlights its row) */
+  selectedSession?: string | null;
 }) {
+  const { items, virtual } = useMemo(() => {
+    const ids = new Set(realItems.map((i) => i.id));
+    const virtual = new Set<string>();
+    const extra: WorkItem[] = [];
+    linked.forEach((l, n) => {
+      if (!ids.has(l.itemId)) return;
+      const id = `lc:${l.itemId}:${l.sessionId}`;
+      if (virtual.has(id)) return;
+      virtual.add(id);
+      extra.push({
+        id,
+        parentId: l.itemId,
+        kind: "conversation",
+        title: l.title || "Conversation",
+        summary: "",
+        nextAction: "",
+        status: "exploring",
+        sortOrder: 1_000_000 + n,
+        startDate: null,
+        targetDate: null,
+        completedAt: null,
+        settledKind: null,
+        settledReason: null,
+        archived: false,
+        builtIn: false,
+        validationDefault: null,
+        sessionId: l.sessionId,
+        settings: null,
+        createdAt: "",
+        updatedAt: "",
+      });
+    });
+    return { items: [...realItems, ...extra], virtual };
+  }, [realItems, linked]);
+  const activate = (i: WorkItem) => {
+    if (i.kind === "conversation" && i.sessionId && onOpenConversation) onOpenConversation(i.sessionId);
+    else if (!virtual.has(i.id)) onSelect(i.id);
+  };
+  const isSelected = (i: WorkItem) => selected === i.id || (!!selectedSession && i.sessionId === selectedSession);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -122,7 +176,7 @@ export function WorkTree({
         break;
       case "Enter":
       case " ":
-        onSelect(item.id);
+        activate(item);
         break;
       default:
         return;
@@ -151,7 +205,7 @@ export function WorkTree({
     if (!el || !id) return null;
     const target = byId.get(id);
     const moving = byId.get(d.id);
-    if (!target || !moving || subtreeOf(d.id).has(id)) return null;
+    if (!target || !moving || virtual.has(id) || subtreeOf(d.id).has(id)) return null;
     const r = el.getBoundingClientRect();
     const rel = (y - r.top) / Math.max(1, r.height);
     let pos: DropPos = rel < 0.28 ? "before" : rel > 0.72 ? "after" : "inside";
@@ -185,7 +239,7 @@ export function WorkTree({
     return () => window.removeEventListener("keydown", onKey);
   }, [drag?.active]);
   const grip = (i: WorkItem) =>
-    onPlace && !i.builtIn ? (
+    onPlace && !i.builtIn && !virtual.has(i.id) ? (
       <span
         aria-hidden="true"
         title="Drag to move"
@@ -238,9 +292,14 @@ export function WorkTree({
           }}
           role="treeitem"
           aria-level={level}
-          aria-selected={selected === i.id}
+          aria-selected={isSelected(i)}
           aria-expanded={hasKids ? open : undefined}
-          aria-label={`${i.title}, ${STATUS_LABELS[i.status]}${i.archived ? ", archived" : ""}`}
+          aria-label={
+            virtual.has(i.id)
+              ? `${i.title}, linked conversation`
+              : `${i.title}, ${i.kind === "conversation" ? "conversation, " : ""}${STATUS_LABELS[i.status]}${i.archived ? ", archived" : ""}`
+          }
+          title={i.title}
           tabIndex={tabStop === i.id ? 0 : -1}
           onKeyDown={(e) => onKey(e, i)}
           onFocus={(e) => {
@@ -249,16 +308,18 @@ export function WorkTree({
           onClick={(e) => {
             e.stopPropagation();
             setFocusId(i.id);
-            onSelect(i.id);
+            activate(i);
           }}
           className="outline-none [&:focus-visible>div]:ring-2 [&:focus-visible>div]:ring-[var(--focus)]"
         >
           <div
             data-row-id={i.id}
-            data-selected={selected === i.id || undefined}
+            data-kind={i.kind}
+            data-selected={isSelected(i) || undefined}
             className={cx(
               "wk-tree-row relative flex cursor-pointer items-center gap-1.5 pr-2 text-[13.5px]",
-              selected !== i.id && "hover:bg-surface",
+              !isSelected(i) && "hover:bg-surface",
+              virtual.has(i.id) && "text-muted",
               level === 1 && "font-semibold",
               i.archived && "opacity-60",
               (i.status === "settled" || i.status === "superseded" || i.status === "abandoned") && selected !== i.id && "text-muted",
@@ -267,7 +328,7 @@ export function WorkTree({
               drag?.active && drag.target?.id === i.id && drag.target.pos === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
               drag?.active && drag.target?.id === i.id && drag.target.pos === "after" && "shadow-[inset_0_-2px_0_var(--accent)]",
             )}
-            style={{ paddingLeft: `${(level - 1) * 12 + 2}px` }}
+            style={{ paddingLeft: `${(level - 1) * 10 + 2}px` }}
           >
             {grip(i)}
             <span
@@ -282,7 +343,11 @@ export function WorkTree({
                 <path d="M8 5l9 7-9 7z" />
               </svg>
             </span>
-            {i.parentId === null && i.builtIn ? null : <StatusDot status={i.status} />}
+            {i.kind === "conversation" ? (
+              <ChatIcon className={cx("h-3.5 w-3.5 shrink-0", i.status === "exploring" ? "text-muted" : "text-accent")} />
+            ) : i.parentId === null && i.builtIn ? null : (
+              <StatusDot status={i.status} />
+            )}
             <span className="min-w-0 flex-1 truncate">{i.title}</span>
           </div>
           {hasKids && open ? <ul role="group">{render(i.id, level + 1)}</ul> : null}
@@ -300,12 +365,12 @@ export function WorkTree({
         id="work-tree-filter"
         type="search"
         className={cx(inputCls, "border-line")}
-        placeholder="Filter work…"
+        placeholder="Filter areas and chats…"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
       />
       {order.length ? (
-        <ul role="tree" aria-label="Work items">
+        <ul role="tree" aria-label="Areas">
           {render(null, 1)}
         </ul>
       ) : (

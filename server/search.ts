@@ -216,14 +216,15 @@ const providers: SearchProvider[] = [
     visible: (u) => can(u, "work.use"),
     search: (q, user) =>
       listWorkItems(user.id, { includeArchived: true })
-        .filter((i) => !i.builtIn)
+        // Conversation nodes are found by the Conversations provider (no duplicates).
+        .filter((i) => !i.builtIn && i.kind !== "conversation")
         .map((i) => ({
           id: `work:${i.id}`,
           kind: "work" as const,
           module: "work",
           title: i.title,
           subtitle: [STATUS_LABELS[i.status], i.nextAction ? `Next: ${i.nextAction}` : i.summary].filter(Boolean).join(" · ").slice(0, 160),
-          href: `/work?item=${encodeURIComponent(i.id)}`,
+          href: `/areas?item=${encodeURIComponent(i.id)}`,
           _s: matchScore(q, i.title, i.summary, i.nextAction),
         })),
   },

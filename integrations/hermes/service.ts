@@ -292,6 +292,8 @@ export type StartRunRequest = {
   idempotencyKey: string;
   model?: string;
   provider?: string;
+  /** per-area agent mode / instructions (Areas); Hermes-only, Claude-direct ignores it */
+  instructions?: string;
   conversationHistory?: { role: string; content: string }[];
 };
 

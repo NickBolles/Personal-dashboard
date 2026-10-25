@@ -14,8 +14,8 @@ type Viewer = Capable & { id: string };
  * app and the phone app attach the same thing. Reads cached snapshots (fast);
  * Home Assistant controls are read live because their states matter.
  */
-export const CONTEXT_SOURCES = ["overview", "skylight", "home_assistant", "todos", "daily_compass", "paperclip"] as const;
-export type ContextSource = (typeof CONTEXT_SOURCES)[number];
+import { CONTEXT_SOURCES, type ContextSource } from "@/lib/work";
+export { CONTEXT_SOURCES, type ContextSource };
 
 const MAX_CHARS = 6000;
 

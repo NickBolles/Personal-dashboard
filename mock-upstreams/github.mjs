@@ -240,6 +240,35 @@ export function createGithub() {
       const is = state.issues.get(key(m[1], m[2], m[3]));
       return json(res, 200, is ? issueBody(is) : { number: Number(m[3]), state: "open", title: `Mock issue ${m[3]}` }, headers);
     }
+    // Issue search (the composer's # picker): repo:owner/name plus words; PRs and issues the mock knows, else two stand-ins.
+    if (path === "/search/issues") {
+      const q = url.searchParams.get("q") ?? "";
+      const repo = q.match(/repo:([^\s]+)/)?.[1]?.toLowerCase() ?? "";
+      const words = q
+        .replace(/repo:[^\s]+/, "")
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(Boolean);
+      const known = [
+        ...[...state.pulls.values()].map((p) => ({
+          number: p.number,
+          title: p.title ?? `Mock PR ${p.number}`,
+          state: p.state ?? "open",
+          pull_request: { merged_at: p.merged ? "2026-01-01T00:00:00Z" : null },
+          repo: `${p.owner}/${p.repo}`,
+        })),
+        ...[...state.issues.values()].map((i) => ({ number: i.number, title: i.title, state: i.state, pull_request: null, repo: `${i.owner}/${i.repo}` })),
+      ].filter((x) => !repo || String(x.repo).toLowerCase() === repo);
+      const base = known.length
+        ? known
+        : [
+            { number: 412, title: "Hydration perf: p95 regression fix", state: "open", pull_request: { merged_at: null } },
+            { number: 88, title: "Timeline editing", state: "closed", pull_request: { merged_at: "2026-01-01T00:00:00Z" } },
+          ];
+      const items = base.filter((x) => words.every((w) => `${x.number} ${x.title}`.toLowerCase().includes(w))).map(({ repo: _r, ...x }) => x);
+      return json(res, 200, { total_count: items.length, items }, headers);
+    }
     if (path === "/issues" && url.searchParams.get("filter") === "assigned") {
       const list = [...state.issues.values()].filter((i) => i.state === "open" && i.assignee && i.assignee.toLowerCase() === who.login.toLowerCase());
       return json(res, 200, list.map(issueBody), headers);

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ErrorNote, Spinner, cx } from "@/components/ui";
-import { StatusBadge, StatusDot, fmtDate } from "@/components/work/common";
+import { StatusBadge, StatusDot, fmtDate, useWorkMutation } from "@/components/work/common";
 import type { InboxResponse, TodayCard, TodayResponse } from "@/lib/work";
 
 export function useToday() {
@@ -173,7 +173,18 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           onOpen={onOpen}
         />
         {t.overdue.length ? <CardList id="today-overdue" title="Overdue" cards={t.overdue} empty="" action={{ label: "Open" }} onOpen={onOpen} /> : null}
+        {t.settleSuggestions?.length ? (
+          <CardList
+            id="today-suggest"
+            title="Ready to settle?"
+            cards={t.settleSuggestions}
+            empty=""
+            action={{ label: "Settle…", do: "settle" }}
+            onOpen={onOpen}
+          />
+        ) : null}
       </div>
+      {t.autoSettled?.length ? <AutoSettled cards={t.autoSettled} onOpen={onOpen} /> : null}
       {inboxCount ? (
         <p className="text-[13px]">
           <button type="button" className="tap text-accent underline" onClick={onInbox}>
@@ -181,6 +192,43 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           </button>
         </p>
       ) : null}
+    </section>
+  );
+}
+
+/** Settled by an area's "settle automatically after a quiet period" policy: always undoable for a week. */
+function AutoSettled({ cards, onOpen }: { cards: TodayResponse["autoSettled"]; onOpen: (id: string) => void }) {
+  const undo = useWorkMutation((opId: string) => api.post(`/api/work/ops/${encodeURIComponent(opId)}/undo`, {}), { ok: "Reopened" });
+  return (
+    <section aria-labelledby="today-auto" className="wk-card min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <h3 id="today-auto" className="wk-label">
+          Settled automatically
+        </h3>
+        <span className="text-xs text-muted tabular-nums">{cards.length}</span>
+      </div>
+      <ul className="wk-rows">
+        {cards.map((c) => (
+          <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
+            <div className="min-w-0 flex-1 basis-48">
+              <button type="button" className="tap min-w-0 text-left text-[14px] font-semibold break-words hover:underline" onClick={() => onOpen(c.id)}>
+                {c.title}
+              </button>
+              <p className="text-xs break-words text-muted">{[c.path, c.detail].filter(Boolean).join(" · ")}</p>
+            </div>
+            {c.opId ? (
+              <Button
+                size="sm"
+                onClick={() => undo.mutate(c.opId!)}
+                busy={undo.isPending && undo.variables === c.opId}
+                aria-label={`Undo automatic settle: ${c.title}`}
+              >
+                Undo
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
