@@ -181,6 +181,29 @@ button.wk-kpi:hover {
 
 /* ---- the /work workbench ---- */
 @media (min-width: 1024px) {
+  /* Left pane header (~256px): title on row one, actions on a full-width second row. */
+  .wk-pane-head > .wk-pane-actions {
+    flex: 1 1 100%;
+  }
+  .wk-pane-head > .wk-pane-actions > * {
+    flex: 1 1 auto;
+  }
+  .wk-pane-head > .wk-pane-actions > :last-child {
+    flex: 0 0 auto;
+  }
+  /* Views switch fills the pane; segments shrink their padding instead of clipping. */
+  .seg-fill > .seg {
+    display: flex;
+    width: 100%;
+  }
+  .seg-fill > .seg > li {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .seg-fill .seg-item {
+    width: 100%;
+    padding: 0 6px;
+  }
   .wk-hub {
     /* continuous left pane background + hairline, whatever its rows' heights */
     background: linear-gradient(
