@@ -201,7 +201,9 @@ export function SettingsView() {
                 <Button
                   variant="danger"
                   onClick={async () => {
-                    await api.post("/api/auth/logout");
+                    await api.post("/api/auth/logout").catch(() => undefined);
+                    // Shared devices: the next person must not see this person's cached pages or chats.
+                    await clearAllLocal();
                     window.location.href = "/login";
                   }}
                 >

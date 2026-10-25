@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { listSubscriptions, removeSubscription, saveSubscription } from "@/server/notifications/push";
+import { isAllowedPushEndpoint, listSubscriptions, removeSubscription, saveSubscription } from "@/server/notifications/push";
 
 const subSchema = z.object({
-  endpoint: z.string().url().max(2000),
+  endpoint: z.string().url().max(2000).refine(isAllowedPushEndpoint, "Not a browser push service endpoint"),
   keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
 });
 
@@ -26,8 +26,8 @@ export const POST = api<z.infer<typeof subSchema>>(
 
 const delSchema = z.object({ endpoint: z.string().max(2000) });
 export const DELETE = api<z.infer<typeof delSchema>>(
-  ({ body }) => {
-    removeSubscription(body.endpoint);
+  ({ body, user }) => {
+    removeSubscription(body.endpoint, user.id);
     return { ok: true };
   },
   { body: delSchema },

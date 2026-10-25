@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { createSession, SESSION_COOKIE, sessionCookieOptions, verifyLogin } from "@/server/auth";
+import { clientKey } from "@/server/http/origin";
 
 export const POST = api(
   ({ body, req }) => {
-    const key = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-    const owner = verifyLogin(body.passcode, key, body.username || undefined);
+    const owner = verifyLogin(body.passcode, clientKey(req), body.username || undefined);
     const s = createSession(owner.id, req.headers.get("user-agent"));
     const res = NextResponse.json({ ok: true });
     res.cookies.set(SESSION_COOKIE, s.token, sessionCookieOptions(s.expiresAt));

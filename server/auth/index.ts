@@ -6,7 +6,8 @@ import { getDb, schema } from "@/server/db";
 import { hashPasscode, newId, randomToken, safeEqual, sha256, verifyPasscode } from "@/server/crypto";
 import { getSetting, setSetting } from "@/server/settings";
 import { DAY } from "@/lib/time";
-import { processSingleton } from "@/server/singleton";
+import { AuthError } from "./errors";
+import { checkThrottle, clearFailures, recordFailure, throttleKeys } from "./throttle";
 import { deviceFromToken } from "@/server/devices";
 import { asRole, capabilitiesFor } from "@/server/access";
 import type { Role } from "@/lib/modules";
@@ -30,9 +31,24 @@ function toCurrentUser(row: Pick<UserRow, "id" | "name" | "role">, via: CurrentU
   return { id: row.id, name: row.name, role, capabilities: capabilitiesFor(row.id, role), via, ...(deviceId ? { deviceId } : {}) };
 }
 
-/** The person who claimed this instance (the first admin). */
+export const OWNER_SETTING = "owner_user_id";
+
+/**
+ * The person who claimed this instance. Stored explicitly (settings
+ * `owner_user_id`, migration 0017) so demoting or adding admins never moves
+ * ownership; older databases fall back to the oldest admin once and persist it.
+ * The owner can't be demoted, disabled or removed (server/people.ts).
+ */
 export function getOwner() {
-  return getDb().select().from(schema.users).where(eq(schema.users.role, "admin")).orderBy(asc(schema.users.createdAt)).limit(1).get();
+  const db = getDb();
+  const id = getSetting<string>(OWNER_SETTING);
+  if (id) {
+    const row = db.select().from(schema.users).where(eq(schema.users.id, id)).get();
+    if (row) return row;
+  }
+  const oldest = db.select().from(schema.users).where(eq(schema.users.role, "admin")).orderBy(asc(schema.users.createdAt)).limit(1).get();
+  if (oldest) setSetting(OWNER_SETTING, oldest.id);
+  return oldest;
 }
 
 export function getUser(id: string) {
@@ -87,14 +103,19 @@ export function claimInstance(input: { setupCode: string; name: string; passcode
     .insert(schema.users)
     .values({ id, name: input.name.trim() || "Owner", role: "admin", passcodeHash: hashPasscode(input.passcode) })
     .run();
+  setSetting(OWNER_SETTING, id);
   return id;
 }
 
-export function changePasscode(userId: string, current: string, next: string) {
+export function changePasscode(userId: string, current: string, next: string, client = "local") {
+  const keys = throttleKeys("passcode", client, userId);
+  checkThrottle(keys);
   const user = getDb().select().from(schema.users).where(eq(schema.users.id, userId)).get();
   if (!user?.passcodeHash || !verifyPasscode(current, user.passcodeHash)) {
+    recordFailure(keys);
     throw new AuthError("bad_passcode", "Current passcode is incorrect.");
   }
+  clearFailures(keys);
   assertPasscodeStrength(next, asRole(user.role));
   getDb()
     .update(schema.users)
@@ -112,38 +133,16 @@ export function assertPasscodeStrength(passcode: string, role: Role) {
     throw new AuthError("weak_passcode", role === "household" ? "Use a PIN of at least 4 digits, or 6+ characters." : "Use at least 6 characters.");
 }
 
-export class AuthError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-// --- login throttling (in-memory, per client key) ---
-const failures = processSingleton("login_failures", () => new Map<string, { count: number; until: number }>());
-
-export function checkThrottle(key: string) {
-  const f = failures.get(key);
-  if (f && f.until > Date.now()) {
-    throw new AuthError("throttled", `Too many attempts. Try again in ${Math.ceil((f.until - Date.now()) / 1000)}s.`);
-  }
-}
-
-export function recordFailure(key: string) {
-  const f = failures.get(key) ?? { count: 0, until: 0 };
-  f.count += 1;
-  if (f.count >= 5) f.until = Date.now() + Math.min(15 * 60_000, 2 ** (f.count - 5) * 30_000);
-  failures.set(key, f);
-}
+export { AuthError };
+export { checkThrottle, clearFailures, recordFailure, throttleKeys } from "./throttle";
 
 /**
  * Sign in by name + passcode. With no name, the passcode is checked against
  * the owner only (the single-person setup keeps its passcode-only sign-in).
+ * Failures count against the client, the target account (or the typed name
+ * when no such person exists) and a global budget (server/auth/throttle.ts).
  */
-export function verifyLogin(passcode: string, throttleKey: string, username?: string) {
-  checkThrottle(throttleKey);
+export function verifyLogin(passcode: string, client: string, username?: string) {
   const name = username ? normalizeUsername(username) : "";
   const user = name
     ? getDb()
@@ -152,11 +151,13 @@ export function verifyLogin(passcode: string, throttleKey: string, username?: st
         .where(and(eq(schema.users.username, name), isNull(schema.users.disabledAt)))
         .get()
     : getOwner();
+  const keys = throttleKeys("login", client, user ? user.id : `name:${name}`);
+  checkThrottle(keys);
   if (!user?.passcodeHash || user.disabledAt || !verifyPasscode(passcode, user.passcodeHash)) {
-    recordFailure(throttleKey);
+    recordFailure(keys);
     throw new AuthError("bad_passcode", name ? "Incorrect name or passcode." : "Incorrect passcode.");
   }
-  failures.delete(throttleKey);
+  clearFailures(keys);
   return user;
 }
 
@@ -217,6 +218,7 @@ export function userFromProxyHeader(value: string | null | undefined): CurrentUs
     // First identity through the proxy becomes the admin.
     const id = newId("usr");
     db.insert(schema.users).values({ id, name: value.trim(), username, role: "admin" }).run();
+    setSetting(OWNER_SETTING, id);
     return userById(id, "proxy");
   }
   if (!owner.username) {

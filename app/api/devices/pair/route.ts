@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { clientKey } from "@/server/http/origin";
-import { checkThrottle, getUser, recordFailure } from "@/server/auth";
+import { checkThrottle, getUser, recordFailure, throttleKeys } from "@/server/auth";
 import { audit } from "@/server/audit";
 import { redeemPairingCode } from "@/server/devices";
 import { HttpError } from "@/server/http/errors";
@@ -16,7 +16,7 @@ const schema = z.object({
 /** Public: exchange a pairing code for a device token. Throttled like passcode login. */
 export const POST = api<z.infer<typeof schema>>(
   ({ req, body, correlationId }) => {
-    const key = `pair:${clientKey(req)}`;
+    const key = throttleKeys("pair", clientKey(req));
     checkThrottle(key);
     try {
       const r = redeemPairingCode(body.code, body);

@@ -5,6 +5,8 @@ import { audit } from "@/server/audit";
 import { newId, sha256 } from "@/server/crypto";
 import { config } from "@/server/config";
 import { HttpError } from "@/server/http/errors";
+import type { CurrentUser } from "@/server/auth";
+import { sessionAccess } from "@/integrations/hermes/service";
 import type { EntityLink, EntityLinkRelationship, NextAction } from "@/lib/contracts";
 import { iso, MINUTE } from "@/lib/time";
 import { runChecks } from "@/integrations/testing";
@@ -167,10 +169,14 @@ export function createLink(input: {
 }
 
 /** Unlinking only removes Jarvis' relationship record — never closes or deletes Paperclip work. */
-export function deleteLink(id: string, actor: string, correlationId: string) {
-  const res = getDb().delete(schema.entityLinks).where(eq(schema.entityLinks.id, id)).run();
-  if (!res.changes) throw new HttpError(404, "not_found", "Link not found");
-  audit({ actor, action: "paperclip.unlink", source: "paperclip", sourceRecord: id, result: "ok", correlationId });
+export function deleteLink(id: string, user: CurrentUser, correlationId: string) {
+  const link = getDb().select().from(schema.entityLinks).where(eq(schema.entityLinks.id, id)).get();
+  // Only someone who can write to the conversation may unlink its issues; others get a plain 404.
+  if (!link || (link.sourceType === "hermes_session" && sessionAccess(user, link.sourceId) !== "write")) {
+    throw new HttpError(404, "not_found", "Link not found");
+  }
+  getDb().delete(schema.entityLinks).where(eq(schema.entityLinks.id, id)).run();
+  audit({ actor: user.id, action: "paperclip.unlink", source: "paperclip", sourceRecord: id, result: "ok", correlationId });
 }
 
 export type TrackRequest =
@@ -183,7 +189,10 @@ export function trackIdempotencyKey(r: { title: string; parentId?: string }) {
   return `jarvis:${sha256(`${(r.parentId ?? "root").toLowerCase()}|${r.title.trim().toLowerCase()}`).slice(0, 40)}`;
 }
 
-export async function track(r: TrackRequest, actor: string, correlationId: string) {
+export async function track(r: TrackRequest, user: CurrentUser, correlationId: string) {
+  // You can only attach work to conversations you can open (private ones stay invisible).
+  if (!sessionAccess(user, r.sessionId)) throw new HttpError(404, "session_not_found", "Conversation not found");
+  const actor = user.id;
   const c = paperclipConn();
   let issue: PaperclipIssue;
   let created = false;
