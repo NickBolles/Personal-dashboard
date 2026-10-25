@@ -82,7 +82,7 @@ export function NewConversationButton({ className }: { className?: string }) {
         }
       }}
     >
-      <PlusIcon className="h-5 w-5" /> New conversation
+      <PlusIcon className="h-4 w-4" /> New conversation
     </Button>
   );
 }
@@ -101,7 +101,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
   }, [sessions, filter]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <BackendSwitch className="self-start" />
       <NewConversationButton className="w-full" />
       <div className="flex gap-2">
@@ -110,13 +110,15 @@ export function SessionList({ compact }: { compact?: boolean }) {
         </label>
         <input id="session-filter" className={inputCls} placeholder="Filter conversations" value={filter} onChange={(e) => setFilter(e.target.value)} />
       </div>
-      <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
-        <input type="checkbox" className="h-5 w-5" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-        Show archived
-      </label>
-      <Button disabled={isFetching} onClick={() => refetch()}>
-        Refresh conversations
-      </Button>
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
+        <label className="flex min-h-11 items-center gap-2 text-sm text-muted dense:min-h-8">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Show archived
+        </label>
+        <Button size="sm" variant="ghost" className="text-muted" disabled={isFetching} onClick={() => refetch()}>
+          Refresh conversations
+        </Button>
+      </div>
       {fromCache ? <p className="text-xs text-warn">Showing previously loaded conversations — the list may be stale or incomplete.</p> : null}
       {unavailable.length ? (
         <p role="status" className="text-xs text-warn">
@@ -125,7 +127,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
       ) : null}
       {error ? <ErrorNote error={error} retry={() => (isFetchNextPageError ? fetchNextPage() : refetch())} /> : null}
       {isLoading && !sessions ? <Spinner label="Loading conversations…" /> : null}
-      <ul className="space-y-1" aria-label="Conversations">
+      <ul className="-mx-1 space-y-px" aria-label="Conversations">
         {list.map((s) => {
           const href = `/chat/${encodeURIComponent(s.id)}`;
           const active = pathname === href;
@@ -134,10 +136,10 @@ export function SessionList({ compact }: { compact?: boolean }) {
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={cx("block rounded-xl border px-3 py-2.5", active ? "border-accent bg-accent-soft" : "border-transparent hover:bg-surface-2")}
+                className={cx("block rounded-[8px] px-2.5 py-2 dense:py-1.5", active ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}
               >
                 <span className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate font-medium">{s.title}</span>
+                  <span className={cx("min-w-0 flex-1 truncate", active ? "font-semibold" : "font-medium")}>{s.title}</span>
                   {s.source === "claude" ? <Badge>Claude</Badge> : null}
                   {s.activeRun ? (
                     <Badge tone={s.activeRun.status === "waiting_for_approval" ? "warn" : "accent"}>

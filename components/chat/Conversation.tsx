@@ -243,14 +243,14 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   return (
     <AssistantName.Provider value={who}>
-      <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-3xl flex-col lg:min-h-dvh">
-        <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur sm:px-6">
+      <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] flex-col lg:min-h-dvh">
+        <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6">
           <div className="flex items-start gap-2">
             <Link href="/chat" className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden" aria-label="Back to conversations">
               <ChevronIcon className="h-5 w-5 rotate-180" />
             </Link>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-lg font-semibold">{session!.title}</h1>
+              <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
                 {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                 {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
@@ -279,13 +279,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   </span>
                 ) : null}
                 {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
-                  <Link
-                    key={l.targetId}
-                    href="/initiatives"
-                    data-dynamic
-                    className="rounded-full border border-line px-2 py-0.5 font-mono"
-                    title={l.targetTitle}
-                  >
+                  <Link key={l.targetId} href="/initiatives" data-dynamic className="rounded-[6px] border border-line px-1.5 font-mono" title={l.targetTitle}>
                     {l.targetIdentifier}
                   </Link>
                 ))}
@@ -297,11 +291,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
           </div>
         </header>
 
-        <div className="flex-1 space-y-4 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
+        <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
           {detail.timeline.length === 0 && !showLive && !pendingInput ? (
             <p className="py-10 text-center text-muted">Say hello to start the conversation.</p>
           ) : null}
-          <ol className="space-y-4">
+          <ol className="space-y-3">
             {detail.timeline.map((item) => (
               <TimelineRow
                 key={item.id}
@@ -314,7 +308,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
             ))}
             {showPendingUser ? (
               <li className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-accent-contrast">
+                <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
                   <p className="prose-chat">{pendingInput}</p>
                 </div>
               </li>
@@ -383,7 +377,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   if (item.kind === "user") {
     return (
       <li className="group flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-accent-contrast">
+        <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
           <span className="sr-only">You said: </span>
           <p className="prose-chat select-text">{item.text}</p>
         </div>
@@ -394,7 +388,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   if (item.kind === "assistant") {
     return (
       <li className="flex flex-col gap-1">
-        <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3">
+        <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} said: </span>
           <p className="prose-chat select-text">{item.text}</p>
         </div>
@@ -409,7 +403,10 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((o) => !o)}
-          className={cx("flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted hover:bg-surface-2", item.error && "text-danger")}
+          className={cx(
+            "flex min-h-11 w-full items-center gap-2 rounded-[10px] border border-dashed border-line px-3 text-left font-mono text-xs text-muted hover:bg-surface-2 dense:min-h-8",
+            item.error && "text-danger",
+          )}
         >
           <ToolIcon className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">
@@ -446,7 +443,7 @@ function MessageMeta({ time, onFork, who }: { time?: string; onFork: () => void;
       <button
         type="button"
         onClick={onFork}
-        className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 hover:bg-surface-2"
+        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 dense:min-h-7"
         aria-label={`${isHermes ? "Restart with text through" : "Fork from"} ${who}${time ? ` at ${time}` : ""}`}
       >
         <ForkIcon className="h-3.5 w-3.5" /> {isHermes ? "Restart with text" : "Fork from here"}
@@ -469,7 +466,7 @@ function ActivityRow({ a }: { a: Activity }) {
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted hover:bg-surface-2"
+        className="flex min-h-11 w-full items-center gap-2 rounded-[10px] border border-dashed border-line px-3 text-left font-mono text-xs text-muted hover:bg-surface-2 dense:min-h-8"
       >
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
         <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -503,7 +500,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       ) : null}
 
       {state.approval ? (
-        <div role="group" aria-labelledby="approval-h" className="rounded-2xl border-2 border-warn bg-warn-soft p-4">
+        <div role="group" aria-labelledby="approval-h" className="rounded-[12px] border-2 border-warn bg-warn-soft p-3.5">
           <h2 id="approval-h" className="font-semibold text-warn">
             Hermes needs your approval
           </h2>
@@ -531,7 +528,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       ) : null}
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
-        <div className="max-w-[95%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3">
+        <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} is saying: </span>
           {text ? <p className="prose-chat select-text">{text}</p> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? (
@@ -654,7 +651,7 @@ function Composer({
         : `Message ${who}`;
 
   return (
-    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur sm:px-6 lg:bottom-0">
+    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6 lg:bottom-0">
       {context.length ? (
         <ul className="mb-2 flex flex-wrap gap-1" aria-label="Attached context">
           {context.map((c) => (
@@ -662,7 +659,7 @@ function Composer({
               <button
                 type="button"
                 onClick={() => onRemoveContext(c.ref)}
-                className="min-h-9 rounded-full border border-line px-3 text-xs"
+                className="min-h-9 rounded-full border border-line bg-surface px-3 text-xs dense:min-h-7"
                 aria-label={`Remove context ${c.label}`}
               >
                 {c.label} ✕
@@ -700,7 +697,7 @@ function Composer({
               onStop();
             }
           }}
-          className="block max-h-[200px] min-h-12 w-full resize-none rounded-[10px] border border-line-strong bg-surface px-3 py-3 text-base"
+          className="block max-h-[200px] min-h-11 w-full resize-none rounded-[12px] border border-line-strong bg-surface px-3 py-2.5 text-base dense:min-h-10 dense:py-2 dense:text-[0.875rem]"
         />
         {running ? (
           <Button type="button" variant="secondary" onClick={onStop} aria-label="Stop the run (Escape)" disabled={phase === "stopping"} className="shrink-0">

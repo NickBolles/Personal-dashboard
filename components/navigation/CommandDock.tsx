@@ -15,8 +15,9 @@ import { cx } from "@/components/ui";
 import { OPEN_PALETTE_EVENT, useCommands, type Command } from "./commands";
 
 /**
- * The command dock: one orb, centre-bottom (the middle of the phone bottom
- * bar; floating centre-bottom on desktop). Tap → command palette. Press and
+ * The command dock: one orb. Phones: the middle of the bottom bar. Desktop:
+ * docked in the foot of the app rail (never floating over content). Tap →
+ * command palette. Press and
  * hold (~320 ms) → radial action map: slide onto a petal (pausing ~⅓ s opens
  * its sub-menu), release to run, release on the orb to cancel. ⌘/Ctrl+. opens
  * the map from the keyboard (arrows choose, Tab/Enter opens a sub-menu, Enter
@@ -79,6 +80,18 @@ const PETALS: Petal[] = [
 type Resolved = { id: string; icon: string; label: string; sub: { cmd: Command; label: string }[] };
 type Pt = { x: number; y: number };
 
+/**
+ * Where the radial map is centred. Normally on the orb; when the orb sits near
+ * a screen edge (the desktop rail foot) the centre moves inwards so every petal
+ * fits, and the orb stays a cancel zone.
+ */
+export function mapCentre(orb: Pt, vw: number): Pt {
+  const margin = 215; // max radius 165 + petal half-width + gutter
+  const lo = Math.min(margin, vw / 2);
+  const hi = Math.max(vw - margin, vw / 2);
+  return { x: Math.max(lo, Math.min(hi, orb.x)), y: orb.y };
+}
+
 /** Petals the person can use: sub-entries map to commands they hold; empty petals disappear. */
 export function resolvePetals(commands: Command[]): Resolved[] {
   const byId = new Map(commands.map((c) => [c.id, c]));
@@ -119,7 +132,7 @@ function subLayout(center: Pt, R: number, petal: { x: number }, count: number) {
   });
 }
 
-export function CommandDock({ variant }: { variant: "bar" | "float" }) {
+export function CommandDock({ variant, compact = false }: { variant: "bar" | "rail"; compact?: boolean }) {
   const commands = useCommands();
   const petals = useMemo(() => resolvePetals(commands), [commands]);
   const orb = useRef<HTMLButtonElement>(null);
@@ -127,7 +140,7 @@ export function CommandDock({ variant }: { variant: "bar" | "float" }) {
   const dwellTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressing = useRef(false);
   const [charging, setCharging] = useState(false);
-  const [map, setMap] = useState<null | { center: Pt; via: "pointer" | "keyboard" }>(null);
+  const [map, setMap] = useState<null | { center: Pt; orb: Pt; via: "pointer" | "keyboard" }>(null);
   const [active, setActive] = useState(-1);
   const [subFor, setSubFor] = useState(-1);
   const [subActive, setSubActive] = useState(-1);
@@ -158,9 +171,9 @@ export function CommandDock({ variant }: { variant: "bar" | "float" }) {
   const open = useCallback((via: "pointer" | "keyboard") => {
     const r = orb.current?.getBoundingClientRect();
     if (!r) return;
-    // A hidden orb (desktop conversation pages) opens the map from the bottom centre.
-    const center = r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight - 48 };
-    setMap({ center, via });
+    // A hidden orb opens the map from the bottom centre.
+    const at = r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight - 48 };
+    setMap({ center: mapCentre(at, window.innerWidth), orb: at, via });
     setSubFor(-1);
     setSubActive(-1);
     setActive(via === "keyboard" ? 0 : -1);
@@ -205,7 +218,7 @@ export function CommandDock({ variant }: { variant: "bar" | "float" }) {
         return;
       }
     }
-    if (Math.hypot(rel.x, rel.y) < 44) {
+    if (Math.hypot(rel.x, rel.y) < 44 || Math.hypot(x - m.orb.x, y - m.orb.y) < 30) {
       setActive(-1);
       setSubActive(-1);
       st.current = { ...st.current, active: -1, subActive: -1 };
@@ -269,7 +282,7 @@ export function CommandDock({ variant }: { variant: "bar" | "float" }) {
   // ⌘/Ctrl+. toggles the map; while it's open, arrows/Tab/Enter/Esc drive it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Two docks are mounted (phone bar, desktop float); only the visible one owns the keyboard,
+      // Two docks are mounted (phone bar, desktop rail); only the visible one owns the keyboard,
       // or the bar's when neither is visible.
       const mine = !!orb.current?.getClientRects().length;
       const anyVisible = Array.from(document.querySelectorAll('[data-testid="dock-orb"]')).some((el) => el.getClientRects().length > 0);
@@ -361,14 +374,41 @@ export function CommandDock({ variant }: { variant: "bar" | "float" }) {
             open("keyboard");
           }
         }}
+        title={variant === "rail" && compact ? "Commands (tap) · action map (hold or Ctrl+.)" : undefined}
         className={cx(
-          "dock-orb relative inline-flex shrink-0 touch-none items-center justify-center rounded-full font-bold text-white select-none",
-          variant === "bar" ? "h-[52px] w-[52px] text-lg" : "h-14 w-14 text-xl shadow-lg",
-          charging && "dock-charging",
+          "relative inline-flex shrink-0 touch-none items-center select-none",
+          variant === "bar"
+            ? "dock-orb h-[52px] w-[52px] justify-center rounded-full text-lg font-bold text-white"
+            : compact
+              ? "h-11 w-11 justify-center rounded-[10px] hover:bg-surface"
+              : "min-h-11 w-full gap-2.5 rounded-[8px] px-1.5 text-[0.875rem] text-muted hover:bg-surface hover:text-text",
+          variant === "bar" && charging && "dock-charging",
         )}
       >
-        <span aria-hidden="true" className="dock-ring" />
-        <span aria-hidden="true">J</span>
+        {variant === "bar" ? (
+          <>
+            <span aria-hidden="true" className="dock-ring" />
+            <span aria-hidden="true">J</span>
+          </>
+        ) : (
+          <>
+            <span
+              aria-hidden="true"
+              className={cx(
+                "dock-orb relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white",
+                charging && "dock-charging",
+              )}
+            >
+              <span className="dock-ring" />J
+            </span>
+            {!compact ? (
+              <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">
+                Commands
+                <kbd className="kbd">Ctrl .</kbd>
+              </span>
+            ) : null}
+          </>
+        )}
       </button>
       {map && geometry
         ? // Portalled to <body>: the phone bar's backdrop-filter would otherwise contain the fixed overlay.

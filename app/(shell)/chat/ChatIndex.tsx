@@ -3,16 +3,16 @@
 import { QuickCapture } from "@/components/chat/QuickCapture";
 import { SessionList } from "@/components/chat/SessionList";
 import { BackendSwitch } from "@/components/chat/backend";
-import { PageHeader } from "@/components/ui";
+import { Kbd, Page, PageHeader } from "@/components/ui";
 
 export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; context?: string; draft?: string }) {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <Page width="narrow">
       <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." actions={<BackendSwitch />} />
-      <div className="mb-6">
+      <div className="mb-5">
         {context ? (
-          <div className="mb-2 rounded-xl border border-line bg-surface-2 p-3 text-sm">
-            <p className="text-xs font-medium text-muted">Attached context</p>
+          <div className="mb-2 rounded-[10px] border border-line bg-surface-2 px-3 py-2 text-sm">
+            <p className="eyebrow">Attached context</p>
             <p className="mt-0.5">{context}</p>
           </div>
         ) : null}
@@ -26,7 +26,9 @@ export function ChatIndex({ startNew, context, draft }: { startNew?: boolean; co
       <div className="lg:hidden">
         <SessionList />
       </div>
-      <p className="hidden text-sm text-muted lg:block">Choose a conversation on the left, or start one above.</p>
-    </div>
+      <p className="hidden text-sm text-muted lg:block">
+        Choose a conversation on the left, or start one above. <Kbd>Enter</Kbd> sends, <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> adds a line.
+      </p>
+    </Page>
   );
 }

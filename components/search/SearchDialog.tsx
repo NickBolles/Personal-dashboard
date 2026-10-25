@@ -81,13 +81,15 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-3 pt-[10vh]"
-      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div role="dialog" aria-modal="true" aria-label="Search" className="card w-full max-w-xl overflow-hidden p-0 shadow-xl">
-        <div className="flex items-center gap-2 border-b border-line px-3">
-          <SearchIcon className="h-5 w-5 shrink-0 text-muted" />
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 p-3 pt-[8vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search"
+        className="w-full max-w-[620px] overflow-hidden rounded-[14px] border border-line bg-surface shadow-[var(--shadow-pop)]"
+      >
+        <div className="flex items-center gap-2.5 border-b border-line px-4">
+          <SearchIcon className="h-[18px] w-[18px] shrink-0 text-muted" />
           <input
             ref={input}
             role="combobox"
@@ -97,7 +99,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             aria-autocomplete="list"
             aria-label="Search Jarvis"
             placeholder="Search, or type a command (“today”, “capture”, “validate”)…"
-            className="min-h-14 w-full bg-transparent text-base outline-none"
+            className="min-h-[52px] w-full bg-transparent text-base outline-none placeholder:text-muted"
             value={q}
             onChange={(e) => {
               setQ(e.target.value);
@@ -120,11 +122,16 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             }}
           />
           {res.isFetching ? <Spinner label="Searching" /> : null}
-          <button type="button" onClick={onClose} className="tap rounded-lg px-2 text-sm text-muted hover:bg-surface-2">
-            Esc
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close search (Esc)"
+            className="tap inline-flex shrink-0 items-center justify-center rounded-[8px] px-1.5 hover:bg-surface-2"
+          >
+            <kbd className="kbd">Esc</kbd>
           </button>
         </div>
-        <ul id={listId} role="listbox" aria-label="Commands and results" className="max-h-[60vh] overflow-y-auto py-1">
+        <ul id={listId} role="listbox" aria-label="Commands and results" className="max-h-[60vh] overflow-y-auto p-1.5">
           {rows.map((row, i) => (
             <li
               key={row.kind === "command" ? `cmd:${row.c.id}` : row.r.id}
@@ -134,15 +141,21 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
               data-command={row.kind === "command" ? row.c.id : undefined}
               onMouseEnter={() => setActive(i)}
               onClick={() => go(row)}
-              className={cx("flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2", i === active && "bg-accent-soft")}
+              className={cx("flex min-h-11 cursor-pointer items-center gap-3 rounded-[8px] px-2.5 py-1.5 dense:min-h-9", i === active && "bg-accent-soft")}
             >
               {row.kind === "command" ? (
                 <>
+                  <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono text-xs text-muted">
+                    ›
+                  </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{row.c.label}</span>
                   <span className="shrink-0 text-xs text-muted">Command · {row.c.group}</span>
                 </>
               ) : (
                 <>
+                  <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono text-xs text-muted">
+                    ·
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{row.r.title}</span>
                     {row.r.subtitle ? <span className="block truncate text-sm text-muted">{row.r.subtitle}</span> : null}
@@ -156,7 +169,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             </li>
           ))}
         </ul>
-        <div className="border-t border-line px-3 py-2 text-xs text-muted" role="status">
+        <div className="border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted" role="status">
           {!debounced
             ? "Type to search or filter commands. ↑↓ to move, Enter to open. Hold the dock orb (or Ctrl+.) for the action map."
             : res.isError

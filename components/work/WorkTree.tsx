@@ -190,7 +190,7 @@ export function WorkTree({
         aria-hidden="true"
         title="Drag to move"
         data-drag-handle={i.id}
-        className="inline-flex h-9 w-5 shrink-0 cursor-grab touch-none items-center justify-center text-muted select-none active:cursor-grabbing"
+        className="wk-grip inline-flex h-9 w-4 shrink-0 cursor-grab touch-none items-center justify-center text-muted select-none active:cursor-grabbing"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e: ReactPointerEvent<HTMLSpanElement>) => {
           if (e.button !== 0) return;
@@ -212,7 +212,7 @@ export function WorkTree({
         }}
         onPointerCancel={() => setDrag(null)}
       >
-        <svg viewBox="0 0 12 16" className="h-4 w-3" fill="currentColor">
+        <svg viewBox="0 0 12 16" className="h-3.5 w-2.5" fill="currentColor">
           <circle cx="3" cy="3" r="1.3" />
           <circle cx="9" cy="3" r="1.3" />
           <circle cx="3" cy="8" r="1.3" />
@@ -255,31 +255,34 @@ export function WorkTree({
         >
           <div
             data-row-id={i.id}
+            data-selected={selected === i.id || undefined}
             className={cx(
-              "relative flex min-h-11 cursor-pointer items-center gap-2 rounded-lg pr-2 text-sm",
-              selected === i.id ? "bg-accent-soft text-accent font-medium" : "hover:bg-surface-2",
+              "wk-tree-row relative flex cursor-pointer items-center gap-1.5 pr-2 text-[13.5px]",
+              selected !== i.id && "hover:bg-surface",
+              level === 1 && "font-semibold",
               i.archived && "opacity-60",
+              (i.status === "settled" || i.status === "superseded" || i.status === "abandoned") && selected !== i.id && "text-muted",
               drag?.active && drag.id === i.id && "opacity-50",
               drag?.active && drag.target?.id === i.id && drag.target.pos === "inside" && "ring-2 ring-accent",
               drag?.active && drag.target?.id === i.id && drag.target.pos === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
               drag?.active && drag.target?.id === i.id && drag.target.pos === "after" && "shadow-[inset_0_-2px_0_var(--accent)]",
             )}
-            style={{ paddingLeft: `${(level - 1) * 14 + 4}px` }}
+            style={{ paddingLeft: `${(level - 1) * 12 + 2}px` }}
           >
             {grip(i)}
             <span
               aria-hidden="true"
-              className={cx("inline-flex h-7 w-6 shrink-0 items-center justify-center text-muted", !hasKids && "invisible")}
+              className={cx("inline-flex h-6 w-4 shrink-0 items-center justify-center text-muted", !hasKids && "invisible")}
               onClick={(e) => {
                 e.stopPropagation();
                 toggle(i.id);
               }}
             >
-              <svg viewBox="0 0 24 24" className={cx("h-4 w-4 transition-transform", open && "rotate-90")} fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="m9 6 6 6-6 6" />
+              <svg viewBox="0 0 24 24" className={cx("h-3 w-3 transition-transform", open && "rotate-90")} fill="currentColor">
+                <path d="M8 5l9 7-9 7z" />
               </svg>
             </span>
-            <StatusDot status={i.status} />
+            {i.parentId === null && i.builtIn ? null : <StatusDot status={i.status} />}
             <span className="min-w-0 flex-1 truncate">{i.title}</span>
           </div>
           {hasKids && open ? <ul role="group">{render(i.id, level + 1)}</ul> : null}
@@ -289,13 +292,20 @@ export function WorkTree({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <label htmlFor="work-tree-filter" className="sr-only">
         Filter work
       </label>
-      <input id="work-tree-filter" type="search" className={inputCls} placeholder="Filter work…" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <input
+        id="work-tree-filter"
+        type="search"
+        className={cx(inputCls, "border-line")}
+        placeholder="Filter work…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
       {order.length ? (
-        <ul role="tree" aria-label="Work items" className="space-y-0.5">
+        <ul role="tree" aria-label="Work items">
           {render(null, 1)}
         </ul>
       ) : (

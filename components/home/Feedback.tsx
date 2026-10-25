@@ -61,7 +61,8 @@ export const HIDE_CHOICES: { label: string; until: (now: Date) => Date }[] = [
   { label: "For a week", until: (now) => localMorning(now, 7) },
 ];
 
-const chip = "press min-h-11 rounded-full border border-line px-3 text-sm text-text hover:bg-surface-2 disabled:opacity-50";
+const chip =
+  "press min-h-11 rounded-full border border-line bg-surface px-3 text-sm text-text hover:border-line-strong hover:bg-surface-2 disabled:opacity-50 dense:min-h-7 dense:px-2.5 dense:text-xs";
 
 /**
  * Feedback for one card. Every choice says what it will do; all of it is

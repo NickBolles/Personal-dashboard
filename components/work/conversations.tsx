@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
+import { Button, Dialog, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
 import type { ConversationOption, ConversationsResponse, LinkRole, UnfiledConversation, UnfiledResponse, WorkItem } from "@/lib/work";
 import { useWorkMutation } from "./common";
 
@@ -156,12 +156,12 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
   const list = q.data?.conversations ?? [];
   const shown = all ? list : list.slice(0, 5);
   return (
-    <Card as="section" aria-labelledby="unfiled-heading" className="min-w-0 p-3">
+    <section aria-labelledby="unfiled-heading" className="wk-card min-w-0 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 id="unfiled-heading" className="font-semibold">
+        <h2 id="unfiled-heading" className="wk-label">
           Unfiled conversations
         </h2>
-        {q.data ? <Badge>{q.data.total}</Badge> : null}
+        {q.data ? <span className="text-xs text-muted tabular-nums">{q.data.total}</span> : null}
       </div>
       {q.isPending ? <Spinner label="Loading conversations…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
@@ -169,12 +169,12 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
         <p className="mb-2 text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; this may be incomplete.</p>
       ) : null}
       {q.data && !list.length ? <p className="text-sm text-muted">Every recent conversation is filed.</p> : null}
-      <ul className="space-y-3">
+      <ul className="wk-rows">
         {shown.map((c) => {
           const top = c.suggestions[0];
           return (
-            <li key={c.id} className="rounded-lg border border-line p-2" data-unfiled={c.id}>
-              <p className="font-medium break-words">
+            <li key={c.id} className="py-2" data-unfiled={c.id}>
+              <p className="text-[14px] font-semibold break-words">
                 <Link href={`/chat/${encodeURIComponent(c.id)}`} className="hover:underline">
                   {c.title}
                 </Link>
@@ -182,7 +182,7 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
               <p className="text-xs text-muted">
                 {BACKEND[c.backend]} · {fmtWhen(c.lastActiveAt)}
               </p>
-              <div className="mt-2 flex flex-wrap gap-1">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {top ? (
                   <Button
                     size="sm"
@@ -230,7 +230,7 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
           onFile={(itemId) => file.mutate({ sessionId: filing.id, itemId }, { onSuccess: () => setFiling(null) })}
         />
       ) : null}
-    </Card>
+    </section>
   );
 }
 

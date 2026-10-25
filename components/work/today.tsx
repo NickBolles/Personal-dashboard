@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Card, ErrorNote, Spinner, cx } from "@/components/ui";
-import { StatusBadge, fmtDate } from "@/components/work/common";
+import { Button, ErrorNote, Spinner, cx } from "@/components/ui";
+import { StatusBadge, StatusDot, fmtDate } from "@/components/work/common";
 import type { InboxResponse, TodayCard, TodayResponse } from "@/lib/work";
 
 export function useToday() {
@@ -24,7 +24,7 @@ export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
           <>
             <span
               className={cx(
-                "block text-2xl leading-tight font-semibold tabular-nums",
+                "block text-[22px] leading-7 font-semibold tracking-tight tabular-nums",
                 !!k.value && k.tone === "warn" && "text-warn",
                 !!k.value && k.tone === "danger" && "text-danger",
                 !!k.value && k.tone === "ok" && "text-ok",
@@ -39,16 +39,11 @@ export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
         return (
           <li key={k.key} data-kpi={k.key}>
             {k.onClick ? (
-              <button
-                type="button"
-                onClick={k.onClick}
-                className="tap card block w-full p-3 text-left hover:bg-surface-2"
-                aria-label={`${k.label}: ${k.value ?? "unknown"}`}
-              >
+              <button type="button" onClick={k.onClick} className="tap wk-kpi" aria-label={`${k.label}: ${k.value ?? "unknown"}`}>
                 {body}
               </button>
             ) : (
-              <div className="card p-3">{body}</div>
+              <div className="wk-kpi">{body}</div>
             )}
           </li>
         );
@@ -64,6 +59,7 @@ function CardList({
   empty,
   action,
   onOpen,
+  urgent,
 }: {
   title: string;
   id: string;
@@ -71,27 +67,40 @@ function CardList({
   empty: string;
   action: { label: string; do?: string };
   onOpen: (id: string, action?: string) => void;
+  /** a warn accent on the rows (proof due) */
+  urgent?: boolean;
 }) {
   return (
-    <Card as="section" aria-labelledby={id} className="min-w-0 p-3">
-      <h3 id={id} className="mb-2 text-sm font-semibold tracking-wide text-muted uppercase">
-        {title}
-      </h3>
+    <section aria-labelledby={id} className="wk-card min-w-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <h3 id={id} className="wk-label">
+          {title}
+        </h3>
+        {cards.length ? <span className="text-xs text-muted tabular-nums">{cards.length}</span> : null}
+      </div>
       {cards.length ? (
-        <ul className="divide-y divide-line">
+        <ul className="wk-rows">
           {cards.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <div className="min-w-0 flex-1">
-                <button type="button" className="tap min-w-0 text-left font-medium break-words hover:underline" onClick={() => onOpen(c.id)}>
+            <li
+              key={c.id}
+              className={cx("wk-row-hover flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2", urgent && "border-l-[3px] border-l-warn pl-[9px]")}
+            >
+              <StatusDot status={c.status} />
+              <div className="min-w-0 flex-1 basis-48">
+                <button
+                  type="button"
+                  className="tap min-w-0 text-left text-[14px] leading-snug font-semibold break-words hover:underline"
+                  onClick={() => onOpen(c.id)}
+                >
                   {c.title}
                 </button>
                 <p className="text-xs break-words text-muted">
                   {[c.path, c.detail, c.due ? `due ${fmtDate(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              <span className="flex shrink-0 items-center gap-2">
+              <span className="ml-auto flex shrink-0 items-center gap-2">
                 <StatusBadge status={c.status} />
-                <Button size="sm" onClick={() => onOpen(c.id, action.do)} aria-label={`${action.label}: ${c.title}`}>
+                <Button size="sm" variant={urgent ? "primary" : "secondary"} onClick={() => onOpen(c.id, action.do)} aria-label={`${action.label}: ${c.title}`}>
                   {action.label}
                 </Button>
               </span>
@@ -99,9 +108,9 @@ function CardList({
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted">{empty}</p>
+        <p className="px-3 py-2.5 text-[13px] text-muted">{empty}</p>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -114,13 +123,16 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const t = q.data;
   const inboxCount = inbox.data?.count ?? null;
   const first = t.continue[0];
+  const [y, m, d] = t.today.split("-").map(Number);
+  const dateLabel = new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
   return (
-    <section aria-labelledby="today-title" className="space-y-4" data-testid="work-today">
+    <section aria-labelledby="today-title" className="space-y-3" data-testid="work-today">
       <div>
-        <h2 id="today-title" className="text-xl font-semibold">
+        <p className="wk-eyebrow">{dateLabel}</p>
+        <h2 id="today-title" className="text-xl leading-tight font-semibold tracking-tight">
           Today
         </h2>
-        <p className="text-sm text-muted">
+        <p className="mt-0.5 text-[13.5px] text-muted">
           {t.proofDue.length ? `${t.proofDue.length === 1 ? "One thing needs" : `${t.proofDue.length} things need`} proof` : "Nothing is waiting on proof"}
           {first ? `, and “${first.title}” is ready to continue.` : "."}
         </p>
@@ -142,7 +154,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         action={{ label: "Continue" }}
         onOpen={onOpen}
       />
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <CardList
           id="today-proof"
           title="Proof due"
@@ -150,6 +162,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           empty="No work is waiting for validation."
           action={{ label: "Record result", do: "validate" }}
           onOpen={onOpen}
+          urgent
         />
         <CardList
           id="today-settle"
@@ -159,10 +172,10 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           action={{ label: "Settle…", do: "settle" }}
           onOpen={onOpen}
         />
+        {t.overdue.length ? <CardList id="today-overdue" title="Overdue" cards={t.overdue} empty="" action={{ label: "Open" }} onOpen={onOpen} /> : null}
       </div>
-      {t.overdue.length ? <CardList id="today-overdue" title="Overdue" cards={t.overdue} empty="" action={{ label: "Open" }} onOpen={onOpen} /> : null}
       {inboxCount ? (
-        <p className="text-sm">
+        <p className="text-[13px]">
           <button type="button" className="tap text-accent underline" onClick={onInbox}>
             {inboxCount} waiting in the inbox
           </button>
