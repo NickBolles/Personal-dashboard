@@ -20,6 +20,8 @@ import {
 } from "@/lib/github";
 import { checkStatus, decryptToken, githubGet, storedConnections } from "./github";
 import { parseScopes, tokenType, tokenWarnings } from "./github-rules";
+import { appSetup, publicApp } from "./github-app";
+import { defaultAppName } from "./github-app-rules";
 
 /**
  * Admin settings for GitHub (Settings → Connections → GitHub): one read-only
@@ -261,7 +263,7 @@ export function setPollMinutes(user: CurrentUser, minutes: number, correlationId
   return minutes;
 }
 
-export function githubSettings(poller: GithubSettingsResponse["poller"]): GithubSettingsResponse {
+export function githubSettings(poller: GithubSettingsResponse["poller"], origin: string): GithubSettingsResponse {
   const s = getSetting<StoredSecret>(WEBHOOK_KEY);
   return {
     connections: listGithubConnections(),
@@ -269,5 +271,7 @@ export function githubSettings(poller: GithubSettingsResponse["poller"]): Github
     webhook: { path: WEBHOOK_PATH, secretSet: !!s?.cipher, secretCreatedAt: s?.createdAt ?? null },
     pollMinutes: pollMinutes(),
     poller,
+    app: publicApp(),
+    appSetup: appSetup(origin, defaultAppName(origin)),
   };
 }

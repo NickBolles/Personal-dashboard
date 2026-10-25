@@ -11,7 +11,10 @@ import { ChevronIcon } from "@/components/icons";
 
 export function ConnectionsView() {
   const q = useQuery({ queryKey: ["integrations"], queryFn: () => api.get<{ integrations: PublicIntegration[] }>("/api/integrations") });
-  const [open, setOpen] = useState<string | null>(() => (typeof window !== "undefined" ? window.location.hash.slice(1) || null : null));
+  // #<kind> opens that panel; GitHub's App redirects (?github_app=…) open the GitHub panel.
+  const [open, setOpen] = useState<string | null>(() =>
+    typeof window !== "undefined" ? window.location.hash.slice(1) || (new URLSearchParams(window.location.search).has("github_app") ? "github" : null) : null,
+  );
   return (
     <div className="mx-auto w-full max-w-[880px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
@@ -66,7 +69,7 @@ export function ConnectionsView() {
             >
               <span className="min-w-0">
                 <span className="block font-semibold">GitHub</span>
-                <span className="block truncate text-sm text-muted">Read-only PR and issue state for the Work hub, one token per owner</span>
+                <span className="block truncate text-sm text-muted">Read-only PR, CI and issue state for the Work hub: GitHub App or tokens</span>
               </span>
               <ChevronIcon className={cx("h-5 w-5 shrink-0 transition-transform", open === "github" && "rotate-90")} />
             </button>

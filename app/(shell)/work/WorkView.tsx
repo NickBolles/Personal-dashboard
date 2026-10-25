@@ -1673,9 +1673,18 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
           ) : null}
           {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
         </div>
-        {l.externalState ? (
-          <Badge tone={l.externalState === "merged" ? "ok" : l.externalState === "closed" ? "neutral" : "accent"}>{l.externalState}</Badge>
-        ) : null}
+        <span className="flex flex-wrap gap-1">
+          {l.externalState ? (
+            <Badge tone={l.externalState === "merged" ? "ok" : l.externalState === "closed" ? "neutral" : "accent"}>{l.externalState}</Badge>
+          ) : null}
+          {l.kind === "github_pr" && l.checksState ? (
+            <Badge tone={l.checksState === "success" ? "ok" : l.checksState === "failure" ? "danger" : "warn"}>
+              <span data-testid="link-checks">
+                {l.checksState === "success" ? "checks green" : l.checksState === "failure" ? "checks red" : "checks running"}
+              </span>
+            </Badge>
+          ) : null}
+        </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         {l.kind === "chat_session" ? (

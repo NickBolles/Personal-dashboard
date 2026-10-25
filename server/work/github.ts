@@ -5,13 +5,17 @@ import { getDb, schema } from "@/server/db";
 import { decrypt } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
 import { processSingleton } from "@/server/singleton";
-import type { ExternalState, PrRef } from "@/lib/work";
+import type { ChecksState, ExternalState, PrRef } from "@/lib/work";
 import { parseAssignedIssues, pickConnection, rateLimitBackoff, type AssignedIssue } from "./github-rules";
+import { combineChecks } from "./github-app-rules";
+import { appReadEnabled, resolveAppToken } from "./github-app";
 
 /**
  * Read-only GitHub access for the Work hub. Only GETs; Jarvis never writes to
- * GitHub. Tokens stay on the server: per-owner connections (Settings →
- * Connections → GitHub, encrypted) with JARVIS_GITHUB_TOKEN as the fallback.
+ * GitHub. Tokens stay on the server, in this order: the GitHub App's
+ * installation covering the repo owner (server/work/github-app.ts), the
+ * per-owner token connection (Settings → Connections → GitHub, encrypted),
+ * then JARVIS_GITHUB_TOKEN.
  * The API base is JARVIS_GITHUB_API_URL (default https://api.github.com) so
  * tests never reach the real API.
  */
@@ -30,7 +34,13 @@ export type StoredConnection = {
   createdBy: string;
   login: string | null;
 };
-export type ResolvedToken = { token: string; source: "connection" | "env"; connectionId: string | null; backoffKey: string };
+export type ResolvedToken = {
+  token: string;
+  source: "app" | "connection" | "env";
+  connectionId: string | null;
+  installationId?: number | null;
+  backoffKey: string;
+};
 
 function parseRepos(json: string): string[] {
   try {
@@ -69,16 +79,21 @@ export function decryptToken(cipher: string): string | null {
   }
 }
 
-/** Any way to read GitHub: a saved connection or JARVIS_GITHUB_TOKEN. */
+/** Any way to read GitHub: an allowlisted App installation, a saved connection or JARVIS_GITHUB_TOKEN. */
 export function githubRefreshEnabled() {
-  return !!config.githubToken || getDb().select({ id: schema.githubConnections.id }).from(schema.githubConnections).limit(1).all().length > 0;
+  return (
+    !!config.githubToken || getDb().select({ id: schema.githubConnections.id }).from(schema.githubConnections).limit(1).all().length > 0 || appReadEnabled()
+  );
 }
 
 /**
- * The token for `owner/repo`: the connection for that owner (respecting its
- * repo allowlist), else JARVIS_GITHUB_TOKEN (backward compatible), else null.
+ * The token for `owner/repo`: an allowlisted GitHub App installation covering
+ * it, else the connection for that owner (respecting its repo allowlist),
+ * else JARVIS_GITHUB_TOKEN (backward compatible), else null.
  */
-export function resolveGithubToken(owner: string, repo?: string | null): ResolvedToken | null {
+export async function resolveGithubToken(owner: string, repo?: string | null): Promise<ResolvedToken | null> {
+  const app = await resolveAppToken(owner, repo);
+  if (app) return app;
   const c = pickConnection(storedConnections(), owner, repo);
   if (c) {
     const token = decryptToken(c.tokenCipher);
@@ -140,8 +155,11 @@ export function checkStatus(r: GithubResponse, what: string) {
   if (r.status < 200 || r.status >= 300) throw new HttpError(502, "github_error", `GitHub answered ${r.status}`);
 }
 
-async function getState(ref: PrRef, what: "pull request" | "issue"): Promise<Record<string, unknown>> {
-  const auth = resolveGithubToken(ref.owner, ref.repo);
+async function getState(
+  ref: Pick<PrRef, "owner" | "repo" | "number">,
+  what: "pull request" | "issue",
+): Promise<{ body: Record<string, unknown>; auth: ResolvedToken }> {
+  const auth = await resolveGithubToken(ref.owner, ref.repo);
   if (!auth) throw new HttpError(409, "github_not_configured", "Add a GitHub connection (Settings → Connections) to refresh from GitHub");
   const r = await githubGet(
     `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/${what === "issue" ? "issues" : "pulls"}/${ref.number}`,
@@ -150,20 +168,54 @@ async function getState(ref: PrRef, what: "pull request" | "issue"): Promise<Rec
   checkStatus(r, what);
   const body = r.body as Record<string, unknown> | null;
   if (!body || (body.state !== "open" && body.state !== "closed")) throw new HttpError(502, "github_shape", "Unexpected response from GitHub");
-  return body;
+  return { body, auth };
 }
 
 const titleOf = (b: Record<string, unknown>) => (typeof b.title === "string" ? b.title.slice(0, 200) : null);
 
-export async function fetchPullState(ref: PrRef): Promise<{ state: ExternalState; title: string | null }> {
-  const body = await getState(ref, "pull request");
+/**
+ * Combined CI state of a commit (read-only GETs: check suites + commit
+ * statuses). Null when it can't be read (e.g. a token without checks/statuses
+ * read access) — never fails the caller.
+ */
+export async function fetchChecksState(ref: Pick<PrRef, "owner" | "repo">, sha: string, auth?: ResolvedToken | null): Promise<ChecksState | null> {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha)) return null;
+  const a = auth ?? (await resolveGithubToken(ref.owner, ref.repo));
+  if (!a) return null;
+  const base = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/commits/${sha}`;
+  try {
+    const [suites, status] = await Promise.all([githubGet(`${base}/check-suites?per_page=100`, a), githubGet(`${base}/status`, a)]);
+    const list = suites.status === 200 ? ((suites.body as { check_suites?: unknown[] } | null)?.check_suites ?? []) : [];
+    const combined = status.status === 200 ? (status.body as { state?: unknown; total_count?: unknown } | null) : null;
+    if (suites.status !== 200 && status.status !== 200) return null;
+    return combineChecks(list as Record<string, unknown>[], combined);
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPullState(ref: PrRef): Promise<{ state: ExternalState; title: string | null; checks: ChecksState | null }> {
+  const { body, auth } = await getState(ref, "pull request");
   const merged = body.merged === true || (typeof body.merged_at === "string" && !!body.merged_at);
-  return { state: merged ? "merged" : body.state === "closed" ? "closed" : "open", title: titleOf(body) };
+  const sha = (body.head as { sha?: unknown } | null)?.sha;
+  const checks = typeof sha === "string" ? await fetchChecksState(ref, sha, auth) : null;
+  return { state: merged ? "merged" : body.state === "closed" ? "closed" : "open", title: titleOf(body), checks };
+}
+
+/** The PR's current head commit (read-only GET); null when it can't be read. */
+export async function fetchPullHead(ref: Pick<PrRef, "owner" | "repo" | "number">): Promise<string | null> {
+  try {
+    const { body } = await getState(ref, "pull request");
+    const sha = (body.head as { sha?: unknown } | null)?.sha;
+    return typeof sha === "string" ? sha : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Issues are only open or closed. */
 export async function fetchIssueState(ref: PrRef): Promise<{ state: ExternalState; title: string | null }> {
-  const body = await getState(ref, "issue");
+  const { body } = await getState(ref, "issue");
   return { state: body.state === "closed" ? "closed" : "open", title: titleOf(body) };
 }
 

@@ -44,6 +44,10 @@ export type GithubSettingsResponse = {
   webhook: { path: string; secretSet: boolean; secretCreatedAt: string | null };
   pollMinutes: number;
   poller: { running: boolean; lastTickAt: string | null; lastResult: string | null };
+  /** the read-only GitHub App (manifest flow), if one was created */
+  app: PublicGithubApp | null;
+  /** what "Create GitHub App" would send (no secrets) */
+  appSetup: GithubAppSetup;
 };
 
 export const GITHUB_OWNER_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
@@ -90,3 +94,98 @@ export function fineGrainedTokenUrl(ownerName: string) {
 
 export const WEBHOOK_PATH = "/api/work/github/webhook";
 export const DEFAULT_POLL_MINUTES = 10;
+
+// --- GitHub App (manifest flow; docs/work.md "GitHub App") ---
+
+export const GITHUB_WEB = "https://github.com";
+export const APP_CALLBACK_PATH = "/api/github/app/callback";
+/** GitHub limits App names to 34 characters and they must be unique on GitHub. */
+export const APP_NAME_MAX = 34;
+
+export type GithubAppSetup = {
+  /** "Jarvis (<host>)", trimmed to 34 characters */
+  defaultName: string;
+  origin: string;
+  callbackUrl: string;
+  webhookUrl: string;
+  /** GitHub can only deliver webhooks to a public https URL */
+  https: boolean;
+};
+
+export type PublicGithubInstallation = {
+  id: number;
+  account: string;
+  accountType: string;
+  repositorySelection: "all" | "selected";
+  repos: string[] | null;
+  suspended: boolean;
+  /** in the account allowlist; otherwise ignored (no tokens, webhooks dropped) and flagged */
+  allowed: boolean;
+  updatedAt: string;
+};
+
+/** What the browser sees of the App: never the client secret, private key or webhook secret. */
+export type PublicGithubApp = {
+  appId: number;
+  slug: string;
+  name: string;
+  owner: string;
+  ownerType: string;
+  htmlUrl: string;
+  installUrl: string;
+  webhookSecretSet: boolean;
+  createdAt: string;
+  installations: PublicGithubInstallation[];
+  allowlist: string[];
+  allowlistIsDefault: boolean;
+  lastRefresh: { at: string; ok: boolean; detail: string } | null;
+};
+
+export const githubAppManifestSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(APP_NAME_MAX, `GitHub allows up to ${APP_NAME_MAX} characters`),
+    target: z.enum(["user", "org"]),
+    org: z.string().trim().regex(GITHUB_OWNER_RE, "A GitHub organization name").optional(),
+  })
+  .strict()
+  .refine((v) => v.target === "user" || !!v.org, { message: "Organization is required", path: ["org"] });
+
+const webhookSecretField = z.string().trim().min(16, "Webhook secrets are at least 16 characters").max(255);
+
+export const githubAppUpdateSchema = z
+  .object({
+    /** accounts whose installations Jarvis uses; null = default (token owners + the App owner) */
+    allowlist: z.array(z.string().trim().regex(GITHUB_OWNER_RE, "GitHub user or organization names")).max(50).nullable().optional(),
+    /** replace the App's webhook secret (write-only) */
+    webhookSecret: webhookSecretField.optional(),
+  })
+  .strict();
+
+/** "Connect existing GitHub App": App id + private key (+ webhook secret), all write-only; checked with GET /app. */
+export const githubAppConnectSchema = z
+  .object({
+    appId: z.coerce.number().int().positive("The App ID is a number").max(1e12),
+    pem: z
+      .string()
+      .trim()
+      .max(10_000)
+      .refine((v) => /-----BEGIN (RSA )?PRIVATE KEY-----[\s\S]+-----END (RSA )?PRIVATE KEY-----/.test(v), "Paste the App's private key (.pem)"),
+    webhookSecret: webhookSecretField.optional(),
+  })
+  .strict();
+
+export function appInstallUrl(slug: string) {
+  return `${GITHUB_WEB}/apps/${encodeURIComponent(slug)}/installations/new`;
+}
+
+/** Callback outcomes shown on Settings → Connections (`?github_app=<code>`). */
+export const APP_CALLBACK_MESSAGES: Record<string, string> = {
+  created: "GitHub App created. Next: install it on your account and organization.",
+  installed: "Installed on GitHub. Jarvis is reading the installations…",
+  state: "That GitHub link expired or wasn't started from this session. Start again from “Create GitHub App”.",
+  forbidden: "Only an admin signed in to Jarvis can finish creating the GitHub App.",
+  exists: "A GitHub App is already set up. Forget it first to create another.",
+  missing_code: "GitHub didn't send a code back. Start again.",
+  conversion: "GitHub refused the code (it's single-use and expires after an hour). Start again.",
+  unreachable: "Couldn't reach GitHub to finish. Start again.",
+};

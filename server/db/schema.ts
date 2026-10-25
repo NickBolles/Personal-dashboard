@@ -825,6 +825,9 @@ export const workLinks = sqliteTable(
     checkedAt: text("checked_at"),
     /** why the last readback failed (cleared on success) */
     checkError: text("check_error"),
+    /** PRs: combined CI state of the head commit (success | failure | pending), from check suites + commit statuses; null = unknown */
+    checksState: text("checks_state"),
+    checksAt: text("checks_at"),
     createdAt: text("created_at").notNull().default(now),
   },
   (t) => [index("work_links_item_idx").on(t.itemId)],
@@ -1052,6 +1055,70 @@ export const workInbox = sqliteTable(
   },
   (t) => [uniqueIndex("work_inbox_external_idx").on(t.userId, t.source, t.externalId), index("work_inbox_owner_idx").on(t.userId, t.state)],
 );
+
+/**
+ * The read-only GitHub App Jarvis created through the manifest flow (Settings
+ * → Connections → GitHub → Create GitHub App). At most one. Client secret,
+ * private key (PEM) and webhook secret are AES-256-GCM encrypted
+ * (server/crypto.ts) and never leave the server.
+ */
+export const githubApps = sqliteTable("github_apps", {
+  id: text("id").primaryKey(),
+  /** GitHub's numeric App id (the JWT `iss`) */
+  appId: integer("app_id").notNull(),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  /** the account that owns the App registration */
+  ownerLogin: text("owner_login").notNull(),
+  ownerType: text("owner_type").notNull().default("User"),
+  htmlUrl: text("html_url"),
+  clientId: text("client_id").notNull(),
+  /** null when the App was connected by id + private key (no client secret needed for read access) */
+  clientSecretCipher: text("client_secret_cipher"),
+  pemCipher: text("pem_cipher").notNull(),
+  /** null when GitHub didn't return one (webhooks then need the legacy secret) */
+  webhookSecretCipher: text("webhook_secret_cipher"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull().default(now),
+  updatedAt: text("updated_at").notNull().default(now),
+});
+
+/** Installations of the App (accounts it was installed on), refreshed via the App JWT and installation webhooks. */
+export const githubAppInstallations = sqliteTable("github_app_installations", {
+  /** GitHub installation id */
+  id: integer("id").primaryKey(),
+  appRowId: text("app_row_id")
+    .notNull()
+    .references(() => githubApps.id, { onDelete: "cascade" }),
+  accountLogin: text("account_login").notNull(),
+  /** lowercase login, matched against repo owners and the account allowlist */
+  accountKey: text("account_key").notNull(),
+  /** User | Organization */
+  accountType: text("account_type").notNull().default("User"),
+  /** all | selected */
+  repositorySelection: text("repository_selection").notNull().default("selected"),
+  /** JSON array of repository names the installation covers (as last read); null = not read yet */
+  repos: text("repos"),
+  suspended: integer("suspended", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull().default(now),
+});
+
+/**
+ * One-time `state` values for the manifest flow: sha256 of the state, bound to
+ * the admin and their session, short-lived (10 min), deleted when used.
+ */
+export const githubAppStates = sqliteTable("github_app_states", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** sha256 of the session cookie (or "proxy:<user>" in proxy auth mode) */
+  sessionKey: text("session_key").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull().default(now),
+});
 
 /** X-GitHub-Delivery ids already handled by the read-only webhook (dedupe; pruned after 7 days). */
 export const workGithubDeliveries = sqliteTable("work_github_deliveries", {
