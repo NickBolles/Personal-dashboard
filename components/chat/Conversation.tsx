@@ -274,7 +274,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   const phase = run.state.runId ? run.state.phase : lastOutcome;
   const liveActive = run.active;
-  const showLive = Boolean(run.state.runId) && (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
+  // A completed run's reply can land in the refetched transcript one render before the live copy is
+  // cleared (onTerminal's refetch → clear); don't show the same reply twice in that window.
+  const liveText = (run.state.text || run.state.output || "").trim();
+  const lastAssistant = [...detail.timeline].reverse().find((t) => t.kind === "assistant");
+  const liveInTranscript =
+    run.state.phase === "completed" && Boolean(liveText) && Boolean(lastAssistant && "text" in lastAssistant && lastAssistant.text.trim() === liveText);
+  const showLive =
+    Boolean(run.state.runId) &&
+    !liveInTranscript &&
+    (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 

@@ -147,12 +147,13 @@ export function WorkView({
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
-        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+        <header className="wk-pane-head mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-1">
           <div className="min-w-0">
             <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
             <p className="text-xs text-muted lg:sr-only">Work and conversations in one private tree.</p>
           </div>
-          <div className="flex shrink-0 gap-1">
+          {/* Narrow desktop pane: the actions drop to their own row (title stays visible). */}
+          <div className="wk-pane-actions flex shrink-0 gap-1">
             {canChat ? (
               <Button size="sm" variant="primary" busy={newChat.busy} onClick={() => newChat.start()} title="New chat (lands in Miscellaneous)">
                 New chat
@@ -166,7 +167,7 @@ export function WorkView({
             </Button>
           </div>
         </header>
-        <AreasViewSwitch className="mb-2 px-1" />
+        <AreasViewSwitch className="seg-fill mb-2 px-1" />
         <nav aria-label="Areas sections">
           <ul
             className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${
