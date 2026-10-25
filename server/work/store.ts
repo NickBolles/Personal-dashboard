@@ -1025,7 +1025,8 @@ export async function readBack(owner: { id: string }, link: typeof schema.workLi
     const db = getDb();
     const patch: Partial<typeof schema.workLinks.$inferInsert> = { checkedAt: nowIso(), checkError: null };
     if (remote.title && link.title === `${ref.owner}/${ref.repo}#${ref.number}`) patch.title = `${remote.title} (#${ref.number})`;
-    if ("checks" in remote && remote.checks) Object.assign(patch, { checksState: remote.checks, checksAt: nowIso() });
+    // The current head's result (possibly none yet) always replaces an earlier commit's badge.
+    if ("checks" in remote) Object.assign(patch, { checksState: remote.checks ?? null, checksAt: nowIso() });
     db.update(schema.workLinks).set(patch).where(eq(schema.workLinks.id, link.id)).run();
     // Changed meanwhile (a webhook or a manual mark landed while we were reading)? Keep the newer state.
     const now = db.select({ s: schema.workLinks.externalState }).from(schema.workLinks).where(eq(schema.workLinks.id, link.id)).get();

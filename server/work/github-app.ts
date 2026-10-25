@@ -405,6 +405,20 @@ function upsertInstallation(
  * installation. Installations outside the allowlist are recorded (flagged)
  * but never get a token. Removed installations are forgotten.
  */
+/** Every repository an installation covers (all pages). Null when any page can't be read, so coverage is never cached partially. */
+export async function listInstallationRepos(token: string, maxPages = 50): Promise<string[] | null> {
+  const names: string[] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const rr = await githubCall("GET", `/installation/repositories?per_page=100&page=${page}`, token);
+    const b = rr.body as { repositories?: { name?: unknown }[]; total_count?: unknown } | null;
+    if (rr.status !== 200 || !Array.isArray(b?.repositories)) return null;
+    for (const x of b.repositories) if (typeof x.name === "string") names.push(x.name);
+    const total = typeof b.total_count === "number" ? b.total_count : null;
+    if (b.repositories.length < 100 || (total !== null && names.length >= total)) return names;
+  }
+  return null;
+}
+
 export async function refreshInstallations(actor: string, correlationId: string) {
   const { app, pem } = credentials();
   const at = new Date().toISOString();
@@ -426,9 +440,7 @@ export async function refreshInstallations(actor: string, correlationId: string)
       if (allowed && !suspended) {
         dropInstallationToken(id);
         const token = await installationToken(id);
-        const rr = await githubCall("GET", "/installation/repositories?per_page=100", token);
-        const b = rr.body as { repositories?: { name?: unknown }[] } | null;
-        if (rr.status === 200 && Array.isArray(b?.repositories)) repos = b.repositories.map((x) => x.name).filter((n): n is string => typeof n === "string");
+        repos = await listInstallationRepos(token);
       } else {
         dropInstallationToken(id);
         if (!allowed) flagged++;

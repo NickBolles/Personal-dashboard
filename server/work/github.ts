@@ -155,7 +155,10 @@ export function checkStatus(r: GithubResponse, what: string) {
   if (r.status < 200 || r.status >= 300) throw new HttpError(502, "github_error", `GitHub answered ${r.status}`);
 }
 
-async function getState(ref: PrRef, what: "pull request" | "issue"): Promise<{ body: Record<string, unknown>; auth: ResolvedToken }> {
+async function getState(
+  ref: Pick<PrRef, "owner" | "repo" | "number">,
+  what: "pull request" | "issue",
+): Promise<{ body: Record<string, unknown>; auth: ResolvedToken }> {
   const auth = await resolveGithubToken(ref.owner, ref.repo);
   if (!auth) throw new HttpError(409, "github_not_configured", "Add a GitHub connection (Settings → Connections) to refresh from GitHub");
   const r = await githubGet(
@@ -197,6 +200,17 @@ export async function fetchPullState(ref: PrRef): Promise<{ state: ExternalState
   const sha = (body.head as { sha?: unknown } | null)?.sha;
   const checks = typeof sha === "string" ? await fetchChecksState(ref, sha, auth) : null;
   return { state: merged ? "merged" : body.state === "closed" ? "closed" : "open", title: titleOf(body), checks };
+}
+
+/** The PR's current head commit (read-only GET); null when it can't be read. */
+export async function fetchPullHead(ref: Pick<PrRef, "owner" | "repo" | "number">): Promise<string | null> {
+  try {
+    const { body } = await getState(ref, "pull request");
+    const sha = (body.head as { sha?: unknown } | null)?.sha;
+    return typeof sha === "string" ? sha : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Issues are only open or closed. */

@@ -6,7 +6,7 @@ import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
 import { webhookSecret } from "./github-connections";
 import { DELIVERY_RETENTION_MS, linkKey, parseWebhookEvent, verifySignature, WEBHOOK_MAX_BYTES, type IssueEvent } from "./github-rules";
-import { fetchChecksState, storedConnections } from "./github";
+import { fetchChecksState, fetchPullHead, storedConnections } from "./github";
 import { appAllowlist, applyInstallationEvent, appWebhookSecret, storedApp } from "./github-app";
 import { accountAllowed, deliveryAccount, parseChecksEvent, parseInstallationEvent, type ChecksEvent } from "./github-app-rules";
 import { applyIssueAssignment } from "./inbox";
@@ -82,19 +82,32 @@ function issueIntake(ev: IssueEvent) {
 async function applyChecks(ev: ChecksEvent, now: Date) {
   let linked = 0;
   let changed = 0;
-  let combined: Awaited<ReturnType<typeof fetchChecksState>> | undefined;
+  let stale = 0;
+  const byHead = new Map<string, Awaited<ReturnType<typeof fetchChecksState>>>();
   for (const n of ev.prNumbers) {
     const links = linksFor("github_pr", linkKey({ owner: ev.owner, repo: ev.repo, number: n }));
     if (!links.length) continue;
-    if (combined === undefined) combined = ev.sha ? await fetchChecksState(ev, ev.sha) : null;
-    const state = combined ?? ev.state;
+    // Only the PR's current head decides its badge: an older commit's run finishing late must not overwrite it.
+    // When the head can't be read (no token covers the repo) the signed event is the only signal, so its own state is used.
+    const head = await fetchPullHead({ owner: ev.owner, repo: ev.repo, number: n });
+    let state: Awaited<ReturnType<typeof fetchChecksState>>;
+    if (!head) state = ev.state;
+    else if (ev.sha && ev.sha.toLowerCase() !== head.toLowerCase()) state = null;
+    else {
+      if (!byHead.has(head)) byHead.set(head, await fetchChecksState(ev, head));
+      state = byHead.get(head) ?? ev.state;
+    }
+    if (!state) {
+      stale++;
+      continue;
+    }
     for (const { link } of links) {
       linked++;
       if (link.checksState !== state) changed++;
       getDb().update(schema.workLinks).set({ checksState: state, checksAt: now.toISOString() }).where(eq(schema.workLinks.id, link.id)).run();
     }
   }
-  return { linked, changed };
+  return { linked, changed, stale };
 }
 
 function finish(delivery: string, event: string, correlationId: string, outcome: string, detail: Record<string, unknown>, result: "ok" | "rejected" = "ok") {
@@ -155,8 +168,13 @@ export async function handleGithubWebhook(req: NextRequest, correlationId: strin
     const ce = parseChecksEvent(event, payload);
     if (!ce) return json(202, { ok: true, ignored: event });
     const r = await applyChecks(ce, now);
-    finish(delivery, event, correlationId, `${r.linked} linked, ${r.changed} checks changed`, { linked: r.linked, checksChanged: r.changed, state: ce.state });
-    return json(200, { ok: true, event, linked: r.linked, changed: r.changed });
+    finish(delivery, event, correlationId, `${r.linked} linked, ${r.changed} checks changed, ${r.stale} stale`, {
+      linked: r.linked,
+      checksChanged: r.changed,
+      stale: r.stale,
+      state: ce.state,
+    });
+    return json(200, { ok: true, event, linked: r.linked, changed: r.changed, stale: r.stale });
   }
 
   const ev = parseWebhookEvent(event, payload);

@@ -154,10 +154,15 @@ function stubAppApi(installations: { id: number; account: string; type?: string;
             })),
           )
         : Response.json({ message: "bad jwt" }, { status: 401 }),
-    "GET /api/installation/repositories": (_u, init) => {
+    "GET /api/installation/repositories": (u, init) => {
       const token = new Headers(init.headers).get("authorization")!.slice(7);
       const inst = installations.find((i) => token.startsWith(`inst_${i.id}_`));
-      return inst ? Response.json({ repositories: (inst.repos ?? []).map((name) => ({ name })) }) : Response.json({}, { status: 401 });
+      if (!inst) return Response.json({}, { status: 401 });
+      const q = new URL(u).searchParams;
+      const per = Number(q.get("per_page") ?? 30);
+      const page = Number(q.get("page") ?? 1);
+      const all = inst.repos ?? [];
+      return Response.json({ total_count: all.length, repositories: all.slice((page - 1) * per, page * per).map((name) => ({ name })) });
     },
   };
   for (const i of installations)
@@ -467,6 +472,19 @@ describe("installations, tokens and the resolver", () => {
     expect(reads.map((r) => r.method)).toEqual(["GET", "GET", "GET"]);
     expect(reads.every((r) => r.auth === `Bearer ${api.minted[0]}`)).toBe(true);
     expect(reads[1]!.url).toContain(`/commits/${sha}/`);
+
+    // A new head with no checks reported yet clears the previous commit's badge.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (url.endsWith("/pulls/5")) return Response.json({ number: 5, state: "open", head: { sha: "d".repeat(40) } });
+        if (url.includes("/check-suites")) return Response.json({ check_suites: [] });
+        if (url.endsWith("/status")) return Response.json({ state: "pending", total_count: 0 });
+        return prev(url, init);
+      }),
+    );
+    const again = await store.refreshLink(u, link.id, cid);
+    expect(again.checksState).toBeNull();
   });
 });
 
@@ -575,6 +593,24 @@ describe("webhooks with the App secret", () => {
     expect(await (await checks("success", "chk-1")).json()).toMatchObject({ duplicate: true });
     await checks("success");
     expect(store.getDetail(owner, item.id).links.find((l) => l.id === link.id)!.checksState).toBe("success");
+
+    // A late result for an older commit never overwrites the badge of the PR's current head.
+    const prevFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (url.includes("/repos/NickBolles/jarvis/pulls/7")) return Response.json({ number: 7, state: "open", head: { sha: "c".repeat(40) } });
+        if (url.includes("/access_tokens"))
+          return Response.json({ token: "inst_31_stale", expires_at: new Date(Date.now() + 3600_000).toISOString() }, { status: 201 });
+        return prevFetch(url, init);
+      }),
+    );
+    try {
+      expect(await (await checks("failure", "chk-stale")).json()).toMatchObject({ linked: 0, changed: 0, stale: 1 });
+      expect(store.getDetail(owner, item.id).links.find((l) => l.id === link.id)!.checksState).toBe("success");
+    } finally {
+      vi.stubGlobal("fetch", prevFetch);
+    }
 
     // installation.deleted forgets it.
     await webhook("installation", { action: "deleted", installation: { id: 31, account: { login: "NickBolles" } } }, APP_HOOK_SECRET);
@@ -739,5 +775,17 @@ describe("connect an existing App", () => {
       server.close();
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("installation coverage", () => {
+  it("reads every page of a selected-repositories installation before caching it", async () => {
+    await createApp();
+    const many = Array.from({ length: 150 }, (_, i) => `repo-${i}`);
+    stubAppApi([{ id: 41, account: "NickBolles", repos: many }]);
+    await ghApp.refreshInstallations(owner, cid);
+    const inst = ghApp.publicApp()!.installations.find((i) => i.id === 41)!;
+    expect(inst.repos).toHaveLength(150);
+    expect(inst.repos).toContain("repo-149");
   });
 });
