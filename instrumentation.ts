@@ -18,4 +18,19 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] work GitHub poller didn't start", (err as Error).message);
   }
+  // Standalone push dispatcher (independent of JARVIS_DISABLE_WORKER; skips while the worker runs).
+  try {
+    const { startNotificationDispatcher } = await import("./server/notifications/dispatcher");
+    const { getAiSettings } = await import("./server/ai/settings");
+    startNotificationDispatcher(getAiSettings().dispatchSeconds);
+  } catch (err) {
+    console.error("[jarvis] push dispatcher didn't start", (err as Error).message);
+  }
+  // AI job runner: only arms itself while ai.enabled and Hermes is configured (server/ai/runner.ts).
+  try {
+    const { startAiRunner } = await import("./server/ai/runner");
+    startAiRunner();
+  } catch (err) {
+    console.error("[jarvis] AI runner didn't start", (err as Error).message);
+  }
 }

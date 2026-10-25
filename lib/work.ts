@@ -188,7 +188,12 @@ export type AreaSettings = {
   settlePolicy: SettlePolicy;
   /** days without activity before a suggestion (suggest) or an automatic settle (auto_after_quiet) */
   quietDays: number;
+  /** phase 5 AI actions: allowed (default) | triage_only | excluded. A Finance area is always excluded (server/ai/rules.ts). */
+  aiPolicy: AiPolicy;
 };
+
+export const AI_POLICIES = ["allowed", "triage_only", "excluded"] as const;
+export type AiPolicy = (typeof AI_POLICIES)[number];
 
 export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   agentMode: null,
@@ -200,6 +205,7 @@ export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   contextSources: [],
   settlePolicy: "suggest",
   quietDays: 3,
+  aiPolicy: "allowed",
 };
 
 const repoRe = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -221,6 +227,7 @@ export const areaSettingsSchema = z
     contextSources: z.array(z.enum(CONTEXT_SOURCES)).max(CONTEXT_SOURCES.length),
     settlePolicy: z.enum(SETTLE_POLICIES),
     quietDays: z.number().int().min(1).max(90),
+    aiPolicy: z.enum(AI_POLICIES),
   })
   .partial()
   .strict();

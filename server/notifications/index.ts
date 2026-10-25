@@ -176,11 +176,26 @@ export function pendingPushes(now = new Date()) {
     .from(schema.notifications)
     .where(
       and(
-        eq(schema.notifications.pushState, "pending"),
+        or(
+          eq(schema.notifications.pushState, "pending"),
+          and(eq(schema.notifications.pushState, "sending"), lt(schema.notifications.pushAttemptedAt, new Date(now.getTime() - 5 * 60_000).toISOString())),
+        ),
         or(isNull(schema.notifications.scheduledFor), lte(schema.notifications.scheduledFor, now.toISOString())),
       ),
     )
     .all();
+}
+
+/** pending → sending, only if still pending (or a stale claim older than 5 minutes). Returns true when this caller owns the send. */
+export function claimPush(id: string, now = new Date()) {
+  const N = schema.notifications;
+  const stale = new Date(now.getTime() - 5 * 60_000).toISOString();
+  const res = getDb()
+    .update(N)
+    .set({ pushState: "sending", pushAttemptedAt: now.toISOString() })
+    .where(and(eq(N.id, id), or(eq(N.pushState, "pending"), and(eq(N.pushState, "sending"), lt(N.pushAttemptedAt, stale)))))
+    .run();
+  return res.changes === 1;
 }
 
 export function setPushState(id: string, state: "sent" | "suppressed" | "failed" | "pending") {

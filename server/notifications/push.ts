@@ -8,7 +8,7 @@ import { getSetting, setSetting, getPreferences } from "@/server/settings";
 import { HttpError } from "@/server/http/errors";
 import { inWindow, localMinutes } from "@/lib/time";
 import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
-import { pendingPushes, setPushState, unreadActionableCount } from "./index";
+import { claimPush, pendingPushes, setPushState, unreadActionableCount } from "./index";
 import { fcmData, sendFcmToUser } from "./fcm";
 
 type Vapid = { publicKey: string; privateKey: string };
@@ -144,6 +144,8 @@ export async function deliverPendingPushes(now = new Date()) {
     }
     const cat = NOTIFICATION_CATEGORIES.find((c) => c.id === (n.category as NotificationCategory));
     if (quiet(n.userId) && !(cat?.bypassQuietHours || n.severity === "critical")) continue; // hold until quiet hours end
+    // Claim (conditional update) so the worker and the standalone dispatcher never send the same row twice.
+    if (!claimPush(n.id, now)) continue;
     const payload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
     const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
     // Browsers (web push) and paired phones (FCM) both get it.

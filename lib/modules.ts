@@ -64,6 +64,13 @@ export const MODULES: ModuleDef[] = [
         description: "Own private work items, packets, validations and dashboard. No AI calls; GitHub is read-only.",
         roles: ["adult"],
       },
+      {
+        id: "work.ai",
+        label: "Run AI actions and pre-investigation",
+        description:
+          "Research, plan, suggest a time and draft on work items; AI triage and investigation of captures. Uses the household AI budget. Finance is never sent.",
+        roles: [],
+      },
     ],
   },
   {

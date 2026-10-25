@@ -739,6 +739,49 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       const back = (payload.fromStatus ?? "ready_to_settle") as WorkStatus;
       tx.update(T).set({ status: back, settledKind: null, settledReason: null, completedAt: null, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
       event(tx, row.id, user.id, { kind: "status", from: "settled", to: back, reason: "Undid automatic settle" });
+    } else if (kind === "ai_plan_create") {
+      const ids = ((payload as { childIds?: string[] }).childIds ?? []).filter((x) => typeof x === "string");
+      // Dependencies among the new children were created by the same op.
+      if (ids.length)
+        tx.delete(schema.workDependencies)
+          .where(and(inArray(schema.workDependencies.itemId, ids), inArray(schema.workDependencies.dependsOnId, ids)))
+          .run();
+      let deleted = 0;
+      for (const cid of ids) {
+        const c = tx
+          .select()
+          .from(T)
+          .where(and(eq(T.id, cid), eq(T.userId, user.id)))
+          .get();
+        if (!c) continue;
+        const cnt = (table: typeof schema.workPackets | typeof schema.workValidations | typeof schema.workLinks) =>
+          tx.select({ id: table.id }).from(table).where(eq(table.itemId, c.id)).all().length;
+        const untouched = isUntouched({
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          eventKinds: tx
+            .select({ kind: schema.workEvents.kind })
+            .from(schema.workEvents)
+            .where(eq(schema.workEvents.itemId, c.id))
+            .all()
+            .map((e) => e.kind),
+          children: allRows(user.id, tx).filter((r) => r.parentId === c.id).length,
+          packets: cnt(schema.workPackets),
+          validations: cnt(schema.workValidations),
+          links: cnt(schema.workLinks),
+          copiedLinks: 0,
+          dependencies: dependencyCount(tx, c.id),
+          derived: 0,
+        });
+        if (untouched) {
+          tx.delete(schema.workLineage)
+            .where(and(eq(schema.workLineage.userId, user.id), eq(schema.workLineage.childId, c.id)))
+            .run();
+          tx.delete(T).where(eq(T.id, c.id)).run();
+          deleted++;
+        } else tx.update(T).set({ archived: true, updatedAt: nowIso() }).where(eq(T.id, c.id)).run();
+      }
+      event(tx, row.id, user.id, { kind: "undo", reason: `Undid plan: removed ${deleted}, archived ${ids.length - deleted}` });
     } else if (kind === "archive" || kind === "unarchive") {
       tx.update(T).set({ archived: !!payload.archived, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "archive" ? "Undid archive" : "Undid unarchive" });

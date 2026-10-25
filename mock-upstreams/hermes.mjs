@@ -129,6 +129,78 @@ export function createHermes({ apiKey }) {
     return JSON.stringify({ error: `No tool for ${source}` });
   }
 
+  /**
+   * Jarvis AI jobs (JARVIS_AI_JOB kind=…): deterministic JSON per kind.
+   * FORCE_ERROR / FORCE_PROSE / FORCE_APPROVAL / FORCE_SLOW / FORCE_COST=<usd>
+   * in the task text change the behaviour; the session gets a cost.
+   */
+  function aiJobAnswer(kind, input) {
+    if (/FORCE_ERROR/.test(input)) return JSON.stringify({ error: "tool missing" });
+    if (/FORCE_PROSE/.test(input)) return "Here is a prose answer instead of JSON.";
+    const title = (input.match(/"([^"]{1,80})"/) || [])[1] || "this";
+    const common = {
+      title: `Findings: ${title}`.slice(0, 120),
+      summary: `Three options for ${title}; the first one fits best.`,
+      body_markdown: `## Overview\nOption A is the most mature [1]. Option B is cheaper [2].\n\n- **A**: proven\n- **B**: cheap`,
+      sources: [
+        { url: "https://example.com/option-a", title: "Option A docs", quote: "A is production ready" },
+        { url: "https://example.org/option-b", title: "Option B pricing" },
+        { url: "https://github.com/example/c", title: "Option C repo" },
+      ],
+      next_actions: [{ title: `Try option A for ${title}`.slice(0, 200), why: "Lowest risk" }],
+      open_questions: ["Is the budget fixed?"],
+      assumptions: ["Single user"],
+      confidence: "medium",
+    };
+    switch (kind) {
+      case "research":
+        return JSON.stringify({
+          ...common,
+          options: [
+            { name: "A", pros: ["proven"], cons: ["cost"], fit: "best" },
+            { name: "B", pros: ["cheap"], cons: ["young"] },
+          ],
+          recommendation: "A",
+        });
+      case "plan":
+        return JSON.stringify({
+          ...common,
+          steps: [
+            { title: "Write the spec", detail: "One page" },
+            { title: "Build a prototype", dependsOn: [0] },
+            { title: "Measure it", dependsOn: [1] },
+          ],
+          acceptance: ["Prototype runs"],
+          validation: { metric: "p95 latency", comparator: "<=", threshold: 800, unit: "ms" },
+          risks: ["Scope creep"],
+        });
+      case "schedule":
+        return JSON.stringify({ durationMinutes: 90, splitOk: false, preferredWindows: ["morning"], reason: "Needs focus; best done in the morning." });
+      case "draft":
+        return JSON.stringify({
+          ...common,
+          title: "Draft",
+          subject: `About ${title}`,
+          body_markdown: `Hi,\n\nQuick note about ${title}.\n\nThanks,\nNick`,
+          variants: [],
+          notes: "Short and direct",
+        });
+      case "triage":
+        return JSON.stringify({
+          title: `Look into ${title}`.slice(0, 120),
+          kind: "task",
+          destinationKey: null,
+          confidence: 0.82,
+          reason: "Looks actionable",
+          shouldInvestigate: true,
+          brief: "Find the key facts",
+          sensitivity: "none",
+        });
+      default:
+        return JSON.stringify(common);
+    }
+  }
+
   /** Scripted agent behaviour, driven by keywords in the input for E2E. */
   async function execute(run, input, instructions) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -139,6 +211,33 @@ export function createHermes({ apiKey }) {
     // Scripted keywords apply to what the person typed, not to context Jarvis attached.
     const said = input.split("\n\n---\nContext from Jarvis:")[0];
     const structured = typeof instructions === "string" ? instructions.match(/JARVIS_STRUCTURED_REQUEST source=(\w+)/)?.[1] : undefined;
+    const aiKind = typeof instructions === "string" ? instructions.match(/JARVIS_AI_JOB kind=(\w+)/)?.[1] : undefined;
+    if (aiKind) {
+      const s = state.sessions.get(run.session_id);
+      const cost = Number(input.match(/FORCE_COST=([\d.]+)/)?.[1] ?? (aiKind === "triage" || aiKind === "schedule" ? 0.004 : 0.12));
+      if (s) s.estimated_cost_usd = cost;
+      if (/FORCE_APPROVAL/.test(input)) {
+        run.status = "waiting_for_approval";
+        run.approval = { event: "approval.request", command: "rm -rf build", request_id: hex(8), choices: ["once", "deny"] };
+        pushEvent(run, run.approval);
+        await new Promise((resolve) => (run.approvalResolver = resolve));
+        return;
+      }
+      if (/FORCE_SLOW|FORCE_COST/.test(input)) {
+        while (run.status !== "stopping") await sleep(t);
+        return finish(run, "cancelled", { completed: false, partial: true, interrupted: true });
+      }
+      await sleep(t * 2);
+      const output = input.startsWith("Reply again") ? "{}" : aiJobAnswer(aiKind, input);
+      addMessage(run.session_id, { role: "assistant", content: output, finish_reason: "stop" });
+      return finish(run, "completed", {
+        completed: true,
+        partial: false,
+        interrupted: false,
+        output,
+        usage: { input_tokens: 900, output_tokens: 400, total_tokens: 1300 },
+      });
+    }
     if (structured) {
       state.structuredCount++;
       if (/FORCE_APPROVAL/.test(input)) {

@@ -30,6 +30,8 @@ type Options<B> = {
    * Omit only for routes every signed-in person may use.
    */
   cap?: string | string[];
+  /** Capabilities the caller needs ALL of (e.g. AI routes: work.use + work.ai). */
+  capAll?: string[];
 };
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -107,6 +109,7 @@ export function api<B = undefined, P = Record<string, string>>(
           const needed = Array.isArray(options.cap) ? options.cap : [options.cap];
           if (!needed.some((c) => user!.capabilities.has(c))) return jsonError(403, "You don't have access to that.", "forbidden");
         }
+        if (options.capAll && !options.capAll.every((c) => user!.capabilities.has(c))) return jsonError(403, "You don't have access to that.", "forbidden");
       }
       let body = undefined as B;
       if (options.body) body = options.body.parse(await readJson(req));
