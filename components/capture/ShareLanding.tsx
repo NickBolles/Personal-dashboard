@@ -26,8 +26,15 @@ export function ShareLanding({ staged, error }: { staged?: string; error?: strin
       live = false;
     };
   }, [staged]);
-  const done = () => {
+  const [round, setRound] = useState(0);
+  const done = (r?: { queued: boolean }) => {
     if (staged) void deleteStaged(staged).catch(() => undefined);
+    // Queued offline: stay here with a fresh sheet. Navigating offline turns into a full
+    // reload from the page cache, which would drop the "Saved on this phone" toast.
+    if (r?.queued && !staged) {
+      setRound((n) => n + 1);
+      return;
+    }
     // Launched by a share: go back to the app that shared; otherwise to the Inbox.
     if (staged && window.history.length > 2) window.history.back();
     else router.push("/areas?view=inbox");
@@ -47,6 +54,7 @@ export function ShareLanding({ staged, error }: { staged?: string; error?: strin
           <>
             {share?.rejected?.length ? <p className="mb-2 text-[13px] text-muted">Skipped (unsupported or over 10 MB): {share.rejected.join(", ")}</p> : null}
             <CaptureSheet
+              key={round}
               autoFocus
               channel={share ? "pwa_share" : "web"}
               initial={share ? { title: share.title, text: share.text, url: share.url, files: share.files } : undefined}
