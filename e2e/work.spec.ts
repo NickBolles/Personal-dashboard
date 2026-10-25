@@ -11,7 +11,19 @@ import { appPost, expectNoHorizontalOverflow } from "./helpers";
 function treeItem(page: Page, title: string) {
   return page.getByRole("treeitem", { name: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`) });
 }
+/** Phones fold the tree behind the Work header's Areas toggle while an item is open. */
+async function showTree(page: Page) {
+  const toggle = page.getByTestId("work-tree-toggle");
+  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+}
+/** Phones fold secondary item sections (Details, Dependencies, Links) into disclosures. */
+async function openSection(page: Page, testId: string) {
+  const section = page.getByTestId(testId);
+  if ((await section.evaluate((el) => el.tagName)) === "DETAILS" && !(await section.evaluate((el) => (el as HTMLDetailsElement).open)))
+    await section.locator("summary").click();
+}
 async function pick(page: Page, title: string) {
+  await showTree(page);
   // Click the row itself, not the centre of the <li> (which may be a nested child).
   await treeItem(page, title).locator("> div").click();
   await expect(page.getByRole("heading", { level: 2, name: title, exact: true })).toBeVisible();
@@ -69,6 +81,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf bug (fork)" })).toBeVisible();
 
   // Keyboard: the tree is one tab stop; arrows move, Enter selects.
+  await showTree(page);
   await treeItem(page, "Hydration perf bug (fork)").focus();
   await page.keyboard.press("ArrowUp");
   await expect(treeItem(page, "Hydration perf bug")).toBeFocused();
@@ -344,12 +357,14 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   const detail = (await (await page.request.get(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`)).json()) as { timeline: unknown[] };
   expect(detail.timeline).toEqual([]);
   await page.goto(`/work?item=${ids["V5 evaluator contract"]}`);
+  await openSection(page, "work-links");
   await expect(page.getByRole("article").getByText("started from the handoff", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Activity" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("Continued in a new conversation (handoff, no packet yet)");
   await expect(page.getByRole("tabpanel")).toContainText("Handed off to");
 
   // Drag-and-drop: drop V2 onto the middle of V4 → it becomes V4's child (moved_from recorded).
+  await showTree(page);
   const handle = page.locator(`[data-drag-handle="${ids["V2 baseline"]}"]`);
   const target = page.locator(`[data-row-id="${ids["V4 lessons"]}"]`);
   await dragTo(page, handle, target);

@@ -19,7 +19,7 @@ type Entry = {
 export function ActivityView() {
   const q = useQuery({ queryKey: ["audit"], queryFn: () => api.get<{ entries: Entry[] }>("/api/audit") });
   return (
-    <div className="mx-auto max-w-4xl px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[1040px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Activity log" subtitle="Consequential actions with their upstream result and correlation ID." />
       {q.isLoading ? <Spinner label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} /> : null}

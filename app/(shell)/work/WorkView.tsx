@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { daysBetween } from "@/lib/time";
-import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { addDays, daysBetween } from "@/lib/time";
+import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
-import { StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { ChevronIcon } from "@/components/icons";
+import { Block, StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -45,10 +46,12 @@ export type WorkViewKind = "today" | "inbox";
 type View = { kind: "today" } | { kind: "inbox" } | { kind: "item"; id: string; action?: string };
 
 /**
- * /work (Command Center): the left rail holds Today, Inbox and the area tree;
- * the centre is Today (the front door), the Inbox, or an item's workspace. On
+ * /work (Command Center workbench, design Direction C). Desktop: a full-width
+ * workbench with the left pane (Today, Inbox, area tree), the centre (Today,
+ * the Inbox or an item's workspace) and, when there's room, a context rail. On
  * phones the order is Today/Inbox switch → content → tree, so what you came
- * for is first and the tree is one scroll away.
+ * for is first; on an item the tree folds behind the header's Areas toggle
+ * (it opens above the item and closes once you pick something).
  */
 export function WorkView({ initialItem, initialView, initialAction }: { initialItem?: string; initialView?: WorkViewKind; initialAction?: string }) {
   const [archived, setArchived] = useState(false);
@@ -58,6 +61,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   );
   const [newArea, setNewArea] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
   const inbox = useInbox();
   const [undo, setUndo] = useState<UndoOp | null>(null);
   const clearUndo = useCallback(() => setUndo(null), []);
@@ -72,6 +76,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
 
   const go = (next: View) => {
     setView(next);
+    setTreeOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
     url.searchParams.delete("view");
@@ -85,22 +90,24 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   const select = (id: string) => go({ kind: "item", id });
   const openWith = (id: string, action?: string) => go({ kind: "item", id, action });
 
+  const wide = useWide();
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
-  const railBtn = (kind: WorkViewKind, label: string, count?: number) => {
+  const railBtn = (kind: WorkViewKind, label: string, icon: string, count?: number) => {
     const active = view.kind === kind;
     return (
       <li>
-        <button
-          type="button"
-          aria-current={active ? "page" : undefined}
-          onClick={() => go({ kind })}
-          className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-sm font-medium ${active ? "bg-accent-soft text-accent" : "text-text hover:bg-surface-2"}`}
-        >
+        <button type="button" aria-current={active ? "page" : undefined} onClick={() => go({ kind })} className="wk-side-nav">
+          <span aria-hidden="true" className="w-4 text-center text-muted">
+            {icon}
+          </span>
           <span>{label}</span>
           {count ? (
-            <span className="rounded-full bg-accent px-2 text-xs leading-5 font-semibold text-accent-contrast" aria-label={`${count} waiting`}>
+            <span
+              className="ml-auto rounded-full bg-warn-soft px-1.5 text-[11.5px] leading-[18px] font-bold text-warn tabular-nums"
+              aria-label={`${count} waiting`}
+            >
               {count}
             </span>
           ) : null}
@@ -110,55 +117,93 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
-      <PageHeader
-        title="Work"
-        subtitle="Areas, projects and threads of AI-assisted work. Private to you."
-        actions={
-          <>
+    <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
+      <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
+        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+          <div className="min-w-0">
+            <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Work</h1>
+            <p className="text-xs text-muted lg:sr-only">Areas, projects and threads of AI-assisted work. Private to you.</p>
+          </div>
+          <div className="flex shrink-0 gap-1.5">
             <Button size="sm" onClick={() => setCapturing(true)}>
               Capture
             </Button>
             <Button size="sm" variant="primary" onClick={() => setNewArea(true)}>
               New area
             </Button>
-          </>
-        }
-      />
-      {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
-      <div className="grid gap-4 lg:grid-cols-[minmax(260px,320px)_1fr] lg:grid-rows-[auto_1fr]">
-        <nav aria-label="Work views" className="min-w-0 lg:col-start-1 lg:row-start-1">
-          <ul className="card grid grid-cols-2 gap-1 p-1 lg:grid-cols-1">
-            {railBtn("today", "Today")}
-            {railBtn("inbox", "Inbox", inboxCount)}
+          </div>
+        </header>
+        <nav aria-label="Work views">
+          <ul
+            className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${view.kind === "item" ? "grid-cols-3" : "grid-cols-2"}`}
+          >
+            {railBtn("today", "Today", "☀")}
+            {railBtn("inbox", "Inbox", "↓", inboxCount)}
+            {view.kind === "item" ? (
+              <li className="lg:hidden">
+                <button
+                  type="button"
+                  className="wk-side-nav"
+                  aria-expanded={treeOpen}
+                  aria-controls="work-tree"
+                  onClick={() => setTreeOpen((o) => !o)}
+                  data-testid="work-tree-toggle"
+                >
+                  <span aria-hidden="true" className="w-4 text-center text-muted">
+                    {treeOpen ? "▾" : "▸"}
+                  </span>
+                  <span>Areas</span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         </nav>
-        <div id="work-content" className="min-w-0 scroll-mt-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          {view.kind === "today" ? (
-            <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
-          ) : view.kind === "inbox" ? (
+      </div>
+      <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        {view.kind === "today" ? (
+          <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
+            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+              <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
+            </div>
+            {wide ? <TodayRail items={list} onSelect={select} /> : null}
+          </div>
+        ) : view.kind === "inbox" ? (
+          <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
             <InboxView items={list} onOpenItem={select} />
-          ) : current ? (
-            <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} initialAction={view.kind === "item" ? view.action : undefined} />
-          ) : items.isPending || items.isFetching ? (
+          </div>
+        ) : current ? (
+          <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} initialAction={view.kind === "item" ? view.action : undefined} />
+        ) : items.isPending || items.isFetching ? (
+          <div className="p-6">
             <Spinner label="Loading…" />
-          ) : (
+          </div>
+        ) : (
+          <div className="p-6">
             <Empty title="That item isn't here">It may be archived or belong to someone else.</Empty>
+          </div>
+        )}
+      </div>
+      <div
+        id="work-tree"
+        className={`min-w-0 px-3 pb-4 lg:order-none lg:col-start-1 lg:row-start-2 lg:block lg:self-start lg:px-0 lg:pb-0 ${
+          view.kind !== "item" ? "order-3" : treeOpen ? "order-1" : "hidden"
+        }`}
+      >
+        <div className="wk-side-sticky min-w-0 rounded-[10px] border border-line bg-surface p-2 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-2.5 lg:pt-1 lg:pb-24">
+          <div className="flex items-center justify-between px-1 pt-1 pb-1.5 lg:pt-2">
+            <h2 className="wk-label">Areas</h2>
+            <span className="text-[11px] text-muted tabular-nums">{list.filter((i) => !i.archived && i.parentId !== null).length || ""}</span>
+          </div>
+          {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
+          {items.isPending ? (
+            <Spinner label="Loading work…" />
+          ) : (
+            <WorkTree items={list} selected={current} onSelect={select} onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })} />
           )}
-        </div>
-        <div className="min-w-0 self-start lg:col-start-1 lg:row-start-2">
-          <Card className="min-w-0 p-3 lg:max-h-[calc(100dvh-8rem)] lg:overflow-y-auto">
-            <h2 className="mb-1 px-1 text-xs font-medium tracking-wide text-muted uppercase">Areas</h2>
-            {items.isPending ? (
-              <Spinner label="Loading work…" />
-            ) : (
-              <WorkTree items={list} selected={current} onSelect={select} onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })} />
-            )}
-            <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-muted">
-              <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
-              Show archived
-            </label>
-          </Card>
+          <label className="mt-2 flex min-h-11 items-center gap-2 px-1 text-[13px] text-muted">
+            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+            Show archived
+          </label>
         </div>
       </div>
       <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
@@ -166,6 +211,323 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
       {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
   );
+}
+
+const OPEN_STATUSES = new Set<WorkStatus>(["captured", "exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "reopened"]);
+
+/** Today's context rail (wide screens): what's due soon, what's parked, and the keys. Read from the tree, no extra request. */
+function TodayRail({ items, onSelect }: { items: WorkItem[]; onSelect: (id: string) => void }) {
+  const today = todayIso();
+  const soonLimit = addDays(today, 14);
+  const live = items.filter((i) => !i.archived && i.parentId !== null);
+  const soon = live
+    .filter((i) => OPEN_STATUSES.has(i.status) && i.targetDate && i.targetDate >= today && i.targetDate <= soonLimit)
+    .sort((a, b) => (a.targetDate! < b.targetDate! ? -1 : 1))
+    .slice(0, 6);
+  const parked = live.filter((i) => i.status === "on_hold").slice(0, 5);
+  const row = (i: WorkItem, meta: string) => (
+    <li key={i.id} className="flex items-baseline justify-between gap-2 py-1">
+      <button type="button" className="min-w-0 truncate text-left text-[13px] text-accent hover:underline" onClick={() => onSelect(i.id)}>
+        {i.title}
+      </button>
+      <span className="shrink-0 text-xs text-muted tabular-nums">{meta}</span>
+    </li>
+  );
+  return (
+    <aside aria-label="Today context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5">
+      <Block label="Due in the next 14 days">
+        {soon.length ? <ul>{soon.map((i) => row(i, shortDate(i.targetDate!)))}</ul> : <p className="text-[13px] text-muted">Nothing due soon.</p>}
+      </Block>
+      <Block label="On hold">{parked.length ? <ul>{parked.map((i) => row(i, ""))}</ul> : <p className="text-[13px] text-muted">Nothing parked.</p>}</Block>
+      <Block label="Keys">
+        <p className="text-[13px] leading-6 text-muted">
+          <kbd className="wk-kbd">Ctrl K</kbd> jump or do · <kbd className="wk-kbd">/</kbd> search · <kbd className="wk-kbd">↑</kbd>
+          <kbd className="wk-kbd">↓</kbd> tree · <kbd className="wk-kbd">←</kbd>
+          <kbd className="wk-kbd">→</kbd> fold
+        </p>
+      </Block>
+    </aside>
+  );
+}
+
+/**
+ * The context rails need room: they only exist when the centre column keeps at
+ * least 640px beside them (content area ≥ 928px = 640 + the 288px rail). That
+ * follows the real content width, not the viewport, so an expanded app rail or
+ * a narrow window drops the context rail instead of squeezing the workspace.
+ * Below that they aren't rendered at all (not just hidden), so their summaries
+ * never duplicate the item's own text for assistive tech.
+ */
+const RAIL_MIN_CONTENT = 640 + 288; // keep in sync with --wk-rail (work.css)
+const subscribeWide = (cb: () => void) => {
+  const el = document.getElementById("work-content");
+  const ro = typeof ResizeObserver === "undefined" || !el ? null : new ResizeObserver(cb);
+  if (el) ro?.observe(el);
+  window.addEventListener("resize", cb);
+  return () => {
+    ro?.disconnect();
+    window.removeEventListener("resize", cb);
+  };
+};
+function useWide() {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia("(min-width: 1024px)").matches && (document.getElementById("work-content")?.clientWidth ?? 0) >= RAIL_MIN_CONTENT,
+    () => false,
+  );
+}
+
+const PHONE = "(max-width: 1023px)";
+const subscribePhone = (cb: () => void) => {
+  const m = window.matchMedia(PHONE);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+/** Phones and small tablets (no app rail): secondary item sections fold into disclosures. */
+function usePhone() {
+  return useSyncExternalStore(
+    subscribePhone,
+    () => window.matchMedia(PHONE).matches,
+    () => false,
+  );
+}
+
+/**
+ * A secondary item section. Desktop: a compact card with its heading and
+ * actions. Phones: a disclosure (summary shows a one-line status) so the item
+ * page leads with the next action, actions and validation.
+ */
+function Section({
+  title,
+  meta,
+  aside,
+  phone,
+  open,
+  onToggle,
+  testId,
+  children,
+}: {
+  title: string;
+  meta?: ReactNode;
+  aside?: ReactNode;
+  phone: boolean;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+  testId?: string;
+  children: ReactNode;
+}) {
+  if (phone)
+    return (
+      <details className="card wk-disclosure" open={open} onToggle={(e) => onToggle(e.currentTarget.open)} data-testid={testId}>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 select-none">
+          <ChevronIcon className="wk-disclosure-chev h-4 w-4 shrink-0 text-muted" />
+          <h3 className="font-semibold">{title}</h3>
+          {meta ? <span className="ml-auto min-w-0 truncate text-xs text-muted">{meta}</span> : null}
+        </summary>
+        <div className="pt-1">
+          {aside ? <div className="mb-2 flex flex-wrap gap-2">{aside}</div> : null}
+          {children}
+        </div>
+      </details>
+    );
+  return (
+    <Card data-testid={testId}>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-baseline gap-2 font-semibold">
+          {title}
+          {meta ? <span className="text-xs font-normal text-muted">{meta}</span> : null}
+        </h3>
+        {aside ? <div className="flex flex-wrap items-center gap-2">{aside}</div> : null}
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+const RAIL_RELATION: Record<string, string> = {
+  forked_from: "↖ Forked from",
+  split_from: "↖ Split from",
+  moved_from: "↖ Moved from",
+  handoff_from: "↖ Follow-up of",
+};
+const CMP_TEXT: Record<string, string> = { "<=": "≤", ">=": "≥", "<": "<", ">": ">", "=": "=" };
+const V_STATE: Record<string, { text: string; s: WorkStatus }> = {
+  pass: { text: "passing", s: "settled" },
+  fail: { text: "failing", s: "reopened" },
+  pending: { text: "pending", s: "awaiting_validation" },
+  waived: { text: "waived", s: "on_hold" },
+};
+
+function prRef(l: WorkLink) {
+  const m = l.url?.match(/github\.com\/([^/]+)\/([^/]+)\/(?:pull|issues)\/(\d+)/);
+  return m ? { repo: m[2]!, number: m[3]! } : null;
+}
+
+/**
+ * The item's context rail (wide screens, design Direction C): validation, PR,
+ * lineage, dates and conversations, always visible next to the workspace.
+ * Read-only summaries; every action stays in the workspace itself.
+ */
+function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect: (id: string) => void; onShowValidations: () => void }) {
+  const { item } = d;
+  const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue");
+  const convs = d.links.filter((l) => l.kind === "chat_session");
+  const lineage = d.lineage
+    .map((l) => {
+      const mine = l.childId === item.id;
+      const otherId = mine ? l.parentId : l.childId;
+      const otherTitle = mine ? l.parentTitle : l.childTitle;
+      if (!mine && l.relation === "moved_from") return null;
+      const text = mine ? RAIL_RELATION[l.relation] : `↘ ${(RAIL_RELATION[l.relation] ?? "").replace(/^↖ /, "").replace(/ (from|of)$/, "")} into`;
+      return otherId && otherTitle ? { id: l.id, otherId, otherTitle, text } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x)
+    .slice(0, 6);
+  const open = d.validations.filter((v) => v.status === "pending" || v.status === "fail").length;
+  return (
+    <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail">
+      <Block
+        label="Validation"
+        aside={
+          d.validations.length ? (
+            <button type="button" className="text-xs text-accent hover:underline" onClick={onShowValidations}>
+              {open ? "Record results" : "Show all"}
+            </button>
+          ) : null
+        }
+      >
+        {d.validations.length ? (
+          <ul className="space-y-1.5">
+            {d.validations.slice(0, 5).map((v) => (
+              <li key={v.id} className="flex items-start justify-between gap-2 text-[13px]">
+                <span className="min-w-0 break-words">
+                  {v.metric} {CMP_TEXT[v.comparator]} {v.threshold}
+                  {v.unit ? ` ${v.unit}` : ""}
+                  {v.overdue ? <span className="block text-xs font-medium text-danger">overdue · due {shortDate(v.dueDate!)}</span> : null}
+                  {!v.overdue && v.dueDate && v.status === "pending" ? <span className="block text-xs text-muted">due {shortDate(v.dueDate)}</span> : null}
+                </span>
+                <span className="wk-pill shrink-0 text-[11px]" data-s={V_STATE[v.status]?.s}>
+                  {V_STATE[v.status]?.text ?? v.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <>
+            <p className="text-[13px] text-muted">{d.settle.allowed ? "None declared." : "Settling needs a declared measurement."}</p>
+            <button type="button" className="mt-1 text-xs text-accent hover:underline" onClick={onShowValidations}>
+              Declare one
+            </button>
+          </>
+        )}
+      </Block>
+      {prs.length ? (
+        <Block label="Pull requests">
+          <ul className="space-y-2">
+            {prs.map((l) => {
+              const ref = prRef(l);
+              // Auto titles ("owner/repo#123") repeat the reference: show "#123 repo" instead.
+              const named = l.title && l.title !== l.targetId && !/^[\w.-]+\/[\w.-]+#\d+$/.test(l.title) ? l.title : null;
+              return (
+                <li key={l.id} className="text-[13px]">
+                  <div className="flex items-start justify-between gap-2">
+                    <a
+                      href={l.url ?? "#"}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="min-w-0 break-words hover:underline"
+                      aria-label={`${l.kind === "github_pr" ? "Pull request" : "Issue"} ${ref ? `${ref.repo} number ${ref.number}` : ""}${named ? `, ${named}` : ""} (opens in a new tab)`}
+                    >
+                      <span className="font-mono text-xs font-semibold">#{ref?.number ?? "?"}</span> {named ?? ref?.repo ?? ""}
+                    </a>
+                    {l.externalState ? (
+                      <span
+                        className="wk-pill shrink-0 text-[11px]"
+                        data-s={l.externalState === "merged" ? "settled" : l.externalState === "open" ? "in_review" : "on_hold"}
+                      >
+                        {l.externalState}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted">
+                    {ref && named ? `${ref.repo} · ` : ""}
+                    {l.role}
+                    {l.checkedAt ? ` · ${l.checkError ? "check failed" : "checked"} ${fmtWhen(l.checkedAt)}` : ""}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </Block>
+      ) : null}
+      {lineage.length ? (
+        <Block label="Lineage">
+          <ul className="space-y-1 text-[13px]">
+            {lineage.map((l) => (
+              <li key={l.id}>
+                <span className="text-muted">{l.text}</span>{" "}
+                <button
+                  type="button"
+                  className="text-left text-accent underline-offset-2 hover:underline"
+                  aria-label={`${l.text.replace(/^[↖↘] /, "")} ${l.otherTitle}`}
+                  onClick={() => onSelect(l.otherId)}
+                >
+                  {l.otherTitle}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
+      <Block label="Dates">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
+          <dt className="text-muted">Planned</dt>
+          <dd>
+            {item.startDate || item.targetDate
+              ? `${item.startDate ? shortDate(item.startDate) : "—"} → ${item.targetDate ? shortDate(item.targetDate) : "—"}`
+              : "Not planned"}
+          </dd>
+          {item.completedAt ? (
+            <>
+              <dt className="text-muted">Closed</dt>
+              <dd>{shortDate(item.completedAt)}</dd>
+            </>
+          ) : null}
+          {d.blockedBy.length ? (
+            <>
+              <dt className="text-muted">Waits on</dt>
+              <dd>
+                {d.blockedBy.filter((b) => b.open).length} open of {d.blockedBy.length}
+              </dd>
+            </>
+          ) : null}
+        </dl>
+      </Block>
+      {convs.length ? (
+        <Block label="Conversations">
+          <ul className="space-y-1 text-[13px]">
+            {convs.map((l) => (
+              <li key={l.id} className="min-w-0">
+                <Link
+                  href={`/chat/${encodeURIComponent(l.targetId ?? "")}`}
+                  className="block truncate text-accent hover:underline"
+                  aria-label={`Chat: ${l.title || l.targetId}`}
+                >
+                  {l.title || <span className="font-mono text-xs">{l.targetId}</span>}
+                </Link>
+                <span className="text-xs text-muted">{l.role}</span>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
+    </aside>
+  );
+}
+
+function shortDate(d: string) {
+  const [y, m, day] = d.slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function NewItemDialog({
@@ -268,52 +630,80 @@ function ItemDetail({
     { onSuccess: (r) => onOp(r.op) },
   );
   const close = () => setDialog(null);
+  const wide = useWide();
+  const phone = usePhone();
+  // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
+  // remounts it) doesn't fold it; a section opens itself when something is added to it.
+  const [sections, setSections] = useState<{ details?: boolean; deps?: boolean; links?: boolean }>({});
+  const toggle = (k: "details" | "deps" | "links") => (open: boolean) => setSections((o) => (o[k] === open ? o : { ...o, [k]: open }));
+  const counts = q.data ? { links: q.data.links.length, deps: q.data.blockedBy.length + q.data.blocking.length } : null;
+  const [seen, setSeen] = useState(counts);
+  if (counts && (counts.links !== seen?.links || counts.deps !== seen?.deps)) {
+    setSeen(counts);
+    if (seen && counts.links > seen.links) setSections((o) => ({ ...o, links: true }));
+    if (seen && counts.deps > seen.deps) setSections((o) => ({ ...o, deps: true }));
+  }
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
   if (dialog === "continue" && !canChat) setDialog(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
 
-  if (q.isPending) return <Spinner label="Loading…" />;
-  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  if (q.isPending)
+    return (
+      <div className="p-6">
+        <Spinner label="Loading…" />
+      </div>
+    );
+  if (q.error)
+    return (
+      <div className="p-6">
+        <ErrorNote error={q.error} retry={() => q.refetch()} />
+      </div>
+    );
   const d = q.data;
   const { item } = d;
   const isArea = item.parentId === null;
   const chat = d.links.find((l) => l.kind === "chat_session");
+  const showValidations = () => {
+    setTab("overview");
+    requestAnimationFrame(() => document.getElementById("work-validations")?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
 
   return (
-    <article aria-labelledby="work-item-title" className="space-y-4">
-      <Card className="space-y-3">
-        <nav aria-label="Breadcrumb">
-          <ol className="flex flex-wrap items-center gap-1 text-sm text-muted">
-            {d.breadcrumb.map((b) => (
-              <li key={b.id} className="flex items-center gap-1">
-                <button type="button" className="tap rounded px-1 hover:text-text hover:underline" onClick={() => onSelect(b.id)}>
-                  {b.title}
-                </button>
-                <span aria-hidden="true">›</span>
-              </li>
-            ))}
-            <li aria-current="page" className="px-1">
-              {KIND_LABEL[item.kind]}
-            </li>
-          </ol>
-        </nav>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 id="work-item-title" className="text-xl font-semibold break-words">
-              {item.title}
-            </h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
+    <article aria-labelledby="work-item-title" className="min-w-0">
+      <section className="bg-surface px-3 pt-3 pb-3 sm:px-5 lg:px-6 lg:pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1 basis-72">
+            <nav aria-label="Breadcrumb">
+              <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
+                {d.breadcrumb.map((b) => (
+                  <li key={b.id} className="flex items-center gap-0.5">
+                    <button type="button" className="tap rounded px-1 hover:text-accent hover:underline" onClick={() => onSelect(b.id)}>
+                      {b.title}
+                    </button>
+                    <span aria-hidden="true">›</span>
+                  </li>
+                ))}
+                <li aria-current="page" className="px-1">
+                  {KIND_LABEL[item.kind]}
+                </li>
+              </ol>
+            </nav>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h2 id="work-item-title" className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px]">
+                {item.title}
+              </h2>
               <StatusBadge status={item.status} auto={item.settledKind === "auto"} />
               {item.archived ? <Badge>Archived</Badge> : null}
               {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
               {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-              {item.settledReason ? <span className="text-sm text-muted">{item.settledReason}</span> : null}
             </div>
+            {item.summary ? <p className="mt-1 line-clamp-2 max-w-[75ch] text-[13.5px] text-muted">{item.summary}</p> : null}
+            {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
           </div>
-          <div className="flex items-end gap-2">
-            <div className="space-y-1">
-              <label htmlFor="work-status" className="block text-xs font-medium text-muted">
+          <div className="flex items-end gap-1.5">
+            <div>
+              <label htmlFor="work-status" className="wk-label block pb-0.5">
                 Status
               </label>
               <select
@@ -356,7 +746,7 @@ function ItemDetail({
           <div
             role="status"
             data-testid="settle-prompt"
-            className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-ok bg-ok-soft p-3 text-sm"
+            className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-ok bg-ok-soft px-3 py-2 text-[13px]"
           >
             <span className="min-w-0">
               <strong>PR merged — settle?</strong> Nothing needs validating. Jarvis never settles on its own: settle when you&apos;re satisfied.
@@ -366,11 +756,11 @@ function ItemDetail({
             </Button>
           </div>
         ) : null}
-        <div className="rounded-[10px] bg-surface-2 p-3">
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">Next action</p>
-          <p className="mt-0.5 break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
+        <div className="mt-2.5 flex min-w-0 items-baseline gap-3 rounded-[10px] border border-line border-l-[3px] border-l-accent bg-bg px-3 py-2">
+          <p className="wk-label shrink-0">Next action</p>
+          <p className="min-w-0 text-[14px] break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
           <Button size="sm" variant="primary" onClick={() => setDialog("packet")}>
             Start focused work
           </Button>
@@ -394,75 +784,119 @@ function ItemDetail({
             </Button>
           ) : null}
         </div>
-      </Card>
+      </section>
 
-      <div role="tablist" aria-label="Item sections" className="flex gap-1">
-        {(
-          [
-            ["overview", "Overview"],
-            ["activity", "Activity"],
-            ["children", `Children (${d.children.length})`],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            role="tab"
-            id={`tab-${k}`}
-            aria-selected={tab === k}
-            aria-controls={`panel-${k}`}
-            tabIndex={tab === k ? 0 : -1}
-            onClick={() => setTab(k)}
-            onKeyDown={(e) => {
-              const keys = ["overview", "activity", "children"] as const;
-              const i = keys.indexOf(k);
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                const n = keys[(i + (e.key === "ArrowRight" ? 1 : 2)) % 3]!;
-                setTab(n);
-                document.getElementById(`tab-${n}`)?.focus();
-              }
-            }}
-            className={`inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium ${tab === k ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-4">
-        {tab === "overview" ? (
-          <>
-            <EditItem key={item.updatedAt} item={item} validationDefault={d.validationDefault} />
-            <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
-            <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
-            <Dependencies d={d} items={items} onSelect={onSelect} />
-            <Links d={d} canChat={canChat} />
-          </>
-        ) : tab === "activity" ? (
-          <Activity d={d} onSelect={onSelect} />
-        ) : (
-          <Card>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="font-semibold">Children</h3>
-              <Button size="sm" onClick={() => setDialog("child")}>
-                Add child
-              </Button>
-            </div>
-            {d.children.length ? (
-              <ul className="divide-y divide-line">
-                {d.children.map((c) => (
-                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                    <button type="button" className="tap min-w-0 text-left font-medium hover:underline" onClick={() => onSelect(c.id)}>
-                      {c.title}
-                    </button>
-                    <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
-                  </li>
-                ))}
-              </ul>
+      <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
+        <div className="min-w-0">
+          <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
+            {(
+              [
+                ["overview", "Overview"],
+                ["activity", "Activity"],
+                ["children", `Children (${d.children.length})`],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                id={`tab-${k}`}
+                aria-selected={tab === k}
+                aria-controls={`panel-${k}`}
+                tabIndex={tab === k ? 0 : -1}
+                onClick={() => setTab(k)}
+                onKeyDown={(e) => {
+                  const keys = ["overview", "activity", "children"] as const;
+                  const i = keys.indexOf(k);
+                  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                    const n = keys[(i + (e.key === "ArrowRight" ? 1 : 2)) % 3]!;
+                    setTab(n);
+                    document.getElementById(`tab-${n}`)?.focus();
+                  }
+                }}
+                className="wk-tab"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+            {tab === "overview" ? (
+              <>
+                {(() => {
+                  const edit = (
+                    <EditItem
+                      key={item.updatedAt}
+                      item={item}
+                      validationDefault={d.validationDefault}
+                      phone={phone}
+                      open={sections.details ?? false}
+                      onToggle={toggle("details")}
+                    />
+                  );
+                  const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
+                  const validations = (
+                    <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
+                  );
+                  // Phones lead with proof and the packet; the editable details fold away below.
+                  return phone ? (
+                    <>
+                      {validations}
+                      {packet}
+                      {edit}
+                    </>
+                  ) : (
+                    <>
+                      {edit}
+                      {packet}
+                      {validations}
+                    </>
+                  );
+                })()}
+                <Dependencies
+                  d={d}
+                  items={items}
+                  onSelect={onSelect}
+                  phone={phone}
+                  open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+                  onToggle={toggle("deps")}
+                />
+                <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+              </>
+            ) : tab === "activity" ? (
+              <Activity d={d} onSelect={onSelect} />
             ) : (
-              <p className="text-sm text-muted">No children yet.</p>
+              <Card>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="font-semibold">Children</h3>
+                  <Button size="sm" onClick={() => setDialog("child")}>
+                    Add child
+                  </Button>
+                </div>
+                {d.children.length ? (
+                  <ul className="wk-rows">
+                    {d.children.map((c) => (
+                      <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                        <button
+                          type="button"
+                          className="tap flex min-w-0 items-center gap-2 text-left text-[14px] font-medium hover:underline"
+                          onClick={() => onSelect(c.id)}
+                        >
+                          <StatusDot status={c.status} />
+                          <span className="min-w-0 break-words">{c.title}</span>
+                        </button>
+                        <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted">No children yet.</p>
+                )}
+              </Card>
             )}
-          </Card>
-        )}
+          </div>
+        </div>
+        {wide ? <ItemRail d={d} onSelect={onSelect} onShowValidations={showValidations} /> : null}
       </div>
 
       <NewItemDialog open={dialog === "child"} onClose={close} parent={item} onCreated={(i) => onSelect(i.id)} />
@@ -485,7 +919,9 @@ function ItemDetail({
   );
 }
 
-function EditItem({ item, validationDefault }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] }) {
+type SectionProps = { phone: boolean; open: boolean; onToggle: (open: boolean) => void };
+
+function EditItem({ item, validationDefault, phone, open, onToggle }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] } & SectionProps) {
   const isArea = item.parentId === null;
   const [f, setF] = useState({
     title: item.title,
@@ -515,63 +951,96 @@ function EditItem({ item, validationDefault }: { item: WorkItem; validationDefau
     f.startDate !== (item.startDate ?? "") ||
     f.targetDate !== (item.targetDate ?? "") ||
     (isArea && f.validationDefault !== (item.validationDefault ?? ""));
+  const planned =
+    item.startDate || item.targetDate
+      ? `${item.startDate ? shortDate(item.startDate) : "—"} → ${item.targetDate ? shortDate(item.targetDate) : "—"}`
+      : "Not planned";
+  const saveButton = (
+    <Button type="submit" form="wi-form" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
+      Save details
+    </Button>
+  );
   return (
-    <Card>
-      <h3 className="mb-3 font-semibold">Details</h3>
+    <Section
+      title="Details"
+      meta={dirty ? "Unsaved changes" : phone ? planned : undefined}
+      aside={phone ? undefined : saveButton}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+      testId="work-details"
+    >
+      {/* A property sheet: label column + quiet inline fields on desktop; stacked on phones. */}
       <form
-        className="space-y-3"
+        id="wi-form"
+        className="wk-props"
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate(undefined);
         }}
       >
-        <Field id="wi-title" label="Title">
-          <input id="wi-title" required className={inputCls} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
-        </Field>
-        <Field id="wi-summary" label="Summary">
-          <textarea id="wi-summary" className={textareaCls} value={f.summary} onChange={(e) => setF({ ...f, summary: e.target.value })} />
-        </Field>
-        <Field id="wi-next" label="Next action">
-          <input id="wi-next" className={inputCls} value={f.nextAction} onChange={(e) => setF({ ...f, nextAction: e.target.value })} />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="wi-start" label="Start date">
-            <input id="wi-start" type="date" className={inputCls} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
-          </Field>
-          <Field id="wi-target" label="Target date">
-            <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
-          </Field>
+        <label htmlFor="wi-title">Title</label>
+        <input id="wi-title" required className={inputCls} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+        <label htmlFor="wi-next">Next action</label>
+        <input
+          id="wi-next"
+          className={inputCls}
+          value={f.nextAction}
+          placeholder="The very next concrete step"
+          onChange={(e) => setF({ ...f, nextAction: e.target.value })}
+        />
+        <label htmlFor="wi-summary">Summary</label>
+        <textarea
+          id="wi-summary"
+          rows={2}
+          className={`${inputCls} wk-autogrow`}
+          value={f.summary}
+          placeholder="What this is and why it matters"
+          onChange={(e) => setF({ ...f, summary: e.target.value })}
+        />
+        <span id="wi-dates-label">Planned</span>
+        <div role="group" aria-labelledby="wi-dates-label" className="wk-props-dates">
+          <label htmlFor="wi-start" className="sr-only">
+            Start date
+          </label>
+          <input id="wi-start" type="date" className={inputCls} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
+          <span aria-hidden="true" className="text-muted">
+            →
+          </span>
+          <label htmlFor="wi-target" className="sr-only">
+            Target date
+          </label>
+          <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
         </div>
         {isArea ? (
-          <Field
-            id="wi-vdefault"
-            label="Validation for new packets"
-            hint="What “Start focused work” preselects for everything in this area. You can override it per packet."
-          >
-            <select
-              id="wi-vdefault"
-              className={inputCls}
-              value={f.validationDefault}
-              onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
-            >
-              <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
-              <option value="required">Required</option>
-              <option value="optional">Optional</option>
-            </select>
-          </Field>
+          <>
+            <label htmlFor="wi-vdefault">Validation</label>
+            <div>
+              <select
+                id="wi-vdefault"
+                className={inputCls}
+                aria-describedby="wi-vdefault-hint"
+                value={f.validationDefault}
+                onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
+              >
+                <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
+                <option value="required">Required</option>
+                <option value="optional">Optional</option>
+              </select>
+              <p id="wi-vdefault-hint" className="mt-1 text-xs text-muted">
+                What “Start focused work” preselects for new packets in this area. You can override it per packet.
+              </p>
+            </div>
+          </>
         ) : (
-          <p className="text-xs text-muted" data-testid="validation-default-note">
+          <p className="wk-props-note text-xs text-muted" data-testid="validation-default-note">
             New packets here {validationDefault.value === "required" ? "require" : "don't require"} validation by default
             {validationDefault.areaTitle ? ` (set on ${validationDefault.areaTitle})` : ""}.
           </p>
         )}
-        <div className="flex justify-end">
-          <Button type="submit" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
-            Save details
-          </Button>
-        </div>
+        {phone ? <div className="wk-props-note flex justify-end">{saveButton}</div> : null}
       </form>
-    </Card>
+    </Section>
   );
 }
 
@@ -702,7 +1171,7 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
       {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
       {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
       {d.validations.length ? (
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {d.validations.map((v, i) => (
             <ValidationRow
               key={v.id}
@@ -957,7 +1426,7 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   const remove = useWorkMutation(() => api.del(url), { ok: "Validation removed" });
   const label = `${v.metric} ${v.comparator} ${v.threshold}${v.unit ? ` ${v.unit}` : ""}`;
   return (
-    <li className={`rounded-lg border p-3 ${v.overdue ? "border-danger" : "border-line"}`} data-overdue={v.overdue || undefined}>
+    <li className={`rounded-[10px] border px-3 py-2.5 ${v.overdue ? "border-danger" : "border-line"}`} data-overdue={v.overdue || undefined}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-medium break-words">{label}</p>
         <span className="flex flex-wrap gap-1">
@@ -1047,7 +1516,7 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   );
 }
 
-function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void }) {
+function Dependencies({ d, items, onSelect, phone, open, onToggle }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void } & SectionProps) {
   const [dest, setDest] = useState("");
   const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
     ok: "Dependency added",
@@ -1074,11 +1543,22 @@ function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]
     </li>
   );
   return (
-    <Card>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">Dependencies</h3>
-        {openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : null}
-      </div>
+    <Section
+      title="Dependencies"
+      meta={
+        phone
+          ? openBlockers
+            ? `Blocked by ${openBlockers}`
+            : d.blockedBy.length + d.blocking.length
+              ? `${d.blockedBy.length + d.blocking.length} linked`
+              : "None"
+          : undefined
+      }
+      aside={!phone && openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : undefined}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+    >
       <h4 className="text-xs font-medium tracking-wide text-muted uppercase">Blocked by</h4>
       {d.blockedBy.length ? (
         <ul className="divide-y divide-line">{d.blockedBy.map((r) => row(r, "Blocked by"))}</ul>
@@ -1114,7 +1594,7 @@ function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]
           Add dependency
         </Button>
       </form>
-    </Card>
+    </Section>
   );
 }
 
@@ -1122,13 +1602,30 @@ function linkLabel(l: WorkLink) {
   return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
 }
 
-function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
+function Links({ d, canChat, phone, open, onToggle }: { d: WorkDetail; canChat: boolean } & SectionProps) {
   const hasChat = d.links.some((l) => l.kind === "chat_session");
   const convs = useConversations(canChat && hasChat);
   const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
+  const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue").length;
+  const chats = d.links.filter((l) => l.kind === "chat_session").length;
+  const meta = d.links.length
+    ? [
+        prs ? `${prs} PR${prs === 1 ? "" : "s"}` : "",
+        chats ? `${chats} chat${chats === 1 ? "" : "s"}` : "",
+        d.links.length - prs - chats ? `${d.links.length - prs - chats} other` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "None";
   return (
-    <Card>
-      <h3 className="mb-2 font-semibold">Links</h3>
+    <Section
+      title="Links"
+      meta={phone ? meta : d.links.length ? String(d.links.length) : undefined}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+      testId="work-links"
+    >
       {d.links.length ? (
         <ul className="space-y-2">
           {d.links.map((l) => (
@@ -1148,7 +1645,7 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
           link.
         </p>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 
@@ -1161,7 +1658,7 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
   const pull = useWorkMutation(() => api.post(`${url}/refresh`), { ok: "Refreshed from GitHub" });
   const name = l.title || l.targetId || l.url || "";
   return (
-    <li className="rounded-lg border border-line p-3">
+    <li className="rounded-[10px] border border-line px-3 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-xs text-muted">

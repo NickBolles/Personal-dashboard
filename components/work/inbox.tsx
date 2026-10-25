@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
+import { Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
@@ -14,7 +14,7 @@ import type { InboxEntry, WorkItem } from "@/lib/work";
  * conversations. Each row says where it came from and why it's here, with
  * File/Accept, Dismiss and Open. Deterministic: nothing is triaged by a model.
  */
-export function CaptureForm({ onDone, autoFocus }: { onDone?: () => void; autoFocus?: boolean }) {
+export function CaptureForm({ onDone, autoFocus, inline }: { onDone?: () => void; autoFocus?: boolean; /** one compact row (the inbox) */ inline?: boolean }) {
   const [text, setText] = useState("");
   const save = useWorkMutation(() => api.post("/api/work/inbox", { text }), {
     ok: "Captured to the inbox",
@@ -23,6 +23,43 @@ export function CaptureForm({ onDone, autoFocus }: { onDone?: () => void; autoFo
       onDone?.();
     },
   });
+  if (inline)
+    return (
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (text.trim()) save.mutate(undefined);
+        }}
+      >
+        <div className="min-w-0 flex-1 basis-64">
+          <label htmlFor="capture-text" className="wk-label mb-1 block">
+            Capture to inbox
+          </label>
+          <textarea
+            id="capture-text"
+            aria-describedby="capture-text-hint"
+            rows={1}
+            className={`${inputCls} min-h-11 resize-y text-base`}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && text.trim()) {
+                e.preventDefault();
+                save.mutate(undefined);
+              }
+            }}
+            placeholder="Something to look at later…"
+          />
+          <p id="capture-text-hint" className="sr-only">
+            First line becomes the title. File it later.
+          </p>
+        </div>
+        <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} busy={save.isPending}>
+          Capture
+        </Button>
+      </form>
+    );
   return (
     <form
       className="space-y-2"
@@ -67,39 +104,64 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
   const dismiss = useWorkMutation((id: string) => api.post(`/api/work/inbox/${encodeURIComponent(id)}/dismiss`), { ok: "Dismissed" });
   const entries = q.data?.items ?? [];
   return (
-    <section aria-labelledby="inbox-title" className="space-y-4" data-testid="work-inbox">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="inbox-title" className="text-xl font-semibold">
-          Inbox
-        </h2>
-        {q.data ? <span className="text-sm text-muted">{q.data.count} waiting</span> : null}
+    <section aria-labelledby="inbox-title" className="space-y-3" data-testid="work-inbox">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="wk-eyebrow">Triage</p>
+          <h2 id="inbox-title" className="text-xl leading-tight font-semibold tracking-tight">
+            Inbox
+          </h2>
+        </div>
+        {q.data ? <span className="text-[13px] text-muted tabular-nums">{q.data.count} waiting</span> : null}
       </div>
-      <Card className="p-3">
-        <CaptureForm />
-      </Card>
-      <Card as="section" aria-labelledby="inbox-items" className="min-w-0 p-3">
-        <h3 id="inbox-items" className="mb-2 font-semibold">
-          Assigned issues and captures
-        </h3>
-        {q.isPending ? <Spinner label="Loading inbox…" /> : null}
-        {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
-        {q.data && !entries.length ? <p className="text-sm text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p> : null}
-        <ul className="space-y-3">
+      <div className="wk-card px-3 py-2.5">
+        <CaptureForm inline />
+      </div>
+      <section aria-labelledby="inbox-items" className="wk-card min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+          <h3 id="inbox-items" className="wk-label">
+            Assigned issues and captures
+          </h3>
+          {entries.length ? <span className="text-xs text-muted tabular-nums">{entries.length}</span> : null}
+        </div>
+        {q.isPending ? (
+          <div className="p-3">
+            <Spinner label="Loading inbox…" />
+          </div>
+        ) : null}
+        {q.error ? (
+          <div className="p-3">
+            <ErrorNote error={q.error} retry={() => q.refetch()} />
+          </div>
+        ) : null}
+        {q.data && !entries.length ? <p className="px-3 py-2.5 text-[13px] text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p> : null}
+        <ul className="wk-rows">
           {entries.map((e) => (
-            <li key={e.id} className="rounded-lg border border-line p-3" data-inbox-entry={e.id}>
-              <p className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                <Badge tone={e.source === "github_issue" ? "accent" : "neutral"}>{SOURCE[e.source]}</Badge>
-                {e.repo ? (
-                  <span>
-                    {e.repo}#{e.number}
-                  </span>
-                ) : null}
-                <span>{fmtWhen(e.createdAt)}</span>
-              </p>
-              <p className="mt-1 font-medium break-words">{e.title}</p>
-              {e.note ? <p className="text-sm break-words whitespace-pre-wrap text-muted">{e.note}</p> : null}
-              <p className="text-xs text-muted">Why: {e.reason}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <li key={e.id} className="wk-row-hover flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-2.5" data-inbox-entry={e.id}>
+              <span
+                aria-hidden="true"
+                className={cx(
+                  "mt-0.5 inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-bold",
+                  e.source === "github_issue" ? "bg-text text-bg" : "bg-surface-2 text-muted ring-1 ring-line",
+                )}
+              >
+                {e.source === "github_issue" ? "GH" : "CA"}
+              </span>
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="text-[14px] leading-snug font-semibold break-words">{e.title}</p>
+                {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted">{e.note}</p> : null}
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                  <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
+                  {e.repo ? (
+                    <span className="font-mono">
+                      {e.repo}#{e.number}
+                    </span>
+                  ) : null}
+                  <span>{fmtWhen(e.createdAt)}</span>
+                  <span>Why: {e.reason}</span>
+                </p>
+              </div>
+              <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">
                 <Button
                   size="sm"
                   variant="primary"
@@ -122,7 +184,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                     href={e.url}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="tap inline-flex min-h-11 items-center px-2 text-sm text-accent underline"
+                    className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent underline"
                   >
                     Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
                   </a>
@@ -131,7 +193,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
             </li>
           ))}
         </ul>
-      </Card>
+      </section>
       {canChat ? <UnfiledPanel items={items.filter((i) => !i.archived)} dismissable /> : null}
       {accepting ? (
         <AcceptDialog

@@ -35,7 +35,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
   const tab = TABS.find((t) => t.id === bucket)!;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[880px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader
         title="All of Home"
         subtitle={

@@ -48,7 +48,7 @@ export function BackendSwitch({ className }: { className?: string }) {
   const { backend, available, choose } = useAssistantChoice();
   if (available.length < 2) return null;
   return (
-    <div role="group" aria-label="Ask" className={cx("inline-flex overflow-hidden rounded-xl border border-line-strong text-sm", className)}>
+    <div role="group" aria-label="Ask" className={cx("inline-flex overflow-hidden rounded-[9px] border border-line-strong text-sm", className)}>
       {available.map((b) => (
         <button
           key={b}
@@ -56,7 +56,10 @@ export function BackendSwitch({ className }: { className?: string }) {
           aria-pressed={backend === b}
           title={BACKEND_LABELS[b].description}
           onClick={() => choose(b)}
-          className={cx("min-h-11 px-3 font-medium", backend === b ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2")}
+          className={cx(
+            "min-h-11 px-3 font-medium dense:min-h-8 dense:px-2.5",
+            backend === b ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2",
+          )}
         >
           {BACKEND_LABELS[b].label}
         </button>

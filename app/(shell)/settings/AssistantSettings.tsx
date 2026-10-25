@@ -28,7 +28,7 @@ export function AssistantSettings() {
   if (!s) return null;
   return (
     <Card>
-      <h2 className="font-semibold">Assistant</h2>
+      <h2 className="eyebrow">Assistant</h2>
       <p className="mt-1 text-sm text-muted">
         Hermes can act (tools, approvals) but can be slow. Claude answers directly and fast, with any Jarvis context you attach, but can’t act. Everyone can
         pick per conversation.

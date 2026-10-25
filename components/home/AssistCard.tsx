@@ -26,29 +26,29 @@ const TONE_BAR: Record<Assist["tone"], string> = {
 export function AssistCard({ card, onTriage }: { card: Assist; onTriage: (card: Assist) => void }) {
   const titleId = `assist-${card.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   return (
-    <article aria-labelledby={titleId} data-tier={TONE_BAR[card.tone]} className="card jv-accent jv-rise flex flex-col gap-2 p-4 pl-5">
-      <p className={cx("text-xs font-medium", card.origin === "seasonal" ? "text-muted" : "text-[var(--tier-compass)]")}>{ORIGIN_LABEL[card.origin]}</p>
-      <h3 id={titleId} className="text-base font-semibold leading-snug">
+    <article aria-labelledby={titleId} data-tier={TONE_BAR[card.tone]} className="card jv-accent jv-rise flex flex-col gap-1.5 px-3.5 py-3 pl-4 dense:py-2.5">
+      <p className={cx("text-xs font-semibold", card.origin === "seasonal" ? "text-muted" : "text-[var(--tier-compass)]")}>{ORIGIN_LABEL[card.origin]}</p>
+      <h3 id={titleId} className="text-[0.9375rem] leading-snug font-semibold dense:text-[0.875rem]">
         {card.title}
       </h3>
       <p className="text-sm text-muted">{card.body}</p>
-      <div className="flex flex-wrap gap-2 pt-1">
+      <div className="flex flex-wrap gap-2 pt-0.5">
         {card.triage ? (
           <Button variant="primary" size="sm" onClick={() => onTriage(card)} aria-describedby={titleId}>
             Review &amp; reschedule
           </Button>
         ) : null}
         {card.chat ? (
-          <ButtonLink href={chatHref(card.chat)} variant={card.triage ? "secondary" : "primary"} className="min-h-11 text-sm" aria-describedby={titleId}>
+          <ButtonLink href={chatHref(card.chat)} variant={card.triage ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
             {card.chat.label}
           </ButtonLink>
         ) : null}
       </div>
       <details className="jv-why group -mx-1">
-        <summary className="tap inline-flex items-center gap-1 rounded-[8px] px-1 text-xs font-medium text-muted hover:text-text">
+        <summary className="tap inline-flex items-center gap-1 rounded-[6px] px-1 text-xs font-medium text-muted hover:text-text dense:min-h-6">
           <span>Why am I seeing this?</span>
           <span className="sr-only"> ({card.title})</span>
-          <ChevronIcon className="h-4 w-4 transition-transform group-open:rotate-90" />
+          <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
         </summary>
         <div className="jv-rise space-y-3 px-1 pb-1 pt-1">
           <ul className="space-y-0.5 text-sm text-muted">

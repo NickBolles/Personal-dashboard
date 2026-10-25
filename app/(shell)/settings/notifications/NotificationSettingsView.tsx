@@ -33,7 +33,7 @@ export function NotificationSettingsView() {
   // Local, synchronous toggle state so the checkbox responds instantly; the server copy catches up.
   const [local, setLocal] = useState<Record<string, boolean>>({});
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Notifications" subtitle="Every alert lands in the Alerts inbox. Push is an extra delivery channel." />
       <Card>
         <h2 className="mb-3 font-semibold">Push on this device</h2>

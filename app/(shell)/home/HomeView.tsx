@@ -13,7 +13,7 @@ import { AssistCard } from "@/components/home/AssistCard";
 import { TriageDialog } from "@/components/home/TriageDialog";
 import type { AssistCard as Assist } from "@/lib/contracts";
 import { QuickCapture } from "@/components/chat/QuickCapture";
-import { Badge, Empty, ErrorNote, Spinner, cx, useOnline } from "@/components/ui";
+import { Badge, Empty, ErrorNote, Page, SectionLabel, Spinner, cx, useOnline } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 
@@ -23,7 +23,7 @@ function FreshnessStrip({ sources, refreshing, online, generatedAt }: { sources:
   const problems = sources.filter((s) => PROBLEM.includes(s.state));
   if (online && !refreshing && !problems.length) return null; // never a permanent "all good" banner
   return (
-    <div role="status" className="card mb-4 flex flex-col gap-1 border-warn bg-warn-soft p-3 text-sm text-warn">
+    <div role="status" className="mb-4 flex flex-col gap-1 rounded-[10px] border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
       {!online ? <p>Offline — showing data from {generatedAt ? relativeTime(generatedAt) : "your last visit"}.</p> : null}
       {refreshing && online ? (
         <p className="flex items-center gap-2">
@@ -58,13 +58,9 @@ function FreshnessStrip({ sources, refreshing, online, generatedAt }: { sources:
 
 function SectionTitle({ id, children, count, action }: { id: string; children: string; count?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-2 flex items-baseline justify-between gap-3">
-      <h2 id={id} className="text-sm font-semibold uppercase tracking-wide text-muted">
-        {children}
-        {count ? <span className="ml-1.5 font-normal normal-case tracking-normal">· {count}</span> : null}
-      </h2>
-      {action}
-    </div>
+    <SectionLabel id={id} count={count} action={action}>
+      {children}
+    </SectionLabel>
   );
 }
 
@@ -72,7 +68,7 @@ function SeeAll({ bucket, total, label }: { bucket: string; total: number; label
   return (
     <Link
       href={`/home/all?bucket=${bucket}`}
-      className="tap inline-flex items-center gap-0.5 rounded-[8px] px-1 text-sm font-medium text-accent hover:underline"
+      className="tap inline-flex items-center gap-0.5 rounded-[8px] px-1 text-xs font-semibold text-accent hover:underline dense:min-h-6"
     >
       See all {total}
       <span className="sr-only"> {label}</span>
@@ -87,7 +83,7 @@ function AttentionLine({ a }: { a: AttentionSummary }) {
   const more = t.upcoming + t.backlog;
   const c = a.compass;
   return (
-    <div className="mt-1 space-y-1.5">
+    <div className="mt-1 space-y-1">
       <p className="text-sm text-muted" data-dynamic>
         {t.open === 0
           ? "Nothing open right now."
@@ -97,7 +93,7 @@ function AttentionLine({ a }: { a: AttentionSummary }) {
         <p className="flex flex-wrap items-center gap-1.5 text-sm">
           <span className="font-medium text-[var(--tier-compass)]">Compass focus</span>
           {c.focus.map((f) => (
-            <span key={f} className="rounded-full border border-line bg-surface px-2 py-0.5 text-xs">
+            <span key={f} className="rounded-[6px] border border-line bg-surface px-1.5 text-xs leading-5">
               {f}
             </span>
           ))}
@@ -121,16 +117,16 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
           aria-expanded={open}
           aria-controls={id}
           onClick={() => setOpen((o) => !o)}
-          className="flex min-h-12 w-full items-center justify-between gap-2 px-4 text-left font-medium"
+          className="flex min-h-11 w-full items-center justify-between gap-2 px-3.5 text-left text-[0.875rem] font-medium dense:min-h-10"
         >
           <span>
             {title} <span className="text-muted">({items.length})</span>
           </span>
-          <ChevronIcon className={cx("h-5 w-5 transition-transform", open && "rotate-90")} />
+          <ChevronIcon className={cx("h-4 w-4 text-muted transition-transform", open && "rotate-90")} />
         </button>
       </h3>
       {open ? (
-        <ul id={id} className="space-y-2 border-t border-line p-3">
+        <ul id={id} className="space-y-2 border-t border-line p-2.5">
           {items.map((a) => (
             <li key={a.id}>
               <ActionCard action={a} compact={title === "Recently completed"} />
@@ -147,7 +143,7 @@ function HomeSkeleton() {
   return (
     <div aria-hidden="true" className="space-y-3">
       {[0, 1, 2].map((i) => (
-        <div key={i} className="card space-y-2 p-4 pl-5">
+        <div key={i} className="card space-y-2 px-3.5 py-3 pl-4">
           <div className="jv-skeleton h-3 w-28" />
           <div className="jv-skeleton h-4 w-3/4" />
           <div className="jv-skeleton h-3 w-1/2" />
@@ -200,11 +196,11 @@ export function HomeView() {
   const later: Partial<Record<HomeSectionId, (d: HomePayload) => React.ReactNode>> = {
     later_today: (d) =>
       d.later.laterToday.length ? (
-        <section key="later_today" aria-labelledby="today-h" className="mb-6">
+        <section key="later_today" aria-labelledby="today-h" className="mb-5">
           <SectionTitle id="today-h" count={String(d.later.laterToday.length)}>
             Later today
           </SectionTitle>
-          <ol className="space-y-2">
+          <ol className="space-y-1.5">
             {d.later.laterToday.map((a) => (
               <li key={a.id} className="jv-rise">
                 <ActionCard action={a} explain />
@@ -215,7 +211,7 @@ export function HomeView() {
       ) : null,
     upcoming: (d) =>
       d.later.upcoming.length ? (
-        <section key="upcoming" aria-labelledby="upcoming-h" className="mb-6">
+        <section key="upcoming" aria-labelledby="upcoming-h" className="mb-5">
           <SectionTitle
             id="upcoming-h"
             count={att ? `${d.later.upcoming.length} of ${att.totals.upcoming}` : undefined}
@@ -223,7 +219,7 @@ export function HomeView() {
           >
             Next two weeks
           </SectionTitle>
-          <ul className="space-y-2">
+          <ul className="space-y-1.5">
             {d.later.upcoming.map((a) => (
               <li key={a.id}>
                 <ActionCard action={a} explain />
@@ -239,115 +235,122 @@ export function HomeView() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <Page>
       <header className="mb-4">
-        <p className="text-sm text-muted">{new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{greeting}</h1>
+        <p className="eyebrow" data-dynamic>
+          {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+        </p>
+        <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">{greeting}</h1>
         {att ? <AttentionLine a={att} /> : null}
       </header>
 
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
-      {visible("now") ? (
-        <section aria-labelledby="now-h" aria-busy={!data || undefined} className="mb-6">
-          <SectionTitle id="now-h" count={att && data?.now.length ? `${data.now.length}` : undefined}>
-            Now
-          </SectionTitle>
-          {!data ? (
-            <>
-              <span className="sr-only" role="status">
-                Loading your next actions…
-              </span>
-              <HomeSkeleton />
-            </>
-          ) : data.now.length ? (
-            <>
-              <ol className="space-y-3">
-                {data.now.map((a) => (
-                  <li key={a.id} className="jv-rise">
-                    <ActionCard action={a} explain />
+      <div className="grid gap-x-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0">
+          {visible("now") ? (
+            <section aria-labelledby="now-h" aria-busy={!data || undefined} className="mb-5">
+              <SectionTitle id="now-h" count={att && data?.now.length ? `${data.now.length}` : undefined}>
+                Now
+              </SectionTitle>
+              {!data ? (
+                <>
+                  <span className="sr-only" role="status">
+                    Loading your next actions…
+                  </span>
+                  <HomeSkeleton />
+                </>
+              ) : data.now.length ? (
+                <>
+                  <ol className="space-y-1.5">
+                    {data.now.map((a) => (
+                      <li key={a.id} className="jv-rise">
+                        <ActionCard action={a} explain />
+                      </li>
+                    ))}
+                  </ol>
+                  {att?.overBudget ? (
+                    <p className="mt-2 text-xs text-muted">
+                      {att.overBudget} more safety {att.overBudget === 1 ? "alert" : "alerts"} than the usual {att.budget.now}: safety alerts are always shown.
+                    </p>
+                  ) : null}
+                </>
+              ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
+                <Empty title="Nothing needs you right now">
+                  Checked{" "}
+                  {data.sources
+                    .filter((s) => s.state === "ok" || s.state === "stale")
+                    .map((s) => s.label)
+                    .join(", ")}
+                  .
+                </Empty>
+              ) : (
+                <Empty
+                  title="No sources connected yet"
+                  action={
+                    <Link className="underline" href="/settings/connections">
+                      Connect sources
+                    </Link>
+                  }
+                >
+                  Jarvis can’t tell what’s next until at least one source is connected.
+                </Empty>
+              )}
+            </section>
+          ) : null}
+
+          {data?.assists?.length ? (
+            <section aria-labelledby="assist-h" className="mb-5">
+              <SectionTitle id="assist-h">Suggestions</SectionTitle>
+              <ul className="space-y-1.5">
+                {data.assists.map((c) => (
+                  <li key={c.id}>
+                    <AssistCard card={c} onTriage={setTriage} />
                   </li>
                 ))}
-              </ol>
-              {att?.overBudget ? (
-                <p className="mt-2 text-xs text-muted">
-                  {att.overBudget} more safety {att.overBudget === 1 ? "alert" : "alerts"} than the usual {att.budget.now}: safety alerts are always shown.
-                </p>
-              ) : null}
-            </>
-          ) : data.sources.some((s) => s.state === "ok" || s.state === "stale") ? (
-            <Empty title="Nothing needs you right now">
-              Checked{" "}
-              {data.sources
-                .filter((s) => s.state === "ok" || s.state === "stale")
-                .map((s) => s.label)
-                .join(", ")}
-              .
-            </Empty>
-          ) : (
-            <Empty
-              title="No sources connected yet"
-              action={
-                <Link className="underline" href="/settings/connections">
-                  Connect sources
-                </Link>
-              }
-            >
-              Jarvis can’t tell what’s next until at least one source is connected.
-            </Empty>
-          )}
-        </section>
-      ) : null}
+              </ul>
+            </section>
+          ) : null}
 
-      {data?.assists?.length ? (
-        <section aria-labelledby="assist-h" className="mb-6">
-          <SectionTitle id="assist-h">Suggestions</SectionTitle>
-          <ul className="space-y-3">
-            {data.assists.map((c) => (
-              <li key={c.id}>
-                <AssistCard card={c} onTriage={setTriage} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          {triage?.triage ? (
+            <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
+          ) : null}
 
-      {triage?.triage ? (
-        <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
-      ) : null}
+          {can("hermes.chat") ? (
+            <section aria-labelledby="capture-h" className="mb-5">
+              <h2 id="capture-h" className="sr-only">
+                Quick capture
+              </h2>
+              <QuickCapture />
+            </section>
+          ) : null}
 
-      {can("hermes.chat") ? (
-        <section aria-labelledby="capture-h" className="mb-6">
-          <h2 id="capture-h" className="sr-only">
-            Quick capture
-          </h2>
-          <QuickCapture />
-        </section>
-      ) : null}
+          {data
+            ? layout
+                .filter((s) => s.visible)
+                .map((s) => {
+                  if (later[s.id]) return later[s.id]!(data);
+                  const g = groups[s.id];
+                  return g && g.items(data).length ? (
+                    <ul key={s.id} className="mb-5 space-y-2">
+                      <LaterGroup id={g.id} title={g.title} items={g.items(data)} />
+                    </ul>
+                  ) : null;
+                })
+            : null}
+        </div>
 
-      {data ? (
-        <>
-          {layout
-            .filter((s) => s.visible)
-            .map((s) => {
-              if (later[s.id]) return later[s.id]!(data);
-              const g = groups[s.id];
-              return g && g.items(data).length ? (
-                <ul key={s.id} className="mb-6 space-y-2">
-                  <LaterGroup id={g.id} title={g.title} items={g.items(data)} />
-                </ul>
-              ) : null;
-            })}
-
+        {/* Context rail: beside the feed on wide screens, after it on phones. */}
+        <aside aria-label="At a glance" className="min-w-0 space-y-5 xl:pt-0">
           {att ? (
-            <section aria-labelledby="backlog-h" className="mb-6">
+            <section aria-labelledby="backlog-h">
               <h2 id="backlog-h" className="sr-only">
                 Backlog
               </h2>
-              <Link href="/home/all?bucket=backlog" className="card press flex min-h-14 items-center justify-between gap-3 p-4 hover:bg-surface-2">
+              <Link href="/home/all?bucket=backlog" className="card press flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-surface-2">
                 <span className="min-w-0">
-                  <span className="block font-medium">
+                  <span className="block font-semibold">
                     Backlog <span className="font-normal text-muted">· {att.totals.backlog}</span>
                   </span>
                   <span className="block text-sm text-muted">
@@ -355,25 +358,32 @@ export function HomeView() {
                       ? "Older overdue, undated, later dates and anything over today’s limit. Nothing is deleted."
                       : "Everything open is on Home."}
                   </span>
+                  {att.totals.overdue ? (
+                    <Badge tone="warn" dot className="mt-1.5">
+                      {att.totals.overdue} overdue across Home
+                    </Badge>
+                  ) : null}
                 </span>
-                {att.totals.overdue ? <Badge tone="warn">{att.totals.overdue} overdue across Home</Badge> : null}
-                <ChevronIcon className="h-5 w-5 shrink-0 text-muted" />
+                <ChevronIcon className="h-4 w-4 shrink-0 text-muted" />
               </Link>
             </section>
           ) : null}
-        </>
-      ) : null}
 
-      {data && visible("glance") ? <Glance data={data} /> : null}
+          {data && visible("glance") ? <Glance data={data} /> : null}
 
-      {data ? (
-        <p className="mt-6 text-center text-sm">
-          <Link href="/settings/home" className="tap inline-flex items-center rounded-[8px] px-2 text-muted underline-offset-2 hover:text-text hover:underline">
-            Tune what Home shows
-          </Link>
-        </p>
-      ) : null}
-    </div>
+          {data ? (
+            <p className="text-sm">
+              <Link
+                href="/settings/home"
+                className="tap inline-flex items-center rounded-[8px] px-1 text-muted underline-offset-2 hover:text-text hover:underline"
+              >
+                Tune what Home shows
+              </Link>
+            </p>
+          ) : null}
+        </aside>
+      </div>
+    </Page>
   );
 }
 
@@ -384,15 +394,13 @@ function Glance({ data }: { data: HomePayload }) {
   const compass = src("daily_compass");
   return (
     <section aria-labelledby="glance-h">
-      <h2 id="glance-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-        Household
-      </h2>
-      <ul className="grid gap-2 sm:grid-cols-3">
-        <li className="card p-4">
-          <h3 className="text-xs font-medium text-muted">Next event</h3>
+      <SectionLabel id="glance-h">Household</SectionLabel>
+      <ul className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+        <li className="card px-3.5 py-3">
+          <h3 className="eyebrow">Next event</h3>
           {data.glance.nextEvent ? (
             <>
-              <p className="mt-1 font-medium">{data.glance.nextEvent.title}</p>
+              <p className="mt-1 font-semibold">{data.glance.nextEvent.title}</p>
               <p className="text-sm text-muted">{formatWhen(data.glance.nextEvent.startsAt, data.glance.nextEvent.allDay)}</p>
             </>
           ) : calendarKnown ? (
@@ -401,11 +409,11 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">Calendar not connected</p>
           )}
         </li>
-        <li className="card p-4">
-          <h3 className="text-xs font-medium text-muted">Daily Compass</h3>
+        <li className="card px-3.5 py-3">
+          <h3 className="eyebrow">Daily Compass</h3>
           {data.glance.compass ? (
             <p className="mt-1">
-              <Link href="/daily-compass" className="font-medium hover:underline">
+              <Link href="/daily-compass" className="font-semibold hover:underline">
                 {data.glance.compass.completed
                   ? "Done for today"
                   : data.glance.compass.inWindow
@@ -417,8 +425,8 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">{compass?.state === "error" ? "Couldn’t load" : "Not set up"}</p>
           )}
         </li>
-        <li className="card p-4">
-          <h3 className="text-xs font-medium text-muted">Home</h3>
+        <li className="card px-3.5 py-3">
+          <h3 className="eyebrow">Home</h3>
           {ha?.state === "ok" || ha?.state === "stale" ? (
             data.glance.homeExceptions.length ? (
               <ul className="mt-1 space-y-1">
