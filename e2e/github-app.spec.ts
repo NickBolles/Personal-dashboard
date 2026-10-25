@@ -36,6 +36,13 @@ async function interceptGithub(page: Page, seen: { manifest?: Record<string, unk
   });
 }
 
+// A failure mid-test must not leave an App behind: later specs (and work.spec's "Add a GitHub token" hint) expect the token-only world.
+test.afterEach(async ({ page }) => {
+  const r = await page.request.get("/api/github");
+  if (r.ok() && ((await r.json()) as { app: unknown }).app) await page.request.delete("/api/github/app", { headers: { "x-jarvis-csrf": "1" } });
+  await page.request.post(`${MOCK_URL}/github/__mock/installations`, { data: { installations: [] } });
+});
+
 test("create GitHub App via the manifest flow; installations, allowlist, App-signed webhooks", async ({ page }) => {
   // Start clean (another run may have left an App).
   const before = await api<{ app: unknown }>(page, "get", "/api/github");
@@ -120,6 +127,11 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
     });
   };
   const repo = { full_name: "momentumbets/mb-stack", owner: { login: "momentumbets" } };
+  // The PR as GitHub reports it: merged, head at the commit the check_suite below is for (Jarvis ignores runs for older heads).
+  const sha = crypto.createHash("sha1").update(String(nonce)).digest("hex");
+  await page.request.post(`${MOCK_URL}/github/__mock/pr`, {
+    data: { owner: "momentumbets", repo: "mb-stack", number: nonce, state: "closed", merged: true, title: `CI watch ${nonce}`, sha },
+  });
   const merged = await send("pull_request", {
     action: "closed",
     installation: { id: 175021594 },
@@ -127,7 +139,6 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
     pull_request: { number: nonce, state: "closed", merged: true },
   });
   expect(await merged.json()).toMatchObject({ linked: 1, changed: 1 });
-  const sha = crypto.createHash("sha1").update(String(nonce)).digest("hex");
   await page.request.post(`${MOCK_URL}/github/__mock/checks`, {
     data: {
       owner: "momentumbets",
@@ -159,7 +170,10 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
 
   await page.goto(`/work?item=${item.id}`);
   await expect(page.getByRole("heading", { level: 2, name: `CI watch ${nonce}` })).toBeVisible();
-  await expect(page.getByText("merged", { exact: true }).first()).toBeVisible();
+  // Phones fold Links into a disclosure; open it if collapsed.
+  const links = page.getByTestId("work-links");
+  if ((await links.evaluate((el) => el.tagName)) === "DETAILS" && !(await links.evaluate((el) => (el as HTMLDetailsElement).open))) await links.locator("summary").click();
+  await expect(links.getByText("merged", { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId("link-checks")).toHaveText("checks red");
 
   // Forget the App (UI) so later specs see the old world.
