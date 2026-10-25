@@ -12,7 +12,7 @@ const CHANNEL_LABEL: Record<string, string> = { pwa_share: "Shared", shortcut: "
 const SKIP_TEXT: Record<string, string> = {
   finance_detected: "Not sent to AI: looks like finance. File it yourself.",
   credentials_detected: "Not sent to AI: looks like it contains a credential.",
-  ai_disabled: "AI triage is off.",
+  ai_disabled: "",
   ai_not_allowed: "",
   off: "",
   budget: "Waiting for today's AI budget.",

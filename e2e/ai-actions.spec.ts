@@ -14,6 +14,7 @@ async function api<T = unknown>(page: Page, method: "get" | "post" | "put" | "pa
 }
 
 type Item = { id: string; title: string };
+const create = async (page: Page, body: Record<string, unknown>) => (await api<{ item: Item }>(page, "post", "/api/work/items", body)).item;
 
 test.describe.configure({ mode: "serial" });
 
@@ -26,8 +27,8 @@ test.afterEach(async ({ page }) => {
 
 test("research an item: job chip, report viewer with sources, use a next action", async ({ page }) => {
   const nonce = Date.now().toString(36);
-  const area = await api<Item>(page, "post", "/api/work/items", { kind: "area", title: `AI area ${nonce}` });
-  const item = await api<Item>(page, "post", "/api/work/items", { kind: "thread", title: `Pick a criteria engine ${nonce}`, parentId: area.id });
+  const area = await create(page, { kind: "area", title: `AI area ${nonce}` });
+  const item = await create(page, { kind: "thread", title: `Pick a criteria engine ${nonce}`, parentId: area.id });
   await page.goto(`/areas?item=${item.id}`);
   const start = page.getByTestId("ai-get-started").getByRole("button", { name: /Get started/ });
   await expect(start).toBeVisible();
@@ -54,8 +55,8 @@ test("research an item: job chip, report viewer with sources, use a next action"
 
 test("make a plan → create child items", async ({ page }) => {
   const nonce = Date.now().toString(36);
-  const area = await api<Item>(page, "post", "/api/work/items", { kind: "area", title: `Plan area ${nonce}` });
-  const item = await api<Item>(page, "post", "/api/work/items", { kind: "thread", title: `Ship the evaluator ${nonce}`, parentId: area.id });
+  const area = await create(page, { kind: "area", title: `Plan area ${nonce}` });
+  const item = await create(page, { kind: "thread", title: `Ship the evaluator ${nonce}`, parentId: area.id });
   await page.goto(`/areas?item=${item.id}`);
   await page.getByTestId("ai-get-started").getByRole("button", { name: "More AI actions" }).click();
   await page.getByRole("menuitem", { name: /Make a plan/ }).click();
@@ -69,8 +70,8 @@ test("make a plan → create child items", async ({ page }) => {
 
 test("Finance areas offer no AI actions", async ({ page }) => {
   const nonce = Date.now().toString(36);
-  const fin = await api<Item>(page, "post", "/api/work/items", { kind: "area", title: "Finance" });
-  const item = await api<Item>(page, "post", "/api/work/items", { kind: "thread", title: `Compare savings ${nonce}`, parentId: fin.id });
+  const fin = await create(page, { kind: "area", title: "Finance" });
+  const item = await create(page, { kind: "thread", title: `Compare savings ${nonce}`, parentId: fin.id });
   await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { name: `Compare savings ${nonce}` })).toBeVisible();
   await expect(page.getByTestId("ai-get-started")).toHaveCount(0);
