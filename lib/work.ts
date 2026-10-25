@@ -128,7 +128,7 @@ export type WorkItem = {
   startDate: string | null;
   targetDate: string | null;
   completedAt: string | null;
-  /** "auto" only on rows settled before phase 3 (legacy, read-only): nothing settles automatically any more */
+  /** "auto" = settled by the area's auto_after_quiet settle policy (undoable for 7 days), or before phase 3 */
   settledKind: "manual" | "auto" | null;
   settledReason: string | null;
   archived: boolean;
