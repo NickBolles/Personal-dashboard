@@ -93,7 +93,8 @@ export function Gantt({
   const px = PX[zoom];
   const width = days * px;
   const x = (date: string) => daysBetween(start, date) * px;
-  const labelW = compact ? "9rem" : "15rem";
+  // Narrower on phones so the chart keeps most of the width.
+  const labelW = compact ? "9rem" : "clamp(8.5rem, 30vw, 15rem)";
   const dated = (r: TimelineRow) => (drag && drag.id === r.id ? { ...r, ...shiftDates(r, drag.mode, drag.days) } : r);
   const index = new Map(rows.map((r, i) => [r.id, i]));
   const bar = (r: TimelineRow) => {

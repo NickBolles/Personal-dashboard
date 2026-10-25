@@ -323,7 +323,8 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
           <ul className="space-y-2">
             {prs.map((l) => {
               const ref = prRef(l);
-              const named = l.title && l.title !== l.targetId ? l.title : null;
+              // Auto titles ("owner/repo#123") repeat the reference: show "#123 repo" instead.
+              const named = l.title && l.title !== l.targetId && !/^[\w.-]+\/[\w.-]+#\d+$/.test(l.title) ? l.title : null;
               return (
                 <li key={l.id} className="text-[13px]">
                   <div className="flex items-start justify-between gap-2">
