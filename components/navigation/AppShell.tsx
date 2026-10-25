@@ -224,7 +224,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         aria-label="Primary"
         className={cx(
           "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface-2 px-2.5 py-2.5 lg:flex",
-          collapsed ? "w-[64px]" : "w-[232px]",
+          collapsed ? "w-[66px]" : "w-[232px]",
         )}
       >
         <div className={cx("mb-1 flex items-center", collapsed ? "justify-center" : "justify-between pl-1.5")}>

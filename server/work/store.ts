@@ -1349,7 +1349,8 @@ export function subtree(userId: string, rootId: string | null) {
 
 export function timeline(userId: string, rootId: string | null): TimelineResponse {
   ensureMiscellaneous(userId);
-  const tree = subtree(userId, rootId);
+  // Conversations live in the tree but only show on the timeline once they have dates.
+  const tree = subtree(userId, rootId).filter((t) => t.row.kind !== "conversation" || t.row.startDate || t.row.targetDate || t.row.id === rootId);
   const ids = tree.map((t) => t.row.id);
   const db = getDb();
   const events = ids.length ? db.select().from(schema.workEvents).where(inArray(schema.workEvents.itemId, ids)).orderBy(asc(schema.workEvents.at)).all() : [];

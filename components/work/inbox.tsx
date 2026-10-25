@@ -85,9 +85,9 @@ export function CaptureForm({
         if (text.trim()) save.mutate(undefined);
       }}
     >
-      <Field id="capture-text" label="Capture to inbox" hint="First line becomes the title. File it later.">
+      <Field id="capture-sheet-text" label="Capture to inbox" hint="First line becomes the title. File it later.">
         <textarea
-          id="capture-text"
+          id="capture-sheet-text"
           data-autofocus={autoFocus || undefined}
           className={`${inputCls} min-h-20 text-base`}
           value={text}

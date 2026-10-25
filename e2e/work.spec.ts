@@ -486,7 +486,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await page.getByRole("button", { name: "Show map" }).click();
   await page.getByRole("button", { name: "Fit" }).click();
   await svg.getByRole("link", { name: /^V4 lessons,/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/work\\?item=${ids["V4 lessons"]}`));
+  await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids["V4 lessons"]}`));
   await expect(page.getByRole("heading", { level: 2, name: "V4 lessons" })).toBeVisible();
 });
 

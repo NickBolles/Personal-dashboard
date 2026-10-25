@@ -216,7 +216,8 @@ const providers: SearchProvider[] = [
     visible: (u) => can(u, "work.use"),
     search: (q, user) =>
       listWorkItems(user.id, { includeArchived: true })
-        .filter((i) => !i.builtIn)
+        // Conversation nodes are found by the Conversations provider (no duplicates).
+        .filter((i) => !i.builtIn && i.kind !== "conversation")
         .map((i) => ({
           id: `work:${i.id}`,
           kind: "work" as const,

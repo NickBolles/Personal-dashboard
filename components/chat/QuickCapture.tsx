@@ -96,7 +96,7 @@ export function QuickCapture({
 
   return (
     <form
-      className="card flex items-end gap-1.5 p-1.5"
+      className="card flex flex-wrap items-end justify-end gap-1.5 p-1.5"
       onSubmit={(e) => {
         e.preventDefault();
         primary();
@@ -120,7 +120,7 @@ export function QuickCapture({
             else primary();
           }
         }}
-        className={cx(inputCls, "max-h-40 resize-none border-transparent bg-transparent")}
+        className={cx(inputCls, "max-h-40 min-w-0 flex-1 basis-48 resize-none border-transparent bg-transparent")}
       />
       {canCapture && canAsk ? (
         <span id="quick-capture-hint" className="sr-only">

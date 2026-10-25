@@ -47,7 +47,9 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
   const composer = page.locator("#composer");
   await composer.fill("Compare with @area:roll");
   const popover = page.getByTestId("composer-popover");
-  await expect(popover.getByRole("option", { name: new RegExp(`Rollout ${nonce}`) })).toBeVisible();
+  // The area: filter leaves only areas (one matches).
+  await expect(popover.getByRole("option")).toHaveCount(1);
+  await expect(popover.getByRole("option", { name: `Rollout ${nonce} Area` })).toBeVisible();
   await composer.press("Enter");
   await expect(composer).toHaveValue(`Compare with @Rollout ${nonce} `);
   await composer.press("End");

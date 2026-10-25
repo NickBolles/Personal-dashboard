@@ -95,7 +95,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const who = detail?.session.source === "claude" ? "Claude" : "Hermes";
   const canAreas = can("work.use");
   const areaQ = useQuery({
-    queryKey: ["work", "conversation-area", sessionId],
+    queryKey: ["work", "conversation-area", sessionId, detail?.session.title ?? ""],
     queryFn: () => api.get<AreaContext>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/area?title=${encodeURIComponent(detail?.session.title ?? "")}`),
     enabled: canAreas && !!detail && !detail.session.readOnly,
   });
