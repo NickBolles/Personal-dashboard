@@ -168,7 +168,7 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
   const requests = (await (await page.request.get(`${MOCK_URL}/github/__mock/requests`)).json()) as { requests: { method: string; path: string }[] };
   expect(requests.requests.filter((r) => r.method !== "GET").every((r) => /\/conversions$|\/access_tokens$/.test(r.path))).toBe(true);
 
-  await page.goto(`/work?item=${item.id}`);
+  await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { level: 2, name: `CI watch ${nonce}` })).toBeVisible();
   // Phones fold Links into a disclosure; open it if collapsed.
   const links = page.getByTestId("work-links");

@@ -129,17 +129,26 @@ describe("conversations (picker, unfiled, filing)", () => {
     expect(unfiled.conversations.find((c) => c.id === a.id)!.suggestions[0]).toMatchObject({ id: v5.id, matched: ["v5"] });
     expect(unfiled.conversations.find((c) => c.id === b.id)!.suggestions).toEqual([]);
 
+    // Filing makes (or moves) the conversation's node in the Areas tree.
     const filed = await conversations.fileConversation(u, { sessionId: a.id, itemId: v5.id }, cid);
-    expect(filed.link).toMatchObject({ kind: "chat_session", targetId: a.id, role: "source", title: "Enable v5 rollout" });
+    expect(filed.item).toMatchObject({ kind: "conversation", sessionId: a.id, parentId: v5.id, title: "Enable v5 rollout", status: "exploring" });
     const misc = await conversations.fileConversation(u, { sessionId: b.id, itemId: null }, cid);
-    expect(store.getDetail(owner, misc.itemId).item.builtIn).toBe(true);
+    expect(store.getDetail(owner, misc.itemId!).item.builtIn).toBe(true);
     unfiled = await conversations.unfiledConversations(u);
     expect(unfiled.total).toBe(0);
-    const linked = (await conversations.listConversations(u)).conversations.find((c) => c.id === a.id)!;
-    expect(linked.linkedItems).toEqual([{ id: v5.id, title: "V5 evaluator contract" }]);
+    const placed = (await conversations.listConversations(u)).conversations.find((c) => c.id === a.id)!;
+    expect(placed.placement).toMatchObject({ nodeId: filed.item.id, parentId: v5.id, inMisc: false });
+    // Unfiled in the conversations view = not in the tree, or only in Miscellaneous.
+    const view = await conversations.conversationList(u, "unfiled");
+    expect(view.conversations.map((c) => c.id)).toEqual([b.id]);
+    expect(view.unfiledCount).toBe(1);
 
-    // The same conversation can't be linked twice to one item; others' private chats can't be linked at all.
-    await expect(conversations.fileConversation(u, { sessionId: a.id, itemId: v5.id }, cid)).rejects.toThrow(/already linked/);
+    // Filing again under the same item is a no-op; moving it is a normal (undoable) move.
+    expect((await conversations.fileConversation(u, { sessionId: a.id, itemId: v5.id }, cid)).item.id).toBe(filed.item.id);
+    const moved = await conversations.fileConversation(u, { sessionId: a.id, itemId: null }, cid);
+    expect(moved.item.id).toBe(filed.item.id);
+    expect(moved.op?.kind).toBe("move");
+    // Others' private chats can't be filed at all.
     await expect(conversations.fileConversation(u, { sessionId: theirs.id, itemId: v5.id }, cid)).rejects.toThrow(/not found/);
     // Other people's items are not found.
     await expect(conversations.fileConversation(them(), { sessionId: theirs.id, itemId: v5.id }, cid)).rejects.toThrow(/not found/);
@@ -730,7 +739,7 @@ describe("Home attention: Work source", () => {
       ["work:validation:a", "overdue"],
     ]);
     const v = out.find((a) => a.id === "work:validation:a")!;
-    expect(v).toMatchObject({ source: "work", title: "Validate: T a", detail: "2 validations overdue: errors, p95", href: "/work?item=a", dueIsDate: true });
+    expect(v).toMatchObject({ source: "work", title: "Validate: T a", detail: "2 validations overdue: errors, p95", href: "/areas?item=a", dueIsDate: true });
     // Due on the earliest overdue date (end of that local day).
     expect(v.dueAt).toBe("2026-10-20T04:59:00.000Z");
     expect(workHomeActions([...rows].reverse(), vals, ctx)).toEqual(out);
@@ -743,7 +752,7 @@ describe("Home attention: Work source", () => {
     store.updateItem(u, v5.id, { status: "in_progress" }, cid);
     const mine = await homeSelection(userById(owner)!, { live: false });
     const all = [...mine.attention.now, ...mine.attention.today, ...mine.attention.upcoming, ...mine.attention.backlog];
-    expect(all.find((a) => a.source === "work")).toMatchObject({ id: `work:target:${v5.id}`, href: `/work?item=${v5.id}` });
+    expect(all.find((a) => a.source === "work")).toMatchObject({ id: `work:target:${v5.id}`, href: `/areas?item=${v5.id}` });
     expect(mine.payload.now.length).toBeLessThanOrEqual(3);
     const theirs = await homeSelection(userById(kid)!, { live: false });
     expect([...theirs.attention.now, ...theirs.attention.today, ...theirs.attention.backlog].some((a) => a.source === "work")).toBe(false);

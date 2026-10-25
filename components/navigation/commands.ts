@@ -23,10 +23,12 @@ export type Command = {
 export const OPEN_PALETTE_EVENT = "jarvis:search";
 /** Open the quick-capture dialog (Work inbox). */
 export const OPEN_CAPTURE_EVENT = "jarvis:work-capture";
+/** Start a new conversation now (AppShell handles it): `detail.areaId` files it there, else Miscellaneous. */
+export const NEW_CHAT_EVENT = "jarvis:new-chat";
 
 /** The Work item open in /work right now, if any. */
 function currentWorkItem() {
-  if (typeof window === "undefined" || window.location.pathname !== "/work") return null;
+  if (typeof window === "undefined" || window.location.pathname !== "/areas") return null;
   return new URLSearchParams(window.location.search).get("item");
 }
 
@@ -40,22 +42,31 @@ export function useCommands(): Command[] {
     const go = (href: string) => () => router.push(href);
     const onItem = (action: string, fallback: string) => () => {
       const id = currentWorkItem();
-      if (id) router.push(`/work?item=${encodeURIComponent(id)}&do=${action}`);
+      if (id) router.push(`/areas?item=${encodeURIComponent(id)}&do=${action}`);
       else {
-        router.push("/work");
+        router.push("/areas");
         toast(fallback, "neutral");
       }
     };
     const list: (Command | false)[] = [
+      // First, so a dock tap → Enter starts a chat.
+      chat && {
+        id: "chat.new",
+        label: "New chat",
+        group: "Work",
+        keywords: "new chat conversation ask hermes claude start",
+        // Zero filing: lands in Miscellaneous, or in the open item/area.
+        run: () => window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: currentWorkItem() } })),
+      },
       { id: "search", label: "Search everything", group: "Search", keywords: "find look up", run: () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)) },
       { id: "go.home", label: "Go to Home", group: "Go to", keywords: "home start", run: go("/home") },
-      chat && { id: "go.chat", label: "Go to Hermes", group: "Go to", keywords: "chat conversations hermes", run: go("/chat") },
+      chat && { id: "go.chat", label: work ? "Go to Conversations" : "Go to Hermes", group: "Go to", keywords: "chat conversations hermes", run: go("/chat") },
       { id: "go.alerts", label: "Go to Alerts", group: "Go to", keywords: "notifications alerts", run: go("/alerts") },
-      work && { id: "work.today", label: "Go to Today", group: "Go to", keywords: "work today continue", run: go("/work") },
-      work && { id: "work.inbox", label: "Go to Inbox", group: "Go to", keywords: "work inbox triage unfiled issues", run: go("/work?view=inbox") },
-      work && { id: "work.timeline", label: "Go to Timeline", group: "Go to", keywords: "work timeline gantt dates", run: go("/work/timeline") },
-      work && { id: "work.dashboard", label: "Go to Dashboard", group: "Go to", keywords: "work dashboard widgets lanes", run: go("/work/dashboard") },
-      work && { id: "work.map", label: "Go to Map", group: "Go to", keywords: "work map graph", run: go("/work/map") },
+      work && { id: "work.today", label: "Go to Today", group: "Go to", keywords: "areas work today continue", run: go("/areas") },
+      work && { id: "work.inbox", label: "Go to Inbox", group: "Go to", keywords: "work inbox triage unfiled issues", run: go("/areas?view=inbox") },
+      work && { id: "work.timeline", label: "Go to Timeline", group: "Go to", keywords: "work timeline gantt dates", run: go("/areas/timeline") },
+      work && { id: "work.dashboard", label: "Go to Dashboard", group: "Go to", keywords: "work dashboard widgets lanes", run: go("/areas/dashboard") },
+      work && { id: "work.map", label: "Go to Map", group: "Go to", keywords: "work map graph", run: go("/areas/map") },
       work && {
         id: "work.capture",
         label: "Capture to Inbox",

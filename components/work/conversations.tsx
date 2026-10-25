@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Dialog, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
-import type { ConversationOption, ConversationsResponse, LinkRole, UnfiledConversation, UnfiledResponse, WorkItem } from "@/lib/work";
+import type { ConversationOption, ConversationsResponse, FilingSuggestion, LinkRole, UnfiledConversation, UnfiledResponse, WorkItem } from "@/lib/work";
 import { useWorkMutation } from "./common";
 
 export function fmtWhen(at: string | null | undefined) {
@@ -234,27 +234,28 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
   );
 }
 
-function FileUnderDialog({
+export function FileUnderDialog({
   c,
   items,
   busy,
   onClose,
   onFile,
 }: {
-  c: UnfiledConversation;
+  c: { id: string; title: string; suggestions: FilingSuggestion[] };
   items: WorkItem[];
   busy: boolean;
   onClose: () => void;
   onFile: (itemId: string) => void;
 }) {
   const [dest, setDest] = useState(c.suggestions[0]?.id ?? "");
-  const options = itemPaths(items);
+  // Conversations go under areas, projects, threads… (or another conversation); never inside a note.
+  const options = itemPaths(items, new Set(items.filter((i) => i.kind === "note" || i.sessionId === c.id).map((i) => i.id)));
   return (
     <Dialog
       open
       onClose={onClose}
       title={`File ${c.title}`}
-      description="Links the conversation as a source of the item you pick. Nothing in the conversation changes."
+      description="Puts the conversation under the item you pick in the Areas tree. Nothing in the conversation changes."
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>

@@ -57,7 +57,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
 
 export async function startConversation(page: Page, text: string) {
   await page.goto("/home");
-  await page.getByLabel("Ask Hermes or capture something").fill(text);
-  await page.getByRole("button", { name: "Send to Hermes" }).click();
+  await page.getByLabel("Capture or ask Hermes").fill(text);
+  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
 }

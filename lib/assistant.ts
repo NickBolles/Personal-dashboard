@@ -27,3 +27,13 @@ export type AssistantStatus = {
   backends: { id: AssistantBackend; label: string; available: boolean; reason?: string }[];
   claude: { model: string; effort: Effort; keySet: boolean; keyFromEnv: boolean };
 };
+
+/** The model selector (GET /api/assistant/models). */
+export type ModelOption = { id: string; label: string; provider?: string };
+export type ModelsResponse = {
+  backend: AssistantBackend;
+  defaultModel: string | null;
+  defaultProvider: string | null;
+  models: ModelOption[];
+  unavailable: boolean;
+};

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { getSessionDetail, updateSession } from "@/server/assistant";
+import { getSessionDetail } from "@/server/assistant";
+import { patchConversation } from "@/server/areas";
 import { linksForSession } from "@/integrations/paperclip/service";
 import { can } from "@/server/access";
 
@@ -21,6 +22,6 @@ const patch = z.object({
   shared: z.boolean().optional(),
 });
 export const PATCH = api<z.infer<typeof patch>, { id: string }>(
-  ({ params, body, user, correlationId }) => updateSession(user, params.id, body, correlationId),
+  ({ params, body, user, correlationId }) => patchConversation(user, params.id, body, correlationId),
   { body: patch, cap: "hermes.chat" },
 );

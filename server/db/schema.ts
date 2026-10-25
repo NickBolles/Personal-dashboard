@@ -774,7 +774,7 @@ export const workItems = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     parentId: text("parent_id"),
-    /** area | project | thread | investigation | note */
+    /** area | project | thread | investigation | note | conversation */
     kind: text("kind").notNull(),
     title: text("title").notNull(),
     summary: text("summary").notNull().default(""),
@@ -793,10 +793,18 @@ export const workItems = sqliteTable(
     systemKey: text("system_key"),
     /** areas only: required | optional; null = by rule (Miscellaneous and Home optional, others required; lib/work.ts areaValidationDefault) */
     validationDefault: text("validation_default"),
+    /** conversation nodes: the Hermes/Claude session id (one node per session per owner) */
+    sessionId: text("session_id"),
+    /** areas only: JSON AreaSettings (lib/work.ts parseAreaSettings); null = defaults */
+    settings: text("settings"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
-  (t) => [index("work_items_owner_idx").on(t.userId, t.parentId), uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey)],
+  (t) => [
+    index("work_items_owner_idx").on(t.userId, t.parentId),
+    uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey),
+    uniqueIndex("work_items_session_idx").on(t.userId, t.sessionId),
+  ],
 );
 
 export const workLinks = sqliteTable(

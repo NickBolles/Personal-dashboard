@@ -1,4 +1,6 @@
-# Work hub
+# Areas (Work hub)
+
+> **Phase 4 renamed Work to Areas** and merged chat into it: one tree for work _and_ conversations. `/work` URLs redirect to `/areas` (the API stays at `/api/work/*`). See [Areas (phase 4)](#areas-phase-4) below; the rest of this page still applies to every node in the tree.
 
 A private place to organize AI-assisted work: where a conversation belongs, what was handed off, which PR implements it, and whether the outcome was actually achieved. Background: the conversation-platform PRD (P0 tree/lifecycle/handoff/validation, P1 timeline and dashboard, P2 map). Single owner per row, no AI calls, GitHub read-only. Phase 1 was the vertical slice; phase 2 added conversation filing, handoff into a new conversation, automatic PR/issue refresh, drag-and-drop, undo, timeline editing and dependencies, validation templates, the map, Home cards and dashboard upgrades. Phase 3 applied the owner's decisions: `/work` opens on **Today**, an **Inbox** in the left rail, **no automatic settlement**, a per-area validation default, GitHub connections (one read-only token per owner) with a scheduled poll and read-only webhooks, the Command Center look and the **command dock**.
 
@@ -29,6 +31,11 @@ Access: capability `work.use` (adults by default; admins have everything). Pages
 |                                   | `work_links.checks_state` / `checks_at` (0016): combined CI state of a PR's head commit (`success · failure · pending`).                                                                                                              |
 
 A built-in **Miscellaneous** area is created lazily per person (`system_key = "misc"`); non-area items created without a parent land there. It can't be archived or moved and always stays last among areas.
+
+| Phase 4 (0017)                                  | What                                                                                                                                                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `work_items.kind = conversation` + `session_id` | A conversation node: a Hermes or Claude-direct session placed in the tree (unique per owner and session). Hermes owns the content; Jarvis owns placement, lineage and lifecycle. |
+| `work_items.settings`                           | Areas only: JSON `AreaSettings` (agent mode, instructions, default backend/model/provider, default repo, context sources, settle policy, quiet days).                            |
 
 ## Tree operations
 
@@ -66,7 +73,7 @@ Statuses: `captured, exploring, ready, in_progress, in_review, awaiting_validati
 - **PR merged** (a linked `github_pr` with role `implementation` whose state becomes `merged`, manually, via refresh, the poller or a webhook), `onImplementationMerged`:
   - the latest packet requires validation (**default when there is no packet**), or any validation is `pending` or `fail` → `awaiting_validation`;
   - otherwise → **`ready_to_settle`** ("Ready to settle"), and the item shows a **"PR merged — settle?"** prompt with **Settle now**. Today lists these too.
-  - **Auto-settle: never** (owner decision). No code path writes `settled_kind = auto` any more; settling is always the person's action and records `settled_kind = manual`. Rows auto-settled before phase 3 stay readable with an **Auto-settled (legacy)** badge. We chose a dedicated status over "`in_review` + a prompt" because it is explicit in lanes, filters, Today and the KPI strip, and it is a normal open status (settle, reopen or move it like any other).
+  - **Auto-settle: only where an area opted in** (phase 4 owner decision; phase 3 had removed it entirely). By default settling is the person's action (`settled_kind = manual`); an area with settle policy `auto_after_quiet` settles merged, passing, quiet work itself (`settled_kind = auto`, always undoable for 7 days — see [Settle policy](#settle-policy)). Auto-settled rows show an **Auto-settled** badge. We chose a dedicated status over "`in_review` + a prompt" because it is explicit in lanes, filters, Today and the KPI strip, and it is a normal open status (settle, reopen or move it like any other).
   - Closed items (settled/superseded/abandoned) are left alone; reference PRs never change state. A merged PR is final: a later (stale) GitHub readback never un-merges it, and a readback that finds the link changed meanwhile (webhook or manual mark) keeps the newer state.
 - **Validation**: recording an observed value computes pass/fail with the comparator (`=` uses a tiny relative tolerance). A waiver needs a reason.
 - **Settle** (`settleGate`): every validation is `pass` or `waived`, and if the latest packet requires validation there must be at least one. Failing validations offer "Reopen with failed evidence".
@@ -185,3 +192,58 @@ Phones are first-class for capture (dock → Capture, or the inbox form), triage
 AI triage/summaries, GitHub writes, sharing, packet accept/reject, redo, editing from the map, a custom-HTML widget gallery (future), context-aware dock petals, Android screens (the Android app is untouched: `work` search results and Home cards there have no native route, and the Android source label map has no "Work" entry, so the label is omitted).
 
 Rollback: remove the `work.use` capability; the tables are additive and nothing existing is rewritten. GitHub: delete the connections (Settings) and set the poll interval to 0; without a webhook secret every delivery is refused.
+
+## Areas (phase 4)
+
+Owner decisions (binding): **one tree** for everything (Momentum Bets, Home, General Dev, Finance…) holding work items _and_ conversations; **misc chats stay effortless** (zero filing); **`@` for every reference**, `#` for GitHub PRs/issues, `/` for commands, no `!`.
+
+### Navigation
+
+- The app rail and phone bar show **Areas** (`/areas`) instead of Work + Hermes for people with `work.use`; people who only chat keep **Hermes** (`/chat`). `/home-control` is labelled **House** (no second "Home"); Workouts has its own dumbbell icon.
+- **One rail state everywhere** (design review D3): collapsed (icons) up to 1440 px, expanded above; the person's toggle (`localStorage jarvis:rail`) wins on every route. Work no longer collapses it.
+- **One secondary nav**: the Areas pane (Today, Inbox, **Chats**, the tree). The old Work top bar is gone; Tree · Timeline · Dashboard · Map is a segmented control in the page header (`AreasViewSwitch`). The same pane sits beside every conversation on desktop (`/chat/*`, `components/areas/AreasSidebar.tsx`).
+
+### Conversations in the tree
+
+- **Nodes**: `kind = conversation` rows with the session id. They nest (children allowed, never inside a note), move, drag/drop, undo, settle and reopen like any item. The item form can't create them (`CREATABLE_KINDS`), and a node can't change kind. Forking the _item_ is refused ("fork the conversation itself"): forking the conversation (`POST /api/hermes/sessions/:id/fork`) places the fork **next to its parent** with `forked_from` lineage.
+- **Linked conversations** (existing `work_links` of kind `chat_session`, e.g. _Continue in new conversation_) show as read-only child rows of their item (`GET /api/work/items` → `linkedConversations`). Selecting any conversation row opens `/chat/<id>`.
+- **New chat from anywhere** (palette's first command — so a dock tap then Enter —, Areas' **New chat**, an item's **New chat here**, `/chat`, Home's **Ask Hermes**): `POST /api/hermes/sessions {areaId?}` (`server/areas.ts startConversation`) creates the session and its node at once — in **Miscellaneous**, or under the area/item it was started from. Placement never blocks the chat (if it fails the chat is simply unfiled). Node titles follow the assistant's titles whenever conversations are listed (`syncConversationTitles`).
+- **Unfiled** = not in the tree, or only directly in Miscellaneous. `/chat` for Areas people is the **conversations view** of the same data (`GET /api/work/conversations?view=all|unfiled`): grouped Today / This week / Older, backend, last activity, a placement chip, and for unfiled ones a one-tap **File under <suggestion>** plus **File…**. The **Inbox** only lists conversations that aren't in the tree at all (chats that land in Miscellaneous never nag).
+- **Filing** (`POST /api/work/conversations/file`) creates or moves the node (an undoable Move). It first reads the conversation through `server/assistant` as the access check and **refuses (503) if the assistant doesn't answer**, instead of trusting the id.
+- Conversation header (`components/chat/Conversation.tsx`): an **area chip** (path or "Not in Areas", opens _File under…_), up to two suggestion chips, **Properties** (the node in `/areas`), and an explicit **Shared with household · Stop sharing** chip.
+
+### Composer: `@`, `#`, `/`
+
+- `@` opens a picker with typed sections — Areas, Work, Conversations, People, Devices, Files & links (URL links on your items) — and `type:` filters (`@chat:`, `@area:`, `@item:`/`@work:`, `@person:`, `@device:`, `@file:`), keyboard-driven from the textarea (↑/↓, Enter/Tab, Esc; `aria-activedescendant`). `GET /api/references?q=` (`server/references.ts`). Finance is never offered.
+- `#` lists PRs/issues: ones linked to your work (local, no token) plus a read-only GitHub issue search in the **repo chip**'s repo (the area's default repo; click to change), with the normal token resolution (App installation → connection → env). `GET /api/references/github?repo=&q=`.
+- `/` commands: `/model`, `/mode` (new conversation with the other assistant, same area), `/file`, `/handoff`, `/fork`, `/settle`, `/share`, `/new`, `/context`. Each is also reachable from a menu or the header.
+- Picked references are written as tokens `@[Label](type:id)` / `#[Label](gh:owner/repo#n)` (`lib/references.ts`), rendered as chips in the timeline. On send the server resolves them (`resolveReferences`) into a "Referenced:" snapshot appended under _Context from Jarvis_ — only what the sender may see (other people's items, unknown types and anything Finance resolve to nothing). The timeline folds that context into a disclosure.
+
+### Model selector
+
+`GET /api/assistant/models?backend=hermes|claude`: Hermes' `/v1/models` plus models its providers report via `/api/model/options` (and Hermes' default), or the Claude-direct list. The composer's **Model** chip (and `/model`) opens a searchable list; the choice is remembered per conversation (browser), and "Also make it the default for <area>" saves the area's default. A run uses: the message's override → the area's default model/provider → the household preference.
+
+### Per-area settings
+
+Area → **Area settings** (`PATCH /api/work/items/:id {settings}`, areas only, merged, audited `work.area_settings`): agent mode (e.g. a Hermes profile name such as `momentumchief`) and instructions — sent as Hermes run `instructions` ("Jarvis area: X. Agent mode: Y. …"; Claude-direct ignores them) —, the assistant new conversations use, the default model, the **default repo** (scopes `#`), context sources attached to every message (Today overview, Skylight, Home Assistant, Todos, Daily Compass, Paperclip; filtered by what the sender may see), the settle policy and quiet days, and (in Details) the validation default.
+
+### Settle policy
+
+`server/work/settle-rules.ts` (pure, unit tested). Deterministic signals: a linked implementation PR is **merged**, the **settle gate passes** (validations pass/waived; a packet that requires validation has one), and **no activity** (events, edits) for the area's quiet days (default 3).
+
+- `manual`: nothing.
+- `suggest` (default): Today lists **Ready to settle?** (items not already prompting as _Ready to settle_).
+- `auto_after_quiet` (opt-in per area): computed when Today loads (`settleReview`), the item is settled with `settled_kind = auto`, an event ("Settled automatically: PR merged, validations pass, quiet for N days (Area policy)"), an audit entry (actor `jarvis`) and a `settle` undo op. Today shows **Settled automatically** with **Undo** for 7 days (`AUTO_SETTLE_UNDO_MS`): undo reopens it to its previous status.
+- A cheap model check could refine suggestions later but needs model-spend approval: `settleModelCheck` is the hook and has no opinion today.
+
+### Capture
+
+Home's box is the one capture primitive (design review D1): **Enter captures to the Inbox**; **Ask Hermes** (button, or ⌘/Ctrl+Enter) starts a conversation instead. The PWA share target opens the Inbox capture sheet prefilled (`/areas?view=inbox&capture=…`) with **Ask Hermes instead** on the sheet; without `work.use` both still go to Hermes. AI triage of the Inbox is phase 5.
+
+### Sharing
+
+Sharing stays read-only for the household. Share/unshare writes `conversation.share` / `conversation.unshare` audit entries (`server/areas.ts patchConversation`); Settings lists **Shared conversations** (`GET /api/hermes/sessions/shared`) with Stop sharing.
+
+### Not yet
+
+Real Hermes profile routing (the API takes `instructions`, not a profile), syncing archive state from Hermes into nodes, a resizable tree pane, phone-specific composer sheet, workflow-run validations, AI triage (phase 5).

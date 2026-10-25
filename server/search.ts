@@ -223,7 +223,7 @@ const providers: SearchProvider[] = [
           module: "work",
           title: i.title,
           subtitle: [STATUS_LABELS[i.status], i.nextAction ? `Next: ${i.nextAction}` : i.summary].filter(Boolean).join(" · ").slice(0, 160),
-          href: `/work?item=${encodeURIComponent(i.id)}`,
+          href: `/areas?item=${encodeURIComponent(i.id)}`,
           _s: matchScore(q, i.title, i.summary, i.nextAction),
         })),
   },

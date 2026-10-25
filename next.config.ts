@@ -31,6 +31,13 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": ["./drizzle/**/*"],
   },
+  /** Work became Areas (phase 4): old links and bookmarks keep working (query strings carry over). */
+  async redirects() {
+    return [
+      { source: "/work", destination: "/areas", permanent: false },
+      { source: "/work/:path*", destination: "/areas/:path*", permanent: false },
+    ];
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

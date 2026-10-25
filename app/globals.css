@@ -245,6 +245,133 @@
     border-top: 1px solid var(--line);
   }
 
+  /*
+   * Status pill (design review D7): every status is tinted (soft background,
+   * coloured text and dot); solid accent is reserved for primary buttons.
+   * Shared by Areas, Today and the dashboard (was Work-only `.wk-pill`).
+   */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    background: var(--surface-2);
+    color: var(--muted);
+  }
+  .status-pill::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.85;
+    flex: none;
+  }
+  .status-pill[data-s="ready"],
+  .status-pill[data-s="in_progress"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .status-pill[data-s="in_review"] {
+    background: var(--violet-soft);
+    color: var(--violet);
+  }
+  .status-pill[data-s="awaiting_validation"] {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .status-pill[data-s="ready_to_settle"],
+  .status-pill[data-s="settled"] {
+    background: var(--ok-soft);
+    color: var(--ok);
+  }
+  .status-pill[data-s="reopened"] {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .status-pill[data-s="on_hold"],
+  .status-pill[data-s="superseded"],
+  .status-pill[data-s="abandoned"] {
+    border-color: var(--line);
+  }
+
+  /* Segmented control (Areas views, filters): one hairline track, the current segment raised. */
+  .seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+  }
+  .seg-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .seg-item:hover {
+    color: var(--text);
+  }
+  .seg-item[aria-current="page"],
+  .seg-item[aria-pressed="true"],
+  .seg-item[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+    box-shadow: var(--shadow);
+  }
+  @media (min-width: 1024px) and (pointer: fine) {
+    .seg-item {
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: 12.5px;
+    }
+  }
+
+  /* Compact chip: references in messages, area placement, filing suggestions. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    min-height: 22px;
+    padding: 0 7px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 12.5px;
+    line-height: 20px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: baseline;
+  }
+  .chip[data-tone="accent"] {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+  }
+  .chip[data-tone="ok"] {
+    background: var(--ok-soft);
+    border-color: transparent;
+    color: var(--ok);
+  }
+
   .brand-mark {
     display: inline-block;
     width: 22px;

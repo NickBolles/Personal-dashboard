@@ -58,63 +58,7 @@
   white-space: nowrap;
 }
 
-/* ---- status pill with a dot (artifact .pill.s-*) ---- */
-.wk-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 18px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-  border: 1px solid transparent;
-  background: var(--surface-2);
-  color: var(--muted);
-}
-.wk-pill::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.85;
-  flex: none;
-}
-.wk-pill.nodot::before {
-  display: none;
-}
-.wk-pill[data-s="ready"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.wk-pill[data-s="in_progress"] {
-  background: var(--accent);
-  color: var(--accent-contrast);
-}
-.wk-pill[data-s="in_review"] {
-  background: var(--violet-soft);
-  color: var(--violet);
-}
-.wk-pill[data-s="awaiting_validation"] {
-  background: var(--warn-soft);
-  color: var(--warn);
-}
-.wk-pill[data-s="ready_to_settle"],
-.wk-pill[data-s="settled"] {
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-.wk-pill[data-s="reopened"] {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-.wk-pill[data-s="on_hold"],
-.wk-pill[data-s="superseded"],
-.wk-pill[data-s="abandoned"] {
-  border-color: var(--line);
-}
+/* The status pill moved to the shared `.status-pill` (app/globals.css, @layer components). */
 
 /* ---- status dot (tree rows, lists) ---- */
 .wk-dot {
@@ -210,28 +154,6 @@ button.wk-kpi:hover {
   color: var(--text);
   font-weight: 600;
   border-color: var(--accent);
-}
-
-/* Section tabs in the Work bar */
-.wk-navlink {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.wk-navlink:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.wk-navlink[aria-current="page"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
 }
 
 /* Left pane rows (Today / Inbox) */
@@ -342,11 +264,6 @@ button.wk-kpi:hover {
   }
   .work-ui .wk-tab {
     min-height: 38px;
-  }
-  .work-ui .wk-navlink {
-    min-height: 30px;
-    padding: 0 10px;
-    font-size: 13.5px;
   }
   .work-ui .wk-side-nav {
     min-height: 32px;

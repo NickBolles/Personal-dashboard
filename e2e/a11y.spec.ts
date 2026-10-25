@@ -27,11 +27,11 @@ const PAGES = [
   "/finance/funds",
   "/finance/plan",
   "/finance/checkin?all=1",
-  "/work",
-  "/work?view=inbox",
-  "/work/timeline",
-  "/work/dashboard",
-  "/work/map",
+  "/areas",
+  "/areas?view=inbox",
+  "/areas/timeline",
+  "/areas/dashboard",
+  "/areas/map",
 ];
 
 for (const path of PAGES) {

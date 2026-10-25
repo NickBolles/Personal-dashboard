@@ -9,6 +9,7 @@ import { Button, Card, Field, Page, PageHeader, SectionLabel, inputCls, useToast
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { AssistantSettings } from "./AssistantSettings";
+import { SharedConversations } from "./SharedConversations";
 
 type Prefs = {
   displayName: string;
@@ -20,7 +21,7 @@ type Prefs = {
 export function SettingsView() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { isAdmin, role } = useAccess();
+  const { isAdmin, role, can } = useAccess();
   const minPass = role === "household" ? 4 : 6;
   const prefs = useQuery({ queryKey: ["preferences"], queryFn: () => api.get<Prefs>("/api/settings") });
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<{ authMode: string; user: { name: string; via: string } }>("/api/auth/me") });
@@ -134,6 +135,7 @@ export function SettingsView() {
           ) : null}
 
           {isAdmin ? <AssistantSettings /> : null}
+          {can("hermes.chat") ? <SharedConversations /> : null}
 
           {me.data?.authMode === "local" ? (
             <Card>

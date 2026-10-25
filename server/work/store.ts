@@ -15,6 +15,7 @@ import {
   areaValidationDefault,
   isClosed,
   isValidationOverdue,
+  parseAreaSettings,
   parseGithubUrl,
   safeHref,
   type createItemSchema,
@@ -42,6 +43,9 @@ import {
   type WorkPacket,
   type WorkStatus,
   type WorkValidation,
+  type AreaSettings,
+  type LinkedConversationRow,
+  type areaSettingsSchema,
 } from "@/lib/work";
 import type { z } from "zod";
 import {
@@ -58,6 +62,7 @@ import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github"
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
 import { isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
+import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
 
 /**
@@ -101,6 +106,8 @@ export function toItem(r: ItemRow): WorkItem {
     archived: r.archived,
     builtIn: !!r.systemKey,
     validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
+    sessionId: r.sessionId ?? null,
+    settings: r.parentId === null && r.kind === "area" ? parseAreaSettings(r.settings) : null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -348,6 +355,10 @@ export function getDetail(userId: string, id: string): WorkDetail {
     })),
     settle: settleGate(packets[0] ?? null, validations as { status: WorkValidation["status"] }[]),
     validationDefault: validationDefaultFor(row, byId),
+    area: (() => {
+      const a = areaOf(row, byId);
+      return a ? { id: a.id, title: a.title, builtIn: !!a.systemKey, settings: parseAreaSettings(a.settings) } : null;
+    })(),
     githubRefresh: githubRefreshEnabled(),
     ...dependencyRefs(userId, id, db, byId),
   };
@@ -368,7 +379,17 @@ function nextSort(userId: string, parentId: string | null, db: Db) {
 function insertItem(
   db: Db,
   userId: string,
-  v: { parentId: string | null; kind: WorkKind; title: string; summary?: string; nextAction?: string; startDate?: string | null; targetDate?: string | null },
+  v: {
+    parentId: string | null;
+    kind: WorkKind;
+    title: string;
+    summary?: string;
+    nextAction?: string;
+    startDate?: string | null;
+    targetDate?: string | null;
+    sessionId?: string | null;
+    status?: WorkStatus;
+  },
 ) {
   const id = newId("wk");
   const at = nowIso();
@@ -379,6 +400,8 @@ function insertItem(
       parentId: v.parentId,
       kind: v.kind,
       title: v.title,
+      sessionId: v.sessionId ?? null,
+      ...(v.status ? { status: v.status } : {}),
       summary: v.summary ?? "",
       nextAction: v.nextAction ?? "",
       startDate: v.startDate ?? null,
@@ -411,12 +434,17 @@ export function createItem(user: CurrentUser, body: z.infer<typeof createItemSch
 }
 
 export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
-  const { status, reason, ...fields } = body;
+  const { status, reason, settings, ...fields } = body;
   const result = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey && (fields.archived || (fields.kind && fields.kind !== "area"))) throw new HttpError(409, "built_in", "Miscellaneous is built in");
     if (fields.validationDefault !== undefined && row.parentId !== null)
       throw new HttpError(400, "not_area", "The validation default is an area setting; change it on the area");
+    if (settings !== undefined && (row.parentId !== null || row.kind !== "area"))
+      throw new HttpError(400, "not_area", "Agent and settle settings belong to an area; change them on the area");
+    if (fields.kind && row.kind === "conversation")
+      throw new HttpError(409, "conversation_kind", "A conversation stays a conversation; split it into a thread instead");
+    if (fields.kind === "area" && row.parentId !== null) throw new HttpError(400, "area_top", "Only top-level items can be areas");
     checkDates(fields.startDate === undefined ? row.startDate : fields.startDate, fields.targetDate === undefined ? row.targetDate : fields.targetDate);
     const nextAction = fields.nextAction ?? row.nextAction;
     if ((row.status === "ready" || row.status === "in_progress") && !status && !nextAction.trim())
@@ -455,6 +483,11 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
       recordOp(tx, user.id, id, fields.archived ? "archive" : "unarchive", { archived: row.archived }, out);
     }
+    if (settings !== undefined) {
+      const merged = mergeAreaSettings(parseAreaSettings(row.settings), settings);
+      patch.settings = JSON.stringify(merged);
+      event(tx, id, user.id, { kind: "edit", reason: `Area settings: ${Object.keys(settings).join(", ") || "unchanged"}` });
+    }
     tx.update(T).set(patch).where(eq(T.id, id)).run();
     return transition;
   });
@@ -470,7 +503,24 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
     });
   else if (fields.archived !== undefined)
     audit({ actor: user.id, action: fields.archived ? "work.archive" : "work.unarchive", source: "work", sourceRecord: id, result: "ok", correlationId });
+  if (settings !== undefined)
+    audit({
+      actor: user.id,
+      action: "work.area_settings",
+      source: "work",
+      sourceRecord: id,
+      result: "ok",
+      correlationId,
+      detail: { fields: Object.keys(settings) },
+    });
   return toItem(ownedItem(user.id, id));
+}
+
+/** Stored settings + a partial update (validated by areaSettingsSchema). */
+export function mergeAreaSettings(current: AreaSettings, patch: z.infer<typeof areaSettingsSchema>): AreaSettings {
+  const next = { ...current };
+  for (const [k, v] of Object.entries(patch)) if (v !== undefined) (next as Record<string, unknown>)[k] = v;
+  return next;
 }
 
 export function moveItem(user: CurrentUser, id: string, parentId: string | null, correlationId: string, out?: OpOut): WorkItem {
@@ -574,6 +624,8 @@ export function forkItem(user: CurrentUser, id: string, title: string | undefine
   const forkId = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
     if (row.systemKey || row.parentId === null) throw new HttpError(409, "fork_area", "Areas can't be forked");
+    if (row.kind === "conversation")
+      throw new HttpError(409, "fork_conversation", "Fork the conversation itself (Fork latest state): the fork lands next to it in the tree");
     const forkId = insertItem(tx, user.id, {
       parentId: row.parentId,
       kind: row.kind as WorkKind,
@@ -648,7 +700,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         .where(and(eq(schema.workOps.userId, user.id), eq(schema.workOps.itemId, op.itemId)))
         .all(),
     );
-    const check = undoCheck(op, latest?.id ?? null, now);
+    const check = undoCheck(op, latest?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
     if (!check.ok) throw new HttpError(409, check.code, check.message);
     const payload = JSON.parse(op.payload) as {
       fromParentId?: string | null;
@@ -656,6 +708,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       prevOrder?: string[];
       archived?: boolean;
       copiedLinks?: number;
+      fromStatus?: string;
     };
     const row = ownedItem(user.id, op.itemId, tx);
     tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
@@ -681,6 +734,11 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       }
       restoreOrder(tx, allRows(user.id, tx), from, payload.prevOrder ?? [], row.id);
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "move" ? "Undid move" : "Undid reorder" });
+    } else if (kind === "settle") {
+      if (row.status !== "settled") throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
+      const back = (payload.fromStatus ?? "ready_to_settle") as WorkStatus;
+      tx.update(T).set({ status: back, settledKind: null, settledReason: null, completedAt: null, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
+      event(tx, row.id, user.id, { kind: "status", from: "settled", to: back, reason: "Undid automatic settle" });
     } else if (kind === "archive" || kind === "unarchive") {
       tx.update(T).set({ archived: !!payload.archived, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "archive" ? "Undid archive" : "Undid unarchive" });
@@ -1341,4 +1399,193 @@ export function itemsWithValidations(userId: string) {
   const ids = rows.map((r) => r.id);
   const vals = ids.length ? getDb().select().from(schema.workValidations).where(inArray(schema.workValidations.itemId, ids)).all() : [];
   return { rows, vals, today: today() };
+}
+
+// --- Areas (phase 4): conversations in the tree, settle policy ---
+
+/** session id → the person's conversation node for it. */
+export function conversationNodes(userId: string, db: Db = getDb()) {
+  const rows = db
+    .select()
+    .from(T)
+    .where(and(eq(T.userId, userId), eq(T.kind, "conversation")))
+    .all();
+  return new Map(rows.filter((r) => r.sessionId).map((r) => [r.sessionId!, r]));
+}
+
+/**
+ * Conversations linked to visible work items (work_links), as child rows of
+ * those items in the tree. A link whose conversation already has its node
+ * under the same item isn't repeated.
+ */
+export function linkedConversationRows(userId: string, items: WorkItem[]): LinkedConversationRow[] {
+  const ids = items.map((i) => i.id);
+  if (!ids.length) return [];
+  const nodes = new Set(items.filter((i) => i.kind === "conversation" && i.sessionId).map((i) => `${i.parentId}|${i.sessionId}`));
+  return getDb()
+    .select({ itemId: schema.workLinks.itemId, sessionId: schema.workLinks.targetId, title: schema.workLinks.title })
+    .from(schema.workLinks)
+    .where(and(inArray(schema.workLinks.itemId, ids), eq(schema.workLinks.kind, "chat_session")))
+    .orderBy(asc(schema.workLinks.createdAt))
+    .all()
+    .filter((l): l is LinkedConversationRow => !!l.sessionId && !nodes.has(`${l.itemId}|${l.sessionId}`));
+}
+
+/**
+ * Put a conversation in the Areas tree: create its node under `parentId`
+ * (null = Miscellaneous) or move its existing node there (a normal Move:
+ * lineage + undo). Callers check first that the person can open the
+ * conversation (createSession, getSessionDetail). Hermes keeps the content;
+ * Jarvis keeps placement, lineage and lifecycle.
+ */
+export function placeConversation(
+  user: CurrentUser,
+  v: { sessionId: string; parentId: string | null; title: string; forkedFromSessionId?: string | null },
+  correlationId: string,
+  out?: OpOut,
+): WorkItem {
+  const existing = conversationNodes(user.id).get(v.sessionId);
+  const db = getDb();
+  if (existing) {
+    const target = v.parentId ?? ensureMiscellaneous(user.id).id;
+    if (target === existing.parentId) return toItem(existing);
+    const parent = ownedItem(user.id, target);
+    if (parent.kind === "note") throw new HttpError(400, "note_parent", "Notes can't hold conversations");
+    return moveItem(user, existing.id, target, correlationId, out);
+  }
+  const id = db.transaction((tx) => {
+    let parentId = v.parentId;
+    if (parentId) {
+      const parent = ownedItem(user.id, parentId, tx);
+      if (parent.kind === "note") throw new HttpError(400, "note_parent", "Notes can't hold conversations");
+    } else parentId = ensureMiscellaneous(user.id, tx).id;
+    const id = insertItem(tx, user.id, {
+      parentId,
+      kind: "conversation",
+      title: v.title.trim().slice(0, 200) || "New conversation",
+      sessionId: v.sessionId,
+      status: "exploring",
+    });
+    event(tx, id, user.id, { kind: "created", to: "exploring", reason: "Conversation" });
+    if (v.forkedFromSessionId) {
+      const from = conversationNodes(user.id, tx).get(v.forkedFromSessionId);
+      if (from) lineage(tx, user.id, { childId: id, parentId: from.id, relation: "forked_from", actor: user.id });
+    }
+    return id;
+  });
+  audit({ actor: user.id, action: "work.conversation_place", source: "work", sourceRecord: id, result: "ok", correlationId, detail: { session: v.sessionId } });
+  return toItem(ownedItem(user.id, id));
+}
+
+/** Keep conversation node titles in step with the assistant's titles (Hermes renames sessions after the first turn). */
+export function syncConversationTitles(userId: string, sessions: { id: string; title?: string | null }[]) {
+  const nodes = conversationNodes(userId);
+  if (!nodes.size) return 0;
+  let n = 0;
+  getDb().transaction((tx) => {
+    for (const s of sessions) {
+      const node = nodes.get(s.id);
+      const title = s.title?.trim().slice(0, 200);
+      if (node && title && title !== node.title) {
+        tx.update(T).set({ title }).where(eq(T.id, node.id)).run();
+        n++;
+      }
+    }
+  });
+  return n;
+}
+
+/**
+ * Apply each area's settle policy (settle-rules.ts) to the person's open work:
+ * returns the ids to suggest, and settles (with an undo op) the ones whose
+ * area opted into `auto_after_quiet`. Deterministic; called when Today loads.
+ */
+export function settleReview(userId: string, now = new Date()) {
+  const db = getDb();
+  const rows = allRows(userId, db);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const hidden = (r: ItemRow) => {
+    for (let c: ItemRow | undefined = r, n = 0; c && n < 100; c = c.parentId ? byId.get(c.parentId) : undefined, n++) if (c.archived) return true;
+    return false;
+  };
+  const open = rows.filter((r) => r.parentId !== null && !isClosed(r.status) && !hidden(r));
+  if (!open.length) return { suggest: [] as string[], settled: [] as string[] };
+  const merged = new Set(
+    db
+      .select({ itemId: schema.workLinks.itemId })
+      .from(schema.workLinks)
+      .where(
+        and(
+          inArray(
+            schema.workLinks.itemId,
+            open.map((r) => r.id),
+          ),
+          eq(schema.workLinks.kind, "github_pr"),
+          eq(schema.workLinks.role, "implementation"),
+          eq(schema.workLinks.externalState, "merged"),
+        ),
+      )
+      .all()
+      .map((l) => l.itemId),
+  );
+  const suggest: string[] = [];
+  const settled: string[] = [];
+  for (const r of open) {
+    if (!merged.has(r.id)) continue;
+    const area = areaOf(r, byId);
+    const settings = parseAreaSettings(area?.settings);
+    const lastEvent = db
+      .select({ at: schema.workEvents.at })
+      .from(schema.workEvents)
+      .where(eq(schema.workEvents.itemId, r.id))
+      .orderBy(desc(schema.workEvents.at))
+      .get();
+    const facts = {
+      status: r.status as WorkStatus,
+      kind: r.kind,
+      archived: r.archived,
+      merged: true,
+      gateAllowed: settleGate(latestPacket(r.id, db), validationsOf(r.id, db) as { status: WorkValidation["status"] }[]).allowed,
+      lastActivityAt: [r.updatedAt, lastEvent?.at ?? ""].sort().at(-1)!,
+    };
+    const signals = settleSignals(facts, settings.quietDays, now);
+    const decision = settleDecision(settings.settlePolicy, signals, facts);
+    if (decision === "suggest") suggest.push(r.id);
+    else if (decision === "auto") {
+      const reason = `Settled automatically: ${signals.reasons.join(", ")} (${area?.title ?? "area"} policy)`;
+      db.transaction((tx) => {
+        const at = now.toISOString();
+        tx.update(T).set({ status: "settled", settledKind: "auto", settledReason: reason, completedAt: at, updatedAt: at }).where(eq(T.id, r.id)).run();
+        event(tx, r.id, "jarvis", { kind: "status", from: r.status, to: "settled", reason });
+        recordOp(tx, userId, r.id, "settle", { fromStatus: r.status });
+      });
+      audit({
+        actor: "jarvis",
+        action: "work.status",
+        source: "work",
+        sourceRecord: r.id,
+        result: "ok",
+        correlationId: `settle-policy:${r.id}`,
+        detail: { from: r.status, to: "settled", auto: true },
+      });
+      settled.push(r.id);
+    }
+  }
+  return { suggest, settled };
+}
+
+/** Auto-settled items of the last 7 days with the undo op that can still reopen them. */
+export function recentAutoSettled(userId: string, now = new Date()) {
+  const since = new Date(now.getTime() - AUTO_SETTLE_UNDO_MS).toISOString();
+  const rows = allRows(userId).filter((r) => r.status === "settled" && r.settledKind === "auto" && (r.completedAt ?? "") >= since);
+  return rows.map((r) => {
+    const latest = latestOp(
+      getDb()
+        .select()
+        .from(schema.workOps)
+        .where(and(eq(schema.workOps.userId, userId), eq(schema.workOps.itemId, r.id)))
+        .all(),
+    );
+    return { row: r, opId: latest && latest.kind === "settle" && !latest.undoneAt ? latest.id : null };
+  });
 }

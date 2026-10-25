@@ -37,16 +37,16 @@ async function centre(l: Locator) {
 }
 
 test("work opens on Today; capture to the inbox, file it, no sideways scrolling", async ({ page }) => {
-  await page.goto("/work");
+  await page.goto("/areas");
   await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Work at a glance" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Work views" }).getByRole("button", { name: "Today" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Areas sections" }).getByRole("button", { name: "Today" })).toHaveAttribute("aria-current", "page");
   await expect(page).not.toHaveURL(/item=/);
   await expectNoHorizontalOverflow(page);
 
   const nonce = Date.now().toString(36);
   await page
-    .getByRole("navigation", { name: "Work views" })
+    .getByRole("navigation", { name: "Areas sections" })
     .getByRole("button", { name: /^Inbox/ })
     .click();
   await expect(page).toHaveURL(/view=inbox/);
@@ -142,7 +142,7 @@ test("settings → connections → GitHub: add, test, warn, webhook secret; assi
   await page.locator("#panel-github").getByRole("button", { name: "Check now" }).click();
   await expect(page.getByTestId("gh-poll-result")).toContainText("assigned issues");
 
-  await page.goto("/work?view=inbox");
+  await page.goto("/areas?view=inbox");
   const entry = page.locator("[data-inbox-entry]", { hasText: issue.title });
   await expect(entry).toContainText("GitHub issue");
   await expect(entry).toContainText("Why: Assigned to you on GitHub (momentumbets)");
@@ -207,7 +207,7 @@ test("command dock: tap opens the palette, hold-and-slide runs an action, releas
   await box.fill("inbox");
   await expect(page.locator('[data-command="work.inbox"]')).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/work\?view=inbox/);
+  await expect(page).toHaveURL(/\/areas\?view=inbox/);
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
 
   // Hold → radial map; slide onto "Go to", pause for its sub-menu, slide to "Timeline", release.
@@ -221,7 +221,7 @@ test("command dock: tap opens the palette, hold-and-slide runs an action, releas
   const tl = await centre(page.locator('[data-sub="work.timeline"]'));
   await page.mouse.move(tl.x, tl.y, { steps: 6 });
   await page.mouse.up();
-  await expect(page).toHaveURL(/\/work\/timeline/);
+  await expect(page).toHaveURL(/\/areas\/timeline/);
   await expect(actionMap(page)).toHaveCount(0);
 
   // Release on the orb cancels: nothing runs, no palette.
@@ -233,7 +233,7 @@ test("command dock: tap opens the palette, hold-and-slide runs an action, releas
   await page.mouse.up();
   await expect(actionMap(page)).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toHaveCount(0);
-  await expect(page).toHaveURL(/\/work\/timeline/);
+  await expect(page).toHaveURL(/\/areas\/timeline/);
 
   // Keyboard: Ctrl+. opens the map; arrows choose, Tab opens a sub-menu, Enter runs, Esc closes.
   await page.keyboard.press("Control+.");
@@ -248,7 +248,7 @@ test("command dock: tap opens the palette, hold-and-slide runs an action, releas
   await page.keyboard.press("Tab");
   await expect(page.locator('[data-sub="work.today"]')).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/work$/);
+  await expect(page).toHaveURL(/\/areas$/);
   await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
 
   // Capture from the map's Capture petal: the quick-capture dialog.
@@ -267,7 +267,7 @@ test("palette commands act on the open item: start focused work and record valid
   });
   const { item } = await api<{ item: { id: string } }>(page, "post", "/api/work/items", { kind: "thread", title: "Hydration perf", parentId: area.id });
   await api(page, "post", `/api/work/items/${item.id}/validations`, { metric: "p95 hydration", comparator: "<=", threshold: 1.2, unit: "s" });
-  await page.goto(`/work?item=${item.id}`);
+  await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf" })).toBeVisible();
   const openPalette = async () => {
     await expect(async () => {
@@ -295,15 +295,15 @@ test("palette commands act on the open item: start focused work and record valid
 test.describe("phone, 320 px", () => {
   test.use({ viewport: { width: 320, height: 640 } });
   test("Today, inbox and the packet dialog fit; the dialog's primary action stays reachable", async ({ page }) => {
-    await page.goto("/work");
+    await page.goto("/areas");
     await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
-    await page.goto("/work?view=inbox");
+    await page.goto("/areas?view=inbox");
     await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     const r = await appPost(page, "/api/work/items", { kind: "thread", title: "Phone packet check" });
     const { item } = (await r.json()) as { item: { id: string } };
-    await page.goto(`/work?item=${item.id}&do=packet`);
+    await page.goto(`/areas?item=${item.id}&do=packet`);
     const dialog = page.getByRole("dialog", { name: "Start focused work" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Save packet" })).toBeInViewport();
