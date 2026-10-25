@@ -172,7 +172,8 @@ test("create GitHub App via the manifest flow; installations, allowlist, App-sig
   await expect(page.getByRole("heading", { level: 2, name: `CI watch ${nonce}` })).toBeVisible();
   // Phones fold Links into a disclosure; open it if collapsed.
   const links = page.getByTestId("work-links");
-  if ((await links.evaluate((el) => el.tagName)) === "DETAILS" && !(await links.evaluate((el) => (el as HTMLDetailsElement).open))) await links.locator("summary").click();
+  if ((await links.evaluate((el) => el.tagName)) === "DETAILS" && !(await links.evaluate((el) => (el as HTMLDetailsElement).open)))
+    await links.locator("summary").click();
   await expect(links.getByText("merged", { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId("link-checks")).toHaveText("checks red");
 
