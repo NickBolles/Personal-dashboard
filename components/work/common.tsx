@@ -15,33 +15,81 @@ const TABS = [
   { href: "/work/map", label: "Map", match: (p: string) => p.startsWith("/work/map") },
 ];
 
-/** Work section chrome: Tree / Timeline / Dashboard / Map tabs. */
+/**
+ * Work section chrome: one slim full-width bar with the brand mark and the
+ * Tree / Timeline / Dashboard / Map tabs. `.work-ui` scopes the hub's density
+ * rules (components/work/work.css).
+ */
 export function WorkShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   return (
-    <>
-      <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6">
+    <div className="work-ui">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-line bg-surface px-3 py-1 sm:px-5">
+        <span className="hidden items-center gap-2 text-sm font-semibold sm:inline-flex" aria-hidden="true">
+          <i className="inline-block h-[18px] w-[18px] rounded-[6px] bg-[linear-gradient(135deg,var(--accent),var(--violet))]" />
+          Work
+        </span>
         <nav aria-label="Work">
-          <ul className="flex flex-wrap gap-1">
+          <ul className="flex flex-wrap gap-0.5">
             {TABS.map((t) => (
               <li key={t.href}>
-                <Link
-                  href={t.href}
-                  aria-current={t.match(path) ? "page" : undefined}
-                  className={cx(
-                    "inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium",
-                    t.match(path) ? "bg-accent-soft text-accent" : "text-muted hover:bg-surface-2 hover:text-text",
-                  )}
-                >
+                <Link href={t.href} aria-current={t.match(path) ? "page" : undefined} className="wk-navlink">
                   {t.label}
                 </Link>
               </li>
             ))}
           </ul>
         </nav>
+        <span className="ml-auto hidden items-center gap-1.5 text-xs text-muted xl:inline-flex">
+          <kbd className="wk-kbd">Ctrl K</kbd> jump or do · private to you
+        </span>
       </div>
       {children}
-    </>
+    </div>
+  );
+}
+
+/**
+ * Compact page header for Work sub-pages (Timeline, Dashboard, Map): eyebrow,
+ * one-line title and actions on a single row; the description is one muted line.
+ */
+export function WorkPageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+  return (
+    <header className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+      <div className="min-w-0">
+        {eyebrow ? <p className="wk-eyebrow">{eyebrow}</p> : null}
+        <h1 className="text-xl leading-tight font-semibold tracking-tight">{title}</h1>
+        {subtitle ? <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** Micro-label + hairline card used across the hub (rail blocks, Today sections, widgets). */
+export function Block({
+  label,
+  aside,
+  children,
+  className,
+  labelId,
+}: {
+  label: ReactNode;
+  aside?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  labelId?: string;
+}) {
+  return (
+    <div className={cx("wk-blk", className)}>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h3 id={labelId} className="wk-label">
+          {label}
+        </h3>
+        {aside}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -77,13 +125,16 @@ export const STATUS_FILL: Record<WorkStatus, string> = {
 };
 
 export function StatusDot({ status }: { status: WorkStatus }) {
-  return <span aria-hidden="true" className={cx("inline-block h-2.5 w-2.5 shrink-0 rounded-full", STATUS_FILL[status])} />;
+  return <span aria-hidden="true" className="wk-dot" data-s={status} />;
 }
 
+/** Status pill with a dot (artifact `.pill.s-*`). `data-status` is the stable hook for tests. */
 export function StatusBadge({ status, auto }: { status: WorkStatus; auto?: boolean }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1" data-status={status}>
-      <Badge tone={STATUS_TONE[status]}>{STATUS_LABELS[status]}</Badge>
+      <span className="wk-pill" data-s={status}>
+        {STATUS_LABELS[status]}
+      </span>
       {/* Rows settled automatically before phase 3; nothing creates them any more. */}
       {auto && status === "settled" ? <Badge tone="neutral">Auto-settled (legacy)</Badge> : null}
     </span>
