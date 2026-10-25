@@ -28,13 +28,14 @@ export function ShareLanding({ staged, error }: { staged?: string; error?: strin
   }, [staged]);
   const done = () => {
     if (staged) void deleteStaged(staged).catch(() => undefined);
-    if (window.history.length > 1 && document.referrer === "") window.history.back();
+    // Launched by a share: go back to the app that shared; otherwise to the Inbox.
+    if (staged && window.history.length > 2) window.history.back();
     else router.push("/areas?view=inbox");
   };
   return (
     <div className="mx-auto max-w-xl p-3 sm:p-6">
       <Card>
-        <h1 className="mb-2 text-lg font-semibold">Save to Inbox</h1>
+        <h1 className="mb-2 text-lg font-semibold">{staged || error ? "Save to Inbox" : "Capture"}</h1>
         {error === "sw" ? (
           <p role="alert" className="mb-2 text-[13px] text-danger">
             Couldn&apos;t receive the share. Open Jarvis once and try again.

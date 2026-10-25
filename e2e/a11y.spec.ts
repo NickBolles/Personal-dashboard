@@ -32,6 +32,8 @@ const PAGES = [
   "/areas/timeline",
   "/areas/dashboard",
   "/areas/map",
+  "/capture",
+  "/settings/ai",
 ];
 
 for (const path of PAGES) {
