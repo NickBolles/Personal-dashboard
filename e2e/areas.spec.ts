@@ -24,6 +24,8 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
     parentId: area.id,
   });
   await page.request.patch(`/api/work/items/${area.id}`, { data: { settings: { defaultRepo: "nick/jarvis" } }, headers: { "x-jarvis-csrf": "1" } });
+  // A PR linked to your work is always offered by # (no GitHub token needed).
+  await post(page, `/api/work/items/${thread.id}/links`, { kind: "github_pr", url: "https://github.com/nick/jarvis/pull/88" });
 
   // New chat from the Areas header: no filing step, it opens right away.
   await page.goto("/areas");
@@ -45,7 +47,7 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
 
   // @ picker: typed sections and filters; the pick becomes a chip in the sent message.
   const composer = page.locator("#composer");
-  await composer.fill("Compare with @area:roll");
+  await composer.fill(`Compare with @area:${nonce}`);
   const popover = page.getByTestId("composer-popover");
   // The area: filter leaves only areas (one matches).
   await expect(popover.getByRole("option")).toHaveCount(1);
@@ -55,7 +57,7 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
   await composer.press("End");
   await composer.pressSequentially("and #");
   await expect(popover.getByRole("button", { name: /nick\/jarvis/ })).toBeVisible();
-  await expect(popover.getByRole("option").first()).toBeVisible();
+  await expect(popover.getByRole("option", { name: /#88/ }).first()).toBeVisible();
   await composer.press("Escape");
   await expect(popover).toHaveCount(0);
   // The picked reference stays attached while its @Label is in the text.
