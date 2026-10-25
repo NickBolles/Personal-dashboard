@@ -71,3 +71,19 @@ Answers are cached (`settings` key `hermes_snapshot:<source>`, per local date) a
 **Daily Compass → complete** sends a separate "mark complete, then read it back" request. Jarvis reports success only if the answer is for today's date **and** says `completed: true`.
 
 The Hermes side needs only tools that can read Skylight and Daily Compass. Nothing special is required for the JSON format; any capable model follows the instructions. The mock (`mock-upstreams/hermes.mjs`) answers these markers for tests. `FORCE_ERROR`, `FORCE_PROSE` and `FORCE_APPROVAL` in the task text exercise the failure paths.
+
+## Hermes AI job contract (phase 5)
+
+`integrations/hermes/jobs.ts#runHermesTask`: `POST /api/sessions` (`source` `jarvis-ai` visible / `jarvis-sync` hidden, then `PATCH hidden: true`), `POST /v1/runs` with `Idempotency-Key = aij:<subject>:<kind>:<clientKey>`, `instructions` = `JARVIS_AI_JOB kind=<kind> v=<n>` preamble + JSON shape, `input` = task + allowlisted context; poll `GET /v1/runs/:id`; `POST /v1/runs/:id/stop` then wait ≤ 8 s for a terminal status; one repair turn (`<key>:repair`) for non-JSON answers; cost from `GET /api/sessions/:id` (`actual_cost_usd ?? estimated_cost_usd`, tokens); hidden sessions deleted only after `completed`/`failed`.
+
+Acceptance gate (spec §6.5) — **not yet verified against the production Hermes** (the build container has no Hermes credentials). Each unknown is behind a Settings → AI flag whose default is the conservative fallback:
+
+| Capability                                            | Flag (default)             | Fallback while off                                                                      |
+| ----------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------- |
+| `POST /v1/runs` honours `model` per run               | `hermes.perRunModel` (off) | no `model` sent; the Hermes profile default runs every tier                             |
+| session cost updates mid-run                          | `hermes.midRunCost` (off)  | per-job cap checked post hoc (usage view flags over-cap jobs); timeout is the hard stop |
+| runs accept image input                               | `hermes.imageInput` (off)  | screenshots described as `[image attached: not analysed]`                               |
+| read-only toolset selection per run                   | — (not sent)               | instructions forbid side effects; hidden jobs stop on any approval                      |
+| approval on a forbidden tool → `waiting_for_approval` | —                          | hidden: `failed/approval_required`; visible: `waiting_approval` + `hermes_input` push   |
+
+`mock-upstreams/hermes.mjs` answers `JARVIS_AI_JOB` runs deterministically per kind and honours `FORCE_ERROR`, `FORCE_PROSE`, `FORCE_APPROVAL`, `FORCE_SLOW`, `FORCE_COST=<usd>`.

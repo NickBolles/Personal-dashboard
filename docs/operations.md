@@ -60,3 +60,10 @@ See `.env.example`. Notable: `JARVIS_AUTH_MODE` (`local`|`proxy`), `JARVIS_AUTH_
 - Paperclip comments/status changes are implemented in the client but not surfaced in the UI yet (deep-link instead).
 - Web Push on iOS requires installing the PWA first.
 - Single household owner; no multi-user roles.
+
+## Phase 5 runtime
+
+- `GET /api/ready` adds `dispatcher` (standalone push outbox: `running`, `lastRunAt`, `lastSent`) and `aiRunner` (`armed`, `running`, `queued`, `budgetBlocked`, `lastTickAt`, `lastError`).
+- The push dispatcher starts from `instrumentation.ts` regardless of `JARVIS_DISABLE_WORKER` and skips while the general worker runs; rows are claimed (`pending → sending`) so nothing is sent twice. Interval: Settings → AI `dispatchSeconds` (default 30 s).
+- The AI runner arms only when Settings → AI is enabled and Hermes is configured.
+- Capture attachments live in `${JARVIS_DATA_DIR:-/data}/captures/`; `scripts/backup.mjs` copies the directory.
