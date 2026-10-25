@@ -16,7 +16,19 @@ import { spendToday } from "./budget";
 import { inboxContext, itemContext, triageDestinations } from "./context";
 import { instructionsFor, taskFor } from "./prompts";
 import { draftFromOutput, linkConversation, writeReport } from "./reports";
-import { backoffMs, budgetGate, effectiveAreaPolicy, errorText, localDay, localDayStart, overCap, reportBucket, retryable, shouldInvestigate } from "./rules";
+import {
+  backoffMs,
+  budgetGate,
+  effectiveAreaPolicy,
+  errorText,
+  financeGuard,
+  localDay,
+  localDayStart,
+  overCap,
+  reportBucket,
+  retryable,
+  shouldInvestigate,
+} from "./rules";
 import { parseAreaSettings } from "@/lib/work";
 import {
   activeCount,
@@ -91,12 +103,7 @@ export async function runnerTick(now = new Date()) {
     s.lastDay = day;
 
     // 1. Our own in-flight jobs: renew leases; propagate cancel requests.
-    for (const [id, f] of s.inflight) {
-      const row = getJobRow(id);
-      if (!row) continue;
-      renewLease(id, owner(), new Date(now.getTime() + LEASE_MS));
-      if (row.state === "cancelling" && !f.controller.signal.aborted) f.controller.abort();
-    }
+    maintainInflight(now);
     // 2. Expired leases (crash/restart): adopt by run id, requeue, or fail.
     for (const row of expiredLeases(now)) {
       if (s.inflight.has(row.id)) continue;
@@ -155,6 +162,16 @@ export async function runnerTick(now = new Date()) {
   s.lastTickAt = now.getTime();
 }
 
+/** Renew our leases and propagate cancel requests to in-flight runs (also while AI is disabled). */
+function maintainInflight(now = new Date()) {
+  for (const [id, f] of state().inflight) {
+    const row = getJobRow(id);
+    if (!row) continue;
+    renewLease(id, owner(), new Date(now.getTime() + LEASE_MS));
+    if (row.state === "cancelling" && !f.controller.signal.aborted) f.controller.abort();
+  }
+}
+
 function launch(id: string, adopt: boolean) {
   const s = state();
   const controller = new AbortController();
@@ -203,13 +220,24 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
   };
   // Guard again at execution: the item may have moved into an excluded area.
   const g = guardSubject(row.userId, kind, row.subjectType, row.subjectId, !!params.financeOverride);
-  if (!g.guard.ok) {
+  // Refused before anything starts: skip. A run that already exists upstream (adopted after a restart)
+  // is stopped and reconciled instead, so it can't keep running after its lease and budget are released.
+  const stopGuard = new AbortController();
+  const refuse = (reason?: string) => {
+    if (row.hermesRunId) {
+      if (row.state === "running" || row.state === "waiting_approval")
+        transition(id, row.state as JobState, "cancelling", { errorCode: "finance_excluded", errorMessage: errorText("finance_excluded") });
+      stopGuard.abort();
+      return false;
+    }
     transition(id, row.state as JobState, "skipped", { errorCode: "finance_excluded", errorMessage: errorText("finance_excluded") });
-    if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "skipped", g.guard.reason);
-    return;
-  }
+    if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "skipped", reason);
+    return true;
+  };
+  if (!g.guard.ok && refuse(g.guard.reason)) return;
   // Build the run input (allowlisted context only).
   let input: string;
+  let outbound = "";
   let title = g.subj.title;
   let areaTitle: string | null = g.area?.title ?? null;
   if (row.subjectType === "work_item") {
@@ -225,7 +253,8 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       draftKind: params.draftKind,
       durationHint: params.durationHint,
     };
-    input = `${taskFor(kind, vars)}\n\n${kind === "schedule" ? (await itemContext(user, row.subjectId, { instructions: params.instructions })).text : ctx.text}`;
+    outbound = kind === "schedule" ? (await itemContext(user, row.subjectId, { instructions: params.instructions })).text : ctx.text;
+    input = `${taskFor(kind, vars)}\n\n${outbound}`;
   } else {
     const ctx = inboxContext(row.userId, row.subjectId, { imagesAnalysed: false, brief: params.brief });
     if (!ctx) return void failJob(row, "upstream", "capture not found");
@@ -237,6 +266,12 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
           )
         : [];
     input = `${taskFor(kind, { title, brief: params.brief, areaTitle, destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n") })}\n\n${ctx.text}`;
+    outbound = ctx.text;
+  }
+  // Screen everything that leaves (packets, links, notes), not only the subject's own fields.
+  if (g.guard.ok && !stopGuard.signal.aborted) {
+    const full = financeGuard({ kind, area: g.area, text: outbound, financeOverride: !!params.financeOverride });
+    if (!full.ok && refuse(full.reason)) return;
   }
 
   const cap = settings.jobCapsUsd[row.tier as "triage" | "standard" | "deep"] ?? settings.jobCapsUsd.standard;
@@ -254,7 +289,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       schema: OUTPUT_SCHEMAS[kind] as never,
       idempotencyKey: row.idempotencyKey,
       timeoutMs: settings.timeoutsS[kind] * 1000,
-      signal,
+      signal: AbortSignal.any([signal, stopGuard.signal]),
       adopt: adopt && row.hermesSessionId ? { sessionId: row.hermesSessionId, runId: row.hermesRunId } : undefined,
       onIds: (ids) => {
         setIds(id, ids);
@@ -570,7 +605,14 @@ function schedule(ms: number) {
 async function wake() {
   const s = state();
   if (!runnerConfigured()) {
-    stopAiRunner();
+    // Disabled: claim nothing new, but keep jobs already in flight cancellable and leased until they end.
+    try {
+      maintainInflight();
+    } catch {
+      /* never throws */
+    }
+    if (s.inflight.size) schedule(3_000);
+    else stopAiRunner();
     return;
   }
   if (!s.ticking) {
@@ -599,13 +641,15 @@ export function stopAiRunner() {
   s.armed = false;
   if (s.timer) clearTimeout(s.timer);
   s.timer = null;
+  // Jobs already running keep their leases and stay cancellable until they end (see wake()).
+  if (s.inflight.size) schedule(3_000);
 }
 
 /** Tick soon (after an enqueue or a finished job). */
 export function kickRunner() {
   const s = state();
   if (!s.armed) {
-    startAiRunner();
+    if (!startAiRunner() && s.inflight.size) schedule(250); // disabled with jobs in flight (e.g. a cancel)
     return;
   }
   schedule(250);

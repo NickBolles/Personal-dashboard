@@ -121,12 +121,11 @@ async function flushCaptureQueue() {
     }
     // Queued by someone else on this browser: leave it for them (the server refused it).
     if (res.status === 409) continue;
-    const keep = res.status >= 500 || [401, 408, 429].includes(res.status);
-    if (!keep) await idbReq(db, "queue", "readwrite", (s) => s.delete(q.clientCaptureId));
-    else {
-      const attempts = (q.attempts || 0) + 1;
-      await idbReq(db, "queue", "readwrite", (s) => s.put({ ...q, attempts, lastError: `HTTP ${res.status}`, failed: attempts >= 5 }));
-    }
+    const retry = res.status >= 500 || [401, 408, 429].includes(res.status);
+    const attempts = (q.attempts || 0) + 1;
+    if (res.ok) await idbReq(db, "queue", "readwrite", (s) => s.delete(q.clientCaptureId));
+    // Refused for good (e.g. 413): kept as failed so the page can offer Retry / Discard.
+    else await idbReq(db, "queue", "readwrite", (s) => s.put({ ...q, attempts, lastError: `HTTP ${res.status}`, failed: !retry || attempts >= 5 }));
   }
   db.close();
 }

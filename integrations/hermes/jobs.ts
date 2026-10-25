@@ -294,13 +294,16 @@ export async function runHermesTask<T>(t: HermesTaskInput<T>): Promise<HermesTas
       if (result) result.cost = cost;
       else lastCost.set(t.idempotencyKey, cost);
       await within(Date.now() + 6000, (signal) => HermesSessionClient.remove(conn, sessionId!, signal)).catch(() => undefined);
+    } else if (sessionId && t.visible && !result) {
+      // Failed/cancelled visible runs are charged what Hermes reports, not just the estimate.
+      lastCost.set(t.idempotencyKey, await readCost(conn, sessionId));
     }
   }
   if (t.visible) result.cost = await readCost(conn, result.sessionId);
   return result;
 }
 
-/** Cost of a hidden session that failed (read before deletion), keyed by idempotency key. */
+/** Cost of a run that failed (hidden: read before deletion; visible: read at the failure), keyed by idempotency key. */
 const lastCost = new Map<string, TaskCost>();
 export function takeLastCost(key: string) {
   const c = lastCost.get(key);

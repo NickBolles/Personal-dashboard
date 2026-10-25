@@ -77,6 +77,22 @@ async function removeQueued(id: string) {
   db.close();
 }
 
+/** Failed captures: try them again, or drop them. */
+export async function retryFailed() {
+  const db = await queueDb();
+  for (const q of await listQueue()) if (q.failed) await tx(db, "queue", "readwrite", (s) => s.put({ ...q, failed: false, attempts: 0 }));
+  db.close();
+  notifyQueue();
+  return flushQueue();
+}
+
+export async function discardFailed() {
+  const db = await queueDb();
+  for (const q of await listQueue()) if (q.failed) await tx(db, "queue", "readwrite", (s) => s.delete(q.clientCaptureId));
+  db.close();
+  notifyQueue();
+}
+
 export async function clearQueue() {
   const db = await queueDb();
   await tx(db, "queue", "readwrite", (s) => s.clear());
@@ -124,9 +140,16 @@ export async function flushQueue() {
       const r = await sendCapture({ ...q.fields, clientCaptureId: q.clientCaptureId, ...(q.userId ? { queuedBy: q.userId } : {}) }, q.files);
       // Saved by another account on this browser: leave it for them.
       if (r.status === 409 && !r.ok && r.code === "wrong_account") continue;
-      if (r.ok || !r.retry) {
+      if (r.ok) {
         await removeQueued(q.clientCaptureId);
-        if (r.ok) sent++;
+        sent++;
+        continue;
+      }
+      if (!r.retry) {
+        // Refused (e.g. 413 over the request limit): keep it as failed so the person can recover or discard it.
+        const db = await queueDb();
+        await tx(db, "queue", "readwrite", (s) => s.put({ ...q, attempts: q.attempts + 1, lastError: r.error, failed: true }));
+        db.close();
         continue;
       }
       if (r.status === 0) break; // still offline

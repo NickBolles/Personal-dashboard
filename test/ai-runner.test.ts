@@ -165,7 +165,7 @@ import { createPerson } from "@/server/people";
 import { recentAudit } from "@/server/audit";
 import * as store from "@/server/work/store";
 import { saveAiSettings } from "@/server/ai/settings";
-import { drainRunner, runnerTick } from "@/server/ai/runner";
+import { drainRunner, runnerTick, stopAiRunner } from "@/server/ai/runner";
 import { enqueue, getJobRow } from "@/server/ai/jobs";
 import { listReports } from "@/server/ai/reports";
 import { dispatchOnce } from "@/server/notifications/dispatcher";
@@ -396,6 +396,25 @@ describe("AI actions end to end (fake Hermes)", () => {
     const row = getJobRow(job.id)!;
     expect(row.state).toBe("cancelled");
     expect(fake.runs.get(row.hermesRunId!)!.status).toBe("cancelled");
+  });
+
+  it("cancel still reaches a running job after AI is disabled", async () => {
+    const { item } = setup();
+    fake.stopDelayPolls = 2;
+    await call(itemAiRoute.GET, { params: { id: item.id } });
+    const { job } = await (
+      await call(actionRoute.POST, { method: "POST", params: { id: item.id }, body: { action: "research", clientKey: "slowjob2", instructions: "FORCE_SLOW" } })
+    ).json();
+    await runnerTick();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(getJobRow(job.id)!.state).toBe("running");
+    saveAiSettings({ enabled: false });
+    stopAiRunner();
+    expect((await (await call(cancelRoute.POST, { method: "POST", params: { id: job.id }, body: {} })).json()).state).toBe("cancelling");
+    await new Promise((r) => setTimeout(r, 400)); // the kicked maintenance pass aborts the in-flight run
+    await drainRunner();
+    expect(getJobRow(job.id)!.state).toBe("cancelled");
+    expect(fake.runs.get(getJobRow(job.id)!.hermesRunId!)!.status).toBe("cancelled");
   });
 
   it("restart: expired lease with a run id is adopted (no second run); without one it's requeued with the same key", async () => {

@@ -6,7 +6,7 @@ import { Button, Field, cx, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CAPTURE_LIMITS } from "@/lib/ai";
-import { QUEUE_EVENT, flushQueue, listQueue, newClientCaptureId, queueCapture, sendCapture } from "@/lib/client/capture-queue";
+import { QUEUE_EVENT, discardFailed, flushQueue, listQueue, newClientCaptureId, queueCapture, retryFailed, sendCapture } from "@/lib/client/capture-queue";
 
 /**
  * The capture sheet (dock, palette, /capture, /share): text, a URL chip,
@@ -21,11 +21,14 @@ const URL_RE = /\bhttps?:\/\/[^\s<>"']{3,2000}/i;
 const ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
 
 function useQueueCount() {
-  const [n, setN] = useState(0);
+  const [n, setN] = useState({ waiting: 0, failed: 0, error: "" });
   useEffect(() => {
     const load = () =>
       void listQueue()
-        .then((l) => setN(l.filter((q) => !q.failed).length))
+        .then((l) => {
+          const failed = l.filter((q) => q.failed);
+          setN({ waiting: l.length - failed.length, failed: failed.length, error: failed.at(-1)?.lastError ?? "" });
+        })
         .catch(() => undefined);
     load();
     window.addEventListener(QUEUE_EVENT, load);
@@ -274,12 +277,24 @@ export function CaptureSheet({
               Investigate
             </label>
           ) : null}
-          {queued ? (
+          {queued.waiting ? (
             <span className={cx("rounded-full border border-warn px-2 text-xs")} data-testid="capture-queued" data-dynamic>
-              {queued} waiting to send
+              {queued.waiting} waiting to send
             </span>
           ) : null}
         </div>
+        {queued.failed ? (
+          <p role="alert" className="order-last flex basis-full flex-wrap items-center gap-2 text-xs text-danger" data-testid="capture-failed" data-dynamic>
+            {queued.failed === 1 ? "1 saved capture couldn't be sent" : `${queued.failed} saved captures couldn't be sent`}
+            {queued.error ? ` (${queued.error})` : ""}.
+            <Button type="button" size="sm" onClick={() => void retryFailed()}>
+              Retry
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => void discardFailed()}>
+              Discard
+            </Button>
+          </p>
+        ) : null}
         <div className="flex gap-2">
           {askable ? (
             <Button
