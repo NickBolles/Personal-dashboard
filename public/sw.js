@@ -1,9 +1,11 @@
 /* Jarvis service worker.
  * - App shell: hashed static assets cache-first; pages network-first with an offline fallback.
+ * - Private pages (Finance, Chat, Settings, People) are never cached, and the page
+ *   cache is wiped on sign-out (postMessage "CLEAR_PRIVATE" from the page).
  * - API responses are never cached here (auth + live data). Bounded snapshots live in IndexedDB.
  * - Web Push: show notifications and deep-link to the exact context on click.
  */
-const VERSION = "jarvis-sw-v1";
+const VERSION = "jarvis-sw-v2";
 const STATIC = `${VERSION}-static`;
 const PAGES = `${VERSION}-pages`;
 const PRECACHE = ["/offline", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/badge-72.png"];
@@ -29,7 +31,17 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data === "CLEAR_PRIVATE") {
+    // Signed out: forget every cached page (they're one person's data).
+    event.waitUntil(caches.delete(PAGES).then(() => event.source?.postMessage?.("CLEARED_PRIVATE")));
+  }
 });
+
+/** Pages that hold one person's private data: always network, never cached. */
+const NO_CACHE = ["/login", "/onboarding", "/join", "/finance", "/chat", "/settings", "/people"];
+function cacheable(pathname) {
+  return !NO_CACHE.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 async function trimPages() {
   const cache = await caches.open(PAGES);
@@ -70,13 +82,13 @@ self.addEventListener("fetch", (event) => {
         try {
           const res = await Promise.race([fetch(req), timeout(4000)]);
           // Only cache successful, same-page responses (not login redirects).
-          if (res.ok && !res.redirected && !url.pathname.startsWith("/login") && !url.pathname.startsWith("/onboarding")) {
+          if (res.ok && !res.redirected && cacheable(url.pathname)) {
             cache.put(url.pathname, res.clone());
             trimPages();
           }
           return res;
         } catch {
-          const hit = (await cache.match(url.pathname)) || (await cache.match("/home"));
+          const hit = cacheable(url.pathname) ? (await cache.match(url.pathname)) || (await cache.match("/home")) : undefined;
           if (hit) return hit;
           return (await caches.match("/offline")) || new Response("Offline", { status: 503 });
         }

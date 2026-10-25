@@ -3,13 +3,13 @@ import { z } from "zod";
 import { api } from "@/server/http/api";
 import { clientKey } from "@/server/http/origin";
 import { audit } from "@/server/audit";
-import { AuthError, checkThrottle, createSession, recordFailure, SESSION_COOKIE, sessionCookieOptions } from "@/server/auth";
+import { AuthError, checkThrottle, createSession, recordFailure, SESSION_COOKIE, sessionCookieOptions, throttleKeys } from "@/server/auth";
 import { invitePreview, redeemInvite } from "@/server/people";
 
 /** Who an invite is for, so the join page can greet them. Throttled like login. */
 export const GET = api(
   ({ req }) => {
-    const key = `join:${clientKey(req)}`;
+    const key = throttleKeys("join", clientKey(req));
     checkThrottle(key);
     const who = invitePreview(req.nextUrl.searchParams.get("code") ?? "");
     if (!who) {
@@ -26,7 +26,7 @@ const schema = z.object({ code: z.string().min(4).max(40), passcode: z.string().
 /** Accept an invite: choose a passcode and sign in. */
 export const POST = api<z.infer<typeof schema>>(
   ({ req, body, correlationId }) => {
-    const key = `join:${clientKey(req)}`;
+    const key = throttleKeys("join", clientKey(req));
     checkThrottle(key);
     let user;
     try {

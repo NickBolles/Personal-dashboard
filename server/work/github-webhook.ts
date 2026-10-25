@@ -3,7 +3,7 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
-import { HttpError } from "@/server/http/errors";
+import { readBodyCapped } from "@/server/http/body";
 import { webhookSecret } from "./github-connections";
 import { DELIVERY_RETENTION_MS, linkKey, parseWebhookEvent, verifySignature, WEBHOOK_MAX_BYTES, type IssueEvent } from "./github-rules";
 import { fetchChecksState, fetchPullHead, storedConnections } from "./github";
@@ -28,12 +28,8 @@ import { applyLinkState } from "./store";
 
 const json = (status: number, body: unknown) => NextResponse.json(body, { status, headers: { "cache-control": "no-store" } });
 
-async function rawBody(req: NextRequest) {
-  const len = Number(req.headers.get("content-length") ?? 0);
-  if (len > WEBHOOK_MAX_BYTES) throw new HttpError(413, "too_large", "Payload too large");
-  const buf = Buffer.from(await req.arrayBuffer());
-  if (buf.length > WEBHOOK_MAX_BYTES) throw new HttpError(413, "too_large", "Payload too large");
-  return buf;
+function rawBody(req: NextRequest) {
+  return readBodyCapped(req, WEBHOOK_MAX_BYTES, "Payload too large");
 }
 
 /** Remember a delivery id; false when it was already handled (GitHub redelivers). */

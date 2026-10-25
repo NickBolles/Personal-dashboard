@@ -5,6 +5,9 @@ import { config } from "@/server/config";
 import { AuthError, bearerToken, resolveUser, SESSION_COOKIE, type CurrentUser } from "@/server/auth";
 import { newId } from "@/server/crypto";
 import { HttpError, UpstreamError } from "./errors";
+import { readBodyCapped } from "./body";
+
+export { readBodyCapped };
 
 type Ctx<P> = { params: Promise<P> };
 
@@ -78,10 +81,7 @@ export function toErrorResponse(err: unknown, correlationId?: string) {
 }
 
 export async function readJson(req: NextRequest): Promise<unknown> {
-  const len = Number(req.headers.get("content-length") ?? 0);
-  if (len > config.maxBodyBytes) throw new HttpError(413, "too_large", "Request body too large");
-  const text = await req.text();
-  if (text.length > config.maxBodyBytes) throw new HttpError(413, "too_large", "Request body too large");
+  const text = (await readBodyCapped(req, config.maxBodyBytes)).toString("utf8");
   if (!text) return {};
   try {
     return JSON.parse(text);

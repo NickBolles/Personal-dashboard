@@ -1,5 +1,7 @@
 "use client";
 
+import { clearPageCaches } from "./idb";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -36,6 +38,8 @@ export async function apiFetch<T = unknown>(path: string, init: { method?: strin
   if (!res.ok) {
     const d = (data ?? {}) as { error?: string; code?: string; detail?: unknown };
     if (res.status === 401 && d.code === "unauthenticated" && typeof window !== "undefined") {
+      // Signed out elsewhere: don't leave this person's pages in the offline cache.
+      void clearPageCaches();
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
     }
     throw new ApiError(res.status, d.error ?? `Request failed (${res.status})`, d.code, d.detail);

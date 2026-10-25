@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { claimInstance, createSession, SESSION_COOKIE, sessionCookieOptions, isClaimed } from "@/server/auth";
+import {
+  AuthError,
+  checkThrottle,
+  claimInstance,
+  clearFailures,
+  createSession,
+  recordFailure,
+  SESSION_COOKIE,
+  sessionCookieOptions,
+  isClaimed,
+  throttleKeys,
+} from "@/server/auth";
+import { clientKey } from "@/server/http/origin";
 import { config } from "@/server/config";
 import { updatePreferences } from "@/server/settings";
 
@@ -9,7 +21,16 @@ export const GET = api(() => ({ claimed: isClaimed(), authMode: config.authMode 
 
 export const POST = api(
   ({ body, req }) => {
-    const userId = claimInstance(body);
+    const keys = throttleKeys("setup", clientKey(req));
+    checkThrottle(keys);
+    let userId: string;
+    try {
+      userId = claimInstance(body);
+    } catch (err) {
+      if (err instanceof AuthError && err.code === "bad_setup_code") recordFailure(keys);
+      throw err;
+    }
+    clearFailures(keys);
     updatePreferences({ displayName: body.name.trim() || "Owner", ...(body.timezone ? { timezone: body.timezone } : {}) });
     const s = createSession(userId, req.headers.get("user-agent"));
     const res = NextResponse.json({ ok: true });

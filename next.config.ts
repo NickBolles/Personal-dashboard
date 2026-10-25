@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["better-sqlite3", "web-push"],
   poweredByHeader: false,
+  // The app never uses next/image. Turning the optimizer off means /_next/image
+  // doesn't fetch or transform anything (it was the RCE/SSRF surface in the
+  // Next 16.3.7 advisories).
+  images: { unoptimized: true },
   outputFileTracingIncludes: {
     "/**": ["./drizzle/**/*"],
   },
