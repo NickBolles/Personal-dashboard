@@ -154,28 +154,34 @@ export function checkFiles(files: IncomingFile[]) {
   });
 }
 
-function writeAttachment(userId: string, inboxId: string, f: ReturnType<typeof checkFiles>[number]) {
+function removeStoredFiles(rows: { storageKey: string }[]) {
+  for (const r of rows)
+    try {
+      fs.unlinkSync(path.join(capturesDir(), r.storageKey));
+    } catch {
+      /* already gone */
+    }
+}
+
+/** Write one file to disk (0600) and return its attachment row; the row is inserted with the entry, in one transaction. */
+function storeAttachmentFile(userId: string, inboxId: string, f: ReturnType<typeof checkFiles>[number]): typeof A.$inferInsert {
   const id = newId("att");
   const rel = path.join(userId.replace(/[^A-Za-z0-9_-]/g, ""), id.replace(/[^A-Za-z0-9_-]/g, ""));
   const abs = path.join(capturesDir(), rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true, mode: 0o700 });
   fs.writeFileSync(abs, f.bytes, { mode: 0o600 });
-  getDb()
-    .insert(A)
-    .values({
-      id,
-      userId,
-      inboxId,
-      kind: f.mime === "text/plain" ? "text" : "image",
-      mime: f.mime,
-      bytes: f.bytes.byteLength,
-      sha256: crypto.createHash("sha256").update(f.bytes).digest("hex"),
-      storageKey: rel,
-      width: f.size?.width ?? null,
-      height: f.size?.height ?? null,
-    })
-    .run();
-  return id;
+  return {
+    id,
+    userId,
+    inboxId,
+    kind: f.mime === "text/plain" ? "text" : "image",
+    mime: f.mime,
+    bytes: f.bytes.byteLength,
+    sha256: crypto.createHash("sha256").update(f.bytes).digest("hex"),
+    storageKey: rel,
+    width: f.size?.width ?? null,
+    height: f.size?.height ?? null,
+  };
 }
 
 export function toAttachmentView(a: typeof A.$inferSelect): AttachmentView {
@@ -261,27 +267,41 @@ export function createCapture(user: CurrentUser, fields: CaptureFields, files: I
   const sensitivity = detectSensitivity([title, note, fields.url ?? ""].join("\n"));
   const id = newId("inb");
   const at = nowIso();
-  db.transaction((tx) => {
-    tx.insert(I)
-      .values({
-        id,
-        userId: user.id,
-        source: "capture",
-        title,
-        note,
-        url: fields.url || null,
-        reason: ctx.channel === "pwa_share" ? "You shared it" : ctx.channel === "shortcut" ? "Captured from a shortcut" : "You captured it",
-        channel: ctx.channel,
-        deviceId: ctx.deviceId ?? null,
-        captureTokenId: ctx.token?.id ?? null,
-        clientCaptureId: fields.clientCaptureId ?? null,
-        sensitivity,
-        createdAt: at,
-        updatedAt: at,
-      })
-      .run();
-  });
-  for (const f of checked) writeAttachment(user.id, id, f);
+  // Files first, then the entry and its attachment rows atomically: a failed write (e.g. disk full) leaves
+  // no entry behind, so an offline replay with the same clientCaptureId saves the whole capture again.
+  const rows: (typeof A.$inferInsert)[] = [];
+  try {
+    for (const f of checked) rows.push(storeAttachmentFile(user.id, id, f));
+  } catch {
+    removeStoredFiles(rows);
+    throw new HttpError(507, "storage_failed", "Couldn't save the attachments; try again");
+  }
+  try {
+    db.transaction((tx) => {
+      tx.insert(I)
+        .values({
+          id,
+          userId: user.id,
+          source: "capture",
+          title,
+          note,
+          url: fields.url || null,
+          reason: ctx.channel === "pwa_share" ? "You shared it" : ctx.channel === "shortcut" ? "Captured from a shortcut" : "You captured it",
+          channel: ctx.channel,
+          deviceId: ctx.deviceId ?? null,
+          captureTokenId: ctx.token?.id ?? null,
+          clientCaptureId: fields.clientCaptureId ?? null,
+          sensitivity,
+          createdAt: at,
+          updatedAt: at,
+        })
+        .run();
+      for (const r of rows) tx.insert(A).values(r).run();
+    });
+  } catch (e) {
+    removeStoredFiles(rows);
+    throw e;
+  }
   if (ctx.token) touchToken(ctx.token.id);
   audit({
     actor: user.id,

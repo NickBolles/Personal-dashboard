@@ -182,6 +182,20 @@ describe("POST /api/capture", () => {
     expect(getDb().select().from(schema.workInbox).where(eq(schema.workInbox.source, "capture")).all()).toHaveLength(1);
   });
 
+  it("a failed attachment write leaves no entry, so the offline replay saves the whole capture", async () => {
+    const spy = vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => {
+      throw new Error("ENOSPC");
+    });
+    const body = () => multipart({ text: "Disk full", clientCaptureId: "offline-0005" }, [{ name: "shot.png", type: "image/png", data: PNG }]);
+    const r = await req(captureRoute.POST, { body: body() });
+    expect(r.status).toBe(507);
+    spy.mockRestore();
+    expect(getDb().select().from(schema.workInbox).where(eq(schema.workInbox.source, "capture")).all()).toHaveLength(0);
+    const again = await req(captureRoute.POST, { body: body() });
+    expect(again.status).toBe(201);
+    expect((await again.json()).entry.capture.attachments).toHaveLength(1);
+  });
+
   it("filing keeps the captured URL and attachments reachable from the item (links)", async () => {
     const r = await req(captureRoute.POST, {
       body: multipart({ text: "Read later", url: "https://example.com/post", clientCaptureId: "offline-0004" }, [
