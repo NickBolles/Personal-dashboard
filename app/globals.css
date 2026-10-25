@@ -278,8 +278,8 @@
 
 @media (min-width: 1024px) {
   .pb-nav {
-    /* room for the floating command dock */
-    padding-bottom: 6.5rem;
+    /* the command dock lives in the rail on desktop: no reserved gutter */
+    padding-bottom: 2rem;
   }
 }
 

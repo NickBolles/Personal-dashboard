@@ -13,8 +13,8 @@
 .work-ui {
   --violet: #6b3fc4;
   --violet-soft: #f0e9ff;
-  --wk-side: 264px;
-  --wk-rail: 304px;
+  --wk-side: 256px;
+  --wk-rail: 288px; /* keep in sync with RAIL_MIN_CONTENT (WorkView) */
 }
 @media (prefers-color-scheme: dark) {
   .work-ui {
@@ -277,10 +277,12 @@ button.wk-kpi:hover {
     scrollbar-width: thin;
   }
 }
-@media (min-width: 1280px) {
-  .wk-with-rail {
-    grid-template-columns: minmax(0, 1fr) var(--wk-rail);
-  }
+/* Context rail: rendered only when the centre keeps ≥ 640px (see useWide in WorkView). */
+.wk-with-rail[data-rail="on"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--wk-rail);
+}
+@media (min-width: 1024px) {
   .wk-rail {
     border-left: 1px solid var(--line);
     background: var(--surface);
@@ -402,4 +404,99 @@ button.wk-kpi:hover {
 .work-ui .wk-panel label.block.text-sm {
   font-size: 12.5px;
   color: var(--muted);
+}
+
+/* ---- Details property sheet (EditItem) ----
+ * Phones: stacked label + field. Desktop: a label column with quiet hairline
+ * fields (artifact density); the summary grows with its text (min 2 lines). */
+.wk-props {
+  display: grid;
+  gap: 4px 12px;
+}
+.wk-props > label,
+.wk-props > span[id] {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  padding-top: 6px;
+}
+.wk-props-dates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wk-props-dates input {
+  min-width: 0;
+  flex: 1 1 0;
+}
+.wk-props-note {
+  padding-top: 4px;
+}
+.wk-autogrow {
+  field-sizing: content;
+  min-height: calc(2lh + 18px);
+  max-height: 16lh;
+  resize: vertical;
+}
+@media (min-width: 1024px) {
+  .wk-props {
+    grid-template-columns: 7rem minmax(0, 1fr);
+    align-items: start;
+    gap: 2px 12px;
+  }
+  .wk-props-note {
+    grid-column: 2;
+  }
+  .wk-props-dates {
+    max-width: 22rem;
+  }
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  /* (the :not chain out-specifies the generic fine-pointer input rule above) */
+  .work-ui .wk-props input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  .work-ui .wk-props select,
+  .work-ui .wk-props textarea {
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 13.5px;
+    border-color: var(--line);
+    background: transparent;
+    border-radius: 7px;
+  }
+  .work-ui .wk-props textarea.wk-autogrow.wk-autogrow {
+    min-height: calc(2lh + 10px);
+  }
+  .work-ui .wk-props input:not([type="checkbox"]):hover,
+  .work-ui .wk-props select:hover,
+  .work-ui .wk-props textarea:hover {
+    border-color: var(--line-strong);
+  }
+  .work-ui .wk-props input:not([type="checkbox"]):focus,
+  .work-ui .wk-props select:focus,
+  .work-ui .wk-props textarea:focus {
+    background: var(--surface);
+    border-color: var(--line-strong);
+  }
+  .work-ui .wk-props > label,
+  .work-ui .wk-props > span[id] {
+    padding-top: 5px;
+    font-size: 12.5px;
+  }
+}
+
+/* ---- phone disclosures (secondary item sections) ---- */
+.wk-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.wk-disclosure .wk-disclosure-chev {
+  transition: transform 0.12s;
+}
+.wk-disclosure[open] .wk-disclosure-chev {
+  transform: rotate(90deg);
+}
+.wk-panel > .wk-disclosure.card {
+  padding: 4px 14px;
+}
+.wk-panel > .wk-disclosure.card[open] {
+  padding-bottom: 14px;
 }

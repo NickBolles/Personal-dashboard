@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
 import { Badge, Button, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
+import { ChevronIcon } from "@/components/icons";
 import { Block, StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
@@ -47,9 +48,10 @@ type View = { kind: "today" } | { kind: "inbox" } | { kind: "item"; id: string; 
 /**
  * /work (Command Center workbench, design Direction C). Desktop: a full-width
  * workbench with the left pane (Today, Inbox, area tree), the centre (Today,
- * the Inbox or an item's workspace) and, on wide screens, a context rail. On
+ * the Inbox or an item's workspace) and, when there's room, a context rail. On
  * phones the order is Today/Inbox switch → content → tree, so what you came
- * for is first and the tree is one scroll away.
+ * for is first; on an item the tree folds behind the header's Areas toggle
+ * (it opens above the item and closes once you pick something).
  */
 export function WorkView({ initialItem, initialView, initialAction }: { initialItem?: string; initialView?: WorkViewKind; initialAction?: string }) {
   const [archived, setArchived] = useState(false);
@@ -59,6 +61,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   );
   const [newArea, setNewArea] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
   const inbox = useInbox();
   const [undo, setUndo] = useState<UndoOp | null>(null);
   const clearUndo = useCallback(() => setUndo(null), []);
@@ -73,6 +76,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
 
   const go = (next: View) => {
     setView(next);
+    setTreeOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
     url.searchParams.delete("view");
@@ -113,7 +117,7 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
   };
 
   return (
-    <div className="wk-hub min-w-0 lg:grid lg:grid-rows-[auto_1fr]">
+    <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
         <header className="mb-2 flex items-center justify-between gap-2 px-1">
           <div className="min-w-0">
@@ -130,15 +134,34 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
           </div>
         </header>
         <nav aria-label="Work views">
-          <ul className="grid grid-cols-2 gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0">
+          <ul
+            className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${view.kind === "item" ? "grid-cols-3" : "grid-cols-2"}`}
+          >
             {railBtn("today", "Today", "☀")}
             {railBtn("inbox", "Inbox", "↓", inboxCount)}
+            {view.kind === "item" ? (
+              <li className="lg:hidden">
+                <button
+                  type="button"
+                  className="wk-side-nav"
+                  aria-expanded={treeOpen}
+                  aria-controls="work-tree"
+                  onClick={() => setTreeOpen((o) => !o)}
+                  data-testid="work-tree-toggle"
+                >
+                  <span aria-hidden="true" className="w-4 text-center text-muted">
+                    {treeOpen ? "▾" : "▸"}
+                  </span>
+                  <span>Areas</span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         </nav>
       </div>
-      <div id="work-content" className="min-w-0 scroll-mt-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
         {view.kind === "today" ? (
-          <div className="wk-with-rail min-w-0 xl:grid">
+          <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
             <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
               <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
             </div>
@@ -160,7 +183,12 @@ export function WorkView({ initialItem, initialView, initialAction }: { initialI
           </div>
         )}
       </div>
-      <div className="min-w-0 self-start px-3 pb-4 lg:col-start-1 lg:row-start-2 lg:px-0 lg:pb-0">
+      <div
+        id="work-tree"
+        className={`min-w-0 px-3 pb-4 lg:order-none lg:col-start-1 lg:row-start-2 lg:block lg:self-start lg:px-0 lg:pb-0 ${
+          view.kind !== "item" ? "order-3" : treeOpen ? "order-1" : "hidden"
+        }`}
+      >
         <div className="wk-side-sticky min-w-0 rounded-[10px] border border-line bg-surface p-2 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-2.5 lg:pt-1 lg:pb-24">
           <div className="flex items-center justify-between px-1 pt-1 pb-1.5 lg:pt-2">
             <h2 className="wk-label">Areas</h2>
@@ -222,22 +250,97 @@ function TodayRail({ items, onSelect }: { items: WorkItem[]; onSelect: (id: stri
   );
 }
 
-const WIDE = "(min-width: 1280px)";
-const subscribeWide = (cb: () => void) => {
-  const m = window.matchMedia(WIDE);
-  m.addEventListener("change", cb);
-  return () => m.removeEventListener("change", cb);
-};
 /**
- * The context rails only exist on wide screens. They aren't rendered at all
- * below that (not just hidden), so their summaries never duplicate the item's
- * own text for assistive tech on smaller screens.
+ * The context rails need room: they only exist when the centre column keeps at
+ * least 640px beside them (content area ≥ 928px = 640 + the 288px rail). That
+ * follows the real content width, not the viewport, so an expanded app rail or
+ * a narrow window drops the context rail instead of squeezing the workspace.
+ * Below that they aren't rendered at all (not just hidden), so their summaries
+ * never duplicate the item's own text for assistive tech.
  */
+const RAIL_MIN_CONTENT = 640 + 288; // keep in sync with --wk-rail (work.css)
+const subscribeWide = (cb: () => void) => {
+  const el = document.getElementById("work-content");
+  const ro = typeof ResizeObserver === "undefined" || !el ? null : new ResizeObserver(cb);
+  if (el) ro?.observe(el);
+  window.addEventListener("resize", cb);
+  return () => {
+    ro?.disconnect();
+    window.removeEventListener("resize", cb);
+  };
+};
 function useWide() {
   return useSyncExternalStore(
     subscribeWide,
-    () => window.matchMedia(WIDE).matches,
+    () => window.matchMedia("(min-width: 1024px)").matches && (document.getElementById("work-content")?.clientWidth ?? 0) >= RAIL_MIN_CONTENT,
     () => false,
+  );
+}
+
+const PHONE = "(max-width: 1023px)";
+const subscribePhone = (cb: () => void) => {
+  const m = window.matchMedia(PHONE);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+/** Phones and small tablets (no app rail): secondary item sections fold into disclosures. */
+function usePhone() {
+  return useSyncExternalStore(
+    subscribePhone,
+    () => window.matchMedia(PHONE).matches,
+    () => false,
+  );
+}
+
+/**
+ * A secondary item section. Desktop: a compact card with its heading and
+ * actions. Phones: a disclosure (summary shows a one-line status) so the item
+ * page leads with the next action, actions and validation.
+ */
+function Section({
+  title,
+  meta,
+  aside,
+  phone,
+  open,
+  onToggle,
+  testId,
+  children,
+}: {
+  title: string;
+  meta?: ReactNode;
+  aside?: ReactNode;
+  phone: boolean;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+  testId?: string;
+  children: ReactNode;
+}) {
+  if (phone)
+    return (
+      <details className="card wk-disclosure" open={open} onToggle={(e) => onToggle(e.currentTarget.open)} data-testid={testId}>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 select-none">
+          <ChevronIcon className="wk-disclosure-chev h-4 w-4 shrink-0 text-muted" />
+          <h3 className="font-semibold">{title}</h3>
+          {meta ? <span className="ml-auto min-w-0 truncate text-xs text-muted">{meta}</span> : null}
+        </summary>
+        <div className="pt-1">
+          {aside ? <div className="mb-2 flex flex-wrap gap-2">{aside}</div> : null}
+          {children}
+        </div>
+      </details>
+    );
+  return (
+    <Card data-testid={testId}>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-baseline gap-2 font-semibold">
+          {title}
+          {meta ? <span className="text-xs font-normal text-muted">{meta}</span> : null}
+        </h3>
+        {aside ? <div className="flex flex-wrap items-center gap-2">{aside}</div> : null}
+      </div>
+      {children}
+    </Card>
   );
 }
 
@@ -528,6 +631,18 @@ function ItemDetail({
   );
   const close = () => setDialog(null);
   const wide = useWide();
+  const phone = usePhone();
+  // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
+  // remounts it) doesn't fold it; a section opens itself when something is added to it.
+  const [sections, setSections] = useState<{ details?: boolean; deps?: boolean; links?: boolean }>({});
+  const toggle = (k: "details" | "deps" | "links") => (open: boolean) => setSections((o) => (o[k] === open ? o : { ...o, [k]: open }));
+  const counts = q.data ? { links: q.data.links.length, deps: q.data.blockedBy.length + q.data.blocking.length } : null;
+  const [seen, setSeen] = useState(counts);
+  if (counts && (counts.links !== seen?.links || counts.deps !== seen?.deps)) {
+    setSeen(counts);
+    if (seen && counts.links > seen.links) setSections((o) => ({ ...o, links: true }));
+    if (seen && counts.deps > seen.deps) setSections((o) => ({ ...o, deps: true }));
+  }
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
   if (dialog === "continue" && !canChat) setDialog(null);
@@ -671,7 +786,7 @@ function ItemDetail({
         </div>
       </section>
 
-      <div className="wk-with-rail min-w-0 xl:grid">
+      <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
         <div className="min-w-0">
           <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
             {(
@@ -708,11 +823,45 @@ function ItemDetail({
           <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
             {tab === "overview" ? (
               <>
-                <EditItem key={item.updatedAt} item={item} validationDefault={d.validationDefault} />
-                <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />
-                <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
-                <Dependencies d={d} items={items} onSelect={onSelect} />
-                <Links d={d} canChat={canChat} />
+                {(() => {
+                  const edit = (
+                    <EditItem
+                      key={item.updatedAt}
+                      item={item}
+                      validationDefault={d.validationDefault}
+                      phone={phone}
+                      open={sections.details ?? false}
+                      onToggle={toggle("details")}
+                    />
+                  );
+                  const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
+                  const validations = (
+                    <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
+                  );
+                  // Phones lead with proof and the packet; the editable details fold away below.
+                  return phone ? (
+                    <>
+                      {validations}
+                      {packet}
+                      {edit}
+                    </>
+                  ) : (
+                    <>
+                      {edit}
+                      {packet}
+                      {validations}
+                    </>
+                  );
+                })()}
+                <Dependencies
+                  d={d}
+                  items={items}
+                  onSelect={onSelect}
+                  phone={phone}
+                  open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+                  onToggle={toggle("deps")}
+                />
+                <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
               </>
             ) : tab === "activity" ? (
               <Activity d={d} onSelect={onSelect} />
@@ -770,7 +919,9 @@ function ItemDetail({
   );
 }
 
-function EditItem({ item, validationDefault }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] }) {
+type SectionProps = { phone: boolean; open: boolean; onToggle: (open: boolean) => void };
+
+function EditItem({ item, validationDefault, phone, open, onToggle }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] } & SectionProps) {
   const isArea = item.parentId === null;
   const [f, setF] = useState({
     title: item.title,
@@ -800,65 +951,96 @@ function EditItem({ item, validationDefault }: { item: WorkItem; validationDefau
     f.startDate !== (item.startDate ?? "") ||
     f.targetDate !== (item.targetDate ?? "") ||
     (isArea && f.validationDefault !== (item.validationDefault ?? ""));
+  const planned =
+    item.startDate || item.targetDate
+      ? `${item.startDate ? shortDate(item.startDate) : "—"} → ${item.targetDate ? shortDate(item.targetDate) : "—"}`
+      : "Not planned";
+  const saveButton = (
+    <Button type="submit" form="wi-form" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
+      Save details
+    </Button>
+  );
   return (
-    <Card>
-      <h3 className="mb-2 font-semibold">Details</h3>
+    <Section
+      title="Details"
+      meta={dirty ? "Unsaved changes" : phone ? planned : undefined}
+      aside={phone ? undefined : saveButton}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+      testId="work-details"
+    >
+      {/* A property sheet: label column + quiet inline fields on desktop; stacked on phones. */}
       <form
-        className="space-y-3"
+        id="wi-form"
+        className="wk-props"
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate(undefined);
         }}
       >
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Field id="wi-title" label="Title">
-            <input id="wi-title" required className={inputCls} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
-          </Field>
-          <Field id="wi-next" label="Next action">
-            <input id="wi-next" className={inputCls} value={f.nextAction} onChange={(e) => setF({ ...f, nextAction: e.target.value })} />
-          </Field>
-        </div>
-        <Field id="wi-summary" label="Summary">
-          <textarea id="wi-summary" className={textareaCls} value={f.summary} onChange={(e) => setF({ ...f, summary: e.target.value })} />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field id="wi-start" label="Start date">
-            <input id="wi-start" type="date" className={inputCls} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
-          </Field>
-          <Field id="wi-target" label="Target date">
-            <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
-          </Field>
+        <label htmlFor="wi-title">Title</label>
+        <input id="wi-title" required className={inputCls} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
+        <label htmlFor="wi-next">Next action</label>
+        <input
+          id="wi-next"
+          className={inputCls}
+          value={f.nextAction}
+          placeholder="The very next concrete step"
+          onChange={(e) => setF({ ...f, nextAction: e.target.value })}
+        />
+        <label htmlFor="wi-summary">Summary</label>
+        <textarea
+          id="wi-summary"
+          rows={2}
+          className={`${inputCls} wk-autogrow`}
+          value={f.summary}
+          placeholder="What this is and why it matters"
+          onChange={(e) => setF({ ...f, summary: e.target.value })}
+        />
+        <span id="wi-dates-label">Planned</span>
+        <div role="group" aria-labelledby="wi-dates-label" className="wk-props-dates">
+          <label htmlFor="wi-start" className="sr-only">
+            Start date
+          </label>
+          <input id="wi-start" type="date" className={inputCls} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
+          <span aria-hidden="true" className="text-muted">
+            →
+          </span>
+          <label htmlFor="wi-target" className="sr-only">
+            Target date
+          </label>
+          <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
         </div>
         {isArea ? (
-          <Field
-            id="wi-vdefault"
-            label="Validation for new packets"
-            hint="What “Start focused work” preselects for everything in this area. You can override it per packet."
-          >
-            <select
-              id="wi-vdefault"
-              className={inputCls}
-              value={f.validationDefault}
-              onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
-            >
-              <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
-              <option value="required">Required</option>
-              <option value="optional">Optional</option>
-            </select>
-          </Field>
+          <>
+            <label htmlFor="wi-vdefault">Validation</label>
+            <div>
+              <select
+                id="wi-vdefault"
+                className={inputCls}
+                aria-describedby="wi-vdefault-hint"
+                value={f.validationDefault}
+                onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
+              >
+                <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
+                <option value="required">Required</option>
+                <option value="optional">Optional</option>
+              </select>
+              <p id="wi-vdefault-hint" className="mt-1 text-xs text-muted">
+                What “Start focused work” preselects for new packets in this area. You can override it per packet.
+              </p>
+            </div>
+          </>
         ) : (
-          <p className="text-xs text-muted" data-testid="validation-default-note">
+          <p className="wk-props-note text-xs text-muted" data-testid="validation-default-note">
             New packets here {validationDefault.value === "required" ? "require" : "don't require"} validation by default
             {validationDefault.areaTitle ? ` (set on ${validationDefault.areaTitle})` : ""}.
           </p>
         )}
-        <div className="flex justify-end">
-          <Button type="submit" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
-            Save details
-          </Button>
-        </div>
+        {phone ? <div className="wk-props-note flex justify-end">{saveButton}</div> : null}
       </form>
-    </Card>
+    </Section>
   );
 }
 
@@ -1334,7 +1516,7 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   );
 }
 
-function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void }) {
+function Dependencies({ d, items, onSelect, phone, open, onToggle }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void } & SectionProps) {
   const [dest, setDest] = useState("");
   const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
     ok: "Dependency added",
@@ -1361,11 +1543,22 @@ function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]
     </li>
   );
   return (
-    <Card>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-semibold">Dependencies</h3>
-        {openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : null}
-      </div>
+    <Section
+      title="Dependencies"
+      meta={
+        phone
+          ? openBlockers
+            ? `Blocked by ${openBlockers}`
+            : d.blockedBy.length + d.blocking.length
+              ? `${d.blockedBy.length + d.blocking.length} linked`
+              : "None"
+          : undefined
+      }
+      aside={!phone && openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : undefined}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+    >
       <h4 className="text-xs font-medium tracking-wide text-muted uppercase">Blocked by</h4>
       {d.blockedBy.length ? (
         <ul className="divide-y divide-line">{d.blockedBy.map((r) => row(r, "Blocked by"))}</ul>
@@ -1401,7 +1594,7 @@ function Dependencies({ d, items, onSelect }: { d: WorkDetail; items: WorkItem[]
           Add dependency
         </Button>
       </form>
-    </Card>
+    </Section>
   );
 }
 
@@ -1409,13 +1602,30 @@ function linkLabel(l: WorkLink) {
   return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
 }
 
-function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
+function Links({ d, canChat, phone, open, onToggle }: { d: WorkDetail; canChat: boolean } & SectionProps) {
   const hasChat = d.links.some((l) => l.kind === "chat_session");
   const convs = useConversations(canChat && hasChat);
   const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
+  const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue").length;
+  const chats = d.links.filter((l) => l.kind === "chat_session").length;
+  const meta = d.links.length
+    ? [
+        prs ? `${prs} PR${prs === 1 ? "" : "s"}` : "",
+        chats ? `${chats} chat${chats === 1 ? "" : "s"}` : "",
+        d.links.length - prs - chats ? `${d.links.length - prs - chats} other` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "None";
   return (
-    <Card>
-      <h3 className="mb-2 font-semibold">Links</h3>
+    <Section
+      title="Links"
+      meta={phone ? meta : d.links.length ? String(d.links.length) : undefined}
+      phone={phone}
+      open={open}
+      onToggle={onToggle}
+      testId="work-links"
+    >
       {d.links.length ? (
         <ul className="space-y-2">
           {d.links.map((l) => (
@@ -1435,7 +1645,7 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
           link.
         </p>
       ) : null}
-    </Card>
+    </Section>
   );
 }
 

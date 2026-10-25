@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, useOnline } from "@/components/ui";
@@ -73,12 +73,64 @@ export function useUnreadCount() {
   });
 }
 
+/*
+ * Rail state. Outside Work the rail is expanded unless the person collapsed it
+ * ("jarvis:rail"). Work is a three-pane workbench (tree + centre + context
+ * rail), so below 1600px its routes default to the icon rail; an explicit
+ * choice made there is remembered separately ("jarvis:rail:work").
+ */
+const RAIL_EVENT = "jarvis:rail-change";
+const WIDE_RAIL = "(min-width: 1600px)";
+function subscribeRail(cb: () => void) {
+  const m = window.matchMedia(WIDE_RAIL);
+  m.addEventListener("change", cb);
+  window.addEventListener(RAIL_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    m.removeEventListener("change", cb);
+    window.removeEventListener(RAIL_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+function readPref(key: string) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function useRail(pathname: string) {
+  const isWork = pathname === "/work" || pathname.startsWith("/work/");
+  const wide = useSyncExternalStore(
+    subscribeRail,
+    () => window.matchMedia(WIDE_RAIL).matches,
+    () => false,
+  );
+  const compactWork = isWork && !wide;
+  const key = compactWork ? "jarvis:rail:work" : "jarvis:rail";
+  const pref = useSyncExternalStore(
+    subscribeRail,
+    () => readPref(key),
+    () => null,
+  );
+  const collapsed = compactWork ? pref !== "expanded" : pref === "collapsed";
+  const toggle = () => {
+    try {
+      localStorage.setItem(key, collapsed ? "expanded" : "collapsed");
+    } catch {
+      /* private mode: no memory */
+    }
+    window.dispatchEvent(new Event(RAIL_EVENT));
+  };
+  return { collapsed, toggle };
+}
+
 export function AppShell({ children, userName }: { children: ReactNode; userName: string }) {
   const pathname = usePathname();
   const hrefFor = useNavMemory(pathname);
   const online = useOnline();
   const unread = useUnreadCount().data?.unread ?? 0;
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggle: toggleRail } = useRail(pathname);
   const mainRef = useRef<HTMLElement>(null);
   const { capabilities } = useAccess();
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
@@ -109,16 +161,6 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);
     };
   }, []);
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem("jarvis:rail") === "collapsed");
-  }, []);
-  const toggleRail = () => {
-    setCollapsed((c) => {
-      localStorage.setItem("jarvis:rail", c ? "expanded" : "collapsed");
-      return !c;
-    });
-  };
 
   const badge =
     unread > 0 ? (
@@ -220,12 +262,14 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           )}
           <ul>{destinations.map(railItem)}</ul>
         </div>
-        <div className="mt-2 border-t border-line pt-2">
+        <div className={cx("mt-2 border-t border-line pt-2", collapsed && "flex flex-col items-center")}>
+          {/* Command dock: docked in the rail foot on desktop so it never covers page content. */}
+          <CommandDock variant="rail" compact={collapsed} />
           <p className={cx("flex min-h-7 items-center gap-2 px-2.5 text-xs text-muted", collapsed && "justify-center px-0")} role="status">
             <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full", online ? "bg-ok" : "bg-warn")} />
             <span className={collapsed ? "sr-only" : "truncate"}>{online ? `Online · ${userName}` : "Offline"}</span>
           </p>
-          <ul>{railItem(SETTINGS)}</ul>
+          <ul className={collapsed ? "w-full" : undefined}>{railItem(SETTINGS)}</ul>
         </div>
       </nav>
 
@@ -239,21 +283,6 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       </main>
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
-
-      {/* Desktop command dock: centre-bottom of the content column. Hidden on conversation
-          pages, where the composer owns the bottom edge (⌘/Ctrl+. and ⌘/Ctrl+K still work there). */}
-      {!pathname.startsWith("/chat/") ? (
-        <div
-          role="toolbar"
-          aria-label="Command dock"
-          className="pointer-events-none fixed bottom-5 z-40 hidden -translate-x-1/2 lg:flex"
-          style={{ left: `calc(50% + ${collapsed ? 32 : 116}px)` }}
-        >
-          <span className="pointer-events-auto">
-            <CommandDock variant="float" />
-          </span>
-        </div>
-      ) : null}
 
       {/* Mobile bottom bar: fixed four items */}
       <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
