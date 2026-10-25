@@ -9,6 +9,8 @@ import type { CurrentUser } from "@/server/auth";
 import { createItem, getDetail } from "@/server/work/store";
 import type { AiJobKind, ReportApply, ReportSource, ReportView, ScheduleSlot } from "@/lib/ai";
 import { AI_KIND_LABEL } from "@/lib/ai";
+import { getPreferences } from "@/server/settings";
+import { localDay } from "./rules";
 
 /**
  * Reports: validated model output → ai_reports + ai_report_sources (one
@@ -344,9 +346,11 @@ export async function applyReport(user: CurrentUser, id: string, a: ReportApply,
   const slot = st.slots?.[a.slot];
   if (!slot) throw new HttpError(400, "bad_index", "No such slot");
   if (a.what === "dates") {
-    const day = slot.start.slice(0, 10);
+    // Slots are UTC instants; the item's dates are the person's local calendar days.
+    const tz = getPreferences(user.id).timezone;
+    const day = localDay(new Date(slot.start), tz);
     db.update(T)
-      .set({ startDate: day, targetDate: slot.end.slice(0, 10), updatedAt: nowIso() })
+      .set({ startDate: day, targetDate: localDay(new Date(slot.end), tz), updatedAt: nowIso() })
       .where(eq(T.id, itemId))
       .run();
     db.insert(schema.workEvents)

@@ -14,6 +14,8 @@ export type QueuedCapture = {
   attempts: number;
   lastError?: string;
   failed?: boolean;
+  /** the account that queued it: replays carry it and the server refuses another account (409) */
+  userId?: string;
 };
 
 const QUEUE_DB = "jarvis-capture-queue";
@@ -93,7 +95,7 @@ export function captureForm(fields: Record<string, string>, files: { name: strin
   return fd;
 }
 
-export type SendResult = { ok: true; status: number; body: unknown } | { ok: false; status: number; error: string; retry: boolean };
+export type SendResult = { ok: true; status: number; body: unknown } | { ok: false; status: number; error: string; code?: string; retry: boolean };
 
 /** POST one capture. Network errors, 5xx, 401, 408 and 429 are retryable (kept in the queue). */
 export async function sendCapture(fields: Record<string, string>, files: { name: string; blob: Blob }[]): Promise<SendResult> {
@@ -106,7 +108,8 @@ export async function sendCapture(fields: Record<string, string>, files: { name:
   const body = await res.json().catch(() => ({}));
   if (res.ok) return { ok: true, status: res.status, body };
   const retry = res.status >= 500 || [401, 408, 429].includes(res.status);
-  return { ok: false, status: res.status, error: (body as { error?: string }).error ?? `Failed (${res.status})`, retry };
+  const b = body as { error?: string; code?: string };
+  return { ok: false, status: res.status, error: b.error ?? `Failed (${res.status})`, code: b.code, retry };
 }
 
 let flushing = false;
@@ -118,7 +121,9 @@ export async function flushQueue() {
   try {
     for (const q of await listQueue()) {
       if (q.failed) continue;
-      const r = await sendCapture({ ...q.fields, clientCaptureId: q.clientCaptureId }, q.files);
+      const r = await sendCapture({ ...q.fields, clientCaptureId: q.clientCaptureId, ...(q.userId ? { queuedBy: q.userId } : {}) }, q.files);
+      // Saved by another account on this browser: leave it for them.
+      if (r.status === 409 && !r.ok && r.code === "wrong_account") continue;
       if (r.ok || !r.retry) {
         await removeQueued(q.clientCaptureId);
         if (r.ok) sent++;

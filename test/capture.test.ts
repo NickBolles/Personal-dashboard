@@ -173,6 +173,31 @@ describe("POST /api/capture", () => {
     expect((await req(attRoute.GET, { method: "GET", params: { id: att.id }, session: other })).status).toBe(404);
   });
 
+  it("offline replays queued by another account are refused (409) and never land in this inbox", async () => {
+    const r = await req(captureRoute.POST, { body: multipart({ text: "someone else's", clientCaptureId: "offline-0002", queuedBy: "usr_other" }) });
+    expect(r.status).toBe(409);
+    expect((await r.json()).code).toBe("wrong_account");
+    const ok = await req(captureRoute.POST, { body: multipart({ text: "mine", clientCaptureId: "offline-0003", queuedBy: owner }) });
+    expect(ok.status).toBe(201);
+    expect(getDb().select().from(schema.workInbox).where(eq(schema.workInbox.source, "capture")).all()).toHaveLength(1);
+  });
+
+  it("filing keeps the captured URL and attachments reachable from the item (links)", async () => {
+    const r = await req(captureRoute.POST, {
+      body: multipart({ text: "Read later", url: "https://example.com/post", clientCaptureId: "offline-0004" }, [
+        { name: "shot.png", type: "image/png", data: PNG },
+      ]),
+    });
+    const { entry } = await r.json();
+    const acc = await req(acceptRoute.POST, { json: { parentId: null }, params: { id: entry.id } });
+    expect(acc.status).toBe(200);
+    const { item } = await acc.json();
+    const links = getDb().select().from(schema.workLinks).where(eq(schema.workLinks.itemId, item.id)).all();
+    const att = getDb().select().from(schema.captureAttachments).get()!;
+    expect(links.map((l) => l.url).sort()).toEqual([`/api/capture/attachments/${att.id}`, "https://example.com/post"].sort());
+    expect(att.itemId).toBe(item.id);
+  });
+
   it("limits: 415 on type mismatch or SVG, 413 on too many / too large files", async () => {
     const svg = new TextEncoder().encode("<svg onload=alert(1)></svg>");
     expect((await req(captureRoute.POST, { body: multipart({ text: "a" }, [{ name: "x.svg", type: "image/svg+xml", data: svg }]) })).status).toBe(415);

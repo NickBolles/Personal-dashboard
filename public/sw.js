@@ -97,9 +97,9 @@ async function handleShareTarget(req) {
     all.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     for (const old of all.slice(10)) await idbReq(db, "staged", "readwrite", (s) => s.delete(old.id));
     db.close();
-    return Response.redirect(`/share?staged=${id}`, 303);
+    return Response.redirect(new URL(`/share?staged=${id}`, self.location.origin).href, 303);
   } catch {
-    return Response.redirect("/share?error=sw", 303);
+    return Response.redirect(new URL("/share?error=sw", self.location.origin).href, 303);
   }
 }
 
@@ -111,6 +111,7 @@ async function flushCaptureQueue() {
     const fd = new FormData();
     for (const [k, v] of Object.entries(q.fields || {})) if (v) fd.set(k, v);
     fd.set("clientCaptureId", q.clientCaptureId);
+    if (q.userId) fd.set("queuedBy", q.userId);
     for (const f of q.files || []) fd.append("files", f.blob, f.name);
     let res;
     try {
@@ -118,6 +119,8 @@ async function flushCaptureQueue() {
     } catch {
       break; // still offline: keep everything
     }
+    // Queued by someone else on this browser: leave it for them (the server refused it).
+    if (res.status === 409) continue;
     const keep = res.status >= 500 || [401, 408, 429].includes(res.status);
     if (!keep) await idbReq(db, "queue", "readwrite", (s) => s.delete(q.clientCaptureId));
     else {

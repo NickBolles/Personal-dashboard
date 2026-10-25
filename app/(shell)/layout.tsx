@@ -13,7 +13,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   // Setup is the admin's job; everyone else goes straight in.
   if (!getPreferences().onboarding.completedAt && user.capabilities.has("admin")) redirect("/onboarding");
   const prefs = getPreferences(user.id);
-  const access = { role: user.role, capabilities: [...user.capabilities].sort(), modules: visibleModules(user).map((m) => m.id) };
+  const access = { userId: user.id, role: user.role, capabilities: [...user.capabilities].sort(), modules: visibleModules(user).map((m) => m.id) };
   return (
     <AccessProvider value={access}>
       <AppShell userName={prefs.displayName || user.name}>{children}</AppShell>

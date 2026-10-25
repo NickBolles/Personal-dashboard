@@ -96,7 +96,12 @@ export async function rememberSession(id: string, data: unknown, limit = 10) {
  */
 export async function clearAllLocal() {
   try {
-    if (hasIdb()) indexedDB.deleteDatabase(DB);
+    if (hasIdb()) {
+      indexedDB.deleteDatabase(DB);
+      // Offline capture queue + share staging (lib/client/capture-queue.ts, public/sw.js).
+      indexedDB.deleteDatabase("jarvis-capture-queue");
+      indexedDB.deleteDatabase("jarvis-share");
+    }
   } catch {
     /* ignore */
   }

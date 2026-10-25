@@ -231,6 +231,8 @@ export type CaptureResult = { entryId: string; created: boolean; triage: "queued
 
 export function createCapture(user: CurrentUser, fields: CaptureFields, files: IncomingFile[], ctx: CaptureCtx): CaptureResult {
   const db = getDb();
+  // An offline capture queued by another account on this browser is never filed into this one's inbox.
+  if (fields.queuedBy && fields.queuedBy !== user.id) throw new HttpError(409, "wrong_account", "This capture was saved by someone else on this device");
   if (fields.clientCaptureId) {
     const prev = db
       .select()
@@ -351,7 +353,48 @@ function fileDirect(user: CurrentUser, inboxId: string, parentId: string, correl
   const e = getDb().select().from(I).where(eq(I.id, inboxId)).get()!;
   const item = createItem(user, { kind: "thread", parentId, title: e.title, summary: e.note }, correlationId);
   getDb().update(I).set({ acceptedAt: nowIso(), acceptedItemId: item.id, updatedAt: nowIso() }).where(eq(I.id, inboxId)).run();
-  getDb().update(A).set({ itemId: item.id }).where(eq(A.inboxId, inboxId)).run();
+  moveCaptureToItem(e, item.id);
+}
+
+/**
+ * Filing a capture: its attachments move to the item, and the captured URL plus
+ * each attachment become links on the item, so nothing is lost once the entry
+ * leaves the inbox (attachment links stay owner-only via /api/capture/attachments).
+ */
+export function moveCaptureToItem(entry: { id: string; url: string | null; title: string }, itemId: string) {
+  const db = getDb();
+  db.update(A).set({ itemId }).where(eq(A.inboxId, entry.id)).run();
+  const L = schema.workLinks;
+  const have = new Set(
+    db
+      .select({ url: L.url })
+      .from(L)
+      .where(eq(L.itemId, itemId))
+      .all()
+      .map((l) => l.url),
+  );
+  const add = (url: string, title: string) => {
+    if (have.has(url)) return;
+    have.add(url);
+    db.insert(L)
+      .values({ id: newId(), itemId, kind: "url", url, title: title.slice(0, 300), role: "source" })
+      .run();
+  };
+  if (entry.url) {
+    let host = entry.url;
+    try {
+      host = new URL(entry.url).hostname;
+    } catch {
+      /* keep the raw url as the title */
+    }
+    add(entry.url, entry.title && entry.title !== host ? entry.title : host);
+  }
+  const atts = db
+    .select()
+    .from(A)
+    .where(and(eq(A.inboxId, entry.id), isNull(A.deletedAt)))
+    .all();
+  atts.forEach((a, i) => add(toAttachmentView(a).url, `${a.kind === "image" ? "Captured image" : "Captured text"}${atts.length > 1 ? ` ${i + 1}` : ""}`));
 }
 
 /** Manual (re-)investigate from the inbox; "Send anyway" passes financeOverride (never for credentials or excluded areas). */

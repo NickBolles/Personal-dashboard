@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { processSingleton } from "@/server/singleton";
 import { workerStatus } from "@/server/worker/status";
@@ -36,7 +36,13 @@ export function hasPendingPushes(now = new Date()) {
   return !!getDb()
     .select({ id: N.id })
     .from(N)
-    .where(and(eq(N.pushState, "pending"), or(isNull(N.scheduledFor), lte(N.scheduledFor, now.toISOString()))))
+    .where(
+      or(
+        and(eq(N.pushState, "pending"), or(isNull(N.scheduledFor), lte(N.scheduledFor, now.toISOString()))),
+        // A claim left in `sending` by a crash/restart is reclaimable after 5 minutes (claimPush).
+        and(eq(N.pushState, "sending"), lt(N.pushAttemptedAt, new Date(now.getTime() - 5 * 60_000).toISOString())),
+      ),
+    )
     .limit(1)
     .get();
 }

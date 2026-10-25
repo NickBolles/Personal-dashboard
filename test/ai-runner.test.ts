@@ -455,10 +455,20 @@ describe("AI actions end to end (fake Hermes)", () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(getJobRow(v.id)!.state).toBe("waiting_approval");
     expect(getDb().select().from(schema.notifications).where(eq(schema.notifications.category, "hermes_input")).all()).toHaveLength(1);
+    // The visible run is registered with the conversation machinery: owned session + run-store row awaiting approval.
+    const vr = getJobRow(v.id)!;
+    expect(getDb().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, vr.hermesSessionId!)).get()?.userId).toBe(owner);
+    expect(getDb().select().from(schema.runs).where(eq(schema.runs.runId, vr.hermesRunId!)).get()).toMatchObject({
+      userId: owner,
+      sessionId: vr.hermesSessionId,
+      status: "waiting_for_approval",
+      notifiedCompletion: true,
+    });
     await call(cancelRoute.POST, { method: "POST", params: { id: v.id }, body: {} });
     await runnerTick();
     await drainRunner();
     expect(getJobRow(v.id)!.state).toBe("cancelled");
+    expect(getDb().select().from(schema.runs).where(eq(schema.runs.runId, vr.hermesRunId!)).get()?.status).toBe("cancelled");
   });
 
   it("per-job cost cap stops the run when Hermes reports cost mid-run (flag on)", async () => {
@@ -508,5 +518,14 @@ describe("standalone push dispatcher", () => {
     notify({ type: "t2", category: "ai_report", severity: "normal", title: "Again", body: "b", source: "work", deepLink: "/areas" }, owner);
     await Promise.all([deliverPendingPushes(), deliverPendingPushes(), dispatchOnce()]);
     expect(webpush.sendNotification).toHaveBeenCalledTimes(2);
+  });
+
+  it("reclaims a stale `sending` claim even when nothing else is pending", async () => {
+    saveSubscription(owner, sub);
+    notify({ type: "t3", category: "ai_report", severity: "normal", title: "Stuck", body: "b", source: "work", deepLink: "/areas" }, owner);
+    const stale = new Date(Date.now() - 10 * 60_000).toISOString();
+    getDb().update(schema.notifications).set({ pushState: "sending", pushAttemptedAt: stale }).run();
+    expect(await dispatchOnce()).toEqual({ sent: 1 });
+    expect(getDb().select().from(schema.notifications).get()!.pushState).toBe("sent");
   });
 });

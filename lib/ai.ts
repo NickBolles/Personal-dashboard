@@ -382,6 +382,8 @@ export const captureFieldsSchema = z
     investigate: z.enum(["auto", "triage_only", "off"]).optional(),
     /** file directly under this work item (still triaged/investigated when on) */
     parentId: z.string().min(1).max(80).optional(),
+    /** offline replays: the account that queued it; refused (409) when another account is signed in */
+    queuedBy: z.string().min(1).max(80).optional(),
   })
   .strict();
 export type CaptureFields = z.infer<typeof captureFieldsSchema>;

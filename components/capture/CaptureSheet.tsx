@@ -57,7 +57,9 @@ export function CaptureSheet({
   askable?: boolean;
 }) {
   const id = useId();
-  const canAi = useAccess().can("work.ai");
+  const access = useAccess();
+  const canAi = access.can("work.ai");
+  const userId = access.userId;
   const qc = useQueryClient();
   const { toast } = useToast();
   const { ask, busy: asking } = useAskHermes();
@@ -168,6 +170,7 @@ export function CaptureSheet({
           files: files.map((f) => ({ name: f.name, type: f.type, blob: f.blob })),
           createdAt: new Date().toISOString(),
           attempts: 0,
+          userId,
         });
         toast("Saved on this phone · sends when online", "warn");
         onDone?.({ queued: true });

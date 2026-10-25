@@ -1,6 +1,6 @@
 import "server-only";
 import { and, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
-import { attachmentsFor, createCapture } from "@/server/capture";
+import { attachmentsFor, createCapture, moveCaptureToItem } from "@/server/capture";
 import { repointReports } from "@/server/ai/reports";
 import type { z } from "zod";
 import { getDb, schema } from "@/server/db";
@@ -283,7 +283,7 @@ export async function acceptEntry(user: CurrentUser, id: string, body: z.infer<t
             lineage: "ai_action",
           })
           .run();
-    getDb().update(schema.captureAttachments).set({ itemId: item.id }).where(eq(schema.captureAttachments.inboxId, id)).run();
+    moveCaptureToItem(r, item.id);
   }
   audit({
     actor: user.id,

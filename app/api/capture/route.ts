@@ -70,7 +70,7 @@ async function readCapture(req: NextRequest): Promise<{ fields: Record<string, s
   if (type.startsWith("multipart/form-data")) {
     const form = await new Response(new Uint8Array(raw), { headers: { "content-type": type } }).formData();
     const fields: Record<string, string | undefined> = {};
-    for (const k of ["text", "title", "url", "channel", "clientCaptureId", "investigate", "parentId"]) {
+    for (const k of ["text", "title", "url", "channel", "clientCaptureId", "investigate", "parentId", "queuedBy"]) {
       const v = form.get(k);
       if (typeof v === "string" && v !== "") fields[k] = v;
     }

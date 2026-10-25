@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { userById } from "@/server/auth";
 import { getPreferences } from "@/server/settings";
@@ -86,8 +86,8 @@ export async function runnerTick(now = new Date()) {
   const tz = getPreferences().timezone;
   const day = localDay(now, tz);
   try {
-    // New local day: budget-blocked jobs go back to the queue.
-    if (s.lastDay && s.lastDay !== day) releaseBudgetBlocked(localDayStart(now, tz).toISOString());
+    // New local day (or first tick after a restart): jobs blocked before today go back to the queue.
+    if (s.lastDay !== day) releaseBudgetBlocked(localDayStart(now, tz).toISOString());
     s.lastDay = day;
 
     // 1. Our own in-flight jobs: renew leases; propagate cancel requests.
@@ -256,10 +256,16 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       timeoutMs: settings.timeoutsS[kind] * 1000,
       signal,
       adopt: adopt && row.hermesSessionId ? { sessionId: row.hermesSessionId, runId: row.hermesRunId } : undefined,
-      onIds: (ids) => setIds(id, ids),
+      onIds: (ids) => {
+        setIds(id, ids);
+        if (row.visibleSession) registerVisibleRun(row, ids, AI_KIND_LABEL[kind]);
+      },
       onPoll: async ({ status, sessionId }) => {
         const cur = getJobRow(id);
-        if (cur?.state === "waiting_approval" && status === "running") transition(id, "waiting_approval", "running");
+        if (cur?.state === "waiting_approval" && status === "running") {
+          transition(id, "waiting_approval", "running");
+          if (cur.hermesRunId) setVisibleRunStatus(cur.hermesRunId, "running");
+        }
         // Live per-job cap only when Hermes is verified to update session cost mid-run.
         if (settings.hermes.midRunCost && row.tier !== "triage" && Date.now() - lastCostCheck > 15_000) {
           lastCostCheck = Date.now();
@@ -268,8 +274,10 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
         }
         return "continue";
       },
-      onApproval: ({ sessionId, command }) => {
+      onApproval: ({ sessionId, runId, command }) => {
         transition(id, "running", "waiting_approval");
+        // The conversation's approval controls read the run store (activeRun / respondApproval).
+        if (row.visibleSession) setVisibleRunStatus(runId, "waiting_for_approval");
         notify(
           {
             type: "ai.approval",
@@ -295,51 +303,116 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       outputTokens: result.cost.outputTokens,
     };
     await onSuccess(row, kind, result.data as Record<string, unknown>, costPatch, title, settings, params);
+    settleVisibleRun(id);
   } catch (e) {
-    row = getJobRow(id)!;
-    const err = e instanceof HermesTaskError ? e : new HermesTaskError("upstream", "failed", { terminalObserved: false });
-    const lc = takeLastCost(row.idempotencyKey);
-    const costPatch = lc?.costUsd != null ? { costUsd: lc.costUsd, costSource: lc.source } : {};
-    if (err.code === "cancelled") {
-      if (err.ids.terminalObserved || !err.ids.runId) {
-        const from = row.state as JobState;
-        if (from === "cancelling" || from === "running" || from === "waiting_approval")
-          transition(id, from === "cancelling" ? "cancelling" : from, from === "cancelling" ? "cancelled" : "cancelling", {
-            errorCode: "cancelled",
-            errorMessage: errorText("cancelled"),
-          });
-        const again = getJobRow(id)!;
-        if (again.state === "cancelling")
-          transition(id, "cancelling", "cancelled", { errorCode: "cancelled", errorMessage: errorText("cancelled"), ...costPatch });
-      }
-      // else: stays `cancelling`; the lease expires and the run is adopted until Hermes reports a terminal status.
-      return;
+    try {
+      await handleFailure(id, e, kind, title);
+    } finally {
+      settleVisibleRun(id);
     }
-    const code = err.code as JobErrorCode;
-    if (!err.ids.runId && retryable(code, row.attempt, row.maxAttempts) && (row.state === "running" || row.state === "waiting_approval")) {
-      transition(id, row.state as JobState, "queued", { notBefore: new Date(Date.now() + backoffMs(row.attempt)).toISOString(), errorCode: code });
-      return;
-    }
-    if (["running", "waiting_approval", "cancelling"].includes(row.state)) failJob(row, code, undefined, costPatch);
-    if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "failed");
-    if (kind !== "triage")
-      notify(
-        {
-          type: "ai.job_failed",
-          category: "info",
-          severity: "info",
-          title: `${AI_KIND_LABEL[kind]} failed: ${title}`.slice(0, 140),
-          body: errorText(code),
-          source: "work",
-          deepLink:
-            row.subjectType === "work_item"
-              ? `/areas?item=${encodeURIComponent(row.subjectId)}`
-              : `/areas?view=inbox&entry=${encodeURIComponent(row.subjectId)}`,
-          dedupeKey: `ai:failed:${id}`,
-        },
-        row.userId,
-      );
   }
+}
+
+async function handleFailure(id: string, e: unknown, kind: AiJobKind, title: string) {
+  const row = getJobRow(id)!;
+  const err = e instanceof HermesTaskError ? e : new HermesTaskError("upstream", "failed", { terminalObserved: false });
+  const lc = takeLastCost(row.idempotencyKey);
+  const costPatch = lc?.costUsd != null ? { costUsd: lc.costUsd, costSource: lc.source } : {};
+  if (err.code === "cancelled") {
+    if (err.ids.terminalObserved || !err.ids.runId) {
+      const from = row.state as JobState;
+      if (from === "cancelling" || from === "running" || from === "waiting_approval")
+        transition(id, from === "cancelling" ? "cancelling" : from, from === "cancelling" ? "cancelled" : "cancelling", {
+          errorCode: "cancelled",
+          errorMessage: errorText("cancelled"),
+        });
+      const again = getJobRow(id)!;
+      // A timeout/cost-cap stop that Hermes confirmed late keeps its original reason.
+      const why = again.errorCode === "timeout" || again.errorCode === "cost_cap" ? (again.errorCode as JobErrorCode) : "cancelled";
+      if (again.state === "cancelling") transition(id, "cancelling", "cancelled", { errorCode: why, errorMessage: errorText(why), ...costPatch });
+    }
+    // else: stays `cancelling`; the lease expires and the run is adopted until Hermes reports a terminal status.
+    return;
+  }
+  const code = err.code as JobErrorCode;
+  if (err.ids.runId && !err.ids.terminalObserved) {
+    // Hermes didn't confirm the stop (e.g. timeout or cost cap): the upstream run may still be going.
+    // Keep the job active (`cancelling`) so its lease expires and the runner adopts it by run id until
+    // Hermes reports a terminal status; concurrency and the budget reservation stay held meanwhile.
+    if (row.state === "running" || row.state === "waiting_approval")
+      transition(id, row.state as JobState, "cancelling", { errorCode: code, errorMessage: errorText(code), ...costPatch });
+    return;
+  }
+  if (!err.ids.runId && retryable(code, row.attempt, row.maxAttempts) && (row.state === "running" || row.state === "waiting_approval")) {
+    transition(id, row.state as JobState, "queued", { notBefore: new Date(Date.now() + backoffMs(row.attempt)).toISOString(), errorCode: code });
+    return;
+  }
+  if (["running", "waiting_approval", "cancelling"].includes(row.state)) failJob(row, code, undefined, costPatch);
+  if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "failed");
+  if (kind !== "triage")
+    notify(
+      {
+        type: "ai.job_failed",
+        category: "info",
+        severity: "info",
+        title: `${AI_KIND_LABEL[kind]} failed: ${title}`.slice(0, 140),
+        body: errorText(code),
+        source: "work",
+        deepLink:
+          row.subjectType === "work_item" ? `/areas?item=${encodeURIComponent(row.subjectId)}` : `/areas?view=inbox&entry=${encodeURIComponent(row.subjectId)}`,
+        dedupeKey: `ai:failed:${id}`,
+      },
+      row.userId,
+    );
+}
+
+const RUN_STATUS_FOR: Record<string, string> = { succeeded: "completed", failed: "failed", cancelled: "cancelled", skipped: "cancelled" };
+
+/**
+ * Visible AI runs join the conversation machinery as soon as Hermes hands out ids:
+ * the session belongs to the person who asked (not the household owner), and the
+ * run gets a run-store row so the conversation shows it and its approval controls.
+ * notifiedCompletion=true: the AI runner sends its own report/failure notices.
+ */
+function registerVisibleRun(row: typeof J.$inferSelect, ids: { sessionId?: string; runId?: string }, label: string) {
+  const db = getDb();
+  if (ids.sessionId) db.insert(schema.sessionMeta).values({ sessionId: ids.sessionId, userId: row.userId }).onConflictDoNothing().run();
+  if (ids.sessionId && ids.runId)
+    db.insert(schema.runs)
+      .values({
+        runId: ids.runId,
+        sessionId: ids.sessionId,
+        userId: row.userId,
+        idempotencyKey: `ai:${row.idempotencyKey}`.slice(0, 255),
+        status: "running",
+        inputPreview: `✦ ${label}`.slice(0, 140),
+        notifiedCompletion: true,
+      })
+      .onConflictDoNothing()
+      .run();
+}
+
+function setVisibleRunStatus(runId: string, status: string) {
+  const R = schema.runs;
+  getDb()
+    .update(R)
+    .set({ status, lastCheckedAt: new Date().toISOString() })
+    .where(and(eq(R.runId, runId), notInArray(R.status, ["completed", "failed", "cancelled", "interrupted"])))
+    .run();
+}
+
+/** Once the job is terminal, its run-store row is too (an unconfirmed stop stays open until adopted and settled). */
+function settleVisibleRun(id: string) {
+  const row = getJobRow(id);
+  if (!row?.visibleSession || !row.hermesRunId) return;
+  const status = RUN_STATUS_FOR[row.state];
+  if (!status) return;
+  const R = schema.runs;
+  getDb()
+    .update(R)
+    .set({ status, pendingApproval: null, completedAt: new Date().toISOString(), lastCheckedAt: new Date().toISOString() })
+    .where(and(eq(R.runId, row.hermesRunId), notInArray(R.status, ["completed", "failed", "cancelled", "interrupted"])))
+    .run();
 }
 
 async function onSuccess(
