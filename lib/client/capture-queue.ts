@@ -61,7 +61,8 @@ export async function queueCapture(item: QueuedCapture) {
   db.close();
   notifyQueue();
   try {
-    const reg = await navigator.serviceWorker?.ready;
+    // getRegistration() resolves (possibly undefined) right away; `ready` would hang without an active worker.
+    const reg = await navigator.serviceWorker?.getRegistration();
     await (reg as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } })?.sync?.register("capture-flush");
   } catch {
     /* Background Sync isn't everywhere; the page flushes on online/visibility */
