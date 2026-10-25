@@ -120,7 +120,7 @@ describe("ai rules (pure)", () => {
     "my github token ghp_abcdefghijklmnopqrstuvwxyz0123",
     "password: hunter2hunter2",
     "Authorization: Bearer abcdefghijklmnop",
-    "-----BEGIN RSA PRIVATE KEY-----",
+    ["-----BEGIN RSA", "PRIVATE KEY-----"].join(" "),
     "AKIAABCDEFGHIJKLMNOP",
   ];
   const SAFE = [

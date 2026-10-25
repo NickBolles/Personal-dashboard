@@ -73,7 +73,8 @@ test("manifest is installable-grade", async ({ request }) => {
   expect(m.display).toBe("standalone");
   expect(m.start_url).toMatch(/^\/home/);
   expect(m.icons.some((i: { sizes: string; purpose?: string }) => i.sizes === "512x512" && i.purpose === "maskable")).toBe(true);
-  expect(m.share_target.action).toBe("/share");
+  expect(m.share_target).toMatchObject({ action: "/share-target", method: "POST", enctype: "multipart/form-data" });
+  expect(m.shortcuts.map((s: { url: string }) => s.url)).toEqual(["/capture", "/areas?view=inbox", "/chat?new=1", "/alerts"]);
   const sw = await request.get("/sw.js");
   expect(sw.ok()).toBe(true);
 });

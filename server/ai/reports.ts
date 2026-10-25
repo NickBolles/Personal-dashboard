@@ -133,6 +133,11 @@ export function writeReport(job: typeof schema.aiJobs.$inferSelect, d: ReportDra
   const id = newId("air");
   const db = getDb();
   const clean = normaliseSources(d.sources);
+  // An inbox entry filed while its job ran: the report lands on the new item (origin kept).
+  const filedTo =
+    job.subjectType === "inbox"
+      ? db.select({ itemId: schema.workInbox.acceptedItemId }).from(schema.workInbox).where(eq(schema.workInbox.id, job.subjectId)).get()?.itemId
+      : null;
   db.transaction((tx) => {
     tx.insert(R)
       .values({
@@ -140,8 +145,8 @@ export function writeReport(job: typeof schema.aiJobs.$inferSelect, d: ReportDra
         userId: job.userId,
         jobId: job.id,
         kind: job.kind,
-        subjectType: job.subjectType,
-        subjectId: job.subjectId,
+        subjectType: filedTo ? "work_item" : job.subjectType,
+        subjectId: filedTo ?? job.subjectId,
         originInboxId: job.subjectType === "inbox" ? job.subjectId : null,
         title: d.title,
         summary: d.summary,

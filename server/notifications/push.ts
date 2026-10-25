@@ -32,6 +32,7 @@ export type PushPayload = {
   url: string;
   tag?: string;
   severity: string;
+  actions?: { action: string; title: string }[];
 };
 
 /**
@@ -146,7 +147,12 @@ export async function deliverPendingPushes(now = new Date()) {
     if (quiet(n.userId) && !(cat?.bypassQuietHours || n.severity === "critical")) continue; // hold until quiet hours end
     // Claim (conditional update) so the worker and the standalone dispatcher never send the same row twice.
     if (!claimPush(n.id, now)) continue;
-    const payload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
+    const payload: PushPayload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
+    if (n.category === "ai_report" && n.deepLink.includes("view=inbox"))
+      payload.actions = [
+        { action: "open", title: "Open report" },
+        { action: "file", title: "File it" },
+      ];
     const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
     // Browsers (web push) and paired phones (FCM) both get it.
     const [web, phone] = await Promise.all([

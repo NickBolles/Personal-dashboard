@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { useAccess } from "@/components/access";
+import { CaptureTokens } from "@/components/capture/CaptureTokens";
 import { Badge, Button, Card, Empty, ErrorNote, Field, PageHeader, Spinner, inputCls, useNow, useToast } from "@/components/ui";
 
 type Device = { id: string; name: string; platform: string; appVersion?: string; pushEnabled: boolean; createdAt: string; lastSeenAt: string };
@@ -16,7 +17,7 @@ export function PhonesView() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const now = useNow(1000);
-  const { isAdmin } = useAccess();
+  const { isAdmin, can } = useAccess();
   const devices = useQuery({ queryKey: ["devices"], queryFn: () => api.get<{ devices: Device[] }>("/api/devices"), refetchInterval: 5000 });
   const push = useQuery({ queryKey: ["push-config"], queryFn: () => api.get<PushStatus>("/api/devices/push-config") });
 
@@ -166,6 +167,7 @@ export function PhonesView() {
           </Button>
         </form>
       </Card>
+      {can("work.use") ? <CaptureTokens /> : null}
     </div>
   );
 }
