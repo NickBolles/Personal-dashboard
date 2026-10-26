@@ -6,7 +6,7 @@ import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { getSessionSummary, listLocalConversations, listSessions, sessionAccess } from "@/server/assistant";
 import { userById } from "@/server/auth";
-import { noteIndexFailure, readIndex, recentIndexUsers, touchIndex, writeIndex, type IndexEntry } from "./conversation-index";
+import { indexMutationSeq, noteIndexFailure, readIndex, recentIndexUsers, touchIndex, writeIndex, type IndexEntry } from "./conversation-index";
 import { isLocalSession } from "@/lib/assistant";
 import type { SessionSummary } from "@/lib/hermes";
 import {
@@ -115,15 +115,23 @@ function quietly(fn: () => void) {
 }
 
 /** Fetch the full window and persist it. Resolves true when Hermes answered; never rejects. */
-function refresh(user: CurrentUser): Promise<boolean> {
+function refresh(user: CurrentUser, retried = false): Promise<boolean> {
   let p = refreshing.get(user.id);
   if (!p) {
+    // Changes Jarvis makes while this request is in flight (new chat, rename, archive, fork, run)
+    // are newer than Hermes' snapshot: then the result is dropped and fetched once more.
+    const seq = indexMutationSeq(user.id);
+    let again = false;
     p = withBudget(listSessions(user, {}), LIST_BUDGET_MS)
       .then((r) => {
         quietly(() => syncConversationTitles(user.id, r.sessions));
         if (r.unavailable.length) {
           quietly(() => noteIndexFailure(user.id, "unavailable"));
           return false;
+        }
+        if (indexMutationSeq(user.id) !== seq) {
+          again = !retried;
+          return true;
         }
         quietly(() => writeIndex(user.id, r.sessions, true));
         return true;
@@ -132,7 +140,10 @@ function refresh(user: CurrentUser): Promise<boolean> {
         quietly(() => noteIndexFailure(user.id, errKind(e)));
         return false;
       })
-      .finally(() => refreshing.delete(user.id));
+      .finally(() => {
+        refreshing.delete(user.id);
+        if (again) void refresh(user, true);
+      });
     refreshing.set(user.id, p);
   }
   return p;

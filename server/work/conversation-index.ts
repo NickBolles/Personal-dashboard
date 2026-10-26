@@ -22,6 +22,17 @@ export type IndexEntry = {
 const T = schema.conversationIndex;
 const ms = (iso: string | null) => (iso ? Date.parse(iso) : null);
 
+/**
+ * Per-person count of index changes made by Jarvis itself (patches, stale
+ * marks). A refresh compares it before and after its upstream call and drops a
+ * result that started before such a change. In-memory is enough: one server
+ * process owns the index, and a restart drops in-flight refreshes too.
+ */
+const g = globalThis as unknown as { __jarvisIndexSeq?: Map<string, number> };
+const seqs = (g.__jarvisIndexSeq ??= new Map());
+export const indexMutationSeq = (userId: string) => seqs.get(userId) ?? 0;
+const bump = (userId: string) => seqs.set(userId, indexMutationSeq(userId) + 1);
+
 function parse(json: string): SessionSummary[] {
   try {
     const v = JSON.parse(json) as unknown;
@@ -90,6 +101,7 @@ export function noteIndexedSession(userId: string, session: SessionSummary, opts
   if (i >= 0) list[i] = { ...list[i], ...session };
   else if (opts.insert !== false) list.unshift(session);
   else return;
+  bump(userId);
   getDb()
     .update(T)
     .set({ sessions: JSON.stringify(list) })
@@ -116,6 +128,7 @@ export function syncIndexedTitle(userId: string, session: Pick<SessionSummary, "
 
 /** Something changed upstream that the cached list can't know (a run started): revalidate on the next read. */
 export function markIndexStale(userId: string) {
+  bump(userId);
   getDb().update(T).set({ complete: false }).where(eq(T.userId, userId)).run();
 }
 

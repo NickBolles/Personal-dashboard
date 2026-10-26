@@ -241,6 +241,20 @@ describe("conversation index: warming", () => {
 });
 
 describe("conversation index: robustness", () => {
+  it("a refresh that started before a Jarvis change is dropped and fetched again", async () => {
+    writeIndex(owner, rows, true, ago(2 * 60_000));
+    const resolvers: ((v: unknown) => void)[] = [];
+    listSessions.mockImplementation(() => new Promise((r) => resolvers.push(r)));
+    await conversations.conversationList(me(), "all");
+    noteIndexedSession(owner, s("h9", "Brand new", "2026-10-25T13:00:00Z"));
+    resolvers[0]!({ sessions: rows, unavailable: [], nextOffset: 100 });
+    await vi.waitFor(() => expect(listSessions).toHaveBeenCalledTimes(2));
+    expect(readIndex(owner)!.sessions.map((x) => x.id)).toContain("h9");
+    resolvers[1]!({ sessions: [s("h9", "Brand new", "2026-10-25T13:00:00Z"), ...rows], unavailable: [], nextOffset: 100 });
+    await conversations.__settleConversationRefreshes();
+    expect(readIndex(owner)!.sessions.map((x) => x.id)).toEqual(["h9", "h1", "h2"]);
+    expect(listSessions).toHaveBeenCalledTimes(2);
+  });
   it("a refresh for a person deleted mid-flight resolves instead of rejecting", async () => {
     writeIndex(owner, rows, true, ago(2 * 60_000));
     let resolve!: (v: unknown) => void;
