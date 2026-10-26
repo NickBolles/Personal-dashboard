@@ -44,6 +44,10 @@ export async function createSession(user: CurrentUser, title?: string, backend?:
 export const getSessionDetail = (user: CurrentUser, id: string) =>
   isLocalSession(id) ? Promise.resolve(local.localSessionDetail(user, id)) : hermes.getSessionDetail(user, id);
 
+/** One conversation's summary (access-checked), without the transcript or fork lineage. */
+export const getSessionSummary = (user: CurrentUser, id: string) =>
+  isLocalSession(id) ? Promise.resolve(local.localSessionDetail(user, id).session) : hermes.getSessionSummary(user, id);
+
 export const updateSession = (user: CurrentUser, id: string, patch: Parameters<typeof hermes.updateSession>[2], correlationId: string) =>
   isLocalSession(id) ? Promise.resolve(local.updateLocalSession(user, id, patch, correlationId)) : hermes.updateSession(user, id, patch, correlationId);
 
