@@ -79,11 +79,14 @@ type Listed = { sessions: SessionSummary[]; unavailable: string[]; updating: boo
 const refreshing = new Map<string, Promise<boolean>>();
 const firstPages = new Map<string, Promise<Listed>>();
 const warming = new Set<Promise<unknown>>();
+/** People queued by the warmer and not yet done. */
+const warmQueued = new Set<string>();
 
 export function __resetConversationCache() {
   refreshing.clear();
   firstPages.clear();
   warming.clear();
+  warmQueued.clear();
 }
 
 /** Wait for any in-flight refreshes (tests). */
@@ -129,8 +132,11 @@ function refresh(user: CurrentUser): Promise<boolean> {
 /** The person's own Claude-direct conversations (local, fast) merged with cached Hermes rows they can still see. */
 function fromIndex(user: CurrentUser, hit: IndexEntry, unavailable: string[]): Listed {
   const remote = hit.sessions.filter((s) => !isLocalSession(s.id) && sessionAccess(user, s.id));
+  const local = listLocalConversations(user);
+  // Claude-direct titles change locally (first message): keep their tree nodes in step, as a live list did.
+  syncConversationTitles(user.id, local);
   return {
-    sessions: sortRecent([...remote, ...listLocalConversations(user)]),
+    sessions: sortRecent([...remote, ...local]),
     unavailable,
     updating: refreshing.has(user.id),
     cachedAt: hit.refreshedAt ? new Date(hit.refreshedAt).toISOString() : null,
@@ -197,13 +203,25 @@ async function sessionsFor(user: CurrentUser, opts: { revalidate?: boolean } = {
  * refreshes in the background, one at a time, and returns how many it queued.
  */
 export function warmConversationIndexes(now = new Date()): number {
+  const isDue = (r: { refreshedAt: number | null; attemptedAt: number | null }, at: number) =>
+    at - Math.max(r.refreshedAt ?? 0, r.attemptedAt ?? 0) >= WARM_EVERY_MS;
   const due = recentIndexUsers(new Date(now.getTime() - WARM_IDLE_MS)).filter(
-    (r) => !refreshing.has(r.userId) && now.getTime() - Math.max(r.refreshedAt ?? 0, r.attemptedAt ?? 0) >= WARM_EVERY_MS,
+    (r) => !refreshing.has(r.userId) && !warmQueued.has(r.userId) && isDue(r, now.getTime()),
   );
   const users = due.map((r) => userById(r.userId)).filter((u): u is CurrentUser => !!u && u.capabilities.has("hermes.chat"));
   if (!users.length) return 0;
-  const [first, ...rest] = users;
-  const chain = rest.reduce<Promise<unknown>>((c, u) => c.then(() => refresh(u)), refresh(first!));
+  // Reserved until their turn ends, so a later pass (every 60 s) never queues them twice.
+  for (const u of users) warmQueued.add(u.id);
+  const step = async (u: CurrentUser) => {
+    try {
+      // A view may have refreshed it while it waited in the queue.
+      const cur = readIndex(u.id);
+      if (!cur || isDue(cur, Date.now())) await refresh(u);
+    } finally {
+      warmQueued.delete(u.id);
+    }
+  };
+  const chain = users.reduce<Promise<unknown>>((c, u) => c.then(() => step(u)), Promise.resolve());
   warming.add(chain);
   void chain.finally(() => warming.delete(chain));
   return users.length;

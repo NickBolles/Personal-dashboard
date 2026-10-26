@@ -124,6 +124,14 @@ describe("conversation index: stale-while-revalidate", () => {
     expect(listSessions).not.toHaveBeenCalled();
   });
 
+  it("cached reads still sync Claude-direct titles into the tree", async () => {
+    placeConversation(me(), { sessionId: "loc_1", parentId: null, title: "New conversation" }, "corr");
+    writeIndex(owner, rows, true);
+    listLocalConversations.mockReturnValue([s("loc_1", "Plan groceries", "2026-10-25T12:00:00Z")]);
+    await conversations.conversationList(me(), "all");
+    expect(conversationNodes(owner).get("loc_1")?.title).toBe("Plan groceries");
+  });
+
   it("a fresh list isn't refetched; ?refresh=1 revalidates in the background and the next read has it", async () => {
     writeIndex(owner, rows, true);
     listSessions.mockResolvedValue({ sessions: more, unavailable: [], nextOffset: 100 });
@@ -205,6 +213,18 @@ describe("conversation index: warming", () => {
     await conversations.__settleConversationRefreshes();
     expect(readIndex(owner)!.sessions).toHaveLength(3);
     expect(conversations.warmConversationIndexes()).toBe(0);
+    expect(listSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("a user still queued from an earlier pass isn't queued again", async () => {
+    writeIndex(owner, rows, true, ago(conversations.WARM_EVERY_MS + 1_000));
+    let resolve!: (v: unknown) => void;
+    listSessions.mockImplementation(() => new Promise((r) => (resolve = r)));
+    expect(conversations.warmConversationIndexes()).toBe(1);
+    expect(conversations.warmConversationIndexes()).toBe(0);
+    await vi.waitFor(() => expect(listSessions).toHaveBeenCalledTimes(1));
+    resolve({ sessions: more, unavailable: [], nextOffset: 100 });
+    await conversations.__settleConversationRefreshes();
     expect(listSessions).toHaveBeenCalledTimes(1);
   });
 
