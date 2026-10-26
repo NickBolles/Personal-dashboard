@@ -7,8 +7,9 @@
  * - the EXIF GPS IFD (tag 0x8825) in JPEG APP1 "Exif", PNG `eXIf` and WebP `EXIF`:
  *   the IFD and its values are zeroed and its pointer is removed from IFD0. If the
  *   TIFF structure can't be walked safely, the whole EXIF block is dropped instead.
- * - XMP packets that mention GPS (JPEG APP1 XMP / extended XMP, PNG iTXt
+ * - XMP packets that mention GPS (JPEG APP1 XMP, PNG iTXt
  *   `XML:com.adobe.xmp`, PNG text "Raw profile type exif/xmp", WebP `XMP `).
+ * - all JPEG extended XMP segments and compressed PNG XMP (can't be checked piecewise).
  * GIF carries no location metadata. HEIC isn't an accepted capture type.
  */
 
@@ -152,8 +153,11 @@ function stripJpeg(input: Uint8Array): StripResult {
         const r = scrubOrDrop(buf, p + 6, segEnd);
         if (r === "scrubbed") changed = true;
         if (r === "drop") drop = true;
-      } else if (startsWith(buf, p, "http://ns.adobe.com/xap/1.0/") || startsWith(buf, p, "http://ns.adobe.com/xmp/extension/")) {
+      } else if (startsWith(buf, p, "http://ns.adobe.com/xap/1.0/")) {
         drop = XMP_GPS.test(latin1(buf, p, segEnd));
+      } else if (startsWith(buf, p, "http://ns.adobe.com/xmp/extension/")) {
+        // Extended XMP spans several segments (a GPS name and its value can sit in different ones): drop it all.
+        drop = true;
       }
     }
     if (drop) {

@@ -37,6 +37,22 @@ describe("stripLocation (pure)", () => {
     expect(r.bytes).toBe(plain);
   });
 
+  it("JPEG: extended XMP is dropped whole even when the GPS value is split across segments", () => {
+    const seg = (text: string) => {
+      const x = [
+        ...Buffer.from("http://ns.adobe.com/xmp/extension/\0", "latin1"),
+        ...Buffer.from("0123456789ABCDEF0123456789ABCDEF\0\0\0\0\0\0\0\0", "latin1"),
+        ...Buffer.from(text),
+      ];
+      return [0xff, 0xe1, (x.length + 2) >> 8, (x.length + 2) & 0xff, ...x];
+    };
+    const base = jpegWithGps();
+    const src = Uint8Array.from([...base.subarray(0, 2), ...seg('<rdf:Description exif:GPSLongitude="'), ...seg('87,37.8W"/>'), ...base.subarray(2)]);
+    const { bytes } = stripLocation(src, "image/jpeg");
+    expect(Buffer.from(bytes).includes("87,37.8W")).toBe(false);
+    expect(Buffer.from(bytes).includes("xmp/extension")).toBe(false);
+  });
+
   it("JPEG: an EXIF block that can't be walked safely is dropped whole", () => {
     const bad = tiffWithGps();
     new DataView(bad.buffer).setUint32(10 + 2 * 12 + 8, 0xfffffff0, true); // GPS pointer out of range
