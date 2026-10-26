@@ -9,7 +9,7 @@ What Jarvis keeps from quick captures, what leaves the box, and for how long. Ow
 
 ## Retention
 
-- **Dismissed captures are deleted 30 days after you dismiss them**, together with their attachment files and the AI reports written for them. This runs hourly in the background (also when the general worker is off) and is audited (`capture.purge_dismissed`, ids only). The AI spend ledger (`ai_jobs`: kind, cost, tokens, timestamps) stays, with its capture-derived parameters (such as the investigation brief) cleared. An investigation conversation filed in Hermes is Hermes' to keep or delete (Jarvis doesn't copy it).
+- **Dismissed captures are deleted 30 days after you dismiss them**, together with their attachment files, the AI reports written for them and the alerts that point at them. This runs hourly in the background (also when the general worker is off) and is audited (`capture.purge_dismissed`, ids only). The AI spend ledger (`ai_jobs`: kind, cost, tokens, timestamps) stays, with its capture-derived parameters (such as the investigation brief) cleared. An investigation conversation filed in Hermes is Hermes' to keep or delete (Jarvis doesn't copy it).
 - Filed captures become Work items; their attachments and reports stay with the item until you delete them.
 - Backups (`scripts/backup.mjs`) keep whatever existed when they were taken.
 

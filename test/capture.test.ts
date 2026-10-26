@@ -494,6 +494,25 @@ describe("30-day purge of dismissed captures", () => {
         costUsd: 0.02,
       })
       .run();
+    for (const [nid, entry] of [
+      ["ntf_old", old],
+      ["ntf_recent", recent],
+    ])
+      getDb()
+        .insert(schema.notifications)
+        .values({
+          id: nid,
+          userId: owner,
+          type: "ai.report_ready",
+          category: "ai_report",
+          severity: "normal",
+          title: "Report ready · old dismissed",
+          body: "summary",
+          source: "work",
+          deepLink: `/areas?view=inbox&entry=${entry}`,
+          pushState: "pending",
+        })
+        .run();
     const oldFile = path.join(
       config.dataDir,
       "captures",
@@ -502,7 +521,15 @@ describe("30-day purge of dismissed captures", () => {
     expect(fs.existsSync(oldFile)).toBe(true);
 
     const r = purgeDismissedCaptures(now);
-    expect(r).toEqual({ entries: 1, attachments: 1, reports: 1 });
+    expect(r).toEqual({ entries: 1, attachments: 1, reports: 1, notifications: 1 });
+    expect(
+      getDb()
+        .select({ id: schema.notifications.id })
+        .from(schema.notifications)
+        .all()
+        .map((n) => n.id),
+    ).toContain("ntf_recent");
+    expect(getDb().select().from(schema.notifications).where(eq(schema.notifications.id, "ntf_old")).all()).toHaveLength(0);
     expect(fs.existsSync(oldFile)).toBe(false);
     const left = getDb()
       .select({ id: schema.workInbox.id })

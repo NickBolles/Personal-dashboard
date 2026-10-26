@@ -16,7 +16,7 @@ export const DISMISSED_CAPTURE_RETENTION_DAYS = 30;
 
 /**
  * Delete dismissed, never-filed captures older than the retention window, in batches.
- * Their attachment files, attachment rows and inbox-scoped AI reports go too; the
+ * Their attachment files, attachment rows, inbox-scoped AI reports and the alerts that link to them go too; the
  * ai_jobs spend ledger stays with its capture-derived params (e.g. the investigation brief) cleared. Audited per entry (ids only), one correlation id per batch.
  * Called from the standalone dispatcher tick (hourly), so it runs with the worker off.
  */
@@ -29,11 +29,12 @@ export function purgeDismissedCaptures(now = new Date(), limit = 100) {
     .where(and(eq(I.source, "capture"), isNotNull(I.dismissedAt), lt(I.dismissedAt, cutoff), isNull(I.acceptedAt)))
     .limit(limit)
     .all();
-  if (!rows.length) return { entries: 0, attachments: 0, reports: 0 };
+  if (!rows.length) return { entries: 0, attachments: 0, reports: 0, notifications: 0 };
   const ids = rows.map((r) => r.id);
   const files = db.select({ storageKey: A.storageKey }).from(A).where(inArray(A.inboxId, ids)).all();
   const R = schema.aiReports;
   let reports = 0;
+  let notifications = 0;
   db.transaction((tx) => {
     reports = tx
       .delete(R)
@@ -43,6 +44,16 @@ export function purgeDismissedCaptures(now = new Date(), limit = 100) {
       .set({ reportId: null, params: "{}" })
       .where(and(eq(schema.aiJobs.subjectType, "inbox"), inArray(schema.aiJobs.subjectId, ids)))
       .run();
+    // Report ready / failed alerts copy the capture title and report summary: they go too (pending pushes included).
+    notifications = tx
+      .delete(schema.notifications)
+      .where(
+        inArray(
+          schema.notifications.deepLink,
+          ids.map((id) => `/areas?view=inbox&entry=${encodeURIComponent(id)}`),
+        ),
+      )
+      .run().changes;
     tx.delete(A).where(inArray(A.inboxId, ids)).run();
     tx.delete(I).where(inArray(I.id, ids)).run();
   });
@@ -66,5 +77,5 @@ export function purgeDismissedCaptures(now = new Date(), limit = 100) {
       correlationId,
       detail: { olderThanDays: DISMISSED_CAPTURE_RETENTION_DAYS, batch: ids.length },
     });
-  return { entries: ids.length, attachments: files.length, reports };
+  return { entries: ids.length, attachments: files.length, reports, notifications };
 }
