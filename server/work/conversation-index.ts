@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt, ne } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { isLocalSession } from "@/lib/assistant";
 import type { SessionSummary } from "@/lib/hermes";
@@ -81,19 +81,42 @@ export function touchIndex(userId: string, now = new Date()) {
  * share, new chat) so the cached list doesn't show the old state until the
  * next refresh. No-op when the person has no index yet.
  */
-export function noteIndexedSession(userId: string, session: SessionSummary) {
+export function noteIndexedSession(userId: string, session: SessionSummary, opts: { insert?: boolean } = {}) {
   if (isLocalSession(session.id)) return;
   const row = getDb().select({ sessions: T.sessions }).from(T).where(eq(T.userId, userId)).get();
   if (!row) return;
   const list = parse(row.sessions);
   const i = list.findIndex((s) => s.id === session.id);
   if (i >= 0) list[i] = { ...list[i], ...session };
-  else list.unshift(session);
+  else if (opts.insert !== false) list.unshift(session);
+  else return;
   getDb()
     .update(T)
     .set({ sessions: JSON.stringify(list) })
     .where(eq(T.userId, userId))
     .run();
+}
+
+/**
+ * The conversation's node in the Areas tree takes Hermes' current title (as
+ * syncConversationTitles does from a list): with lists served from the index,
+ * a chat that just got its title would otherwise keep "Untitled conversation"
+ * until the next refresh.
+ */
+export function syncIndexedTitle(userId: string, session: Pick<SessionSummary, "id" | "title">) {
+  const title = session.title?.trim().slice(0, 200);
+  if (!title) return;
+  const W = schema.workItems;
+  getDb()
+    .update(W)
+    .set({ title })
+    .where(and(eq(W.userId, userId), eq(W.kind, "conversation"), eq(W.sessionId, session.id), ne(W.title, title)))
+    .run();
+}
+
+/** Something changed upstream that the cached list can't know (a run started): revalidate on the next read. */
+export function markIndexStale(userId: string) {
+  getDb().update(T).set({ complete: false }).where(eq(T.userId, userId)).run();
 }
 
 /** People whose index was used since `since` (the warmer keeps only theirs fresh). */

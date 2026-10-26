@@ -22,7 +22,8 @@ vi.mock("@/server/assistant", () => ({
 import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import * as conversations from "@/server/work/conversations";
-import { noteIndexedSession, readIndex, writeIndex } from "@/server/work/conversation-index";
+import { markIndexStale, noteIndexedSession, readIndex, syncIndexedTitle, writeIndex } from "@/server/work/conversation-index";
+import { conversationNodes, placeConversation } from "@/server/work/store";
 import { dispatchOnce, registerDispatcherTask } from "@/server/notifications/dispatcher";
 
 const s = (id: string, title: string, at: string): SessionSummary => ({ id, title, lastActiveAt: at, startedAt: at }) as SessionSummary;
@@ -179,6 +180,20 @@ describe("conversation index: stale-while-revalidate", () => {
     expect(cached.map((x) => x.id)).toEqual(["h9", "h1", "h2"]);
     expect(cached[2]).toMatchObject({ title: "Renamed", archived: true });
     expect(ids(await conversations.conversationList(me(), "all"))).toEqual(["h9", "h1"]);
+    // Reads (insert: false) only refresh rows already listed.
+    noteIndexedSession(owner, s("h10", "Opened, not listed", "2026-10-25T14:00:00Z"), { insert: false });
+    expect(readIndex(owner)!.sessions.map((x) => x.id)).not.toContain("h10");
+  });
+
+  it("a conversation's new title reaches its tree node without waiting for a refresh; a started run marks the index stale", async () => {
+    const node = placeConversation(me(), { sessionId: "h1", parentId: null, title: "Untitled conversation" }, "corr");
+    syncIndexedTitle(owner, { id: "h1", title: "Plan the week" });
+    expect(conversationNodes(owner).get("h1")).toMatchObject({ id: node.id, title: "Plan the week" });
+    writeIndex(owner, rows, true);
+    markIndexStale(owner);
+    expect(readIndex(owner)!.complete).toBe(false);
+    listSessions.mockImplementation(never);
+    expect(await conversations.conversationList(me(), "all")).toMatchObject({ updating: true });
   });
 });
 
