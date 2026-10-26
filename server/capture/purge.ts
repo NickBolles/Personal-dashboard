@@ -17,7 +17,7 @@ export const DISMISSED_CAPTURE_RETENTION_DAYS = 30;
 /**
  * Delete dismissed, never-filed captures older than the retention window, in batches.
  * Their attachment files, attachment rows and inbox-scoped AI reports go too; the
- * content-free ai_jobs spend ledger stays. Audited per entry (ids only), one correlation id per batch.
+ * ai_jobs spend ledger stays with its capture-derived params (e.g. the investigation brief) cleared. Audited per entry (ids only), one correlation id per batch.
  * Called from the standalone dispatcher tick (hourly), so it runs with the worker off.
  */
 export function purgeDismissedCaptures(now = new Date(), limit = 100) {
@@ -40,7 +40,7 @@ export function purgeDismissedCaptures(now = new Date(), limit = 100) {
       .where(and(eq(R.subjectType, "inbox"), inArray(R.subjectId, ids)))
       .run().changes;
     tx.update(schema.aiJobs)
-      .set({ reportId: null })
+      .set({ reportId: null, params: "{}" })
       .where(and(eq(schema.aiJobs.subjectType, "inbox"), inArray(schema.aiJobs.subjectId, ids)))
       .run();
     tx.delete(A).where(inArray(A.inboxId, ids)).run();

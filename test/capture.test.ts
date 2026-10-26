@@ -476,6 +476,24 @@ describe("30-day purge of dismissed captures", () => {
         promptVersion: "investigate@1",
       })
       .run();
+    getDb()
+      .insert(schema.aiJobs)
+      .values({
+        id: "aij_old",
+        userId: owner,
+        kind: "investigate",
+        subjectType: "inbox",
+        subjectId: old,
+        state: "succeeded",
+        lane: "work",
+        tier: "standard",
+        idempotencyKey: "aij:old:investigate:x",
+        params: JSON.stringify({ brief: "private capture brief" }),
+        promptVersion: "investigate@1",
+        reportId: "air_old",
+        costUsd: 0.02,
+      })
+      .run();
     const oldFile = path.join(
       config.dataDir,
       "captures",
@@ -495,6 +513,8 @@ describe("30-day purge of dismissed captures", () => {
     expect(left).not.toContain(old);
     expect(getDb().select().from(schema.captureAttachments).where(eq(schema.captureAttachments.inboxId, old)).all()).toHaveLength(0);
     expect(getDb().select().from(schema.aiReports).where(eq(schema.aiReports.id, "air_old")).all()).toHaveLength(0);
+    // The spend ledger stays, without capture-derived content.
+    expect(getDb().select().from(schema.aiJobs).where(eq(schema.aiJobs.id, "aij_old")).get()).toMatchObject({ params: "{}", reportId: null, costUsd: 0.02 });
     const a = recentAudit(50).find((x) => x.action === "capture.purge_dismissed")!;
     expect(a).toMatchObject({ actor: "jarvis", result: "ok", sourceRecord: old });
     expect(JSON.parse(a.detail!)).toMatchObject({ olderThanDays: 30, batch: 1 });

@@ -214,7 +214,9 @@ function stripPng(input: Uint8Array): StripResult {
     } else if (type === "iTXt" || type === "tEXt" || type === "zTXt") {
       const nul = buf.indexOf(0, dataStart);
       const keyword = nul > dataStart && nul < dataStart + len ? latin1(buf, dataStart, nul) : "";
-      if (keyword === "XML:com.adobe.xmp") drop = XMP_GPS.test(latin1(buf, dataStart, dataStart + len)) || type === "zTXt";
+      // Compressed XMP (zTXt, or iTXt with compression flag 1) can't be checked cheaply: drop it.
+      const compressed = type === "zTXt" || (type === "iTXt" && buf[nul + 1] === 1);
+      if (keyword === "XML:com.adobe.xmp") drop = compressed || XMP_GPS.test(latin1(buf, dataStart, dataStart + len));
       else if (/^Raw profile type (exif|xmp|APP1)$/i.test(keyword)) drop = true; // ImageMagick hex dumps
     }
     if (drop) {

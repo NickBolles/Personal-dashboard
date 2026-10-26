@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import zlib from "node:zlib";
 import { crc32, hasLocation, stripLocation } from "@/server/capture/exif";
 import { imageSize, sniffMime } from "@/server/capture/sniff";
-import { contains32, jpegWithGps, LAT_MARK, LON_MARK, pngWithGps, tiffWithGps, webpWithGps, XMP_NO_GPS, XMP_WITH_GPS } from "./fixtures/exif";
+import { contains32, jpegWithGps, LAT_MARK, LON_MARK, pngChunk, pngWithGps, tiffWithGps, webpWithGps, XMP_NO_GPS, XMP_WITH_GPS } from "./fixtures/exif";
 
 const tiffU16 = (b: Uint8Array, at: number, le = true) => new DataView(b.buffer, b.byteOffset).getUint16(at, le);
 
@@ -61,6 +62,22 @@ describe("stripLocation (pure)", () => {
       expect(dv.getUint32(i + 8 + len)).toBe(crc32(bytes, i + 4, i + 8 + len));
       i += 12 + len;
     }
+  });
+
+  it("PNG: compressed XMP (iTXt flag 1) is dropped, since it can't be checked without inflating", () => {
+    const base = Buffer.from(
+      stripLocation(
+        pngWithGps((b) => crc32(b)),
+        "image/png",
+      ).bytes,
+    );
+    const xmp = Buffer.concat([Buffer.from("XML:com.adobe.xmp\0\x01\x00\0\0", "latin1"), zlib.deflateSync(Buffer.from(XMP_WITH_GPS))]);
+    const chunk = Buffer.from(pngChunk("iTXt", Uint8Array.from(xmp), (b) => crc32(b)));
+    const src = Uint8Array.from(Buffer.concat([base.subarray(0, 33), chunk, base.subarray(33)]));
+    const { bytes, changed } = stripLocation(src, "image/png");
+    expect(changed).toBe(true);
+    expect(Buffer.from(bytes).includes("XML:com.adobe.xmp")).toBe(false);
+    expect(bytes.length).toBe(src.length - chunk.length);
   });
 
   it("WebP: scrubs EXIF, drops GPS XMP, fixes the RIFF size and VP8X flags", () => {
