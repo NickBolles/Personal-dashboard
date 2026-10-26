@@ -246,10 +246,13 @@ describe("conversation index: robustness", () => {
     const resolvers: ((v: unknown) => void)[] = [];
     listSessions.mockImplementation(() => new Promise((r) => resolvers.push(r)));
     await conversations.conversationList(me(), "all");
+    placeConversation(me(), { sessionId: "h1", parentId: null, title: "Renamed in Jarvis" }, "corr");
     noteIndexedSession(owner, s("h9", "Brand new", "2026-10-25T13:00:00Z"));
     resolvers[0]!({ sessions: rows, unavailable: [], nextOffset: 100 });
     await vi.waitFor(() => expect(listSessions).toHaveBeenCalledTimes(2));
     expect(readIndex(owner)!.sessions.map((x) => x.id)).toContain("h9");
+    // The discarded snapshot didn't touch the tree either.
+    expect(conversationNodes(owner).get("h1")?.title).toBe("Renamed in Jarvis");
     resolvers[1]!({ sessions: [s("h9", "Brand new", "2026-10-25T13:00:00Z"), ...rows], unavailable: [], nextOffset: 100 });
     await conversations.__settleConversationRefreshes();
     expect(readIndex(owner)!.sessions.map((x) => x.id)).toEqual(["h9", "h1", "h2"]);

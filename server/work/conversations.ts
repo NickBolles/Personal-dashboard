@@ -124,15 +124,17 @@ function refresh(user: CurrentUser, retried = false): Promise<boolean> {
     let again = false;
     p = withBudget(listSessions(user, {}), LIST_BUDGET_MS)
       .then((r) => {
-        quietly(() => syncConversationTitles(user.id, r.sessions));
         if (r.unavailable.length) {
+          quietly(() => syncConversationTitles(user.id, r.sessions));
           quietly(() => noteIndexFailure(user.id, "unavailable"));
           return false;
         }
         if (indexMutationSeq(user.id) !== seq) {
+          // Older than a change Jarvis just made: it must not touch the index or the tree titles.
           again = !retried;
           return true;
         }
+        quietly(() => syncConversationTitles(user.id, r.sessions));
         quietly(() => writeIndex(user.id, r.sessions, true));
         return true;
       })
