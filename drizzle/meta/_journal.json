@@ -141,6 +141,13 @@
       "when": 1792944944999,
       "tag": "0019_ai_actions_capture",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792988521261,
+      "tag": "0020_conversation_index",
+      "breakpoints": true
     }
   ]
 }

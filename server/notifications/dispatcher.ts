@@ -50,10 +50,37 @@ export function hasPendingPushes(now = new Date()) {
     .get();
 }
 
+/**
+ * Light periodic jobs that must run in production too (where the general
+ * worker is disabled) ride this tick. Registered from instrumentation.ts so
+ * this module (reachable from server/ai) imports nothing of theirs. Each runs
+ * at most every `everyMs`, must not block (start background work and return),
+ * and its failures are logged, never thrown.
+ */
+type TickTask = { everyMs: number; run: (now: Date) => unknown; lastAt: number | null };
+const tasks = () => processSingleton<Map<string, TickTask>>("dispatcher_tick_tasks", () => new Map());
+
+export function registerDispatcherTask(name: string, everyMs: number, run: (now: Date) => unknown) {
+  tasks().set(name, { everyMs, run, lastAt: null });
+}
+
+function runTasks(now: Date) {
+  for (const [name, t] of tasks()) {
+    if (t.lastAt !== null && now.getTime() - t.lastAt < t.everyMs) continue;
+    t.lastAt = now.getTime();
+    try {
+      t.run(now);
+    } catch (e) {
+      console.error(`[jarvis] dispatcher task ${name} failed`, (e as Error).message.slice(0, 200));
+    }
+  }
+}
+
 /** One dispatch pass (exported for tests). Never throws. */
 export async function dispatchOnce(now = new Date()) {
   const s = state();
   if (s.running) return { skipped: "busy" as const };
+  runTasks(now);
   // Retention runs here (hourly) whether or not the general worker is enabled.
   maybePurge(s, now);
   if (workerStatus().running) return { skipped: "worker" as const };

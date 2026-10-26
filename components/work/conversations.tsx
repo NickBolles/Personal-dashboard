@@ -4,8 +4,17 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
-import type { ConversationOption, ConversationsResponse, FilingSuggestion, LinkRole, UnfiledConversation, UnfiledResponse, WorkItem } from "@/lib/work";
+import { Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls } from "@/components/ui";
+import type {
+  ConversationIndexState,
+  ConversationOption,
+  ConversationsResponse,
+  FilingSuggestion,
+  LinkRole,
+  UnfiledConversation,
+  UnfiledResponse,
+  WorkItem,
+} from "@/lib/work";
 import { useWorkMutation } from "./common";
 
 export function fmtWhen(at: string | null | undefined) {
@@ -17,12 +26,26 @@ export function fmtWhen(at: string | null | undefined) {
 
 const BACKEND = { hermes: "Hermes", claude: "Claude" } as const;
 
+/** While the server is refreshing a cached conversation list in the background, poll until it lands. */
+export const pollWhileUpdating = (query: { state: { data?: ConversationIndexState } }) => (query.state.data?.updating ? 2_500 : false);
+
+/** Subtle "Updating…" for a cached list being refreshed (instead of the "didn't answer" warning). */
+export function UpdatingNote({ data, className }: { data?: ConversationIndexState & { unavailable: string[] }; className?: string }) {
+  if (!data?.updating || data.unavailable.length) return null;
+  return (
+    <p role="status" className={cx("text-xs text-muted", className)} data-dynamic>
+      Updating…
+    </p>
+  );
+}
+
 export function useConversations(enabled = true) {
   return useQuery({
     queryKey: ["work", "conversations"],
     queryFn: () => api.get<ConversationsResponse>("/api/work/conversations"),
     enabled,
     staleTime: 30_000,
+    refetchInterval: pollWhileUpdating,
   });
 }
 
@@ -63,6 +86,7 @@ export function ConversationPicker({ onPick, busy, linkedHere }: { onPick: (c: C
       {q.isPending ? <Spinner label="Loading conversations…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data?.unavailable.length ? <p className="text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; the list may be incomplete.</p> : null}
+      <UpdatingNote data={q.data} />
       {q.data ? (
         list.length ? (
           <ul aria-label="Conversations" className="max-h-80 divide-y divide-line overflow-y-auto rounded-lg border border-line">
@@ -145,7 +169,11 @@ export function ConversationLinkDialog({ item, linkedHere, onClose }: { item: Wo
 
 /** "Unfiled conversations": recent chats not linked to any work item, with one-click filing. */
 export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismissable?: boolean }) {
-  const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled") });
+  const q = useQuery({
+    queryKey: ["work", "unfiled"],
+    queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled"),
+    refetchInterval: pollWhileUpdating,
+  });
   const [all, setAll] = useState(false);
   const [filing, setFiling] = useState<UnfiledConversation | null>(null);
   const file = useWorkMutation((v: { sessionId: string; itemId: string | null }) => api.post<{ itemId: string }>("/api/work/conversations/file", v), {
@@ -168,6 +196,7 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
       {q.data?.unavailable.length ? (
         <p className="mb-2 text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; this may be incomplete.</p>
       ) : null}
+      <UpdatingNote data={q.data} className="mb-2" />
       {q.data && !list.length ? <p className="text-sm text-muted">Every recent conversation is filed.</p> : null}
       <ul className="wk-rows">
         {shown.map((c) => {
