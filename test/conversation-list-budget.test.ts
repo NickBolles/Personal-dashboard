@@ -19,7 +19,8 @@ vi.mock("@/server/assistant", () => ({
   sessionAccess: (...a: unknown[]) => sessionAccess(...a),
 }));
 
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
+import { eq } from "drizzle-orm";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import * as conversations from "@/server/work/conversations";
 import { markIndexStale, noteIndexedSession, readIndex, syncIndexedTitle, writeIndex } from "@/server/work/conversation-index";
@@ -236,6 +237,20 @@ describe("conversation index: warming", () => {
     await dispatchOnce(new Date(t0.getTime() + 30_000));
     await dispatchOnce(new Date(t0.getTime() + 61_000));
     expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("conversation index: robustness", () => {
+  it("a refresh for a person deleted mid-flight resolves instead of rejecting", async () => {
+    writeIndex(owner, rows, true, ago(2 * 60_000));
+    let resolve!: (v: unknown) => void;
+    listSessions.mockImplementation(() => new Promise((r) => (resolve = r)));
+    const u = me();
+    await conversations.conversationList(u, "all");
+    getDb().delete(schema.users).where(eq(schema.users.id, owner)).run();
+    resolve({ sessions: more, unavailable: [], nextOffset: 100 });
+    await expect(conversations.__settleConversationRefreshes()).resolves.toBeUndefined();
+    expect(readIndex(owner)).toBeNull();
   });
 });
 

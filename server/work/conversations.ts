@@ -105,22 +105,31 @@ function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
 
 const errKind = (e: unknown) => (e instanceof Error && e.message === "timeout" ? "timeout" : "error");
 
+/** Index writes from background work must never reject it (e.g. the person was deleted mid-refresh: FK cascade). */
+function quietly(fn: () => void) {
+  try {
+    fn();
+  } catch {
+    // cache only
+  }
+}
+
 /** Fetch the full window and persist it. Resolves true when Hermes answered; never rejects. */
 function refresh(user: CurrentUser): Promise<boolean> {
   let p = refreshing.get(user.id);
   if (!p) {
     p = withBudget(listSessions(user, {}), LIST_BUDGET_MS)
       .then((r) => {
-        syncConversationTitles(user.id, r.sessions);
+        quietly(() => syncConversationTitles(user.id, r.sessions));
         if (r.unavailable.length) {
-          noteIndexFailure(user.id, "unavailable");
+          quietly(() => noteIndexFailure(user.id, "unavailable"));
           return false;
         }
-        writeIndex(user.id, r.sessions, true);
+        quietly(() => writeIndex(user.id, r.sessions, true));
         return true;
       })
       .catch((e) => {
-        noteIndexFailure(user.id, errKind(e));
+        quietly(() => noteIndexFailure(user.id, errKind(e)));
         return false;
       })
       .finally(() => refreshing.delete(user.id));
@@ -149,14 +158,14 @@ function firstPage(user: CurrentUser): Promise<Listed> {
   if (!p) {
     p = withBudget(listSessions(user, { offset: 0 }), LIST_BUDGET_MS)
       .then((r): Listed => {
-        syncConversationTitles(user.id, r.sessions);
+        quietly(() => syncConversationTitles(user.id, r.sessions));
         if (r.unavailable.length) return { sessions: r.sessions, unavailable: r.unavailable, updating: false, cachedAt: null };
-        writeIndex(user.id, r.sessions, r.nextOffset === null);
+        quietly(() => writeIndex(user.id, r.sessions, r.nextOffset === null));
         if (r.nextOffset !== null) void refresh(user);
         return { sessions: r.sessions, unavailable: [], updating: r.nextOffset !== null, cachedAt: new Date().toISOString() };
       })
       .catch((e): Listed => {
-        noteIndexFailure(user.id, errKind(e));
+        quietly(() => noteIndexFailure(user.id, errKind(e)));
         // A failing assistant backend is reported, never shown as "no conversations".
         return { sessions: [], unavailable: ["Hermes"], updating: false, cachedAt: null };
       })

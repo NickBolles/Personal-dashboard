@@ -71,8 +71,18 @@ export const getSessionSummary = async (user: CurrentUser, id: string) =>
 export const updateSession = async (user: CurrentUser, id: string, patch: Parameters<typeof hermes.updateSession>[2], correlationId: string) =>
   isLocalSession(id) ? local.updateLocalSession(user, id, patch, correlationId) : indexed(user, await hermes.updateSession(user, id, patch, correlationId));
 
-export const forkSession = (user: CurrentUser, id: string, input: hermes.ForkInput, correlationId: string) =>
-  isLocalSession(id) ? local.forkLocalSession(user, id, input, correlationId) : hermes.forkSession(user, id, input, correlationId);
+export const forkSession = async (user: CurrentUser, id: string, input: hermes.ForkInput, correlationId: string) => {
+  if (isLocalSession(id)) return local.forkLocalSession(user, id, input, correlationId);
+  const result = await hermes.forkSession(user, id, input, correlationId);
+  if (result.session?.id) indexed(user, result.session);
+  try {
+    // A fork may start its first run inside Hermes: revalidate on the next list read.
+    markIndexStale(user.id);
+  } catch {
+    /* cache only */
+  }
+  return result;
+};
 
 export const startRun = async (user: CurrentUser, r: hermes.StartRunRequest, correlationId: string) => {
   if (isLocalSession(r.sessionId)) return local.startLocalRun(user, r, correlationId);
