@@ -144,6 +144,11 @@ describe("conversation index: stale-while-revalidate", () => {
     expect(ids(view)).toEqual(["h1", "h2"]);
     expect(view.unavailable).toEqual([]);
     expect(readIndex(owner)!.lastError).toBe("error");
+    // Backoff: polling right after the failure neither retries Hermes nor keeps reporting "updating".
+    expect(listSessions).toHaveBeenCalledTimes(1);
+    expect(view.updating).toBe(false);
+    await conversations.conversationList(me(), "all", null, { revalidate: true });
+    expect(listSessions).toHaveBeenCalledTimes(1);
   });
 
   it("past STALE_OK_MS, waits for Hermes within the budget, then shows the cached list with the warning", async () => {

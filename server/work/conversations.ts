@@ -175,13 +175,14 @@ async function sessionsFor(user: CurrentUser, opts: { revalidate?: boolean } = {
   }
   touchIndex(user.id);
   const age = now - hit.refreshedAt;
+  // Backoff: right after a failed refresh, neither polling views nor new requests start another one.
+  const recentFailure = hit.attemptedAt !== null && hit.attemptedAt > hit.refreshedAt && now - hit.attemptedAt < RETRY_AFTER_FAILURE_MS;
   if (age < STALE_OK_MS) {
-    if (opts.revalidate || age >= FRESH_MS || !hit.complete) void refresh(user);
+    if (!recentFailure && (opts.revalidate || age >= FRESH_MS || !hit.complete)) void refresh(user);
     return fromIndex(user, hit, []);
   }
   // Older than STALE_OK_MS (Hermes has been failing): try once within the budget,
   // unless that just failed; then the cached list, flagged as possibly incomplete.
-  const recentFailure = hit.attemptedAt !== null && hit.attemptedAt > hit.refreshedAt && now - hit.attemptedAt < RETRY_AFTER_FAILURE_MS;
   if (recentFailure && !opts.revalidate) {
     return fromIndex(user, hit, ["Hermes"]);
   }
