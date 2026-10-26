@@ -310,7 +310,14 @@ export const aiSettingsSchema = z
         investigate: z.number().int().min(10).max(3600),
       })
       .strict(),
-    capture: z.object({ auto: z.enum(["triage_and_investigate", "triage_only", "off"]), investigateMinConfidence: z.number().min(0).max(1) }).strict(),
+    capture: z
+      .object({
+        auto: z.enum(["triage_and_investigate", "triage_only", "off"]),
+        investigateMinConfidence: z.number().min(0).max(1),
+        /** owner decision 2026-10-25: remove GPS from photo metadata before saving; off by default */
+        stripLocation: z.boolean().default(false),
+      })
+      .strict(),
     schedule: z
       .object({
         calendars: z.array(z.string().trim().min(1).max(200)).max(20),
@@ -347,7 +354,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   estimatesUsd: { triage: 0.01, standard: 0.25, deep: 1 },
   concurrency: { triage: 2, work: 2 },
   timeoutsS: { triage: 90, schedule: 120, plan: 300, draft: 300, research: 900, investigate: 600 },
-  capture: { auto: "triage_and_investigate", investigateMinConfidence: 0.6 },
+  capture: { auto: "triage_and_investigate", investigateMinConfidence: 0.6, stripLocation: false },
   schedule: { calendars: [], workHours: { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5] }, calendarWrite: { enabled: false, entityId: null } },
   hermes: { perRunModel: false, midRunCost: false, imageInput: false },
   dispatchSeconds: 30,

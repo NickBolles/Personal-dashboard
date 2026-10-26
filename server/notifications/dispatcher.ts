@@ -3,6 +3,7 @@ import { and, eq, isNull, lt, lte, or } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { processSingleton } from "@/server/singleton";
 import { workerStatus } from "@/server/worker/status";
+import { purgeDismissedCaptures } from "@/server/capture/purge";
 import { deliverPendingPushes } from "./push";
 
 /**
@@ -20,6 +21,7 @@ type DispatcherState = {
   lastRunAt: number | null;
   lastSent: number;
   lastError: string | null;
+  lastPurgeAt: number | null;
 };
 const state = () =>
   processSingleton<DispatcherState>("notification_dispatcher", () => ({
@@ -29,6 +31,7 @@ const state = () =>
     lastRunAt: null,
     lastSent: 0,
     lastError: null,
+    lastPurgeAt: null,
   }));
 
 export function hasPendingPushes(now = new Date()) {
@@ -51,6 +54,8 @@ export function hasPendingPushes(now = new Date()) {
 export async function dispatchOnce(now = new Date()) {
   const s = state();
   if (s.running) return { skipped: "busy" as const };
+  // Retention runs here (hourly) whether or not the general worker is enabled.
+  maybePurge(s, now);
   if (workerStatus().running) return { skipped: "worker" as const };
   s.running = true;
   try {
@@ -65,6 +70,21 @@ export async function dispatchOnce(now = new Date()) {
   } finally {
     s.running = false;
     s.lastRunAt = now.getTime();
+  }
+}
+
+const PURGE_EVERY_MS = 60 * 60_000;
+
+/** Dismissed captures past 30 days are deleted in batches (one batch per hour keeps each tick short). */
+function maybePurge(s: DispatcherState, now: Date) {
+  if (s.lastPurgeAt && now.getTime() - s.lastPurgeAt < PURGE_EVERY_MS) return;
+  s.lastPurgeAt = now.getTime();
+  try {
+    const r = purgeDismissedCaptures(now);
+    // A full batch means more are waiting: come back on the next tick instead of in an hour.
+    if (r.entries >= 100) s.lastPurgeAt = null;
+  } catch (e) {
+    console.error("[jarvis] capture purge failed", (e as Error).message.slice(0, 200));
   }
 }
 

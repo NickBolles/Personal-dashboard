@@ -80,5 +80,7 @@ Backups (`scripts/backup.mjs`) contain the encrypted DB **and** the key file: st
 - **Finance guard** (`server/ai/rules.ts#financeGuard`), checked at enqueue and again at execution: Finance areas are always excluded (pure rule, not just UI); finance/credential heuristics skip AI. A unit test walks the static import graph of `server/ai/**` and asserts no finance module is reachable.
 - **Prompt injection posture**: untrusted text in `<data>` blocks, read-only instructions, hidden jobs stop on any approval request, outputs zod-validated, source URLs restricted to public http(s), Markdown rendered without raw HTML or images (`components/work/ai/SafeMarkdown.tsx`).
 - **No model text in job rows**: `ai_jobs` keeps controlled error codes/messages only; the validated report is the only stored model output.
+- **File it from a push**: the service worker POSTs `/api/work/inbox/:id/file-suggestion` with the CSRF header and the session cookie (same origin only); the route re-checks ownership, `work.use`, and that the suggested parent is one of the person's live items. Without a session it gets 401 and simply opens the Inbox.
+- **Photo location / retention**: optional GPS removal before storage and the 30-day purge of dismissed captures, see [privacy.md](privacy.md).
 - **Budget** bounds total spend (and a leaked capture token, which can also be `triage_only`/`off`).
 - Rollback: Settings → AI → Enabled off stops the runner (queued jobs stay); removing `work.ai` hides everything; capture keeps working deterministically.

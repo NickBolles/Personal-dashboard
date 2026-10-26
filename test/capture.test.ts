@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -68,6 +69,11 @@ import * as attRoute from "@/app/api/capture/attachments/[id]/route";
 import * as tokensRoute from "@/app/api/devices/capture-tokens/route";
 import * as tokenRoute from "@/app/api/devices/capture-tokens/[id]/route";
 import * as acceptRoute from "@/app/api/work/inbox/[id]/accept/route";
+import * as fileSuggestionRoute from "@/app/api/work/inbox/[id]/file-suggestion/route";
+import * as dismissRoute from "@/app/api/work/inbox/[id]/dismiss/route";
+import { purgeDismissedCaptures } from "@/server/capture/purge";
+import { dispatchOnce } from "@/server/notifications/dispatcher";
+import { contains32, jpegWithGps, LAT_MARK } from "./fixtures/exif";
 import * as inboxRoute from "@/app/api/work/inbox/route";
 import * as investigateRoute from "@/app/api/work/inbox/[id]/investigate/route";
 import * as homeRoute from "@/app/api/home/route";
@@ -361,5 +367,158 @@ describe("AI triage → investigate chain", () => {
     const adult = createPerson({ name: "Adult", username: "adult2", role: "adult", passcode: "synthetic-pass" }, owner).id;
     const r = await (await req(captureRoute.POST, { json: { text: "buy milk" }, session: adult })).json();
     expect(r).toMatchObject({ triage: "skipped", reason: "ai_not_allowed" });
+  });
+});
+
+describe("remove location from captured photos (setting, default off)", () => {
+  it("off: photos are stored exactly as sent; on: GPS is removed before saving and the audit says so", async () => {
+    const jpeg = jpegWithGps();
+    const send = async (n: string) =>
+      (await (await req(captureRoute.POST, { body: multipart({ text: n }, [{ name: "p.jpg", type: "image/jpeg", data: jpeg }]) })).json()) as {
+        entry: { id: string };
+      };
+    const stored = (inboxId: string) => {
+      const a = getDb().select().from(schema.captureAttachments).where(eq(schema.captureAttachments.inboxId, inboxId)).get()!;
+      return { row: a, data: fs.readFileSync(path.join(config.dataDir, "captures", a.storageKey)) };
+    };
+    const off = await send("as sent");
+    expect(contains32(stored(off.entry.id).data, LAT_MARK)).toBe(true);
+    saveAiSettings({ capture: { auto: "off", investigateMinConfidence: 0.6, stripLocation: true } });
+    const on = await send("no location");
+    const s = stored(on.entry.id);
+    expect(contains32(s.data, LAT_MARK)).toBe(false);
+    expect(s.row.bytes).toBe(s.data.length);
+    expect(s.row.sha256).toBe(crypto.createHash("sha256").update(s.data).digest("hex"));
+    const a = recentAudit(50).find((x) => x.action === "capture.create" && x.sourceRecord === on.entry.id)!;
+    expect(JSON.parse(a.detail!).locationStripped).toBe(1);
+  });
+});
+
+describe("File it from the Report ready push", () => {
+  async function triaged(text: string, dest: string | null) {
+    (globalThis as { __dest?: string | null }).__dest = dest ?? undefined;
+    const r = await (await req(captureRoute.POST, { json: { text } })).json();
+    for (let i = 0; i < 4; i++) {
+      await runnerTick();
+      await drainRunner();
+    }
+    return r.entry.id as string;
+  }
+
+  it("files under the suggestion once (idempotent), audited; 409 when the suggestion is gone or it was dismissed; 401 signed out", async () => {
+    saveAiSettings({ enabled: true });
+    const u = resolveUser(new Headers(), createSession(owner).token)!;
+    const home = store.createItem(u, { kind: "area", title: "Home" }, "c");
+    const id = await triaged("porch light", home.id);
+    expect((await req(fileSuggestionRoute.POST, { params: { id }, session: null, headers: { "x-jarvis-csrf": "1" } })).status).toBe(401);
+    expect((await req(fileSuggestionRoute.POST, { params: { id }, csrf: false })).status).toBe(403);
+    const first = await req(fileSuggestionRoute.POST, { params: { id } });
+    expect(first.status).toBe(200);
+    const j = await first.json();
+    expect(j).toMatchObject({ title: "Fix the porch light", parentTitle: "Home", already: false });
+    const item = getDb().select().from(schema.workItems).where(eq(schema.workItems.id, j.itemId)).get()!;
+    expect(item.parentId).toBe(home.id);
+    const again = await (await req(fileSuggestionRoute.POST, { params: { id } })).json();
+    expect(again).toMatchObject({ itemId: j.itemId, already: true, parentTitle: "Home" });
+    expect(getDb().select().from(schema.workItems).where(eq(schema.workItems.title, "Fix the porch light")).all()).toHaveLength(1);
+    expect(recentAudit(100).filter((a) => a.action === "work.inbox_file_suggestion")).toHaveLength(1);
+    // Someone else can't file it.
+    const adult = createPerson({ name: "Adult", username: "adult3", role: "adult", passcode: "synthetic-pass" }, owner).id;
+    expect((await req(fileSuggestionRoute.POST, { params: { id }, session: adult })).status).toBe(404);
+
+    // Suggestion gone: the suggested area was archived.
+    const garage = store.createItem(u, { kind: "area", title: "Garage" }, "c");
+    const id2 = await triaged("garage door", garage.id);
+    getDb().update(schema.workItems).set({ archived: true }).where(eq(schema.workItems.id, garage.id)).run();
+    const gone = await req(fileSuggestionRoute.POST, { params: { id: id2 } });
+    expect(gone.status).toBe(409);
+    expect((await gone.json()).code).toBe("no_suggestion");
+    // No suggestion at all, and dismissed entries.
+    const id3 = await triaged("random thought", null);
+    expect((await (await req(fileSuggestionRoute.POST, { params: { id: id3 } })).json()).code).toBe("no_suggestion");
+    await req(dismissRoute.POST, { params: { id: id3 } });
+    expect((await (await req(fileSuggestionRoute.POST, { params: { id: id3 } })).json()).code).toBe("dismissed");
+  });
+});
+
+describe("30-day purge of dismissed captures", () => {
+  it("deletes old dismissed captures with their files and reports in a batch (audited); keeps recent, open and filed ones", async () => {
+    const mk = async (text: string) =>
+      (await (await req(captureRoute.POST, { body: multipart({ text }, [{ name: "p.png", type: "image/png", data: PNG }]) })).json()).entry.id as string;
+    const old = await mk("old dismissed");
+    const recent = await mk("recent dismissed");
+    const open = await mk("still open");
+    const filed = await mk("filed");
+    await req(acceptRoute.POST, { params: { id: filed }, json: { parentId: null } });
+    for (const id of [old, recent]) await req(dismissRoute.POST, { params: { id } });
+    const now = new Date();
+    const ago = (d: number) => new Date(now.getTime() - d * 86400_000).toISOString();
+    getDb()
+      .update(schema.workInbox)
+      .set({ dismissedAt: ago(31) })
+      .where(eq(schema.workInbox.id, old))
+      .run();
+    getDb()
+      .update(schema.workInbox)
+      .set({ dismissedAt: ago(29) })
+      .where(eq(schema.workInbox.id, recent))
+      .run();
+    getDb()
+      .insert(schema.aiReports)
+      .values({
+        id: "air_old",
+        userId: owner,
+        jobId: "aij_x",
+        kind: "investigate",
+        subjectType: "inbox",
+        subjectId: old,
+        title: "r",
+        promptVersion: "investigate@1",
+      })
+      .run();
+    const oldFile = path.join(
+      config.dataDir,
+      "captures",
+      getDb().select().from(schema.captureAttachments).where(eq(schema.captureAttachments.inboxId, old)).get()!.storageKey,
+    );
+    expect(fs.existsSync(oldFile)).toBe(true);
+
+    const r = purgeDismissedCaptures(now);
+    expect(r).toEqual({ entries: 1, attachments: 1, reports: 1 });
+    expect(fs.existsSync(oldFile)).toBe(false);
+    const left = getDb()
+      .select({ id: schema.workInbox.id })
+      .from(schema.workInbox)
+      .all()
+      .map((x) => x.id);
+    expect(left).toEqual(expect.arrayContaining([recent, open, filed]));
+    expect(left).not.toContain(old);
+    expect(getDb().select().from(schema.captureAttachments).where(eq(schema.captureAttachments.inboxId, old)).all()).toHaveLength(0);
+    expect(getDb().select().from(schema.aiReports).where(eq(schema.aiReports.id, "air_old")).all()).toHaveLength(0);
+    const a = recentAudit(50).find((x) => x.action === "capture.purge_dismissed")!;
+    expect(a).toMatchObject({ actor: "jarvis", result: "ok", sourceRecord: old });
+    expect(JSON.parse(a.detail!)).toMatchObject({ olderThanDays: 30, batch: 1 });
+    expect(purgeDismissedCaptures(now).entries).toBe(0);
+
+    // Batches: limit applies.
+    for (const id of [recent])
+      getDb()
+        .update(schema.workInbox)
+        .set({ dismissedAt: ago(40) })
+        .where(eq(schema.workInbox.id, id))
+        .run();
+    expect(purgeDismissedCaptures(now, 0).entries).toBe(0);
+  });
+
+  it("the standalone dispatcher tick runs the purge", async () => {
+    const id = (await (await req(captureRoute.POST, { json: { text: "dispatcher purge" } })).json()).entry.id as string;
+    await req(dismissRoute.POST, { params: { id } });
+    getDb()
+      .update(schema.workInbox)
+      .set({ dismissedAt: new Date(Date.now() - 45 * 86400_000).toISOString() })
+      .where(eq(schema.workInbox.id, id))
+      .run();
+    await dispatchOnce(new Date(Date.now() + 2 * 3600_000)); // past any earlier hourly slot
+    expect(getDb().select().from(schema.workInbox).where(eq(schema.workInbox.id, id)).all()).toHaveLength(0);
   });
 });

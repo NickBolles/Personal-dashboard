@@ -199,28 +199,77 @@ self.addEventListener("push", (event) => {
       renotify: data.severity === "critical",
       requireInteraction: data.severity === "critical",
       data: { url: data.url || "/alerts", id: data.id },
-      // Inbox "Report ready": Open report / File it (filing happens in the page, with CSRF).
+      // Inbox "Report ready": Open report / File it (files under the suggestion; see notificationclick).
       ...(data.actions ? { actions: data.actions } : {}),
     }),
   );
 });
 
+/**
+ * "File it" (Report ready push, owner decision 2026-10-25): file the capture under its triage
+ * suggestion straight from the notification with an authenticated, CSRF-headed POST (the
+ * session cookie rides along; the route is idempotent). Returns null when that isn't possible
+ * (signed out, suggestion gone, dismissed, offline) so the caller opens the Inbox entry instead.
+ */
+async function fileFromNotification(url) {
+  const u = new URL(url, self.location.origin);
+  const entry = u.searchParams.get("entry");
+  if (u.origin !== self.location.origin || u.searchParams.get("view") !== "inbox" || !entry) return null;
+  try {
+    const res = await fetch(`/api/work/inbox/${encodeURIComponent(entry)}/file-suggestion`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "x-jarvis-csrf": "1" },
+    });
+    if (!res.ok || res.redirected) return null;
+    const j = await res.json();
+    return j && typeof j.itemId === "string" ? j : null;
+  } catch {
+    return null;
+  }
+}
+
+async function openOrFocus(target) {
+  const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of all) {
+    if (new URL(client.url).origin === self.location.origin && "focus" in client) {
+      await client.focus();
+      if ("navigate" in client) return client.navigate(target);
+      return;
+    }
+  }
+  return self.clients.openWindow(target);
+}
+
+/** Notification tap (exported as a SW global so e2e can drive it). Resolves with what it did. */
+async function handleNotificationClick(action, data, tag) {
+  const url = (data && data.url) || "/alerts";
+  if (action === "file" && url.includes("view=inbox")) {
+    const filed = await fileFromNotification(url);
+    if (filed) {
+      // Confirm in place (no window opens); tapping the confirmation opens the new item.
+      await self.registration
+        .showNotification(filed.already ? "Already filed" : "Filed", {
+          body: `${filed.title}${filed.parentTitle ? ` → ${filed.parentTitle}` : ""}`.slice(0, 160),
+          icon: "/icons/icon-192.png",
+          badge: "/icons/badge-72.png",
+          tag: tag || undefined,
+          data: { url: `/areas?item=${encodeURIComponent(filed.itemId)}` },
+        })
+        .catch(() => undefined);
+      return { filed };
+    }
+    // Not signed in / suggestion gone / dismissed / offline: open the Inbox entry to file it by hand.
+    const fallback = new URL(url + (url.includes("?") ? "&" : "?") + "do=file", self.location.origin).href;
+    await openOrFocus(fallback).catch(() => undefined);
+    return { opened: fallback };
+  }
+  const target = new URL(url, self.location.origin).href;
+  await openOrFocus(target).catch(() => undefined);
+  return { opened: target };
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  let url = event.notification.data?.url || "/alerts";
-  if (event.action === "file" && url.includes("view=inbox")) url += (url.includes("?") ? "&" : "?") + "do=file";
-  const target = new URL(url, self.location.origin).href;
-  event.waitUntil(
-    (async () => {
-      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      for (const client of all) {
-        if (new URL(client.url).origin === self.location.origin && "focus" in client) {
-          await client.focus();
-          if ("navigate" in client) return client.navigate(target);
-          return;
-        }
-      }
-      return self.clients.openWindow(target);
-    })(),
-  );
+  event.waitUntil(handleNotificationClick(event.action, event.notification.data, event.notification.tag));
 });
