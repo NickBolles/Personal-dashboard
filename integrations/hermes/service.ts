@@ -157,6 +157,16 @@ export async function getSessionDetail(user: CurrentUser, id: string) {
   };
 }
 
+/** Access-checked summary of one session: a single GET, no messages or list scan. */
+export async function getSessionSummary(user: CurrentUser, id: string) {
+  assertSessionId(id);
+  assertAccess(user, id, "read");
+  const res = await HermesSessionClient.get(hermesConn(), id);
+  const [summary] = decorate([normalizeSession(res.session)], user);
+  if (!summary) throw new HttpError(404, "session_not_found", "Conversation not found");
+  return summary;
+}
+
 export async function createSession(user: CurrentUser, title?: string) {
   const conn = hermesConn();
   const res = await HermesSessionClient.create(conn, { title: title?.trim() || undefined, source: "api_server" });

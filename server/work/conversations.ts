@@ -4,7 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { requireCap } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
-import { getSessionDetail, listSessions } from "@/server/assistant";
+import { getSessionSummary, listSessions, sessionAccess } from "@/server/assistant";
 import { isLocalSession } from "@/lib/assistant";
 import type { SessionSummary } from "@/lib/hermes";
 import {
@@ -35,22 +35,77 @@ import { listItems, placeConversation, syncConversationTitles, type OpOut } from
  * (new chats land in Miscellaneous automatically, which never nags).
  */
 
-const TIMEOUT_MS = 6000;
+/**
+ * Hermes' session list is slow: measured 8.6 s for the 100-row window in prod
+ * (13.9 s earlier), and HermesSessionClient.list allows it 20 s. This backstop
+ * must sit above that budget, or every load of a big history gets reported as
+ * "Hermes didn't answer" with an empty list (the 6 s race this replaced).
+ */
+export const LIST_BUDGET_MS = 25_000;
+/** Filing only needs the one session (GET /api/sessions/:id), not its transcript. */
+const DETAIL_BUDGET_MS = 10_000;
+/** How long the last good Hermes list may stand in while Hermes is down. */
+const LAST_GOOD_MAX_AGE_MS = 30 * 60_000;
 const UNFILED_LIMIT = 20;
 const LIST_LIMIT = 100;
 
-async function sessionsFor(user: CurrentUser): Promise<{ sessions: SessionSummary[]; unavailable: string[] }> {
+type Listed = { sessions: SessionSummary[]; unavailable: string[] };
+/** One upstream list per user at a time: the Areas view, unfiled count and Inbox share it. */
+const inflight = new Map<string, Promise<Listed>>();
+/** Per-user last complete list, only ever shown (re-checked for access) when Hermes fails. */
+const lastGood = new Map<string, { at: number; sessions: SessionSummary[] }>();
+
+export function __resetConversationCache() {
+  inflight.clear();
+  lastGood.clear();
+}
+
+function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("timeout")), ms);
+    (timer as { unref?: () => void }).unref?.();
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
+
+function fetchSessions(user: CurrentUser): Promise<Listed> {
+  let p = inflight.get(user.id);
+  if (!p) {
+    p = withBudget(listSessions(user, {}), LIST_BUDGET_MS)
+      .then((r) => ({ sessions: r.sessions, unavailable: r.unavailable }))
+      .finally(() => inflight.delete(user.id));
+    inflight.set(user.id, p);
+  }
+  return p;
+}
+
+/** Remote sessions from the last good list that this user can still see. */
+function remembered(user: CurrentUser, except: Set<string>): SessionSummary[] {
+  const hit = lastGood.get(user.id);
+  if (!hit || Date.now() - hit.at > LAST_GOOD_MAX_AGE_MS) return [];
+  return hit.sessions.filter((s) => !isLocalSession(s.id) && !except.has(s.id) && sessionAccess(user, s.id));
+}
+
+async function sessionsFor(user: CurrentUser): Promise<Listed> {
   try {
-    const r = await Promise.race([
-      listSessions(user, {}),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS).unref?.()),
-    ]);
+    const r = await fetchSessions(user);
     syncConversationTitles(user.id, r.sessions);
-    return { sessions: r.sessions, unavailable: r.unavailable };
+    if (!r.unavailable.length) {
+      lastGood.set(user.id, { at: Date.now(), sessions: r.sessions });
+      return r;
+    }
+    // Partial (Claude-direct only): keep the Hermes rows we last saw, flagged.
+    const extra = remembered(user, new Set(r.sessions.map((s) => s.id)));
+    return { sessions: sortRecent([...r.sessions, ...extra]), unavailable: r.unavailable };
   } catch {
     // A failing assistant backend is reported, never shown as "no conversations".
-    return { sessions: [], unavailable: ["Hermes"] };
+    return { sessions: remembered(user, new Set()), unavailable: ["Hermes"] };
   }
+}
+
+function sortRecent(list: SessionSummary[]) {
+  return list.sort((a, b) => (b.lastActiveAt ?? b.startedAt ?? "").localeCompare(a.lastActiveAt ?? a.startedAt ?? ""));
 }
 
 /** session id → your items that link it */
@@ -201,12 +256,9 @@ export async function fileConversation(user: CurrentUser, body: z.infer<typeof f
   requireCap(user, "hermes.chat");
   let title = body.title ?? "";
   try {
-    const d = await Promise.race([
-      getSessionDetail(user, body.sessionId),
-      new Promise<never>((_, r) => setTimeout(() => r(new Error("timeout")), TIMEOUT_MS).unref?.()),
-    ]);
-    if (d.session.readOnly) throw new HttpError(403, "read_only", "Fork a shared conversation to file it");
-    title = d.session.title || title;
+    const session = await withBudget(getSessionSummary(user, body.sessionId), DETAIL_BUDGET_MS);
+    if (session.readOnly) throw new HttpError(403, "read_only", "Fork a shared conversation to file it");
+    title = session.title || title;
   } catch (e) {
     if (e instanceof HttpError && e.code === "read_only") throw e;
     if (e instanceof HttpError && (e.status === 403 || e.status === 404 || e.status === 400)) throw new HttpError(404, "not_found", "Conversation not found");
