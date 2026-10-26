@@ -171,6 +171,7 @@ import { listReports } from "@/server/ai/reports";
 import { dispatchOnce } from "@/server/notifications/dispatcher";
 import { deliverPendingPushes, saveSubscription } from "@/server/notifications/push";
 import { notify } from "@/server/notifications";
+import { updatePreferences } from "@/server/settings";
 import { workerGlobal } from "@/server/worker/status";
 import * as actionRoute from "@/app/api/work/items/[id]/ai-actions/route";
 import * as itemAiRoute from "@/app/api/work/items/[id]/ai/route";
@@ -523,6 +524,8 @@ describe("AI actions end to end (fake Hermes)", () => {
 
 describe("standalone push dispatcher", () => {
   const sub = { endpoint: "https://fcm.googleapis.com/fcm/send/abc", keys: { p256dh: "p", auth: "a" } };
+  // Default quiet hours (22:00–07:00) would hold these pushes when CI runs at night.
+  beforeEach(() => updatePreferences({ quietHours: { enabled: false } }, owner));
 
   it("delivers pending pushes with the worker disabled; skips while the worker runs; never double-sends", async () => {
     saveSubscription(owner, sub);
