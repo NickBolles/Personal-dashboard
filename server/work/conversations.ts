@@ -4,7 +4,9 @@ import { getDb, schema } from "@/server/db";
 import { requireCap } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
-import { getSessionSummary, listSessions, sessionAccess } from "@/server/assistant";
+import { getSessionSummary, listLocalConversations, listSessions, sessionAccess } from "@/server/assistant";
+import { userById } from "@/server/auth";
+import { indexMutationSeq, noteIndexFailure, readIndex, recentIndexUsers, touchIndex, writeIndex, type IndexEntry } from "./conversation-index";
 import { isLocalSession } from "@/lib/assistant";
 import type { SessionSummary } from "@/lib/hermes";
 import {
@@ -36,28 +38,60 @@ import { listItems, placeConversation, syncConversationTitles, type OpOut } from
  */
 
 /**
- * Hermes' session list is slow: measured 8.6 s for the 100-row window in prod
- * (13.9 s earlier), and HermesSessionClient.list allows it 20 s. This backstop
- * must sit above that budget, or every load of a big history gets reported as
- * "Hermes didn't answer" with an empty list (the 6 s race this replaced).
+ * Hermes' session list is slow: 8.6 s for the 100-row window in prod and
+ * ~3.7 s even for 20 rows (its query ranks every session before applying the
+ * limit). So the Areas views never wait for it when they don't have to:
+ *
+ * - Stale-while-revalidate: each person's last list is persisted
+ *   (conversation_index) and served at once, access re-checked per row, while
+ *   a background refresh brings it up to date. The views show "Updating…"
+ *   (not a warning) and poll until it lands.
+ * - Progressive first load: with no index yet, the fast first page (20 rows)
+ *   is returned and stored, and the full 100-row window follows in the
+ *   background.
+ * - Warm: the standalone dispatcher tick refreshes the index of anyone who
+ *   used it in the last week every few minutes (warmConversationIndexes).
+ *
+ * The 25 s budget is for a refresh that someone actually waits on (a cold
+ * start, or a list older than STALE_OK_MS); it must sit above
+ * HermesSessionClient.list's own 20 s, or a slow list reads as "Hermes didn't
+ * answer".
  */
 export const LIST_BUDGET_MS = 25_000;
 /** Filing only needs the one session (GET /api/sessions/:id), not its transcript. */
 const DETAIL_BUDGET_MS = 10_000;
-/** How long the last good Hermes list may stand in while Hermes is down. */
-const LAST_GOOD_MAX_AGE_MS = 30 * 60_000;
+/** A list younger than this is served without asking Hermes again. */
+export const FRESH_MS = 60_000;
+/** Up to this age a cached list is shown at once with "Updating…", never the "didn't answer" warning. */
+export const STALE_OK_MS = 30 * 60_000;
+/** The warmer refreshes an index once it is this old. */
+export const WARM_EVERY_MS = 3 * 60_000;
+/** People who haven't opened a conversation view for this long aren't warmed. */
+const WARM_IDLE_MS = 7 * 24 * 60 * 60_000;
+/** Right after a failed refresh, don't make the next request wait for another one. */
+const RETRY_AFTER_FAILURE_MS = 60_000;
 const UNFILED_LIMIT = 20;
 const LIST_LIMIT = 100;
 
-type Listed = { sessions: SessionSummary[]; unavailable: string[] };
-/** One upstream list per user at a time: the Areas view, unfiled count and Inbox share it. */
-const inflight = new Map<string, Promise<Listed>>();
-/** Per-user last complete list, only ever shown (re-checked for access) when Hermes fails. */
-const lastGood = new Map<string, { at: number; sessions: SessionSummary[] }>();
+type Listed = { sessions: SessionSummary[]; unavailable: string[]; updating: boolean; cachedAt: string | null };
+
+/** One upstream refresh (or first page) per person at a time: the views, the unfiled count, the Inbox and the warmer share it. */
+const refreshing = new Map<string, Promise<boolean>>();
+const firstPages = new Map<string, Promise<Listed>>();
+const warming = new Set<Promise<unknown>>();
+/** People queued by the warmer and not yet done. */
+const warmQueued = new Set<string>();
 
 export function __resetConversationCache() {
-  inflight.clear();
-  lastGood.clear();
+  refreshing.clear();
+  firstPages.clear();
+  warming.clear();
+  warmQueued.clear();
+}
+
+/** Wait for any in-flight refreshes (tests). */
+export async function __settleConversationRefreshes() {
+  while (refreshing.size || firstPages.size || warming.size) await Promise.allSettled([...refreshing.values(), ...firstPages.values(), ...warming]);
 }
 
 function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -69,39 +103,150 @@ function withBudget<T>(p: Promise<T>, ms: number): Promise<T> {
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
-function fetchSessions(user: CurrentUser): Promise<Listed> {
-  let p = inflight.get(user.id);
+const errKind = (e: unknown) => (e instanceof Error && e.message === "timeout" ? "timeout" : "error");
+
+/** Index writes from background work must never reject it (e.g. the person was deleted mid-refresh: FK cascade). */
+function quietly(fn: () => void) {
+  try {
+    fn();
+  } catch {
+    // cache only
+  }
+}
+
+/** Fetch the full window and persist it. Resolves true when Hermes answered; never rejects. */
+function refresh(user: CurrentUser, retried = false): Promise<boolean> {
+  let p = refreshing.get(user.id);
   if (!p) {
+    // Changes Jarvis makes while this request is in flight (new chat, rename, archive, fork, run)
+    // are newer than Hermes' snapshot: then the result is dropped and fetched once more.
+    const seq = indexMutationSeq(user.id);
+    let again = false;
     p = withBudget(listSessions(user, {}), LIST_BUDGET_MS)
-      .then((r) => ({ sessions: r.sessions, unavailable: r.unavailable }))
-      .finally(() => inflight.delete(user.id));
-    inflight.set(user.id, p);
+      .then((r) => {
+        if (r.unavailable.length) {
+          quietly(() => syncConversationTitles(user.id, r.sessions));
+          quietly(() => noteIndexFailure(user.id, "unavailable"));
+          return false;
+        }
+        if (indexMutationSeq(user.id) !== seq) {
+          // Older than a change Jarvis just made: it must not touch the index or the tree titles.
+          again = !retried;
+          return true;
+        }
+        quietly(() => syncConversationTitles(user.id, r.sessions));
+        quietly(() => writeIndex(user.id, r.sessions, true));
+        return true;
+      })
+      .catch((e) => {
+        quietly(() => noteIndexFailure(user.id, errKind(e)));
+        return false;
+      })
+      .finally(() => {
+        refreshing.delete(user.id);
+        if (again) void refresh(user, true);
+      });
+    refreshing.set(user.id, p);
   }
   return p;
 }
 
-/** Remote sessions from the last good list that this user can still see. */
-function remembered(user: CurrentUser, except: Set<string>): SessionSummary[] {
-  const hit = lastGood.get(user.id);
-  if (!hit || Date.now() - hit.at > LAST_GOOD_MAX_AGE_MS) return [];
-  return hit.sessions.filter((s) => !isLocalSession(s.id) && !except.has(s.id) && sessionAccess(user, s.id));
+/** The person's own Claude-direct conversations (local, fast) merged with cached Hermes rows they can still see. */
+function fromIndex(user: CurrentUser, hit: IndexEntry, unavailable: string[]): Listed {
+  const remote = hit.sessions.filter((s) => !isLocalSession(s.id) && sessionAccess(user, s.id));
+  const local = listLocalConversations(user);
+  // Claude-direct titles change locally (first message): keep their tree nodes in step, as a live list did.
+  syncConversationTitles(user.id, local);
+  return {
+    sessions: sortRecent([...remote, ...local]),
+    unavailable,
+    updating: refreshing.has(user.id),
+    cachedAt: hit.refreshedAt ? new Date(hit.refreshedAt).toISOString() : null,
+  };
 }
 
-async function sessionsFor(user: CurrentUser): Promise<Listed> {
-  try {
-    const r = await fetchSessions(user);
-    syncConversationTitles(user.id, r.sessions);
-    if (!r.unavailable.length) {
-      lastGood.set(user.id, { at: Date.now(), sessions: r.sessions });
-      return r;
-    }
-    // Partial (Claude-direct only): keep the Hermes rows we last saw, flagged.
-    const extra = remembered(user, new Set(r.sessions.map((s) => s.id)));
-    return { sessions: sortRecent([...r.sessions, ...extra]), unavailable: r.unavailable };
-  } catch {
-    // A failing assistant backend is reported, never shown as "no conversations".
-    return { sessions: remembered(user, new Set()), unavailable: ["Hermes"] };
+/** No index yet: the fast 20-row first page now, the full window in the background. */
+function firstPage(user: CurrentUser): Promise<Listed> {
+  let p = firstPages.get(user.id);
+  if (!p) {
+    p = withBudget(listSessions(user, { offset: 0 }), LIST_BUDGET_MS)
+      .then((r): Listed => {
+        quietly(() => syncConversationTitles(user.id, r.sessions));
+        if (r.unavailable.length) return { sessions: r.sessions, unavailable: r.unavailable, updating: false, cachedAt: null };
+        quietly(() => writeIndex(user.id, r.sessions, r.nextOffset === null));
+        if (r.nextOffset !== null) void refresh(user);
+        return { sessions: r.sessions, unavailable: [], updating: r.nextOffset !== null, cachedAt: new Date().toISOString() };
+      })
+      .catch((e): Listed => {
+        quietly(() => noteIndexFailure(user.id, errKind(e)));
+        // A failing assistant backend is reported, never shown as "no conversations".
+        return { sessions: [], unavailable: ["Hermes"], updating: false, cachedAt: null };
+      })
+      .finally(() => firstPages.delete(user.id));
+    firstPages.set(user.id, p);
   }
+  return p;
+}
+
+async function sessionsFor(user: CurrentUser, opts: { revalidate?: boolean } = {}): Promise<Listed> {
+  const now = Date.now();
+  const hit = readIndex(user.id);
+  if (!hit?.refreshedAt) {
+    // Never listed (or never successfully): the progressive first page.
+    if (hit?.attemptedAt && now - hit.attemptedAt < RETRY_AFTER_FAILURE_MS && !opts.revalidate) {
+      return { sessions: listLocalConversations(user), unavailable: ["Hermes"], updating: false, cachedAt: null };
+    }
+    const r = await firstPage(user);
+    if (!r.unavailable.length) return r;
+    // Claude-only partial or failure: whatever there is, flagged.
+    return r.sessions.length ? r : { ...r, sessions: listLocalConversations(user) };
+  }
+  touchIndex(user.id);
+  const age = now - hit.refreshedAt;
+  // Backoff: right after a failed refresh, neither polling views nor new requests start another one.
+  const recentFailure = hit.attemptedAt !== null && hit.attemptedAt > hit.refreshedAt && now - hit.attemptedAt < RETRY_AFTER_FAILURE_MS;
+  if (age < STALE_OK_MS) {
+    if (!recentFailure && (opts.revalidate || age >= FRESH_MS || !hit.complete)) void refresh(user);
+    return fromIndex(user, hit, []);
+  }
+  // Older than STALE_OK_MS (Hermes has been failing): try once within the budget,
+  // unless that just failed; then the cached list, flagged as possibly incomplete.
+  if (recentFailure && !opts.revalidate) {
+    return fromIndex(user, hit, ["Hermes"]);
+  }
+  const ok = await refresh(user);
+  const latest = readIndex(user.id) ?? hit;
+  return fromIndex(user, latest, ok ? [] : ["Hermes"]);
+}
+
+/**
+ * Keep recently used indexes fresh (the dispatcher tick calls this every
+ * ~30 s; each index is refreshed at most every WARM_EVERY_MS). Starts the
+ * refreshes in the background, one at a time, and returns how many it queued.
+ */
+export function warmConversationIndexes(now = new Date()): number {
+  const isDue = (r: { refreshedAt: number | null; attemptedAt: number | null }, at: number) =>
+    at - Math.max(r.refreshedAt ?? 0, r.attemptedAt ?? 0) >= WARM_EVERY_MS;
+  const due = recentIndexUsers(new Date(now.getTime() - WARM_IDLE_MS)).filter(
+    (r) => !refreshing.has(r.userId) && !warmQueued.has(r.userId) && isDue(r, now.getTime()),
+  );
+  const users = due.map((r) => userById(r.userId)).filter((u): u is CurrentUser => !!u && u.capabilities.has("hermes.chat"));
+  if (!users.length) return 0;
+  // Reserved until their turn ends, so a later pass (every 60 s) never queues them twice.
+  for (const u of users) warmQueued.add(u.id);
+  const step = async (u: CurrentUser) => {
+    try {
+      // A view may have refreshed it while it waited in the queue.
+      const cur = readIndex(u.id);
+      if (!cur || isDue(cur, Date.now())) await refresh(u);
+    } finally {
+      warmQueued.delete(u.id);
+    }
+  };
+  const chain = users.reduce<Promise<unknown>>((c, u) => c.then(() => step(u)), Promise.resolve());
+  warming.add(chain);
+  void chain.finally(() => warming.delete(chain));
+  return users.length;
 }
 
 function sortRecent(list: SessionSummary[]) {
@@ -178,9 +323,9 @@ function candidates(ctx: Ctx) {
 const isUnfiled = (o: ConversationOption) => !o.readOnly && (!o.placement || o.placement.inMisc);
 
 /** Your conversations (most recent first), optionally filtered by title/preview text. */
-export async function listConversations(user: CurrentUser, q?: string | null): Promise<ConversationsResponse> {
+export async function listConversations(user: CurrentUser, q?: string | null, opts: { revalidate?: boolean } = {}): Promise<ConversationsResponse> {
   requireCap(user, "hermes.chat");
-  const { sessions, unavailable } = await sessionsFor(user);
+  const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
   const ctx = context(user.id);
   const needle = q?.trim().toLowerCase();
   const conversations = sessions
@@ -188,13 +333,18 @@ export async function listConversations(user: CurrentUser, q?: string | null): P
     .map((s) => toOption(s, ctx))
     .filter((c) => !needle || `${c.title} ${c.preview ?? ""}`.toLowerCase().includes(needle))
     .slice(0, 50);
-  return { conversations, unavailable };
+  return { conversations, unavailable, updating, cachedAt };
 }
 
 /** The conversations view of the Areas tree: All or Unfiled (not in the tree, or only in Miscellaneous), with filing suggestions. */
-export async function conversationList(user: CurrentUser, filter: ConversationFilter, q?: string | null): Promise<ConversationListResponse> {
+export async function conversationList(
+  user: CurrentUser,
+  filter: ConversationFilter,
+  q?: string | null,
+  opts: { revalidate?: boolean } = {},
+): Promise<ConversationListResponse> {
   requireCap(user, "hermes.chat");
-  const { sessions, unavailable } = await sessionsFor(user);
+  const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
   const ctx = context(user.id);
   const cands = candidates(ctx);
   const needle = q?.trim().toLowerCase();
@@ -205,13 +355,13 @@ export async function conversationList(user: CurrentUser, filter: ConversationFi
     .filter((c) => !needle || `${c.title} ${c.preview ?? ""} ${c.placement?.path ?? ""}`.toLowerCase().includes(needle))
     .slice(0, LIST_LIMIT)
     .map((c) => ({ ...c, suggestions: isUnfiled(c) ? suggestFiling(c.title, cands) : [] }));
-  return { conversations, unfiledCount, unavailable };
+  return { conversations, unfiledCount, unavailable, updating, cachedAt };
 }
 
 /** Recent conversations of yours that aren't in the tree at all (not dismissed), with filing suggestions: the Inbox's list. */
-export async function unfiledConversations(user: CurrentUser): Promise<UnfiledResponse> {
+export async function unfiledConversations(user: CurrentUser, opts: { revalidate?: boolean } = {}): Promise<UnfiledResponse> {
   requireCap(user, "hermes.chat");
-  const { sessions, unavailable } = await sessionsFor(user);
+  const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
   const ctx = context(user.id);
   const cands = candidates(ctx);
   // Dismissed from the Inbox (only the id is kept; Hermes owns the conversation).
@@ -227,6 +377,8 @@ export async function unfiledConversations(user: CurrentUser): Promise<UnfiledRe
   return {
     total: open.length,
     unavailable,
+    updating,
+    cachedAt,
     conversations: open.slice(0, UNFILED_LIMIT).map((s) => {
       const o = toOption(s, ctx);
       return { ...o, suggestions: suggestFiling(o.title, cands) };

@@ -7,6 +7,7 @@ import { isConfigured } from "@/integrations/store";
 import * as hermes from "@/integrations/hermes/service";
 import * as local from "./local";
 import { backendAvailable, defaultBackend } from "./settings";
+import { markIndexStale, noteIndexedSession, syncIndexedTitle } from "@/server/work/conversation-index";
 
 /**
  * One chat surface, two backends. Conversation and run ids say which backend
@@ -35,27 +36,65 @@ export async function listSessions(user: CurrentUser, opts: hermes.SessionListOp
   return { sessions, unavailable, nextOffset };
 }
 
+/** Just your Claude-direct conversations (local, no network): merged live into cached lists. */
+export const listLocalConversations = (user: CurrentUser) => local.listLocalSessions(user, {});
+
+/** Keep the persisted conversation index (server/work/conversation-index.ts) in step with changes made here. */
+function indexed<T extends SessionSummary>(user: CurrentUser, s: T, opts: { insert?: boolean } = {}): T {
+  try {
+    noteIndexedSession(user.id, s, opts);
+    if (!s.readOnly) syncIndexedTitle(user.id, s);
+  } catch {
+    // The index is a cache; the next refresh corrects it.
+  }
+  return s;
+}
+
 export async function createSession(user: CurrentUser, title?: string, backend?: AssistantBackend) {
   const b = backend ?? defaultBackend();
   if (!backendAvailable(b)) throw new HttpError(409, "backend_unavailable", b === "claude" ? "Claude isn't set up yet." : "Hermes isn't connected.");
-  return b === "claude" ? local.createLocalSession(user, title) : hermes.createSession(user, title);
+  return b === "claude" ? local.createLocalSession(user, title) : indexed(user, await hermes.createSession(user, title));
 }
 
-export const getSessionDetail = (user: CurrentUser, id: string) =>
-  isLocalSession(id) ? Promise.resolve(local.localSessionDetail(user, id)) : hermes.getSessionDetail(user, id);
+// Reads refresh that conversation's row in the persisted index (and its tree title) without adding new rows.
+export const getSessionDetail = async (user: CurrentUser, id: string) => {
+  if (isLocalSession(id)) return local.localSessionDetail(user, id);
+  const d = await hermes.getSessionDetail(user, id);
+  indexed(user, d.session, { insert: false });
+  return d;
+};
 
 /** One conversation's summary (access-checked), without the transcript or fork lineage. */
-export const getSessionSummary = (user: CurrentUser, id: string) =>
-  isLocalSession(id) ? Promise.resolve(local.localSessionDetail(user, id).session) : hermes.getSessionSummary(user, id);
+export const getSessionSummary = async (user: CurrentUser, id: string) =>
+  isLocalSession(id) ? local.localSessionDetail(user, id).session : indexed(user, await hermes.getSessionSummary(user, id), { insert: false });
 
-export const updateSession = (user: CurrentUser, id: string, patch: Parameters<typeof hermes.updateSession>[2], correlationId: string) =>
-  isLocalSession(id) ? Promise.resolve(local.updateLocalSession(user, id, patch, correlationId)) : hermes.updateSession(user, id, patch, correlationId);
+export const updateSession = async (user: CurrentUser, id: string, patch: Parameters<typeof hermes.updateSession>[2], correlationId: string) =>
+  isLocalSession(id) ? local.updateLocalSession(user, id, patch, correlationId) : indexed(user, await hermes.updateSession(user, id, patch, correlationId));
 
-export const forkSession = (user: CurrentUser, id: string, input: hermes.ForkInput, correlationId: string) =>
-  isLocalSession(id) ? local.forkLocalSession(user, id, input, correlationId) : hermes.forkSession(user, id, input, correlationId);
+export const forkSession = async (user: CurrentUser, id: string, input: hermes.ForkInput, correlationId: string) => {
+  if (isLocalSession(id)) return local.forkLocalSession(user, id, input, correlationId);
+  const result = await hermes.forkSession(user, id, input, correlationId);
+  if (result.session?.id) indexed(user, result.session);
+  try {
+    // A fork may start its first run inside Hermes: revalidate on the next list read.
+    markIndexStale(user.id);
+  } catch {
+    /* cache only */
+  }
+  return result;
+};
 
-export const startRun = (user: CurrentUser, r: hermes.StartRunRequest, correlationId: string) =>
-  isLocalSession(r.sessionId) ? local.startLocalRun(user, r, correlationId) : hermes.startRun(user, r, correlationId);
+export const startRun = async (user: CurrentUser, r: hermes.StartRunRequest, correlationId: string) => {
+  if (isLocalSession(r.sessionId)) return local.startLocalRun(user, r, correlationId);
+  const run = await hermes.startRun(user, r, correlationId);
+  try {
+    // Its title/recency will change upstream: the next list read revalidates in the background.
+    markIndexStale(user.id);
+  } catch {
+    /* cache only */
+  }
+  return run;
+};
 
 export const getRun = (user: CurrentUser, runId: string) => (isLocalRun(runId) ? Promise.resolve(local.getLocalRun(user, runId)) : hermes.getRun(user, runId));
 

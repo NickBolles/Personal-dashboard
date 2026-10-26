@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { QuickCapture } from "@/components/chat/QuickCapture";
@@ -10,7 +10,7 @@ import { BackendSwitch } from "@/components/chat/backend";
 import { Badge, Button, ErrorNote, Spinner, cx } from "@/components/ui";
 import { ChatIcon } from "@/components/icons";
 import { useWorkMutation } from "@/components/work/common";
-import { FileUnderDialog } from "@/components/work/conversations";
+import { FileUnderDialog, UpdatingNote, pollWhileUpdating } from "@/components/work/conversations";
 import type { ConversationFilter, ConversationListResponse, ItemsResponse } from "@/lib/work";
 
 type Row = ConversationListResponse["conversations"][number];
@@ -43,10 +43,24 @@ export function ConversationsView({
   initialFilter?: ConversationFilter;
 }) {
   const [filter, setFilter] = useState<ConversationFilter>(initialFilter ?? "all");
+  const qc = useQueryClient();
+  const key = ["work", "conversations", "view", filter];
+  // Answers from the persisted index at once; while it refreshes in the background, poll.
   const q = useQuery({
-    queryKey: ["work", "conversations", "view", filter],
+    queryKey: key,
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=${filter}`),
+    refetchInterval: pollWhileUpdating,
   });
+  // Refresh asks the server to revalidate now; the reply (cached, `updating`) starts the polling.
+  const [revalidating, setRevalidating] = useState(false);
+  const refresh = () => {
+    setRevalidating(true);
+    api
+      .get<ConversationListResponse>(`/api/work/conversations?view=${filter}&refresh=1`)
+      .then((d) => qc.setQueryData(key, d))
+      .catch(() => q.refetch())
+      .finally(() => setRevalidating(false));
+  };
   const items = useQuery({ queryKey: ["work", "items", false], queryFn: () => api.get<ItemsResponse>("/api/work/items") });
   const [filing, setFiling] = useState<Row | null>(null);
   const file = useWorkMutation((v: { sessionId: string; itemId: string | null }) => api.post("/api/work/conversations/file", v), { ok: "Filed" });
@@ -99,7 +113,7 @@ export function ConversationsView({
             ) : null}
           </button>
         </div>
-        <Button size="sm" variant="ghost" onClick={() => q.refetch()} busy={q.isFetching && !q.isPending} aria-label="Refresh conversations">
+        <Button size="sm" variant="ghost" onClick={refresh} busy={revalidating} aria-label="Refresh conversations">
           Refresh
         </Button>
       </div>
@@ -108,6 +122,7 @@ export function ConversationsView({
       {q.data?.unavailable.length ? (
         <p className="mb-2 text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; this list may be incomplete.</p>
       ) : null}
+      <UpdatingNote data={q.data} className="mb-2" />
       {q.data && !list.length ? (
         <p className="rounded-[10px] border border-dashed border-line-strong px-3 py-4 text-center text-sm text-muted">
           {filter === "unfiled" ? "Nothing unfiled: every conversation has a place." : "No conversations yet. Ask anything above."}

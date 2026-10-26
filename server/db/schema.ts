@@ -1364,3 +1364,24 @@ export const dashboardWidgets = sqliteTable(
   },
   (t) => [index("dashboard_widgets_idx").on(t.dashboardId, t.position)],
 );
+
+/**
+ * Per-person persisted Hermes conversation list: the Areas views render from it
+ * at once and refresh it in the background (stale-while-revalidate; Hermes'
+ * own list takes 4–9 s). Hermes owns the conversations: rows are a cache of
+ * what this person last saw, re-checked for access on every read.
+ */
+export const conversationIndex = sqliteTable("conversation_index", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** JSON SessionSummary[] (Hermes rows only; Claude-direct ones are read live) */
+  sessions: text("sessions").notNull().default("[]"),
+  /** false while only the fast first page is stored */
+  complete: integer("complete", { mode: "boolean" }).notNull().default(false),
+  refreshedAt: text("refreshed_at"),
+  attemptedAt: text("attempted_at"),
+  lastError: text("last_error"),
+  /** last time the person opened a view using it (the warmer skips idle people) */
+  accessedAt: text("accessed_at").notNull().default(now),
+});

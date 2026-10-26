@@ -779,20 +779,26 @@ export type ConversationPlacement = {
 };
 export const CONVERSATION_FILTERS = ["all", "unfiled"] as const;
 export type ConversationFilter = (typeof CONVERSATION_FILTERS)[number];
-export type ConversationsResponse = { conversations: ConversationOption[]; unavailable: string[] };
+/**
+ * Conversation lists come from a persisted per-person index (stale-while-revalidate):
+ * `updating` = a background refresh is running (show "Updating…" and poll),
+ * `cachedAt` = when Hermes last answered for this list.
+ */
+export type ConversationIndexState = { updating?: boolean; cachedAt?: string | null };
+export type ConversationsResponse = { conversations: ConversationOption[]; unavailable: string[] } & ConversationIndexState;
 /** The conversations view of the Areas tree (All / Unfiled), newest first. */
 export type ConversationListResponse = {
   conversations: (ConversationOption & { suggestions: FilingSuggestion[] })[];
   /** unfiled = not in the tree, or only in Miscellaneous */
   unfiledCount: number;
   unavailable: string[];
-};
+} & ConversationIndexState;
 /** A conversation linked to a work item (work_links), shown as a child row of that item in the tree. */
 export type LinkedConversationRow = { itemId: string; sessionId: string; title: string };
 export type ItemsResponse = { items: WorkItem[]; linkedConversations: LinkedConversationRow[] };
 export type FilingSuggestion = { id: string; title: string; path: string; matched: string[] };
 export type UnfiledConversation = ConversationOption & { suggestions: FilingSuggestion[] };
-export type UnfiledResponse = { conversations: UnfiledConversation[]; total: number; unavailable: string[] };
+export type UnfiledResponse = { conversations: UnfiledConversation[]; total: number; unavailable: string[] } & ConversationIndexState;
 
 /**
  * File a conversation under an item; `itemId: null` files it in Miscellaneous.

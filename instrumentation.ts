@@ -26,6 +26,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] push dispatcher didn't start", (err as Error).message);
   }
+  // Keep the Areas conversation index warm (stale-while-revalidate; Hermes' list takes 4–9 s).
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { warmConversationIndexes } = await import("./server/work/conversations");
+    registerDispatcherTask("conversation_index_warm", 60_000, (now) => warmConversationIndexes(now));
+  } catch (err) {
+    console.error("[jarvis] conversation warmer didn't start", (err as Error).message);
+  }
   // AI job runner: only arms itself while ai.enabled and Hermes is configured (server/ai/runner.ts).
   try {
     const { startAiRunner } = await import("./server/ai/runner");

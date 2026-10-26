@@ -11,7 +11,9 @@ export const GET = api(
   ({ req, user }) => {
     const view = req.nextUrl.searchParams.get("view");
     const q = req.nextUrl.searchParams.get("q");
-    return view === "all" || view === "unfiled" ? conversationList(user, view, q) : listConversations(user, q);
+    // ?refresh=1: answer from the index at once and revalidate it in the background (`updating` in the reply).
+    const opts = { revalidate: req.nextUrl.searchParams.get("refresh") === "1" };
+    return view === "all" || view === "unfiled" ? conversationList(user, view, q, opts) : listConversations(user, q, opts);
   },
   { cap: "work.use" },
 );
