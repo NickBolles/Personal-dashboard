@@ -134,3 +134,77 @@ test("a staged POST share opens the capture sheet prefilled", async ({ page }) =
   await expect(page.getByLabel("Capture to inbox")).toHaveValue(/Shared title\nShared text/);
   await expect(page.getByText("https://example.com/x")).toBeVisible();
 });
+
+type InboxCapture = { id: string; capture?: { triageState: string; suggestion?: { parentId: string } | null } };
+
+test("File it from a Report ready push files under the suggestion once; falls back to the Inbox entry", async ({ page, context }) => {
+  await api(page, "put", "/api/settings/ai", { enabled: true });
+  const nonce = Date.now().toString(36);
+  const made: string[] = [];
+  try {
+    await page.goto("/areas?view=inbox");
+    const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
+    const area = (await api<{ item: { id: string } }>(page, "post", "/api/work/items", { kind: "area", title: `Porch-${nonce}` })).item;
+    const triaged = async (text: string) => {
+      const r = await api<{ entry: { id: string } }>(page, "post", "/api/capture", { text });
+      made.push(r.entry.id);
+      let e: InboxCapture | undefined;
+      await expect(async () => {
+        const inbox = await api<{ items: InboxCapture[] }>(page, "get", "/api/work/inbox");
+        e = inbox.items.find((i) => i.id === r.entry.id);
+        expect(e?.capture?.triageState).toBe("done");
+      }).toPass({ timeout: 60_000 });
+      return { id: r.entry.id, entry: e! };
+    };
+    const tap = (id: string) =>
+      sw.evaluate(
+        // handleNotificationClick is a global of public/sw.js
+        (url) =>
+          (globalThis as unknown as { handleNotificationClick: (a: string, d: unknown, t: string) => Promise<unknown> }).handleNotificationClick(
+            "file",
+            { url },
+            "e2e",
+          ),
+        `/areas?view=inbox&entry=${id}`,
+      ) as Promise<{ filed?: { itemId: string; already: boolean; parentTitle: string }; opened?: string }>;
+
+    const a = await triaged(`Fix the porch light FORCE_DEST=Porch-${nonce}`);
+    expect(a.entry.capture?.suggestion?.parentId).toBe(area.id);
+    const first = await tap(a.id);
+    expect(first.filed).toMatchObject({ already: false, parentTitle: `Porch-${nonce}` });
+    const again = await tap(a.id);
+    expect(again.filed).toMatchObject({ itemId: first.filed!.itemId, already: true });
+    const inbox = await api<{ items: { id: string }[] }>(page, "get", "/api/work/inbox");
+    expect(inbox.items.some((i) => i.id === a.id)).toBe(false);
+
+    // No suggestion: the tap opens the Inbox entry instead of filing.
+    const b = await triaged(`Random thought ${nonce}`);
+    const fallback = await tap(b.id);
+    expect(fallback.filed).toBeUndefined();
+    expect(fallback.opened).toContain(`view=inbox&entry=${b.id}&do=file`);
+    await api(page, "post", `/api/work/inbox/${b.id}/dismiss`);
+  } finally {
+    await api(page, "put", "/api/settings/ai", { enabled: false });
+  }
+});
+
+test("Settings → AI: Remove location from captured photos is off by default and can be turned on", async ({ page }) => {
+  await page.goto("/settings/ai");
+  const box = page.getByRole("checkbox", { name: /Remove location from captured photos/ });
+  await expect(box).not.toBeChecked();
+  await expect(page.getByText("Dismissed captures, their photos and reports are deleted after 30 days.")).toBeVisible();
+  // Controlled by the saved settings: the box flips once the PUT returns.
+  await box.click();
+  await expect(box).toBeChecked();
+  await expect(async () => {
+    const s = await api<{ settings: { capture: { stripLocation: boolean } } }>(page, "get", "/api/settings/ai");
+    expect(s.settings.capture.stripLocation).toBe(true);
+  }).toPass({ timeout: 10_000 });
+  await expectNoHorizontalOverflow(page);
+  await box.click();
+  await expect(box).not.toBeChecked();
+  await expect(async () => {
+    const s = await api<{ settings: { capture: { stripLocation: boolean } } }>(page, "get", "/api/settings/ai");
+    expect(s.settings.capture.stripLocation).toBe(false);
+  }).toPass({ timeout: 10_000 });
+});

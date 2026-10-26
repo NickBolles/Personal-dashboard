@@ -16,6 +16,7 @@ import { areaOf, enqueue } from "@/server/ai/jobs";
 import { kickRunner } from "@/server/ai/runner";
 import { createItem } from "@/server/work/store";
 import { declaredMatches, imageSize, sniffMime } from "./sniff";
+import { stripLocation } from "./exif";
 
 /**
  * Quick capture (phase 5): text/URL/images into the Work inbox, then (with
@@ -253,7 +254,15 @@ export function createCapture(user: CurrentUser, fields: CaptureFields, files: I
         reason: prev.triageSkipReason ?? undefined,
       };
   }
-  const checked = checkFiles(files);
+  const settings = getAiSettings();
+  // Optional (Settings → AI → Captures): drop GPS from photo metadata before anything is stored.
+  let locationStripped = 0;
+  const checked = checkFiles(files).map((f) => {
+    if (!settings.capture.stripLocation || f.mime === "text/plain") return f;
+    const r = stripLocation(f.bytes, f.mime);
+    if (r.changed) locationStripped++;
+    return r.changed ? { ...f, bytes: r.bytes } : f;
+  });
   const text = (fields.text ?? "").slice(0, CAPTURE_LIMITS.text);
   const [first, ...rest] = text.split(/\r?\n/);
   const title = (
@@ -310,10 +319,9 @@ export function createCapture(user: CurrentUser, fields: CaptureFields, files: I
     sourceRecord: id,
     result: "ok",
     correlationId: ctx.correlationId,
-    detail: { channel: ctx.channel, files: checked.length, token: ctx.token?.id ?? null },
+    detail: { channel: ctx.channel, files: checked.length, token: ctx.token?.id ?? null, ...(locationStripped ? { locationStripped } : {}) },
   });
   // Follow-up decision.
-  const settings = getAiSettings();
   const mode = captureFollowUp(settings.capture.auto, ctx.token?.investigateMode as "inherit" | "triage_only" | "off" | undefined, fields.investigate);
   const skip = (reason: string): CaptureResult => {
     db.update(I).set({ triageState: "skipped", triageSkipReason: reason }).where(eq(I.id, id)).run();

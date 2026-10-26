@@ -297,6 +297,55 @@ export async function acceptEntry(user: CurrentUser, id: string, body: z.infer<t
   return { item };
 }
 
+/**
+ * "File it" from a Report ready push (owner decision 2026-10-25): file the capture under
+ * its triage suggestion. Idempotent: an entry that's already filed answers with that item
+ * (already: true). 409 when it was dismissed or the suggestion is gone (no suggestion, or
+ * the suggested item was archived/deleted): the notification then opens the Inbox entry.
+ */
+export async function fileSuggestion(user: CurrentUser, id: string, correlationId: string) {
+  const r = ownedEntry(user.id, id);
+  const W = schema.workItems;
+  const titleOf = (itemId: string | null | undefined) =>
+    itemId
+      ? (getDb()
+          .select({ title: W.title })
+          .from(W)
+          .where(and(eq(W.id, itemId), eq(W.userId, user.id)))
+          .get()?.title ?? null)
+      : null;
+  if (r.acceptedAt && r.acceptedItemId) {
+    const it = getDb()
+      .select({ id: W.id, title: W.title, parentId: W.parentId })
+      .from(W)
+      .where(and(eq(W.id, r.acceptedItemId), eq(W.userId, user.id)))
+      .get();
+    return { itemId: r.acceptedItemId, title: it?.title ?? r.title, parentTitle: titleOf(it?.parentId), already: true };
+  }
+  if (r.dismissedAt) throw new HttpError(409, "dismissed", "This was dismissed");
+  const live =
+    r.source === "capture" && r.suggestedParentId
+      ? getDb()
+          .select({ id: W.id, title: W.title })
+          .from(W)
+          .where(and(eq(W.id, r.suggestedParentId), eq(W.userId, user.id), eq(W.archived, false)))
+          .get()
+      : undefined;
+  if (!live) throw new HttpError(409, "no_suggestion", "There's no suggestion to file it under; open the Inbox to choose");
+  // Synchronous up to the write for captures, so a double tap can't file twice.
+  const { item } = await acceptEntry(user, id, { parentId: null, useSuggestion: true }, correlationId);
+  audit({
+    actor: user.id,
+    action: "work.inbox_file_suggestion",
+    source: "work",
+    sourceRecord: id,
+    result: "ok",
+    correlationId,
+    detail: { item: item.id, via: "push" },
+  });
+  return { itemId: item.id, title: item.title, parentTitle: live.title, already: false };
+}
+
 export function dismissEntry(user: CurrentUser, id: string, correlationId: string) {
   const r = ownedEntry(user.id, id);
   if (!r.dismissedAt) getDb().update(I).set({ dismissedAt: nowIso(), updatedAt: nowIso() }).where(eq(I.id, id)).run();

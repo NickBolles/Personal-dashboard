@@ -130,6 +130,20 @@ export function AiSettingsView() {
             <option value="off">Nothing (file by hand)</option>
           </select>
         </Field>
+        <label className="tap mt-2 flex items-start gap-2 py-1 text-[14px]">
+          <input
+            type="checkbox"
+            checked={s.capture.stripLocation}
+            onChange={(e) => void save({ capture: { ...s.capture, stripLocation: e.target.checked } })}
+          />
+          <span>
+            Remove location from captured photos
+            <span className="block text-xs text-muted">
+              Removes GPS coordinates from photo metadata (JPEG, PNG, WebP) before saving. Off: photos are kept exactly as sent.
+            </span>
+          </span>
+        </label>
+        <p className="mt-2 text-xs text-muted">Dismissed captures, their photos and reports are deleted after 30 days. Filed captures stay with their item.</p>
       </Card>
       <Card>
         <h2 className="mb-1 font-semibold">Hermes capabilities</h2>

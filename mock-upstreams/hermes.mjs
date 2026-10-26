@@ -134,6 +134,16 @@ export function createHermes({ apiKey }) {
    * FORCE_ERROR / FORCE_PROSE / FORCE_APPROVAL / FORCE_SLOW / FORCE_COST=<usd>
    * in the task text change the behaviour; the session gets a cost.
    */
+  function forcedDestination(input) {
+    const want = input.match(/FORCE_DEST=(\S+)/)?.[1];
+    if (!want) return null;
+    for (const line of input.split("\n")) {
+      const m = line.match(/^(\S+) — (.+)$/);
+      if (m && m[2].trim().endsWith(want)) return m[1];
+    }
+    return null;
+  }
+
   function aiJobAnswer(kind, input) {
     if (/FORCE_ERROR/.test(input)) return JSON.stringify({ error: "tool missing" });
     if (/FORCE_PROSE/.test(input)) return "Here is a prose answer instead of JSON.";
@@ -189,7 +199,8 @@ export function createHermes({ apiKey }) {
         return JSON.stringify({
           title: `Look into ${title}`.slice(0, 120),
           kind: "task",
-          destinationKey: null,
+          // FORCE_DEST=<title>: suggest the destination whose path ends with that title.
+          destinationKey: forcedDestination(input),
           confidence: 0.82,
           reason: "Looks actionable",
           shouldInvestigate: true,
