@@ -473,7 +473,7 @@ fun ItemContent(
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "More") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onDialog(AreasDialog.Edit(node)) })
-                        if (!node.isConversation) WorkLabels.CREATABLE.filter { it != "area" }.forEach { k ->
+                        if (!node.isConversation && node.kind != "note") WorkLabels.CREATABLE.filter { it != "area" }.forEach { k ->
                             DropdownMenuItem(text = { Text("New ${WorkLabels.kind(k).lowercase()} inside") }, leadingIcon = { Icon(kindIcon(k), null) }, onClick = { menu = false; onDialog(AreasDialog.New(k, node.id)) })
                         }
                         if (!node.builtIn) DropdownMenuItem(text = { Text("Archive") }, leadingIcon = { Icon(Icons.Outlined.Archive, null) }, onClick = { menu = false; onArchive(node) })
@@ -572,9 +572,11 @@ fun ItemContent(
                         }
                     }
                 }
-                if (!node.isConversation) {
+                // Notes and conversations can't hold items (the server refuses them as parents).
+                val canHold = !node.isConversation && node.kind != "note"
+                if (canHold || rows.isNotEmpty()) {
                     item(key = "inside-h") { SectionHeader(if (node.isContainer) "Inside" else "Sub-items") }
-                    item(key = "inside-add") { QuickAdd(node, busy, { text, done -> onQuickAdd(node, text, done) }) }
+                    if (canHold) item(key = "inside-add") { QuickAdd(node, busy, { text, done -> onQuickAdd(node, text, done) }) }
                     if (rows.isEmpty()) item(key = "inside-empty") { Text("Nothing here yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     items(rows, key = { "r:${it.item.id}" }) { r ->
                         Box(Modifier.padding(start = 0.dp)) {
@@ -711,7 +713,7 @@ private fun NewItemDialog(d: AreasDialog.New, all: List<WorkItem>, onDismiss: ()
     )
     if (picking) PickerDialog(
         title = "Put it in…",
-        targets = WorkTree.rows(all, all.map { it.id }.toSet()).map { it.item }.filter { !it.isConversation },
+        targets = WorkTree.rows(all, all.map { it.id }.toSet(), showClosed = true).map { it.item }.filter { WorkTree.canHold(it) },
         all = all,
         allowTop = false,
         onDismiss = { picking = false },

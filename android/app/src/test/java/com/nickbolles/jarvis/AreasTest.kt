@@ -101,6 +101,7 @@ class AreasTest {
         assertFalse("c_chat" in targets)
         assertTrue("a_work" in targets && "p_v5" in targets)
         assertTrue("settled work is still a valid destination", "t_done" in targets)
+        assertFalse("notes can't hold items", "n_wall" in WorkTree.moveTargets(items, items.first { it.id == "t_ladder" }).map { it.id })
     }
 
     @Test fun rollupCountsWork() {

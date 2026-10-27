@@ -110,14 +110,17 @@ object WorkTree {
         return out
     }
 
+    /** Notes and conversation nodes can't hold other items (the server refuses them as parents). */
+    fun canHold(i: WorkItem) = !i.isConversation && i.kind != "note"
+
     /**
-     * Where `item` may move: anything but itself, its descendants, conversation
-     * nodes and its current parent. Only areas may go to the top level (null).
+     * Where `item` may move: anything but itself, its descendants, notes,
+     * conversation nodes and its current parent. Only areas may go to the top level (null).
      */
     fun moveTargets(items: List<WorkItem>, item: WorkItem): List<WorkItem> {
         val banned = descendants(items, item.id).map { it.id }.toHashSet() + item.id
         return rows(items, expanded = items.map { it.id }.toSet(), showClosed = true)
             .map { it.item }
-            .filter { it.id !in banned && !it.isConversation && it.id != item.parentId }
+            .filter { it.id !in banned && canHold(it) && it.id != item.parentId }
     }
 }

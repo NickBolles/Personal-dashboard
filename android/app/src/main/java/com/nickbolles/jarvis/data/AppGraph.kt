@@ -135,16 +135,23 @@ class Resource<T>(
 
     /** Forget everything (sign-out); the next refresh starts from nothing. */
     fun clear() {
+        generation++
         _state.value = Loadable()
     }
 
+    /** Bumped by clear(): an answer that arrives after a sign-out belongs to the old account and is dropped. */
+    @Volatile private var generation = 0
+
     suspend fun refresh() {
+        val gen = generation
         _state.value = _state.value.copy(loading = true, error = null)
         try {
             val v = graph.call(fetch)
+            if (gen != generation) return
             cacheName?.let { graph.store.writeCache(it, serializer, v) }
             _state.value = Loadable(data = v)
         } catch (e: ApiException) {
+            if (gen != generation) return
             _state.value = _state.value.copy(loading = false, error = e.message)
         }
     }
