@@ -1122,9 +1122,7 @@ function ContainerBody({
         open={sections.details ?? false}
         onToggle={toggle("details")}
       />
-      {isArea && !item.builtIn ? (
-        <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} />
-      ) : null}
+      {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
       {isArea ? null : <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />}
       <details className="wk-disclosure card">
         <summary className="tap cursor-pointer font-semibold">Activity</summary>
@@ -1205,7 +1203,12 @@ function ChildrenCard({
       ) : null}
       <div className="border-t border-line">
         {adding ? (
-          <InlineAdd parent={parent} onDone={() => setAdding(false)} placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined} />
+          <InlineAdd
+            parent={parent}
+            kind={addKind}
+            onDone={() => setAdding(false)}
+            placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined}
+          />
         ) : (
           <button type="button" className="wk-node-row wk-add-row" onClick={() => setAdding(true)}>
             <span aria-hidden="true" className="wk-plus">

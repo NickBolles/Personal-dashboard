@@ -57,7 +57,8 @@ export function QuickAddDialog({
     onClose();
     onCreated(r.item);
   });
-  const opts = kindOptions(parent);
+  // Without a parent anything goes: an area, or an item/project that lands in Miscellaneous (or under the path's first level).
+  const opts = parent ? kindOptions(parent) : [{ value: "area" as const, label: "Area" }, ...kindOptions({ kind: "area", parentId: null } as WorkItem)];
   const effectiveKind = opts.some((o) => o.value === kind) ? kind : opts[0]!.value;
   const destinations = itemPaths(
     items.filter((i) => !i.archived),
@@ -102,7 +103,7 @@ export function QuickAddDialog({
                 if (k === "area") setParentId("");
               }}
             >
-              {(parent ? opts : [{ value: "area" as const, label: "Area" }, ...kindOptions({ kind: "area", parentId: null } as WorkItem)]).map((o) => (
+              {opts.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
@@ -150,15 +151,18 @@ export function InlineAdd({
   onCreated,
   autoFocus = true,
   placeholder,
+  kind: initialKind,
 }: {
   parent: WorkItem | null;
   onDone?: () => void;
   onCreated?: (i: WorkItem) => void;
   autoFocus?: boolean;
   placeholder?: string;
+  /** start with this kind (e.g. "Add an item" on an area) */
+  kind?: CreatableKind;
 }) {
   const opts = kindOptions(parent);
-  const [kind, setKind] = useState<CreatableKind>(defaultChildKind(parent));
+  const [kind, setKind] = useState<CreatableKind>(initialKind ?? defaultChildKind(parent));
   const [touched, setTouched] = useState(false);
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
