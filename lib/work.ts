@@ -54,6 +54,75 @@ export const STATUS_LABELS: Record<WorkStatus, string> = {
   abandoned: "Abandoned",
 };
 
+/**
+ * Containers organise work (Area, Project); everything else is work itself.
+ * Containers get an overview page; only work gets validation, packets and PRs.
+ */
+export const isContainer = (i: { kind: WorkKind; parentId: string | null }) => i.parentId === null || i.kind === "area" || i.kind === "project";
+
+/** What a new child of `parent` is by default: areas hold projects, everything else holds threads. */
+export function defaultChildKind(parent: { kind: WorkKind; parentId: string | null } | null): CreatableKind {
+  if (!parent) return "area";
+  return parent.parentId === null || parent.kind === "area" ? "project" : "thread";
+}
+
+/**
+ * Split quick-add text into path segments. Only a slash with spaces around it
+ * separates levels, so titles like "CI/CD" stay whole. Max 6 levels.
+ */
+export function parseQuickPath(text: string): string[] {
+  return text
+    .split(/\s\/(?=\s)/)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+/** The one context-aware primary action on a work page (everything else lives in ⋯). */
+export type PrimaryAction = "open_chat" | "settle" | "record" | "reopen" | "continue" | "packet";
+export function primaryAction(
+  d: { item: Pick<WorkItem, "kind" | "status" | "sessionId">; packets: unknown[]; validations: { status: string }[] },
+  canChat: boolean,
+): PrimaryAction {
+  const { item } = d;
+  if (item.kind === "conversation" && item.sessionId && canChat) return "open_chat";
+  if (item.status === "ready_to_settle") return "settle";
+  if (item.status === "awaiting_validation") return d.validations.some((v) => v.status === "pending") ? "record" : "settle";
+  if (item.status === "settled" || item.status === "abandoned" || item.status === "superseded") return "reopen";
+  if (d.packets.length && canChat && (item.status === "in_progress" || item.status === "ready")) return "continue";
+  return "packet";
+}
+
+export type Rollup = { containers: number; total: number; open: number; active: number; done: number; proofDue: number; conversations: number };
+/** Counts over everything under `rootId` (not including it). */
+export function rollup(items: Pick<WorkItem, "id" | "parentId" | "kind" | "status" | "archived">[], rootId: string): Rollup {
+  const kids = new Map<string, typeof items>();
+  for (const i of items) if (i.parentId && !i.archived) kids.set(i.parentId, [...(kids.get(i.parentId) ?? []), i]);
+  const r: Rollup = { containers: 0, total: 0, open: 0, active: 0, done: 0, proofDue: 0, conversations: 0 };
+  const seen = new Set<string>([rootId]);
+  const stack = [...(kids.get(rootId) ?? [])];
+  while (stack.length) {
+    const i = stack.pop()!;
+    if (seen.has(i.id)) continue;
+    seen.add(i.id);
+    stack.push(...(kids.get(i.id) ?? []));
+    if (i.kind === "conversation") {
+      r.conversations++;
+      continue;
+    }
+    if (i.kind === "project" || i.kind === "area") {
+      r.containers++;
+      continue;
+    }
+    r.total++;
+    if (isClosed(i.status)) r.done++;
+    else r.open++;
+    if (i.status === "in_progress" || i.status === "in_review") r.active++;
+    if (i.status === "awaiting_validation" || i.status === "ready_to_settle") r.proofDue++;
+  }
+  return r;
+}
+
 /** Work that no longer needs attention. */
 export const CLOSED_STATUSES: WorkStatus[] = ["settled", "superseded", "abandoned"];
 export const isClosed = (s: string) => (CLOSED_STATUSES as string[]).includes(s);
@@ -493,6 +562,20 @@ export const updateItemSchema = z
     validationDefault: z.enum(VALIDATION_DEFAULTS).nullable().optional(),
     /** areas only: merged into the stored settings */
     settings: areaSettingsSchema.optional(),
+  })
+  .strict();
+
+/**
+ * Quick add with a path ("Momentum bets / V5 evaluator / hydration fix"): each
+ * segment is a level. Missing levels are created as projects (the first one,
+ * when there is no parent, as an area); existing ones are reused by title.
+ */
+export const createPathSchema = z
+  .object({
+    parentId: id.nullable().optional(),
+    path: z.array(title).min(1).max(6),
+    /** the last segment's kind (default: project under an area, thread elsewhere) */
+    kind: z.enum(CREATABLE_KINDS).optional(),
   })
   .strict();
 

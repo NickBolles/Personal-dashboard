@@ -2,22 +2,56 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { cx, inputCls } from "@/components/ui";
-import { STATUS_LABELS, type LinkedConversationRow, type WorkItem } from "@/lib/work";
+import { KIND_LABELS, STATUS_LABELS, isContainer, rollup, type LinkedConversationRow, type WorkItem } from "@/lib/work";
 import { ChatIcon } from "@/components/icons";
 import { StatusDot } from "./common";
+import { InlineAdd } from "./QuickAdd";
 
 type DropPos = "before" | "after" | "inside";
 type Drag = { id: string; x: number; y: number; active: boolean; target: { id: string; pos: DropPos } | null };
+type AddRow = { id: string; parentId: string | null };
+
+const COLLAPSED_KEY = "jarvis.areas.collapsed";
+function readCollapsed(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const v = JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 2000) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Folder-with-tab glyph for projects. */
+export function ProjectIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className={cx("h-3.5 w-3.5 shrink-0 text-muted", className)}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    >
+      <path d="M2 4.5V12a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H8L6.6 3.5H3A1 1 0 0 0 2 4.5Z" />
+    </svg>
+  );
+}
 
 /**
  * Nested work tree (WAI-ARIA tree pattern): one tab stop, arrows move,
  * Right/Left expand/collapse (or go to parent), Enter/Space selects.
  * Rows hold no buttons so treeitems never nest interactive content.
  *
+ * Structure editing: every open area/project ends with an "Add to …" row
+ * (inline quick add with path syntax, Enter keeps adding); F2 or double-click
+ * renames; Alt+→/← indent/outdent; Alt+↑/↓ reorder; M opens Move to…;
+ * Ctrl/⌘-click (or select mode) selects rows for a bulk move. Collapsed rows
+ * are remembered per browser.
+ *
  * Drag-and-drop (pointer events, mouse/pen/touch) uses the grip on each row:
  * drop on the top or bottom quarter of a row to place before/after it, or the
- * middle to put it inside. Escape cancels. The keyboard equivalents are the
- * item's "Move up", "Move down" and "Move…" actions.
+ * middle to put it inside. Escape cancels.
  *
  * Areas (phase 4): conversations live in the same tree. Conversation nodes
  * (kind `conversation`) behave like any item (drag, nest, move); a
@@ -32,6 +66,12 @@ export function WorkTree({
   linked = [],
   onOpenConversation,
   selectedSession,
+  onCreated,
+  onRename,
+  onMove,
+  selection,
+  selectMode,
+  onToggleSelect,
 }: {
   items: WorkItem[];
   selected: string | null;
@@ -43,6 +83,15 @@ export function WorkTree({
   onOpenConversation?: (sessionId: string) => void;
   /** the open conversation (highlights its row) */
   selectedSession?: string | null;
+  /** turns on the inline add rows; called with what was created */
+  onCreated?: (i: WorkItem) => void;
+  onRename?: (id: string, title: string) => void;
+  /** open Move to… for one item */
+  onMove?: (id: string) => void;
+  /** multi-select (bulk move/archive) */
+  selection?: Set<string>;
+  selectMode?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const { items, virtual } = useMemo(() => {
     const ids = new Set(realItems.map((i) => i.id));
@@ -78,16 +127,41 @@ export function WorkTree({
     });
     return { items: [...realItems, ...extra], virtual };
   }, [realItems, linked]);
+  const selectable = (i: WorkItem) => !!onToggleSelect && !virtual.has(i.id) && !i.builtIn;
   const activate = (i: WorkItem) => {
-    if (i.kind === "conversation" && i.sessionId && onOpenConversation) onOpenConversation(i.sessionId);
+    if (selectMode && selectable(i)) onToggleSelect!(i.id);
+    else if (i.kind === "conversation" && i.sessionId && onOpenConversation) onOpenConversation(i.sessionId);
     else if (!virtual.has(i.id)) onSelect(i.id);
   };
-  const isSelected = (i: WorkItem) => selected === i.id || (!!selectedSession && i.sessionId === selectedSession);
+  const multi = !!selectMode || !!selection?.size;
+  const isSelected = (i: WorkItem) => (multi ? !!selection?.has(i.id) : selected === i.id || (!!selectedSession && i.sessionId === selectedSession));
   const [drag, setDrag] = useState<Drag | null>(null);
   const [filter, setFilter] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed);
   const [focusId, setFocusId] = useState<string | null>(selected);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const refs = useRef(new Map<string, HTMLLIElement>());
+  const refocus = useRef<string | null>(null);
+  const skipBlurCommit = useRef(false);
+  useEffect(() => {
+    const id = refocus.current;
+    if (!id) return;
+    const el = refs.current.get(id);
+    if (el && document.activeElement !== el && (!document.activeElement || document.activeElement === document.body || !document.activeElement.isConnected)) {
+      el.focus();
+      refocus.current = null;
+    } else if (el && document.activeElement === el) refocus.current = null;
+  }, [realItems]);
+  const canAdd = !!onCreated && !selectMode;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+    } catch {
+      /* private mode: just don't remember */
+    }
+  }, [collapsed]);
 
   const { kids, byId } = useMemo(() => {
     const kids = new Map<string | null, WorkItem[]>();
@@ -98,6 +172,12 @@ export function WorkTree({
     }
     return { kids, byId };
   }, [items]);
+
+  const rollups = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof rollup>>();
+    for (const i of realItems) if (isContainer(i) && !i.archived) m.set(i.id, rollup(realItems, i.id));
+    return m;
+  }, [realItems]);
 
   // Filtering keeps matches plus their ancestors, all expanded.
   const visibleSet = useMemo(() => {
@@ -125,15 +205,20 @@ export function WorkTree({
   }
 
   const isOpen = (id: string) => !!visibleSet || !collapsed.has(id);
-  const order: WorkItem[] = [];
+  const showAdd = (i: WorkItem) => canAdd && !visibleSet && !virtual.has(i.id) && isContainer(i) && !i.archived;
+  const order: (WorkItem | AddRow)[] = [];
   const walk = (parent: string | null) => {
     for (const i of kids.get(parent) ?? []) {
       if (visibleSet && !visibleSet.has(i.id)) continue;
       order.push(i);
-      if (isOpen(i.id)) walk(i.id);
+      if (isOpen(i.id)) {
+        walk(i.id);
+        if (showAdd(i)) order.push({ id: `add:${i.id}`, parentId: i.id });
+      }
     }
   };
   walk(null);
+  if (canAdd && !visibleSet) order.push({ id: "add:", parentId: null });
   const tabStop = order.some((o) => o.id === focusId) ? focusId : (order[0]?.id ?? null);
 
   function focus(id: string | undefined) {
@@ -150,9 +235,62 @@ export function WorkTree({
     });
   }
 
+  const realKids = (id: string | null) => (kids.get(id) ?? []).filter((k) => !virtual.has(k.id) && !k.archived);
+  const parentKey = (i: WorkItem) => (i.parentId && byId.has(i.parentId) ? i.parentId : null);
+
+  /** Keyboard structure edits (the drag-and-drop equivalents). Returns true when handled. */
+  function structureKey(e: KeyboardEvent, item: WorkItem) {
+    if (virtual.has(item.id) || item.builtIn) return false;
+    const pk = parentKey(item);
+    const sibs = realKids(pk);
+    const idx = sibs.findIndex((s) => s.id === item.id);
+    // The moved row remounts under its new parent once the tree refreshes: put focus back on it then.
+    if (e.altKey && e.key.startsWith("Arrow")) refocus.current = item.id;
+    if (e.altKey && onPlace && e.key === "ArrowUp") {
+      if (idx > 0) onPlace(item.id, pk, idx - 1);
+    } else if (e.altKey && onPlace && e.key === "ArrowDown") {
+      if (idx >= 0 && idx < sibs.length - 1 && !sibs[idx + 1]?.builtIn) onPlace(item.id, pk, idx + 1);
+    } else if (e.altKey && onPlace && e.key === "ArrowRight") {
+      const prev = sibs[idx - 1];
+      if (prev && prev.kind !== "note") {
+        toggle(prev.id, true);
+        onPlace(item.id, prev.id, realKids(prev.id).length);
+      }
+    } else if (e.altKey && onPlace && e.key === "ArrowLeft") {
+      const parent = pk ? byId.get(pk) : undefined;
+      if (!parent) return true;
+      const grand = parentKey(parent);
+      if (grand === null && item.kind !== "area") return true; // only areas sit at the top
+      const up = realKids(grand).filter((s) => s.id !== item.id);
+      onPlace(item.id, grand, up.findIndex((s) => s.id === parent.id) + 1);
+    } else if (e.key === "F2" && onRename) setRenaming({ id: item.id, title: item.title });
+    else if ((e.key === "m" || e.key === "M") && !e.altKey && !e.ctrlKey && !e.metaKey && onMove) onMove(item.id);
+    else return false;
+    return true;
+  }
+
+  function onAddKey(e: KeyboardEvent, row: AddRow) {
+    const i = order.findIndex((o) => o.id === row.id);
+    if (e.key === "ArrowDown") focus(order[i + 1]?.id);
+    else if (e.key === "ArrowUp") focus(order[i - 1]?.id);
+    else if (e.key === "ArrowLeft") focus(row.parentId ?? undefined);
+    else if (e.key === "Home") focus(order[0]?.id);
+    else if (e.key === "End") focus(order.at(-1)?.id);
+    else if (e.key === "Enter" || e.key === " ") setAdding(row.id);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
   function onKey(e: KeyboardEvent, item: WorkItem) {
+    if (e.target !== e.currentTarget) return; // typing in a rename box
     const i = order.findIndex((o) => o.id === item.id);
-    const hasKids = !!kids.get(item.id)?.length;
+    const hasKids = !!kids.get(item.id)?.length || showAdd(item);
+    if (structureKey(e, item)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     switch (e.key) {
       case "ArrowDown":
         focus(order[i + 1]?.id);
@@ -168,15 +306,18 @@ export function WorkTree({
         break;
       case "ArrowRight":
         if (hasKids && !isOpen(item.id)) toggle(item.id, true);
-        else if (hasKids) focus(kids.get(item.id)?.find((k) => !visibleSet || visibleSet.has(k.id))?.id);
+        else if (hasKids) focus(order[i + 1]?.id);
         break;
       case "ArrowLeft":
         if (hasKids && isOpen(item.id) && !visibleSet) toggle(item.id, false);
         else focus(item.parentId ?? undefined);
         break;
       case "Enter":
-      case " ":
         activate(item);
+        break;
+      case " ":
+        if (selectable(item) && (multi || e.shiftKey)) onToggleSelect!(item.id);
+        else activate(item);
         break;
       default:
         return;
@@ -277,11 +418,89 @@ export function WorkTree({
       </span>
     ) : null;
 
+  function count(i: WorkItem) {
+    const r = rollups.get(i.id);
+    if (!r || virtual.has(i.id)) return null;
+    const text = i.parentId === null ? (r.open ? String(r.open) : "") : r.total ? `${r.done}/${r.total}` : "";
+    return text ? (
+      <span aria-hidden="true" className="ml-1 shrink-0 text-[11px] font-normal text-muted tabular-nums">
+        {text}
+      </span>
+    ) : null;
+  }
+
+  function commitRename(i: WorkItem) {
+    // Enter/Escape already decided; the blur that follows moving focus back must not commit (again).
+    if (skipBlurCommit.current) {
+      skipBlurCommit.current = false;
+      return;
+    }
+    const t = renaming?.title.trim();
+    if (t && t !== i.title) onRename?.(i.id, t);
+    setRenaming(null);
+  }
+
+  function addLi(parent: WorkItem | null, level: number) {
+    const id = `add:${parent?.id ?? ""}`;
+    if (adding === id)
+      return (
+        <li key={id} role="none" className="py-0.5" style={{ paddingLeft: `${(level - 1) * 10}px` }}>
+          <InlineAdd
+            parent={parent}
+            onCreated={(n) => onCreated?.(n)}
+            onDone={() => {
+              setAdding(null);
+              requestAnimationFrame(() => focus(id));
+            }}
+          />
+        </li>
+      );
+    const empty = parent ? !realKids(parent.id).length : false;
+    const label = !parent ? "New area" : empty ? `Add the first ${parent.parentId === null ? "project" : "item"} to ${parent.title}` : `Add to ${parent.title}`;
+    return (
+      <li
+        key={id}
+        id={`wt-${id}`}
+        ref={(el) => {
+          if (el) refs.current.set(id, el);
+          else refs.current.delete(id);
+        }}
+        role="treeitem"
+        aria-level={level}
+        aria-selected={false}
+        aria-label={label}
+        data-add-row={parent?.id ?? "root"}
+        tabIndex={tabStop === id ? 0 : -1}
+        onKeyDown={(e) => onAddKey(e, { id, parentId: parent?.id ?? null })}
+        onFocus={(e) => {
+          if (e.target === e.currentTarget) setFocusId(id);
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setFocusId(id);
+          setAdding(id);
+        }}
+        className="outline-none [&:focus-visible>div]:ring-2 [&:focus-visible>div]:ring-[var(--focus)]"
+      >
+        <div
+          className="wk-tree-row wk-add-row flex cursor-pointer items-center gap-1.5 pr-2 text-[12.5px] hover:bg-surface"
+          style={{ paddingLeft: `${(level - 1) * 10 + 22}px` }}
+        >
+          <span aria-hidden="true" className="wk-plus">
+            +
+          </span>
+          <span className="truncate">{label}</span>
+        </div>
+      </li>
+    );
+  }
+
   const render = (parent: string | null, level: number) => {
     const list = (kids.get(parent) ?? []).filter((i) => !visibleSet || visibleSet.has(i.id));
     return list.map((i) => {
-      const hasKids = !!kids.get(i.id)?.some((k) => !visibleSet || visibleSet.has(k.id));
+      const hasKids = !!kids.get(i.id)?.some((k) => !visibleSet || visibleSet.has(k.id)) || showAdd(i);
       const open = isOpen(i.id);
+      const sel = isSelected(i);
       return (
         <li
           key={i.id}
@@ -292,12 +511,18 @@ export function WorkTree({
           }}
           role="treeitem"
           aria-level={level}
-          aria-selected={isSelected(i)}
+          aria-selected={sel}
           aria-expanded={hasKids ? open : undefined}
           aria-label={
             virtual.has(i.id)
               ? `${i.title}, linked conversation`
-              : `${i.title}, ${i.kind === "conversation" ? "conversation, " : ""}${STATUS_LABELS[i.status]}${i.archived ? ", archived" : ""}`
+              : `${i.title}, ${
+                  i.parentId === null
+                    ? "area"
+                    : i.kind === "conversation" || i.kind === "project"
+                      ? `${KIND_LABELS[i.kind].toLowerCase()}, ${STATUS_LABELS[i.status]}`
+                      : STATUS_LABELS[i.status]
+                }${i.archived ? ", archived" : ""}`
           }
           title={i.title}
           tabIndex={tabStop === i.id ? 0 : -1}
@@ -308,17 +533,18 @@ export function WorkTree({
           onClick={(e) => {
             e.stopPropagation();
             setFocusId(i.id);
-            activate(i);
+            if ((e.ctrlKey || e.metaKey || e.shiftKey) && selectable(i)) onToggleSelect!(i.id);
+            else activate(i);
           }}
           className="outline-none [&:focus-visible>div]:ring-2 [&:focus-visible>div]:ring-[var(--focus)]"
         >
           <div
             data-row-id={i.id}
             data-kind={i.kind}
-            data-selected={isSelected(i) || undefined}
+            data-selected={sel || undefined}
             className={cx(
               "wk-tree-row relative flex cursor-pointer items-center gap-1.5 pr-2 text-[13.5px]",
-              !isSelected(i) && "hover:bg-surface",
+              !sel && "hover:bg-surface",
               virtual.has(i.id) && "text-muted",
               level === 1 && "font-semibold",
               i.archived && "opacity-60",
@@ -330,7 +556,14 @@ export function WorkTree({
             )}
             style={{ paddingLeft: `${(level - 1) * 10 + 2}px` }}
           >
-            {grip(i)}
+            {multi && selectable(i) ? (
+              <span
+                aria-hidden="true"
+                className={cx("h-3.5 w-3.5 shrink-0 rounded-[4px] border-[1.5px]", sel ? "border-accent bg-accent" : "border-line-strong")}
+              />
+            ) : (
+              grip(i)
+            )}
             <span
               aria-hidden="true"
               className={cx("inline-flex h-6 w-4 shrink-0 items-center justify-center text-muted", !hasKids && "invisible")}
@@ -345,12 +578,52 @@ export function WorkTree({
             </span>
             {i.kind === "conversation" ? (
               <ChatIcon className={cx("h-3.5 w-3.5 shrink-0", i.status === "exploring" ? "text-muted" : "text-accent")} />
-            ) : i.parentId === null && i.builtIn ? null : (
+            ) : i.kind === "project" && i.parentId !== null ? (
+              <ProjectIcon />
+            ) : i.parentId === null ? null : (
               <StatusDot status={i.status} />
             )}
-            <span className="min-w-0 flex-1 truncate">{i.title}</span>
+            {renaming?.id === i.id ? (
+              <input
+                aria-label={`Rename ${i.title}`}
+                className="min-w-0 flex-1 rounded border border-accent bg-bg px-1.5 py-0.5 text-[13.5px]"
+                autoFocus
+                value={renaming.title}
+                onFocus={() => {
+                  skipBlurCommit.current = false;
+                }}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setRenaming({ id: i.id, title: e.target.value })}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    commitRename(i);
+                    skipBlurCommit.current = true;
+                    focus(i.id);
+                  } else if (e.key === "Escape") {
+                    skipBlurCommit.current = true;
+                    setRenaming(null);
+                    focus(i.id);
+                  }
+                }}
+                onBlur={() => commitRename(i)}
+              />
+            ) : (
+              <span
+                className="min-w-0 flex-1 truncate"
+                onDoubleClick={onRename && !i.builtIn && !virtual.has(i.id) ? () => setRenaming({ id: i.id, title: i.title }) : undefined}
+              >
+                {i.title}
+              </span>
+            )}
+            {count(i)}
           </div>
-          {hasKids && open ? <ul role="group">{render(i.id, level + 1)}</ul> : null}
+          {hasKids && open ? (
+            <ul role="group">
+              {render(i.id, level + 1)}
+              {showAdd(i) ? addLi(i, level + 1) : null}
+            </ul>
+          ) : null}
         </li>
       );
     });
@@ -370,11 +643,12 @@ export function WorkTree({
         onChange={(e) => setFilter(e.target.value)}
       />
       {order.length ? (
-        <ul role="tree" aria-label="Areas">
+        <ul role="tree" aria-label="Areas" aria-multiselectable={multi || undefined}>
           {render(null, 1)}
+          {canAdd && !visibleSet ? addLi(null, 1) : null}
         </ul>
       ) : (
-        <p className="p-2 text-sm text-muted">{filter ? "Nothing matches." : "No work yet."}</p>
+        <p className="p-2 text-sm text-muted">{filter ? "Nothing matches." : "No areas yet."}</p>
       )}
       {/* Below the tree so showing it never shifts the rows under the pointer. */}
       {drag?.active ? (

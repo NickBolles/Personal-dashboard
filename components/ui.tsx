@@ -365,9 +365,23 @@ export function Dialog({
 
 // --- Overflow menu (visible equivalent for any swipe/long-press action) ---
 
-export type MenuItem = { label: string; onSelect: () => void; danger?: boolean; disabled?: boolean };
+export type MenuItem = { label: string; onSelect: () => void; danger?: boolean; disabled?: boolean; hint?: string };
 
-export function OverflowMenu({ label, items }: { label: string; items: MenuItem[] }) {
+/**
+ * Menu button (WAI-ARIA menu). Defaults to a ⋯ icon; pass `trigger` (+ `triggerClassName`) for a labelled
+ * button such as "+ New". `label` is the accessible name of the button and the menu.
+ */
+export function OverflowMenu({
+  label,
+  items,
+  trigger,
+  triggerClassName,
+}: {
+  label: string;
+  items: MenuItem[];
+  trigger?: ReactNode;
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -408,13 +422,15 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="tap inline-flex items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
+        className={triggerClassName ?? "tap inline-flex items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="5" cy="12" r="1.8" fill="currentColor" />
-          <circle cx="12" cy="12" r="1.8" fill="currentColor" />
-          <circle cx="19" cy="12" r="1.8" fill="currentColor" />
-        </svg>
+        {trigger ?? (
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.8" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+            <circle cx="19" cy="12" r="1.8" fill="currentColor" />
+          </svg>
+        )}
       </button>
       {open ? (
         <ul
@@ -440,7 +456,14 @@ export function OverflowMenu({ label, items }: { label: string; items: MenuItem[
                   it.danger && "text-danger",
                 )}
               >
-                {it.label}
+                {it.hint ? (
+                  <span className="flex items-center justify-between gap-3">
+                    <span>{it.label}</span>
+                    <span className="text-xs text-muted">{it.hint}</span>
+                  </span>
+                ) : (
+                  it.label
+                )}
               </button>
             </li>
           ))}

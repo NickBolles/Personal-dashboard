@@ -29,6 +29,7 @@ const PAGES = [
   "/finance/checkin?all=1",
   "/areas",
   "/areas?view=inbox",
+  "/areas?view=tree",
   "/areas/timeline",
   "/areas/dashboard",
   "/areas/map",

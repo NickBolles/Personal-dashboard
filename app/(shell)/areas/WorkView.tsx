@@ -6,38 +6,42 @@ import { useCallback, useState, useSyncExternalStore, type ReactNode } from "rea
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
-import { Badge, Button, ButtonLink, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast, type MenuItem } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { WorkTree } from "@/components/work/WorkTree";
 import { ChevronIcon } from "@/components/icons";
-import { AreasViewSwitch, Block, StatusBadge, StatusDot, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
+import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsCard } from "@/components/areas/AreaSettings";
 import { useAskHermes } from "@/components/chat/useAskHermes";
-import { ChatIcon, PlusIcon } from "@/components/icons";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
+import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
+import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
 import { TodayView, useInbox } from "@/components/work/today";
 import { CaptureDialog, InboxView } from "@/components/work/inbox";
-import { ActionSheet, GetStarted, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
+import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
 import {
   areaValidationDefault,
   COMPARATORS,
-  CREATABLE_KINDS,
+  isClosed,
+  isContainer,
   KIND_LABELS,
   handoffMarkdown,
+  primaryAction,
+  rollup,
   todayIso,
   STATUS_LABELS,
   WORK_STATUSES,
   type Comparator,
+  type CreatableKind,
   type DependencyRef,
   type ItemsResponse,
   type ValidationTemplate,
   type LinkKind,
   type WorkDetail,
   type WorkItem,
-  type WorkKind,
   type WorkLink,
   type WorkStatus,
   type WorkValidation,
@@ -50,16 +54,19 @@ function useItems(archived: boolean) {
   return useQuery({ queryKey: ["work", "items", archived], queryFn: () => api.get<ItemsResponse>(`/api/work/items${archived ? "?archived=1" : ""}`) });
 }
 
-export type WorkViewKind = "today" | "inbox";
-type View = { kind: "today" } | { kind: "inbox" } | { kind: "item"; id: string; action?: string };
+export type WorkViewKind = "today" | "inbox" | "tree";
+type View = { kind: "today" } | { kind: "inbox" } | { kind: "tree" } | { kind: "item"; id: string; action?: string };
 
 /**
- * /work (Command Center workbench, design Direction C). Desktop: a full-width
- * workbench with the left pane (Today, Inbox, area tree), the centre (Today,
- * the Inbox or an item's workspace) and, when there's room, a context rail. On
- * phones the order is Today/Inbox switch → content → tree, so what you came
- * for is first; on an item the tree folds behind the header's Areas toggle
- * (it opens above the item and closes once you pick something).
+ * /areas (Command Center workbench, design Direction C). Desktop: a full-width
+ * workbench with the left pane (one nav row + the area tree), the centre
+ * (Today, Inbox, the Areas overview or a node's page) and, when there's room,
+ * a context rail. Phones: Today/Inbox put the content first and the tree
+ * below; "Areas" puts the tree (where structure is built) first.
+ *
+ * Node pages are type-aware (docs/work.md "Areas structure"): areas and
+ * projects are containers (children, progress, quick add); threads,
+ * investigations and notes get the work page (validation, packet, PRs).
  */
 export function WorkView({
   initialItem,
@@ -75,16 +82,17 @@ export function WorkView({
 }) {
   const router = useRouter();
   const { can } = useAccess();
+  const { toast } = useToast();
   const canChat = can("hermes.chat");
   const newChat = useAskHermes();
   const [archived, setArchived] = useState(false);
   const items = useItems(archived);
-  const [view, setView] = useState<View>(
-    initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView === "inbox" ? "inbox" : "today" },
-  );
-  const [newArea, setNewArea] = useState(false);
+  const [view, setView] = useState<View>(initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView ?? "today" });
+  const [adding, setAdding] = useState<{ kind?: CreatableKind; parent: WorkItem | null } | null>(null);
+  const [moving, setMoving] = useState<string[] | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selection, setSelection] = useState<Set<string>>(() => new Set());
   const [capturing, setCapturing] = useState<boolean | string>(initialCapture ? initialCapture : false);
-  const [treeOpen, setTreeOpen] = useState(false);
   const inbox = useInbox();
   const [undo, setUndo] = useState<UndoOp | null>(null);
   const clearUndo = useCallback(() => setUndo(null), []);
@@ -96,19 +104,41 @@ export function WorkView({
       api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
     { onSuccess: (r) => onOp(r.op) },
   );
+  const rename = useWorkMutation((v: { id: string; title: string }) => api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }), {
+    ok: "Renamed",
+  });
+  const bulkArchive = useWorkMutation(
+    async (ids: string[]) => {
+      let n = 0;
+      for (const id of ids)
+        try {
+          await api.patch(`/api/work/items/${encodeURIComponent(id)}`, { archived: true });
+          n++;
+        } catch {
+          /* e.g. Miscellaneous is built in */
+        }
+      return { n, failed: ids.length - n };
+    },
+    {
+      onSuccess: ({ n, failed }) => {
+        toast(failed ? `Archived ${n}; ${failed} couldn't be archived` : `Archived ${n}`, failed ? "warn" : "ok");
+        setSelection(new Set());
+        setSelectMode(false);
+      },
+    },
+  );
 
   const go = (next: View) => {
     setView(next);
-    setTreeOpen(false);
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
     url.searchParams.delete("view");
     url.searchParams.delete("do");
     if (next.kind === "item") url.searchParams.set("item", next.id);
-    else if (next.kind === "inbox") url.searchParams.set("view", "inbox");
+    else if (next.kind !== "today") url.searchParams.set("view", next.kind);
     window.history.replaceState(null, "", url);
     // Phones: the content sits above the tree, so bring it into view.
-    if (window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
+    if (next.kind !== "tree" && window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
   };
   const openConversation = (sessionId: string) => router.push(`/chat/${encodeURIComponent(sessionId)}`);
   const select = (id: string) => {
@@ -122,91 +152,25 @@ export function WorkView({
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
-  const railBtn = (kind: WorkViewKind, label: string, icon: string, count?: number) => {
-    const active = view.kind === kind;
-    return (
-      <li>
-        <button type="button" aria-current={active ? "page" : undefined} onClick={() => go({ kind })} className="wk-side-nav">
-          <span aria-hidden="true" className="w-4 text-center text-muted">
-            {icon}
-          </span>
-          <span>{label}</span>
-          {count ? (
-            <span
-              className="ml-auto rounded-full bg-warn-soft px-1.5 text-[11.5px] leading-[18px] font-bold text-warn tabular-nums"
-              aria-label={`${count} waiting`}
-            >
-              {count}
-            </span>
-          ) : null}
-        </button>
-      </li>
-    );
-  };
+  // "+ New" creates where you are: inside the open area/project, or next to the open item.
+  const open = current ? list.find((i) => i.id === current) : undefined;
+  const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
 
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
-        <header className="wk-pane-head mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-1">
-          <div className="min-w-0">
-            <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
-            <p className="text-xs text-muted lg:sr-only">Work and conversations in one private tree.</p>
-          </div>
-          {/* Narrow desktop pane: the actions drop to their own row (title stays visible). */}
-          <div className="wk-pane-actions flex shrink-0 gap-1">
-            {canChat ? (
-              <Button size="sm" variant="primary" busy={newChat.busy} onClick={() => newChat.start()} title="New chat (lands in Miscellaneous)">
-                New chat
-              </Button>
-            ) : null}
-            <Button size="sm" onClick={() => setCapturing(true)}>
-              Capture
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setNewArea(true)} aria-label="New area" title="New area">
-              <PlusIcon className="h-4 w-4" />
-            </Button>
-          </div>
+        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+          <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
+          <NewMenu
+            canChat={canChat}
+            busy={newChat.busy}
+            context={contextNode}
+            onChat={() => newChat.start(contextNode ? { areaId: contextNode.id } : undefined)}
+            onNew={(kind) => setAdding({ kind, parent: kind === "area" ? null : contextNode })}
+            onCapture={() => setCapturing(true)}
+          />
         </header>
-        <AreasViewSwitch className="seg-fill mb-2 px-1" />
-        <nav aria-label="Areas sections">
-          <ul
-            className={`grid gap-1 rounded-[10px] border border-line bg-surface p-1 lg:grid-cols-1 lg:gap-0.5 lg:border-0 lg:bg-transparent lg:p-0 ${
-              (view.kind === "item" ? 1 : 0) + (canChat ? 1 : 0) === 2
-                ? "grid-cols-4"
-                : (view.kind === "item" ? 1 : 0) + (canChat ? 1 : 0) === 1
-                  ? "grid-cols-3"
-                  : "grid-cols-2"
-            }`}
-          >
-            {railBtn("today", "Today", "☀")}
-            {railBtn("inbox", "Inbox", "↓", inboxCount)}
-            {canChat ? (
-              <li>
-                <Link href="/chat" className="wk-side-nav">
-                  <ChatIcon className="h-4 w-4 shrink-0 text-muted" />
-                  <span>Chats</span>
-                </Link>
-              </li>
-            ) : null}
-            {view.kind === "item" ? (
-              <li className="lg:hidden">
-                <button
-                  type="button"
-                  className="wk-side-nav"
-                  aria-expanded={treeOpen}
-                  aria-controls="work-tree"
-                  onClick={() => setTreeOpen((o) => !o)}
-                  data-testid="work-tree-toggle"
-                >
-                  <span aria-hidden="true" className="w-4 text-center text-muted">
-                    {treeOpen ? "▾" : "▸"}
-                  </span>
-                  <span>Areas</span>
-                </button>
-              </li>
-            ) : null}
-          </ul>
-        </nav>
+        <AreasNav current={view.kind === "item" ? "tree" : view.kind} inboxCount={inboxCount} onPick={(k) => go({ kind: k })} className="px-1" />
       </div>
       <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
         {view.kind === "today" ? (
@@ -220,8 +184,21 @@ export function WorkView({
           <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
             <InboxView items={list} onOpenItem={select} />
           </div>
+        ) : view.kind === "tree" ? (
+          <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+            <AreasOverview items={list} onSelect={select} onNewArea={() => setAdding({ kind: "area", parent: null })} />
+          </div>
         ) : current ? (
-          <ItemDetail key={current} id={current} items={list} onSelect={select} onOp={onOp} initialAction={view.kind === "item" ? view.action : undefined} />
+          <ItemDetail
+            key={current}
+            id={current}
+            items={list}
+            onSelect={select}
+            onOp={onOp}
+            initialAction={view.kind === "item" ? view.action : undefined}
+            onAdd={(kind, parent) => setAdding({ kind, parent })}
+            onMove={(ids) => setMoving(ids)}
+          />
         ) : items.isPending || items.isFetching ? (
           <div className="p-6">
             <Spinner label="Loading…" />
@@ -235,13 +212,24 @@ export function WorkView({
       <div
         id="work-tree"
         className={`min-w-0 px-3 pb-4 lg:order-none lg:col-start-1 lg:row-start-2 lg:block lg:self-start lg:px-0 lg:pb-0 ${
-          view.kind !== "item" ? "order-3" : treeOpen ? "order-1" : "hidden"
+          view.kind === "tree" ? "order-1" : view.kind !== "item" ? "order-3" : "hidden"
         }`}
       >
         <div className="wk-side-sticky min-w-0 rounded-[10px] border border-line bg-surface p-2 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-2.5 lg:pt-1 lg:pb-24">
-          <div className="flex items-center justify-between px-1 pt-1 pb-1.5 lg:pt-2">
+          <div className="flex items-center justify-between gap-2 px-1 pt-1 pb-1.5 lg:pt-2">
             <h2 className="wk-label">Areas</h2>
-            <span className="text-[11px] text-muted tabular-nums">{list.filter((i) => !i.archived && i.parentId !== null).length || ""}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-pressed={selectMode}
+              onClick={() => {
+                setSelectMode((m) => !m);
+                setSelection(new Set());
+              }}
+              title="Select several rows to move or archive them together"
+            >
+              {selectMode ? "Done" : "Select"}
+            </Button>
           </div>
           {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
           {items.isPending ? (
@@ -254,15 +242,59 @@ export function WorkView({
               onSelect={select}
               onOpenConversation={canChat ? openConversation : undefined}
               onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
+              onCreated={() => toast("Added", "ok")}
+              onRename={(id, title) => rename.mutate({ id, title })}
+              onMove={(id) => setMoving([id])}
+              selectMode={selectMode}
+              selection={selection}
+              onToggleSelect={(id) => {
+                setSelectMode(true);
+                setSelection((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                });
+              }}
             />
           )}
+          {selection.size ? (
+            <div className="wk-bulk mt-2" role="region" aria-label="Selection">
+              <span className="mr-auto">{selection.size} selected</span>
+              <Button size="sm" onClick={() => setMoving([...selection])}>
+                Move to…
+              </Button>
+              <Button size="sm" busy={bulkArchive.isPending} onClick={() => bulkArchive.mutate([...selection])}>
+                Archive
+              </Button>
+              <Button size="sm" variant="ghost" className="text-inherit" onClick={() => setSelection(new Set())}>
+                Clear
+              </Button>
+            </div>
+          ) : null}
+          <p className="mt-2 hidden px-1 text-[11px] text-muted lg:block">Alt+→/← indent/outdent · Alt+↑/↓ reorder · F2 rename · M move · ⌘-click select</p>
           <label className="mt-2 flex min-h-11 items-center gap-2 px-1 text-[13px] text-muted">
             <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
             Show archived
           </label>
         </div>
       </div>
-      <NewItemDialog open={newArea} onClose={() => setNewArea(false)} parent={null} onCreated={(i) => select(i.id)} />
+      {adding ? (
+        <QuickAddDialog parent={adding.parent} kind={adding.kind} items={list} onClose={() => setAdding(null)} onCreated={(i) => select(i.id)} />
+      ) : null}
+      {moving ? (
+        <MoveToDialog
+          ids={moving}
+          items={list}
+          onClose={() => setMoving(null)}
+          onDone={(op) => {
+            setMoving(null);
+            setSelection(new Set());
+            setSelectMode(false);
+            onOp(op);
+          }}
+        />
+      ) : null}
       {capturing ? <CaptureDialog initialText={typeof capturing === "string" ? capturing : undefined} onClose={() => setCapturing(false)} /> : null}
       {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
@@ -586,84 +618,24 @@ function shortDate(d: string) {
   return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-function NewItemDialog({
-  open,
-  onClose,
-  parent,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  parent: WorkItem | null;
-  onCreated: (i: WorkItem) => void;
-}) {
-  const defaultKind: WorkKind = !parent ? "area" : parent.kind === "area" ? "project" : "thread";
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<WorkKind>(defaultKind);
-  const [summary, setSummary] = useState("");
-  const create = useWorkMutation(() => api.post<{ item: WorkItem }>("/api/work/items", { title, kind, summary, parentId: parent?.id ?? null }), {
-    ok: "Created",
-    onSuccess: (r) => {
-      setTitle("");
-      setSummary("");
-      onClose();
-      onCreated(r.item);
-    },
-  });
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={parent ? `New item in ${parent.title}` : "New area"}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" form="new-item" type="submit" busy={create.isPending}>
-            Create
-          </Button>
-        </>
-      }
-    >
-      <form
-        id="new-item"
-        className="space-y-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          create.mutate(undefined);
-        }}
-      >
-        <Field id="ni-title" label="Title">
-          <input id="ni-title" data-autofocus required className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} />
-        </Field>
-        {parent ? (
-          <Field id="ni-kind" label="Kind">
-            <select id="ni-kind" className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as WorkKind)}>
-              {CREATABLE_KINDS.filter((k) => k !== "area").map((k) => (
-                <option key={k} value={k}>
-                  {KIND_LABEL[k]}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-        <Field id="ni-summary" label="Summary (optional)">
-          <textarea id="ni-summary" className={textareaCls} value={summary} onChange={(e) => setSummary(e.target.value)} />
-        </Field>
-      </form>
-    </Dialog>
-  );
-}
-
-type DialogKind = null | "child" | "fork" | "split" | "move" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
+type DialogKind = null | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
 
 type OnOp = (op: UndoOp | null | undefined) => void;
 
+/**
+ * A node's page. Containers (areas, projects) get an overview: progress,
+ * children with inline add, recent changes; areas keep their settings behind
+ * a disclosure. Work (threads, investigations, notes, conversations) gets the
+ * workspace: one context-aware primary action, chat, and everything else in ⋯.
+ */
 function ItemDetail({
   id,
   items,
   onSelect,
   onOp,
   initialAction,
+  onAdd,
+  onMove,
 }: {
   id: string;
   items: WorkItem[];
@@ -671,9 +643,11 @@ function ItemDetail({
   onOp: OnOp;
   /** from the command palette / Today: packet | continue | settle | validate */
   initialAction?: string;
+  onAdd: (kind: CreatableKind | undefined, parent: WorkItem) => void;
+  onMove: (ids: string[]) => void;
 }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
-  const [tab, setTab] = useState<"overview" | "activity" | "children">("overview");
+  const [tab, setTab] = useState<"overview" | "activity">("overview");
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -694,6 +668,7 @@ function ItemDetail({
   const aiItems = useAiMenuItems(id, setAiSheet);
   const wide = useWide();
   const phone = usePhone();
+  const [renaming, setRenaming] = useState<string | null>(null);
   // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
   // remounts it) doesn't fold it; a section opens itself when something is added to it.
   const [sections, setSections] = useState<{ details?: boolean; deps?: boolean; links?: boolean }>({});
@@ -726,87 +701,163 @@ function ItemDetail({
   const d = q.data;
   const { item } = d;
   const isArea = item.parentId === null;
+  const container = isContainer(item) && item.kind !== "conversation";
   const chat = d.links.find((l) => l.kind === "chat_session");
   const showValidations = () => {
     setTab("overview");
     requestAnimationFrame(() => document.getElementById("work-validations")?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
+  const action = primaryAction(d, canChat);
+  const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
+  const childLabel = isArea ? "Project" : "Item";
+  const has = (x: MenuItem | false | null | undefined): x is MenuItem => !!x;
+  const menu: MenuItem[] = [
+    container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+    isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
+    isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
+    isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
+    container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+    // A project with no items yet can still be worked directly.
+    (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
+      ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
+      : null,
+    { label: "Rename", hint: "F2", onSelect: () => setRenaming(item.title), disabled: item.builtIn },
+    { label: "Move…", hint: "M", onSelect: () => onMove([item.id]), disabled: item.builtIn },
+    { label: "Move up", onSelect: () => reorder.mutate("up") },
+    { label: "Move down", onSelect: () => reorder.mutate("down") },
+    item.kind === "project" && !isArea
+      ? { label: "Convert to item", onSelect: () => patch.mutate({ kind: "thread" }) }
+      : !isArea && item.kind !== "conversation"
+        ? { label: "Convert to project", onSelect: () => patch.mutate({ kind: "project" }) }
+        : null,
+    isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
+    container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
+    !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
+    ...(container ? [] : aiItems),
+    {
+      label: item.archived ? "Unarchive" : "Archive",
+      onSelect: () => patch.mutate({ archived: !item.archived }),
+      disabled: item.builtIn,
+      danger: !item.archived,
+    },
+  ].filter(has);
+
+  const primary =
+    action === "open_chat" && item.sessionId ? (
+      <ButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
+        Open conversation
+      </ButtonLink>
+    ) : action === "settle" ? (
+      <Button size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed} title={d.settle.reason ?? undefined}>
+        Settle…
+      </Button>
+    ) : action === "record" ? (
+      <Button size="sm" variant="primary" onClick={showValidations}>
+        Record result
+      </Button>
+    ) : action === "reopen" ? (
+      <Button size="sm" variant="primary" onClick={() => setDialog("reopen")}>
+        Reopen
+      </Button>
+    ) : action === "continue" ? (
+      <Button size="sm" variant="primary" onClick={() => setDialog("continue")}>
+        Continue
+      </Button>
+    ) : (
+      <Button size="sm" variant="primary" onClick={() => setDialog("packet")}>
+        Start focused work
+      </Button>
+    );
+
+  const kids = d.children.filter((c) => !c.archived);
+  const statusSelect = isArea ? null : (
+    <div className="flex items-center">
+      <label htmlFor="work-status" className="sr-only">
+        Status
+      </label>
+      <select
+        id="work-status"
+        className={`${inputCls} wk-status-select`}
+        value={item.status}
+        onChange={(e) => {
+          const to = e.target.value as WorkStatus;
+          if (to === "settled") setDialog("settle");
+          else if (to === "reopened") setDialog("reopen");
+          else patch.mutate({ status: to });
+        }}
+      >
+        {WORK_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {STATUS_LABELS[s]}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
-    <article aria-labelledby="work-item-title" className="min-w-0">
+    <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
       <section className="bg-surface px-3 pt-3 pb-3 sm:px-5 lg:px-6 lg:pt-4">
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1 basis-72">
-            <nav aria-label="Breadcrumb">
-              <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
-                {d.breadcrumb.map((b) => (
-                  <li key={b.id} className="flex items-center gap-0.5">
-                    <button type="button" className="tap rounded px-1 hover:text-accent hover:underline" onClick={() => onSelect(b.id)}>
-                      {b.title}
-                    </button>
-                    <span aria-hidden="true">›</span>
-                  </li>
-                ))}
-                <li aria-current="page" className="px-1">
-                  {KIND_LABEL[item.kind]}
-                </li>
-              </ol>
-            </nav>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <h2 id="work-item-title" className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px]">
-                {item.title}
-              </h2>
-              <StatusBadge status={item.status} auto={item.settledKind === "auto"} />
-              {item.archived ? <Badge>Archived</Badge> : null}
-              {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
-              {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-            </div>
-            {item.summary ? <p className="mt-1 line-clamp-2 max-w-[75ch] text-[13.5px] text-muted">{item.summary}</p> : null}
-            {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
-          </div>
-          <div className="flex items-end gap-1.5">
-            <div>
-              <label htmlFor="work-status" className="wk-label block pb-0.5">
-                Status
-              </label>
-              <select
-                id="work-status"
-                className={`${inputCls} min-h-11 py-1`}
-                value={item.status}
-                onChange={(e) => {
-                  const to = e.target.value as WorkStatus;
-                  if (to === "settled") setDialog("settle");
-                  else if (to === "reopened") setDialog("reopen");
-                  else patch.mutate({ status: to });
+        <nav aria-label="Breadcrumb">
+          <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
+            {d.breadcrumb.map((b) => (
+              <li key={b.id} className="flex items-center gap-0.5">
+                <button type="button" className="tap rounded px-1 hover:text-accent hover:underline" onClick={() => onSelect(b.id)}>
+                  {b.title}
+                </button>
+                <span aria-hidden="true">›</span>
+              </li>
+            ))}
+            <li aria-current="page" className="wk-kind px-1">
+              {isArea ? "Area" : item.kind === "thread" ? "Item" : KIND_LABEL[item.kind]}
+            </li>
+          </ol>
+        </nav>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+          {renaming !== null ? (
+            <form
+              className="flex min-w-0 flex-1 basis-60 items-center gap-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (renaming.trim() && renaming.trim() !== item.title) patch.mutate({ title: renaming.trim() });
+                setRenaming(null);
+              }}
+            >
+              <input
+                aria-label="Title"
+                className={`${inputCls} text-[16px] font-semibold`}
+                autoFocus
+                value={renaming}
+                onChange={(e) => setRenaming(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setRenaming(null);
                 }}
-              >
-                {WORK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <OverflowMenu
-              label="More item actions"
-              items={[
-                { label: "Fork", onSelect: () => setDialog("fork"), disabled: isArea },
-                { label: "Split into child", onSelect: () => setDialog("split") },
-                { label: "Move…", onSelect: () => setDialog("move"), disabled: item.builtIn },
-                { label: "Move up", onSelect: () => reorder.mutate("up") },
-                { label: "Move down", onSelect: () => reorder.mutate("down") },
-                {
-                  label: item.archived ? "Unarchive" : "Archive",
-                  onSelect: () => patch.mutate({ archived: !item.archived }),
-                  disabled: item.builtIn,
-                  danger: !item.archived,
-                },
-                ...aiItems,
-              ]}
-            />
+              />
+              <Button type="submit" size="sm" variant="primary">
+                Save
+              </Button>
+            </form>
+          ) : (
+            <h2
+              id="work-item-title"
+              className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px]"
+              onDoubleClick={item.builtIn ? undefined : () => setRenaming(item.title)}
+            >
+              {item.title}
+            </h2>
+          )}
+          {isArea ? null : <StatusBadge status={item.status} auto={item.settledKind === "auto"} />}
+          {item.archived ? <Badge>Archived</Badge> : null}
+          {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
+          {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
+          <div className="ml-auto flex items-center gap-1">
+            {statusSelect}
+            <OverflowMenu label="More item actions" items={menu} />
           </div>
         </div>
-        {item.status === "ready_to_settle" ? (
+        {item.summary ? <p className="mt-1 line-clamp-2 max-w-[75ch] text-[13.5px] text-muted">{item.summary}</p> : null}
+        {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
+        {item.status === "ready_to_settle" && !container ? (
           <div
             role="status"
             data-testid="settle-prompt"
@@ -820,169 +871,123 @@ function ItemDetail({
             </Button>
           </div>
         ) : null}
-        <div className="mt-2.5 flex min-w-0 items-baseline gap-3 rounded-[10px] border border-line border-l-[3px] border-l-accent bg-bg px-3 py-2">
-          <p className="wk-label shrink-0">Next action</p>
-          <p className="min-w-0 text-[14px] break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
-        </div>
-        <JobChip itemId={item.id} />
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
-          {item.kind !== "conversation" ? <GetStarted itemId={item.id} areaId={d.area?.id ?? null} /> : null}
-          {item.kind === "conversation" && item.sessionId && canChat ? (
-            <ButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
-              Open conversation
-            </ButtonLink>
-          ) : null}
-          <Button size="sm" variant={item.kind === "conversation" ? "secondary" : "primary"} onClick={() => setDialog("packet")}>
-            Start focused work
-          </Button>
-          {canChat ? (
+        {isArea ? null : (
+          <div className="mt-2.5 flex min-w-0 items-baseline gap-3 rounded-[10px] border border-line border-l-[3px] border-l-accent bg-bg px-3 py-2">
+            <p className="wk-label shrink-0">Next action</p>
+            <p className="min-w-0 text-[14px] break-words">{item.nextAction || <span className="text-muted">Not set</span>}</p>
+          </div>
+        )}
+        {container ? null : <JobChip itemId={item.id} />}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {container ? (
+            <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
+              + {childLabel}
+            </Button>
+          ) : (
+            primary
+          )}
+          {canChat && item.kind !== "conversation" ? (
             <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-              New chat here
-            </Button>
-          ) : null}
-          <Button size="sm" onClick={() => setDialog("child")}>
-            New child
-          </Button>
-          <Button size="sm" onClick={() => setDialog("github_pr")}>
-            Link PR
-          </Button>
-          {canChat ? (
-            <Button size="sm" onClick={() => setDialog("chat_session")}>
-              Link conversation
-            </Button>
-          ) : null}
-          <Button size="sm" onClick={() => setDialog("url")}>
-            Link URL
-          </Button>
-          {item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail") ? (
-            <Button size="sm" onClick={() => setDialog("reopen")}>
-              Reopen
+              Chat here
             </Button>
           ) : null}
         </div>
       </section>
 
-      <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
-        <div className="min-w-0">
-          <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
-            {(
-              [
-                ["overview", "Overview"],
-                ["activity", "Activity"],
-                ["children", `Children (${d.children.length})`],
-              ] as const
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                role="tab"
-                id={`tab-${k}`}
-                aria-selected={tab === k}
-                aria-controls={`panel-${k}`}
-                tabIndex={tab === k ? 0 : -1}
-                onClick={() => setTab(k)}
-                onKeyDown={(e) => {
-                  const keys = ["overview", "activity", "children"] as const;
-                  const i = keys.indexOf(k);
-                  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                    const n = keys[(i + (e.key === "ArrowRight" ? 1 : 2)) % 3]!;
-                    setTab(n);
-                    document.getElementById(`tab-${n}`)?.focus();
-                  }
-                }}
-                className="wk-tab"
-              >
-                {label}
-              </button>
-            ))}
+      {container ? (
+        <ContainerBody d={d} items={items} onSelect={onSelect} phone={phone} sections={sections} toggle={toggle} canChat={canChat} onDialog={setDialog} />
+      ) : (
+        <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
+          <div className="min-w-0">
+            <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
+              {(
+                [
+                  ["overview", "Overview"],
+                  ["activity", "Activity"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  id={`tab-${k}`}
+                  aria-selected={tab === k}
+                  aria-controls={`panel-${k}`}
+                  tabIndex={tab === k ? 0 : -1}
+                  onClick={() => setTab(k)}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                      const n = k === "overview" ? "activity" : "overview";
+                      setTab(n);
+                      document.getElementById(`tab-${n}`)?.focus();
+                    }
+                  }}
+                  className="wk-tab"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+              {tab === "overview" ? (
+                <>
+                  {(() => {
+                    const edit = (
+                      <EditItem
+                        key={item.updatedAt}
+                        item={item}
+                        validationDefault={d.validationDefault}
+                        phone={phone}
+                        open={sections.details ?? false}
+                        onToggle={toggle("details")}
+                      />
+                    );
+                    const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
+                    const validations = (
+                      <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
+                    );
+                    const children = kids.length ? (
+                      <ChildrenCard label="Sub-items" parent={item} list={kids} items={items} onSelect={onSelect} addLabel="Add a sub-item" />
+                    ) : null;
+                    // Phones lead with proof and the packet; the editable details fold away below.
+                    return phone ? (
+                      <>
+                        {validations}
+                        {packet}
+                        {children}
+                        {edit}
+                      </>
+                    ) : (
+                      <>
+                        {edit}
+                        {children}
+                        {packet}
+                        {validations}
+                      </>
+                    );
+                  })()}
+                  <Dependencies
+                    d={d}
+                    items={items}
+                    onSelect={onSelect}
+                    phone={phone}
+                    open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+                    onToggle={toggle("deps")}
+                  />
+                  <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+                  <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
+                </>
+              ) : (
+                <Activity d={d} onSelect={onSelect} />
+              )}
+            </div>
           </div>
-          <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
-            {tab === "overview" ? (
-              <>
-                {(() => {
-                  const edit = (
-                    <EditItem
-                      key={item.updatedAt}
-                      item={item}
-                      validationDefault={d.validationDefault}
-                      phone={phone}
-                      open={sections.details ?? false}
-                      onToggle={toggle("details")}
-                    />
-                  );
-                  const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
-                  const validations = (
-                    <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
-                  );
-                  // Phones lead with proof and the packet; the editable details fold away below.
-                  const settings = isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null;
-                  return phone ? (
-                    <>
-                      {validations}
-                      {packet}
-                      {edit}
-                      {settings}
-                    </>
-                  ) : (
-                    <>
-                      {edit}
-                      {settings}
-                      {packet}
-                      {validations}
-                    </>
-                  );
-                })()}
-                <Dependencies
-                  d={d}
-                  items={items}
-                  onSelect={onSelect}
-                  phone={phone}
-                  open={sections.deps ?? d.blockedBy.some((b) => b.open)}
-                  onToggle={toggle("deps")}
-                />
-                <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
-                <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
-              </>
-            ) : tab === "activity" ? (
-              <Activity d={d} onSelect={onSelect} />
-            ) : (
-              <Card>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="font-semibold">Children</h3>
-                  <Button size="sm" onClick={() => setDialog("child")}>
-                    Add child
-                  </Button>
-                </div>
-                {d.children.length ? (
-                  <ul className="wk-rows">
-                    {d.children.map((c) => (
-                      <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                        <button
-                          type="button"
-                          className="tap flex min-w-0 items-center gap-2 text-left text-[14px] font-medium hover:underline"
-                          onClick={() => onSelect(c.id)}
-                        >
-                          <StatusDot status={c.status} />
-                          <span className="min-w-0 break-words">{c.title}</span>
-                        </button>
-                        <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted">No children yet.</p>
-                )}
-              </Card>
-            )}
-          </div>
+          {wide ? <ItemRail d={d} onSelect={onSelect} onShowValidations={showValidations} /> : null}
         </div>
-        {wide ? <ItemRail d={d} onSelect={onSelect} onShowValidations={showValidations} /> : null}
-      </div>
+      )}
 
-      <NewItemDialog open={dialog === "child"} onClose={close} parent={item} onCreated={(i) => onSelect(i.id)} />
       <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} onOp={onOp} />
       <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} onOp={onOp} />
-      <MoveDialog open={dialog === "move"} onClose={close} item={item} items={items} onOp={onOp} />
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
       {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
@@ -997,6 +1002,245 @@ function ItemDetail({
         />
       ) : null}
     </article>
+  );
+}
+
+/** Area / project body: progress, children (with inline add), recent changes, settings and details. */
+function ContainerBody({
+  d,
+  items,
+  onSelect,
+  phone,
+  sections,
+  toggle,
+  canChat,
+  onDialog,
+}: {
+  d: WorkDetail;
+  items: WorkItem[];
+  onSelect: (id: string) => void;
+  phone: boolean;
+  sections: { details?: boolean; deps?: boolean; links?: boolean };
+  toggle: (k: "details" | "deps" | "links") => (open: boolean) => void;
+  canChat: boolean;
+  onDialog: (k: DialogKind) => void;
+}) {
+  const { item } = d;
+  const isArea = item.parentId === null;
+  const r = rollup(items, item.id);
+  const kids = items.filter((i) => i.parentId === item.id && !i.archived);
+  const projects = kids.filter((k) => k.kind === "project");
+  const rest = kids.filter((k) => k.kind !== "project");
+  // Recently changed anywhere below this node.
+  const below = new Set<string>([item.id]);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const i of items)
+      if (i.parentId && below.has(i.parentId) && !below.has(i.id)) {
+        below.add(i.id);
+        grew = true;
+      }
+  }
+  below.delete(item.id);
+  const recent = items
+    .filter((i) => below.has(i.id) && !i.archived && i.updatedAt)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 5);
+  const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
+  return (
+    <div className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+      <div className="wk-kpis" aria-label="Progress">
+        <div>
+          <b>{isArea ? r.containers : `${r.done}/${r.total}`}</b>
+          <span>{isArea ? "Projects" : "Done"}</span>
+        </div>
+        <div>
+          <b>{r.open}</b>
+          <span>Open</span>
+        </div>
+        <div>
+          <b>{r.active}</b>
+          <span>Active</span>
+        </div>
+        <div>
+          <b>{r.proofDue}</b>
+          <span>Proof due</span>
+        </div>
+      </div>
+      {isArea ? (
+        <>
+          <ChildrenCard
+            label="Projects"
+            parent={item}
+            list={projects}
+            items={items}
+            onSelect={onSelect}
+            addLabel={projects.length ? "Add a project" : "Add your first project"}
+            addKind="project"
+            empty="Projects group related work. Add one, or type a path like “Launch / pricing page”."
+          />
+          <ChildrenCard
+            label="Items & chats here"
+            parent={item}
+            list={rest}
+            items={items}
+            onSelect={onSelect}
+            addLabel="Add an item"
+            addKind="thread"
+            empty={canChat ? "Loose items and chats filed straight into this area show here." : "Loose items show here."}
+          />
+        </>
+      ) : (
+        <ChildrenCard
+          label="Work"
+          parent={item}
+          list={kids}
+          items={items}
+          onSelect={onSelect}
+          addLabel={kids.length ? "Add item, sub-project or path" : "Add the first item"}
+          empty="Break the project into items. Type “Sub-project / item” to nest."
+        />
+      )}
+      {recent.length ? (
+        <Block label="Recently updated">
+          <ul className="wk-rows text-[13px]">
+            {recent.map((i) => (
+              <li key={i.id} className="flex items-center justify-between gap-2 py-1">
+                <button type="button" className="tap min-w-0 truncate text-left hover:underline" onClick={() => onSelect(i.id)}>
+                  {i.title}
+                </button>
+                <span className="shrink-0 text-xs text-muted" data-dynamic>
+                  {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
+      {usedAsWork ? (
+        <>
+          <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
+          <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
+        </>
+      ) : null}
+      <EditItem
+        key={item.updatedAt}
+        item={item}
+        validationDefault={d.validationDefault}
+        phone={phone}
+        open={sections.details ?? false}
+        onToggle={toggle("details")}
+      />
+      {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
+      {isArea ? null : (
+        <>
+          <Dependencies
+            d={d}
+            items={items}
+            onSelect={onSelect}
+            phone={phone}
+            open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+            onToggle={toggle("deps")}
+          />
+          <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+        </>
+      )}
+      <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
+      <details className="wk-disclosure card">
+        <summary className="tap cursor-pointer font-semibold">Activity</summary>
+        <div className="mt-2 space-y-3">
+          <Activity d={d} onSelect={onSelect} />
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/** Children of a node as dense rows; closed work folds away; ends with an inline "+ Add" row. */
+function ChildrenCard({
+  label,
+  parent,
+  list,
+  items,
+  onSelect,
+  addLabel,
+  addKind,
+  empty,
+}: {
+  label: string;
+  parent: WorkItem;
+  list: WorkItem[];
+  items: WorkItem[];
+  onSelect: (id: string) => void;
+  addLabel: string;
+  addKind?: CreatableKind;
+  empty?: string;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const open = list.filter((i) => !isClosed(i.status) || i.kind === "project" || i.kind === "conversation");
+  const done = list.filter((i) => !open.includes(i));
+  const rows = showDone ? [...open, ...done] : open;
+  const slug = label.toLowerCase().replace(/[^a-z]+/g, "-");
+  return (
+    <section aria-labelledby={`kids-${slug}`} className="overflow-hidden rounded-[10px] border border-line bg-surface" data-testid={`children-${slug}`}>
+      <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
+        <h3 id={`kids-${slug}`} className="wk-label">
+          {label}
+          {list.length ? ` · ${list.length}` : ""}
+        </h3>
+      </div>
+      {rows.length ? (
+        <ul className="wk-node-rows border-t border-line">
+          {rows.map((c) => (
+            <li key={c.id}>
+              <NodeRow
+                i={c}
+                items={items}
+                onSelect={(x) => onSelect(x.id)}
+                status={
+                  c.kind === "conversation" ? (
+                    <span className="text-xs text-muted" data-dynamic>
+                      {fmtWhen(c.updatedAt)}
+                    </span>
+                  ) : (
+                    <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                  )
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      ) : !adding && empty ? (
+        <p className="px-3 pb-2 text-[13px] text-muted">{empty}</p>
+      ) : null}
+      {done.length ? (
+        <button
+          type="button"
+          className="tap w-full border-t border-line px-3 py-1.5 text-left text-xs text-muted hover:text-text"
+          onClick={() => setShowDone((s) => !s)}
+        >
+          {showDone ? "Hide done" : `${done.length} done · show`}
+        </button>
+      ) : null}
+      <div className="border-t border-line">
+        {adding ? (
+          <InlineAdd
+            parent={parent}
+            kind={addKind}
+            onDone={() => setAdding(false)}
+            placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined}
+          />
+        ) : (
+          <button type="button" className="wk-node-row wk-add-row" onClick={() => setAdding(true)}>
+            <span aria-hidden="true" className="wk-plus">
+              +
+            </span>
+            {addLabel}
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1980,69 +2224,6 @@ function SplitDialog({
           <textarea id="sp-summary" className={textareaCls} value={summary} onChange={(e) => setSummary(e.target.value)} />
         </Field>
       </form>
-    </Dialog>
-  );
-}
-
-function MoveDialog({ open, onClose, item, items, onOp }: { open: boolean; onClose: () => void; item: WorkItem; items: WorkItem[]; onOp: OnOp }) {
-  const [dest, setDest] = useState("");
-  // Exclude the item and its descendants (the server also refuses cycles).
-  const banned = new Set<string>([item.id]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const i of items)
-      if (i.parentId && banned.has(i.parentId) && !banned.has(i.id)) {
-        banned.add(i.id);
-        grew = true;
-      }
-  }
-  const byId = new Map(items.map((i) => [i.id, i]));
-  const path = (i: WorkItem) => {
-    const parts = [i.title];
-    for (let p = i.parentId ? byId.get(i.parentId) : undefined; p && parts.length < 8; p = p.parentId ? byId.get(p.parentId) : undefined)
-      parts.unshift(p.title);
-    return parts.join(" › ");
-  };
-  const options = items
-    .filter((i) => !banned.has(i.id) && i.id !== item.parentId && i.kind !== "note")
-    .map((i) => ({ id: i.id, label: path(i) }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-  const move = useWorkMutation(
-    () => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}/move`, { parentId: dest === "__top" ? null : dest }),
-    {
-      onSuccess: (r) => {
-        onClose();
-        onOp(r.op);
-      },
-    },
-  );
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={`Move ${item.title}`}
-      description="Moving changes placement only; history and lineage are kept."
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!dest} busy={move.isPending} onClick={() => move.mutate(undefined)}>
-            Move here
-          </Button>
-        </>
-      }
-    >
-      <Field id="mv-dest" label="Destination">
-        <select id="mv-dest" data-autofocus className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
-          <option value="">Choose…</option>
-          {item.kind === "area" && item.parentId ? <option value="__top">Top level</option> : null}
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </Field>
     </Dialog>
   );
 }
