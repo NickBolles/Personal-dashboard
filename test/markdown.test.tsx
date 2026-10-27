@@ -63,6 +63,13 @@ describe("Markdown renderer", () => {
     expect(html(t)).not.toMatch(/<script|<img|<iframe|onerror="|href="(javascript|data|vbscript|\/\/)/i);
   });
 
+  it("never nests links (a URL used as a link label)", () => {
+    const out = html("[https://example.com](https://example.com/docs) and [see <https://x.test>](/areas)");
+    expect(out.match(/<a /g)).toHaveLength(2);
+    expect(out).toContain('<a href="https://example.com/docs" target="_blank" rel="noopener noreferrer nofollow">https://example.com</a>');
+    expect(out).toContain('<a href="/areas">see https://x.test</a>');
+  });
+
   it("allows only http(s), mailto and same-origin hrefs", () => {
     expect(safeHref("/areas?item=1")).toBe("/areas?item=1");
     expect(safeHref("#report-source-1")).toBe("#report-source-1");

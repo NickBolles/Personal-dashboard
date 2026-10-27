@@ -30,7 +30,7 @@ export function safeHref(raw: string): string | null {
   }
 }
 
-type Ctx = { sourceCount: number; headingOffset: number };
+type Ctx = { sourceCount: number; headingOffset: number; /** inside a link label: no nested links */ noLinks?: boolean };
 
 // ---------------------------------------------------------------- inline
 
@@ -98,12 +98,12 @@ export function renderInline(text: string, key: string, ctx: Ctx): ReactNode[] {
     }
     if (c === "[") {
       if ((m = /^\[((?:[^[\]]|\[[^\]]*\])+)\]\(\s*<?((?:[^()\s>]|\([^()\s]*\))+)>?(?:\s+"[^"]*")?\s*\)/.exec(rest))) {
-        const label = renderInline(m[1]!, k, ctx);
-        push(link(safeHref(m[2]!), label, k, label));
+        const label = renderInline(m[1]!, k, { ...ctx, noLinks: true });
+        push(ctx.noLinks ? <Fragment key={k}>{label}</Fragment> : link(safeHref(m[2]!), label, k, label));
         i += m[0].length;
         continue;
       }
-      if (ctx.sourceCount && (m = /^\[(\d{1,2})\]/.exec(rest))) {
+      if (ctx.sourceCount && !ctx.noLinks && (m = /^\[(\d{1,2})\]/.exec(rest))) {
         const num = Number(m[1]);
         if (num >= 1 && num <= ctx.sourceCount) {
           push(
@@ -117,11 +117,11 @@ export function renderInline(text: string, key: string, ctx: Ctx): ReactNode[] {
       }
     }
     if (c === "<" && (m = /^<((?:https?:\/\/|mailto:)[^\s>]+)>/.exec(rest))) {
-      push(link(safeHref(m[1]!), m[1], k, m[0]));
+      push(ctx.noLinks ? m[1] : link(safeHref(m[1]!), m[1], k, m[0]));
       i += m[0].length;
       continue;
     }
-    if ((c === "h" || c === "H") && !isWord(text[i - 1]) && (m = /^https?:\/\/[^\s<>"]+/i.exec(rest))) {
+    if (!ctx.noLinks && (c === "h" || c === "H") && !isWord(text[i - 1]) && (m = /^https?:\/\/[^\s<>"]+/i.exec(rest))) {
       const url = m[0].replace(/[.,;:!?'")\]]+$/, "");
       push(link(safeHref(url), url, k, url));
       i += url.length;
