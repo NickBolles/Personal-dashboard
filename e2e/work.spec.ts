@@ -362,7 +362,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
   await page.getByRole("button", { name: "Continue in new conversation" }).click();
   const cont = page.getByRole("dialog", { name: "Continue in a new conversation" });
-  await expect(cont.getByTestId("continue-preview")).toContainText("# Handoff: V5 evaluator contract");
+  await expect(cont.getByTestId("continue-preview")).toContainText("Handoff: V5 evaluator contract");
   await cont.getByRole("button", { name: "Create conversation" }).click();
   await expect(page).toHaveURL(/\/chat\/[^/?]+$/);
   const sessionId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop()!);

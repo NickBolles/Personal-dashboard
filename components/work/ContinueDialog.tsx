@@ -9,6 +9,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import { BACKEND_LABELS } from "@/lib/assistant";
 import { BackendSwitch, useAssistantChoice } from "@/components/chat/backend";
 import { Button, Dialog, useToast } from "@/components/ui";
+import { Markdown } from "@/components/markdown/Markdown";
 import type { WorkDetail, WorkLink } from "@/lib/work";
 
 /**
@@ -69,9 +70,16 @@ export function ContinueDialog({ d, markdown, onClose }: { d: WorkDetail; markdo
           <span className="font-medium">Ask</span>
           {available.length > 1 ? <BackendSwitch /> : <span>{available.length ? BACKEND_LABELS[backend].label : "No assistant is set up"}</span>}
         </div>
-        <pre data-testid="continue-preview" className="max-h-72 overflow-auto rounded-lg bg-surface-2 p-3 text-xs break-words whitespace-pre-wrap">
-          {markdown}
-        </pre>
+        {/* Rendered the way the conversation will show it; the raw Markdown is what gets sent. */}
+        <div
+          data-testid="continue-preview"
+          role="region"
+          aria-label="Handoff preview"
+          tabIndex={0}
+          className="max-h-72 overflow-auto rounded-[10px] border border-line bg-surface-2 px-3 py-2.5 text-[13px]"
+        >
+          <Markdown text={markdown} headingOffset={2} />
+        </div>
       </div>
     </Dialog>
   );

@@ -21,21 +21,32 @@ export function cx(...c: (string | false | null | undefined)[]) {
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 
+/*
+ * Disabled: a primary/danger button turns into a quiet neutral (not a washed-out
+ * accent that still reads as clickable); secondary/ghost just dim.
+ */
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent text-accent-contrast border-accent font-semibold shadow-[0_1px_0_rgb(0_0_0/0.06)] hover:opacity-90",
-  secondary: "bg-surface text-text border-line hover:border-line-strong hover:bg-surface-2",
-  ghost: "bg-transparent text-text border-transparent hover:bg-surface-2",
-  danger: "bg-danger text-white border-transparent font-semibold hover:opacity-90 dark:text-black",
+  primary:
+    "bg-accent text-accent-contrast border-accent font-semibold shadow-[0_1px_0_rgb(0_0_0/0.06)] hover:opacity-90 disabled:border-line disabled:bg-surface-2 disabled:text-muted disabled:shadow-none disabled:hover:opacity-100",
+  secondary:
+    "bg-surface text-text border-line hover:border-line-strong hover:bg-surface-2 disabled:opacity-50 disabled:hover:border-line disabled:hover:bg-surface",
+  ghost: "bg-transparent text-text border-transparent hover:bg-surface-2 disabled:opacity-50",
+  danger:
+    "bg-danger text-white border-transparent font-semibold hover:opacity-90 dark:text-black disabled:border-line disabled:bg-surface-2 disabled:text-muted dark:disabled:text-muted",
 };
 
-/** Touch keeps 44px targets; a desktop pointer gets the compact sizes. */
+/**
+ * Three density tiers: phones keep 44px touch targets; tablets (≥640px, touch)
+ * get 40/36px controls so a page doesn't read as oversized; a desktop pointer
+ * (`dense:`) gets the compact command-center sizes.
+ */
 const SIZES = {
-  md: "min-h-11 px-4 text-[0.9375rem] dense:min-h-9 dense:px-3.5 dense:text-[0.875rem]",
-  sm: "min-h-11 px-3 text-sm dense:min-h-[30px] dense:px-2.5",
+  md: "min-h-11 px-4 text-[0.9375rem] sm:min-h-10 sm:px-3.5 sm:text-[0.875rem] dense:min-h-9 dense:px-3.5 dense:text-[0.875rem]",
+  sm: "min-h-11 px-3 text-sm sm:min-h-9 sm:px-3 dense:min-h-[30px] dense:px-2.5",
 } as const;
 
 const BUTTON_BASE =
-  "press inline-flex items-center justify-center gap-1.5 rounded-[9px] border font-medium leading-tight no-underline disabled:opacity-50 disabled:cursor-not-allowed";
+  "press inline-flex items-center justify-center gap-1.5 rounded-[9px] border font-medium leading-tight no-underline disabled:cursor-not-allowed";
 
 export function Button({
   variant = "secondary",
@@ -224,10 +235,10 @@ export function Badge({ tone = "neutral", children, className, dot }: { tone?: T
 
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-[var(--radius)] border border-dashed border-line-strong px-4 py-5 text-center">
-      <p className="font-medium">{title}</p>
-      {children ? <div className="mt-1 text-sm text-muted">{children}</div> : null}
-      {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
+    <div className="rounded-[var(--radius)] border border-dashed border-line px-4 py-4 text-center">
+      <p className="text-[0.875rem] font-medium">{title}</p>
+      {children ? <div className="mt-0.5 text-sm text-muted">{children}</div> : null}
+      {action ? <div className="mt-2.5 flex justify-center">{action}</div> : null}
     </div>
   );
 }
@@ -441,7 +452,7 @@ export function OverflowMenu({
                   it.onSelect();
                 }}
                 className={cx(
-                  "block min-h-11 w-full rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50 dense:min-h-8 dense:px-2.5",
+                  "block min-h-11 w-full rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50 sm:min-h-10 dense:min-h-8 dense:px-2.5",
                   it.danger && "text-danger",
                 )}
               >
@@ -561,4 +572,4 @@ export function Field({ label, hint, children, id, error }: { label: string; hin
 }
 
 export const inputCls =
-  "block w-full min-h-11 rounded-[8px] border border-line-strong bg-surface px-3 py-2 text-base text-text placeholder:text-muted disabled:opacity-60 dense:min-h-9 dense:px-2.5 dense:py-1.5 dense:text-[0.875rem]";
+  "block w-full min-h-11 rounded-[8px] border border-line-strong bg-surface px-3 py-2 text-base text-text placeholder:text-muted disabled:opacity-60 sm:min-h-10 sm:py-1.5 dense:min-h-9 dense:px-2.5 dense:py-1.5 dense:text-[0.875rem]";
