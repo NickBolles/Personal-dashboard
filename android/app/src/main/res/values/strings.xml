@@ -13,4 +13,7 @@
     <string name="widget_home_status">Home status</string>
     <string name="widget_capture">Ask Hermes</string>
     <string name="widget_compass">Daily Compass</string>
+    <string name="widget_areas_next">Areas: next actions</string>
+    <string name="widget_areas_next_desc">Next actions from your Areas. Tap one to open it.</string>
+    <string name="shortcut_areas">Areas</string>
 </resources>

@@ -49,6 +49,7 @@ fun CaptureSheet(graph: AppGraph, request: CaptureRequest, onDismiss: () -> Unit
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var attached by remember { mutableStateOf(request.attached) }
+    var typed by remember { mutableStateOf(request.text) }
     // Hermes or Claude, when both are set up; remembered on this phone.
     val ui = graph.context.getSharedPreferences("jarvis_ui", android.content.Context.MODE_PRIVATE)
     val assistant by graph.assistant.state.collectAsState()
@@ -80,6 +81,13 @@ fun CaptureSheet(graph: AppGraph, request: CaptureRequest, onDismiss: () -> Unit
                     }
                 }
             }
+            // Shared text can also go straight into Areas as a note (no Hermes run).
+            if (request.text.isNotBlank() && com.nickbolles.jarvis.ui.nav.can("work.use")) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onDismiss(); onNavigate(Routes.areasSave(typed.ifBlank { request.text })) },
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                ) { Text("Save to Areas instead") }
+            }
             error?.let { StatusBanner(it, tone = "danger", modifier = Modifier.padding(horizontal = 16.dp)) }
             Composer(
                 enabled = !sending,
@@ -90,6 +98,7 @@ fun CaptureSheet(graph: AppGraph, request: CaptureRequest, onDismiss: () -> Unit
                 attachedLabel = request.attachedLabel,
                 onClearAttached = { attached = null },
                 clearOnSend = false,
+                onTextChange = { typed = it },
                 onSend = { text, sources, att ->
                     sending = true
                     error = null

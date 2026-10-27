@@ -13,11 +13,17 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.data.WidgetSummary
+import com.nickbolles.jarvis.data.WorkItemsResponse
 import java.util.concurrent.TimeUnit
 
 const val WIDGET_CACHE = "widget-summary"
 
 fun readWidgetSummary(context: Context): WidgetSummary? = AppGraph.get(context).store.readCache(WIDGET_CACHE, WidgetSummary.serializer())
+
+/** Same cache the Areas tab reads (AppGraph.work), so the widget and app agree. */
+fun readWorkCache(context: Context): WorkItemsResponse? = AppGraph.get(context).store.readCache(WORK_CACHE, WorkItemsResponse.serializer())
+
+const val WORK_CACHE = "work-items"
 
 /** Fetches /api/widget/summary into the cache and redraws every widget. */
 class WidgetRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -27,9 +33,14 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
             WidgetUpdater.redrawAll(applicationContext)
             return Result.success()
         }
+        val pairing = graph.store.current()
+        // Only publish answers for the pairing that asked: a sign-out mid-request must not refill the caches.
+        suspend fun stillPaired() = graph.store.current() == pairing
         return try {
             val summary = graph.call { it.widgetSummary() }
-            graph.store.writeCache(WIDGET_CACHE, WidgetSummary.serializer(), summary)
+            if (stillPaired()) graph.store.writeCache(WIDGET_CACHE, WidgetSummary.serializer(), summary)
+            // Areas next actions: optional (people without work.use get 403), never fails the refresh.
+            runCatching { graph.call { it.workItems() } }.getOrNull()?.let { if (stillPaired()) graph.store.writeCache(WORK_CACHE, WorkItemsResponse.serializer(), it) }
             WidgetUpdater.redrawAll(applicationContext)
             Result.success()
         } catch (e: Exception) {
@@ -69,5 +80,6 @@ object WidgetUpdater {
         HomeStatusWidget().updateAll(context)
         CaptureWidget().updateAll(context)
         CompassWidget().updateAll(context)
+        AreasNextWidget().updateAll(context)
     }
 }

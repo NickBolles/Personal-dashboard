@@ -382,9 +382,13 @@ fun Bubble(text: String, mine: Boolean) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.widthIn(max = 340.dp),
+            // Replies read like documents (lists, headings, code): give them the room and render Markdown.
+            modifier = Modifier.widthIn(max = if (mine) 340.dp else 680.dp),
         ) {
-            SelectionContainer { Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) }
+            SelectionContainer {
+                if (mine) Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+                else com.nickbolles.jarvis.ui.components.MarkdownText(text, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
         }
     }
 }
@@ -473,6 +477,8 @@ fun Composer(
     onClearAttached: () -> Unit = {},
     /** keep the text when the caller may fail and want a retry (capture sheet) */
     clearOnSend: Boolean = true,
+    /** the current text as typed (the capture sheet's "Save to Areas" uses it) */
+    onTextChange: (String) -> Unit = {},
 ) {
     var text by rememberSaveable { mutableStateOf(initialText) }
     var sources by rememberSaveable { mutableStateOf(initialSources.map { it.name }.toSet()) }
@@ -498,7 +504,7 @@ fun Composer(
             Row(verticalAlignment = Alignment.Bottom) {
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = { text = it; onTextChange(it) },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text(busyLabel ?: if (sources.isEmpty()) "Message Hermes" else "Ask about ${sources.mapNotNull { n -> ContextSource.entries.firstOrNull { it.name == n }?.label }.joinToString(", ")}") },
                     maxLines = 6,

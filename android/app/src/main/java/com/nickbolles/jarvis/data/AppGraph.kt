@@ -56,6 +56,19 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
         _signedOutReason.value = reason
         cachedApi = null
         store.clear()
+        // In-memory copies too: the next pairing may be another person or server.
+        resources.forEach { it.get()?.clear() }
+    }
+
+    /**
+     * Every live account-scoped Resource, so sign-out can drop their in-memory
+     * data. Weak: screen-owned resources still go away with their screens.
+     */
+    private val resources = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<Resource<*>>>()
+
+    internal fun track(r: Resource<*>) {
+        resources.removeAll { it.get() == null }
+        resources.add(java.lang.ref.WeakReference(r))
     }
 
     fun clearSignedOutReason() {
@@ -72,6 +85,9 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
 
     /** Shared preferences resource: Home, Settings and the theme all observe the same copy. */
     val prefs by lazy { Resource(this, "prefs", Preferences.serializer()) { it.preferences() } }
+
+    /** The Areas tree (items + linked conversations); the tab and every item page read this one copy. */
+    val work by lazy { Resource(this, "work-items", WorkItemsResponse.serializer()) { it.workItems() } }
 
     /** Called after anything that changes what widgets show (actions, alerts, pushes). */
     var onDataChanged: () -> Unit = {}
@@ -113,13 +129,29 @@ class Resource<T>(
     private val _state = MutableStateFlow(Loadable<T>(data = cacheName?.let { graph.store.readCache(it, serializer) }, fromCache = cacheName != null))
     val state: StateFlow<Loadable<T>> = _state.asStateFlow()
 
+    init {
+        graph.track(this)
+    }
+
+    /** Forget everything (sign-out); the next refresh starts from nothing. */
+    fun clear() {
+        generation++
+        _state.value = Loadable()
+    }
+
+    /** Bumped by clear(): an answer that arrives after a sign-out belongs to the old account and is dropped. */
+    @Volatile private var generation = 0
+
     suspend fun refresh() {
+        val gen = generation
         _state.value = _state.value.copy(loading = true, error = null)
         try {
             val v = graph.call(fetch)
+            if (gen != generation) return
             cacheName?.let { graph.store.writeCache(it, serializer, v) }
             _state.value = Loadable(data = v)
         } catch (e: ApiException) {
+            if (gen != generation) return
             _state.value = _state.value.copy(loading = false, error = e.message)
         }
     }

@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Menu
@@ -51,6 +53,8 @@ import com.nickbolles.jarvis.data.Layout
 import com.nickbolles.jarvis.data.PairingState
 import com.nickbolles.jarvis.data.UnreadCount
 import com.nickbolles.jarvis.ui.screens.AlertsScreen
+import com.nickbolles.jarvis.ui.screens.AreasScreen
+import com.nickbolles.jarvis.ui.screens.ItemScreen
 import com.nickbolles.jarvis.ui.screens.CaptureSheet
 import com.nickbolles.jarvis.ui.screens.ChatListScreen
 import com.nickbolles.jarvis.ui.screens.CompassScreen
@@ -87,6 +91,7 @@ sealed interface LaunchRequest {
             val data: Uri = intent.data ?: return null
             if (data.scheme != "jarvis") return null
             PairLink.parse(data.toString())?.let { return Pair(it) }
+            if (data.host == "areas") return Routes.fromPath(data.toString())?.let { Route(it) }
             if (data.host == "open") {
                 val path = data.path.orEmpty() + (data.query?.let { "?$it" } ?: "")
                 if (path.startsWith("/capture")) {
@@ -104,6 +109,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 
 private val TABS = listOf(
     Tab(Routes.HOME, "Home", Icons.Outlined.Home, Icons.Filled.Home),
+    Tab(Routes.AREAS, "Areas", Icons.Outlined.AccountTree, Icons.Filled.AccountTree, capability = "work.use"),
     Tab(Routes.CHAT, "Chat", Icons.Outlined.ChatBubbleOutline, Icons.Filled.ChatBubble, capability = "hermes.chat"),
     Tab(Routes.ALERTS, "Alerts", Icons.Outlined.Notifications, Icons.Filled.Notifications),
     Tab(Routes.MORE, "More", Icons.Outlined.Menu, Icons.Filled.Menu),
@@ -195,6 +201,11 @@ private fun MainScaffold(graph: AppGraph, requests: MutableStateFlow<LaunchReque
         ) { padding ->
             NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(padding)) {
                 composable(Routes.HOME) { HomeScreen() }
+                composable(Routes.AREAS) { AreasScreen() }
+                composable(Routes.ITEM, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e -> ItemScreen(e.arguments?.getString("id")!!) }
+                composable(Routes.AREAS_SAVE, arguments = listOf(navArgument("text") { type = NavType.StringType; nullable = true; defaultValue = null })) { e ->
+                    AreasScreen(shareText = e.arguments?.getString("text")?.takeIf { it.isNotBlank() })
+                }
                 composable(Routes.CHAT) { ChatListScreen() }
                 composable(
                     Routes.CONVERSATION,
@@ -225,6 +236,7 @@ private fun BottomBar(nav: NavHostController, unread: Int, tabs: List<Tab>) {
     NavigationBar {
         tabs.forEach { tab ->
             val selected = current == tab.route || (tab.route == Routes.CHAT && current == Routes.CONVERSATION) ||
+                (tab.route == Routes.AREAS && current in setOf(Routes.ITEM, Routes.AREAS_SAVE)) ||
                 (tab.route == Routes.MORE && current in setOf(Routes.CONTROLS, Routes.SKYLIGHT, Routes.COMPASS, Routes.TODOS, Routes.SETTINGS, Routes.LAYOUT, Routes.SEARCH, Routes.FINANCE))
             NavigationBarItem(
                 selected = selected,
