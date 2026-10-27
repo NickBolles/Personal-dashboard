@@ -718,7 +718,9 @@ function ItemDetail({
     isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
     container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
     // A project with no items yet can still be worked directly.
-    item.kind === "project" && !isArea ? { label: "Start focused work", onSelect: () => setDialog("packet") } : null,
+    (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
+      ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
+      : null,
     { label: "Rename", hint: "F2", onSelect: () => setRenaming(item.title), disabled: item.builtIn },
     { label: "Move…", hint: "M", onSelect: () => onMove([item.id]), disabled: item.builtIn },
     { label: "Move up", onSelect: () => reorder.mutate("up") },
