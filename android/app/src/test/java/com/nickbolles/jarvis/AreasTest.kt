@@ -71,6 +71,14 @@ class AreasTest {
         assertEquals(listOf("a_home", "p_garage", "t_door"), WorkTree.rows(items, emptySet(), filter = "spring").map { it.item.id })
     }
 
+    @Test fun closedWorkStaysVisibleWhileItHoldsOpenWork() {
+        val child = items.first { it.id == "t_ladder" }.copy(id = "t_sub", parentId = "t_done", title = "Follow-up from the baseline")
+        val rows = WorkTree.rows(items + child, setOf("a_work", "p_v5", "t_done"))
+        assertTrue(rows.any { it.item.id == "t_done" })
+        assertTrue(rows.any { it.item.id == "t_sub" && it.depth == 3 })
+        assertEquals(listOf("a_work", "p_v5", "t_done", "t_sub"), WorkTree.rows(items + child, emptySet(), filter = "follow-up").map { it.item.id })
+    }
+
     @Test fun subtreeRowsKeepRealParents() {
         val sub = WorkTree.rows(items, emptySet(), showClosed = true, rootId = "p_garage")
         assertEquals(listOf("t_door", "n_wall"), sub.map { it.item.id })

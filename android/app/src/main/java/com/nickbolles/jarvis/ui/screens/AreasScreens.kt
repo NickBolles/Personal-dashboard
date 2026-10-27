@@ -123,6 +123,8 @@ class AreasViewModel(private val graph: AppGraph) : ViewModel() {
                 done?.let(onMessage)
                 onDone(item)
             } catch (e: ApiException) {
+                // Part of it may have happened (e.g. some path levels): re-read so a retry reuses them.
+                work.refresh()
                 onMessage(e.message ?: "That didn't work")
             } finally {
                 _busy.value = false

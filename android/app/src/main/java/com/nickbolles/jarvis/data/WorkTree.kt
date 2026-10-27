@@ -77,7 +77,14 @@ object WorkTree {
      * `rootId` walks one item's subtree (depth 0 = its children); items keep their real parents.
      */
     fun rows(items: List<WorkItem>, expanded: Set<String>, filter: String = "", showClosed: Boolean = false, rootId: String? = null): List<Row> {
-        val live = items.filter { !it.archived && (showClosed || !it.isClosed || it.isContainer) }
+        // Closed work stays visible while it holds open work (its children aren't closed with it).
+        val byIdAll = items.associateBy { it.id }
+        val holdsOpen = hashSetOf<String>()
+        if (!showClosed) for (i in items) if (!i.archived && !i.isClosed) {
+            var p = i.parentId?.let { byIdAll[it] }
+            while (p != null && holdsOpen.add(p.id)) p = p.parentId?.let { byIdAll[it] }
+        }
+        val live = items.filter { !it.archived && (showClosed || !it.isClosed || it.isContainer || it.id in holdsOpen) }
         val kids = live.groupBy { it.parentId }.mapValues { (_, v) -> v.sortedWith(compareBy({ it.sortOrder }, { it.createdAt })) }
         val q = filter.trim().lowercase()
         val keep: Set<String>? = if (q.isEmpty()) null else {
