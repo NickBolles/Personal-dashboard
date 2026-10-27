@@ -1,5 +1,7 @@
 package com.nickbolles.jarvis
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
@@ -137,5 +139,34 @@ class LargeTextScreenshotTest {
 
     @Test fun alerts_large_text() = compose.snapshot("alerts_large_text") {
         AlertsContent(Loadable(Fixtures.load("notifications", NotificationsResponse.serializer())), false, {}, {}, {}, { _, _ -> }, {})
+    }
+
+    /* Areas (fixture: src/test/resources/work-items.json, shaped like GET /api/work/items) */
+
+    @Test fun areas_tree() = compose.snapshot("areas") {
+        com.nickbolles.jarvis.ui.screens.AreasContent(Loadable(AreasTest.work()), setOf("a_home", "a_work", "p_garage"), false, {}, {}, { _, _ -> }, {}, {}, {})
+    }
+
+    @Test fun areas_tree_dark() = compose.snapshot("areas_dark", dark = true) {
+        com.nickbolles.jarvis.ui.screens.AreasContent(Loadable(AreasTest.work()), setOf("a_home", "a_work", "p_v5"), false, {}, {}, { _, _ -> }, {}, {}, {})
+    }
+
+    @Test fun area_page() = compose.snapshot("area_page") {
+        com.nickbolles.jarvis.ui.screens.ItemContent(Loadable(AreasTest.work()), "a_home", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, {})
+    }
+
+    @Test fun work_item_page() = compose.snapshot("work_item_page") {
+        com.nickbolles.jarvis.ui.screens.ItemContent(Loadable(AreasTest.work()), "t_door", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, {})
+    }
+
+    @Test fun chat_markdown() = compose.snapshot("chat_markdown") {
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(16.dp)) {
+            com.nickbolles.jarvis.ui.screens.Bubble(
+                "Here's a pass on the **20 overdue tasks** I can see. I haven't changed anything.\n\n" +
+                    "### Do this week (6)\n1. **Return ladder:** check today whether you can still return it.\n2. **Therapists:** shortlist 2 or 3 and send one inquiry.\n" +
+                    "3. **Downgrade Claude:** check your renewal date and usage.\n\n### Drop\n- Old *someday* items\n- `cleanup-script` follow-ups\n\n> Paste the other 12 and I'll do them too.",
+                mine = false,
+            )
+        }
     }
 }

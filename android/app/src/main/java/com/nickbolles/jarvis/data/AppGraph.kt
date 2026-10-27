@@ -73,6 +73,9 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
     /** Shared preferences resource: Home, Settings and the theme all observe the same copy. */
     val prefs by lazy { Resource(this, "prefs", Preferences.serializer()) { it.preferences() } }
 
+    /** The Areas tree (items + linked conversations); the tab and every item page read this one copy. */
+    val work by lazy { Resource(this, "work-items", WorkItemsResponse.serializer()) { it.workItems() } }
+
     /** Called after anything that changes what widgets show (actions, alerts, pushes). */
     var onDataChanged: () -> Unit = {}
 

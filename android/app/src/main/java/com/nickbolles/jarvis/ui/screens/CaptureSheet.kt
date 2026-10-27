@@ -80,6 +80,13 @@ fun CaptureSheet(graph: AppGraph, request: CaptureRequest, onDismiss: () -> Unit
                     }
                 }
             }
+            // Shared text can also go straight into Areas as a note (no Hermes run).
+            if (request.text.isNotBlank() && com.nickbolles.jarvis.ui.nav.can("work.use")) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { onDismiss(); onNavigate(Routes.areasSave(request.text)) },
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                ) { Text("Save to Areas instead") }
+            }
             error?.let { StatusBanner(it, tone = "danger", modifier = Modifier.padding(horizontal = 16.dp)) }
             Composer(
                 enabled = !sending,

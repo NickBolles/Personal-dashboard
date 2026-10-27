@@ -9,4 +9,7 @@
     <shortcut android:shortcutId="home" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_home">
         <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" android:data="jarvis://open/home-control" />
     </shortcut>
+    <shortcut android:shortcutId="areas" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_areas">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" android:data="jarvis://open/areas" />
+    </shortcut>
 </shortcuts>

@@ -49,6 +49,9 @@ import com.nickbolles.jarvis.R
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.data.WidgetAction
 import com.nickbolles.jarvis.data.WidgetSummary
+import com.nickbolles.jarvis.data.WorkItemsResponse
+import com.nickbolles.jarvis.data.WorkLabels
+import com.nickbolles.jarvis.data.WorkTree
 import com.nickbolles.jarvis.ui.components.PRIORITY_LABELS
 import com.nickbolles.jarvis.ui.components.SOURCE_LABELS
 import com.nickbolles.jarvis.ui.components.formatDue
@@ -294,4 +297,52 @@ fun CompassContent(context: Context, summary: WidgetSummary?, now: Instant = Ins
 
 class CompassWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = CompassWidget()
+}
+
+/* Areas: next actions ----------------------------------------------------- */
+
+/** Open work with a next action from Areas (in progress first); tap a row to open the item. */
+class AreasNextWidget : GlanceAppWidget() {
+    override val sizeMode = SizeMode.Responsive(setOf(DpSize(180.dp, 110.dp), DpSize(250.dp, 180.dp), DpSize(320.dp, 260.dp)))
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val work = readWorkCache(context)
+        val isPaired = paired(context)
+        provideContent { GlanceTheme { if (!isPaired) NotPaired(context) else AreasNextContent(context, work) } }
+    }
+}
+
+@Composable
+fun AreasNextContent(context: Context, work: WorkItemsResponse?) {
+    val size = LocalSize.current
+    val n = when {
+        size.height < 150.dp -> 1
+        size.height < 250.dp -> 3
+        else -> 5
+    }
+    WidgetFrame {
+        Column(GlanceModifier.fillMaxSize()) {
+            Row(GlanceModifier.fillMaxWidth().clickable(openApp(context, "/areas"))) { Title("Next actions") }
+            Spacer(GlanceModifier.height(8.dp))
+            val items = work?.let { WorkTree.nextActions(it.items, limit = n) }.orEmpty()
+            when {
+                work == null -> Text("Open Areas in Jarvis to load", style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
+                items.isEmpty() -> Text("No next actions. Add one to an item in Areas.", style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 14.sp))
+                else -> Column {
+                    items.forEach { i ->
+                        Column(GlanceModifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            Column(GlanceModifier.fillMaxWidth().background(GlanceTheme.colors.surface).cornerRadius(14.dp).padding(10.dp).clickable(openApp(context, "/areas/${Uri.encode(i.id)}"))) {
+                                Text(i.nextAction, maxLines = 2, style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = 14.sp))
+                                Text(listOf(i.title, WorkLabels.status(i.status)).joinToString(" · "), maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+class AreasNextWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = AreasNextWidget()
 }

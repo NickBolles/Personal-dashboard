@@ -232,6 +232,40 @@ class JarvisApi(
         }
     }
 
+    /* -------------------------------------------------------------- areas */
+
+    suspend fun workItems() = get("/api/work/items", WorkItemsResponse.serializer())
+
+    suspend fun createWorkItem(kind: String, title: String, parentId: String?, summary: String? = null, nextAction: String? = null) = post(
+        "/api/work/items",
+        buildJsonObject {
+            put("kind", kind)
+            put("title", title.take(200))
+            put("parentId", JsonPrimitive(parentId))
+            summary?.takeIf { it.isNotBlank() }?.let { put("summary", it.take(20000)) }
+            nextAction?.takeIf { it.isNotBlank() }?.let { put("nextAction", it.take(2000)) }
+        },
+        WorkItemEnvelope.serializer(),
+    ).item
+
+    /** Quick add with a path ("Area / Project / item"): reuses levels by title, creates the rest. */
+    suspend fun createWorkPath(parentId: String?, path: List<String>, kind: String? = null) = post(
+        "/api/work/items/path",
+        buildJsonObject {
+            put("parentId", JsonPrimitive(parentId))
+            put("path", buildJsonArray { path.forEach { add(JsonPrimitive(it.take(200))) } })
+            kind?.let { put("kind", it) }
+        },
+        WorkPathResult.serializer(),
+    )
+
+    suspend fun updateWorkItem(id: String, fields: JsonObject) = send("PATCH", "/api/work/items/${enc(id)}", fields, WorkItemEnvelope.serializer()).item
+
+    suspend fun moveWorkItem(id: String, parentId: String?) =
+        post("/api/work/items/${enc(id)}/move", buildJsonObject { put("parentId", JsonPrimitive(parentId)) }, WorkItemEnvelope.serializer()).item
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
+
     /* ------------------------------------------------------------ people */
 
     suspend fun authMe() = get("/api/auth/me", AuthMe.serializer())
