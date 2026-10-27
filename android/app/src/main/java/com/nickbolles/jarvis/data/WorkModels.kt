@@ -3,7 +3,7 @@ package com.nickbolles.jarvis.data
 import kotlinx.serialization.Serializable
 
 /*
- * Areas (/api/work/*): the same tree the web shows. Areas and projects
+ * Areas (the /api/work routes): the same tree the web shows. Areas and projects
  * organise work; threads, investigations and notes are the work itself;
  * conversation nodes point at a Hermes/Claude session.
  */
