@@ -68,7 +68,7 @@ export function AiSettingsView() {
           New jobs stop at the daily budget; each job offers Run anyway.
         </p>
         <form
-          className="grid gap-2 sm:grid-cols-4"
+          className="grid grid-cols-2 gap-2 sm:grid-cols-4"
           onSubmit={(e) => {
             e.preventDefault();
             const f = new FormData(e.currentTarget);

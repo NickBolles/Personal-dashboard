@@ -74,9 +74,9 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
   const controlsFresh = controls.data && now - new Date(controls.data.fetchedAt).getTime() < 60_000;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
       <PageHeader
-        title="Home"
+        title="House"
         subtitle={
           can("home_assistant.view") ? "Exceptions, doors, lights and cameras. Physical controls are confirmed and read back." : "The household calendar."
         }

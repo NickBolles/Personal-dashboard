@@ -334,7 +334,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
             </Link>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+              {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
+              <div className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
                 {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                 {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
                 {readOnly ? (
@@ -353,7 +354,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   </span>
                 ) : null}
                 {areaCtx ? (
-                  <span className="inline-flex flex-wrap items-center gap-1" data-testid="area-chip">
+                  <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
                     <button
                       type="button"
                       className="chip cursor-pointer hover:border-line-strong"
@@ -420,7 +421,21 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
         <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
           {detail.timeline.length === 0 && !showLive && !pendingInput ? (
-            <p className="py-10 text-center text-muted">Say hello to start the conversation.</p>
+            <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
+              <p className="text-[0.9375rem] font-semibold">Start the conversation</p>
+              <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
+              <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
+                <li className="chip">
+                  <kbd className="kbd">@</kbd> people, devices, work
+                </li>
+                <li className="chip">
+                  <kbd className="kbd">#</kbd> PRs and issues
+                </li>
+                <li className="chip">
+                  <kbd className="kbd">/</kbd> commands
+                </li>
+              </ul>
+            </div>
           ) : null}
           <ol className="space-y-3">
             {detail.timeline.map((item) => (
@@ -921,7 +936,7 @@ function Composer({
       ? "Answer the approval first"
       : running
         ? "Add guidance…"
-        : `Message ${who} — @ reference, # PR, / command`;
+        : `Message ${who}…`;
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
   return (

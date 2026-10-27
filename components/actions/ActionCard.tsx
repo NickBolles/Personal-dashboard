@@ -109,13 +109,44 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
       )
     ) : null;
 
+  const why =
+    rank && action.why?.length ? (
+      <details className="jv-why group min-w-0 open:basis-full">
+        <summary className="inline-flex min-h-6 items-center gap-0.5 rounded-[6px] px-1 text-xs font-medium text-muted hover:bg-surface-2 hover:text-text">
+          <span>Why this?</span>
+          <span className="sr-only"> ({action.title})</span>
+          <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="jv-rise space-y-3 px-1 pt-1 pb-1">
+          <ul className="space-y-0.5 text-sm text-muted">
+            {action.why.map((w) => (
+              <li key={w}>· {w}</li>
+            ))}
+          </ul>
+          <FeedbackBar
+            canHide={rank.tier !== "critical"}
+            target={{
+              kind: "action",
+              id: action.id,
+              category: rank.category,
+              title: action.title,
+              fingerprint: rank.fingerprint,
+              why: action.why,
+              sources: [action.source],
+            }}
+          />
+        </div>
+      </details>
+    ) : null;
+
   // Phones: title/meta beside the menu, primary action below. Wider: one row — content, action, menu.
+  // Two text lines: title, then source · status · detail · due · "Why this?" (design review D4).
   return (
     <article
       aria-labelledby={titleId}
       data-tier={rank?.tier}
       className={cx(
-        "card grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-2 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center dense:py-2.5",
+        "card grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 px-3.5 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:py-2 dense:py-2",
         rank && "jv-accent pl-4",
         done && "jv-done",
       )}
@@ -139,48 +170,21 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           </Badge>
           {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
           {rank?.tier === "compass" ? <Badge tone="violet">Compass focus</Badge> : null}
+          {!compact && action.detail ? <span className="min-w-0 text-xs text-muted">{action.detail}</span> : null}
+          {due || stale ? (
+            <span className="text-xs text-muted">
+              {due ? <span>{due}</span> : null}
+              {due && stale ? " · " : null}
+              {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
+            </span>
+          ) : null}
+          {why}
         </div>
-        {!compact && action.detail ? <p className="text-sm text-muted">{action.detail}</p> : null}
-        {due || stale ? (
-          <p className="text-xs text-muted">
-            {due ? <span>{due}</span> : null}
-            {due && stale ? " · " : null}
-            {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
-          </p>
-        ) : null}
       </div>
       <div className="col-start-2 row-start-1 self-start sm:col-start-3 sm:self-center">
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
       {primaryButton ? <div className="col-start-1 row-start-2 flex gap-2 sm:col-start-2 sm:row-start-1">{primaryButton}</div> : null}
-      {rank && action.why?.length ? (
-        <details className="jv-why group col-span-full -mx-1 -mt-1">
-          <summary className="tap inline-flex items-center gap-1 rounded-[6px] px-1 text-xs font-medium text-muted hover:text-text dense:min-h-6">
-            <span>Why this?</span>
-            <span className="sr-only"> ({action.title})</span>
-            <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
-          </summary>
-          <div className="jv-rise space-y-3 px-1 pt-1 pb-1">
-            <ul className="space-y-0.5 text-sm text-muted">
-              {action.why.map((w) => (
-                <li key={w}>· {w}</li>
-              ))}
-            </ul>
-            <FeedbackBar
-              canHide={rank.tier !== "critical"}
-              target={{
-                kind: "action",
-                id: action.id,
-                category: rank.category,
-                title: action.title,
-                fingerprint: rank.fingerprint,
-                why: action.why,
-                sources: [action.source],
-              }}
-            />
-          </div>
-        </details>
-      ) : null}
     </article>
   );
 }

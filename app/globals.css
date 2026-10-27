@@ -86,7 +86,9 @@
   --color-ok-soft: var(--ok-soft);
   --color-violet: var(--violet);
   --color-violet-soft: var(--violet-soft);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Emoji fallbacks: source titles carry emoji (Skylight) that would otherwise render as tofu. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius-card: var(--radius);
   /* Type scale: hierarchy comes from weight and colour, not size. text-base stays 16px (inputs: no iOS zoom). */
@@ -132,7 +134,8 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  @media (min-width: 1024px) and (pointer: fine) {
+  /* Tablets: 14px body so pages don't read as a blown-up phone. */
+  @media (min-width: 640px) {
     body {
       font-size: 0.875rem;
       line-height: 1.45;
@@ -186,6 +189,14 @@
   .tap {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  /* Tablets (≥640px): still finger-sized, no longer oversized. */
+  @media (min-width: 640px) {
+    .tap {
+      min-height: 40px;
+      min-width: 40px;
+    }
   }
 
   @media (min-width: 1024px) and (pointer: fine) {
@@ -334,6 +345,11 @@
     font-weight: 600;
     box-shadow: var(--shadow);
   }
+  @media (min-width: 640px) {
+    .seg-item {
+      min-height: 36px;
+    }
+  }
   @media (min-width: 1024px) and (pointer: fine) {
     .seg-item {
       min-height: 28px;
@@ -380,6 +396,16 @@
     background: var(--brand-gradient);
     flex: none;
   }
+}
+
+/* Single-line horizontal strip (chips, filters) without a visible scrollbar. */
+.scroll-x-clean {
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.scroll-x-clean::-webkit-scrollbar {
+  display: none;
 }
 
 .prose-chat {
