@@ -141,7 +141,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
               data-command={row.kind === "command" ? row.c.id : undefined}
               onMouseEnter={() => setActive(i)}
               onClick={() => go(row)}
-              className={cx("flex min-h-11 cursor-pointer items-center gap-3 rounded-[8px] px-2.5 py-1.5 dense:min-h-9", i === active && "bg-accent-soft")}
+              className={cx(
+                "flex min-h-11 cursor-pointer items-center gap-3 rounded-[8px] px-2.5 py-1.5 sm:min-h-10 dense:min-h-8",
+                i === active && "bg-accent-soft",
+                // a hairline between command groups, so the group label only needs saying once
+                i > 0 && row.kind === "command" && rows[i - 1]?.kind === "command" && (rows[i - 1] as typeof row).c.group !== row.c.group && "mt-1.5",
+              )}
             >
               {row.kind === "command" ? (
                 <>
@@ -149,7 +154,11 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     ›
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{row.c.label}</span>
-                  <span className="shrink-0 text-xs text-muted">Command · {row.c.group}</span>
+                  {i === 0 || rows[i - 1]?.kind !== "command" || (rows[i - 1] as typeof row).c.group !== row.c.group ? (
+                    <span className="eyebrow shrink-0">{row.c.group}</span>
+                  ) : (
+                    <span className="sr-only">{row.c.group}</span>
+                  )}
                 </>
               ) : (
                 <>
@@ -170,17 +179,30 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
           ))}
         </ul>
         <div className="border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted" role="status">
-          {!debounced
-            ? "Type to search or filter commands. ↑↓ to move, Enter to open. Hold the dock orb (or Ctrl+.) for the action map."
-            : res.isError
-              ? `Search failed: ${(res.error as Error).message}`
-              : res.data && !results.length
-                ? `Nothing found for “${debounced}”.`
-                : res.data?.partial.length
-                  ? `${results.length} results. ${res.data.partial.join(", ")} didn't answer in time.`
-                  : results.length
-                    ? `${results.length} result${results.length === 1 ? "" : "s"}`
-                    : "Searching…"}
+          {!debounced ? (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                <kbd className="kbd">↑</kbd> <kbd className="kbd">↓</kbd> move
+              </span>
+              <span>
+                <kbd className="kbd">↵</kbd> open
+              </span>
+              <span>
+                <kbd className="kbd">Ctrl</kbd> <kbd className="kbd">.</kbd> or hold the orb: action map
+              </span>
+              <span className="sr-only">Type to search or filter commands.</span>
+            </span>
+          ) : res.isError ? (
+            `Search failed: ${(res.error as Error).message}`
+          ) : res.data && !results.length ? (
+            `Nothing found for “${debounced}”.`
+          ) : res.data?.partial.length ? (
+            `${results.length} results. ${res.data.partial.join(", ")} didn't answer in time.`
+          ) : results.length ? (
+            `${results.length} result${results.length === 1 ? "" : "s"}`
+          ) : (
+            "Searching…"
+          )}
         </div>
       </div>
     </div>

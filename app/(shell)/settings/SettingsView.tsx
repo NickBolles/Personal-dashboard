@@ -65,8 +65,8 @@ export function SettingsView() {
   return (
     <Page>
       <PageHeader title="Settings" />
-      <div className="grid items-start gap-x-6 gap-y-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
-        <nav aria-labelledby="settings-sections-h" className="lg:sticky lg:top-5">
+      <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-[minmax(0,248px)_minmax(0,1fr)] lg:gap-x-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+        <nav aria-labelledby="settings-sections-h" className="md:sticky md:top-4">
           <SectionLabel id="settings-sections-h">Sections</SectionLabel>
           <ul className="card rows overflow-hidden p-0">
             {links.map((l) => (

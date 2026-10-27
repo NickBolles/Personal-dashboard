@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/components/access";
+import { Badge, PageHeader } from "@/components/ui";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import {
   EQUIPMENT,
@@ -17,10 +18,11 @@ import {
   type WorkoutSet,
 } from "@/lib/workouts";
 
-const button = "tap rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50";
-const primary = `${button} bg-accent text-accent-contrast`;
-const secondary = `${button} bg-surface-2`;
-const field = "min-w-0 w-full rounded-xl bg-surface-2 px-3 py-3 tabular-nums";
+// Shared control language (ui.tsx): 9px radius, hairline borders, density from `.tap`.
+const button = "tap inline-flex items-center justify-center rounded-[9px] border px-3.5 text-sm font-medium transition-colors disabled:opacity-50";
+const primary = `${button} border-accent bg-accent font-semibold text-accent-contrast hover:opacity-90`;
+const secondary = `${button} border-line bg-surface hover:border-line-strong hover:bg-surface-2`;
+const field = "min-w-0 w-full rounded-[8px] border border-line-strong bg-surface px-3 py-2 tabular-nums sm:py-1.5";
 type Save = { id: string; version: number; requestId: string; session: WorkoutSession };
 function today() {
   const d = new Date();
@@ -169,22 +171,13 @@ export function WorkoutView() {
 
   if (!can("workouts.use")) return <p>You do not have access to workouts.</p>;
   return (
-    <div className="mx-auto max-w-3xl space-y-7 px-4 py-6 sm:px-6">
-      <header className="flex items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Your training, simplified</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Workouts</h1>
-        </div>
-        <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">Private</span>
-      </header>
-      <nav aria-label="Workout views" className="flex gap-2 rounded-2xl bg-surface p-1">
+    <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
+      <div className="[&>header]:mb-0">
+        <PageHeader title="Workouts" subtitle="Your training, simplified." actions={<Badge tone="accent">Private</Badge>} />
+      </div>
+      <nav aria-label="Workout views" className="seg flex w-full">
         {(["train", "history"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            aria-pressed={tab === t}
-            className={`${button} flex-1 ${tab === t ? "bg-accent-soft text-accent" : "text-muted"}`}
-          >
+          <button key={t} type="button" onClick={() => setTab(t)} aria-pressed={tab === t} className="seg-item flex-1">
             {t === "train" ? "Train" : `History · ${history.length}`}
           </button>
         ))}

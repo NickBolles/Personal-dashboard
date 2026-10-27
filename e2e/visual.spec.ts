@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mock, setHa } from "./helpers";
 import { homeVisual } from "./fixtures/home";
 import { alertsVisual, areasVisual, chatVisual, inboxVisual, visualNow } from "./fixtures/chat-alerts";
+import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -136,4 +137,24 @@ test("visual: configuration transfer", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Configuration transfer" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page).toHaveScreenshot("configuration-transfer.png", { fullPage: true });
+});
+
+// Every Markdown element in one assistant message (fixture shared with test/markdown.test.tsx).
+test("visual: markdown in a chat message", async ({ page }) => {
+  await page.clock.setFixedTime(new Date(visualNow));
+  const timeline = [...chatVisual.timeline, { kind: "assistant" as const, id: "visual-markdown", text: MARKDOWN_FIXTURE, at: visualNow }];
+  await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+  await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: { ...chatVisual, timeline } }));
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.goto("/chat/sess_morning");
+  const message = page.locator(".md").filter({ hasText: "Rollout plan" });
+  await expect(message.getByRole("heading", { name: "Rollout plan" })).toBeVisible();
+  await expect(message.getByRole("table")).toBeVisible();
+  await expect(message.getByRole("button", { name: "Copy ts" })).toBeVisible();
+  await expect(message.locator('a[href^="javascript"]')).toHaveCount(0);
+  // A wide table scrolls inside its own box; the page never scrolls sideways.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.waitForTimeout(300);
+  await expect(message).toHaveScreenshot("markdown.png");
 });

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ErrorNote, Spinner, cx } from "@/components/ui";
-import { StatusBadge, StatusDot, fmtDate, useWorkMutation } from "@/components/work/common";
+import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
 import type { InboxResponse, TodayCard, TodayResponse } from "@/lib/work";
 
 export function useToday() {
@@ -15,16 +15,34 @@ export function useInbox() {
 
 type Kpi = { key: string; label: string; value: number | null; tone?: "warn" | "danger" | "ok" | "accent"; onClick?: () => void };
 
-/** The Command Center KPI strip (Direction C): dense numbers, each a way in. */
+/** Short date for list meta: the year only when it isn't this year (design review D16). */
+function fmtShort(d: string) {
+  const [y, m, day] = d.slice(0, 10).split("-").map(Number);
+  const sameYear = y === new Date().getFullYear();
+  return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * The Command Center KPI strip (Direction C): one hairline bar of dense numbers,
+ * each a way in. Always one row; phones scroll it sideways.
+ */
 export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
   return (
-    <ul aria-label="Work at a glance" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+    <ul
+      aria-label="Work at a glance"
+      className="scroll-x-clean grid auto-cols-[minmax(144px,1fr)] grid-flow-col gap-px rounded-[10px] border border-line bg-line"
+    >
       {kpis.map((k) => {
         const body = (
           <>
             <span
               className={cx(
-                "block text-[22px] leading-7 font-semibold tracking-tight tabular-nums",
+                "block text-[19px] leading-6 font-semibold tracking-tight tabular-nums",
                 !!k.value && k.tone === "warn" && "text-warn",
                 !!k.value && k.tone === "danger" && "text-danger",
                 !!k.value && k.tone === "ok" && "text-ok",
@@ -33,17 +51,22 @@ export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
             >
               {k.value ?? "—"}
             </span>
-            <span className="block text-xs text-muted">{k.label}</span>
+            <span className="block truncate text-[11.5px] leading-4 text-muted">{k.label}</span>
           </>
         );
         return (
-          <li key={k.key} data-kpi={k.key}>
+          <li key={k.key} data-kpi={k.key} className="min-w-0 bg-surface">
             {k.onClick ? (
-              <button type="button" onClick={k.onClick} className="tap wk-kpi" aria-label={`${k.label}: ${k.value ?? "unknown"}`}>
+              <button
+                type="button"
+                onClick={k.onClick}
+                className="tap block w-full px-3 py-1.5 text-left hover:bg-surface-2"
+                aria-label={`${k.label}: ${k.value ?? "unknown"}`}
+              >
                 {body}
               </button>
             ) : (
-              <div className="wk-kpi">{body}</div>
+              <div className="px-3 py-1.5">{body}</div>
             )}
           </li>
         );
@@ -70,20 +93,34 @@ function CardList({
   /** a warn accent on the rows (proof due) */
   urgent?: boolean;
 }) {
+  // Empty: one quiet line instead of a full panel (design review D9).
+  if (!cards.length)
+    return (
+      <section
+        aria-labelledby={id}
+        className="flex min-w-0 items-baseline gap-2 self-start rounded-[10px] border border-dashed border-line px-3 py-2"
+        data-empty
+      >
+        <h3 id={id} className="wk-label shrink-0">
+          {title}
+        </h3>
+        <p className="min-w-0 truncate text-[12.5px] text-muted">{empty}</p>
+      </section>
+    );
   return (
     <section aria-labelledby={id} className="wk-card min-w-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-1.5">
         <h3 id={id} className="wk-label">
           {title}
         </h3>
-        {cards.length ? <span className="text-xs text-muted tabular-nums">{cards.length}</span> : null}
+        <span className="text-xs text-muted tabular-nums">{cards.length}</span>
       </div>
       {cards.length ? (
         <ul className="wk-rows">
           {cards.map((c) => (
             <li
               key={c.id}
-              className={cx("wk-row-hover flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2", urgent && "border-l-[3px] border-l-warn pl-[9px]")}
+              className={cx("wk-row-hover flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5", urgent && "border-l-[3px] border-l-warn pl-[9px]")}
             >
               <StatusDot status={c.status} />
               <div className="min-w-0 flex-1 basis-48">
@@ -95,7 +132,7 @@ function CardList({
                   {c.title}
                 </button>
                 <p className="text-xs break-words text-muted">
-                  {[c.path, c.detail, c.due ? `due ${fmtDate(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
+                  {[c.path, c.detail, c.due ? `due ${fmtShort(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>
               </div>
               <span className="ml-auto flex shrink-0 items-center gap-2">
@@ -126,7 +163,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const [y, m, d] = t.today.split("-").map(Number);
   const dateLabel = new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
   return (
-    <section aria-labelledby="today-title" className="space-y-3" data-testid="work-today">
+    <section aria-labelledby="today-title" className="space-y-2.5" data-testid="work-today">
       <div>
         <p className="wk-eyebrow">{dateLabel}</p>
         <h2 id="today-title" className="text-xl leading-tight font-semibold tracking-tight">
@@ -180,7 +217,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         action={{ label: "Continue" }}
         onOpen={onOpen}
       />
-      <div className="grid gap-3 xl:grid-cols-2">
+      <div className="grid gap-2.5 xl:grid-cols-2">
         <CardList
           id="today-proof"
           title="Proof due"
