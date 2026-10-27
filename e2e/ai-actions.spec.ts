@@ -30,9 +30,9 @@ test("research an item: job chip, report viewer with sources, use a next action"
   const area = await create(page, { kind: "area", title: `AI area ${nonce}` });
   const item = await create(page, { kind: "thread", title: `Pick a criteria engine ${nonce}`, parentId: area.id });
   await page.goto(`/areas?item=${item.id}`);
-  const start = page.getByTestId("ai-get-started").getByRole("button", { name: /Get started/ });
-  await expect(start).toBeVisible();
-  await start.click();
+  // AI actions live in the item's ⋯ menu (one primary action per page).
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name: /Research it/ }).click();
   const sheet = page.getByRole("dialog", { name: "Research it" });
   await expect(sheet.getByText("Finance is never sent to AI.")).toBeVisible();
   await expectNoHorizontalOverflow(page);
@@ -58,7 +58,7 @@ test("make a plan → create child items", async ({ page }) => {
   const area = await create(page, { kind: "area", title: `Plan area ${nonce}` });
   const item = await create(page, { kind: "thread", title: `Ship the evaluator ${nonce}`, parentId: area.id });
   await page.goto(`/areas?item=${item.id}`);
-  await page.getByTestId("ai-get-started").getByRole("button", { name: "More AI actions" }).click();
+  await page.getByRole("button", { name: "More item actions" }).click();
   await page.getByRole("menuitem", { name: /Make a plan/ }).click();
   await page.getByRole("dialog", { name: "Make a plan" }).getByTestId("ai-start").click();
   const row = page.getByTestId("ai-report-row").first();
@@ -74,7 +74,9 @@ test("Finance areas offer no AI actions", async ({ page }) => {
   const item = await create(page, { kind: "thread", title: `Compare savings ${nonce}`, parentId: fin.id });
   await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { name: `Compare savings ${nonce}` })).toBeVisible();
-  await expect(page.getByTestId("ai-get-started")).toHaveCount(0);
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await expect(page.getByRole("menuitem", { name: /Research it/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   const r = await page.request.post(`/api/work/items/${item.id}/ai-actions`, {
     data: { action: "research", clientKey: `e2e${nonce}` },
     headers: { "x-jarvis-csrf": "1" },

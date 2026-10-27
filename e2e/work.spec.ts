@@ -11,10 +11,16 @@ import { appPost, expectNoHorizontalOverflow } from "./helpers";
 function treeItem(page: Page, title: string) {
   return page.getByRole("treeitem", { name: new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")},`) });
 }
-/** Phones fold the tree behind the Work header's Areas toggle while an item is open. */
+/** Phones show the tree on the Areas section (nav row); desktop always shows it in the left pane. */
 async function showTree(page: Page) {
-  const toggle = page.getByTestId("work-tree-toggle");
-  if ((await toggle.isVisible()) && (await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+  const tree = page.getByRole("tree", { name: "Areas" });
+  if (!(await tree.isVisible())) await page.getByRole("navigation", { name: "Areas sections" }).getByRole("button", { name: "Areas", exact: true }).click();
+  await expect(tree).toBeVisible();
+}
+/** Item actions live in the ⋯ menu. */
+async function itemAction(page: Page, name: string) {
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
 }
 /** Phones fold secondary item sections (Details, Dependencies, Links) into disclosures. */
 async function openSection(page: Page, testId: string) {
@@ -30,7 +36,11 @@ async function pick(page: Page, title: string) {
 }
 async function newChild(page: Page, parent: string, title: string) {
   await pick(page, parent);
-  await page.getByRole("button", { name: "New child", exact: true }).click();
+  // Containers lead with "+ Project" (areas) / "+ Item" (projects).
+  await page
+    .getByRole("article")
+    .getByRole("button", { name: /^\+ (Project|Item)$/ })
+    .click();
   await page.getByRole("dialog").getByLabel("Title", { exact: true }).fill(title);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: title, exact: true })).toBeVisible();
@@ -54,7 +64,8 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(page.getByRole("heading", { level: 1, name: "Areas" })).toBeVisible();
   await expect(treeItem(page, "Miscellaneous")).toBeVisible();
 
-  await page.getByRole("button", { name: "New area" }).click();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Area", exact: true }).click();
   await page.getByRole("dialog").getByLabel("Title", { exact: true }).fill("Momentum Bets");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Momentum Bets" })).toBeVisible();
@@ -108,7 +119,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(handoff).toContainText("## Next action\nOpen the evaluator contract PR");
 
   // Link the PR, then mark it merged: validation is required, so it waits.
-  await page.getByRole("button", { name: "Link PR" }).click();
+  await itemAction(page, "Link PR");
   await page.getByLabel("GitHub PR URL").fill("https://github.com/NickBolles/momentum-bets/pull/128");
   await page.getByRole("button", { name: "Add link" }).click();
   await expect(page.getByText("NickBolles/momentum-bets#128", { exact: true })).toBeVisible();
@@ -317,7 +328,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect(page.getByRole("heading", { level: 2, name: "V5 evaluator contract" })).toBeVisible();
 
   // Picker: search your conversations and link one (no pasting ids).
-  await page.getByRole("button", { name: "Link conversation" }).click();
+  await itemAction(page, "Link conversation");
   const dialog = page.getByRole("dialog", { name: "Link a conversation" });
   await dialog.getByLabel("Search conversations").fill(`Picker check ${nonce}`);
   await dialog.getByRole("button", { name: `Link Picker check ${nonce}` }).click();
@@ -394,6 +405,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
     .toBe("V5 evaluator contract|V2 baseline|V3 parity|V4 lessons");
 
   // Undo an archive from the item menu.
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
   await page.getByRole("button", { name: "More item actions" }).click();
   await page.getByRole("menuitem", { name: "Archive" }).click();
   await expect.poll(async () => (await items(page)).some((i) => i.id === ids["V5 evaluator contract"])).toBe(false);

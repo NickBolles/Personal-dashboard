@@ -8,49 +8,90 @@ import { Badge, cx, useToast, type Tone } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/work";
 
-const VIEWS = [
-  { href: "/areas", label: "Tree", match: (p: string) => p === "/areas" },
-  { href: "/areas/timeline", label: "Timeline", match: (p: string) => p.startsWith("/areas/timeline") },
-  { href: "/areas/dashboard", label: "Dashboard", match: (p: string) => p.startsWith("/areas/dashboard") },
-  { href: "/areas/map", label: "Map", match: (p: string) => p.startsWith("/areas/map") },
+export type AreasSection = "today" | "inbox" | "tree" | "timeline" | "dashboard" | "map";
+
+const SECTIONS: { key: AreasSection; href: string; label: string; icon?: string }[] = [
+  { key: "today", href: "/areas", label: "Today", icon: "☀" },
+  { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: "↓" },
+  { key: "tree", href: "/areas?view=tree", label: "Areas", icon: "▸" },
+  { key: "timeline", href: "/areas/timeline", label: "Timeline" },
+  { key: "dashboard", href: "/areas/dashboard", label: "Dashboard" },
+  { key: "map", href: "/areas/map", label: "Map" },
 ];
+const IN_PAGE = new Set<AreasSection>(["today", "inbox", "tree"]);
 
 /**
- * Areas section wrapper. There is no separate top bar any more (design review
- * D3: app rail + one secondary nav): the Tree / Timeline / Dashboard / Map
- * views are a segmented control in each page's header. `.work-ui` scopes the
- * hub's density rules (components/work/work.css).
+ * Areas section wrapper. `.work-ui` scopes the hub's density rules
+ * (components/work/work.css).
  */
 export function WorkShell({ children }: { children: ReactNode }) {
   return <div className="work-ui">{children}</div>;
 }
 
-/** Tree · Timeline · Dashboard · Map as one compact segmented control (in the page header). */
-export function AreasViewSwitch({ className }: { className?: string }) {
+/**
+ * The one Areas navigation row: Today · Inbox · Areas │ Timeline · Dashboard · Map.
+ * On /areas the first three switch in place (`onPick`, rendered as buttons);
+ * everywhere else every entry is a link. Scrolls sideways on narrow phones.
+ */
+export function AreasNav({
+  current,
+  onPick,
+  inboxCount,
+  className,
+}: {
+  current: AreasSection | null;
+  onPick?: (k: "today" | "inbox" | "tree") => void;
+  inboxCount?: number;
+  className?: string;
+}) {
   const path = usePathname();
+  const active = current ?? SECTIONS.find((s) => !IN_PAGE.has(s.key) && path.startsWith(s.href))?.key ?? null;
   return (
-    <nav aria-label="Areas views" className={className}>
-      <ul className="seg">
-        {VIEWS.map((t) => (
-          <li key={t.href}>
-            <Link href={t.href} aria-current={t.match(path) ? "page" : undefined} className="seg-item">
-              {t.label}
-            </Link>
-          </li>
-        ))}
+    <nav aria-label="Areas sections" className={cx("wk-nav", className)}>
+      <ul>
+        {SECTIONS.map((s, n) => {
+          const body = (
+            <>
+              {s.icon ? (
+                <span aria-hidden="true" className="text-muted">
+                  {s.icon}
+                </span>
+              ) : null}
+              <span>{s.label}</span>
+              {s.key === "inbox" && inboxCount ? (
+                <span className="wk-count" aria-label={`${inboxCount} waiting`}>
+                  {inboxCount}
+                </span>
+              ) : null}
+            </>
+          );
+          return (
+            <li key={s.key} className={n === 3 ? "wk-nav-sep" : undefined}>
+              {onPick && IN_PAGE.has(s.key) ? (
+                <button type="button" className="wk-nav-item" aria-current={active === s.key ? "page" : undefined} onClick={() => onPick(s.key as "today")}>
+                  {body}
+                </button>
+              ) : (
+                <Link href={s.href} className="wk-nav-item" aria-current={active === s.key ? "page" : undefined}>
+                  {body}
+                </Link>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );
 }
 
 /**
- * Compact page header for Work sub-pages (Timeline, Dashboard, Map): eyebrow,
- * one-line title and actions on a single row; the description is one muted line.
+ * Compact page header for Areas sub-pages (Timeline, Dashboard, Map): the
+ * nav row, then eyebrow/title and actions on one row.
  */
 export function WorkPageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <header className="mb-3 space-y-2">
-      <AreasViewSwitch />
+      <AreasNav current={null} />
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           {eyebrow ? <p className="wk-eyebrow">{eyebrow}</p> : null}

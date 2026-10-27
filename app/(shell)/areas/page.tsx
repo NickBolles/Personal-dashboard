@@ -15,7 +15,7 @@ export default async function WorkPage({ searchParams }: { searchParams: Promise
       // Palette commands navigate here with ?do=…: remount so the requested action opens.
       key={`${item ?? ""}|${view ?? ""}|${action ?? ""}`}
       initialItem={typeof item === "string" ? item : undefined}
-      initialView={view === "inbox" ? "inbox" : "today"}
+      initialView={view === "inbox" || view === "tree" ? view : "today"}
       initialAction={typeof action === "string" ? action : undefined}
       initialCapture={typeof capture === "string" ? capture.slice(0, 2000) : undefined}
     />

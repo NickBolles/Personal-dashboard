@@ -19,6 +19,8 @@ import {
   parseGithubUrl,
   safeHref,
   type createItemSchema,
+  type createPathSchema,
+  defaultChildKind,
   type ExternalState,
   type GithubRefreshResult,
   type linkSchema,
@@ -431,6 +433,56 @@ export function createItem(user: CurrentUser, body: z.infer<typeof createItemSch
   });
   audit({ actor: user.id, action: "work.create", source: "work", sourceRecord: id, result: "ok", correlationId, detail: { kind: body.kind } });
   return toItem(ownedItem(user.id, id));
+}
+
+/**
+ * Quick add with a path (createPathSchema). Reuses an existing, unarchived
+ * child with the same title (case-insensitive) at each level; creates missing
+ * levels as projects (a missing first level without a parent as an area). The
+ * last segment is always new. All in one transaction.
+ */
+export function createPath(user: CurrentUser, body: z.infer<typeof createPathSchema>, correlationId: string): { item: WorkItem; created: number } {
+  const segs = body.path.map((s) => s.trim()).filter(Boolean);
+  if (!segs.length) throw new HttpError(400, "path", "Type a title");
+  const created: string[] = [];
+  const id = getDb().transaction((tx) => {
+    let parentId = body.parentId ?? null;
+    if (parentId && ownedItem(user.id, parentId, tx).kind === "note") throw new HttpError(400, "note_parent", "Notes can't hold other items");
+    const rows = allRows(user.id, tx).filter((r) => !r.archived && r.kind !== "conversation");
+    const find = (p: string | null, t: string) => rows.find((r) => r.parentId === p && r.title.trim().toLowerCase() === t.toLowerCase());
+    const make = (p: string | null, kind: WorkKind, t: string) => {
+      const nid = insertItem(tx, user.id, { parentId: p, kind, title: t });
+      event(tx, nid, user.id, { kind: "created", to: "captured" });
+      created.push(nid);
+      return nid;
+    };
+    let i = 0;
+    if (!parentId && segs.length > 1) {
+      parentId = find(null, segs[0]!)?.id ?? make(null, "area", segs[0]!);
+      i = 1;
+    }
+    for (; i < segs.length - 1; i++) {
+      const hit = find(parentId, segs[i]!);
+      if (hit?.kind === "note") throw new HttpError(400, "note_parent", `${hit.title} is a note; notes can't hold other items`);
+      parentId = hit?.id ?? make(parentId, "project", segs[i]!);
+    }
+    const parent = parentId ? (rows.find((r) => r.id === parentId) ?? ownedItem(user.id, parentId, tx)) : null;
+    const kind: WorkKind = body.kind ?? defaultChildKind(parent ? { kind: parent.kind as WorkKind, parentId: parent.parentId } : null);
+    if (kind === "area" && parentId) throw new HttpError(400, "area_top", "Only top-level items can be areas");
+    // Only areas live at the top; anything else without a home goes to Miscellaneous.
+    if (!parentId && kind !== "area") parentId = ensureMiscellaneous(user.id, tx).id;
+    return make(parentId, kind, segs.at(-1)!);
+  });
+  audit({
+    actor: user.id,
+    action: "work.create",
+    source: "work",
+    sourceRecord: id,
+    result: "ok",
+    correlationId,
+    detail: { path: segs.length, created: created.length },
+  });
+  return { item: toItem(ownedItem(user.id, id)), created: created.length };
 }
 
 export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
