@@ -28,9 +28,13 @@ describe("Markdown renderer", () => {
     expect(out).toMatch(
       /<ol class="ai-ol"><li><p>Audit compatibility<\/p><\/li><li><p>Migrate config<\/p><ul class="ai-ul"><li><p>nested bullet<\/p><\/li><li><p>another one<\/p><ol class="ai-ol"><li><p>deep ordered<\/p><\/li><\/ol><\/li><\/ul><\/li><li><p>Roll out<\/p><\/li><\/ol>/,
     );
-    expect(out).toContain('<li class="md-task"><input type="checkbox" disabled="" readOnly="" aria-label="Done" checked=""/><p>Write the spec</p></li>');
-    expect(out).toContain('aria-label="Not done"/><p>Ship it</p>');
+    expect(out).toContain(
+      '<li class="md-task"><input type="checkbox" disabled="" readOnly="" aria-label="Done" checked=""/><div class="md-task-body"><p>Write the spec</p></div></li>',
+    );
+    expect(out).toContain('aria-label="Not done"/><div class="md-task-body"><p>Ship it</p></div>');
     expect(html("3. three\n4. four")).toContain('<ol start="3"');
+    // a nested checklist stays inside the parent's block body
+    expect(html("- [ ] Parent\n  - [ ] Child")).toMatch(/<div class="md-task-body"><p>Parent<\/p><ul class="ai-ul"><li class="md-task">.*Child.*<\/ul><\/div>/);
   });
 
   it("renders blockquotes (nested), rules, fenced code with a copy button, and tables", () => {

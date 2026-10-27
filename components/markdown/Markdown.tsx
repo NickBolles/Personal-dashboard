@@ -378,8 +378,15 @@ function parseList(src: string[], start: number, key: string, ctx: Ctx): [ReactN
         const kids = parseBlocks(it.body, `${key}-${j}`, ctx);
         return (
           <li key={j} className={it.task !== null ? "md-task" : undefined}>
-            {it.task !== null ? <input type="checkbox" checked={it.task} disabled readOnly aria-label={it.task ? "Done" : "Not done"} /> : null}
-            {kids}
+            {it.task !== null ? (
+              <>
+                <input type="checkbox" checked={it.task} disabled readOnly aria-label={it.task ? "Done" : "Not done"} />
+                {/* block flow, so a nested checklist stacks under its parent instead of beside it */}
+                <div className="md-task-body">{kids}</div>
+              </>
+            ) : (
+              kids
+            )}
           </li>
         );
       })}
