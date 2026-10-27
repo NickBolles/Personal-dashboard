@@ -151,6 +151,11 @@ class LargeTextScreenshotTest {
         com.nickbolles.jarvis.ui.screens.AreasContent(Loadable(AreasTest.work()), setOf("a_home", "a_work", "p_v5"), false, {}, {}, { _, _ -> }, {}, {}, {})
     }
 
+    @Config(qualifiers = "w673dp-h841dp-xhdpi")
+    @Test fun areas_foldable() = compose.snapshot("areas_foldable") {
+        com.nickbolles.jarvis.ui.screens.AreasContent(Loadable(AreasTest.work()), setOf("a_home", "a_work", "p_garage", "p_v5"), false, {}, {}, { _, _ -> }, {}, {}, {})
+    }
+
     @Test fun area_page() = compose.snapshot("area_page") {
         com.nickbolles.jarvis.ui.screens.ItemContent(Loadable(AreasTest.work()), "a_home", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, {})
     }

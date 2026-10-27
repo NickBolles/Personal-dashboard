@@ -1,6 +1,8 @@
 package com.nickbolles.jarvis
 
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -136,7 +138,7 @@ class AreasTest {
             }
         }
         compose.onNodeWithText("Order the replacement torsion spring").assertExists()
-        compose.onNodeWithText("Status: In progress").performClick()
+        compose.onNode(hasText("In progress") and hasClickAction()).performClick()
         compose.onNodeWithText("On hold").performClick()
         assertEquals(listOf("on_hold"), status)
         compose.onNodeWithText("Garage door spring options").performClick()

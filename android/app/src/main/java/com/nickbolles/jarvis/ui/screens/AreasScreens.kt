@@ -318,12 +318,12 @@ fun QuickAdd(parent: WorkItem?, busy: Boolean, onAdd: (String, () -> Unit) -> Un
         enabled = !busy,
         leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null) },
         trailingIcon = { if (segs.isNotEmpty()) TextButton(onClick = submit, enabled = !busy) { Text("Add") } },
-        placeholder = { Text(if (parent == null) "Add… Area / Project / item" else "Add to ${parent.title}…") },
+        placeholder = { Text(if (parent == null) "Quick add…" else "Add to ${parent.title}…", maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingText = {
             Text(
                 when {
                     segs.size > 1 -> "Creates or reuses: ${segs.joinToString(" › ")}"
-                    parent == null -> "Use “ / ” between levels"
+                    parent == null -> "Area / Project / item creates the levels"
                     else -> "New ${WorkLabels.kind(WorkTree.defaultChildKind(parent)).lowercase()} · use “ / ” for levels"
                 },
                 maxLines = 1,
@@ -347,9 +347,14 @@ private fun NextActionRow(item: WorkItem, all: List<WorkItem>, onOpen: (WorkItem
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(item.nextAction, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text("${item.title}${if (where.isNotEmpty()) " · $where" else ""}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                if (item.status != "captured") {
+                    Pill(WorkLabels.status(item.status), tone = WorkLabels.statusTone(item.status))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text("${item.title}${if (where.isNotEmpty()) " · $where" else ""}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
-        if (item.status != "captured") Pill(WorkLabels.status(item.status), tone = WorkLabels.statusTone(item.status))
     }
 }
 
@@ -380,12 +385,16 @@ private fun TreeRow(r: WorkTree.Row, all: List<WorkItem>, onToggle: (String) -> 
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (i.nextAction.isNotBlank() && !i.isClosed) Text("→ ${i.nextAction}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val pill = !i.isContainer && !i.isConversation && i.status != "captured"
+                if (pill || (i.nextAction.isNotBlank() && !i.isClosed)) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    if (pill) {
+                        Pill(WorkLabels.status(i.status), tone = WorkLabels.statusTone(i.status))
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    if (i.nextAction.isNotBlank() && !i.isClosed) Text("→ ${i.nextAction}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
-            when {
-                i.isContainer && open > 0 -> Text("$open open", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                !i.isContainer && !i.isConversation && i.status != "captured" -> Pill(WorkLabels.status(i.status), tone = WorkLabels.statusTone(i.status))
-            }
+            if (i.isContainer && open > 0) Text("$open open", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text("Open") }, onClick = { menu = false; onOpen(i) })
@@ -495,8 +504,8 @@ fun ItemContent(
                 }
                 item(key = "head") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(kindIcon(node.kind), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(kindIcon(node.kind), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterVertically))
                             Pill(WorkLabels.kind(node.kind), tone = "accent")
                             if (!node.isContainer && !node.isConversation) Pill(WorkLabels.status(node.status), tone = WorkLabels.statusTone(node.status))
                             if (node.builtIn) Pill("Built in")
@@ -527,7 +536,7 @@ fun ItemContent(
                             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("Next action", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(node.nextAction.ifBlank { "None yet. Add one so this shows up in Next actions." }, style = MaterialTheme.typography.bodyLarge)
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     TextButton(onClick = { onDialog(AreasDialog.Edit(node)) }) { Text(if (node.nextAction.isBlank()) "Add next action" else "Edit") }
                                     StatusMenu(node, busy, onStatus)
                                 }
@@ -548,9 +557,14 @@ fun ItemContent(
                         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).combinedClickableCompat(onClick = { onOpen(n) }), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(n.nextAction, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                Text(n.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                                    if (n.status != "captured") {
+                                        Pill(WorkLabels.status(n.status), tone = WorkLabels.statusTone(n.status))
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Text(n.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
-                            if (n.status != "captured") Pill(WorkLabels.status(n.status), tone = WorkLabels.statusTone(n.status))
                         }
                     }
                 }
@@ -583,7 +597,10 @@ private fun Stat(label: String, n: Int) {
 private fun StatusMenu(item: WorkItem, busy: Boolean, onStatus: (WorkItem, String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }, enabled = !busy) { Text("Status: ${WorkLabels.status(item.status)}") }
+        OutlinedButton(onClick = { open = true }, enabled = !busy) {
+            Text(WorkLabels.status(item.status), maxLines = 1)
+            Icon(Icons.Outlined.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             WorkLabels.SETTABLE.filter { it != item.status }.forEach { s ->
                 DropdownMenuItem(text = { Text(WorkLabels.status(s)) }, onClick = { open = false; onStatus(item, s) })
