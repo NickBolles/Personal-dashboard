@@ -109,12 +109,19 @@ export function WorkView({
   });
   const bulkArchive = useWorkMutation(
     async (ids: string[]) => {
-      for (const id of ids) await api.patch(`/api/work/items/${encodeURIComponent(id)}`, { archived: true });
-      return ids.length;
+      let n = 0;
+      for (const id of ids)
+        try {
+          await api.patch(`/api/work/items/${encodeURIComponent(id)}`, { archived: true });
+          n++;
+        } catch {
+          /* e.g. Miscellaneous is built in */
+        }
+      return { n, failed: ids.length - n };
     },
     {
-      onSuccess: (n) => {
-        toast(`Archived ${n}`, "ok");
+      onSuccess: ({ n, failed }) => {
+        toast(failed ? `Archived ${n}; ${failed} couldn't be archived` : `Archived ${n}`, failed ? "warn" : "ok");
         setSelection(new Set());
         setSelectMode(false);
       },
@@ -1123,7 +1130,19 @@ function ContainerBody({
         onToggle={toggle("details")}
       />
       {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
-      {isArea ? null : <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />}
+      {isArea ? null : (
+        <>
+          <Dependencies
+            d={d}
+            items={items}
+            onSelect={onSelect}
+            phone={phone}
+            open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+            onToggle={toggle("deps")}
+          />
+          <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+        </>
+      )}
       <details className="wk-disclosure card">
         <summary className="tap cursor-pointer font-semibold">Activity</summary>
         <div className="mt-2 space-y-3">

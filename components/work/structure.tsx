@@ -176,16 +176,22 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
   const shown = all ? list : list.slice(0, 8);
   const file = useWorkMutation(
     async (jobs: { sessionId: string; itemId: string | null }[]) => {
+      // Keep going past a failure (a session can 404/503) so the rest still files; the list refreshes either way.
       let ok = 0;
       for (const j of jobs) {
-        await api.post("/api/work/conversations/file", j);
-        ok++;
+        try {
+          await api.post("/api/work/conversations/file", j);
+          ok++;
+        } catch {
+          /* counted below */
+        }
       }
-      return ok;
+      return { ok, failed: jobs.length - ok };
     },
     {
-      onSuccess: (n) => {
-        toast(n === 1 ? "Filed" : `Filed ${n}`, "ok");
+      onSuccess: ({ ok: n, failed }) => {
+        if (failed) toast(`Filed ${n}; ${failed} couldn't be filed (try again)`, "warn");
+        else toast(n === 1 ? "Filed" : `Filed ${n}`, "ok");
         setPicked(new Set());
         setFiling(null);
       },
