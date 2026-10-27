@@ -33,11 +33,14 @@ class WidgetRefreshWorker(context: Context, params: WorkerParameters) : Coroutin
             WidgetUpdater.redrawAll(applicationContext)
             return Result.success()
         }
+        val pairing = graph.store.current()
+        // Only publish answers for the pairing that asked: a sign-out mid-request must not refill the caches.
+        suspend fun stillPaired() = graph.store.current() == pairing
         return try {
             val summary = graph.call { it.widgetSummary() }
-            graph.store.writeCache(WIDGET_CACHE, WidgetSummary.serializer(), summary)
+            if (stillPaired()) graph.store.writeCache(WIDGET_CACHE, WidgetSummary.serializer(), summary)
             // Areas next actions: optional (people without work.use get 403), never fails the refresh.
-            runCatching { graph.call { it.workItems() } }.getOrNull()?.let { graph.store.writeCache(WORK_CACHE, WorkItemsResponse.serializer(), it) }
+            runCatching { graph.call { it.workItems() } }.getOrNull()?.let { if (stillPaired()) graph.store.writeCache(WORK_CACHE, WorkItemsResponse.serializer(), it) }
             WidgetUpdater.redrawAll(applicationContext)
             Result.success()
         } catch (e: Exception) {
