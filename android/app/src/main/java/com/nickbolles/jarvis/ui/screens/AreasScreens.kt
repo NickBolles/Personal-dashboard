@@ -108,10 +108,14 @@ class AreasViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch { work.refresh() }
     }
 
+    /**
+     * Runs on the app scope, not viewModelScope: leaving the page (back after
+     * archive, a tab switch) must not cancel the refresh and the readback message.
+     */
     private fun mutate(onMessage: (String) -> Unit, done: String?, onDone: (WorkItem?) -> Unit = {}, block: suspend () -> WorkItem?) {
         if (_busy.value) return
         _busy.value = true
-        viewModelScope.launch {
+        graph.scope.launch(kotlinx.coroutines.Dispatchers.Main.immediate) {
             try {
                 val item = block()
                 work.refresh()
@@ -163,7 +167,7 @@ class AreasViewModel(private val graph: AppGraph) : ViewModel() {
         mutate(onMessage, "Moved to $target") { graph.call { it.moveWorkItem(item.id, parentId) } }
     }
 
-    fun update(item: WorkItem, fields: Map<String, Any?>, onMessage: (String) -> Unit, done: String? = "Saved") = mutate(onMessage, done) {
+    fun update(item: WorkItem, fields: Map<String, Any?>, onMessage: (String) -> Unit, done: String? = "Saved", onDone: (WorkItem?) -> Unit = {}) = mutate(onMessage, done, onDone) {
         val body = JsonObject(fields.mapValues { (_, v) -> when (v) { null -> JsonPrimitive(null as String?); is Boolean -> JsonPrimitive(v); else -> JsonPrimitive(v.toString()) } })
         graph.call { it.updateWorkItem(item.id, body) }
     }
@@ -427,7 +431,8 @@ fun ItemScreen(id: String) {
         onQuickAdd = { parent, text, done -> vm.quickAdd(parent.id, text, app::message) { done() } },
         onStatus = { item, s -> vm.update(item, mapOf("status" to s), app::message, "Marked ${WorkLabels.status(s).lowercase()}") },
         onDialog = { dialog = it },
-        onArchive = { item -> vm.update(item, mapOf("archived" to true), app::message, "Archived ${item.title}"); app.back() },
+        // Leave the page only once the server archived it (an error keeps you here with the message).
+        onArchive = { item -> vm.update(item, mapOf("archived" to true), app::message, "Archived ${item.title}") { app.back() } },
         onChat = { sessionId -> app.navigate(Routes.conversation(sessionId)) },
         onRefresh = vm::refresh,
     )
@@ -483,11 +488,7 @@ fun ItemContent(
                 return@PullToRefreshBox
             }
             val crumbs = remember(all, id) { WorkTree.breadcrumb(all, id) }
-            val rows = remember(all, id, expanded) {
-                // The subtree, rooted here: rows() walks from the top, so re-root by shifting depth.
-                val sub = WorkTree.descendants(all, id)
-                WorkTree.rows(sub.map { if (it.parentId == id) it.copy(parentId = null) else it }, expanded, showClosed = true)
-            }
+            val rows = remember(all, id, expanded) { WorkTree.rows(all, expanded, showClosed = true, rootId = id) }
             val roll = remember(all, id) { WorkTree.rollup(all, id) }
             val next = remember(all, id) { WorkTree.nextActions(all, id, limit = 8) }
             val convs = state.data?.linkedConversations.orEmpty().filter { it.itemId == id }

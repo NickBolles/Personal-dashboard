@@ -74,8 +74,9 @@ object WorkTree {
     /**
      * The visible tree: rows in order with their depth. A filter shows every
      * match with its ancestors (expanded); otherwise only expanded nodes open.
+     * `rootId` walks one item's subtree (depth 0 = its children); items keep their real parents.
      */
-    fun rows(items: List<WorkItem>, expanded: Set<String>, filter: String = "", showClosed: Boolean = false): List<Row> {
+    fun rows(items: List<WorkItem>, expanded: Set<String>, filter: String = "", showClosed: Boolean = false, rootId: String? = null): List<Row> {
         val live = items.filter { !it.archived && (showClosed || !it.isClosed || it.isContainer) }
         val kids = live.groupBy { it.parentId }.mapValues { (_, v) -> v.sortedWith(compareBy({ it.sortOrder }, { it.createdAt })) }
         val q = filter.trim().lowercase()
@@ -98,7 +99,7 @@ object WorkTree {
                 if (open && depth < 20) walk(i.id, depth + 1)
             }
         }
-        walk(null, 0)
+        walk(rootId, 0)
         return out
     }
 

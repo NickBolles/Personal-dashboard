@@ -63,6 +63,12 @@ class AreasTest {
         assertEquals(listOf("a_home", "p_garage", "t_door"), WorkTree.rows(items, emptySet(), filter = "spring").map { it.item.id })
     }
 
+    @Test fun subtreeRowsKeepRealParents() {
+        val sub = WorkTree.rows(items, emptySet(), showClosed = true, rootId = "p_garage")
+        assertEquals(listOf("t_door", "n_wall"), sub.map { it.item.id })
+        assertTrue(sub.all { it.depth == 0 && it.item.parentId == "p_garage" && !it.item.isContainer })
+    }
+
     @Test fun nextActionsPutInProgressFirst() {
         val next = WorkTree.nextActions(items)
         assertEquals("t_door", next.first().id)
