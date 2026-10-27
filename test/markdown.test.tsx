@@ -63,6 +63,13 @@ describe("Markdown renderer", () => {
     expect(html(t)).not.toMatch(/<script|<img|<iframe|onerror="|href="(javascript|data|vbscript|\/\/)/i);
   });
 
+  it("keeps balanced parentheses in bare URLs and drops trailing punctuation", () => {
+    expect(html("See https://en.wikipedia.org/wiki/Function_(mathematics).")).toContain('href="https://en.wikipedia.org/wiki/Function_(mathematics)"');
+    expect(html("(see https://example.com/a)")).toContain(
+      'href="https://example.com/a" target="_blank" rel="noopener noreferrer nofollow">https://example.com/a</a>)',
+    );
+  });
+
   it("never nests links (a URL used as a link label)", () => {
     const out = html("[https://example.com](https://example.com/docs) and [see <https://x.test>](/areas)");
     expect(out.match(/<a /g)).toHaveLength(2);

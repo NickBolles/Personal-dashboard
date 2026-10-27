@@ -50,6 +50,17 @@ function link(href: string | null, label: ReactNode, key: string, fallback: Reac
   );
 }
 
+/** Drop trailing punctuation from a bare URL, keeping a `)` that closes a `(` inside it (GFM rule). */
+function trimUrl(raw: string) {
+  let url = raw;
+  for (;;) {
+    const last = url[url.length - 1];
+    if (last && /[.,;:!?'"\]]/.test(last)) url = url.slice(0, -1);
+    else if (last === ")" && (url.match(/\)/g)?.length ?? 0) > (url.match(/\(/g)?.length ?? 0)) url = url.slice(0, -1);
+    else return url;
+  }
+}
+
 const isWord = (c: string | undefined) => !!c && /[\p{L}\p{N}]/u.test(c);
 
 export function renderInline(text: string, key: string, ctx: Ctx): ReactNode[] {
@@ -122,7 +133,7 @@ export function renderInline(text: string, key: string, ctx: Ctx): ReactNode[] {
       continue;
     }
     if (!ctx.noLinks && (c === "h" || c === "H") && !isWord(text[i - 1]) && (m = /^https?:\/\/[^\s<>"]+/i.exec(rest))) {
-      const url = m[0].replace(/[.,;:!?'")\]]+$/, "");
+      const url = trimUrl(m[0]);
       push(link(safeHref(url), url, k, url));
       i += url.length;
       continue;
