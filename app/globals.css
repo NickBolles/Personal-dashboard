@@ -496,6 +496,7 @@
   height: 14px;
   accent-color: var(--accent);
   transform: translateY(2px);
+  opacity: 1;
 }
 .md li.md-task > p {
   margin: 0;
