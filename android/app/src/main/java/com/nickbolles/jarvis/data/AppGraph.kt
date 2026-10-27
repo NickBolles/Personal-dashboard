@@ -56,6 +56,15 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
         _signedOutReason.value = reason
         cachedApi = null
         store.clear()
+        // In-memory copies too: the next pairing may be another person or server.
+        resources.forEach { it.clear() }
+    }
+
+    /** Every account-scoped Resource, so sign-out can drop their in-memory data. */
+    private val resources = java.util.concurrent.CopyOnWriteArrayList<Resource<*>>()
+
+    internal fun track(r: Resource<*>) {
+        resources.add(r)
     }
 
     fun clearSignedOutReason() {
@@ -115,6 +124,15 @@ class Resource<T>(
 ) {
     private val _state = MutableStateFlow(Loadable<T>(data = cacheName?.let { graph.store.readCache(it, serializer) }, fromCache = cacheName != null))
     val state: StateFlow<Loadable<T>> = _state.asStateFlow()
+
+    init {
+        graph.track(this)
+    }
+
+    /** Forget everything (sign-out); the next refresh starts from nothing. */
+    fun clear() {
+        _state.value = Loadable()
+    }
 
     suspend fun refresh() {
         _state.value = _state.value.copy(loading = true, error = null)

@@ -39,6 +39,14 @@ class AreasTest {
 
     private val items = work().items
 
+    @Test fun signOutDropsTheInMemoryAreasTree() {
+        val graph = com.nickbolles.jarvis.data.AppGraph(androidx.test.core.app.ApplicationProvider.getApplicationContext())
+        graph.work.set(work())
+        assertTrue(graph.work.state.value.data != null)
+        kotlinx.coroutines.runBlocking { graph.signOutLocally() }
+        assertEquals(null, graph.work.state.value.data)
+    }
+
     @Test fun quickPathSplitsOnlyOnSpacedSlashes() {
         assertEquals(listOf("Home", "Garage", "Fix CI/CD"), WorkTree.parseQuickPath("Home / Garage /  Fix CI/CD "))
         assertEquals(listOf("one"), WorkTree.parseQuickPath("one"))
