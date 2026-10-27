@@ -119,6 +119,7 @@ class AreasTest {
         assertEquals(MdBlock.Code("code", null), b[7])
         assertEquals(MdBlock.Quote("quote"), b[8])
         assertEquals(MdBlock.Table(listOf("A", "B"), listOf(listOf("1", "2"))), b[9])
+        assertEquals(listOf(220, 72), Markdown.columnWidths(listOf(listOf("Description", "N"), listOf("a much longer description of the thing", "12"))))
         val s = Markdown.inline("**bold** and *it* and `code` [link](https://x.y) snake_case_name")
         assertEquals("bold and it and code link snake_case_name", s.text)
         assertEquals(1, s.getLinkAnnotations(0, s.length).size)

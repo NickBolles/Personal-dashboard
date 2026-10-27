@@ -57,14 +57,18 @@ class AppGraph(val context: Context, val store: SessionStore = SessionStore(cont
         cachedApi = null
         store.clear()
         // In-memory copies too: the next pairing may be another person or server.
-        resources.forEach { it.clear() }
+        resources.forEach { it.get()?.clear() }
     }
 
-    /** Every account-scoped Resource, so sign-out can drop their in-memory data. */
-    private val resources = java.util.concurrent.CopyOnWriteArrayList<Resource<*>>()
+    /**
+     * Every live account-scoped Resource, so sign-out can drop their in-memory
+     * data. Weak: screen-owned resources still go away with their screens.
+     */
+    private val resources = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<Resource<*>>>()
 
     internal fun track(r: Resource<*>) {
-        resources.add(r)
+        resources.removeAll { it.get() == null }
+        resources.add(java.lang.ref.WeakReference(r))
     }
 
     fun clearSignedOutReason() {

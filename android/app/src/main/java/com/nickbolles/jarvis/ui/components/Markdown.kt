@@ -126,6 +126,12 @@ object Markdown {
         return out
     }
 
+    /** Table column widths in dp: ~8dp per character of the longest cell, 72–220dp. */
+    fun columnWidths(rows: List<List<String>>): List<Int> {
+        val cols = rows.maxOfOrNull { it.size } ?: 0
+        return (0 until cols).map { c -> ((rows.maxOfOrNull { it.getOrNull(c)?.length ?: 0 } ?: 0) * 8 + 12).coerceIn(72, 220) }
+    }
+
     private fun indentOf(ws: String) = (ws.replace("\t", "    ").length / 2).coerceAtMost(4)
 
     private fun cells(row: String) = row.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
@@ -208,15 +214,18 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, style: TextStyle =
                     )
                 }
                 is MdBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-                    (listOf(b.header) + b.rows).forEachIndexed { r, cells ->
+                    val all = listOf(b.header) + b.rows
+                    // One width per column (from its longest cell) so values line up under their headings.
+                    val widths = Markdown.columnWidths(all)
+                    all.forEachIndexed { r, cells ->
                         Row {
-                            cells.forEach { c ->
+                            widths.forEachIndexed { ci, w ->
                                 Text(
-                                    span(c),
+                                    span(cells.getOrElse(ci) { "" }),
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = if (r == 0) FontWeight.SemiBold else null,
                                     color = color,
-                                    modifier = Modifier.widthIn(min = 72.dp, max = 220.dp).padding(horizontal = 6.dp, vertical = 4.dp),
+                                    modifier = Modifier.width(w.dp).padding(horizontal = 6.dp, vertical = 4.dp),
                                 )
                             }
                         }
