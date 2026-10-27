@@ -56,7 +56,8 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await expect(page.getByRole("heading", { level: 2, name: area })).toBeVisible();
   await expect(page.getByTestId("children-projects")).toContainText("Scoring engine");
   await expect(article.getByRole("button", { name: "+ Project" })).toBeVisible();
-  await expect(article.getByText("Validation", { exact: true })).toHaveCount(0);
+  await expect(article.getByRole("button", { name: "Add validation" })).toHaveCount(0);
+  await expect(article.getByRole("button", { name: "Settle", exact: true })).toHaveCount(0);
   await expect(article.getByText("Work packet")).toHaveCount(0);
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
@@ -118,24 +119,53 @@ test("bulk select → Move to…, and file unfiled conversations in bulk", async
   await expect.poll(async () => (await items(page)).filter((i) => i.parentId === target.item.id).length).toBe(2);
   expect((await items(page)).find((i) => i.id === two.item.id)?.parentId).toBe(target.item.id);
 
-  // Unfiled conversations: select two, file both with one picker.
-  const s1 = await post<{ id: string }>(page, "/api/hermes/sessions", { title: `Bulk file one ${nonce}`, backend: "hermes" });
-  const s2 = await post<{ id: string }>(page, "/api/hermes/sessions", { title: `Bulk file two ${nonce}`, backend: "hermes" });
+  // Unfiled conversations: select two, accept one suggestion, file the rest with one picker. The list is
+  // stubbed (the e2e Hermes mock's chats are shared with other specs); filing calls are recorded.
+  const conv = (id: string, title: string, suggestion?: { id: string; title: string }) => ({
+    id,
+    title,
+    backend: "hermes",
+    preview: null,
+    lastActiveAt: new Date().toISOString(),
+    readOnly: false,
+    linkedItems: [],
+    suggestions: suggestion ? [{ ...suggestion, matched: ["target"] }] : [],
+  });
+  await page.route("**/api/work/conversations/unfiled*", (route) =>
+    route.fulfill({
+      json: {
+        conversations: [
+          conv(`fake1${nonce}`, `Bulk file one ${nonce}`, { id: target.item.id, title: `Target ${nonce}` }),
+          conv(`fake2${nonce}`, `Bulk file two ${nonce}`),
+        ],
+        total: 2,
+        unavailable: [],
+        updating: false,
+        cachedAt: new Date().toISOString(),
+      },
+    }),
+  );
+  const filed: { sessionId: string; itemId: string | null }[] = [];
+  await page.route("**/api/work/conversations/file", async (route) => {
+    filed.push(route.request().postDataJSON());
+    await route.fulfill({ json: { itemId: "x" } });
+  });
   await page.goto("/areas?view=tree");
   const triage = page.locator("section[aria-labelledby=unfiled-triage]");
-  await expect(triage.getByRole("heading", { name: /Unfiled conversations · \d+/ })).toBeVisible({ timeout: 20_000 });
-  const showAll = triage.getByRole("button", { name: /Show all/ });
-  if (await showAll.isVisible()) await showAll.click();
-  await expect(triage.getByText(`Bulk file one ${nonce}`)).toBeVisible({ timeout: 20_000 });
+  await expect(triage.getByText("→ Target", { exact: false })).toBeVisible();
+  await triage.getByLabel(`Select Bulk file one ${nonce}`).check();
+  const sel = page.getByRole("region", { name: "Selected conversations" });
+  await sel.getByRole("button", { name: "Accept suggestions" }).click();
+  await expect.poll(() => filed.length).toBe(1);
+  expect(filed[0]).toEqual({ sessionId: `fake1${nonce}`, itemId: target.item.id });
   await triage.getByLabel(`Select Bulk file one ${nonce}`).check();
   await triage.getByLabel(`Select Bulk file two ${nonce}`).check();
-  await page.getByRole("region", { name: "Selected conversations" }).getByRole("button", { name: "File to…" }).click();
+  await sel.getByRole("button", { name: "File to…" }).click();
   const fileDlg = page.getByRole("dialog", { name: "File 2 conversations" });
-  await fileDlg.getByRole("combobox", { name: "Search destinations" }).fill(`Target ${nonce}`);
-  await fileDlg.getByRole("option", { name: new RegExp(`Target ${nonce}`) }).click();
+  await expect(fileDlg.getByRole("option").first()).toContainText(`Target ${nonce}`); // suggested first
+  await fileDlg.getByRole("combobox", { name: "Search destinations" }).fill(`Move area ${nonce}`);
+  await fileDlg.getByRole("combobox", { name: "Search destinations" }).press("Enter");
   await expect(fileDlg).toHaveCount(0);
-  await expect
-    .poll(async () => (await items(page)).filter((i) => i.parentId === target.item.id && i.kind === "conversation").length, { timeout: 15_000 })
-    .toBe(2);
-  expect(s1.id && s2.id).toBeTruthy();
+  await expect.poll(() => filed.length).toBe(3);
+  expect(filed.slice(1).map((f) => f.sessionId)).toEqual([`fake1${nonce}`, `fake2${nonce}`]);
 });

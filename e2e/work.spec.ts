@@ -357,6 +357,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   // The filed chat is now a conversation node under V5; the linked one is a child row too.
   await expect(treeItem(page, `V5 evaluator hydration notes ${nonce}`)).toHaveAttribute("aria-label", /conversation/);
   await expect(page.getByRole("treeitem", { name: `Picker check ${nonce}, linked conversation` })).toBeVisible();
+  await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
 
   // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
   await page.getByRole("button", { name: "Continue in new conversation" }).click();
