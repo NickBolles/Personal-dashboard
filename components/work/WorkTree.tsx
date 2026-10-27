@@ -142,6 +142,17 @@ export function WorkTree({
   const [adding, setAdding] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const refs = useRef(new Map<string, HTMLLIElement>());
+  const refocus = useRef<string | null>(null);
+  const skipBlurCommit = useRef(false);
+  useEffect(() => {
+    const id = refocus.current;
+    if (!id) return;
+    const el = refs.current.get(id);
+    if (el && document.activeElement !== el && (!document.activeElement || document.activeElement === document.body || !document.activeElement.isConnected)) {
+      el.focus();
+      refocus.current = null;
+    } else if (el && document.activeElement === el) refocus.current = null;
+  }, [realItems]);
   const canAdd = !!onCreated && !selectMode;
 
   useEffect(() => {
@@ -233,6 +244,8 @@ export function WorkTree({
     const pk = parentKey(item);
     const sibs = realKids(pk);
     const idx = sibs.findIndex((s) => s.id === item.id);
+    // The moved row remounts under its new parent once the tree refreshes: put focus back on it then.
+    if (e.altKey && e.key.startsWith("Arrow")) refocus.current = item.id;
     if (e.altKey && onPlace && e.key === "ArrowUp") {
       if (idx > 0) onPlace(item.id, pk, idx - 1);
     } else if (e.altKey && onPlace && e.key === "ArrowDown") {
@@ -417,6 +430,11 @@ export function WorkTree({
   }
 
   function commitRename(i: WorkItem) {
+    // Enter/Escape already decided; the blur that follows moving focus back must not commit (again).
+    if (skipBlurCommit.current) {
+      skipBlurCommit.current = false;
+      return;
+    }
     const t = renaming?.title.trim();
     if (t && t !== i.title) onRename?.(i.id, t);
     setRenaming(null);
@@ -571,14 +589,19 @@ export function WorkTree({
                 className="min-w-0 flex-1 rounded border border-accent bg-bg px-1.5 py-0.5 text-[13.5px]"
                 autoFocus
                 value={renaming.title}
+                onFocus={() => {
+                  skipBlurCommit.current = false;
+                }}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setRenaming({ id: i.id, title: e.target.value })}
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === "Enter") {
                     commitRename(i);
+                    skipBlurCommit.current = true;
                     focus(i.id);
                   } else if (e.key === "Escape") {
+                    skipBlurCommit.current = true;
                     setRenaming(null);
                     focus(i.id);
                   }
