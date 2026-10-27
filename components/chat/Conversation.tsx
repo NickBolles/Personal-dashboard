@@ -1,5 +1,6 @@
 "use client";
 import { refreshSessionLists } from "@/lib/client/session-lists";
+import { Markdown } from "@/components/markdown/Markdown";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -567,7 +568,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
       <li className="flex flex-col gap-1">
         <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} said: </span>
-          <p className="prose-chat select-text">{item.text}</p>
+          <Markdown text={item.text} className="select-text" />
         </div>
         <MessageMeta time={time} onFork={onFork} who={`${who}' message`} />
       </li>
@@ -738,7 +739,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} is saying: </span>
-          {text ? <p className="prose-chat select-text">{text}</p> : null}
+          {text ? <Markdown text={text} className="select-text" /> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? (
             <p className="mt-1 flex items-center gap-1 text-muted" aria-hidden="true">
               <span className="typing-dot">●</span>

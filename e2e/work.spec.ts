@@ -103,7 +103,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(header).toContainText("Open the evaluator contract PR");
   await page.getByText("Preview handoff").click();
   const handoff = page.getByTestId("handoff-preview");
-  await expect(handoff).toContainText("# Handoff: V5 evaluator contract");
+  await expect(handoff).toContainText("Handoff: V5 evaluator contract");
   await expect(handoff).toContainText("- Keep V4 scoring weights");
   await expect(handoff).toContainText("## Next action\nOpen the evaluator contract PR");
 
