@@ -712,7 +712,7 @@ function ItemDetail({
   const childLabel = isArea ? "Project" : "Item";
   const has = (x: MenuItem | false | null | undefined): x is MenuItem => !!x;
   const menu: MenuItem[] = [
-    container ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+    container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
     isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
     isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
     isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1143,6 +1143,7 @@ function ContainerBody({
           <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
         </>
       )}
+      <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
       <details className="wk-disclosure card">
         <summary className="tap cursor-pointer font-semibold">Activity</summary>
         <div className="mt-2 space-y-3">
