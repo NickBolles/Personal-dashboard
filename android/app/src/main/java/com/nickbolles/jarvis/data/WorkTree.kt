@@ -116,7 +116,7 @@ object WorkTree {
      */
     fun moveTargets(items: List<WorkItem>, item: WorkItem): List<WorkItem> {
         val banned = descendants(items, item.id).map { it.id }.toHashSet() + item.id
-        return rows(items, expanded = items.map { it.id }.toSet())
+        return rows(items, expanded = items.map { it.id }.toSet(), showClosed = true)
             .map { it.item }
             .filter { it.id !in banned && !it.isConversation && it.id != item.parentId }
     }

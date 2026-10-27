@@ -100,6 +100,7 @@ class AreasTest {
         assertFalse("a_home" in targets)
         assertFalse("c_chat" in targets)
         assertTrue("a_work" in targets && "p_v5" in targets)
+        assertTrue("settled work is still a valid destination", "t_done" in targets)
     }
 
     @Test fun rollupCountsWork() {
@@ -150,6 +151,18 @@ class AreasTest {
         assertEquals(listOf("p_garage"), opened)
         compose.onNodeWithContentDescription("Expand Momentum bets").performClick()
         assertEquals(listOf("a_work"), toggled)
+    }
+
+    @Test fun itemPageShowsALoadFailureWithRetry() {
+        var retried = 0
+        compose.setContent {
+            JarvisTheme(dynamicColor = false) {
+                ItemContent(Loadable(error = "Can't reach Jarvis (offline)"), "t_door", false, {}, {}, {}, { _, _, _ -> }, { _, _ -> }, {}, {}, {}, { retried++ })
+            }
+        }
+        compose.onNodeWithText("Can't reach Jarvis (offline)").assertExists()
+        compose.onNodeWithText("Retry").performClick()
+        assertEquals(1, retried)
     }
 
     @Test fun workItemPageShowsNextActionAndChangesStatus() {

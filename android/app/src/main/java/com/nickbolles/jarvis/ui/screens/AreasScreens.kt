@@ -484,7 +484,8 @@ fun ItemContent(
         PullToRefreshBox(isRefreshing = state.loading && state.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
             if (node == null) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    if (state.loading || state.data == null) Text("Loading…")
+                    if (state.data == null && state.error != null && !state.loading) StatusBanner(state.error, tone = "danger", onRetry = onRefresh)
+                    else if (state.loading || state.data == null) Text("Loading…")
                     else EmptyState("That item isn't here", "It may have been archived or moved.") { OutlinedButton(onClick = onAreas) { Text("All areas") } }
                 }
                 return@PullToRefreshBox
