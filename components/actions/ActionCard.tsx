@@ -170,9 +170,13 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           </Badge>
           {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
           {rank?.tier === "compass" ? <Badge tone="violet">Compass focus</Badge> : null}
-          {!compact && action.detail ? <span className="min-w-0 text-xs text-muted">{action.detail}</span> : null}
+          {!compact && action.detail ? (
+            <span data-dynamic className="min-w-0 text-xs text-muted">
+              {action.detail}
+            </span>
+          ) : null}
           {due || stale ? (
-            <span className="text-xs text-muted">
+            <span data-dynamic className="text-xs text-muted">
               {due ? <span>{due}</span> : null}
               {due && stale ? " · " : null}
               {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
