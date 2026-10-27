@@ -29,7 +29,8 @@ test("a new chat lands in Miscellaneous, files in one tap, and the composer refe
 
   // New chat from the Areas header: no filing step, it opens right away.
   await page.goto("/areas");
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Chat", exact: true }).click();
   await expect(page).toHaveURL(/\/chat\/[^/?]+$/);
   const sessionId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop()!);
   await page.request.patch(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`, {

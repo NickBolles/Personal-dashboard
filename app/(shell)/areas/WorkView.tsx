@@ -1123,12 +1123,7 @@ function ContainerBody({
         onToggle={toggle("details")}
       />
       {isArea && !item.builtIn ? (
-        <details className="wk-disclosure card" data-testid="area-settings">
-          <summary className="tap cursor-pointer font-semibold">Area settings</summary>
-          <div className="mt-2">
-            <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} />
-          </div>
-        </details>
+        <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} />
       ) : null}
       {isArea ? null : <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />}
       <details className="wk-disclosure card">
