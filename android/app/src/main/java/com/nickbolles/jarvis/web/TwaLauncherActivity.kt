@@ -9,7 +9,11 @@ import com.nickbolles.jarvis.BuildConfig
 import com.nickbolles.jarvis.MainActivity
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.widgets.WidgetUpdater
+import com.nickbolles.jarvis.push.PushRegistrar
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,6 +51,9 @@ class TwaLauncherActivity : LauncherActivity() {
                 finish()
                 return@launch
             }
+            // Paired launches skip MainActivity, which used to refresh the FCM registration on every
+            // start (e.g. Firebase configured on the server after pairing): do it here, off the UI path.
+            if (read?.getOrNull() != null) refreshPush(applicationContext)
             target = Uri.parse(resolve(raw, read?.getOrNull()))
             if (!isFinishing) launchTwa()
         }
@@ -65,6 +72,11 @@ class TwaLauncherActivity : LauncherActivity() {
     companion object {
         fun resolve(raw: String?, pairedServer: String?): String =
             WebLinks.launchUrl(raw, WebLinks.origin(pairedServer, BuildConfig.JARVIS_ORIGIN), BuildConfig.JARVIS_ORIGIN)
+
+        /** Outlives this activity (it finishes once the web app is up); register() handles its own errors. */
+        private fun refreshPush(app: Context) {
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { runCatching { PushRegistrar.register(AppGraph.get(app)) } }
+        }
 
         private suspend fun readPairedServer(context: Context): Result<String?> = runCatching { AppGraph.get(context).store.pairedServer() }
 

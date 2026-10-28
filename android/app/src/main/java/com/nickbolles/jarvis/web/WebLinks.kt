@@ -45,9 +45,29 @@ object WebLinks {
         val linkOrigin = originOf(link)
         if (linkOrigin != null) {
             val trusted = linkOrigin == originOf(origin) || linkOrigin == originOf(defaultOrigin)
-            return if (trusted) linkOrigin + withMarker(webPath(link.substring(linkOrigin.length))) else origin + withMarker(HOME)
+            return if (trusted) linkOrigin + withMarker(sitePath(link.substring(linkOrigin.length))) else origin + withMarker(HOME)
         }
         return origin + withMarker(webPath(link))
+    }
+
+    /**
+     * Path + query + fragment of an App Link on the Jarvis site, kept as is: these are real web
+     * URLs (/join?code=…, /areas/map), not old native links, so no mapping. Only `source` is
+     * dropped (the app's marker), and dot segments open Home.
+     */
+    fun sitePath(rest: String): String {
+        var s = rest
+        if (!s.startsWith("/")) s = "/$s"
+        val hashAt = s.indexOf('#')
+        val fragment = if (hashAt >= 0) s.substring(hashAt) else ""
+        if (hashAt >= 0) s = s.substring(0, hashAt)
+        val qAt = s.indexOf('?')
+        val path = if (qAt >= 0) s.substring(0, qAt) else s
+        val query = parseQuery(if (qAt >= 0) s.substring(qAt + 1) else "").filter { it.first != "source" }
+        val segs = path.split('/').filter { it.isNotEmpty() }
+        if (segs.any { decode(it) == ".." || decode(it) == "." || decode(it).contains('\\') }) return HOME
+        if (segs.isEmpty()) return HOME + buildQuery(query) + fragment
+        return path + buildQuery(query) + fragment
     }
 
     /** Native link or path → web path + query (no origin, no marker). */

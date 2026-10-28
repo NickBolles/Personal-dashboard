@@ -70,7 +70,13 @@ class WebLinksTest {
 
     @Test fun httpsLinksOnlyOnTheAppOrigin() {
         assertEquals("$o/areas?item=q&source=android", url("https://jarvis.nickbolles.com/areas?item=q"))
-        assertEquals("$o/areas?item=q&source=android", url("https://JARVIS.nickbolles.com/areas/q"))
+        // Site links are real web URLs: path and query stay as they are.
+        assertEquals("$o/areas/map?source=android", url("https://JARVIS.nickbolles.com/areas/map"))
+        assertEquals("$o/areas/timeline?source=android", url("https://jarvis.nickbolles.com/areas/timeline"))
+        assertEquals("$o/join?code=AB12&source=android", url("https://jarvis.nickbolles.com/join?code=AB12"))
+        assertEquals("$o/chat/abc?source=android#m2", url("https://jarvis.nickbolles.com/chat/abc?source=pwa#m2"))
+        assertEquals("$o/home?source=android", url("https://jarvis.nickbolles.com"))
+        assertEquals("$o/home?source=android", url("https://jarvis.nickbolles.com/a/../../x"))
         assertEquals("$o/home?source=android", url("https://evil.example/areas?item=q"))
         assertEquals("$o/home?source=android", url("https://jarvis.nickbolles.com.evil.example/alerts"))
     }
