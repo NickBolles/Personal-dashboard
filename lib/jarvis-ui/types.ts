@@ -29,6 +29,9 @@ export type AppliedEntry = {
   /** idempotency key of the apply call that wrote it */
   key: string;
   undone?: boolean;
+  /** "Already applied" (recorded only so a replay returns the full response) */
+  noop?: boolean;
+  code?: string;
   /** what undo needs (previous due/status, created item id, work op id) */
   undo?: Record<string, unknown>;
 };

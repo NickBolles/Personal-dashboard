@@ -6,7 +6,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { LIMITS, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
-import { describeIntent, intentTarget, type Intent } from "@/lib/jarvis-ui/intents";
+import { describeIntent, intentKey, intentTarget, type Intent } from "@/lib/jarvis-ui/intents";
 import { canonicalJson, specRefs } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, ApplyResult, HydrateResponse, SurfaceView } from "@/lib/jarvis-ui/types";
 import { Button, cx, useToast } from "@/components/ui";
@@ -50,7 +50,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
 
   const applied = useMemo(() => {
     const m = new Map<string, AppliedEntry>();
-    for (const e of view?.applied ?? []) if (e.ok && !e.undone) m.set(intentTarget(e.intent as Intent), e);
+    for (const e of view?.applied ?? []) if (e.ok && !e.undone && !e.noop) m.set(intentTarget(e.intent as Intent), e);
     return m;
   }, [view]);
   const checks = Array.isArray(view?.state.checks) ? (view!.state.checks as string[]) : [];
@@ -83,16 +83,20 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     },
     onSuccess: ({ entries, results, surface: next }) => {
       setView(next);
-      const keep = new Map<string, Intent>();
+      // Reconcile against the current tray: drop only what was submitted and
+      // applied unchanged; failures stay staged with their error.
       const errs = new Map<string, string>();
+      const done = new Map<string, string>();
       results.forEach((r, i) => {
         const [k, intent] = entries[i]!;
-        if (!r.ok) {
-          keep.set(k, intent);
-          errs.set(k, r.message);
-        }
+        if (r.ok) done.set(k, intentKey(intent));
+        else errs.set(k, r.message);
       });
-      setStaged(keep);
+      setStaged((prev) => {
+        const keep = new Map(prev);
+        for (const [k, key] of done) if (keep.get(k) && intentKey(keep.get(k)!) === key) keep.delete(k);
+        return keep;
+      });
       setErrors(errs);
       setReview(false);
       const ok = results.filter((r) => r.ok).length;
@@ -114,6 +118,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     undoing,
     checks,
     stage: (target, intent) => {
+      if (apply.isPending) return;
       setStaged((prev) => {
         const next = new Map(prev);
         if (intent) next.set(target, intent);

@@ -181,6 +181,33 @@ describe("smart UI API", () => {
     expect((JSON.parse(row.appliedJson) as { key: string }[]).map((e) => e.key).sort()).toEqual(["overlap-a-1", "overlap-b-1"]);
   });
 
+  it("replays a partially failed batch with the complete ordered response", async () => {
+    const { todosAdapter } = await import("@/integrations/todos/adapter");
+    const { HttpError } = await import("@/server/http/errors");
+    vi.mocked(todosAdapter.act!).mockImplementation(async (id) => {
+      if (id === "gt-2") throw new HttpError(502, "bad_response", "Google did not confirm completion");
+      return { ok: true, message: "ok" };
+    });
+    const { surfaceId } = await setup();
+    const body = {
+      surfaceId,
+      intents: [
+        { kind: "todo.complete", ref: "todo:gt-2" },
+        { kind: "todo.snooze", ref: "todo:gt-1", date: "2026-10-30" },
+      ],
+      idempotencyKey: "partial-batch-1",
+    };
+    const first = await (await call(applyRoute.POST, { body })).json();
+    const again = await (await call(applyRoute.POST, { body })).json();
+    expect(first.results.map((r: { ok: boolean }) => r.ok)).toEqual([false, true]);
+    expect(again.results).toEqual(first.results);
+    // A new batch with the already-applied snooze reports it without writing twice.
+    vi.mocked(todosAdapter.act!).mockClear();
+    const next = await (await call(applyRoute.POST, { body: { ...body, intents: [body.intents[1]], idempotencyKey: "partial-batch-2" } })).json();
+    expect(next.results[0]).toMatchObject({ ok: true, message: "Already applied" });
+    expect(todosAdapter.act).not.toHaveBeenCalled();
+  });
+
   it("saves checklist ticks as surface state (≤ 16 KB) without running anything", async () => {
     const { surfaceId } = await setup();
     const r = await call(stateRoute.PATCH, { method: "PATCH", params: { id: surfaceId }, body: { state: { checks: ["Runbook::one"] } } });

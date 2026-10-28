@@ -124,16 +124,23 @@ async function applyLocked(
   const row = ownedSurface(user.id, body.surfaceId);
   const applied = JSON.parse(row.appliedJson) as AppliedEntry[];
   // Idempotent replay: the same apply call returns what it did the first time.
+  // Idempotent replay: the same key returns the complete, ordered response it got the first time.
   const replay = applied.filter((e) => e.key === body.idempotencyKey);
-  if (replay.length) return { results: replay.map((e) => ({ intentHash: e.intentHash, ok: e.ok, message: e.message })), surface: toView(row, user) };
+  if (replay.length)
+    return {
+      results: replay.map((e) => ({ intentHash: e.intentHash, ok: e.ok, message: e.message, ...(e.code ? { code: e.code } : {}) })),
+      surface: toView(row, user),
+    };
 
   const checked = check(user, body.intents, () => storedSpec(row));
   const results: ApplyResult[] = [];
   const at = new Date().toISOString();
   let touchedTodos = false;
   for (const c of checked) {
-    const live = applied.find((e) => e.intentHash === c.hash && e.ok && !e.undone);
+    const live = applied.find((e) => e.intentHash === c.hash && e.ok && !e.undone && !e.noop);
     if (live) {
+      // Recorded (as a no-op) so a replay of this key returns the full response.
+      applied.push({ intentHash: c.hash, intent: c.intent, ok: true, noop: true, message: "Already applied", at, key: body.idempotencyKey });
       results.push({ intentHash: c.hash, ok: true, message: "Already applied" });
       continue;
     }
@@ -145,7 +152,9 @@ async function applyLocked(
     } catch (err) {
       const e = err as HttpError;
       const message = e instanceof HttpError || (e as Error).name === "UpstreamError" ? (e as Error).message : "Couldn't apply that change";
-      results.push({ intentHash: c.hash, ok: false, message, code: e.code ?? "failed" });
+      const code = e.code ?? "failed";
+      applied.push({ intentHash: c.hash, intent: c.intent, ok: false, message, code, at, key: body.idempotencyKey });
+      results.push({ intentHash: c.hash, ok: false, message, code });
     }
   }
   writeApplied(row.id, applied);
@@ -165,7 +174,7 @@ async function applyLocked(
 async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHash: string }, correlationId: string) {
   const row = ownedSurface(user.id, body.surfaceId);
   const applied = JSON.parse(row.appliedJson) as AppliedEntry[];
-  const entry = applied.find((e) => e.intentHash === body.intentHash && e.ok && !e.undone);
+  const entry = applied.find((e) => e.intentHash === body.intentHash && e.ok && !e.undone && !e.noop);
   if (!entry) throw new HttpError(404, "not_found", "Nothing to undo");
   const u = entry.undo ?? { type: "none" };
   const intent = intentSchema.parse(entry.intent);
@@ -180,9 +189,11 @@ async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHa
       await todosAdapter.act!((intent as { ref: string }).ref.slice(5), "snooze", { ...opts, until: u.date as string });
       break;
     case "archive":
+      if (!can(user, "work.use")) throw new HttpError(403, "forbidden", "You don't have access to that.");
       updateItem(user, u.itemId as string, { archived: true }, correlationId);
       break;
     case "item":
+      if (!can(user, "work.use")) throw new HttpError(403, "forbidden", "You don't have access to that.");
       updateItem(
         user,
         u.itemId as string,
