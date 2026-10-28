@@ -289,7 +289,7 @@ test("palette commands act on the open item: start focused work and record valid
   await expect(page.getByLabel("Observed value for p95 hydration")).toBeFocused();
   await page.getByLabel("Observed value for p95 hydration").fill("0.9");
   await page.getByRole("button", { name: "Record p95 hydration" }).click();
-  await expect(page.locator("li", { hasText: "p95 hydration <= 1.2 s" }).getByText("Pass", { exact: true })).toBeVisible();
+  await expect(page.locator("li", { hasText: "p95 hydration ≤ 1.2 s" }).getByText("Pass", { exact: true })).toBeVisible();
 });
 
 test.describe("phone, 320 px", () => {

@@ -74,7 +74,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
   const controlsFresh = controls.data && now - new Date(controls.data.fetchedAt).getTime() < 60_000;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
+    <div className="mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5 dense:max-w-6xl">
       <PageHeader
         title="House"
         subtitle={
@@ -91,91 +91,95 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
       {home.isLoading ? <Spinner label="Loading home state…" /> : null}
       <SourceState status={home.data?.status} hasData={Boolean(home.data?.data)} />
 
-      {can("home_assistant.calendar") && home.data?.data?.events?.length ? <CalendarSection events={home.data.data.events} /> : null}
+      {/* Desktop: two balanced columns (owner default); each section stays whole. */}
+      <div className="dense:columns-2 dense:gap-6 dense:[&>section]:mt-0 dense:[&>section]:mb-6 [&>section]:break-inside-avoid">
+        {can("home_assistant.calendar") && home.data?.data?.events?.length ? <CalendarSection events={home.data.data.events} /> : null}
 
-      {home.data?.data && can("home_assistant.view") ? (
-        <section aria-labelledby="ex-h" className="mt-4">
-          <h2 id="ex-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Exceptions
-          </h2>
-          {exceptions.length ? (
-            <ul className="space-y-2">
-              {exceptions.map((e) => (
-                <li key={e.entityId} className={cx("card p-3", focusEntity === e.entityId && "border-accent")}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={e.severity === "critical" || e.severity === "high" ? "danger" : e.severity === "normal" ? "warn" : "neutral"}>
-                      {e.severity}
-                    </Badge>
-                    <span className="font-medium">{e.name}</span>
-                  </div>
-                  <p className="text-sm text-muted">
-                    {e.reason} · state “{e.state}”{e.since ? ` since ${new Date(e.since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
-                  </p>
+        {home.data?.data && can("home_assistant.view") ? (
+          <section aria-labelledby="ex-h" className="mt-4">
+            <h2 id="ex-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+              Exceptions
+            </h2>
+            {exceptions.length ? (
+              <ul className="space-y-2">
+                {exceptions.map((e) => (
+                  <li key={e.entityId} className={cx("card p-3", focusEntity === e.entityId && "border-accent")}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={e.severity === "critical" || e.severity === "high" ? "danger" : e.severity === "normal" ? "warn" : "neutral"}>
+                        {e.severity}
+                      </Badge>
+                      <span className="font-medium">{e.name}</span>
+                    </div>
+                    <p className="text-sm text-muted">
+                      {e.reason} · state “{e.state}”
+                      {e.since ? ` since ${new Date(e.since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">Nothing unusual in your watched entities.</p>
+            )}
+          </section>
+        ) : null}
+
+        {can("home_assistant.view") || can("home_assistant.cameras") ? <Devices focusEntity={focusEntity} online={online} /> : null}
+
+        {can("home_assistant.view") && home.data?.status && home.data.status.state !== "unconfigured" && home.data.status.state !== "disabled" ? (
+          <HealthPanel status={home.data.status} health={home.data.data?.extra?.health as HomeHealth | undefined} />
+        ) : null}
+
+        {can("home_assistant.control_doors") ? (
+          <section aria-labelledby="ctl-h" className="mt-6">
+            <h2 id="ctl-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+              Controls
+            </h2>
+            {!online ? (
+              <p role="status" className="rounded-xl bg-warn-soft p-3 text-sm text-warn">
+                Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.
+              </p>
+            ) : null}
+            {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
+            {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
+            {controls.data && !controls.data.controls.length ? (
+              <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
+            ) : null}
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {(controls.data?.controls ?? []).map((c) => (
+                <li key={c.entityId}>
+                  <Card className={cx(focusEntity === c.entityId && "border-accent")}>
+                    <p className="font-medium">{c.name}</p>
+                    <p className="text-sm text-muted">
+                      Now: <strong className="text-text">{c.state}</strong>
+                      <span className="block text-xs">Checked {new Date(c.observedAt).toLocaleTimeString()}</span>
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {c.services.map((s) => (
+                        <Button
+                          key={s.service}
+                          size="sm"
+                          variant={s.wouldChange ? "primary" : "secondary"}
+                          disabled={!online || !controlsFresh || c.state === "missing" || pendingId === c.entityId}
+                          busy={pendingId === c.entityId && exec.variables?.service === s.service}
+                          onClick={() => setConfirm({ control: c, service: s.service, label: s.label })}
+                          aria-label={`${s.label} ${c.name}`}
+                        >
+                          {s.label}
+                        </Button>
+                      ))}
+                    </div>
+                    {pendingId === c.entityId ? (
+                      <p className="mt-2 text-xs text-muted" role="status">
+                        Waiting for Home Assistant to confirm…
+                      </p>
+                    ) : null}
+                  </Card>
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="text-sm text-muted">Nothing unusual in your watched entities.</p>
-          )}
-        </section>
-      ) : null}
-
-      {can("home_assistant.view") || can("home_assistant.cameras") ? <Devices focusEntity={focusEntity} online={online} /> : null}
-
-      {can("home_assistant.view") && home.data?.status && home.data.status.state !== "unconfigured" && home.data.status.state !== "disabled" ? (
-        <HealthPanel status={home.data.status} health={home.data.data?.extra?.health as HomeHealth | undefined} />
-      ) : null}
-
-      {can("home_assistant.control_doors") ? (
-        <section aria-labelledby="ctl-h" className="mt-6">
-          <h2 id="ctl-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Controls
-          </h2>
-          {!online ? (
-            <p role="status" className="rounded-xl bg-warn-soft p-3 text-sm text-warn">
-              Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.
-            </p>
-          ) : null}
-          {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
-          {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
-          {controls.data && !controls.data.controls.length ? (
-            <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
-          ) : null}
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {(controls.data?.controls ?? []).map((c) => (
-              <li key={c.entityId}>
-                <Card className={cx(focusEntity === c.entityId && "border-accent")}>
-                  <p className="font-medium">{c.name}</p>
-                  <p className="text-sm text-muted">
-                    Now: <strong className="text-text">{c.state}</strong>
-                    <span className="block text-xs">Checked {new Date(c.observedAt).toLocaleTimeString()}</span>
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {c.services.map((s) => (
-                      <Button
-                        key={s.service}
-                        size="sm"
-                        variant={s.wouldChange ? "primary" : "secondary"}
-                        disabled={!online || !controlsFresh || c.state === "missing" || pendingId === c.entityId}
-                        busy={pendingId === c.entityId && exec.variables?.service === s.service}
-                        onClick={() => setConfirm({ control: c, service: s.service, label: s.label })}
-                        aria-label={`${s.label} ${c.name}`}
-                      >
-                        {s.label}
-                      </Button>
-                    ))}
-                  </div>
-                  {pendingId === c.entityId ? (
-                    <p className="mt-2 text-xs text-muted" role="status">
-                      Waiting for Home Assistant to confirm…
-                    </p>
-                  ) : null}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
 
       <Dialog
         open={Boolean(confirm)}

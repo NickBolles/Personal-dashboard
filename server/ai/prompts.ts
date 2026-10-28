@@ -15,6 +15,7 @@ export const PROMPT_VERSIONS: Record<AiJobKind, string> = {
   draft: "draft@1",
   triage: "triage@1",
   investigate: "investigate@1",
+  file: "file@1",
 };
 
 const COMMON_EXAMPLE = {
@@ -49,6 +50,11 @@ const EXAMPLES: Record<AiJobKind, unknown> = {
     shouldInvestigate: true,
     brief: "≤600: what a short investigation should find out",
     sensitivity: "none|personal|finance|credentials",
+  },
+  file: {
+    suggestions: [
+      { sessionId: "an id from the conversations list", destinationKey: "an id from the destinations list, or null", confidence: 0.8, reason: "≤200" },
+    ],
   },
 };
 
@@ -91,6 +97,8 @@ export function taskFor(kind: AiJobKind, v: TaskVars) {
       return `Draft a ${v.draftKind ?? "message"} for "${t}".${v.audience ? ` Audience: ${v.audience}.` : ""} Keep Nick's voice: direct, concise. Never send anything.`;
     case "triage":
       return `Classify this capture. Destinations (key — path):\n${v.destinations || "(none)"}\nReturn the best destination key or null, a clean title, the kind, whether a short investigation would save Nick time, and a one-paragraph brief for that investigation.`;
+    case "file":
+      return `Suggest where each of Nick's conversations belongs in his Areas tree, judging from the title. Destinations (key — path):\n${v.destinations || "(none)"}\nFor every conversation return its sessionId, the best destination key (or null when nothing fits; Miscellaneous is fine for one-off questions) and a short reason. Don't invent keys.`;
     case "investigate":
       return `Prepare what Nick needs when he opens this capture: what it is, why it matters${v.areaTitle ? ` for ${v.areaTitle}` : ""}, key facts with sources, and the obvious next action.${v.brief ? ` Brief from triage: ${v.brief}` : ""}`;
   }

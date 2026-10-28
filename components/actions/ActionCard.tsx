@@ -139,7 +139,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
       </details>
     ) : null;
 
-  // Phones: title/meta beside the menu, primary action below. Wider: one row — content, action, menu.
+  // Phones: title/meta beside the menu, primary action right-aligned below. Wider: one row — content, action, menu.
   // Two text lines: title, then source · status · detail · due · "Why this?" (design review D4).
   return (
     <article
@@ -185,10 +185,13 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           {why}
         </div>
       </div>
-      <div className="col-start-2 row-start-1 self-start sm:col-start-3 sm:self-center">
+      <div className="col-start-2 row-start-1 self-start justify-self-end sm:col-start-3 sm:self-center">
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
-      {primaryButton ? <div className="col-start-1 row-start-2 flex gap-2 sm:col-start-2 sm:row-start-1">{primaryButton}</div> : null}
+      {/* Phones: the main action sits on the right (owner default), on its own line so a long label never squeezes the title. */}
+      {primaryButton ? (
+        <div className="col-span-2 col-start-1 row-start-2 flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">{primaryButton}</div>
+      ) : null}
     </article>
   );
 }

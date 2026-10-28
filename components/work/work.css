@@ -571,9 +571,36 @@ button.wk-kpi:hover {
   font-variant-numeric: tabular-nums;
 }
 @media (min-width: 1024px) {
-  /* left pane (~256px): the nav row wraps to two lines instead of scrolling */
+  /* Left pane (~256px): two tiers instead of a ragged wrap. Today · Inbox · Areas as an even segmented
+     row; Timeline · Dashboard · Map as a quieter second row under a hairline. */
   .wk-hub .wk-nav > ul {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 2px;
+  }
+  .wk-hub .wk-nav li {
+    min-width: 0;
+  }
+  .wk-hub .wk-nav-item > span[aria-hidden] {
+    display: none;
+  }
+  .wk-hub .wk-nav li .wk-nav-item {
+    width: 100%;
+    justify-content: center;
+  }
+  .wk-hub .wk-nav li:nth-child(n + 4) {
+    margin-top: 3px;
+    padding-top: 3px;
+    border-top: 1px solid var(--line);
+  }
+  .wk-hub .wk-nav li.wk-nav-sep {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .wk-hub .wk-nav li:nth-child(n + 4) .wk-nav-item {
+    font-size: 12px;
+    font-weight: 500;
   }
 }
 @media (pointer: fine) {
@@ -589,6 +616,7 @@ button.wk-kpi:hover {
   text-transform: uppercase;
   color: var(--muted);
 }
+/* Container progress: one hairline strip, number + label inline (same rhythm as the Today KPIs). */
 .wk-kpis {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -597,23 +625,36 @@ button.wk-kpi:hover {
   background: var(--surface);
 }
 .wk-kpis > div {
-  padding: 7px 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px;
   border-left: 1px solid var(--line);
   min-width: 0;
+  white-space: nowrap;
 }
 .wk-kpis > div:first-child {
   border-left: 0;
 }
 .wk-kpis b {
-  display: block;
-  font-size: 17px;
+  font-size: 15px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
 }
 .wk-kpis span {
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 10.5px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
+}
+@media (max-width: 639px) {
+  .wk-kpis > div {
+    flex-direction: column;
+    gap: 0;
+    padding: 5px 8px;
+  }
 }
 .wk-node-rows > li + li {
   border-top: 1px solid var(--line);
@@ -704,4 +745,213 @@ button.wk-kpi:hover {
   font-size: 12.5px !important;
   font-weight: 600;
   width: auto;
+}
+
+/* --- Areas refine (item page) --- */
+/* Status: the pill is the control. A transparent native select covers it (keyboard + screen readers get the real select). */
+.wk-status-pick {
+  position: relative;
+  cursor: pointer;
+  padding-right: 6px;
+}
+.wk-status-pick:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.wk-status-native {
+  position: absolute;
+  inset: -11px -4px;
+  width: calc(100% + 8px);
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  .wk-status-native {
+    inset: -9px -4px;
+  }
+}
+/* Next action strip (read + inline edit). */
+.wk-next {
+  margin-top: 10px;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 4px 4px 4px 12px;
+  min-height: 44px;
+}
+@media (max-width: 639px) {
+  /* Phones: the label sits on its own line so the action gets the full width. */
+  .wk-next:not([data-editing]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 6px;
+    row-gap: 0;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .wk-next:not([data-editing]) > .wk-next-label {
+    grid-column: 1;
+  }
+  .wk-next:not([data-editing]) > p {
+    grid-column: 1;
+  }
+  .wk-next:not([data-editing]) > .wk-next-edit {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+.wk-next[data-editing] {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.wk-next-edit {
+  flex: none;
+  align-self: stretch;
+  min-width: 44px;
+  border-radius: 7px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.wk-next-edit:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.wk-next-input {
+  min-width: 0;
+  flex: 1 1 14rem;
+  min-height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 0 10px;
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  .wk-next {
+    min-height: 40px;
+  }
+  .wk-next-input {
+    font-size: 14px;
+  }
+}
+/* Work packet: label column + Markdown values. */
+.wk-packet-dl {
+  display: grid;
+  gap: 6px 14px;
+  font-size: 13.5px;
+}
+.wk-packet-dl > dt {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 2px;
+}
+@media (min-width: 640px) {
+  .wk-packet-dl {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+  }
+}
+@media (max-width: 639px) {
+  .wk-packet-dl > dd {
+    margin-bottom: 4px;
+  }
+}
+.md-compact > :first-child {
+  margin-top: 0;
+}
+.md-compact > :last-child {
+  margin-bottom: 0;
+}
+.md-compact p,
+.md-compact ul,
+.md-compact ol {
+  margin-top: 0;
+  margin-bottom: 2px;
+}
+/* Validation rows: one hairline list, record form on one line (≥640). */
+.wk-vlist > li + li {
+  border-top: 1px solid var(--line);
+}
+.wk-vrow {
+  padding: 8px 0;
+}
+.wk-vrow:first-child {
+  padding-top: 2px;
+}
+.wk-vrow[data-overdue] {
+  box-shadow: inset 3px 0 0 var(--danger);
+  padding-left: 10px;
+}
+.wk-vform {
+  margin-top: 6px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.wk-vform > div:nth-child(2) {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+@media (min-width: 640px) {
+  .wk-vform {
+    grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  }
+  .wk-vform > div:nth-child(2) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+/* One filing suggestion chip (→ destination); the rest lives in ⋯. */
+.wk-suggest {
+  display: inline-flex;
+  max-width: min(13rem, 38vw);
+  min-height: 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.wk-suggest > .truncate {
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.wk-suggest:hover {
+  background: var(--accent-soft);
+}
+.wk-suggest:disabled {
+  opacity: 0.6;
+}
+@media (min-width: 640px) {
+  .wk-suggest {
+    min-height: 36px;
+    background: var(--accent-soft);
+  }
+  .wk-suggest > .truncate {
+    border-bottom: 0;
+  }
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .wk-suggest {
+    min-height: 28px;
+  }
+}
+@media (max-width: 639px) {
+  /* Phone child rows: status as dot + coloured label, not a filled pill (a column of pills shouts). */
+  .wk-node-row .status-pill {
+    background: transparent;
+    padding: 0;
+    font-size: 11.5px;
+  }
 }

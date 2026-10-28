@@ -8,7 +8,8 @@ import { CONTEXT_SOURCES } from "@/lib/work";
 
 export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft"] as const;
 export type AiActionKind = (typeof AI_ACTION_KINDS)[number];
-export const AI_JOB_KINDS = [...AI_ACTION_KINDS, "triage", "investigate"] as const;
+/** `file`: on-demand filing suggestions for unfiled conversations (triage tier, hidden, no report). */
+export const AI_JOB_KINDS = [...AI_ACTION_KINDS, "triage", "investigate", "file"] as const;
 export type AiJobKind = (typeof AI_JOB_KINDS)[number];
 
 export const JOB_STATES = ["queued", "running", "waiting_approval", "cancelling", "succeeded", "failed", "cancelled", "budget_blocked", "skipped"] as const;
@@ -55,6 +56,7 @@ export const KIND_VERB: Record<AiJobKind, string> = {
   draft: "Drafting",
   triage: "Triaging",
   investigate: "Investigating",
+  file: "Suggesting where to file",
 };
 
 export const AI_KIND_LABEL: Record<AiJobKind, string> = {
@@ -64,6 +66,7 @@ export const AI_KIND_LABEL: Record<AiJobKind, string> = {
   draft: "Draft",
   triage: "Triage",
   investigate: "Investigation",
+  file: "Filing suggestions",
 };
 
 const clientKey = z
@@ -219,6 +222,22 @@ export const triageOutput = z
   })
   .passthrough();
 
+export const fileOutput = z
+  .object({
+    suggestions: z
+      .array(
+        z.object({
+          sessionId: z.string().max(200),
+          destinationKey: z.string().max(80).nullable().default(null),
+          confidence: z.number().min(0).max(1).default(0),
+          reason: s(200).default(""),
+        }),
+      )
+      .max(30)
+      .default([]),
+  })
+  .passthrough();
+
 export const OUTPUT_SCHEMAS = {
   research: researchOutput,
   investigate: investigateOutput,
@@ -226,7 +245,13 @@ export const OUTPUT_SCHEMAS = {
   schedule: scheduleOutput,
   draft: draftOutput,
   triage: triageOutput,
+  file: fileOutput,
 } as const;
+
+/** One AI filing suggestion (stored per person; read by the Areas unfiled list). `itemId` null = no good home. */
+export type AiFilingSuggestion = { sessionId: string; itemId: string | null; confidence: number; reason: string };
+export type AiFilingState = { job: JobView | null; suggestions: AiFilingSuggestion[]; at: string | null; excluded: number };
+export const fileSuggestSchema = z.object({ clientKey }).strict();
 
 // --- Views ---
 
@@ -236,7 +261,7 @@ export type ScheduleSlot = { start: string; end: string; score: number; why: str
 export type JobView = {
   id: string;
   kind: AiJobKind;
-  subjectType: "work_item" | "inbox";
+  subjectType: "work_item" | "inbox" | "conversations";
   subjectId: string;
   state: JobState;
   tier: AiTier;
@@ -259,7 +284,7 @@ export type ReportView = {
   id: string;
   jobId: string;
   kind: AiJobKind;
-  subjectType: "work_item" | "inbox";
+  subjectType: "work_item" | "inbox" | "conversations";
   subjectId: string;
   title: string;
   summary: string;

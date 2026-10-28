@@ -24,17 +24,17 @@ export function canTransition(from: JobState, to: JobState) {
 }
 
 export function laneFor(kind: AiJobKind): AiLane {
-  return kind === "triage" || kind === "schedule" ? "triage" : "work";
+  return kind === "triage" || kind === "schedule" || kind === "file" ? "triage" : "work";
 }
 
 export function tierFor(kind: AiJobKind, params: { deep?: boolean } = {}): AiTier {
-  if (kind === "triage" || kind === "schedule") return "triage";
+  if (kind === "triage" || kind === "schedule" || kind === "file") return "triage";
   return params.deep ? "deep" : "standard";
 }
 
 /** Research/plan/draft/investigate get a visible conversation filed under the item; triage/schedule are hidden and deleted. */
 export function visibleFor(kind: AiJobKind) {
-  return kind !== "triage" && kind !== "schedule";
+  return kind !== "triage" && kind !== "schedule" && kind !== "file";
 }
 
 export type BudgetInput = { spentToday: number; reserved: number; estimate: number; daily: number; override: boolean };

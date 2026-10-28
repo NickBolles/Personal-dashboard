@@ -21,6 +21,7 @@ const fake = vi.hoisted(() => {
     starts: [] as { key: string; input: string; model?: string }[],
     seq: 0,
     stopDelayPolls: 1,
+    fileAnswer: null as string | null,
     reset() {
       st.sessions.clear();
       st.runs.clear();
@@ -28,6 +29,7 @@ const fake = vi.hoisted(() => {
       st.starts.length = 0;
       st.seq = 0;
       st.stopDelayPolls = 1;
+      st.fileAnswer = null;
     },
   };
   return st;
@@ -76,6 +78,8 @@ function answerFor(kind: string, input: string) {
         brief: "Find out more",
         sensitivity: "none",
       });
+    case "file":
+      return fake.fileAnswer ?? JSON.stringify({ suggestions: [] });
     default:
       return JSON.stringify(common);
   }
@@ -181,6 +185,8 @@ import * as applyRoute from "@/app/api/ai/reports/[id]/apply/route";
 import * as exportRoute from "@/app/api/ai/reports/[id]/export/route";
 import * as usageRoute from "@/app/api/ai/usage/route";
 import * as undoRoute from "@/app/api/work/ops/[id]/undo/route";
+import * as suggestRoute from "@/app/api/work/conversations/suggest/route";
+import { createLocalSession } from "@/server/assistant/local";
 
 let owner: string, other: string;
 const cid = "test-correlation";
@@ -350,6 +356,41 @@ describe("AI actions end to end (fake Hermes)", () => {
     expect(
       (await call(actionRoute.POST, { user: other, method: "POST", params: { id: theirs.id }, body: { action: "research", clientKey: "abcdefgh" } })).status,
     ).toBe(403);
+  });
+
+  it("Suggest with AI (filing): screened titles only, Finance never offered, answers kept only for real destinations", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-test-value");
+    const { u, area } = setup();
+    const fin = store.createItem(u, { kind: "area", title: "Finance" }, cid);
+    const a = createLocalSession(u, "Enable v5 rollout");
+    const b = createLocalSession(u, "Pay card 4111 1111 1111 1111");
+    const go = () => call(suggestRoute.POST, { method: "POST", body: { clientKey: `ck${Math.random().toString(36).slice(2, 12)}` } });
+    fake.fileAnswer = JSON.stringify({
+      suggestions: [
+        { sessionId: a.id, destinationKey: area.id, confidence: 0.9, reason: "V5 work" },
+        { sessionId: b.id, destinationKey: area.id, confidence: 0.9, reason: "not asked" },
+      ],
+    });
+    const res = await go();
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ asked: 1, excluded: 1 });
+    await settle();
+    expect(fake.starts).toHaveLength(1);
+    expect(fake.starts[0]!.input).toContain(a.id);
+    expect(fake.starts[0]!.input).not.toContain(b.id);
+    expect(fake.starts[0]!.input).not.toContain(fin.id); // AI-excluded area: never a destination
+    let state = await (await call(suggestRoute.GET)).json();
+    expect(state.job).toMatchObject({ kind: "file", state: "succeeded" });
+    expect(state.suggestions).toEqual([{ sessionId: a.id, itemId: area.id, confidence: 0.9, reason: "V5 work" }]);
+    // A key outside the offered destinations (Finance, or invented) is dropped to "no home".
+    fake.fileAnswer = JSON.stringify({ suggestions: [{ sessionId: a.id, destinationKey: fin.id, confidence: 0.7, reason: "money" }] });
+    expect((await go()).status).toBe(202);
+    await settle();
+    state = await (await call(suggestRoute.GET)).json();
+    expect(state.suggestions).toEqual([{ sessionId: a.id, itemId: null, confidence: 0.7, reason: "money" }]);
+    // work.ai is required.
+    expect((await call(suggestRoute.POST, { user: other, method: "POST", body: { clientKey: "abcdefgh" } })).status).toBe(403);
+    vi.unstubAllEnvs();
   });
 
   it("an item moved into Finance after enqueue is skipped at execution", async () => {

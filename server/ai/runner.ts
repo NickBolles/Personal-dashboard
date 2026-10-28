@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { userById } from "@/server/auth";
-import { getPreferences } from "@/server/settings";
+import { getPreferences, setSetting } from "@/server/settings";
 import { processSingleton } from "@/server/singleton";
 import { notify } from "@/server/notifications";
 import { kickDispatcher } from "@/server/notifications/dispatcher";
@@ -255,6 +255,15 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
     };
     outbound = kind === "schedule" ? (await itemContext(user, row.subjectId, { instructions: params.instructions })).text : ctx.text;
     input = `${taskFor(kind, vars)}\n\n${outbound}`;
+  } else if (row.subjectType === "conversations") {
+    // Filing suggestions: only conversation titles (pre-screened at enqueue) and non-excluded destinations leave.
+    const convs = fileParams(row.params);
+    const dests = triageDestinations(
+      row.userId,
+      (r) => effectiveAreaPolicy({ title: r.title, systemKey: r.systemKey, aiPolicy: parseAreaSettings(r.settings).aiPolicy }) === "excluded",
+    );
+    outbound = convs.map((c) => `${c.id} — ${c.title}`).join("\n");
+    input = `${taskFor(kind, { title, destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n") })}\n\nConversations (sessionId — title):\n<data source="conversation titles">\n${outbound}\n</data>`;
   } else {
     const ctx = inboxContext(row.userId, row.subjectId, { imagesAnalysed: false, brief: params.brief });
     if (!ctx) return void failJob(row, "upstream", "capture not found");
@@ -288,7 +297,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       input,
       schema: OUTPUT_SCHEMAS[kind] as never,
       idempotencyKey: row.idempotencyKey,
-      timeoutMs: settings.timeoutsS[kind] * 1000,
+      timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind] * 1000,
       signal: AbortSignal.any([signal, stopGuard.signal]),
       adopt: adopt && row.hermesSessionId ? { sessionId: row.hermesSessionId, runId: row.hermesRunId } : undefined,
       onIds: (ids) => {
@@ -384,7 +393,7 @@ async function handleFailure(id: string, e: unknown, kind: AiJobKind, title: str
   }
   if (["running", "waiting_approval", "cancelling"].includes(row.state)) failJob(row, code, undefined, costPatch);
   if (row.subjectType === "inbox") setTriage(row.subjectId, kind, "failed");
-  if (kind !== "triage")
+  if (kind !== "triage" && kind !== "file")
     notify(
       {
         type: "ai.job_failed",
@@ -459,6 +468,27 @@ async function onSuccess(
   settings: ReturnType<typeof getAiSettings>,
   params: { investigateMode?: string },
 ) {
+  if (kind === "file") {
+    // Keep only destinations the person owns and that aren't AI-excluded; stored per person (no report, no conversation).
+    const allowed = new Set(
+      triageDestinations(
+        row.userId,
+        (r) => effectiveAreaPolicy({ title: r.title, systemKey: r.systemKey, aiPolicy: parseAreaSettings(r.settings).aiPolicy }) === "excluded",
+      ).map((d) => d.key),
+    );
+    const asked = new Set(fileParams(row.params).map((c) => c.id));
+    const out = ((data as { suggestions?: { sessionId: string; destinationKey: string | null; confidence: number; reason: string }[] }).suggestions ?? [])
+      .filter((x) => asked.has(x.sessionId))
+      .map((x) => ({
+        sessionId: x.sessionId,
+        itemId: x.destinationKey && allowed.has(x.destinationKey) ? x.destinationKey : null,
+        confidence: x.confidence,
+        reason: x.reason.slice(0, 200),
+      }));
+    setSetting(fileSuggestionsKey(row.userId), { jobId: row.id, at: new Date().toISOString(), suggestions: out });
+    transition(row.id, row.state as JobState, "succeeded", costPatch);
+    return;
+  }
   if (kind === "triage") {
     const t = data as {
       title: string;
@@ -670,4 +700,21 @@ export function aiRunnerStatus() {
     lastTickAt: s.lastTickAt ? new Date(s.lastTickAt).toISOString() : null,
     lastError: s.lastError,
   };
+}
+
+/** Where a person's latest AI filing suggestions are kept (settings key/value; replaced on each run). */
+export function fileSuggestionsKey(userId: string) {
+  return `ai_filing:${userId}`;
+}
+
+/** The conversations a `file` job was asked about (`params.conversations`, screened at enqueue). */
+export function fileParams(raw: string): { id: string; title: string }[] {
+  try {
+    const p = JSON.parse(raw) as { conversations?: unknown };
+    return Array.isArray(p.conversations)
+      ? p.conversations.filter((c): c is { id: string; title: string } => !!c && typeof c.id === "string" && typeof c.title === "string").slice(0, 15)
+      : [];
+  } catch {
+    return [];
+  }
 }

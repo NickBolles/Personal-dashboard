@@ -139,7 +139,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await page.getByLabel("Unit").fill("ms");
   await page.getByLabel("Baseline (optional)").fill("1200");
   await page.getByRole("button", { name: "Save validation" }).click();
-  await expect(page.getByText("p95 hydration <= 800 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("p95 hydration ≤ 800 ms", { exact: true })).toBeVisible();
   await page.getByLabel("Observed value for p95 hydration").fill("950");
   await page.getByRole("button", { name: "Record p95 hydration" }).click();
   await expect(page.getByText("Fail", { exact: true })).toBeVisible();
@@ -468,7 +468,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await td.getByLabel("Due after (days, optional)").fill("7");
   await td.getByRole("button", { name: "Save template" }).click();
   await td.getByRole("button", { name: "Add p95 hydration" }).click();
-  await expect(page.getByText("p95 hydration <= 800 ms", { exact: true })).toBeVisible();
+  await expect(page.getByText("p95 hydration ≤ 800 ms", { exact: true })).toBeVisible();
   await post(`/api/work/items/${ids["V5 evaluator contract"]}/validations`, {
     metric: "error rate",
     comparator: "<",

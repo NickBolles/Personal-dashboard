@@ -10,7 +10,7 @@ import { BackendSwitch } from "@/components/chat/backend";
 import { Badge, Button, ErrorNote, Spinner, cx } from "@/components/ui";
 import { ChatIcon } from "@/components/icons";
 import { useWorkMutation } from "@/components/work/common";
-import { FileUnderDialog, UpdatingNote, pollWhileUpdating } from "@/components/work/conversations";
+import { FileUnderDialog, FilingActions, UpdatingNote, pollWhileUpdating } from "@/components/work/conversations";
 import type { ConversationFilter, ConversationListResponse, ItemsResponse } from "@/lib/work";
 
 type Row = ConversationListResponse["conversations"][number];
@@ -136,8 +136,8 @@ export function ConversationsView({
               const top = c.suggestions[0];
               const unfiled = !c.placement || c.placement.inMisc;
               return (
-                <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" data-conversation={c.id}>
-                  <div className="min-w-0 flex-1 basis-60">
+                <li key={c.id} className="flex items-center gap-x-3 gap-y-1 px-3 py-2" data-conversation={c.id}>
+                  <div className="min-w-0 flex-1">
                     <Link href={`/chat/${encodeURIComponent(c.id)}`} className="flex min-h-7 items-center gap-1.5 text-[14px] font-medium hover:underline">
                       <ChatIcon className={cx("h-3.5 w-3.5 shrink-0", c.backend === "claude" ? "text-violet" : "text-muted")} />
                       <span className="min-w-0 truncate">{c.title}</span>
@@ -158,22 +158,14 @@ export function ConversationsView({
                     </p>
                   </div>
                   {unfiled && !c.readOnly ? (
-                    <div className="flex flex-wrap gap-1">
-                      {top ? (
-                        <Button
-                          size="sm"
-                          onClick={() => file.mutate({ sessionId: c.id, itemId: top.id })}
-                          busy={file.isPending && file.variables?.sessionId === c.id && file.variables?.itemId === top.id}
-                          aria-label={`File under ${top.title}: ${c.title}`}
-                          title={`${top.path} — shares: ${top.matched.join(", ")}`}
-                        >
-                          File under {top.title}
-                        </Button>
-                      ) : null}
-                      <Button size="sm" variant="ghost" onClick={() => setFiling(c)} aria-label={`File…: ${c.title}`}>
-                        File…
-                      </Button>
-                    </div>
+                    <FilingActions
+                      c={c}
+                      top={top ? { ...top, why: `${top.path} — shares: ${top.matched.join(", ")}` } : null}
+                      busy={file.isPending && file.variables?.sessionId === c.id}
+                      inMisc={!!c.placement?.inMisc}
+                      onFile={(itemId) => file.mutate({ sessionId: c.id, itemId })}
+                      onPick={() => setFiling(c)}
+                    />
                   ) : null}
                 </li>
               );
