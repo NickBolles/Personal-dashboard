@@ -20,6 +20,7 @@ for (const [name, path] of [
   ["chat", "/chat/sess_morning"],
   ["alerts", "/alerts"],
   ["more", "/more"],
+  ["kit", "/dev/kit"],
 ] as const) {
   test(`visual: ${name}`, async ({ page }) => {
     if (name === "home") {
