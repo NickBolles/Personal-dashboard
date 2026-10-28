@@ -10,6 +10,7 @@ import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { AssistantSettings } from "./AssistantSettings";
 import { SharedConversations } from "./SharedConversations";
+import { SmartSettings } from "./SmartSettings";
 
 type Prefs = {
   displayName: string;
@@ -136,6 +137,7 @@ export function SettingsView() {
           ) : null}
 
           {isAdmin ? <AssistantSettings /> : null}
+          {can("hermes.chat") ? <SmartSettings /> : null}
           {can("hermes.chat") ? <SharedConversations /> : null}
 
           {me.data?.authMode === "local" ? (

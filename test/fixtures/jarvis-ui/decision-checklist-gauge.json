@@ -1,0 +1,74 @@
+{
+  "v": 1,
+  "catalog": "jarvis-ui@1",
+  "root": "r",
+  "elements": {
+    "r": {
+      "type": "Stack",
+      "props": {},
+      "children": ["d", "c", "g"]
+    },
+    "d": {
+      "type": "DecisionCard",
+      "props": {
+        "title": "V5 grading path",
+        "context": "Scores are estimates.",
+        "options": [
+          {
+            "id": "patch",
+            "label": "Patch V4 grader",
+            "consequence": "~1 day",
+            "recommended": true,
+            "intent": {
+              "kind": "item.update",
+              "ref": "item:ITEM",
+              "patch": {
+                "nextAction": "Patch the V4 grader push rule"
+              }
+            }
+          },
+          {
+            "id": "new",
+            "label": "New evaluator",
+            "consequence": "~4 days",
+            "intent": {
+              "kind": "item.update",
+              "ref": "item:ITEM",
+              "patch": {
+                "nextAction": "Start grading on the V5 evaluator"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "c": {
+      "type": "Checklist",
+      "props": {
+        "title": "Release runbook",
+        "steps": [
+          {
+            "id": "freeze",
+            "label": "Freeze main"
+          },
+          {
+            "id": "merge",
+            "label": "Merge the PR",
+            "runBy": "you",
+            "detail": "Manual on GitHub"
+          }
+        ]
+      }
+    },
+    "g": {
+      "type": "Gauge",
+      "props": {
+        "label": "AI today",
+        "value": 0.62,
+        "max": 5,
+        "unit": "$",
+        "note": "From the usage page"
+      }
+    }
+  }
+}

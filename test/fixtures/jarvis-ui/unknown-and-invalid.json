@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "catalog": "jarvis-ui@1",
+  "root": "r",
+  "elements": {
+    "r": {
+      "type": "Stack",
+      "props": {},
+      "children": ["ok", "frame", "bad", "styled"]
+    },
+    "ok": {
+      "type": "Text",
+      "props": {
+        "text": "Still shown"
+      }
+    },
+    "frame": {
+      "type": "Iframe",
+      "props": {
+        "src": "https://evil.example"
+      }
+    },
+    "bad": {
+      "type": "TaskList",
+      "props": {
+        "title": "x",
+        "rows": [
+          {
+            "ref": "todo:a",
+            "suggestion": "nuke"
+          }
+        ]
+      }
+    },
+    "styled": {
+      "type": "Text",
+      "props": {
+        "text": "x",
+        "style": {
+          "color": "red"
+        }
+      }
+    }
+  }
+}

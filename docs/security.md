@@ -84,3 +84,7 @@ Backups (`scripts/backup.mjs`) contain the encrypted DB **and** the key file: st
 - **Photo location / retention**: optional GPS removal before storage and the 30-day purge of dismissed captures, see [privacy.md](privacy.md).
 - **Budget** bounds total spend (and a leaked capture token, which can also be `triage_only`/`off`).
 - Rollback: Settings → AI → Enabled off stops the runner (queued jobs stay); removing `work.ai` hides everything; capture keeps working deterministically.
+
+## Phase 6: smart replies (`jarvis-ui@1`)
+
+Model output can only **propose**. The catalog is closed (strict zod props: no HTML, no style, no URLs, no `$state`/`$computed` expressions), text renders as React text (only `**bold**` and `` `code` ``), and unknown/invalid elements are dropped. The server stores the canonical spec on first render, and `POST /api/smart/apply` re-checks every intent against that stored spec, the person's capabilities, ref ownership and the Finance rule before writing anything (forged → 400, Finance → 403). Titles and dates shown in rows come from Jarvis data by ref, never from the model. Logs and audit record surface ids, intent kinds and counts, never spec text or model output. Details: `docs/smart-ui.md`.

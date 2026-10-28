@@ -255,3 +255,72 @@ export const todosAdapter: SourceAdapter = {
     );
   },
 };
+
+/**
+ * Smart-UI undo: reopen a todo Jarvis completed (or "dropped"). Readback
+ * before reporting success, like every other todo write.
+ */
+export async function reopenTodo(id: string, opts: { actor: string; correlationId: string }) {
+  try {
+    switch (provider()) {
+      case "google_tasks": {
+        await GoogleTasksClient.patch(id, { status: "needsAction" });
+        const after = await GoogleTasksClient.get(id);
+        if (after.status !== "needsAction") throw new UpstreamError("Google Tasks", "bad_response", "Google did not confirm the reopen");
+        break;
+      }
+      case "home_assistant": {
+        const entity = resolveIntegration("todos").config.haEntityId;
+        const conn = haConn();
+        await HomeAssistantClient.callService(conn, "todo", "update_item", { entity_id: entity, item: id, status: "needs_action" });
+        const after = (await HomeAssistantClient.todoItems(conn, entity)).find((i) => i.uid === id);
+        if (!after || after.status === "completed") throw new UpstreamError("Home Assistant", "bad_response", "Home Assistant did not confirm the reopen");
+        break;
+      }
+      case "jarvis": {
+        const res = getDb().update(schema.localTodos).set({ completedAt: null, updatedAt: new Date().toISOString() }).where(eq(schema.localTodos.id, id)).run();
+        if (!res.changes) throw new HttpError(404, "not_found", "Todo not found");
+      }
+    }
+    audit({ actor: opts.actor, action: "todos.reopen", source: "todos", sourceRecord: id, result: "ok", correlationId: opts.correlationId });
+  } catch (err) {
+    audit({
+      actor: opts.actor,
+      action: "todos.reopen",
+      source: "todos",
+      sourceRecord: id,
+      result: "error",
+      correlationId: opts.correlationId,
+      detail: { error: (err as Error).message },
+    });
+    throw err;
+  }
+}
+
+/**
+ * "Drop" (owner decision D3): never delete. Complete with readback, record an
+ * audited `todos.drop`, and on Jarvis-local todos prefix the note so the list shows why.
+ */
+export async function dropTodo(id: string, note: string | undefined, opts: { actor: string; correlationId: string }) {
+  await todosAdapter.act!(id, "complete", { actor: opts.actor, correlationId: opts.correlationId });
+  if (provider() === "jarvis") {
+    const row = getDb().select().from(schema.localTodos).where(eq(schema.localTodos.id, id)).get();
+    if (row) {
+      const prefix = `Dropped${note ? `: ${note.slice(0, 300)}` : ""}`;
+      getDb()
+        .update(schema.localTodos)
+        .set({ notes: row.notes ? `${prefix}\n${row.notes}` : prefix })
+        .where(eq(schema.localTodos.id, id))
+        .run();
+    }
+  }
+  audit({
+    actor: opts.actor,
+    action: "todos.drop",
+    source: "todos",
+    sourceRecord: id,
+    result: "ok",
+    correlationId: opts.correlationId,
+    detail: { note: Boolean(note) },
+  });
+}

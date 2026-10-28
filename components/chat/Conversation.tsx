@@ -15,6 +15,8 @@ import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToas
 import { ChevronIcon, ForkIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
+import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
+import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ContextPicker, ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
 import { useAskHermes } from "./useAskHermes";
@@ -155,6 +157,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         input: text,
         idempotencyKey: key,
         context: ctx || undefined,
+        capabilities: [SMART_CAPABILITY],
         ...model,
       });
       await kvDel(`pending:${sessionId}`);
@@ -327,223 +330,229 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   return (
     <AssistantName.Provider value={who}>
-      <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] flex-col lg:min-h-dvh">
-        <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6">
-          <div className="flex items-start gap-2">
-            <Link href="/chat" className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden" aria-label="Back to conversations">
-              <ChevronIcon className="h-5 w-5 rotate-180" />
-            </Link>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
-              {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-              <div className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
-                {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
-                {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
-                {readOnly ? (
-                  <Badge>Shared with you · read only</Badge>
-                ) : session!.shared ? (
-                  <span className="chip" data-tone="accent" data-testid="shared-chip">
-                    Shared with household ·
-                    <button
-                      type="button"
-                      className="underline underline-offset-2"
-                      disabled={!online}
-                      onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
-                    >
-                      Stop sharing
-                    </button>
-                  </span>
-                ) : null}
-                {areaCtx ? (
-                  <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
-                    <button
-                      type="button"
-                      className="chip cursor-pointer hover:border-line-strong"
-                      title={areaCtx.placement?.path ?? "Not in Areas yet"}
-                      onClick={() => setDialog("file")}
-                      aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
-                    >
-                      <span aria-hidden="true">▸</span> {areaCtx.placement?.path || "Not in Areas"}
-                    </button>
-                    {areaCtx.suggestions.slice(0, 2).map((sg) => (
+      <SmartSession.Provider value={sessionId}>
+        <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] flex-col lg:min-h-dvh">
+          <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6">
+            <div className="flex items-start gap-2">
+              <Link
+                href="/chat"
+                className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
+                aria-label="Back to conversations"
+              >
+                <ChevronIcon className="h-5 w-5 rotate-180" />
+              </Link>
+              <div className="min-w-0 flex-1">
+                <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
+                {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
+                <div className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
+                  {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
+                  {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
+                  {readOnly ? (
+                    <Badge>Shared with you · read only</Badge>
+                  ) : session!.shared ? (
+                    <span className="chip" data-tone="accent" data-testid="shared-chip">
+                      Shared with household ·
                       <button
-                        key={sg.id}
                         type="button"
-                        className="chip cursor-pointer"
-                        data-tone="accent"
-                        title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
-                        onClick={() => fileTo(sg.id, sg.title)}
+                        className="underline underline-offset-2"
+                        disabled={!online}
+                        onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
                       >
-                        File under {sg.title}
+                        Stop sharing
                       </button>
-                    ))}
-                    {areaCtx.node ? (
-                      <Link className="chip hover:border-line-strong" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
-                        Properties
+                    </span>
+                  ) : null}
+                  {areaCtx ? (
+                    <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
+                      <button
+                        type="button"
+                        className="chip cursor-pointer hover:border-line-strong"
+                        title={areaCtx.placement?.path ?? "Not in Areas yet"}
+                        onClick={() => setDialog("file")}
+                        aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
+                      >
+                        <span aria-hidden="true">▸</span> {areaCtx.placement?.path || "Not in Areas"}
+                      </button>
+                      {areaCtx.suggestions.slice(0, 2).map((sg) => (
+                        <button
+                          key={sg.id}
+                          type="button"
+                          className="chip cursor-pointer"
+                          data-tone="accent"
+                          title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
+                          onClick={() => fileTo(sg.id, sg.title)}
+                        >
+                          File under {sg.title}
+                        </button>
+                      ))}
+                      {areaCtx.node ? (
+                        <Link className="chip hover:border-line-strong" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
+                          Properties
+                        </Link>
+                      ) : null}
+                    </span>
+                  ) : null}
+                  {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
+                  {detail.parent ? (
+                    <span className="inline-flex items-center gap-1">
+                      <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
+                      <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
+                        {detail.parent.title}
                       </Link>
-                    ) : null}
-                  </span>
-                ) : null}
-                {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
-                {detail.parent ? (
-                  <span className="inline-flex items-center gap-1">
-                    <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
-                    <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
-                      {detail.parent.title}
+                    </span>
+                  ) : session!.parentSessionId ? (
+                    <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
+                      <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
                     </Link>
-                  </span>
-                ) : session!.parentSessionId ? (
-                  <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
-                    <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
-                  </Link>
-                ) : null}
-                {detail.children.length ? (
-                  <span className="inline-flex flex-wrap items-center gap-1">
-                    <ForkIcon className="h-3.5 w-3.5" /> Forks:
-                    {detail.children.map((c) => (
-                      <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
-                        {c.title}
-                      </Link>
-                    ))}
-                  </span>
-                ) : null}
-                {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
-                  <Link key={l.targetId} href="/initiatives" data-dynamic className="rounded-[6px] border border-line px-1.5 font-mono" title={l.targetTitle}>
-                    {l.targetIdentifier}
-                  </Link>
-                ))}
-                {model.model ? <span>Model: {model.model}</span> : null}
-                {fromCache ? <span className="text-warn">Saved copy</span> : null}
+                  ) : null}
+                  {detail.children.length ? (
+                    <span className="inline-flex flex-wrap items-center gap-1">
+                      <ForkIcon className="h-3.5 w-3.5" /> Forks:
+                      {detail.children.map((c) => (
+                        <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
+                          {c.title}
+                        </Link>
+                      ))}
+                    </span>
+                  ) : null}
+                  {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
+                    <Link key={l.targetId} href="/initiatives" data-dynamic className="rounded-[6px] border border-line px-1.5 font-mono" title={l.targetTitle}>
+                      {l.targetIdentifier}
+                    </Link>
+                  ))}
+                  {model.model ? <span>Model: {model.model}</span> : null}
+                  {fromCache ? <span className="text-warn">Saved copy</span> : null}
+                </div>
               </div>
+              <OverflowMenu label="Conversation actions" items={menu} />
             </div>
-            <OverflowMenu label="Conversation actions" items={menu} />
-          </div>
-        </header>
+          </header>
 
-        <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
-          {detail.timeline.length === 0 && !showLive && !pendingInput ? (
-            <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
-              <p className="text-[0.9375rem] font-semibold">Start the conversation</p>
-              <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
-              <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
-                <li className="chip">
-                  <kbd className="kbd">@</kbd> people, devices, work
+          <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
+            {detail.timeline.length === 0 && !showLive && !pendingInput ? (
+              <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
+                <p className="text-[0.9375rem] font-semibold">Start the conversation</p>
+                <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
+                <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
+                  <li className="chip">
+                    <kbd className="kbd">@</kbd> people, devices, work
+                  </li>
+                  <li className="chip">
+                    <kbd className="kbd">#</kbd> PRs and issues
+                  </li>
+                  <li className="chip">
+                    <kbd className="kbd">/</kbd> commands
+                  </li>
+                </ul>
+              </div>
+            ) : null}
+            <ol className="space-y-3">
+              {detail.timeline.map((item) => (
+                <TimelineRow
+                  key={item.id}
+                  item={item}
+                  onFork={() => {
+                    setForkFrom(item);
+                    setDialog("fork");
+                  }}
+                />
+              ))}
+              {showPendingUser ? (
+                <li className="flex justify-end">
+                  <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
+                    <p className="prose-chat">{pendingInput}</p>
+                  </div>
                 </li>
-                <li className="chip">
-                  <kbd className="kbd">#</kbd> PRs and issues
-                </li>
-                <li className="chip">
-                  <kbd className="kbd">/</kbd> commands
-                </li>
-              </ul>
+              ) : null}
+            </ol>
+            {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onRetry={run.retry} /> : null}
+            <div ref={bottomRef} />
+          </div>
+
+          {detached ? (
+            <div className="pointer-events-none sticky bottom-[140px] z-10 flex justify-center">
+              <Button size="sm" className="pointer-events-auto shadow" onClick={() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })}>
+                Jump to latest
+              </Button>
             </div>
           ) : null}
-          <ol className="space-y-3">
-            {detail.timeline.map((item) => (
-              <TimelineRow
-                key={item.id}
-                item={item}
-                onFork={() => {
-                  setForkFrom(item);
-                  setDialog("fork");
-                }}
-              />
-            ))}
-            {showPendingUser ? (
-              <li className="flex justify-end">
-                <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
-                  <p className="prose-chat">{pendingInput}</p>
-                </div>
-              </li>
-            ) : null}
-          </ol>
-          {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onRetry={run.retry} /> : null}
-          <div ref={bottomRef} />
+
+          {readOnly ? (
+            <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
+              This conversation was shared with you.{" "}
+              <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
+                Fork it
+              </button>{" "}
+              to continue it as your own.
+            </div>
+          ) : (
+            <Composer
+              sessionId={sessionId}
+              phase={phase}
+              online={online}
+              context={context}
+              onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
+              onAttach={() => setDialog("context")}
+              onSend={send}
+              onSteer={steer}
+              onStop={run.stop}
+              onCommand={runCommand}
+              repo={areaCtx?.settings?.defaultRepo ?? null}
+              modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
+              onModel={() => setDialog("model")}
+            />
+          )}
+
+          <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
+          <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
+          <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
+          {dialog === "model" ? (
+            <ModelSelectDialog
+              open
+              onClose={() => setDialog(null)}
+              backend={session!.source === "claude" ? "claude" : "hermes"}
+              value={model}
+              onChange={(m) => {
+                setModel(m);
+                kvSet(`model:${sessionId}`, m);
+              }}
+              area={
+                areaCtx?.area && !areaCtx.area.builtIn
+                  ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
+                  : null
+              }
+              onAreaDefault={(m) =>
+                areaCtx?.area &&
+                api
+                  .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
+                    settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
+                  })
+                  .then(() => {
+                    qc.invalidateQueries({ queryKey: ["work"] });
+                    toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
+                  })
+                  .catch((e: Error) => toast(e.message, "danger"))
+              }
+            />
+          ) : null}
+          {dialog === "file" ? (
+            <FileUnderDialog
+              c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
+              items={treeItems.data?.items ?? []}
+              busy={false}
+              onClose={() => setDialog(null)}
+              onFile={async (itemId) => {
+                if (await fileTo(itemId)) setDialog(null);
+              }}
+            />
+          ) : null}
+          <ContextPicker
+            open={dialog === "context"}
+            onClose={() => setDialog(null)}
+            onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))}
+          />
         </div>
-
-        {detached ? (
-          <div className="pointer-events-none sticky bottom-[140px] z-10 flex justify-center">
-            <Button size="sm" className="pointer-events-auto shadow" onClick={() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })}>
-              Jump to latest
-            </Button>
-          </div>
-        ) : null}
-
-        {readOnly ? (
-          <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
-            This conversation was shared with you.{" "}
-            <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
-              Fork it
-            </button>{" "}
-            to continue it as your own.
-          </div>
-        ) : (
-          <Composer
-            sessionId={sessionId}
-            phase={phase}
-            online={online}
-            context={context}
-            onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
-            onAttach={() => setDialog("context")}
-            onSend={send}
-            onSteer={steer}
-            onStop={run.stop}
-            onCommand={runCommand}
-            repo={areaCtx?.settings?.defaultRepo ?? null}
-            modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
-            onModel={() => setDialog("model")}
-          />
-        )}
-
-        <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
-        <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
-        <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
-        {dialog === "model" ? (
-          <ModelSelectDialog
-            open
-            onClose={() => setDialog(null)}
-            backend={session!.source === "claude" ? "claude" : "hermes"}
-            value={model}
-            onChange={(m) => {
-              setModel(m);
-              kvSet(`model:${sessionId}`, m);
-            }}
-            area={
-              areaCtx?.area && !areaCtx.area.builtIn
-                ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
-                : null
-            }
-            onAreaDefault={(m) =>
-              areaCtx?.area &&
-              api
-                .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
-                  settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
-                })
-                .then(() => {
-                  qc.invalidateQueries({ queryKey: ["work"] });
-                  toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
-                })
-                .catch((e: Error) => toast(e.message, "danger"))
-            }
-          />
-        ) : null}
-        {dialog === "file" ? (
-          <FileUnderDialog
-            c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
-            items={treeItems.data?.items ?? []}
-            busy={false}
-            onClose={() => setDialog(null)}
-            onFile={async (itemId) => {
-              if (await fileTo(itemId)) setDialog(null);
-            }}
-          />
-        ) : null}
-        <ContextPicker
-          open={dialog === "context"}
-          onClose={() => setDialog(null)}
-          onPick={(label, ref) => setContext((c) => (c.some((x) => x.ref === ref) ? c : [...c, { label, ref }]))}
-        />
-      </div>
+      </SmartSession.Provider>
     </AssistantName.Provider>
   );
 }
@@ -568,7 +577,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
       <li className="flex flex-col gap-1">
         <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} said: </span>
-          <Markdown text={item.text} className="select-text" />
+          <AssistantText text={item.text} />
         </div>
         <MessageMeta time={time} onFork={onFork} who={`${who}' message`} />
       </li>
@@ -739,7 +748,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
           <span className="sr-only">{who} is saying: </span>
-          {text ? <Markdown text={text} className="select-text" /> : null}
+          {text ? <AssistantText text={text} live={!isTerminal(state.phase)} /> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? (
             <p className="mt-1 flex items-center gap-1 text-muted" aria-hidden="true">
               <span className="typing-dot">●</span>

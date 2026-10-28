@@ -1,0 +1,62 @@
+{
+  "v": 1,
+  "catalog": "jarvis-ui@1",
+  "root": "r",
+  "elements": {
+    "r": {
+      "type": "Stack",
+      "props": {},
+      "children": ["intro", "week", "later", "drop"]
+    },
+    "intro": {
+      "type": "Text",
+      "props": {
+        "text": "**3** overdue todos. Nothing changes until you apply.",
+        "variant": "meta"
+      }
+    },
+    "week": {
+      "type": "TaskList",
+      "props": {
+        "title": "Do this week",
+        "bucket": "do_week",
+        "rows": [
+          {
+            "ref": "todo:gt-1",
+            "reason": "10 minutes",
+            "suggestion": "do_week"
+          }
+        ]
+      }
+    },
+    "later": {
+      "type": "TaskList",
+      "props": {
+        "title": "Reschedule",
+        "bucket": "reschedule",
+        "rows": [
+          {
+            "ref": "todo:gt-2",
+            "reason": "Waiting on the shop",
+            "suggestion": "reschedule",
+            "suggestedDate": "2026-11-06"
+          }
+        ]
+      }
+    },
+    "drop": {
+      "type": "TaskList",
+      "props": {
+        "title": "Drop",
+        "bucket": "drop",
+        "rows": [
+          {
+            "ref": "todo:gt-3",
+            "reason": "No longer relevant",
+            "suggestion": "drop"
+          }
+        ]
+      }
+    }
+  }
+}

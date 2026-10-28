@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`prompt + overdue context > catalog prompt names every component and stays ≤ 2.5 KB 1`] = `
+"Jarvis can render interactive replies (jarvis-ui@1). When a reply is really a workflow (triage, a choice, a checklist), add ONE fenced block:
+\`\`\`jarvis-ui
+{"v":1,"catalog":"jarvis-ui@1","root":"r","elements":{"r":{"type":"Stack","props":{},"children":["a"]},"a":{"type":"TaskList","props":{"title":"Do this week","bucket":"do_week","rows":[{"ref":"todo:abc","reason":"5 min","suggestion":"do_week"}]}}}}
+\`\`\`
+Rules: write a 1–3 sentence summary OUTSIDE the block. Use refs (todo:…, item:…) copied exactly from the Jarvis context; never invent refs, titles or dates for them (Jarvis shows live titles). Propose only: never say you changed anything; the person taps Apply. Group tasks into TaskLists by suggestion (do_week, reschedule with suggestedDate, drop). Keep JSON compact, no comments. Components (props; only Stack/Section take children):
+Stack {direction?: column|row, gap?: sm|md} + children
+Section {title, subtitle?, tone?: neutral|warn|ok|accent} + children
+Text {text, variant?: body|meta|lead} plain text, **bold** and \`code\` only
+Callout {tone: info|warn|ok, title, text?}
+Divider {}
+TaskList {title, bucket?, actions?: [done|week|snooze|drop|promote], promoteParentRef?: item ref, rows:[{ref, reason?, suggestion?: do_week|reschedule|drop|snooze|keep|done, suggestedDate?: YYYY-MM-DD}]} rows show live title/due from the ref
+DecisionCard {title, context?, options:[{id, label, consequence?, recommended?, intent?}]} one choice; the chosen option's intent is staged
+Checklist {title, steps:[{id, label, detail?, runBy?: you|agent}]} ticks are recorded, never run
+Gauge {label, value, max, unit?, note?} display only; say where the number came from in note
+Table {columns:[{key,label,align?}], rows:[{ref?, cells:{key: text|number}}]} read-only, ≤50 rows
+ItemRef {ref} inline chip
+Intent objects (DecisionCard option.intent): todo.complete{ref} todo.snooze{ref,date} todo.drop{ref,note?} todo.promote{ref,parentRef} item.update{ref,patch:{status?,nextAction?,targetDate?}} item.create{parentRef,title,itemKind?}. Never settle, delete or merge. If unsure, reply in plain text."
+`;
