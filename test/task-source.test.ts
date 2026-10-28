@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { autoMatchMembers, classifySkylightChore, isOwnersTask, keepAssigned, skylightPrefs, sourceFilterOptions, taskSourceLabel } from "@/lib/task-source";
+import {
+  autoGroupMembers as autoAll,
+  autoMatchMembers,
+  classifySkylightChore,
+  groupMemberIds,
+  isOwnersTask,
+  keepAssigned,
+  skylightPrefs,
+  sourceFilterOptions,
+  taskSourceLabel,
+} from "@/lib/task-source";
 
 const members = [
   { id: "1", name: "Nick" },
@@ -10,12 +20,16 @@ const members = [
 
 describe("skylight assignment", () => {
   it("parses prefs with defaults (up-for-grabs on, others off)", () => {
-    expect(skylightPrefs({})).toEqual({ members: [], includeUpForGrabs: true, showOthers: false });
+    expect(skylightPrefs({})).toEqual({ members: [], includeUpForGrabs: true, showOthers: false, groups: null });
     expect(skylightPrefs({ members: "1, 2", includeUpForGrabs: "false", showOthers: "true" })).toEqual({
       members: ["1", "2"],
       includeUpForGrabs: false,
       showOthers: true,
+      groups: null,
     });
+    expect(skylightPrefs({ groups: "none" }).groups).toEqual([]);
+    expect(skylightPrefs({ groups: " auto " }).groups).toBeNull();
+    expect(skylightPrefs({ groups: "3, 7" }).groups).toEqual(["3", "7"]);
   });
 
   it("classifies mine, other and up for grabs", () => {
@@ -24,8 +38,29 @@ describe("skylight assignment", () => {
     expect(classifySkylightChore({ categoryId: null }, members, ["1"]).kind).toBe("up_for_grabs");
     expect(classifySkylightChore({ categoryId: "4" }, members, ["1"]).kind).toBe("up_for_grabs");
     expect(classifySkylightChore({ categoryId: "2", upForGrabs: true }, members, ["1"]).kind).toBe("up_for_grabs");
-    // Household category is not up for grabs: hidden unless showOthers.
+    // Without groups a household category is someone else's.
     expect(classifySkylightChore({ categoryId: "3" }, members, ["1"]).kind).toBe("other");
+  });
+
+  it("treats household groups (Family*) as up for grabs", () => {
+    const all = [...members, { id: "5", name: "Family Chores" }, { id: "6", name: "Kids", isGroup: true }, { id: "7", name: "Familyman" }];
+    const auto = groupMemberIds(all, skylightPrefs({}));
+    expect(auto).toEqual(["3", "5", "6"]);
+    expect(classifySkylightChore({ categoryId: "3" }, all, ["1"], auto)).toEqual({ kind: "up_for_grabs", name: "Up for grabs" });
+    expect(classifySkylightChore({ categoryId: "6" }, all, ["1"], auto).kind).toBe("up_for_grabs");
+    expect(classifySkylightChore({ categoryId: "7" }, all, ["1"], auto).kind).toBe("other");
+    expect(classifySkylightChore({ categoryId: "2" }, all, ["1"], auto).kind).toBe("other");
+    // Owner override: explicit list / none.
+    expect(groupMemberIds(all, skylightPrefs({ groups: "2" }))).toEqual(["2"]);
+    expect(groupMemberIds(all, skylightPrefs({ groups: "none" }))).toEqual([]);
+    expect(classifySkylightChore({ categoryId: "3" }, all, ["1"], [])).toEqual({ kind: "other", name: "Family" });
+    // Kept only when "Include up-for-grabs" is on.
+    const ufg = classifySkylightChore({ categoryId: "3" }, all, ["1"], auto);
+    expect(keepAssigned(ufg, skylightPrefs({ members: "1" }))).toBe(true);
+    expect(keepAssigned(ufg, skylightPrefs({ members: "1", includeUpForGrabs: "false" }))).toBe(false);
+    // Groups are never auto-matched as the owner.
+    expect(autoMatchMembers([{ id: "5", name: "Family" }], { name: "Family" })).toEqual([]);
+    expect(autoAll(all)).toEqual(["3", "5", "6"]);
   });
 
   it("filters by prefs; unconfigured shows everything", () => {
