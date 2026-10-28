@@ -4,6 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { adapterContext, cachedSource, scopeResult } from "@/server/sources";
+import { isOwnersTask } from "@/lib/task-source";
 import { processSingleton } from "@/server/singleton";
 import { listItems } from "@/server/work/store";
 import { githubGet, resolveGithubToken, type ResolvedToken } from "@/server/work/github";
@@ -37,7 +38,7 @@ export function overdueTodos(user: CurrentUser, now = new Date()): NextAction[] 
   if (!can(user, "todos.view")) return [];
   const ctx = adapterContext(now);
   return (scopeResult(user, cachedSource("todos", now))?.data?.actions ?? []).filter((a) => {
-    if (a.status !== "open" || !a.dueAt) return false;
+    if (a.status !== "open" || !a.dueAt || !isOwnersTask(a)) return false;
     return a.dueIsDate ? localDate(new Date(a.dueAt), ctx.timezone) < ctx.today : new Date(a.dueAt) < now;
   });
 }

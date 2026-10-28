@@ -6,6 +6,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import type { AttentionBucket, HomeItemsPage } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
 import { ActionCard } from "@/components/actions/ActionCard";
+import { SourceFilter, matchesSource } from "@/components/actions/SourceFilter";
 import { Button, Empty, ErrorNote, PageHeader, Spinner, cx } from "@/components/ui";
 
 const TABS: { id: AttentionBucket; label: string; hint: string }[] = [
@@ -30,7 +31,9 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextOffset,
   });
-  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const loaded = q.data?.pages.flatMap((p) => p.items) ?? [];
+  const [source, setSource] = useState("");
+  const items = loaded.filter(matchesSource(source));
   const total = q.data?.pages[0]?.total;
   const tab = TABS.find((t) => t.id === bucket)!;
 
@@ -69,6 +72,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
           {tab.hint}
           {total !== undefined ? <span data-dynamic> {total === 1 ? "1 item." : `${total} items.`}</span> : null}
         </p>
+        <SourceFilter items={loaded} value={source} onChange={setSource} />
         {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
         {q.isPending ? (
           <Spinner label="Loading…" />
@@ -86,7 +90,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
         {q.hasNextPage ? (
           <div className="mt-4 flex justify-center">
             <Button onClick={() => q.fetchNextPage()} busy={q.isFetchingNextPage}>
-              Show more ({items.length} of {total})
+              Show more ({loaded.length} of {total})
             </Button>
           </div>
         ) : null}

@@ -58,6 +58,10 @@ export type NextAction = {
   href: string;
   /** true when href points outside Jarvis (deep link into the source system) */
   external?: boolean;
+  /** Source chip text, e.g. "Skylight · Chores", "Google Tasks · Groceries" (lib/task-source.ts). */
+  sourceLabel?: string;
+  /** Who the task belongs to when the source knows (Skylight chores, shared lists). */
+  assignee?: { kind: "mine" | "up_for_grabs" | "other"; name?: string };
   pinned?: boolean;
   primaryAction?: {
     kind: PrimaryActionKind;
@@ -218,7 +222,10 @@ export type HomeSectionId = (typeof HOME_SECTIONS)[number]["id"];
 export type WidgetSummary = {
   generatedAt: string;
   unread: number;
-  next: Pick<NextAction, "id" | "source" | "title" | "detail" | "priorityReason" | "dueAt" | "dueIsDate" | "primaryAction" | "secondaryActions" | "href">[];
+  next: Pick<
+    NextAction,
+    "id" | "source" | "sourceLabel" | "assignee" | "title" | "detail" | "priorityReason" | "dueAt" | "dueIsDate" | "primaryAction" | "secondaryActions" | "href"
+  >[];
   nextEvent?: Pick<CalendarEvent, "title" | "startsAt" | "endsAt" | "allDay" | "location" | "source">;
   compass?: HouseholdGlance["compass"];
   home: { exceptions: Pick<HomeException, "name" | "reason" | "severity" | "state">[]; critical: number };

@@ -12,8 +12,16 @@ export function createSkylight({ refreshToken }) {
       ["55900629", { id: "55900629", summary: "Schedule vet appointment", emoji_icon: "🐾", status: "pending", start_time: null }],
       [
         "55780859-" + isoDate(new Date()) + "-1800",
-        { id: "55780859-" + isoDate(new Date()) + "-1800", summary: "Take out recycling", emoji_icon: "♻️", status: "pending", start_time: "18:00" },
+        {
+          id: "55780859-" + isoDate(new Date()) + "-1800",
+          summary: "Take out recycling",
+          emoji_icon: "♻️",
+          status: "pending",
+          start_time: "18:00",
+          category: "13600771",
+        },
       ],
+      ["55900777", { id: "55900777", summary: "Practice piano scales", emoji_icon: "🎹", status: "pending", start_time: null, category: "13600772" }],
     ]);
   }
   seed();
@@ -71,13 +79,22 @@ export function createSkylight({ refreshToken }) {
         ],
       });
     }
+    if (/^\/api\/frames\/[^/]+\/categories$/.test(path)) {
+      const cat = (id, label, linked) => ({
+        id,
+        type: "category",
+        attributes: { id: Number(id), label, color: "#CB434C", linked_to_profile: linked, selected_for_chore_chart: linked },
+      });
+      return json(res, 200, { data: [cat("13600771", "Nick", true), cat("13600772", "Will", true), cat("14463836", "Family", false)] });
+    }
     if ((match = path.match(/^\/api\/frames\/([^/]+)\/chores$/))) {
       if (!url.searchParams.get("after") || !url.searchParams.get("before")) return json(res, 422, { errors: ["after can't be blank"] });
       return json(res, 200, {
         data: [...state.chores.values()].map((c) => ({
           id: c.id,
           type: "chore",
-          attributes: { ...c, start: isoDate(new Date()), recurring: c.id.includes("-") },
+          attributes: { ...c, category: undefined, start: isoDate(new Date()), recurring: c.id.includes("-") },
+          relationships: { category: { data: c.category ? { id: c.category, type: "category" } : null } },
         })),
       });
     }

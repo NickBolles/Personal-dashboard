@@ -220,6 +220,23 @@ describe("adapters against the mock upstreams", () => {
     expect(data.events!.length).toBeGreaterThan(0);
   });
 
+  it("skylight: shows the owner's + up-for-grabs chores, hides others', labels them", async () => {
+    saveIntegration("skylight", { config: { members: "13600771", includeUpForGrabs: "true", showOthers: "false" } });
+    try {
+      const data = await ADAPTERS.skylight.fetch(adapterContext());
+      const byTitle = new Map(data.actions.map((a) => [a.title.replace(/^\S+ /, ""), a]));
+      expect(byTitle.get("Take out recycling")).toMatchObject({ sourceLabel: "Skylight · Chores", assignee: { kind: "mine", name: "Nick" } });
+      expect(byTitle.get("Schedule vet appointment")).toMatchObject({ sourceLabel: "Skylight · Up for grabs", assignee: { kind: "up_for_grabs" } });
+      expect(byTitle.has("Practice piano scales")).toBe(false);
+      expect(data.extra).toMatchObject({ counts: { mine: 1, upForGrabs: 1, others: 0, hidden: 1 }, needsMember: false });
+      saveIntegration("skylight", { config: { showOthers: "true" } });
+      const all = await ADAPTERS.skylight.fetch(adapterContext());
+      expect(all.actions.find((a) => a.title.endsWith("Practice piano scales"))!.assignee).toEqual({ kind: "other", name: "Will" });
+    } finally {
+      saveIntegration("skylight", { config: { members: "", includeUpForGrabs: "", showOthers: "" } });
+    }
+  });
+
   it("paperclip: tracking the same initiative from two conversations creates it once", async () => {
     const a = await track({ mode: "create", sessionId: "s1", title: "Enable v6" }, userById(userId)!, "t1");
     const b = await track({ mode: "create", sessionId: "s2", title: "enable v6 " }, userById(userId)!, "t2");

@@ -12,6 +12,7 @@ import { SKYLIGHT_DEFAULT_PROMPT } from "@/integrations/registry";
 import { baseAction, classifyInstant } from "@/integrations/actions";
 import { cachedStructured, runStructured, saveSnapshot } from "@/integrations/hermes/structured";
 import type { AdapterContext, SourceAdapter, SourceData } from "@/integrations/types";
+import { autoMatchMembers, classifySkylightChore, keepAssigned, skylightPrefs, type SkylightMember } from "@/lib/task-source";
 
 /**
  * Skylight has no official API. Two modes:
@@ -34,6 +35,7 @@ function cfg() {
     baseUrl: r.config.baseUrl || "https://app.ourskylight.com",
     apiVersion: r.config.apiVersion || "2026-06-01",
     frameId: r.config.frameId,
+    prefs: skylightPrefs(r.config),
     fingerprint: r.config.deviceFingerprint,
     refreshToken: r.secrets.refreshToken,
   };
@@ -112,7 +114,13 @@ async function api<T>(path: string, query?: Record<string, string>) {
   });
 }
 
-const resource = z.object({ id: z.string(), type: z.string().optional(), attributes: z.record(z.string(), z.unknown()) });
+const relOne = z.object({ data: z.object({ id: z.union([z.string(), z.number()]) }).nullish() }).partial();
+const resource = z.object({
+  id: z.string(),
+  type: z.string().optional(),
+  attributes: z.record(z.string(), z.unknown()),
+  relationships: z.record(z.string(), z.unknown()).optional(),
+});
 const doc = z.object({ data: z.array(resource) });
 
 export async function listFrames() {
@@ -122,6 +130,36 @@ export async function listFrames() {
     name: String(f.attributes.name ?? f.attributes.household_name ?? f.id),
     timezone: String(f.attributes.timezone ?? ""),
   }));
+}
+
+/** Family members ("categories") on the frame: chores' assignees. */
+export async function listMembers(frame?: string): Promise<SkylightMember[]> {
+  const f = frame ?? (await frameId());
+  const r = doc.parse(await api(`/frames/${f}/categories`));
+  return r.data.map((c) => ({
+    id: c.id,
+    name: String(c.attributes.label ?? c.attributes.name ?? c.id),
+    linkedToProfile: Boolean(c.attributes.linked_to_profile),
+  }));
+}
+
+function choreCategory(rel: Record<string, unknown> | undefined): string | null {
+  const one = relOne.safeParse(rel?.category);
+  if (one.success && one.data.data?.id != null) return String(one.data.data.id);
+  const many = z.object({ data: z.array(z.object({ id: z.union([z.string(), z.number()]) })) }).safeParse(rel?.categories);
+  return many.success && many.data.data[0] ? String(many.data.data[0].id) : null;
+}
+
+/** The owner's member ids: configured, else a unique name match against the Jarvis owner. */
+async function ownerMembers(members: SkylightMember[], configured: string[]): Promise<string[]> {
+  if (configured.length) return configured;
+  try {
+    const { getOwner } = await import("@/server/auth");
+    const owner = getOwner();
+    return owner ? autoMatchMembers(members, { name: owner.name, username: owner.username }) : [];
+  } catch {
+    return [];
+  }
 }
 
 async function frameId() {
@@ -230,6 +268,7 @@ export function mapHermesAnswer(answer: HermesAnswer, ctx: AdapterContext): Sour
       return baseAction("skylight", id, ctx, STALE, {
         title: c.title,
         detail: "Skylight chore",
+        sourceLabel: "Skylight · Chores",
         status: "open",
         priorityReason: due ? classifyInstant(due, ctx) : "today",
         dueAt: due,
@@ -267,12 +306,17 @@ export const skylightAdapter: SourceAdapter = {
     if (cfg().mode === "hermes") return fetchViaHermes(ctx);
     const frame = await frameId();
     const until = localDate(ctx.now.getTime() + 7 * DAY, ctx.timezone);
-    const [eventsDoc, choresDoc] = await Promise.all([
+    const [eventsDoc, choresDoc, members] = await Promise.all([
       api(`/frames/${frame}/calendar_events`, { date_min: ctx.today, date_max: until, timezone: ctx.timezone }).then((d) => doc.parse(d)),
       api(`/frames/${frame}/chores`, { after: ctx.today, before: ctx.today, include_late: "true" })
         .then((d) => doc.parse(d))
-        .catch(() => ({ data: [] })),
+        .catch(() => ({ data: [] as z.infer<typeof resource>[] })),
+      listMembers(frame).catch(() => [] as SkylightMember[]),
     ]);
+    const prefs = cfg().prefs;
+    const mine = await ownerMembers(members, prefs.members);
+    const effective = { ...prefs, members: mine };
+    let hidden = 0;
     const events: CalendarEvent[] = eventsDoc.data
       .map((e) => {
         const a = e.attributes;
@@ -292,12 +336,21 @@ export const skylightAdapter: SourceAdapter = {
       .filter((e): e is NonNullable<typeof e> => Boolean(e));
     const actions: NextAction[] = choresDoc.data
       .filter((c) => c.attributes.status !== "complete" && c.attributes.status !== "skipped")
-      .map((c) => {
+      .map((c) => ({
+        c,
+        who: classifySkylightChore({ categoryId: choreCategory(c.relationships), upForGrabs: c.attributes.up_for_grabs === true }, members, mine),
+      }))
+      .filter(({ who }) => {
+        const keep = keepAssigned(who, effective);
+        if (!keep) hidden++;
+        return keep;
+      })
+      .map(({ c, who }) => {
         const a = c.attributes;
         const due = a.start_time ? iso(localTimeToInstant(String(a.start ?? ctx.today), String(a.start_time), ctx.timezone)) : undefined;
         return baseAction("skylight", c.id, ctx, STALE, {
           title: `${a.emoji_icon ? `${a.emoji_icon} ` : ""}${String(a.summary ?? "Chore")}`,
-          detail: "Skylight chore",
+          detail: who.kind === "up_for_grabs" ? "Skylight chore · up for grabs" : who.name ? `Skylight chore · ${who.name}` : "Skylight chore",
           status: "open",
           priorityReason: due ? classifyInstant(due, ctx) : "today",
           dueAt: due,
@@ -305,9 +358,18 @@ export const skylightAdapter: SourceAdapter = {
           href: "https://app.ourskylight.com/",
           external: true,
           primaryAction: { kind: "open", label: "Open Skylight" },
+          sourceLabel: who.kind === "up_for_grabs" ? "Skylight · Up for grabs" : "Skylight · Chores",
+          assignee: who.kind === "mine" ? { kind: "mine", name: who.name } : who,
         });
       });
-    return { actions, events };
+    const counts = {
+      mine: actions.filter((x) => x.assignee?.kind === "mine").length,
+      upForGrabs: actions.filter((x) => x.assignee?.kind === "up_for_grabs").length,
+      others: actions.filter((x) => x.assignee?.kind === "other").length,
+      hidden,
+    };
+    // Unconfigured and no unique name match: Settings asks the owner to pick (extra.needsMember).
+    return { actions, events, extra: { via: "direct", counts, needsMember: mine.length === 0 && members.length > 0 } };
   },
   async test() {
     if (cfg().mode === "hermes") {
@@ -343,6 +405,7 @@ export const skylightAdapter: SourceAdapter = {
       ]);
     }
     let frames: { id: string; name: string }[] = [];
+    let members: SkylightMember[] = [];
     return runChecks(
       [
         {
@@ -368,8 +431,18 @@ export const skylightAdapter: SourceAdapter = {
             return `${r.data.length} events today`;
           },
         },
+        {
+          name: "List family members",
+          run: async () => {
+            members = await listMembers().catch(() => []);
+            return members.length ? `${members.length} members: pick yours under “Whose tasks to show”` : "No members found (all chores shown)";
+          },
+        },
       ],
-      () => [{ field: "frameId", label: "Frame", options: frames.map((f) => ({ value: f.id, label: f.name })) }],
+      () => [
+        { field: "frameId", label: "Frame", options: frames.map((f) => ({ value: f.id, label: f.name })) },
+        ...(members.length ? [{ field: "members", label: "Whose tasks to show (you)", options: members.map((m) => ({ value: m.id, label: m.name })) }] : []),
+      ],
     );
   },
 };

@@ -31,6 +31,8 @@ export type TodoItem = {
   completedAt?: string;
   updatedAt?: string;
   url?: string;
+  /** Source chip text: "Google Tasks · <list>", "Home Assistant · <list>", "Jarvis". */
+  sourceLabel?: string;
 };
 
 function toAction(t: TodoItem, ctx: AdapterContext): NextAction {
@@ -49,6 +51,7 @@ function toAction(t: TodoItem, ctx: AdapterContext): NextAction {
     dueIsDate: Boolean(dateOnly),
     updatedAt: t.completedAt ?? t.updatedAt ?? iso(ctx.now),
     href: `/todos#todo-${encodeURIComponent(t.id)}`,
+    sourceLabel: t.sourceLabel,
     primaryAction: t.completed ? undefined : { kind: "complete", label: "Done" },
     secondaryActions: t.completed ? [] : ["snooze"],
   });
@@ -57,7 +60,7 @@ function toAction(t: TodoItem, ctx: AdapterContext): NextAction {
 // --- providers ---
 
 async function listGoogle(ctx: AdapterContext): Promise<TodoItem[]> {
-  const tasks = await GoogleTasksClient.tasks({ completedMin: iso(ctx.now.getTime() - DAY) });
+  const [tasks, label] = await Promise.all([GoogleTasksClient.tasks({ completedMin: iso(ctx.now.getTime() - DAY) }), googleListLabel()]);
   return tasks
     .filter((t) => !t.deleted && (t.status === "needsAction" || t.completed))
     .map((t) => ({
@@ -70,7 +73,21 @@ async function listGoogle(ctx: AdapterContext): Promise<TodoItem[]> {
       completedAt: t.completed,
       updatedAt: t.updated,
       url: t.webViewLink,
+      sourceLabel: label,
     }));
+}
+
+/** "Google Tasks · <list name>"; the list name is looked up once per process. */
+const listNames = new Map<string, string>();
+async function googleListLabel(): Promise<string> {
+  const id = resolveIntegration("todos").config.taskListId || "@default";
+  if (!listNames.has(id)) {
+    const lists = await GoogleTasksClient.lists().catch(() => [] as { id: string; title: string }[]);
+    const hit = id === "@default" ? lists[0] : lists.find((l) => l.id === id);
+    if (hit) listNames.set(id, hit.title);
+  }
+  const name = listNames.get(id);
+  return name ? `Google Tasks · ${name}` : "Google Tasks";
 }
 
 async function listHa(): Promise<TodoItem[]> {
@@ -84,6 +101,7 @@ async function listHa(): Promise<TodoItem[]> {
     due: i.due,
     completed: i.status === "completed",
     completedAt: i.completed,
+    sourceLabel: `Home Assistant · ${entity.replace(/^todo\./, "").replace(/_/g, " ")}`,
   }));
 }
 
@@ -102,6 +120,7 @@ function listLocal(ctx: AdapterContext): TodoItem[] {
       completed: Boolean(t.completedAt),
       completedAt: t.completedAt ?? undefined,
       updatedAt: t.updatedAt,
+      sourceLabel: "Jarvis",
     }));
 }
 
