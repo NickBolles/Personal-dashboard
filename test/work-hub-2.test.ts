@@ -136,6 +136,10 @@ describe("conversations (picker, unfiled, filing)", () => {
     expect(store.getDetail(owner, misc.itemId!).item.builtIn).toBe(true);
     unfiled = await conversations.unfiledConversations(u);
     expect(unfiled.total).toBe(0);
+    // The Areas list (`includeMisc`) still counts the chat that only sits in Miscellaneous.
+    const areasList = await conversations.unfiledConversations(u, { includeMisc: true });
+    expect(areasList.conversations.map((c) => c.id)).toEqual([b.id]);
+    expect(areasList.conversations[0]!.placement?.inMisc).toBe(true);
     const placed = (await conversations.listConversations(u)).conversations.find((c) => c.id === a.id)!;
     expect(placed.placement).toMatchObject({ nodeId: filed.item.id, parentId: v5.id, inMisc: false });
     // Unfiled in the conversations view = not in the tree, or only in Miscellaneous.

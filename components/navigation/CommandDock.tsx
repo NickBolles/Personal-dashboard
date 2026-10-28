@@ -1,5 +1,6 @@
 "use client";
 
+import { JarvisMark } from "@/components/brand/JarvisMark";
 import {
   useCallback,
   useEffect,
@@ -388,7 +389,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
         {variant === "bar" ? (
           <>
             <span aria-hidden="true" className="dock-ring" />
-            <span aria-hidden="true">J</span>
+            <JarvisMark className="h-7 w-7" />
           </>
         ) : (
           <>
@@ -399,7 +400,8 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
                 charging && "dock-charging",
               )}
             >
-              <span className="dock-ring" />J
+              <span className="dock-ring" />
+              <JarvisMark className="h-[18px] w-[18px]" />
             </span>
             {!compact ? (
               <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">

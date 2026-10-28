@@ -139,7 +139,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
       </details>
     ) : null;
 
-  // Phones: title/meta beside the menu, primary action below. Wider: one row — content, action, menu.
+  // Phones: title/meta on the left; menu top-right, primary action bottom-right. Wider: one row — content, action, menu.
   // Two text lines: title, then source · status · detail · due · "Why this?" (design review D4).
   return (
     <article
@@ -151,7 +151,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
         done && "jv-done",
       )}
     >
-      <div className="col-start-1 row-start-1 min-w-0 space-y-0.5">
+      <div className="col-start-1 row-span-2 row-start-1 min-w-0 space-y-0.5 sm:row-span-1">
         <h3 id={titleId} className="text-[0.9375rem] leading-snug font-semibold dense:text-[0.875rem]">
           {action.external ? (
             <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
@@ -185,10 +185,11 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           {why}
         </div>
       </div>
-      <div className="col-start-2 row-start-1 self-start sm:col-start-3 sm:self-center">
+      <div className="col-start-2 row-start-1 self-start justify-self-end sm:col-start-3 sm:self-center">
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
-      {primaryButton ? <div className="col-start-1 row-start-2 flex gap-2 sm:col-start-2 sm:row-start-1">{primaryButton}</div> : null}
+      {/* Phones: the main action sits on the right, under the menu, beside the meta line (owner default). */}
+      {primaryButton ? <div className="col-start-2 row-start-2 flex justify-end gap-2 self-end sm:row-start-1 sm:self-center">{primaryButton}</div> : null}
     </article>
   );
 }

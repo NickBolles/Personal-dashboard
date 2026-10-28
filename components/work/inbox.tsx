@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls } from "@/components/ui";
+import { Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
@@ -57,7 +57,7 @@ export function CaptureForm({
             id="capture-text"
             aria-describedby="capture-text-hint"
             rows={1}
-            className={`${inputCls} min-h-11 resize-y text-base`}
+            className={`${inputCls} min-h-11 resize-y text-base sm:min-h-10`}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -132,7 +132,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
         {q.data && !entries.length ? <p className="px-3 py-2.5 text-[13px] text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p> : null}
         <ul className="wk-rows">
           {entries.map((e) => (
-            <li key={e.id} className="wk-row-hover flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-2.5" data-inbox-entry={e.id}>
+            <li key={e.id} className="wk-row-hover flex items-start gap-x-2.5 px-3 py-2" data-inbox-entry={e.id}>
               <span
                 aria-hidden="true"
                 className={cx(
@@ -142,7 +142,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
               >
                 {e.source === "github_issue" ? "GH" : "CA"}
               </span>
-              <div className="min-w-0 flex-1 basis-56">
+              <div className="min-w-0 flex-1">
                 <p className="text-[14px] leading-snug font-semibold break-words">{e.title}</p>
                 {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted">{e.note}</p> : null}
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
@@ -157,34 +157,22 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                 </p>
                 {e.capture ? <CaptureExtras entry={e} onAccepted={onOpenItem} /> : null}
               </div>
-              <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1.5">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => setAccepting(e)}
-                  aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}
-                >
-                  {e.source === "github_issue" ? "Accept…" : "File…"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  busy={dismiss.isPending && dismiss.variables === e.id}
-                  onClick={() => dismiss.mutate(e.id)}
-                  aria-label={`Dismiss: ${e.title}`}
-                >
-                  Dismiss
-                </Button>
+              {/* One visible action (File/Accept) + ⋯ (Dismiss); GitHub entries keep their Open link. */}
+              <div className="flex shrink-0 items-center gap-0.5">
                 {e.url ? (
                   <a
                     href={e.url}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent underline"
+                    className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent hover:underline sm:min-h-9"
                   >
                     Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
                   </a>
                 ) : null}
+                <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
+                  {e.source === "github_issue" ? "Accept…" : "File…"}
+                </Button>
+                <OverflowMenu label={`More for ${e.title}`} items={[{ label: "Dismiss", onSelect: () => dismiss.mutate(e.id), danger: true }]} />
               </div>
             </li>
           ))}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls } from "@/components/ui";
+import { Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls, type MenuItem } from "@/components/ui";
 import type {
   ConversationIndexState,
   ConversationOption,
@@ -25,6 +25,63 @@ export function fmtWhen(at: string | null | undefined) {
 }
 
 const BACKEND = { hermes: "Hermes", claude: "Claude" } as const;
+
+/**
+ * A conversation row's filing control (owner pattern): ONE suggestion chip
+ * ("→ Criteria evaluator V5", one tap files it) plus a ⋯ menu with the rest
+ * (File under…, File in Miscellaneous, Dismiss…). No suggestion → a quiet
+ * "File…" button instead of the chip.
+ */
+export function FilingActions({
+  c,
+  top,
+  busy,
+  onFile,
+  onPick,
+  more = [],
+  inMisc,
+}: {
+  c: { id: string; title: string };
+  top?: { id: string; title: string; path?: string; why?: string } | null;
+  busy?: boolean;
+  onFile: (itemId: string | null) => void;
+  onPick: () => void;
+  more?: MenuItem[];
+  /** already in Miscellaneous: no "File in Miscellaneous" entry */
+  inMisc?: boolean;
+}) {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      {top ? (
+        <button
+          type="button"
+          className="wk-suggest"
+          disabled={busy}
+          onClick={() => onFile(top.id)}
+          aria-label={`File under ${top.title}: ${c.title}`}
+          title={top.why ?? top.path}
+        >
+          <span aria-hidden="true" className="opacity-70">
+            →
+          </span>
+          <span className="truncate">{top.title}</span>
+        </button>
+      ) : (
+        <Button size="sm" variant="ghost" onClick={onPick} aria-label={`File…: ${c.title}`}>
+          File…
+        </Button>
+      )}
+      <OverflowMenu
+        label={`Filing options: ${c.title}`}
+        items={[
+          ...(top ? [{ label: "File under…", onSelect: onPick }] : []),
+          ...(inMisc ? [] : [{ label: "File in Miscellaneous", onSelect: () => onFile(null) }]),
+          ...more,
+        ]}
+      />
+    </span>
+  );
+}
 
 /** While the server is refreshing a cached conversation list in the background, poll until it lands. */
 export const pollWhileUpdating = (query: { state: { data?: ConversationIndexState } }) => (query.state.data?.updating ? 2_500 : false);
@@ -184,8 +241,8 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
   const list = q.data?.conversations ?? [];
   const shown = all ? list : list.slice(0, 5);
   return (
-    <section aria-labelledby="unfiled-heading" className="wk-card min-w-0 p-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <section aria-labelledby="unfiled-heading" className="wk-card min-w-0 px-3 pt-2.5 pb-2">
+      <div className="mb-1 flex items-center justify-between gap-2">
         <h2 id="unfiled-heading" className="wk-label">
           Unfiled conversations
         </h2>
@@ -202,45 +259,23 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
         {shown.map((c) => {
           const top = c.suggestions[0];
           return (
-            <li key={c.id} className="py-2" data-unfiled={c.id}>
-              <p className="text-[14px] font-semibold break-words">
-                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="hover:underline">
+            <li key={c.id} className="flex items-center gap-2 py-1.5" data-unfiled={c.id}>
+              <span className="min-w-0 flex-1">
+                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-[13.5px] font-medium hover:underline">
                   {c.title}
                 </Link>
-              </p>
-              <p className="text-xs text-muted">
-                {BACKEND[c.backend]} · {fmtWhen(c.lastActiveAt)}
-              </p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {top ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    busy={file.isPending && file.variables?.itemId === top.id && file.variables?.sessionId === c.id}
-                    onClick={() => file.mutate({ sessionId: c.id, itemId: top.id })}
-                    aria-label={`File under ${top.title}: ${c.title}`}
-                    title={`Shares the words: ${top.matched.join(", ")}`}
-                  >
-                    File under {top.title}
-                  </Button>
-                ) : null}
-                <Button size="sm" onClick={() => setFiling(c)} aria-label={`File under…: ${c.title}`}>
-                  File under…
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => file.mutate({ sessionId: c.id, itemId: null })}
-                  aria-label={`File in Miscellaneous: ${c.title}`}
-                >
-                  File in Miscellaneous
-                </Button>
-                {dismissable ? (
-                  <Button size="sm" variant="ghost" onClick={() => dismiss.mutate(c.id)} aria-label={`Dismiss: ${c.title}`}>
-                    Dismiss
-                  </Button>
-                ) : null}
-              </div>
+                <span className="block truncate text-xs text-muted" data-dynamic>
+                  {BACKEND[c.backend]} · {fmtWhen(c.lastActiveAt)}
+                </span>
+              </span>
+              <FilingActions
+                c={c}
+                top={top ? { ...top, why: `Shares the words: ${top.matched.join(", ")}` } : null}
+                busy={file.isPending && file.variables?.sessionId === c.id}
+                onFile={(itemId) => file.mutate({ sessionId: c.id, itemId })}
+                onPick={() => setFiling(c)}
+                more={dismissable ? [{ label: "Dismiss from Inbox", onSelect: () => dismiss.mutate(c.id) }] : []}
+              />
             </li>
           );
         })}

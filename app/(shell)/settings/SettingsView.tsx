@@ -67,6 +67,23 @@ export function SettingsView() {
       <PageHeader title="Settings" />
       <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-[minmax(0,248px)_minmax(0,1fr)] lg:gap-x-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
         <nav aria-labelledby="settings-sections-h" className="md:sticky md:top-4">
+          {/* The account avatar lives here (the command orb carries the Jarvis mark instead). */}
+          <div className="card mb-3 flex items-center gap-3 px-3 py-2.5" data-testid="settings-account">
+            <span
+              aria-hidden="true"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-accent-contrast"
+            >
+              {(form?.displayName || me.data?.user.name || "?").trim().charAt(0).toUpperCase()}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate font-semibold" data-dynamic>
+                {form?.displayName || me.data?.user.name || "Your account"}
+              </span>
+              <span className="block truncate text-xs text-muted" data-dynamic>
+                {role === "household" ? "Household member" : isAdmin ? "Owner · admin" : "Member"}
+              </span>
+            </span>
+          </div>
           <SectionLabel id="settings-sections-h">Sections</SectionLabel>
           <ul className="card rows overflow-hidden p-0">
             {links.map((l) => (

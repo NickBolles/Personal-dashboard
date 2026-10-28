@@ -152,7 +152,8 @@ test("bulk select → Move to…, and file unfiled conversations in bulk", async
   });
   await page.goto("/areas?view=tree");
   const triage = page.locator("section[aria-labelledby=unfiled-triage]");
-  await expect(triage.getByText("→ Target", { exact: false })).toBeVisible();
+  // One suggestion chip per row (the rest is in ⋯).
+  await expect(triage.getByRole("button", { name: `File under Target ${nonce}: Bulk file one ${nonce}` })).toBeVisible();
   await triage.getByLabel(`Select Bulk file one ${nonce}`).check();
   const sel = page.getByRole("region", { name: "Selected conversations" });
   await sel.getByRole("button", { name: "Accept suggestions" }).click();

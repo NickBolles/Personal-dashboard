@@ -358,8 +358,8 @@ export async function conversationList(
   return { conversations, unfiledCount, unavailable, updating, cachedAt };
 }
 
-/** Recent conversations of yours that aren't in the tree at all (not dismissed), with filing suggestions: the Inbox's list. */
-export async function unfiledConversations(user: CurrentUser, opts: { revalidate?: boolean } = {}): Promise<UnfiledResponse> {
+/** Recent conversations of yours that aren't in the tree at all (not dismissed), with filing suggestions: the Inbox's list (+ Miscellaneous ones for the Areas list). */
+export async function unfiledConversations(user: CurrentUser, opts: { revalidate?: boolean; includeMisc?: boolean } = {}): Promise<UnfiledResponse> {
   requireCap(user, "hermes.chat");
   const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
   const ctx = context(user.id);
@@ -373,7 +373,12 @@ export async function unfiledConversations(user: CurrentUser, opts: { revalidate
       .all()
       .map((r) => r.id),
   );
-  const open = sessions.filter((s) => !s.archived && !s.readOnly && !dismissed.has(s.id) && !placementOf(ctx, s.id));
+  // `includeMisc` (the Areas list): chats sitting only in Miscellaneous count as unfiled too, like the conversations view.
+  const unplaced = (id: string) => {
+    const p = placementOf(ctx, id);
+    return !p || (!!opts.includeMisc && p.inMisc);
+  };
+  const open = sessions.filter((s) => !s.archived && !s.readOnly && !dismissed.has(s.id) && unplaced(s.id));
   return {
     total: open.length,
     unavailable,

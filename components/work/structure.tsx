@@ -8,7 +8,8 @@ import { Button, ErrorNote, OverflowMenu, Spinner, useToast } from "@/components
 import { PlusIcon } from "@/components/icons";
 import { useWorkMutation } from "@/components/work/common";
 import { DestinationPicker } from "@/components/work/DestinationPicker";
-import { fmtWhen, pollWhileUpdating, UpdatingNote } from "@/components/work/conversations";
+import { FilingActions, fmtWhen, pollWhileUpdating, UpdatingNote } from "@/components/work/conversations";
+import { SuggestWithAi, useAiFiling } from "@/components/work/ai/SuggestFiling";
 import type { UndoOp } from "@/components/work/UndoBar";
 import { ProjectIcon } from "@/components/work/WorkTree";
 import { rollup, type CreatableKind, type UnfiledConversation, type UnfiledResponse, type WorkItem } from "@/lib/work";
@@ -135,7 +136,7 @@ export function AreasOverview({ items, onSelect, onNewArea }: { items: WorkItem[
                   </span>
                   {r.active ? <span className="text-xs text-accent">{r.active} active</span> : null}
                   {r.proofDue ? <span className="text-xs text-warn">{r.proofDue} proof due</span> : null}
-                  <Progress done={r.done} total={r.total} />
+                  {r.total ? <Progress done={r.done} total={r.total} /> : null}
                 </button>
               </li>
             );
@@ -150,7 +151,7 @@ export function AreasOverview({ items, onSelect, onNewArea }: { items: WorkItem[
 export function Progress({ done, total }: { done: number; total: number }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5" title={`${done} of ${total} done`}>
-      <span className="wk-prog" aria-hidden="true">
+      <span className="wk-prog hidden sm:inline-block" aria-hidden="true">
         <i style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
       </span>
       <span className="w-9 text-right text-[11.5px] text-muted tabular-nums">{total ? `${done}/${total}` : "—"}</span>
@@ -164,15 +165,29 @@ export function Progress({ done, total }: { done: number; total: number }) {
  */
 export function UnfiledTriage({ items }: { items: WorkItem[] }) {
   const q = useQuery({
-    queryKey: ["work", "unfiled"],
-    queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled"),
+    // Chats that only sit in Miscellaneous count as unfiled here (owner decision), like the conversations view.
+    queryKey: ["work", "unfiled", "misc"],
+    queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled?misc=1"),
     refetchInterval: pollWhileUpdating,
   });
   const { toast } = useToast();
   const [picked, setPicked] = useState<Set<string>>(() => new Set());
   const [all, setAll] = useState(false);
   const [filing, setFiling] = useState<UnfiledConversation[] | null>(null);
-  const list = q.data?.conversations ?? [];
+  // AI suggestions (on demand): sessionId → destination; they take the place of the word-match suggestion.
+  const { allowed: aiAllowed, map: ai } = useAiFiling();
+  const raw = q.data?.conversations ?? [];
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const list = raw.map((c) => {
+    const s = ai[c.id];
+    const dest = s?.itemId ? byId.get(s.itemId) : undefined;
+    return dest && s
+      ? {
+          ...c,
+          suggestions: [{ id: dest.id, title: dest.title, path: dest.title, matched: [], ai: s.reason }, ...c.suggestions.filter((x) => x.id !== dest.id)],
+        }
+      : c;
+  });
   const shown = all ? list : list.slice(0, 8);
   const file = useWorkMutation(
     async (jobs: { sessionId: string; itemId: string | null }[]) => {
@@ -207,15 +222,18 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
       return n;
     });
   return (
-    <section aria-labelledby="unfiled-triage" className="wk-card min-w-0 p-3">
+    <section aria-labelledby="unfiled-triage" className="wk-card min-w-0 px-3 pt-2.5 pb-2">
       <div className="mb-1 flex items-center justify-between gap-2">
         <h2 id="unfiled-triage" className="wk-label">
           Unfiled conversations{q.data ? ` · ${q.data.total}` : ""}
         </h2>
         {list.length ? (
-          <Button size="sm" variant="ghost" onClick={() => setPicked(picked.size === shown.length ? new Set() : new Set(shown.map((c) => c.id)))}>
-            {picked.size && picked.size === shown.length ? "Select none" : "Select all"}
-          </Button>
+          <span className="flex items-center gap-1">
+            <SuggestWithAi allowed={aiAllowed} />
+            <Button size="sm" variant="ghost" onClick={() => setPicked(picked.size === shown.length ? new Set() : new Set(shown.map((c) => c.id)))}>
+              {picked.size && picked.size === shown.length ? "Select none" : "Select all"}
+            </Button>
+          </span>
         ) : null}
       </div>
       {q.isPending ? <Spinner label="Loading conversations…" /> : null}
@@ -224,7 +242,7 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
       {q.data && !list.length ? <p className="text-sm text-muted">Every recent conversation is filed.</p> : null}
       <ul className="wk-rows">
         {shown.map((c) => {
-          const top = c.suggestions[0];
+          const top = c.suggestions[0] as (UnfiledConversation["suggestions"][number] & { ai?: string }) | undefined;
           return (
             <li key={c.id} className="flex items-center gap-2.5 py-1.5" data-unfiled-row={c.id}>
               <input type="checkbox" className="h-4 w-4 shrink-0" aria-label={`Select ${c.title}`} checked={picked.has(c.id)} onChange={() => toggle(c.id)} />
@@ -232,13 +250,23 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
                 <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-[13.5px] font-medium hover:underline">
                   {c.title}
                 </Link>
-                <span className="block truncate text-xs text-muted">
-                  {top ? `→ ${top.title}` : "No suggestion"} · {fmtWhen(c.lastActiveAt)}
+                <span className="block truncate text-xs text-muted" data-dynamic>
+                  {c.placement?.inMisc ? "In Miscellaneous" : "Not in Areas"} · {fmtWhen(c.lastActiveAt)}
+                  {top?.ai ? <span className="text-violet"> · ✦ AI</span> : null}
                 </span>
               </span>
-              <Button size="sm" variant="ghost" onClick={() => setFiling([c])} aria-label={`File to…: ${c.title}`}>
-                File…
-              </Button>
+              <FilingActions
+                c={c}
+                top={
+                  top
+                    ? { id: top.id, title: top.title, why: top.ai ? `AI: ${top.ai}` : top.matched.length ? `Shares: ${top.matched.join(", ")}` : top.path }
+                    : null
+                }
+                busy={file.isPending}
+                inMisc={!!c.placement?.inMisc}
+                onFile={(itemId) => file.mutate([{ sessionId: c.id, itemId }])}
+                onPick={() => setFiling([c])}
+              />
             </li>
           );
         })}
@@ -302,7 +330,9 @@ export function NodeRow({ i, items, onSelect, status }: { i: WorkItem; items: Wo
         <span className="block truncate">{i.title}</span>
         {i.nextAction ? <span className="block truncate text-xs text-muted">Next: {i.nextAction}</span> : null}
       </span>
-      {r ? <Progress done={r.done} total={r.total} /> : status}
+      {/* Projects: their (manual) status, plus progress once they hold work. */}
+      {status}
+      {r && r.total ? <Progress done={r.done} total={r.total} /> : null}
     </button>
   );
 }
