@@ -989,7 +989,14 @@ details.jv-why > summary::-webkit-details-marker {
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
   -webkit-touch-callout: none;
 }
-.dock-orb:focus-visible {
+.dock-tide {
+  box-shadow:
+    0 0 0 4px var(--bg),
+    0 6px 18px color-mix(in srgb, var(--o2) 45%, transparent);
+  -webkit-touch-callout: none;
+}
+.dock-orb:focus-visible,
+.dock-tide:focus-visible {
   outline: 3px solid var(--text);
   outline-offset: 3px;
 }

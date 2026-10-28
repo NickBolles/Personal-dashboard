@@ -31,6 +31,14 @@ function actionMap(page: Page) {
 function orb(page: Page) {
   return page.locator('[data-testid="dock-orb"]:visible');
 }
+/** Orb tap → radial menu → Search → palette. */
+async function openPalette(page: Page) {
+  await expect(async () => {
+    if (!(await actionMap(page).count())) await orb(page).click();
+    await actionMap(page).click();
+    await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused({ timeout: 1000 });
+  }).toPass();
+}
 async function centre(l: Locator) {
   const b = (await l.boundingBox())!;
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
@@ -192,17 +200,23 @@ test("settings → connections → GitHub: add, test, warn, webhook secret; assi
   await removeConnections(page);
 });
 
-test("command dock: tap opens the palette, hold-and-slide runs an action, release on the orb cancels, Ctrl+. works", async ({ page }) => {
+test("command dock: tap opens the radial menu, Search opens the palette, hold-and-slide runs an action, release on the orb cancels, Ctrl+. works", async ({
+  page,
+}) => {
   await page.goto("/home");
   await page.getByRole("heading", { name: "Now" }).waitFor();
   const o = orb(page);
   await expect(o).toBeVisible();
 
-  // Tap → command palette with Work commands.
-  await expect(async () => {
-    await o.click();
-    await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused({ timeout: 1000 });
-  }).toPass();
+  // Tap → radial command menu (focus on the first action); Esc returns focus to the orb.
+  await o.click();
+  await expect(page.locator('[data-petal="search"]')).toBeFocused();
+  await expect(o).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(actionMap(page)).toHaveCount(0);
+  await expect(o).toBeFocused();
+  // Search in the radial menu → command palette with Work commands.
+  await openPalette(page);
   const box = page.getByRole("combobox", { name: "Search Jarvis" });
   await box.fill("inbox");
   await expect(page.locator('[data-command="work.inbox"]')).toBeVisible();
@@ -269,13 +283,7 @@ test("palette commands act on the open item: start focused work and record valid
   await api(page, "post", `/api/work/items/${item.id}/validations`, { metric: "p95 hydration", comparator: "<=", threshold: 1.2, unit: "s" });
   await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf" })).toBeVisible();
-  const openPalette = async () => {
-    await expect(async () => {
-      await orb(page).click();
-      await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused({ timeout: 1000 });
-    }).toPass();
-  };
-  await openPalette();
+  await openPalette(page);
   await page.getByRole("combobox", { name: "Search Jarvis" }).fill("focused");
   await page.locator('[data-command="work.packet"]').click();
   await expect(page.getByRole("dialog", { name: "Start focused work" })).toBeVisible();
@@ -283,7 +291,7 @@ test("palette commands act on the open item: start focused work and record valid
   await expect(page.getByRole("dialog").getByLabel("Validation required before settling")).toBeChecked();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
 
-  await openPalette();
+  await openPalette(page);
   await page.getByRole("combobox", { name: "Search Jarvis" }).fill("record validation");
   await page.keyboard.press("Enter");
   await expect(page.getByLabel("Observed value for p95 hydration")).toBeFocused();
@@ -308,10 +316,10 @@ test.describe("phone, 320 px", () => {
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Save packet" })).toBeInViewport();
     await expectNoHorizontalOverflow(page);
-    // The orb is the centre of the bottom bar, not on top of it.
+    // The orb is the centre of the bottom bar, lifted 20px (§5), never floating over content.
     const bar = await page.getByRole("navigation", { name: "Primary" }).last().boundingBox();
     const o = await orb(page).boundingBox();
-    expect(o!.y).toBeGreaterThanOrEqual(bar!.y - 1);
+    expect(o!.y).toBeGreaterThanOrEqual(bar!.y - 21);
     expect(o!.y + o!.height).toBeLessThanOrEqual(bar!.y + bar!.height + 1);
   });
 });

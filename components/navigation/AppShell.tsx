@@ -133,6 +133,8 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const { capabilities } = useAccess();
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
   const destinations = DESTINATIONS.filter((d) => allowed(d, capabilities));
+  // The phone bar holds four destinations around the orb; Hermes-only people (no Areas) keep Chat.
+  const barItems = primary.filter((d) => d.key !== "chat" || !primary.some((p) => p.key === "areas")).slice(0, 3);
   const [searchOpen, setSearchOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const canWork = capabilities.includes("work.use");
@@ -299,11 +301,11 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
 
-      {/* Mobile bottom bar: fixed four items */}
+      {/* Phone bottom bar (§5): Home · Areas · [orb] · Alerts · More. Chat and Inbox are reached from the orb / More. */}
       <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <ul className={cx("mx-auto grid max-w-xl overflow-hidden", primary.length === 3 ? "grid-cols-5" : "grid-cols-4")}>
-          {[...primary, MORE].map((d, i, all) => {
-            const active = d.key === "more" ? MORE.match(pathname) && !primary.some((p) => p.match(pathname)) : d.match(pathname);
+        <ul className="mx-auto grid max-w-xl grid-cols-5">
+          {[...barItems, MORE].map((d, i, all) => {
+            const active = d.key === "more" ? MORE.match(pathname) && !barItems.some((p) => p.match(pathname)) : d.match(pathname);
             const Icon = d.icon;
             // The command dock is the centre item of the bar (never overlapping it).
             const dock =

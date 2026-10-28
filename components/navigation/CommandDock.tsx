@@ -16,7 +16,10 @@ import { cx } from "@/components/ui";
 import { OPEN_PALETTE_EVENT, useCommands, type Command } from "./commands";
 
 /**
- * The command dock: one orb. Phones: the middle of the bottom bar. Desktop:
+ * The command dock: one orb. Phones (design system §5): the Tide orb, lifted
+ * out of the middle of the bottom bar; a tap opens the radial command menu
+ * (focus on the first action, arrows cycle, Esc/scrim returns focus to the
+ * orb) and Search there opens the palette. Desktop:
  * docked in the foot of the app rail (never floating over content). Tap →
  * command palette. Press and
  * hold (~320 ms) → radial action map: slide onto a petal (pausing ~⅓ s opens
@@ -107,9 +110,10 @@ export function resolvePetals(commands: Command[]): Resolved[] {
   })).filter((p) => p.sub.length > 0);
 }
 
-function layout(center: Pt, n: number) {
+function layout(center: Pt, n: number, phone = false) {
   const vw = window.innerWidth;
-  const R = Math.max(120, Math.min(165, center.x - 40, vw - center.x - 40, window.innerHeight * 0.3));
+  // Phone bar: 6 × 62px actions on a 128px semicircle (§5); desktop keeps the wider arc.
+  const R = phone ? 128 : Math.max(120, Math.min(165, center.x - 40, vw - center.x - 40, window.innerHeight * 0.3));
   const start = -168;
   const span = 156; // upper arc, clear of the dock
   return {
@@ -151,6 +155,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
     st.current = { active, subFor, subActive, map };
   });
 
+  const phone = variant === "bar";
   const palette = () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
   const vibrate = (ms: number) => {
     try {
@@ -199,7 +204,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
   const track = (x: number, y: number) => {
     const m = st.current.map;
     if (!m) return;
-    const { R, petals: pos } = layout(m.center, petals.length);
+    const { R, petals: pos } = layout(m.center, petals.length, phone);
     const rel = { x: x - m.center.x, y: y - m.center.y };
     const s = st.current.subFor;
     if (s >= 0) {
@@ -272,7 +277,9 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
     if (st.current.map) {
       track(e.clientX, e.clientY);
       commit();
-    } else palette();
+    } else if (phone)
+      open("keyboard"); // tap → radial command menu, focus on its first action
+    else palette();
   };
   const onPointerCancel = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -339,7 +346,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
     if (sel) document.querySelector<HTMLElement>(`#command-map ${sel}`)?.focus({ preventScroll: true });
   }, [map, active, subFor, subActive]);
 
-  const geometry = map ? layout(map.center, petals.length) : null;
+  const geometry = map ? layout(map.center, petals.length, phone) : null;
   const subs = map && geometry && subFor >= 0 ? subLayout(map.center, geometry.R, geometry.petals[subFor]!, petals[subFor]!.sub.length) : [];
   const hint = !map
     ? ""
@@ -357,7 +364,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
         ref={orb}
         type="button"
         data-testid="dock-orb"
-        aria-label="Jarvis commands: tap for the command palette, hold for the action map (Ctrl+.)"
+        aria-label={phone ? "Jarvis commands" : "Jarvis commands: tap for the command palette, hold for the action map (Ctrl+.)"}
         aria-haspopup="menu"
         aria-expanded={!!map}
         onPointerDown={onPointerDown}
@@ -367,7 +374,10 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
         onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
           // Keyboard activation (Enter/Space) has detail 0; pointer taps are handled on pointerup.
-          if (e.detail === 0) palette();
+          if (e.detail === 0) {
+            if (phone) open("keyboard");
+            else palette();
+          }
         }}
         onKeyDown={(e: ReactKeyboardEvent) => {
           if (e.key === "ArrowUp" && !map) {
@@ -379,7 +389,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
         className={cx(
           "relative inline-flex shrink-0 touch-none items-center select-none",
           variant === "bar"
-            ? "dock-orb h-[52px] w-[52px] justify-center rounded-full text-lg font-bold text-white"
+            ? "k-orb dock-tide h-[52px] w-[52px] -translate-y-5 justify-center rounded-full text-lg font-bold text-white"
             : compact
               ? "h-11 w-11 justify-center rounded-[10px] hover:bg-surface"
               : "min-h-11 w-full gap-2.5 rounded-[8px] px-1.5 text-[0.875rem] text-muted hover:bg-surface hover:text-text",
@@ -388,6 +398,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
       >
         {variant === "bar" ? (
           <>
+            <span aria-hidden="true" className="k-orb-aura" />
             <span aria-hidden="true" className="dock-ring" />
             <JarvisMark className="h-7 w-7" />
           </>
@@ -416,7 +427,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
         ? // Portalled to <body>: the phone bar's backdrop-filter would otherwise contain the fixed overlay.
           createPortal(
             <div
-              className="fixed inset-0 z-[70] touch-none bg-black/40 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[70] touch-none bg-[var(--scrim)] backdrop-blur-[6px]"
               onPointerDown={(e) => {
                 if (e.target === e.currentTarget) close();
               }}
@@ -448,13 +459,16 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
                     data-petal-index={i}
                     tabIndex={-1}
                     onClick={() => {
+                      // One-action petals (Search, Capture) run on tap; others open their sub-menu.
+                      if (p.sub.length === 1) return run(p.sub[0]!.cmd);
                       setActive(i);
                       setSubFor(i);
                       setSubActive(0);
                     }}
                     style={{ left: geometry.petals[i]!.x, top: geometry.petals[i]!.y, animationDelay: `${i * 18}ms` }}
                     className={cx(
-                      "dock-petal absolute -mt-[34px] -ml-[34px] flex h-[68px] w-[68px] flex-col items-center justify-center gap-0.5 rounded-full border text-[11px] font-semibold shadow-lg",
+                      "dock-petal absolute flex flex-col items-center justify-center gap-0.5 rounded-full border text-[11px] font-semibold shadow-lg",
+                      phone ? "-mt-[31px] -ml-[31px] h-[62px] w-[62px]" : "-mt-[34px] -ml-[34px] h-[68px] w-[68px]",
                       active === i ? "border-transparent bg-accent text-accent-contrast" : "border-line bg-surface text-text",
                       subFor >= 0 && subFor !== i && "opacity-40",
                     )}
