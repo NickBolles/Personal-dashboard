@@ -14,7 +14,9 @@ test("asset links are public JSON for the Jarvis Android package", async ({ play
   await anon.dispose();
 });
 
-test("inside the Android app without Firebase, web push is offered (FCM not configured)", async ({ page }) => {
+test("inside the Android app without Firebase, web push is offered (FCM not configured)", async ({ page, context }) => {
+  // Headless CI Chromium reports notifications as "denied" unless granted ("web push blocked").
+  await context.grantPermissions(["notifications"]);
   await page.goto("/settings/notifications?source=android");
   const status = page.getByTestId("push-status");
   await expect(status).toContainText("This phone:");
