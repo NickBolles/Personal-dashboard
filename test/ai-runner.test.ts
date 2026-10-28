@@ -162,6 +162,9 @@ vi.mock("@/integrations/store", async (orig) => ({ ...(await orig<typeof import(
 vi.mock("web-push", () => ({ default: { sendNotification: vi.fn(async () => ({})), generateVAPIDKeys: () => ({ publicKey: "pub", privateKey: "priv" }) } }));
 
 import webpush from "web-push";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { and, eq } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
@@ -419,6 +422,54 @@ describe("AI actions end to end (fake Hermes)", () => {
     await settle();
     expect(getJobRow(j2.id)!.state).toBe("succeeded");
     expect(recentAudit(100).some((a) => a.action === "ai.budget_override" && a.sourceRecord === j2.id)).toBe(true);
+  });
+
+  it("subscription meter: background jobs stop at the weekly line (fail closed), user jobs run, $ budget ignored", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-usage-"));
+    const file = path.join(dir, "usage.json");
+    const write = (pct: number, at = new Date()) =>
+      fs.writeFileSync(
+        file,
+        JSON.stringify({ fetched_at: at.toISOString(), providers: { "openai-codex": { weekly_used_percent: pct, fetched_at: at.toISOString() } } }),
+      );
+    process.env.JARVIS_HERMES_USAGE_FILE = file;
+    try {
+      saveAiSettings({ dailyBudgetUsd: 0, billing: { mode: "codex", stopAtPct: 48 } });
+      const { item, u, area } = setup();
+      const b = store.createItem(u, { kind: "thread", title: "Background one", parentId: area.id }, cid);
+      // No snapshot yet: background stops, a person's job still runs (and the $0 budget doesn't apply).
+      const bg = enqueue({
+        userId: owner,
+        kind: "research",
+        subjectType: "work_item",
+        subjectId: b.id,
+        clientKey: "bgmeter01",
+        background: true,
+        correlationId: cid,
+      }).job;
+      const fg = (await (await start(item.id, "research")).json()).job;
+      await settle();
+      expect(getJobRow(fg.id)!.state).toBe("succeeded");
+      expect(getJobRow(bg.id)).toMatchObject({ state: "budget_blocked", errorCode: "quota" });
+      expect(JSON.parse(getJobRow(bg.id)!.params).background).toBe(true);
+      // Over the line: still held.
+      write(48);
+      await settle();
+      expect(getJobRow(bg.id)!.state).toBe("budget_blocked");
+      // Stale (> 2 h) snapshot under the line: still held.
+      write(10, new Date(Date.now() - 3 * 3600_000));
+      await settle();
+      expect(getJobRow(bg.id)!.state).toBe("budget_blocked");
+      // Fresh and under the line: released and run.
+      write(10);
+      await settle();
+      expect(getJobRow(bg.id)!.state).toBe("succeeded");
+      const meter = (await (await call(usageRoute.GET, { url: "http://jarvis.test/api/ai/usage?days=1" })).json()).meter;
+      expect(meter).toMatchObject({ mode: "codex", state: "ok", usedPct: 10, summary: "Codex 10% of week", backgroundAllowed: true });
+    } finally {
+      delete process.env.JARVIS_HERMES_USAGE_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("cancel while running → cancelling → cancelled only after Hermes reports terminal", async () => {
