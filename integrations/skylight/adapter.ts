@@ -449,33 +449,16 @@ export const skylightAdapter: SourceAdapter = {
           name: "List family members",
           run: async () => {
             members = await listMembers().catch(() => []);
-            return members.length ? `${members.length} members: pick yours under “Whose tasks to show”` : "No members found (all chores shown)";
+            if (!members.length) return "No members found (all chores shown)";
+            // Groups stay a free-text list (several ids allowed), so list names + ids here instead of a single-choice picker.
+            const auto = autoGroupMembers(members).map((id) => members.find((m) => m.id === id)?.name);
+            return `${members.length} members: pick yours under “Whose tasks to show”. Up-for-grabs groups (auto): ${auto.join(", ") || "none"}. Ids: ${members.map((m) => `${m.name}=${m.id}`).join(", ")}`;
           },
         },
       ],
       () => [
         { field: "frameId", label: "Frame", options: frames.map((f) => ({ value: f.id, label: f.name })) },
         ...(members.length ? [{ field: "members", label: "Whose tasks to show (you)", options: members.map((m) => ({ value: m.id, label: m.name })) }] : []),
-        ...(members.length
-          ? [
-              {
-                field: "groups",
-                label: "Up-for-grabs groups",
-                options: [
-                  {
-                    value: "",
-                    label: `Auto (${
-                      autoGroupMembers(members)
-                        .map((id) => members.find((m) => m.id === id)?.name)
-                        .join(", ") || "none found"
-                    })`,
-                  },
-                  { value: "none", label: "None" },
-                  ...members.map((m) => ({ value: m.id, label: m.name })),
-                ],
-              },
-            ]
-          : []),
       ],
     );
   },
