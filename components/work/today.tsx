@@ -2,7 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, ErrorNote, Spinner, cx } from "@/components/ui";
+import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
+import { useSmartSettings } from "@/components/smart/AssistantText";
 import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
 import { STATUS_LABELS, type InboxResponse, type TodayCard, type TodayResponse } from "@/lib/work";
 
@@ -156,6 +157,7 @@ function CardList({
 export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: string) => void; onInbox: () => void }) {
   const q = useToday();
   const inbox = useInbox();
+  const smart = useSmartSettings();
   if (q.isPending) return <Spinner label="Loading today…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const t = q.data;
@@ -175,6 +177,16 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           {first ? `, and “${first.title}” is ready to continue.` : "."}
         </p>
       </div>
+      {smart.data?.enabled ? (
+        <nav aria-label="Workflows" className="flex flex-wrap gap-1.5" data-testid="today-workflows">
+          <ButtonLink size="sm" href="/areas/brief">
+            ☀ Morning brief
+          </ButtonLink>
+          <ButtonLink size="sm" href="/areas/plan">
+            Plan the week
+          </ButtonLink>
+        </nav>
+      ) : null}
       <KpiStrip
         kpis={[
           { key: "in_progress", label: "In progress", value: t.kpis.inProgress, tone: "accent" },

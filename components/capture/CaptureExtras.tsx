@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Dialog } from "@/components/ui";
+import { Badge, Button, Dialog, OverflowMenu, type MenuItem } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { ReportViewer } from "@/components/work/ai/AiActions";
@@ -21,16 +21,10 @@ const SKIP_TEXT: Record<string, string> = {
 /** Phase 5 additions to a capture row: triage state, one-tap filing under the suggestion, report, thumbnails, investigate. */
 export function CaptureExtras({ entry, onAccepted }: { entry: InboxEntry; onAccepted: (id: string) => void }) {
   const c = entry.capture!;
-  const canAi = useAccess().can("work.ai");
   const [report, setReport] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState(false);
   const file = useWorkMutation(
     () => api.post<{ item: WorkItem }>(`/api/work/inbox/${encodeURIComponent(entry.id)}/accept`, { parentId: null, useSuggestion: true }),
     { ok: "Filed", onSuccess: (r) => onAccepted(r.item.id) },
-  );
-  const investigate = useWorkMutation(
-    (financeOverride: boolean) => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, financeOverride ? { financeOverride: true } : {}),
-    { ok: "Jarvis is looking into it", onSuccess: () => setConfirm(false) },
   );
   const skip = c.triageState === "skipped" && c.triageSkipReason ? SKIP_TEXT[c.triageSkipReason] : "";
   return (
@@ -81,18 +75,33 @@ export function CaptureExtras({ entry, onAccepted }: { entry: InboxEntry; onAcce
             ✦ Report ready<span className="sr-only">: {c.report.title}</span>
           </Button>
         ) : null}
-        {canAi && !c.report && !c.investigating && c.sensitivity !== "credentials" && c.sensitivity !== "finance" && c.triageState !== "queued" ? (
-          <Button size="sm" variant="ghost" onClick={() => investigate.mutate(false)} busy={investigate.isPending}>
-            Investigate
-          </Button>
-        ) : null}
-        {canAi && c.sensitivity === "finance" ? (
-          <Button size="sm" variant="ghost" onClick={() => setConfirm(true)}>
-            Send anyway…
-          </Button>
-        ) : null}
       </div>
       {report ? <ReportViewer reportId={report} onClose={() => setReport(null)} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The ⋯ menu of a capture row: Investigate (work.ai) and "Send anyway…" for
+ * finance-looking captures live here with Dismiss, so the row keeps one
+ * visible action (File/suggestion).
+ */
+export function CaptureRowMenu({ entry, label, onDismiss }: { entry: InboxEntry; label: string; onDismiss: () => void }) {
+  const c = entry.capture!;
+  const canAi = useAccess().can("work.ai");
+  const [confirm, setConfirm] = useState(false);
+  const investigate = useWorkMutation(
+    (financeOverride: boolean) => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, financeOverride ? { financeOverride: true } : {}),
+    { ok: "Jarvis is looking into it", onSuccess: () => setConfirm(false) },
+  );
+  const items: MenuItem[] = [];
+  if (canAi && !c.report && !c.investigating && c.sensitivity !== "credentials" && c.sensitivity !== "finance" && c.triageState !== "queued")
+    items.push({ label: "Investigate", onSelect: () => investigate.mutate(false) });
+  if (canAi && c.sensitivity === "finance") items.push({ label: "Send to AI anyway…", onSelect: () => setConfirm(true) });
+  items.push({ label: "Dismiss", onSelect: onDismiss, danger: true });
+  return (
+    <>
+      <OverflowMenu label={label} items={items} />
       {confirm ? (
         <Dialog
           open
@@ -109,6 +118,6 @@ export function CaptureExtras({ entry, onAccepted }: { entry: InboxEntry; onAcce
           }
         />
       ) : null}
-    </div>
+    </>
   );
 }

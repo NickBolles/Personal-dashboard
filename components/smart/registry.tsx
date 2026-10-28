@@ -4,10 +4,11 @@ import Link from "next/link";
 import type { ComponentRegistry, ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog";
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
-import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
+import { isTask, type AppliedEntry, type HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
 import { Badge, Button, OverflowMenu, cx, type MenuItem } from "@/components/ui";
 import { InlineText, useSurface } from "./context";
+import { ApprovalChips, MetricGauge, PRCard, Sparkline, WeekPlan } from "./workflow-components";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
 
@@ -70,7 +71,7 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
       <div className="min-w-0 flex-1">
         <p className={cx("truncate font-medium", (applied?.intent as { kind?: string })?.kind?.match(/complete|drop/) && "line-through")}>{name}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted" data-dynamic>
-          {h && "kind" in h ? <DuePill due={h.due} today={s.today} /> : null}
+          {isTask(h) ? <DuePill due={h.due} today={s.today} /> : null}
           {h && "where" in h && h.where ? <span>{h.where}</span> : null}
           {row.reason ? <span className="min-w-0 truncate">· {row.reason}</span> : null}
           {unavailable && !s.hydrating ? (
@@ -255,6 +256,7 @@ function Checklist({ element }: P<"Checklist">) {
 }
 
 function Gauge({ element }: P<"Gauge">) {
+  if ("metric" in element.props) return <MetricGauge metric={element.props.metric} label={element.props.label} />;
   const p = element.props;
   const pct = Math.max(0, Math.min(1, p.value / p.max));
   const tone = pct >= 0.9 ? "bg-danger" : pct >= 0.7 ? "bg-warn" : "bg-ok";
@@ -320,7 +322,7 @@ function Table({ element }: P<"Table">) {
 function ItemRef({ element }: P<"ItemRef">) {
   const s = useSurface();
   const h = s.refs[element.props.ref];
-  if (!h || "unavailable" in h) return <span className="chip text-muted">Unavailable</span>;
+  if (!isTask(h)) return <span className="chip text-muted">Unavailable</span>;
   return h.href ? (
     <Link href={h.href} className="chip">
       {h.title}
@@ -373,6 +375,10 @@ export const registry: ComponentRegistry = {
   DecisionCard,
   Checklist,
   Gauge,
+  Sparkline,
+  ApprovalChips,
+  WeekPlan,
+  PRCard,
   Table,
   ItemRef,
 };
