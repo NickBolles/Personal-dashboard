@@ -140,6 +140,8 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   userAgent: text("user_agent"),
+  /** "android-app" when subscribed inside the Jarvis Android app (TWA); skipped when that phone gets FCM. */
+  source: text("source"),
   createdAt: text("created_at").notNull().default(now),
   lastSuccessAt: text("last_success_at"),
   failureCount: integer("failure_count").notNull().default(0),
