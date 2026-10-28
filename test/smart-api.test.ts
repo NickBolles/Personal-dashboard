@@ -160,6 +160,27 @@ describe("smart UI API", () => {
     expect((await send([{ kind: "todo.snooze", ref: "todo:gt-1", date: "2026-10-30" }], other)).status).toBe(404);
   });
 
+  it("serializes overlapping applies on one surface so neither loses its applied entries", async () => {
+    const { todosAdapter } = await import("@/integrations/todos/adapter");
+    vi.mocked(todosAdapter.act!).mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+      return { ok: true, message: "ok" };
+    });
+    const { surfaceId } = await setup();
+    const [a, b] = await Promise.all([
+      call(applyRoute.POST, { body: { surfaceId, intents: [{ kind: "todo.snooze", ref: "todo:gt-1", date: "2026-10-30" }], idempotencyKey: "overlap-a-1" } }),
+      call(applyRoute.POST, { body: { surfaceId, intents: [{ kind: "todo.complete", ref: "todo:gt-2" }], idempotencyKey: "overlap-b-1" } }),
+    ]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    const { getDb, schema } = await import("@/server/db");
+    const row = getDb()
+      .select()
+      .from(schema.uiSurfaces)
+      .all()
+      .find((r) => r.id === surfaceId)!;
+    expect((JSON.parse(row.appliedJson) as { key: string }[]).map((e) => e.key).sort()).toEqual(["overlap-a-1", "overlap-b-1"]);
+  });
+
   it("saves checklist ticks as surface state (≤ 16 KB) without running anything", async () => {
     const { surfaceId } = await setup();
     const r = await call(stateRoute.PATCH, { method: "PATCH", params: { id: surfaceId }, body: { state: { checks: ["Runbook::one"] } } });

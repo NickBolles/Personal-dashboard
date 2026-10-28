@@ -181,7 +181,22 @@ function DecisionCard({ element }: P<"DecisionCard">) {
           );
         })}
       </div>
-      {appliedOpt ? <p className="mt-2 text-xs text-ok">✓ Recorded “{appliedOpt.label}”</p> : null}
+      {appliedOpt ? (
+        <p className="mt-2 flex items-center gap-2 text-xs">
+          <span className="text-ok">✓ Recorded “{appliedOpt.label}”</span>
+          {s.readOnly ? null : (
+            <Button
+              size="sm"
+              variant="ghost"
+              busy={s.undoing === s.applied.get(intentTarget(appliedOpt.intent!))!.intentHash}
+              onClick={() => s.undo(s.applied.get(intentTarget(appliedOpt.intent!))!)}
+              aria-label={`Undo: ${appliedOpt.label}`}
+            >
+              Undo
+            </Button>
+          )}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -4,8 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
-import { api, ApiError } from "@/lib/client/api";
-import type { JarvisSpec } from "@/lib/jarvis-ui/catalog";
+import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
+import { LIMITS, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import { describeIntent, intentTarget, type Intent } from "@/lib/jarvis-ui/intents";
 import { canonicalJson, specRefs } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, ApplyResult, HydrateResponse, SurfaceView } from "@/lib/jarvis-ui/types";
@@ -45,7 +45,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [review, setReview] = useState(false);
   const [undoing, setUndoing] = useState<string>();
-  const version = useRef(0);
+  const batch = useRef<{ sig: string; key: string }>(undefined);
   const view = surface.data;
 
   const applied = useMemo(() => {
@@ -61,13 +61,25 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const apply = useMutation({
     mutationFn: async () => {
       const entries = [...staged.entries()];
-      version.current += 1;
-      const r = await api.post<{ results: ApplyResult[]; surface: SurfaceView }>("/api/smart/apply", {
-        surfaceId: view!.id,
-        intents: entries.map(([, i]) => i),
-        idempotencyKey: `${view!.id}:${version.current}:${entries.length}`,
-      });
-      return { entries, ...r };
+      // One idempotency key per staged batch (unique across reloads and devices);
+      // a retry of the very same batch reuses it so the server can replay.
+      const sig = canonicalJson(entries);
+      if (batch.current?.sig !== sig) batch.current = { sig, key: newIdempotencyKey("smart") };
+      const results: ApplyResult[] = [];
+      let next: SurfaceView | undefined;
+      // The endpoint takes ≤ 50 intents per call; larger trays go in chunks.
+      for (let i = 0; i < entries.length; i += LIMITS.applyIntents) {
+        const chunk = entries.slice(i, i + LIMITS.applyIntents);
+        const r = await api.post<{ results: ApplyResult[]; surface: SurfaceView }>("/api/smart/apply", {
+          surfaceId: view!.id,
+          intents: chunk.map(([, intent]) => intent),
+          idempotencyKey: `${batch.current.key}:${i / LIMITS.applyIntents}`,
+        });
+        results.push(...r.results);
+        next = r.surface;
+      }
+      batch.current = undefined;
+      return { entries, results, surface: next! };
     },
     onSuccess: ({ entries, results, surface: next }) => {
       setView(next);

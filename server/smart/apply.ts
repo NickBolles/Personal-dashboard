@@ -90,7 +90,33 @@ async function execute(user: CurrentUser, c: Checked, correlationId: string): Pr
   }
 }
 
-export async function applyIntents(
+const locks = new Map<string, Promise<unknown>>();
+
+/**
+ * Apply/undo read the surface's applied history, await upstream writes, then
+ * write the history back. Serialize them per surface (one server process) so
+ * an overlapping request can't overwrite another's entries.
+ */
+async function withSurfaceLock<T>(surfaceId: string, fn: () => Promise<T>): Promise<T> {
+  const run = (locks.get(surfaceId) ?? Promise.resolve()).catch(() => undefined).then(fn);
+  const tail = run.catch(() => undefined);
+  locks.set(surfaceId, tail);
+  try {
+    return await run;
+  } finally {
+    if (locks.get(surfaceId) === tail) locks.delete(surfaceId);
+  }
+}
+
+export function applyIntents(user: CurrentUser, body: { surfaceId: string; intents: unknown[]; idempotencyKey: string }, correlationId: string) {
+  return withSurfaceLock(body.surfaceId, () => applyLocked(user, body, correlationId));
+}
+
+export function undoIntent(user: CurrentUser, body: { surfaceId: string; intentHash: string }, correlationId: string) {
+  return withSurfaceLock(body.surfaceId, () => undoLocked(user, body, correlationId));
+}
+
+async function applyLocked(
   user: CurrentUser,
   body: { surfaceId: string; intents: unknown[]; idempotencyKey: string },
   correlationId: string,
@@ -136,7 +162,7 @@ export async function applyIntents(
   return { results, surface: toView({ ...row, appliedJson: JSON.stringify(applied) }, user) };
 }
 
-export async function undoIntent(user: CurrentUser, body: { surfaceId: string; intentHash: string }, correlationId: string) {
+async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHash: string }, correlationId: string) {
   const row = ownedSurface(user.id, body.surfaceId);
   const applied = JSON.parse(row.appliedJson) as AppliedEntry[];
   const entry = applied.find((e) => e.intentHash === body.intentHash && e.ok && !e.undone);
