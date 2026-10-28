@@ -25,12 +25,25 @@ android {
         version = release(37) { minorApiLevel = 2 }
     }
 
+    // The web app the launcher opens before pairing (and whose links the app claims). After pairing,
+    // the paired server is used. Self-hosters: -PjarvisOrigin=https://jarvis.example.com
+    val jarvisOrigin = ((findProperty("jarvisOrigin") as String?) ?: "https://jarvis.nickbolles.com").trimEnd('/')
+    require(Regex("^https://[a-z0-9.-]+(:[0-9]+)?$").matches(jarvisOrigin)) { "jarvisOrigin must be https://host[:port]" }
+
     defaultConfig {
         applicationId = "com.nickbolles.jarvis"
         minSdk = 29
         targetSdk = 36
         versionCode = ((findProperty("versionCode") as String?) ?: "1").toInt()
         versionName = (findProperty("versionName") as String?) ?: "1.0.0"
+        buildConfigField("String", "JARVIS_ORIGIN", "\"$jarvisOrigin\"")
+        manifestPlaceholders["jarvisDefaultUrl"] = "$jarvisOrigin/home?source=android"
+        manifestPlaceholders["jarvisHost"] = jarvisOrigin.removePrefix("https://").substringBefore(':')
+        resValue(
+            "string",
+            "asset_statements",
+            "[{\\\"relation\\\": [\\\"delegate_permission/common.handle_all_urls\\\"], \\\"target\\\": {\\\"namespace\\\": \\\"web\\\", \\\"site\\\": \\\"$jarvisOrigin\\\"}}]",
+        )
     }
 
     val keystore = System.getenv("JARVIS_KEYSTORE")
@@ -57,6 +70,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
 
     compileOptions {
@@ -108,6 +122,8 @@ dependencies {
     implementation(libs.code.scanner)
     // The scanner pulls an old Fragment; ActivityResult APIs need a current one.
     implementation(libs.androidx.fragment)
+    // Trusted Web Activity launcher (the app is the web app in Chrome).
+    implementation(libs.androidbrowserhelper)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 

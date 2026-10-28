@@ -50,7 +50,7 @@ Restore: `docker compose stop jarvis`, copy `jarvis.db` (and `secret.key` unless
 
 ## Configuration reference (env)
 
-See `.env.example`. Notable: `JARVIS_AUTH_MODE` (`local`|`proxy`), `JARVIS_AUTH_PROXY_HEADER`, `JARVIS_SECRET_KEY`, `JARVIS_PUBLIC_ORIGIN` (needed for Google OAuth redirect + Paperclip backlinks), `JARVIS_WORKER_INTERVAL_MS` (default 60 s), `JARVIS_MAX_STREAMS`, `JARVIS_TWA_ASSETLINKS`.
+See `.env.example`. Notable: `JARVIS_AUTH_MODE` (`local`|`proxy`), `JARVIS_AUTH_PROXY_HEADER`, `JARVIS_SECRET_KEY`, `JARVIS_PUBLIC_ORIGIN` (needed for Google OAuth redirect + Paperclip backlinks), `JARVIS_WORKER_INTERVAL_MS` (default 60 s), `JARVIS_MAX_STREAMS`, `JARVIS_ANDROID_CERT_SHA256` / `JARVIS_ANDROID_PACKAGE` (Android app asset links; default = the Jarvis CI key), `JARVIS_TWA_ASSETLINKS` (extra apps).
 
 ## Known limitations
 

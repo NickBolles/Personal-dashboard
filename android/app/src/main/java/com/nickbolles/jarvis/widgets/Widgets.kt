@@ -44,7 +44,7 @@ import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import com.nickbolles.jarvis.MainActivity
+import com.nickbolles.jarvis.web.TwaLauncherActivity
 import com.nickbolles.jarvis.R
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.data.WidgetAction
@@ -61,9 +61,8 @@ import java.time.ZoneId
 
 /* Shared bits ------------------------------------------------------------ */
 
-fun openApp(context: Context, path: String) = actionStartActivity(
-    Intent(Intent.ACTION_VIEW, Uri.parse("jarvis://open$path"), context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-)
+/** Opens [path] in the app (the web app in a Trusted Web Activity; see WebLinks for the path map). */
+fun openApp(context: Context, path: String) = actionStartActivity(TwaLauncherActivity.intent(context, path))
 
 @Composable
 private fun Title(text: String, trailing: String? = null) {

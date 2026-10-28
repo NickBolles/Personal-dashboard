@@ -16,4 +16,7 @@
     <string name="widget_areas_next">Areas: next actions</string>
     <string name="widget_areas_next_desc">Next actions from your Areas. Tap one to open it.</string>
     <string name="shortcut_areas">Areas</string>
+    <string name="classic_app">Jarvis classic</string>
+    <string name="shortcut_classic">Classic app</string>
+    <string name="shortcut_classic_long">Classic app (native screens)</string>
 </resources>

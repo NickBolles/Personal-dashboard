@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { AndroidWrapperMarker } from "@/components/AndroidWrapperMarker";
 
 export const metadata: Metadata = {
   title: { default: "Jarvis", template: "%s · Jarvis" },
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         >
           Skip to content
         </a>
+        <AndroidWrapperMarker />
         <Providers>{children}</Providers>
       </body>
     </html>
