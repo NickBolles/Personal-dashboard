@@ -24,6 +24,9 @@ export async function listSessions(user: CurrentUser, opts: hermes.SessionListOp
       const page = await hermes.listSessionPage(user, opts);
       remote = page.sessions;
       nextOffset = page.nextOffset;
+      // A routed profile that didn't answer makes this a partial list: flag it so the
+      // conversation index keeps its cached entries instead of dropping them.
+      for (const p of page.unavailableProfiles ?? []) unavailable.push(`Hermes (${p})`);
     } catch (err) {
       if (opts.signal?.aborted) throw err;
       // Partial success is explicit and retryable, never a terminal empty list.

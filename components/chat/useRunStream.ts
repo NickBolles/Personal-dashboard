@@ -82,6 +82,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
           return { ...s, activity: next };
         }
         case "subagent.started":
+          // A resumed stream re-announces subagents still open; keep the original activity.
+          if (e.id && s.activity.some((x) => x.kind === "subagent" && x.id === e.id)) return s;
           return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at }] };
         case "subagent.completed": {
           const idx = s.activity.findIndex((x) => x.kind === "subagent" && (x.id === e.id || (!x.done && x.goal === e.goal)));

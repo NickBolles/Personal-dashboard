@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { startMockServer } from "../mock-upstreams/server.mjs";
 import { MOCK_PROFILE_KEYS } from "../mock-upstreams/hermes.mjs";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
@@ -167,6 +167,27 @@ describe("routing chats, runs and AI jobs to the area's profile", () => {
     // It shows in the conversation list even though the default profile doesn't know it.
     const list = await listSessions(u, {});
     expect(list.sessions.find((x) => x.id === s.id)?.agentProfile).toBe("momentumchief");
+  });
+
+  it("routed conversations page with the list and an unreachable profile flags a partial list", async () => {
+    const u = me();
+    const rows = Array.from({ length: 31 }, (_, i) => ({
+      sessionId: `routed-page-${String(i).padStart(2, "0")}`,
+      userId: owner,
+      hermesProfile: "momentumchief",
+      lastSeenAt: `2020-01-01T00:00:${String(i).padStart(2, "0")}Z`,
+    }));
+    getDb().insert(schema.sessionMeta).values(rows).run();
+    // 31 rows (deleted upstream, so 404 = gone, not unavailable) overflow one routed page.
+    const first = await listSessions(u, { offset: 0 });
+    expect(first.unavailable).toEqual([]);
+    expect(first.nextOffset).not.toBeNull();
+    getDb().delete(schema.sessionMeta).where(like(schema.sessionMeta.sessionId, "routed-page-%")).run();
+
+    getDb().insert(schema.sessionMeta).values({ sessionId: "routed-down-1", userId: owner, hermesProfile: "devchief" }).run();
+    const partial = await listSessions(u, { offset: 0 });
+    expect(partial.unavailable).toContain("Hermes (devchief)");
+    getDb().delete(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, "routed-down-1")).run();
   });
 
   it("with the AG-UI flag on, the same relay streams AG-UI events (only when asked)", async () => {

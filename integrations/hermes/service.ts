@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, notInArray, or } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { config } from "@/server/config";
@@ -126,18 +126,23 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
   opts.signal?.throwIfAborted();
   const [res, routed] = await Promise.all([
     HermesSessionClient.list(connForProfile(null), { limit, offset, includeChildren: true, signal: opts.signal }),
-    offset === 0 ? routedSessions(user, opts.signal) : Promise.resolve([]),
+    // Routed conversations page alongside the default list: page k of the default
+    // window carries routed rows [k*N, (k+1)*N), so "load more" reaches all of them.
+    opts.offset === undefined || offset % limit === 0
+      ? routedSessions(user, { page: Math.floor(offset / limit), includeArchived: opts.includeArchived, signal: opts.signal })
+      : Promise.resolve({ sessions: [], unavailable: [] as string[], hasMore: false }),
   ]);
   if ((res.offset !== undefined && res.offset !== offset) || (res.limit !== undefined && res.limit !== limit)) {
     throw new UpstreamError("Hermes", "bad_response", "Hermes returned a different conversation window");
   }
   // Pins can be back-filled beyond limit and upstream can under-report has_more
   // when a pin occupies the recency window. Err toward continuation, not loss.
-  const hasMore = res.has_more === true || res.data.length >= limit;
+  const hasMore = res.has_more === true || res.data.length >= limit || routed.hasMore;
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
-  const sessions = decorate([...visible, ...routed].map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
+  const sessions = decorate([...visible, ...routed.sessions].map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
   return {
     sessions: [...new Map(sessions.map((s) => [s.id, s])).values()],
+    unavailableProfiles: routed.unavailable,
     // Advance by the SQL window, not the filtered count or appended pin count.
     nextOffset: hasMore ? offset + limit : null,
   };
@@ -146,9 +151,11 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
 /**
  * Conversations Jarvis started on other Hermes profiles (Settings → Agents) live in
  * those profiles' stores, so the default list never returns them. Fetch the most
- * recent ones by id on the first page (no list scans); unreachable ones are skipped.
+ * recent ones by id, one page per default-list page (no list scans). Ownership and
+ * archive filters run in SQL so other users' or archived rows don't use up the page.
  */
-async function routedSessions(user: CurrentUser, signal?: AbortSignal) {
+async function routedSessions(user: CurrentUser, opts: { page: number; includeArchived?: boolean; signal?: AbortSignal }) {
+  const signal = opts.signal;
   const rows = db()
     .select({
       sessionId: schema.sessionMeta.sessionId,
@@ -157,19 +164,33 @@ async function routedSessions(user: CurrentUser, signal?: AbortSignal) {
       shared: schema.sessionMeta.shared,
     })
     .from(schema.sessionMeta)
-    .where(isNotNull(schema.sessionMeta.hermesProfile))
-    .orderBy(desc(schema.sessionMeta.lastSeenAt), desc(schema.sessionMeta.createdAt))
-    .limit(200)
-    .all()
-    .filter((r) => r.userId === user.id || r.shared)
-    .slice(0, ROUTED_LIST_LIMIT);
+    .where(
+      and(
+        isNotNull(schema.sessionMeta.hermesProfile),
+        or(eq(schema.sessionMeta.userId, user.id), eq(schema.sessionMeta.shared, true)),
+        opts.includeArchived ? undefined : eq(schema.sessionMeta.archived, false),
+      ),
+    )
+    .orderBy(desc(schema.sessionMeta.lastSeenAt), desc(schema.sessionMeta.createdAt), desc(schema.sessionMeta.sessionId))
+    .limit(ROUTED_LIST_LIMIT + 1)
+    .offset(opts.page * ROUTED_LIST_LIMIT)
+    .all();
+  const hasMore = rows.length > ROUTED_LIST_LIMIT;
+  rows.length = Math.min(rows.length, ROUTED_LIST_LIMIT);
   const got = await Promise.allSettled(
     rows.map(async (r) => {
       signal?.throwIfAborted();
       return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
     }),
   );
-  return got.flatMap((g) => (g.status === "fulfilled" && !g.value.hidden ? [g.value] : []));
+  // A deleted session (404) is simply gone; any other failure means that profile is
+  // unreachable, so the caller reports a retryable partial list instead of a complete one.
+  const unavailable = [
+    ...new Set(
+      got.flatMap((g, i) => (g.status === "rejected" && !(g.reason instanceof UpstreamError && g.reason.kind === "not_found") ? [rows[i]!.profile!] : [])),
+    ),
+  ];
+  return { sessions: got.flatMap((g) => (g.status === "fulfilled" && !g.value.hidden ? [g.value] : [])), unavailable, hasMore };
 }
 const ROUTED_LIST_LIMIT = 30;
 
