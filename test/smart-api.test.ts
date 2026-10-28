@@ -248,6 +248,33 @@ describe("smart UI API", () => {
     }
   });
 
+  it("a todo completed elsewhere is a no-op with no undo (never reopened by Undo)", async () => {
+    const { todosAdapter } = await import("@/integrations/todos/adapter");
+    TODOS.push({
+      id: "todos:gt-8",
+      source: "todos",
+      sourceId: "gt-8",
+      title: "Done elsewhere",
+      status: "completed",
+      dueAt: "2026-10-02T04:59:00.000Z",
+      dueIsDate: true,
+    });
+    try {
+      await setup();
+      const doneSpec = { root: "a", elements: { a: { type: "TaskList", props: { title: "T", rows: [{ ref: "todo:gt-8", suggestion: "done" }] } } } };
+      const t = await (await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "sess-4", blockIndex: 0, spec: doneSpec } })).json();
+      vi.mocked(todosAdapter.act!).mockClear();
+      const r = await (
+        await call(applyRoute.POST, { body: { surfaceId: t.id, intents: [{ kind: "todo.complete", ref: "todo:gt-8" }], idempotencyKey: "done-elsewhere-1" } })
+      ).json();
+      expect(r.results[0]).toMatchObject({ ok: true, message: "Already done" });
+      expect(todosAdapter.act).not.toHaveBeenCalled();
+      expect((await call(undoRoute.POST, { body: { surfaceId: t.id, intentHash: r.results[0].intentHash } })).status).toBe(409);
+    } finally {
+      TODOS.pop();
+    }
+  });
+
   it("saves checklist ticks as surface state (≤ 16 KB) without running anything", async () => {
     const { surfaceId } = await setup();
     const r = await call(stateRoute.PATCH, { method: "PATCH", params: { id: surfaceId }, body: { state: { checks: ["Runbook::one"] } } });

@@ -58,6 +58,8 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const checks = Array.isArray(view?.state.checks) ? (view!.state.checks as string[]) : [];
 
   const setView = (v: SurfaceView) => qc.setQueryData(surfaceKey, v);
+  // Apply/undo responses carry the applied history; keep the newest local UI state (checklist ticks).
+  const setApplied = (v: SurfaceView) => qc.setQueryData<SurfaceView>(surfaceKey, (prev) => (prev ? { ...v, state: prev.state } : v));
   const refreshData = () => qc.invalidateQueries({ queryKey: ["smart-hydrate"] });
 
   const apply = useMutation({
@@ -84,7 +86,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
       return { entries, results, surface: next! };
     },
     onSuccess: ({ entries, results, surface: next }) => {
-      setView(next);
+      setApplied(next);
       // Reconcile against the current tray: drop only what was submitted and
       // applied unchanged; failures stay staged with their error.
       const errs = new Map<string, string>();
@@ -140,7 +142,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
       setUndoing(entry.intentHash);
       try {
         const r = await api.post<{ surface: SurfaceView }>("/api/smart/undo", { surfaceId: view.id, intentHash: entry.intentHash });
-        setView(r.surface);
+        setApplied(r.surface);
         toast("Undone", "ok");
         refreshData();
       } catch (e) {
@@ -162,7 +164,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
         if (!latest) return;
         try {
           const saved = await api.patch<SurfaceView>(`/api/smart/surfaces/${encodeURIComponent(latest.id)}/state`, { state: latest.state });
-          if (mine === checkSeq.current) setView(saved);
+          if (mine === checkSeq.current) qc.setQueryData<SurfaceView>(surfaceKey, (prev) => (prev ? { ...prev, state: saved.state } : saved));
         } catch {
           toast("Couldn't save that tick", "danger");
         }

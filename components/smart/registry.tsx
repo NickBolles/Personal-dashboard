@@ -83,7 +83,9 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
           </p>
         ) : null}
       </div>
-      {s.readOnly || unavailable ? null : applied ? (
+      {s.readOnly || unavailable ? null : done && !applied ? (
+        <span className="shrink-0 text-xs text-muted">Already done</span>
+      ) : applied ? (
         <span className="flex shrink-0 items-center gap-1 text-xs">
           <span className="text-ok">✓ {applied.message}</span>
           {canUndo(applied) ? (

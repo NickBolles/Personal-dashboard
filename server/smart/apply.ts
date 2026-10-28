@@ -50,6 +50,9 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
 async function execute(user: CurrentUser, c: Checked, correlationId: string): Promise<{ message: string; undo: Record<string, unknown> }> {
   const i = c.intent;
   const opts = { actor: user.id, correlationId };
+  // Completed elsewhere since the reply was written: nothing to do, and nothing to undo.
+  const target = "ref" in i ? c.hydrated[i.ref] : undefined;
+  if (i.kind.startsWith("todo.") && target && "done" in target && target.done) return { message: "Already done", undo: { type: "none" } };
   switch (i.kind) {
     case "todo.complete":
       await todosAdapter.act!(i.ref.slice(5), "complete", opts);
