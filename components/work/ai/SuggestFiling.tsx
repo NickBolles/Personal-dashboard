@@ -17,7 +17,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export function useAiFiling() {
   const { can } = useAccess();
   const allowed = can("work.ai") && can("hermes.chat");
-  const q = useQuery({ queryKey: KEY, queryFn: () => api.get<AiFilingState>("/api/work/conversations/suggest"), enabled: allowed });
+  // Polls while a filing job is active, so a run started before a reload (or one slower than the
+  // click handler's wait) still delivers its suggestions without another click.
+  const q = useQuery({
+    queryKey: KEY,
+    queryFn: () => api.get<AiFilingState>("/api/work/conversations/suggest"),
+    enabled: allowed,
+    refetchInterval: (query) => {
+      const job = query.state.data?.job;
+      return job && ACTIVE_JOB_STATES.includes(job.state) && job.state !== "budget_blocked" ? 3_000 : false;
+    },
+  });
   const map: Record<string, AiFilingSuggestion> = {};
   for (const s of q.data?.suggestions ?? []) if (s.itemId) map[s.sessionId] = s;
   return { allowed, map };
