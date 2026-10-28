@@ -29,10 +29,32 @@ export function saveAgentSettings(patch: Partial<AgentSettings>): AgentSettings 
   return next;
 }
 
-const keyFor = (r: AgentRoute) => {
+/** The route's own key, or (no `keyEnv`) the main Hermes connection key. */
+const keyFor = (r: AgentRoute, main?: string) => {
+  if (!r.keyEnv) {
+    // The main key only goes to the main Hermes server, never to a route's custom host.
+    if (r.baseUrl && originOf(r.baseUrl) !== originOf(safeDefaultBase())) return undefined;
+    return main ?? mainKey();
+  }
   const v = process.env[r.keyEnv];
   return v && v.trim().length >= 16 ? v.trim() : undefined;
 };
+
+function originOf(u: string | null) {
+  try {
+    return u ? new URL(u).origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function mainKey() {
+  try {
+    return hermesConn("admin-connection-test").apiKey || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** True when the profile's key is present (never returns the key). */
 export const routeKeyPresent = (r: AgentRoute) => Boolean(keyFor(r));
@@ -85,7 +107,7 @@ export function connForProfile(profile: string | null | undefined, purpose?: "ad
   if (!p) return base;
   const r = routeFor(p);
   if (!r) throw new UpstreamError("Hermes", "unsupported", `The ${p} agent isn't set up in Settings → Agents`);
-  const apiKey = keyFor(r);
+  const apiKey = keyFor(r, base.apiKey || undefined);
   if (!apiKey) throw new UpstreamError("Hermes", "unsupported", `The ${p} agent's key isn't configured on the server`);
   return { baseUrl: routeBaseUrl(r, base.baseUrl)!, apiKey };
 }
@@ -94,7 +116,7 @@ export function connForProfile(profile: string | null | undefined, purpose?: "ad
 export function agentRouteStatus() {
   const s = getAgentSettings();
   const base = safeDefaultBase();
-  return s.routes.map((r) => ({ ...r, effectiveBaseUrl: routeBaseUrl(r, base), keyPresent: routeKeyPresent(r) }));
+  return s.routes.map((r) => ({ ...r, effectiveBaseUrl: routeBaseUrl(r, base), keyPresent: routeKeyPresent(r), sharedKey: !r.keyEnv }));
 }
 
 /**

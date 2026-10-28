@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 const PORT = Number(process.env.E2E_PORT ?? 3200);
@@ -77,6 +78,8 @@ export default defineConfig({
         JARVIS_GITHUB_API_URL: `${MOCK_URL}/github`,
         // Settings → Agents e2e: the mock Hermes' momentumchief profile key (mock-upstreams/hermes.mjs MOCK_PROFILE_KEYS).
         JARVIS_HERMES_KEY_MOMENTUMCHIEF: "mock-hermes-momentumchief-key-0123456789",
+        // Subscription usage meter: e2e/ai-meter.spec.ts writes this snapshot (absolute: the server runs in .next/standalone).
+        JARVIS_HERMES_USAGE_FILE: path.resolve("e2e/.tmp/hermes-usage.json"),
         JARVIS_SETUP_CODE: "E2E-SETUP",
         JARVIS_WORKER_INTERVAL_MS: "3600000",
         JARVIS_SECURE_COOKIES: "false",

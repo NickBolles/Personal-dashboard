@@ -115,7 +115,10 @@ export function ActionSheet({
   const tier = action === "schedule" ? "triage" : deep ? "deep" : "standard";
   const estimate = tier === "triage" ? 0.01 : tier === "deep" ? 1 : 0.25;
   const t = usage.data?.today;
-  const overBudget = t ? t.spentUsd + t.reservedUsd + estimate > t.budgetUsd : false;
+  const meter = usage.data?.meter;
+  const subscription = meter && meter.mode !== "api";
+  // Subscription billing reports $0: the $ budget doesn't apply (the weekly meter only warns here).
+  const overBudget = t && !subscription ? t.spentUsd + t.reservedUsd + estimate > t.budgetUsd : false;
   const start = useWorkMutation(
     () =>
       api.post<{ job: JobView }>(`/api/work/items/${encodeURIComponent(itemId)}/ai-actions`, {
@@ -151,8 +154,13 @@ export function ActionSheet({
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted" data-dynamic>
-            ≈ {usd2(estimate)}
-            {t ? ` · today ${usd2(t.spentUsd)} of ${usd2(t.budgetUsd)}` : ""}
+            {subscription ? meter.summary : `≈ ${usd2(estimate)}`}
+            {t && !subscription ? ` · today ${usd2(t.spentUsd)} of ${usd2(t.budgetUsd)}` : ""}
+            {subscription && meter.warning ? (
+              <span className="block text-warn" role="status" data-testid="ai-meter-warning">
+                {meter.warning}
+              </span>
+            ) : null}
           </p>
           <div className="flex gap-2">
             <Button size="sm" onClick={onClose}>

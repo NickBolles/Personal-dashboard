@@ -5,6 +5,7 @@ import { getPreferences } from "@/server/settings";
 import type { UsageDay, UsageResponse } from "@/lib/ai";
 import { getAiSettings } from "./settings";
 import { localDay, localDayStart, overCap } from "./rules";
+import { subscriptionMeter } from "./meter";
 
 /**
  * Spend ledger. The daily budget is household-wide (owner decision: $5/day):
@@ -60,6 +61,7 @@ export function usage(userId: string | null, days: number, now = new Date()): Us
     days: list,
     totals: { jobs: list.reduce((n, d) => n + d.jobs, 0), costUsd: list.reduce((n, d) => n + d.costUsd, 0), overCap: overCapCount },
     today: { spentUsd: t.spentUsd, reservedUsd: t.reservedUsd, budgetUsd: settings.dailyBudgetUsd },
+    meter: subscriptionMeter(now, settings),
   };
 }
 

@@ -10,10 +10,11 @@ import { isConfigured } from "@/integrations/store";
 import { HermesTaskError, readCost, runHermesTask, takeLastCost } from "@/integrations/hermes/jobs";
 import { connForProfile } from "@/server/agents/routing";
 import type { HermesConn } from "@/integrations/hermes/client";
-import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
+import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, tierRun, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
 import type { ContextSource } from "@/lib/work";
 import { getAiSettings } from "./settings";
 import { spendToday } from "./budget";
+import { subscriptionMeter } from "./meter";
 import { inboxContext, itemContext, triageDestinations } from "./context";
 import { instructionsFor, taskFor } from "./prompts";
 import { draftFromOutput, linkConversation, writeReport } from "./reports";
@@ -40,7 +41,9 @@ import {
   failJob,
   getJobRow,
   guardSubject,
+  isBackgroundJob,
   releaseBudgetBlocked,
+  releaseQuotaBlocked,
   renewLease,
   runningCount,
   setIds,
@@ -102,6 +105,11 @@ export async function runnerTick(now = new Date()) {
     // New local day (or first tick after a restart): jobs blocked before today go back to the queue.
     if (s.lastDay !== day) releaseBudgetBlocked(localDayStart(now, tz).toISOString());
     s.lastDay = day;
+    // Subscription billing: the weekly-window meter gates background jobs (fail closed when unreadable).
+    const meter = subscriptionMeter(now, settings);
+    // Also after switching back to API billing: held jobs must not wait for a new day.
+    // Under subscription billing the $ budget doesn't apply, so $-held jobs are released too (the meter re-gates them).
+    if (meter.backgroundAllowed) releaseQuotaBlocked(meter.mode !== "api");
 
     // 1. Our own in-flight jobs: renew leases; propagate cancel requests.
     maintainInflight(now);
@@ -123,14 +131,37 @@ export async function runnerTick(now = new Date()) {
       for (const cand of claimable(lane, now, Math.max(0, free))) {
         if (free <= 0) break;
         if (lane === "work" && runningCount("work", cand.userId) >= 2) continue;
+        if (!meter.backgroundAllowed && !cand.budgetOverride && isBackgroundJob(cand.params)) {
+          if (transition(cand.id, "queued", "budget_blocked", { errorCode: "quota", errorMessage: meter.warning?.slice(0, 200) ?? null })) {
+            notify(
+              {
+                type: "ai.budget",
+                category: "info",
+                severity: "info",
+                title: `Background AI paused (${meter.summary})`,
+                body: `${meter.warning ?? ""} Open a job and choose Run anyway to start it now.`.trim(),
+                source: "work",
+                deepLink: "/settings/ai",
+                dedupeKey: `ai:quota:${day}`,
+              },
+              cand.userId,
+            );
+            if (cand.subjectType === "inbox") setTriage(cand.subjectId, cand.kind, "skipped", "budget");
+          }
+          continue;
+        }
+        // The $ budget only applies to pay-per-token billing (subscriptions report $0).
         const spend = spendToday(now);
-        const gate = budgetGate({
-          spentToday: spend.spentUsd,
-          reserved: spend.reservedUsd,
-          estimate: cand.estimateUsd,
-          daily: settings.dailyBudgetUsd,
-          override: cand.budgetOverride,
-        });
+        const gate =
+          meter.mode !== "api"
+            ? ({ ok: true } as const)
+            : budgetGate({
+                spentToday: spend.spentUsd,
+                reserved: spend.reservedUsd,
+                estimate: cand.estimateUsd,
+                daily: settings.dailyBudgetUsd,
+                override: cand.budgetOverride,
+              });
         if (!gate.ok) {
           if (transition(cand.id, "queued", "budget_blocked")) {
             notify(
@@ -299,7 +330,10 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       label: AI_KIND_LABEL[kind],
       visible: row.visibleSession,
       title: row.visibleSession ? `✦ ${AI_KIND_LABEL[kind]} · ${title}` : `jarvis-ai:${kind}`,
-      model: settings.hermes.perRunModel ? row.model : null,
+      ...(() => {
+        const run = tierRun(settings, row.tier as "triage" | "standard" | "deep", row.model);
+        return { model: run.model, provider: run.provider, modelOptions: run.modelOptions };
+      })(),
       conn,
       instructions: instructionsFor(kind),
       input,
@@ -550,6 +584,7 @@ async function onSuccess(
           subjectId: row.subjectId,
           clientKey: `auto${row.id.replace(/[^A-Za-z0-9]/g, "").slice(-20)}`,
           params: { brief: t.brief },
+          background: true,
           correlationId: row.id,
         });
         kickRunner();

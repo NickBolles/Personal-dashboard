@@ -197,6 +197,7 @@ export function errorText(code: JobErrorCode, extra?: string) {
     hermes_unavailable: "Hermes isn't reachable",
     cancelled: "Cancelled",
     ai_disabled: "AI actions are turned off",
+    quota: "Paused to keep half of the weekly subscription free",
   };
   const msg = extra ? `${base[code]}: ${extra}` : base[code];
   return msg.slice(0, 300);

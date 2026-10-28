@@ -11,12 +11,13 @@ import { useAccess } from "@/components/access";
 import { AssistantSettings } from "./AssistantSettings";
 import { SharedConversations } from "./SharedConversations";
 import { SmartSettings } from "./SmartSettings";
+import { REASONING_EFFORTS } from "@/lib/ai";
 
 type Prefs = {
   displayName: string;
   timezone: string;
   refreshIntervalMinutes: number;
-  hermes: { defaultModel?: string; defaultProvider?: string; showToolDetails: boolean };
+  hermes: { defaultModel?: string; defaultProvider?: string; defaultReasoning?: (typeof REASONING_EFFORTS)[number] | ""; showToolDetails: boolean };
 };
 
 export function SettingsView() {
@@ -144,6 +145,26 @@ export function SettingsView() {
                         value={form.hermes.defaultProvider ?? ""}
                         onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })}
                       />
+                    </Field>
+                    <Field id="s-reasoning" label="Default reasoning effort" hint="Sent with chats on the default model, e.g. openai-codex + gpt-6.1-sol.">
+                      <select
+                        id="s-reasoning"
+                        className={inputCls}
+                        value={form.hermes.defaultReasoning ?? ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            hermes: { ...form.hermes, defaultReasoning: e.target.value as (typeof REASONING_EFFORTS)[number] | "" },
+                          })
+                        }
+                      >
+                        <option value="">Model default</option>
+                        {REASONING_EFFORTS.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
                     </Field>
                   </>
                 ) : null}
