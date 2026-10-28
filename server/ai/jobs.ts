@@ -410,12 +410,15 @@ export function runAnyway(userId: string, id: string, correlationId: string) {
   return toJobView(out ?? getJobRow(id)!);
 }
 
-/** Jobs held by the subscription meter (errorCode `quota`) go back to the queue once background AI may run again. */
-export function releaseQuotaBlocked() {
+/**
+ * Jobs held by the subscription meter (errorCode `quota`) go back to the queue once background AI may run again.
+ * `includeDollar`: also release $-budget holds (subscription billing makes the $ gate inapplicable; the meter re-gates them).
+ */
+export function releaseQuotaBlocked(includeDollar = false) {
   const rows = getDb()
     .select()
     .from(J)
-    .where(and(eq(J.state, "budget_blocked"), eq(J.errorCode, "quota")))
+    .where(includeDollar ? eq(J.state, "budget_blocked") : and(eq(J.state, "budget_blocked"), eq(J.errorCode, "quota")))
     .all();
   for (const r of rows) transition(r.id, "budget_blocked", "queued", { notBefore: nowIso(), errorCode: null, errorMessage: null });
   return rows.length;

@@ -5,7 +5,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { ModelCombobox } from "@/components/areas/ModelPicker";
-import { BILLING_LABEL, BILLING_MODES, usd2, type AiSettings, type BillingMode, type MeterView, type UsageResponse } from "@/lib/ai";
+import {
+  BILLING_LABEL,
+  BILLING_MODES,
+  REASONING_EFFORTS,
+  usd2,
+  type ReasoningEffort,
+  type AiSettings,
+  type BillingMode,
+  type MeterView,
+  type UsageResponse,
+} from "@/lib/ai";
 
 type View = {
   settings: AiSettings;
@@ -107,16 +117,53 @@ export function AiSettingsView() {
         <h2 className="mb-2 font-semibold">Models</h2>
         <div className="grid gap-2 sm:grid-cols-3">
           {(["triage", "standard", "deep"] as const).map((t) => (
-            <ModelCombobox
-              key={t}
-              backend="hermes"
-              label={t === "triage" ? "Fast (triage, schedule)" : t === "standard" ? "Standard" : "Deep (opt-in)"}
-              value={{ model: s.models[t] ?? undefined }}
-              onChange={(v) => void save({ models: { ...s.models, [t]: v.model ?? null } })}
-              defaultHint="Hermes default"
-            />
+            <div key={t} className="grid gap-2">
+              <ModelCombobox
+                backend="hermes"
+                label={t === "triage" ? "Fast (triage, schedule)" : t === "standard" ? "Standard" : "Deep (opt-in)"}
+                value={{ model: s.models[t] ?? undefined, provider: s.providers[t] ?? undefined }}
+                onChange={(v) =>
+                  void save({
+                    models: { ...s.models, [t]: v.model ?? null },
+                    ...(v.provider ? { providers: { ...s.providers, [t]: v.provider } } : {}),
+                  })
+                }
+                defaultHint="Hermes default"
+              />
+              <Field id={`ai-prov-${t}`} label={`Provider: ${t}`} hint="e.g. openai-codex. Blank: the profile's provider">
+                <input
+                  id={`ai-prov-${t}`}
+                  key={`${t}:${s.providers[t] ?? ""}`}
+                  className={inputCls}
+                  defaultValue={s.providers[t] ?? ""}
+                  maxLength={80}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim() || null;
+                    if (v !== s.providers[t]) void save({ providers: { ...s.providers, [t]: v } });
+                  }}
+                />
+              </Field>
+              <Field id={`ai-reason-${t}`} label={`Reasoning: ${t}`}>
+                <select
+                  id={`ai-reason-${t}`}
+                  className={inputCls}
+                  value={s.reasoning[t] ?? ""}
+                  onChange={(e) => void save({ reasoning: { ...s.reasoning, [t]: (e.target.value || null) as ReasoningEffort | null } })}
+                >
+                  <option value="">Model default</option>
+                  {REASONING_EFFORTS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           ))}
         </div>
+        <p className="mt-2 text-[12.5px] text-muted">
+          Provider, model and reasoning are sent per run (needs &quot;Hermes honours a per-run model&quot;), so no Hermes aliases are needed.
+        </p>
       </Card>
       <Card>
         <h2 className="mb-2 font-semibold">Captures</h2>

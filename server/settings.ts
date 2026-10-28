@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { config } from "@/server/config";
 import { HOME_SECTIONS, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
+import { reasoningEffort } from "@/lib/ai";
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24h)");
 
@@ -46,6 +47,8 @@ export const preferencesSchema = z.object({
     .object({
       defaultModel: z.string().optional(),
       defaultProvider: z.string().optional(),
+      /** reasoning effort sent with chat runs that use the default model (Hermes model_options) */
+      defaultReasoning: reasoningEffort.optional(),
       showToolDetails: z.boolean().default(false),
     })
     .default({ showToolDetails: false }),

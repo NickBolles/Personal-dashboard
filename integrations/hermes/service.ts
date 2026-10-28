@@ -372,6 +372,8 @@ export type StartRunRequest = {
   idempotencyKey: string;
   model?: string;
   provider?: string;
+  /** Hermes `model_options`, e.g. the chat default's reasoning effort */
+  modelOptions?: Record<string, unknown>;
   /** per-area agent mode / instructions (Areas); Hermes-only, Claude-direct ignores it */
   instructions?: string;
   conversationHistory?: { role: string; content: string }[];

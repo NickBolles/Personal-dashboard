@@ -10,7 +10,7 @@ import { isConfigured } from "@/integrations/store";
 import { HermesTaskError, readCost, runHermesTask, takeLastCost } from "@/integrations/hermes/jobs";
 import { connForProfile } from "@/server/agents/routing";
 import type { HermesConn } from "@/integrations/hermes/client";
-import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
+import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, tierRun, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
 import type { ContextSource } from "@/lib/work";
 import { getAiSettings } from "./settings";
 import { spendToday } from "./budget";
@@ -108,7 +108,8 @@ export async function runnerTick(now = new Date()) {
     // Subscription billing: the weekly-window meter gates background jobs (fail closed when unreadable).
     const meter = subscriptionMeter(now, settings);
     // Also after switching back to API billing: held jobs must not wait for a new day.
-    if (meter.backgroundAllowed) releaseQuotaBlocked();
+    // Under subscription billing the $ budget doesn't apply, so $-held jobs are released too (the meter re-gates them).
+    if (meter.backgroundAllowed) releaseQuotaBlocked(meter.mode !== "api");
 
     // 1. Our own in-flight jobs: renew leases; propagate cancel requests.
     maintainInflight(now);
@@ -329,7 +330,10 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       label: AI_KIND_LABEL[kind],
       visible: row.visibleSession,
       title: row.visibleSession ? `✦ ${AI_KIND_LABEL[kind]} · ${title}` : `jarvis-ai:${kind}`,
-      model: settings.hermes.perRunModel ? row.model : null,
+      ...(() => {
+        const run = tierRun(settings, row.tier as "triage" | "standard" | "deep", row.model);
+        return { model: run.model, provider: run.provider, modelOptions: run.modelOptions };
+      })(),
       conn,
       instructions: instructionsFor(kind),
       input,

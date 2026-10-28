@@ -109,6 +109,8 @@ export type StartRunInput = {
   idempotencyKey: string;
   model?: string;
   provider?: string;
+  /** Hermes `model_options`, e.g. { reasoning: { effort: "high" } } */
+  modelOptions?: Record<string, unknown>;
   instructions?: string;
   conversationHistory?: { role: string; content: string }[];
 };
@@ -127,6 +129,7 @@ export const HermesExecutionClient = {
           session_id: r.sessionId,
           ...(r.model ? { model: r.model } : {}),
           ...(r.provider ? { provider: r.provider } : {}),
+          ...(r.modelOptions ? { model_options: r.modelOptions } : {}),
           ...(r.instructions ? { instructions: r.instructions } : {}),
           ...(r.conversationHistory ? { conversation_history: r.conversationHistory } : {}),
         },

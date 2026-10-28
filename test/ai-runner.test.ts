@@ -424,6 +424,31 @@ describe("AI actions end to end (fake Hermes)", () => {
     expect(recentAudit(100).some((a) => a.action === "ai.budget_override" && a.sourceRecord === j2.id)).toBe(true);
   });
 
+  it("switching to subscription billing releases $-budget holds", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-usage-"));
+    const file = path.join(dir, "usage.json");
+    const at = new Date().toISOString();
+    fs.writeFileSync(file, JSON.stringify({ fetched_at: at, providers: { "openai-codex": { weekly_used_percent: 10, fetched_at: at } } }));
+    process.env.JARVIS_HERMES_USAGE_FILE = file;
+    try {
+      saveAiSettings({ dailyBudgetUsd: 0.26 });
+      const { item, u, area } = setup();
+      const b = store.createItem(u, { kind: "thread", title: "Held by dollars", parentId: area.id }, cid);
+      const j1 = (await (await start(item.id, "research")).json()).job;
+      await settle();
+      expect(getJobRow(j1.id)!.state).toBe("succeeded");
+      const j2 = (await (await start(b.id, "research")).json()).job;
+      await settle();
+      expect(getJobRow(j2.id)).toMatchObject({ state: "budget_blocked", errorCode: null });
+      saveAiSettings({ billing: { mode: "codex", stopAtPct: 48 } });
+      await settle();
+      expect(getJobRow(j2.id)!.state).toBe("succeeded");
+    } finally {
+      delete process.env.JARVIS_HERMES_USAGE_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("subscription meter: background jobs stop at the weekly line (fail closed), user jobs run, $ budget ignored", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-usage-"));
     const file = path.join(dir, "usage.json");

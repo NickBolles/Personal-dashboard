@@ -9,13 +9,14 @@ import { RUN_TERMINAL } from "./types";
 import { extractJson, parseStructured, sleep, within } from "./jobs";
 import { getAiSettings } from "@/server/ai/settings";
 import { meterStopText, subscriptionMeter } from "@/server/ai/meter";
+import { tierRun } from "@/lib/ai";
 
 /**
  * Background syncs run on the cheap triage tier (Settings → AI → models), never the
  * Hermes profile default (an expensive model), and only while the subscription meter allows.
  */
 export function syncModel(settings = getAiSettings()) {
-  return settings.hermes.perRunModel ? (settings.models.triage ?? null) : null;
+  return tierRun(settings, "triage").model;
 }
 
 /**
@@ -74,14 +75,18 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
   const settings = getAiSettings();
   const meter = subscriptionMeter(new Date(), settings);
   if (!req.interactive && !meter.backgroundAllowed) throw new UpstreamError(req.label, "unsupported", `${req.label} sync paused: ${meterStopText(meter)}`);
-  const model = syncModel(settings);
+  const { model, provider, modelOptions } = tierRun(settings, "triage");
   const observe = (status: string) => {
     lastStatus = [...RUN_TERMINAL, "queued", "running", "stopping", "waiting_for_approval"].includes(status) ? status : "unknown";
     terminal = (RUN_TERMINAL as readonly string[]).includes(lastStatus);
   };
   try {
     const { session } = await within(workDeadline, (signal) =>
-      HermesSessionClient.create(conn, { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE, ...(model ? { model } : {}) }, signal),
+      HermesSessionClient.create(
+        conn,
+        { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE, ...(model ? { model } : {}), ...(provider ? { provider } : {}) },
+        signal,
+      ),
     );
     sessionId = session.id;
     await within(workDeadline, (signal) => HermesSessionClient.update(conn, session.id, { hidden: true }, signal));
@@ -95,6 +100,8 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
           idempotencyKey: crypto.randomUUID(),
           instructions: structuredInstructions(req.source, req.example),
           ...(model ? { model } : {}),
+          ...(provider ? { provider } : {}),
+          ...(modelOptions ? { modelOptions } : {}),
           conversationHistory: [],
         },
         signal,

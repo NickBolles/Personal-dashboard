@@ -19,7 +19,7 @@ import { HermesExecutionClient as runs, HermesSessionClient as sessions } from "
 import { runStructured, syncModel } from "@/integrations/hermes/structured";
 import { meterFrom, subscriptionMeter, USAGE_STALE_MS } from "@/server/ai/meter";
 import { getAiSettings } from "@/server/ai/settings";
-import { DEFAULT_AI_SETTINGS } from "@/lib/ai";
+import { DEFAULT_AI_SETTINGS, tierRun } from "@/lib/ai";
 
 const now = new Date("2026-10-28T15:00:00Z");
 const codex = { mode: "codex" as const, stopAtPct: 48 };
@@ -107,6 +107,36 @@ describe("background syncs (Skylight / Daily Compass)", () => {
     vi.clearAllMocks();
     settingsStore.value = {};
     delete process.env.JARVIS_HERMES_USAGE_FILE;
+  });
+
+  it("send the triage tier's provider + reasoning with its model (no Hermes alias needed)", async () => {
+    settingsStore.value = {
+      models: { triage: "gpt-6.1-sol", standard: null, deep: null },
+      providers: { triage: "openai-codex", standard: null, deep: null },
+      reasoning: { triage: "low", standard: null, deep: "high" },
+      hermes: { perRunModel: true, midRunCost: false, imageInput: false },
+    };
+    await expect(runStructured(request)).resolves.toEqual({ ok: true });
+    expect(vi.mocked(sessions.create).mock.calls[0][1]).toMatchObject({ model: "gpt-6.1-sol", provider: "openai-codex" });
+    expect(vi.mocked(runs.start).mock.calls[0][1]).toMatchObject({
+      model: "gpt-6.1-sol",
+      provider: "openai-codex",
+      modelOptions: { reasoning: { effort: "low" } },
+    });
+  });
+
+  it("tierRun: provider only with the tier's own model; nothing when per-run models are off", () => {
+    const s = {
+      ...DEFAULT_AI_SETTINGS,
+      models: { triage: null, standard: "gpt-6.1-sol", deep: "gpt-6.1-sol" },
+      providers: { triage: "openai-codex", standard: "openai-codex", deep: "openai-codex" },
+      reasoning: { triage: null, standard: "medium" as const, deep: "high" as const },
+      hermes: { perRunModel: true, midRunCost: false, imageInput: false },
+    };
+    expect(tierRun(s, "deep")).toEqual({ model: "gpt-6.1-sol", provider: "openai-codex", modelOptions: { reasoning: { effort: "high" } } });
+    expect(tierRun(s, "standard", "claude-sonnet-5")).toEqual({ model: "claude-sonnet-5", provider: null, modelOptions: { reasoning: { effort: "medium" } } });
+    expect(tierRun(s, "triage")).toEqual({ model: null, provider: null, modelOptions: null });
+    expect(tierRun({ ...s, hermes: { ...s.hermes, perRunModel: false } }, "deep")).toEqual({ model: null, provider: null, modelOptions: null });
   });
 
   it("send the triage tier model instead of the profile default", async () => {
