@@ -46,6 +46,8 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const [review, setReview] = useState(false);
   const [undoing, setUndoing] = useState<string>();
   const batch = useRef<{ sig: string; key: string }>(undefined);
+  const checkSeq = useRef(0);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
   const view = surface.data;
 
   const applied = useMemo(() => {
@@ -106,10 +108,11 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     onError: (e) => toast(e instanceof ApiError ? e.message : "Couldn't apply those changes", "danger"),
   });
 
+  const readOnly = !view || view.readOnly;
   const ctx: SurfaceCtx = {
     surfaceId: view?.id,
     today: hydrate.data?.today ?? localToday(),
-    readOnly: !view || view.readOnly,
+    readOnly,
     refs: hydrate.data?.refs ?? {},
     hydrating: hydrate.isPending,
     staged,
@@ -146,15 +149,24 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
         setUndoing(undefined);
       }
     },
-    toggleCheck: async (id) => {
+    toggleCheck: (id) => {
       if (!view || view.readOnly) return;
       const next = checks.includes(id) ? checks.filter((c) => c !== id) : [...checks, id];
       setView({ ...view, state: { ...view.state, checks: next } });
-      try {
-        setView(await api.patch<SurfaceView>(`/api/smart/surfaces/${encodeURIComponent(view.id)}/state`, { state: { ...view.state, checks: next } }));
-      } catch {
-        toast("Couldn't save that tick", "danger");
-      }
+      // Saves run one at a time and only the newest edit is sent, so a slow or
+      // out-of-order response can never drop a newer tick.
+      const mine = ++checkSeq.current;
+      saveChain.current = saveChain.current.then(async () => {
+        if (mine !== checkSeq.current) return;
+        const latest = qc.getQueryData<SurfaceView>(surfaceKey);
+        if (!latest) return;
+        try {
+          const saved = await api.patch<SurfaceView>(`/api/smart/surfaces/${encodeURIComponent(latest.id)}/state`, { state: latest.state });
+          if (mine === checkSeq.current) setView(saved);
+        } catch {
+          toast("Couldn't save that tick", "danger");
+        }
+      });
     },
   };
 
@@ -177,7 +189,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
           </JSONUIProvider>
           {dropped ? <p className="text-xs text-muted">Some content couldn’t be shown.</p> : null}
         </div>
-        {ctx.readOnly ? null : (
+        {readOnly ? null : (
           <div className="sticky bottom-0 border-t border-line-strong bg-surface">
             {review && n ? (
               <ul className="max-h-60 overflow-y-auto border-b border-line px-3 py-1.5 text-sm" aria-label="Staged changes">

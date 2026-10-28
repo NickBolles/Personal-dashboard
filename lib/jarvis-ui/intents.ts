@@ -115,6 +115,13 @@ export function suggestedAction(row: Row): RowAction | undefined {
  * or within the bounds it declares)? Pure; `today` is the household's local date.
  */
 export function intentInSpec(spec: JarvisSpec, intent: Intent, today: string): boolean {
+  // Date bounds hold whichever component offered the intent (a model-written option included).
+  const dates = [
+    intent.kind === "todo.snooze" ? intent.date : undefined,
+    intent.kind === "item.update" ? (intent.patch.targetDate ?? undefined) : undefined,
+    intent.kind === "item.create" ? intent.targetDate : undefined,
+  ].filter((d): d is string => Boolean(d));
+  if (dates.some((d) => !inWindow(d, today))) return false;
   const key = intentKey(intent);
   for (const el of Object.values(spec.elements)) {
     if (el.type === "DecisionCard") {

@@ -121,7 +121,25 @@ describe("intent allowlist and binding", () => {
     expect(intentSchema.safeParse({ kind: "pr.merge", ref: "pr:x" }).success).toBe(false);
   });
 
-  it("decision options bind exactly", () => {
+  it("decision options bind exactly, and date bounds apply to them too", () => {
+    const past = validateSpec({
+      root: "d",
+      elements: {
+        d: {
+          type: "DecisionCard",
+          props: {
+            title: "When",
+            options: [
+              { id: "a", label: "Past", intent: { kind: "todo.snooze", ref: "todo:x", date: "2020-01-01" } },
+              { id: "b", label: "Far", intent: { kind: "todo.snooze", ref: "todo:x", date: "2030-01-01" } },
+            ],
+          },
+        },
+      },
+    });
+    if (!past.ok) throw new Error("spec");
+    expect(intentInSpec(past.spec, { kind: "todo.snooze", ref: "todo:x", date: "2020-01-01" }, TODAY)).toBe(false);
+    expect(intentInSpec(past.spec, { kind: "todo.snooze", ref: "todo:x", date: "2030-01-01" }, TODAY)).toBe(false);
     const d = validateBlock(fixture("decision-checklist-gauge.json"));
     if (!d.ok) throw new Error("fixture");
     expect(intentInSpec(d.spec, { kind: "item.update", ref: "item:ITEM", patch: { nextAction: "Patch the V4 grader push rule" } }, TODAY)).toBe(true);
