@@ -68,6 +68,8 @@ export type SessionSummary = {
   /** Jarvis-side lineage when a fork was approximated ("fork from here") */
   forkedFromSessionId?: string;
   forkedFromMessageId?: string;
+  /** Hermes profile this conversation runs on (Settings → Agents routing); absent = default profile */
+  agentProfile?: string;
   activeRun?: { runId: string; status: string; pendingApproval?: ApprovalRequest };
 };
 

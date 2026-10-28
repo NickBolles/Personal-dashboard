@@ -6,8 +6,15 @@ import { json, readBody, bearerOk, notFound, hermesError } from "./util.mjs";
 const now = () => Date.now() / 1000;
 const hex = (n) => randomBytes(n).toString("hex");
 
+/** Named Hermes profiles served under /p/<profile>/ (gateway.multiplex_profiles), each with its own key. */
+export const MOCK_PROFILE_KEYS = {
+  momentumchief: "mock-hermes-momentumchief-key-0123456789",
+  devchief: "mock-hermes-devchief-key-0123456789",
+};
+
 export function createHermes({ apiKey }) {
   const state = {
+    profileRequests: {},
     sessions: new Map(),
     messages: new Map(), // sessionId -> []
     runs: new Map(),
@@ -375,16 +382,28 @@ export function createHermes({ apiKey }) {
     };
   }
 
-  async function handle(req, res, path, url, control) {
+  async function handle(req, res, rawPath, url, control) {
+    // /p/<profile>/… selects a named profile; unknown prefixes 404 and a profile never accepts the default key.
+    let path = rawPath;
+    let profile = null;
+    const pm = rawPath.match(/^\/p\/([a-z0-9][a-z0-9_-]*)(\/.*)?$/);
+    if (pm) {
+      profile = pm[1];
+      path = pm[2] ?? "/";
+      if (!(profile in MOCK_PROFILE_KEYS)) return json(res, 404, { error: "Unknown or unconfigured profile" });
+    }
+    // Sessions and runs live in their profile's own store.
+    const mine = (o) => o && (o.profile ?? null) === profile;
     if (path === "/health" || path === "/v1/health") {
       return json(res, 200, { status: "ok", platform: "hermes-agent", version: "v2026.9.24-mock" });
     }
     if (control.fail.has("hermes")) return json(res, 503, { error: { message: "Mock outage", type: "server_error", code: "gateway_draining" } });
-    if (!bearerOk(req, apiKey)) {
+    if (!bearerOk(req, profile ? MOCK_PROFILE_KEYS[profile] : apiKey)) {
       return json(res, 401, { error: { message: "Invalid gateway API key (API_SERVER_KEY)", type: "gateway_auth_error", code: "gateway_auth_failed" } });
     }
     const m = req.method;
     let match;
+    if (profile) state.profileRequests[profile] = (state.profileRequests[profile] ?? 0) + 1;
 
     if (path === "/v1/capabilities" && m === "GET") {
       return json(res, 200, {
@@ -489,18 +508,22 @@ export function createHermes({ apiKey }) {
     // Sessions
     if (path === "/api/sessions" && m === "GET") {
       const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
-      const data = [...state.sessions.values()].sort((a, b) => b.last_active - a.last_active).slice(0, limit);
+      const data = [...state.sessions.values()]
+        .filter(mine)
+        .sort((a, b) => b.last_active - a.last_active)
+        .slice(0, limit);
       return json(res, 200, { object: "list", data, limit, offset: 0, has_more: false });
     }
     if (path === "/api/sessions" && m === "POST") {
       const body = await readBody(req);
       if (body.id && state.sessions.has(body.id)) return hermesError(res, 409, "session_exists", "Session already exists");
       const s = addSession({ id: body.id ?? body.session_id, title: body.title, source: body.source });
+      if (profile) s.profile = profile;
       return json(res, 201, { object: "hermes.session", session: s });
     }
     if ((match = path.match(/^\/api\/sessions\/([^/]+)$/))) {
       const s = state.sessions.get(decodeURIComponent(match[1]));
-      if (!s) return hermesError(res, 404, "session_not_found", "Session not found");
+      if (!mine(s)) return hermesError(res, 404, "session_not_found", "Session not found");
       if (m === "GET") return json(res, 200, { object: "hermes.session", session: s });
       if (m === "PATCH") {
         const body = await readBody(req);
@@ -517,7 +540,7 @@ export function createHermes({ apiKey }) {
     }
     if ((match = path.match(/^\/api\/sessions\/([^/]+)\/messages$/)) && m === "GET") {
       const id = decodeURIComponent(match[1]);
-      if (!state.sessions.has(id)) return hermesError(res, 404, "session_not_found", "Session not found");
+      if (!mine(state.sessions.get(id))) return hermesError(res, 404, "session_not_found", "Session not found");
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || 500)));
       const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
       const order = url.searchParams.get("order") || "latest";
@@ -530,9 +553,10 @@ export function createHermes({ apiKey }) {
     if ((match = path.match(/^\/api\/sessions\/([^/]+)\/fork$/)) && m === "POST") {
       const id = decodeURIComponent(match[1]);
       const src = state.sessions.get(id);
-      if (!src) return hermesError(res, 404, "session_not_found", "Session not found");
+      if (!mine(src)) return hermesError(res, 404, "session_not_found", "Session not found");
       const body = await readBody(req);
       const child = addSession({ id: body.id, title: body.title ?? `${src.title ?? "Session"} fork`, parent_session_id: id });
+      if (profile) child.profile = profile;
       for (const { id: _omit, ...msg } of state.messages.get(id)) addMessage(child.id, { ...msg, session_id: child.id });
       src.end_reason = "branched";
       src.ended_at = now();
@@ -552,7 +576,12 @@ export function createHermes({ apiKey }) {
         return json(res, 202, { run_id: run.run_id, status: run.status, replayed: true });
       }
       const sessionId = body.session_id ?? null;
-      if (sessionId && !state.sessions.has(sessionId)) addSession({ id: sessionId });
+      if (sessionId && state.sessions.has(sessionId) && !mine(state.sessions.get(sessionId)))
+        return hermesError(res, 409, "session_profile_mismatch", "Session lives on another profile");
+      if (sessionId && !state.sessions.has(sessionId)) {
+        const s = addSession({ id: sessionId });
+        if (profile) s.profile = profile;
+      }
       const run = {
         run_id: `run_${hex(16)}`,
         status: "queued",
@@ -560,6 +589,7 @@ export function createHermes({ apiKey }) {
         updated_at: now(),
         session_id: sessionId,
         model: body.model ?? "hermes-agent",
+        profile,
         events: [],
         subscribers: new Set(),
         enders: [],
@@ -573,12 +603,12 @@ export function createHermes({ apiKey }) {
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)$/)) && m === "GET") {
       const run = state.runs.get(match[1]);
-      if (!run) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       return json(res, 200, runStatus(run));
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/events$/)) && m === "GET") {
       const run = state.runs.get(match[1]);
-      if (!run) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
       res.write(": open\n\n");
       const last = req.headers["last-event-id"] ?? url.searchParams.get("last_seq");
@@ -601,7 +631,7 @@ export function createHermes({ apiKey }) {
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/stop$/)) && m === "POST") {
       const run = state.runs.get(match[1]);
-      if (!run) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       if (["completed", "failed", "cancelled", "interrupted"].includes(run.status)) return json(res, 200, runStatus(run));
       const wasWaiting = run.status === "waiting_for_approval";
       run.status = "stopping";
@@ -613,7 +643,7 @@ export function createHermes({ apiKey }) {
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/approval$/)) && m === "POST") {
       const run = state.runs.get(match[1]);
-      if (!run) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       const body = await readBody(req);
       const choice = { approve: "once", approved: "once", allow: "once" }[body.choice] ?? body.choice;
       if (!["once", "session", "always", "deny"].includes(choice)) return hermesError(res, 400, "invalid_approval_choice", "Invalid choice");
@@ -625,7 +655,7 @@ export function createHermes({ apiKey }) {
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/steer$/)) && m === "POST") {
       const run = state.runs.get(match[1]);
-      if (!run) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       if (run.status !== "running") return hermesError(res, 409, "run_not_accepting_steer", "Run is not accepting steer");
       const body = await readBody(req);
       run.pendingSteer = body.input ?? body.message ?? body.text;

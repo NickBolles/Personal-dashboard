@@ -12,6 +12,10 @@ import { parseAreaSettings as parseSettings } from "@/lib/work";
 import { conversationNodes, placeConversation } from "@/server/work/store";
 import { conversationPlacement } from "@/server/work/conversations";
 import { areaDefaultsFor, assertAreaOwned } from "@/server/references";
+import { requestedAgentFor, resolveAgent, resolveAgentForNode } from "@/server/agents/routing";
+import { sessionProfile } from "@/integrations/hermes/service";
+import { isLocalSession } from "@/lib/assistant";
+import type { AgentResolution } from "@/lib/agents";
 
 /**
  * Areas (phase 4) glue between the assistant layer (server/assistant: Hermes
@@ -32,7 +36,9 @@ export async function startConversation(user: Viewer, v: { title?: string; backe
   const work = can(user, "work.use");
   if (v.areaId && work) assertAreaOwned(user, v.areaId);
   const defaults = v.areaId && work ? areaDefaultsForItem(user, v.areaId) : null;
-  const session = await createSession(user, v.title, v.backend ?? defaults?.settings.defaultBackend ?? undefined);
+  // Settings → Agents: a chat started under an area runs on that area's Hermes profile (inherited up the tree).
+  const agent = v.areaId && work ? resolveAgentForNode(user.id, v.areaId) : resolveAgent(null);
+  const session = await createSession(user, v.title, v.backend ?? defaults?.settings.defaultBackend ?? undefined, agent.routed ? agent.profile : null);
   let placedIn: string | null = null;
   if (work) {
     try {
@@ -144,5 +150,18 @@ export function conversationAreaContext(user: Viewer, sessionId: string, title: 
   if (!can(user, "work.use")) return { enabled: false as const };
   const p = conversationPlacement(user, sessionId, title);
   const d = areaDefaultsFor(user, sessionId);
-  return { enabled: true as const, ...p, area: d?.area ?? null, settings: d?.settings ?? null };
+  return { enabled: true as const, ...p, area: d?.area ?? null, settings: d?.settings ?? null, agent: conversationAgent(user, sessionId, p.node?.id ?? null) };
+}
+
+/**
+ * Who answers in this conversation (composer agent chip). A conversation stays
+ * on the profile it was created on; when its area now routes elsewhere it says so.
+ */
+export function conversationAgent(user: CurrentUser, sessionId: string, nodeId: string | null): AgentResolution | null {
+  if (isLocalSession(sessionId)) return null;
+  const actual = sessionProfile(sessionId);
+  const want = nodeId ? requestedAgentFor(user.id, nodeId) : { agentMode: null, from: null };
+  if (actual) return { requested: want.agentMode ?? actual, profile: actual, routed: true, reason: "routed", from: want.from };
+  const r = resolveAgent(want.agentMode, want.from);
+  return r.routed ? { ...r, profile: null, routed: false, reason: "started_on_default" } : r;
 }

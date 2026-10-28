@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { api } from "@/lib/client/api";
 import { isTerminal, type ApprovalRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
+import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
 
 export type Activity =
   | { id: string; kind: "tool"; tool: string; preview?: string; result?: string; done: boolean; error?: boolean; startedAt: string; durationSec?: number }
@@ -81,6 +82,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
           return { ...s, activity: next };
         }
         case "subagent.started":
+          // A resumed stream re-announces subagents still open; keep the original activity.
+          if (e.id && s.activity.some((x) => x.kind === "subagent" && x.id === e.id)) return s;
           return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at }] };
         case "subagent.completed": {
           const idx = s.activity.findIndex((x) => x.kind === "subagent" && (x.id === e.id || (!x.done && x.goal === e.goal)));
@@ -135,6 +138,8 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   const finished = useRef<string | null>(null);
   // Connection facts updated synchronously (not via render) so connect() never sees a stale run.
   const conn = useRef<{ runId?: string; lastSeq?: number; attempts: number }>({ attempts: 0 });
+  // AG-UI read state (tool names by synthesised id) for the current run; survives reconnects.
+  const agui = useRef(newAguiReadState());
 
   const cleanup = useCallback(() => {
     es.current?.close();
@@ -202,27 +207,31 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     const c = conn.current;
     if (!c.runId) return;
     cleanup();
-    const q = c.lastSeq !== undefined ? `?lastSeq=${c.lastSeq}` : "";
+    // The server answers in AG-UI only while Settings → Agents enables it; both formats are read here.
+    const q = c.lastSeq !== undefined ? `?format=agui&lastSeq=${c.lastSeq}` : "?format=agui";
     const source = new EventSource(`/api/hermes/runs/${encodeURIComponent(c.runId)}/events${q}`);
     es.current = source;
     source.onmessage = (msg) => {
-      let ev: RunEvent;
+      let raw: unknown;
       try {
-        ev = JSON.parse(msg.data) as RunEvent;
+        raw = JSON.parse(msg.data);
       } catch {
         return;
       }
-      if (ev.type === "stream.closed") {
-        void onBroken();
-        return;
-      }
+      const events: RunEvent[] = isAguiEvent(raw) ? aguiToRunEvents(raw, agui.current) : [raw as RunEvent];
       const seq = msg.lastEventId && /^\d+$/.test(msg.lastEventId) ? Number(msg.lastEventId) : undefined;
-      if (seq !== undefined) conn.current.lastSeq = seq;
-      conn.current.attempts = 0;
-      dispatch({ type: "event", event: ev, seq });
-      if (ev.type === "run.terminal") {
-        // Confirm with the authoritative status before finalizing.
-        void reconcile().then(() => finish());
+      for (const ev of events) {
+        if (ev.type === "stream.closed") {
+          void onBroken();
+          return;
+        }
+        if (seq !== undefined) conn.current.lastSeq = seq;
+        conn.current.attempts = 0;
+        dispatch({ type: "event", event: ev, seq });
+        if (ev.type === "run.terminal") {
+          // Confirm with the authoritative status before finalizing.
+          void reconcile().then(() => finish());
+        }
       }
     };
     source.onerror = () => {
@@ -239,6 +248,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       finished.current = null;
       pendingFinish.current = null;
       conn.current = { runId, attempts: 0 };
+      agui.current = newAguiReadState();
       dispatch({ type: "reset", runId, phase });
       connectRef.current();
     },

@@ -178,7 +178,7 @@ export function writeReport(job: typeof schema.aiJobs.$inferSelect, d: ReportDra
 export function linkConversation(job: typeof schema.aiJobs.$inferSelect, itemId: string, title: string) {
   if (!job.hermesSessionId) return;
   const db = getDb();
-  db.insert(schema.sessionMeta).values({ sessionId: job.hermesSessionId, userId: job.userId }).onConflictDoNothing().run();
+  db.insert(schema.sessionMeta).values({ sessionId: job.hermesSessionId, userId: job.userId, hermesProfile: job.hermesProfile }).onConflictDoNothing().run();
   const L = schema.workLinks;
   const dup = db
     .select({ id: L.id })

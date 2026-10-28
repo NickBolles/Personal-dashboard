@@ -13,6 +13,7 @@ import { WorkTree } from "@/components/work/WorkTree";
 import { ChevronIcon } from "@/components/icons";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsCard } from "@/components/areas/AreaSettings";
+import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
@@ -967,6 +968,7 @@ function ItemDetail({
               Chat here
             </Button>
           ) : null}
+          {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
         </div>
       </section>
 

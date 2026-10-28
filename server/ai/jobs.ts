@@ -9,6 +9,7 @@ import { ACTIVE_JOB_STATES, type AiJobKind, type AiTier, type JobErrorCode, type
 import { getAiSettings } from "./settings";
 import { canTransition, effectiveAreaPolicy, errorText, financeGuard, laneFor, tierFor, visibleFor, type AreaRef } from "./rules";
 import { PROMPT_VERSIONS } from "./prompts";
+import { resolveAgent, resolveAgentForNode } from "@/server/agents/routing";
 
 /**
  * AI job store: idempotent enqueue, guarded transitions (each writes a
@@ -174,6 +175,8 @@ export function enqueue(input: EnqueueInput): { job: JobView; created: boolean }
   const areaSettings = areaRow ? parseAreaSettings(areaRow.settings) : null;
   // Model: explicit per run > area default (standard tier) > tier setting. Only sent when Hermes honours per-run models.
   const model = input.model ?? (tier === "standard" ? (areaSettings?.defaultModel ?? settings.models.standard) : settings.models[tier]) ?? null;
+  // Settings → Agents: the job runs on the subject's (inherited) area profile when that profile is routed.
+  const agent = input.subjectType === "work_item" ? resolveAgentForNode(input.userId, input.subjectId) : resolveAgent(areaSettings?.agentMode);
   const id = newId("aij");
   const at = nowIso();
   db.insert(J)
@@ -188,7 +191,8 @@ export function enqueue(input: EnqueueInput): { job: JobView; created: boolean }
       lane: laneFor(input.kind),
       tier,
       model,
-      hermesProfile: areaSettings?.agentMode ?? null,
+      /** the profile the job runs on (null = default); fixed at creation so adoption after a restart stays on it */
+      hermesProfile: agent.routed ? agent.profile : null,
       visibleSession: visibleFor(input.kind),
       idempotencyKey: key,
       params: JSON.stringify(input.params ?? {}).slice(0, 4096),

@@ -24,6 +24,8 @@ import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import { FileUnderDialog } from "@/components/work/conversations";
 import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
 import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsResponse } from "@/lib/work";
+import type { AgentResolution } from "@/lib/agents";
+import { AgentChip } from "@/components/agents/AgentChip";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -35,6 +37,7 @@ type AreaContext =
       suggestions: FilingSuggestion[];
       area: { id: string; title: string; builtIn: boolean } | null;
       settings: AreaSettings | null;
+      agent?: AgentResolution | null;
     };
 
 const CONTEXT_MARK = "\n\n---\nContext from Jarvis:";
@@ -500,6 +503,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               repo={areaCtx?.settings?.defaultRepo ?? null}
               modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
               onModel={() => setDialog("model")}
+              agent={
+                areaCtx?.agent ??
+                (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
+              }
             />
           )}
 
@@ -801,6 +808,7 @@ function Composer({
   repo: areaRepo,
   modelLabel,
   onModel,
+  agent,
 }: {
   sessionId: string;
   phase?: RunPhase;
@@ -816,6 +824,8 @@ function Composer({
   repo: string | null;
   modelLabel: string;
   onModel: () => void;
+  /** who answers (Settings → Agents); shown when an agent is involved */
+  agent?: AgentResolution | null;
 }) {
   const who = useContext(AssistantName);
   const [text, setText] = useState("");
@@ -961,6 +971,7 @@ function Composer({
         >
           <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
         </button>
+        {agent && (agent.routed || agent.requested) ? <AgentChip agent={agent} /> : null}
         {context.map((c) => (
           <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
             {c.label} ✕

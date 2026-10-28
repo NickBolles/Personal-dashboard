@@ -8,7 +8,8 @@ import { notify } from "@/server/notifications";
 import { kickDispatcher } from "@/server/notifications/dispatcher";
 import { isConfigured } from "@/integrations/store";
 import { HermesTaskError, readCost, runHermesTask, takeLastCost } from "@/integrations/hermes/jobs";
-import { hermesConn } from "@/integrations/hermes/client";
+import { connForProfile } from "@/server/agents/routing";
+import type { HermesConn } from "@/integrations/hermes/client";
 import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
 import type { ContextSource } from "@/lib/work";
 import { getAiSettings } from "./settings";
@@ -285,7 +286,14 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
 
   const cap = settings.jobCapsUsd[row.tier as "triage" | "standard" | "deep"] ?? settings.jobCapsUsd.standard;
   let lastCostCheck = 0;
-  const conn = hermesConn();
+  let conn: HermesConn;
+  try {
+    // The job's Hermes profile (Settings → Agents); a removed route fails the job clearly instead of using the default.
+    conn = connForProfile(row.hermesProfile);
+  } catch (e) {
+    await handleFailure(id, e, kind, title);
+    return;
+  }
   try {
     const result = await runHermesTask({
       label: AI_KIND_LABEL[kind],
@@ -420,7 +428,8 @@ const RUN_STATUS_FOR: Record<string, string> = { succeeded: "completed", failed:
  */
 function registerVisibleRun(row: typeof J.$inferSelect, ids: { sessionId?: string; runId?: string }, label: string) {
   const db = getDb();
-  if (ids.sessionId) db.insert(schema.sessionMeta).values({ sessionId: ids.sessionId, userId: row.userId }).onConflictDoNothing().run();
+  if (ids.sessionId)
+    db.insert(schema.sessionMeta).values({ sessionId: ids.sessionId, userId: row.userId, hermesProfile: row.hermesProfile }).onConflictDoNothing().run();
   if (ids.sessionId && ids.runId)
     db.insert(schema.runs)
       .values({
@@ -428,6 +437,7 @@ function registerVisibleRun(row: typeof J.$inferSelect, ids: { sessionId?: strin
         sessionId: ids.sessionId,
         userId: row.userId,
         idempotencyKey: `ai:${row.idempotencyKey}`.slice(0, 255),
+        hermesProfile: row.hermesProfile,
         status: "running",
         inputPreview: `✦ ${label}`.slice(0, 140),
         notifiedCompletion: true,
