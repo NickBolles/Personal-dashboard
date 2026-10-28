@@ -23,6 +23,14 @@ export function SkylightView() {
       />
       {q.isLoading ? <Spinner label="Loading Skylight…" /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
+      {q.data?.data?.extra?.needsMember ? (
+        <div role="note" className="card mt-3 flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-sm">
+          <span>Showing everyone’s chores. Pick which Skylight member is you to see just yours and up-for-grabs.</span>
+          <ButtonLink href="/settings/connections" size="sm">
+            Pick your member
+          </ButtonLink>
+        </div>
+      ) : null}
       {q.data?.data ? (
         <>
           <section aria-labelledby="sk-chores" className="mt-4">

@@ -13,9 +13,11 @@ export const GET = api(async ({ user }): Promise<WidgetSummary> => {
   return {
     generatedAt: home.generatedAt,
     unread: unreadActionableCount(user.id),
-    next: top.map(({ id, source, title, detail, priorityReason, dueAt, dueIsDate, primaryAction, secondaryActions, href }) => ({
+    next: top.map(({ id, source, sourceLabel, assignee, title, detail, priorityReason, dueAt, dueIsDate, primaryAction, secondaryActions, href }) => ({
       id,
       source,
+      sourceLabel,
+      assignee,
       title,
       detail,
       priorityReason,

@@ -8,7 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_LABELS, type NextAction, type PrimaryActionKind } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
-import { Badge, Button, ButtonLink, OverflowMenu, SourceBadge, cx, useNow, useOnline, useToast, type MenuItem, type Tone } from "@/components/ui";
+import { AssigneeChip, Badge, Button, ButtonLink, OverflowMenu, SourceBadge, cx, useNow, useOnline, useToast, type MenuItem, type Tone } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import { FeedbackBar } from "@/components/home/Feedback";
 import { formatDue } from "./format";
@@ -164,7 +164,8 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           )}
         </h3>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <SourceBadge source={action.source} />
+          <SourceBadge source={action.source} label={action.sourceLabel} />
+          {action.assignee?.kind === "up_for_grabs" ? null : <AssigneeChip assignee={action.assignee} />}
           <Badge tone={REASON_TONE[action.priorityReason]} dot>
             {PRIORITY_LABELS[action.priorityReason]}
           </Badge>

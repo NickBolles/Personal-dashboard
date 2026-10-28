@@ -373,6 +373,35 @@ export const INTEGRATIONS: IntegrationDef[] = [
         showWhen: { field: "mode", oneOf: ["direct"] },
         help: "Stable device UUID used with the refresh token. Generated at sign-in.",
       },
+      {
+        key: "members",
+        label: "Whose tasks to show (you)",
+        type: "text",
+        showWhen: { field: "mode", oneOf: ["direct"] },
+        help: "Your Skylight member(s), comma-separated ids. “Test connection” lists the frame's members to pick from. Blank: Jarvis matches your name, else shows everyone's until you pick.",
+      },
+      {
+        key: "includeUpForGrabs",
+        label: "Include up-for-grabs (unassigned) chores",
+        type: "select",
+        default: "true",
+        options: [
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ],
+        showWhen: { field: "mode", oneOf: ["direct"] },
+      },
+      {
+        key: "showOthers",
+        label: "Show others' chores as read-only context",
+        type: "select",
+        default: "false",
+        options: [
+          { value: "false", label: "No (hide them)" },
+          { value: "true", label: "Yes" },
+        ],
+        showWhen: { field: "mode", oneOf: ["direct"] },
+      },
       { key: "apiVersion", label: "API version header", type: "text", default: "2026-06-01", advanced: true, showWhen: { field: "mode", oneOf: ["direct"] } },
       {
         key: "baseUrl",
