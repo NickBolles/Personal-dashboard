@@ -37,7 +37,7 @@ test.afterEach(async ({ page }) => {
 test("Settings → Agents: add a profile route, test it, turn routing on", async ({ page }) => {
   await page.goto("/settings/agents");
   await expect(page.getByRole("heading", { level: 1, name: "Agents" })).toBeVisible();
-  await page.getByLabel("Hermes profile").fill("momentumchief");
+  await page.getByLabel("Hermes profile", { exact: true }).fill("momentumchief");
   await expect(page.getByLabel("Key env var")).toHaveAttribute("placeholder", "JARVIS_HERMES_KEY_MOMENTUMCHIEF");
   await page.getByRole("button", { name: "Save route" }).click();
   const row = page.getByTestId("agent-route-momentumchief");

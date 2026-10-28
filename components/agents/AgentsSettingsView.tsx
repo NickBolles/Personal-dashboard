@@ -20,6 +20,8 @@ export function AgentsSettingsView() {
   const { toast } = useToast();
   const q = useQuery({ queryKey: ["settings", "agents"], queryFn: () => api.get<View>("/api/settings/agents") });
   const [busy, setBusy] = useState(false);
+  // optimistic toggle state while a save is in flight (controlled checkboxes would otherwise snap back until refetch)
+  const [pending, setPending] = useState<Partial<AgentSettings>>({});
   const [tests, setTests] = useState<Record<string, TestResult>>({});
   const [profile, setProfile] = useState("");
   const [keyEnv, setKeyEnv] = useState("");
@@ -29,6 +31,7 @@ export function AgentsSettingsView() {
   const s = q.data.settings;
   const save = async (patch: Partial<AgentSettings>, ok = "Saved") => {
     setBusy(true);
+    setPending(patch);
     try {
       await api.put("/api/settings/agents", patch);
       await qc.invalidateQueries({ queryKey: ["settings", "agents"] });
@@ -39,6 +42,7 @@ export function AgentsSettingsView() {
       toast((e as Error).message, "danger");
       return false;
     } finally {
+      setPending({});
       setBusy(false);
     }
   };
@@ -58,7 +62,13 @@ export function AgentsSettingsView() {
       <Card>
         <div className="space-y-2">
           <label className="tap flex items-start gap-2 text-[14px]">
-            <input type="checkbox" className="mt-1" checked={s.routing} disabled={busy} onChange={(e) => void save({ routing: e.target.checked })} />
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={pending.routing ?? s.routing}
+              disabled={busy}
+              onChange={(e) => void save({ routing: e.target.checked })}
+            />
             <span>
               <span className="font-semibold">Route areas to their Hermes profile</span>
               <span className="block text-[13px] text-muted">
@@ -68,7 +78,13 @@ export function AgentsSettingsView() {
             </span>
           </label>
           <label className="tap flex items-start gap-2 text-[14px]">
-            <input type="checkbox" className="mt-1" checked={s.aguiStream} disabled={busy} onChange={(e) => void save({ aguiStream: e.target.checked })} />
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={pending.aguiStream ?? s.aguiStream}
+              disabled={busy}
+              onChange={(e) => void save({ aguiStream: e.target.checked })}
+            />
             <span>
               <span className="font-semibold">Stream runs as AG-UI events</span>
               <span className="block text-[13px] text-muted">
