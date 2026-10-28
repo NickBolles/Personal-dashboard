@@ -64,6 +64,8 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
         idempotencyKey: body.idempotencyKey,
         model: body.model || s?.defaultModel || prefs.defaultModel || undefined,
         provider: body.provider || (body.model ? undefined : s?.defaultProvider) || prefs.defaultProvider || undefined,
+        // The chat default's reasoning effort applies only when the run uses the default model.
+        ...(prefs.defaultReasoning && !body.model && !s?.defaultModel ? { modelOptions: { reasoning: { effort: prefs.defaultReasoning } } } : {}),
         instructions,
       },
       correlationId,

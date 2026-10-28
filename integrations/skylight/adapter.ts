@@ -327,7 +327,7 @@ export const skylightAdapter: SourceAdapter = {
             const ctx = adapterContext();
             let answer: HermesAnswer;
             try {
-              answer = await runStructured(skylightHermesRequest(ctx));
+              answer = await runStructured({ ...skylightHermesRequest(ctx), interactive: true });
             } catch (err) {
               if (!(err instanceof UpstreamError) || err.kind !== "bad_response") throw err;
               // The usual cause: the Hermes profile serving Jarvis lacks the reader skill or its Skylight credentials.

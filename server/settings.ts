@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { config } from "@/server/config";
 import { HOME_SECTIONS, NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
+import { reasoningEffort } from "@/lib/ai";
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM (24h)");
 
@@ -46,6 +47,8 @@ export const preferencesSchema = z.object({
     .object({
       defaultModel: z.string().optional(),
       defaultProvider: z.string().optional(),
+      /** reasoning effort sent with chat runs that use the default model (Hermes model_options) */
+      defaultReasoning: reasoningEffort.optional(),
       showToolDetails: z.boolean().default(false),
     })
     .default({ showToolDetails: false }),
@@ -104,7 +107,8 @@ export function getPreferences(userId?: string): Preferences {
 export type PreferencesPatch = Omit<Partial<Preferences>, "onboarding" | "quietHours" | "hermes" | "layout"> & {
   quietHours?: Partial<Preferences["quietHours"]>;
   layout?: Partial<Preferences["layout"]>;
-  hermes?: Partial<Preferences["hermes"]>;
+  /** defaultReasoning "" = reset to the model default */
+  hermes?: Partial<Omit<Preferences["hermes"], "defaultReasoning">> & { defaultReasoning?: Preferences["hermes"]["defaultReasoning"] | "" };
   onboarding?: { completedAt?: string | null; skippedSteps?: string[] };
 };
 
@@ -130,6 +134,14 @@ export function updatePreferences(patch: PreferencesPatch, userId?: string): Pre
   return merged;
 }
 
+/** "" = "Model default": an explicit reset (undefined would be dropped by JSON and keep the old value). */
+function dropBlankReasoning<T extends { defaultReasoning?: unknown }>(h: T): T {
+  if (h.defaultReasoning !== "") return h;
+  const { defaultReasoning: _drop, ...rest } = h;
+  void _drop;
+  return rest as T;
+}
+
 function mergePreferences(current: Preferences, patch: PreferencesPatch): Preferences {
   const onboarding = { ...current.onboarding, ...(patch.onboarding ?? {}) };
   if (onboarding.completedAt === null) delete onboarding.completedAt;
@@ -138,7 +150,7 @@ function mergePreferences(current: Preferences, patch: PreferencesPatch): Prefer
     ...patch,
     quietHours: { ...current.quietHours, ...(patch.quietHours ?? {}) },
     notificationCategories: { ...current.notificationCategories, ...(patch.notificationCategories ?? {}) },
-    hermes: { ...current.hermes, ...(patch.hermes ?? {}) },
+    hermes: dropBlankReasoning({ ...current.hermes, ...(patch.hermes ?? {}) }),
     layout: { ...current.layout, ...(patch.layout ?? {}) },
     onboarding,
   });

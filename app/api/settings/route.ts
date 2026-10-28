@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { getPreferences, PERSONAL_PREFERENCES, updatePreferences } from "@/server/settings";
+import { reasoningEffort } from "@/lib/ai";
 import { can } from "@/server/access";
 import { HttpError } from "@/server/http/errors";
 
@@ -30,7 +31,12 @@ export const PUT = api(
         quietHours: z.object({ enabled: z.boolean(), start: hhmm, end: hhmm }).partial(),
         notificationCategories: z.record(z.string(), z.object({ push: z.boolean() })),
         hermes: z
-          .object({ defaultModel: z.string().max(100).optional(), defaultProvider: z.string().max(100).optional(), showToolDetails: z.boolean() })
+          .object({
+            defaultModel: z.string().max(100).optional(),
+            defaultProvider: z.string().max(100).optional(),
+            defaultReasoning: reasoningEffort.or(z.literal("")).optional(),
+            showToolDetails: z.boolean(),
+          })
           .partial(),
         integrationFailureAlertMinutes: z.number().int().min(5).max(1440),
         onboarding: z.object({ completedAt: z.string().nullable(), skippedSteps: z.array(z.string()) }).partial(),

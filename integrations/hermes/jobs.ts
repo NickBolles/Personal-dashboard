@@ -93,6 +93,10 @@ export type HermesTaskInput<T> = {
   title: string;
   /** null/undefined = the Hermes profile default */
   model?: string | null;
+  /** sent with `model` (e.g. openai-codex); null = the profile's provider */
+  provider?: string | null;
+  /** Hermes `model_options` (reasoning effort) */
+  modelOptions?: Record<string, unknown> | null;
   conn?: HermesConn;
   instructions: string;
   input: string;
@@ -213,7 +217,12 @@ export async function runHermesTask<T>(t: HermesTaskInput<T>): Promise<HermesTas
       const { session } = await within(deadline, (signal) =>
         HermesSessionClient.create(
           conn,
-          { title: t.title.slice(0, 120), source: t.visible ? "jarvis-ai" : "jarvis-sync", ...(t.model ? { model: t.model } : {}) },
+          {
+            title: t.title.slice(0, 120),
+            source: t.visible ? "jarvis-ai" : "jarvis-sync",
+            ...(t.model ? { model: t.model } : {}),
+            ...(t.model && t.provider ? { provider: t.provider } : {}),
+          },
           signal,
         ),
       ).catch((e) => {
@@ -237,6 +246,8 @@ export async function runHermesTask<T>(t: HermesTaskInput<T>): Promise<HermesTas
             instructions: t.instructions,
             idempotencyKey: t.idempotencyKey,
             ...(t.model ? { model: t.model } : {}),
+            ...(t.model && t.provider ? { provider: t.provider } : {}),
+            ...(t.modelOptions ? { modelOptions: t.modelOptions } : {}),
             conversationHistory: [],
           },
           signal,

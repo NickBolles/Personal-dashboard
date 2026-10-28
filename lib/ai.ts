@@ -31,6 +31,7 @@ export const JOB_ERROR_CODES = [
   "hermes_unavailable",
   "cancelled",
   "ai_disabled",
+  "quota",
 ] as const;
 export type JobErrorCode = (typeof JOB_ERROR_CODES)[number];
 
@@ -75,6 +76,15 @@ const clientKey = z
   .max(64)
   .regex(/^[A-Za-z0-9_-]+$/);
 const modelId = z.string().trim().min(1).max(120);
+/** Hermes provider id sent per run with the tier's model, e.g. openai-codex (null = the profile's provider). */
+const providerId = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9][a-z0-9._-]{0,79}$/i, "Use a Hermes provider id, e.g. openai-codex");
+/** Reasoning effort sent per run as Hermes `model_options.reasoning.effort` (null = model default). */
+export const REASONING_EFFORTS = ["minimal", "low", "medium", "high", "xhigh"] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+export const reasoningEffort = z.enum(REASONING_EFFORTS);
 
 export const aiActionSchema = z
   .object({
@@ -311,9 +321,39 @@ export type UsageResponse = {
   days: UsageDay[];
   totals: { jobs: number; costUsd: number; overCap: number };
   today: { spentUsd: number; reservedUsd: number; budgetUsd: number };
+  meter: MeterView;
 };
 
 // --- Settings (settings key `ai.settings`; admin) ---
+
+export const BILLING_MODES = ["api", "codex", "claude"] as const;
+export type BillingMode = (typeof BILLING_MODES)[number];
+/** Hermes provider id in `hermes usage --json` for each subscription mode. */
+export const BILLING_PROVIDER: Record<Exclude<BillingMode, "api">, string> = { codex: "openai-codex", claude: "anthropic" };
+export const BILLING_LABEL: Record<BillingMode, string> = { api: "API (pay per token)", codex: "Codex", claude: "Claude" };
+
+/**
+ * Subscription meter (read from the Hermes usage snapshot). `state`:
+ * ok = background jobs may run; stop = at/over the stop line; stale/missing = the snapshot
+ * is older than 2 h or unreadable, so background jobs stop (fail closed). `api` = $ budget mode.
+ */
+export type MeterState = "api" | "ok" | "stop" | "stale" | "missing";
+export type MeterView = {
+  mode: BillingMode;
+  provider: string | null;
+  label: string;
+  state: MeterState;
+  usedPct: number | null;
+  stopAtPct: number;
+  resetsAt: string | null;
+  fetchedAt: string | null;
+  /** background (auto) AI jobs and syncs may start */
+  backgroundAllowed: boolean;
+  /** short UI text, e.g. "Codex 12% of week" */
+  summary: string;
+  /** warning for chat/user-started actions; null when fine */
+  warning: string | null;
+};
 
 export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const usd = z.number().min(0).max(100);
@@ -321,6 +361,10 @@ export const aiSettingsSchema = z
   .object({
     enabled: z.boolean(),
     models: z.object({ triage: modelId.nullable(), standard: modelId.nullable(), deep: modelId.nullable() }).strict(),
+    /** per tier: provider sent with the tier's model (no Hermes aliases/restart needed) */
+    providers: z.object({ triage: providerId.nullable(), standard: providerId.nullable(), deep: providerId.nullable() }).strict(),
+    /** per tier: reasoning effort sent per run */
+    reasoning: z.object({ triage: reasoningEffort.nullable(), standard: reasoningEffort.nullable(), deep: reasoningEffort.nullable() }).strict(),
     dailyBudgetUsd: usd,
     jobCapsUsd: z.object({ triage: usd, standard: usd, deep: usd }).strict(),
     estimatesUsd: z.object({ triage: usd, standard: usd, deep: usd }).strict(),
@@ -366,6 +410,17 @@ export const aiSettingsSchema = z
       })
       .strict(),
     dispatchSeconds: z.number().int().min(5).max(600),
+    /**
+     * How the Hermes provider bills. `api` = pay per token: the $ daily budget gates jobs.
+     * `codex`/`claude` = subscription (Hermes reports $0): background jobs stop once the
+     * provider's weekly window reaches `stopAtPct` used; chat and user-started actions only warn.
+     */
+    billing: z
+      .object({
+        mode: z.enum(BILLING_MODES),
+        stopAtPct: z.number().min(1).max(100),
+      })
+      .strict(),
   })
   .strict();
 export type AiSettings = z.infer<typeof aiSettingsSchema>;
@@ -374,6 +429,8 @@ export type AiSettings = z.infer<typeof aiSettingsSchema>;
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   enabled: false,
   models: { triage: null, standard: null, deep: null },
+  providers: { triage: null, standard: null, deep: null },
+  reasoning: { triage: null, standard: null, deep: null },
   dailyBudgetUsd: 5,
   jobCapsUsd: { triage: 0.03, standard: 0.75, deep: 2.5 },
   estimatesUsd: { triage: 0.01, standard: 0.25, deep: 1 },
@@ -383,9 +440,27 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   schedule: { calendars: [], workHours: { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5] }, calendarWrite: { enabled: false, entityId: null } },
   hermes: { perRunModel: false, midRunCost: false, imageInput: false },
   dispatchSeconds: 30,
+  /** owner decision 2026-10-28: keep ≥50% of the weekly subscription window free → stop background at 48% */
+  billing: { mode: "api", stopAtPct: 48 },
 };
 
 export const aiSettingsPatchSchema = aiSettingsSchema.partial().strict();
+
+export type TierRun = { model: string | null; provider: string | null; modelOptions: { reasoning: { effort: ReasoningEffort } } | null };
+/**
+ * What a run on `tier` sends to Hermes. The provider only goes with the tier's own model (a bare
+ * provider, or one paired with another model such as an area default, would mismatch); reasoning
+ * goes whenever set. Everything is null when Hermes doesn't honour per-run models.
+ */
+export function tierRun(settings: AiSettings, tier: "triage" | "standard" | "deep", model: string | null = settings.models[tier]): TierRun {
+  if (!settings.hermes.perRunModel) return { model: null, provider: null, modelOptions: null };
+  const effort = settings.reasoning[tier];
+  return {
+    model,
+    provider: model && model === settings.models[tier] ? settings.providers[tier] : null,
+    modelOptions: effort ? { reasoning: { effort } } : null,
+  };
+}
 
 // --- Capture ---
 

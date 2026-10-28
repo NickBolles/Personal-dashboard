@@ -22,7 +22,15 @@ export const suggestedKeyEnv = (profile: string) => `${KEY_ENV_PREFIX}${profile.
 
 export const agentRouteSchema = z.object({
   profile: z.string().trim().regex(PROFILE_NAME_RE, "Use the Hermes profile id, e.g. momentumchief"),
-  keyEnv: z.string().trim().regex(KEY_ENV_RE, `Use an env var starting with ${KEY_ENV_PREFIX}`),
+  /** null/blank = reuse the main Hermes connection key (shared API_SERVER_KEY on the profile) */
+  keyEnv: z
+    .string()
+    .trim()
+    .regex(KEY_ENV_RE, `Use an env var starting with ${KEY_ENV_PREFIX}`)
+    .or(z.literal(""))
+    .nullable()
+    .optional()
+    .transform((v) => v || null),
   /** null = the Hermes connection's base URL + /p/<profile> */
   baseUrl: z
     .string()

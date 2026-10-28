@@ -7,6 +7,17 @@ import { processSingleton } from "@/server/singleton";
 import { HermesExecutionClient, HermesSessionClient, hermesConn } from "./client";
 import { RUN_TERMINAL } from "./types";
 import { extractJson, parseStructured, sleep, within } from "./jobs";
+import { getAiSettings } from "@/server/ai/settings";
+import { meterStopText, subscriptionMeter } from "@/server/ai/meter";
+import { tierRun } from "@/lib/ai";
+
+/**
+ * Background syncs run on the cheap triage tier (Settings → AI → models), never the
+ * Hermes profile default (an expensive model), and only while the subscription meter allows.
+ */
+export function syncModel(settings = getAiSettings()) {
+  return tierRun(settings, "triage").model;
+}
 
 /**
  * Structured requests: some sources (Skylight, Daily Compass) are owned by
@@ -26,6 +37,8 @@ export type StructuredRequest<T> = {
   schema: z.ZodType<T>;
   example: unknown;
   timeoutMs?: number;
+  /** a person asked for it (e.g. completing the Daily Compass, a connection test): the usage meter doesn't stop it */
+  interactive?: boolean;
 };
 
 const pollMs = () => Number(process.env.JARVIS_STRUCTURED_POLL_MS ?? 750);
@@ -59,13 +72,21 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
   let failure: UpstreamError["kind"] | undefined;
   let cleanup = "retained";
   const conn = hermesConn();
+  const settings = getAiSettings();
+  const meter = subscriptionMeter(new Date(), settings);
+  if (!req.interactive && !meter.backgroundAllowed) throw new UpstreamError(req.label, "unsupported", `${req.label} sync paused: ${meterStopText(meter)}`);
+  const { model, provider, modelOptions } = tierRun(settings, "triage");
   const observe = (status: string) => {
     lastStatus = [...RUN_TERMINAL, "queued", "running", "stopping", "waiting_for_approval"].includes(status) ? status : "unknown";
     terminal = (RUN_TERMINAL as readonly string[]).includes(lastStatus);
   };
   try {
     const { session } = await within(workDeadline, (signal) =>
-      HermesSessionClient.create(conn, { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE }, signal),
+      HermesSessionClient.create(
+        conn,
+        { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE, ...(model ? { model } : {}), ...(provider ? { provider } : {}) },
+        signal,
+      ),
     );
     sessionId = session.id;
     await within(workDeadline, (signal) => HermesSessionClient.update(conn, session.id, { hidden: true }, signal));
@@ -78,6 +99,9 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
           input: req.task,
           idempotencyKey: crypto.randomUUID(),
           instructions: structuredInstructions(req.source, req.example),
+          ...(model ? { model } : {}),
+          ...(provider ? { provider } : {}),
+          ...(modelOptions ? { modelOptions } : {}),
           conversationHistory: [],
         },
         signal,

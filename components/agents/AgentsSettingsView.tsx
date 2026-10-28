@@ -6,7 +6,7 @@ import { api } from "@/lib/client/api";
 import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { KEY_ENV_PREFIX, suggestedKeyEnv, type AgentRoute, type AgentSettings } from "@/lib/agents";
 
-type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean };
+type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean; sharedKey?: boolean };
 type View = { settings: AgentSettings; routes: RouteStatus[]; hermesConfigured: boolean };
 type TestResult = { profile: string; served: boolean; authorized: boolean; message: string };
 
@@ -113,7 +113,7 @@ export function AgentsSettingsView() {
                       {r.profile}
                     </span>
                     <span className="block truncate text-[12.5px] text-muted" data-dynamic>
-                      {r.effectiveBaseUrl ?? "—"} · key {r.keyEnv}
+                      {r.effectiveBaseUrl ?? "—"} · key {r.keyEnv ?? "main Hermes key"}
                     </span>
                     {t ? (
                       <span className={`block text-[12.5px] ${t.authorized ? "text-ok" : "text-danger"}`} role="status">
@@ -146,7 +146,7 @@ export function AgentsSettingsView() {
           aria-label="Add a profile route"
           onSubmit={async (e) => {
             e.preventDefault();
-            const route: AgentRoute = { profile: p, keyEnv: keyEnv.trim() || suggestedKeyEnv(p), baseUrl: baseUrl.trim() || null };
+            const route: AgentRoute = { profile: p, keyEnv: keyEnv.trim() || null, baseUrl: baseUrl.trim() || null };
             if (await save({ routes: [...routes(q.data.routes.filter((x) => x.profile !== p)), route] }, `Route for ${p} saved`)) {
               setProfile("");
               setKeyEnv("");
@@ -165,7 +165,7 @@ export function AgentsSettingsView() {
               maxLength={64}
             />
           </Field>
-          <Field id="ag-key" label="Key env var" hint={`Starts with ${KEY_ENV_PREFIX}`}>
+          <Field id="ag-key" label="Key env var (optional)" hint={`Starts with ${KEY_ENV_PREFIX}. Blank: reuse the main Hermes key`}>
             <input
               id="ag-key"
               className={inputCls}

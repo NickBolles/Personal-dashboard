@@ -5,13 +5,24 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { ModelCombobox } from "@/components/areas/ModelPicker";
-import { usd2, type AiSettings, type UsageResponse } from "@/lib/ai";
+import {
+  BILLING_LABEL,
+  BILLING_MODES,
+  REASONING_EFFORTS,
+  usd2,
+  type ReasoningEffort,
+  type AiSettings,
+  type BillingMode,
+  type MeterView,
+  type UsageResponse,
+} from "@/lib/ai";
 
 type View = {
   settings: AiSettings;
   runner: { armed: boolean; running: number; queued: number; budgetBlocked: number; lastTickAt: string | null; lastError: string | null };
   dispatcher: { running: boolean; lastRunAt: string | null; lastSent: number; lastError: string | null };
   today: { spentUsd: number; reservedUsd: number; day: string };
+  meter: MeterView;
   hermesConfigured: boolean;
 };
 
@@ -61,6 +72,7 @@ export function AiSettingsView() {
           </label>
         </div>
       </Card>
+      <UsageMeterCard meter={q.data.meter} billing={s.billing} busy={busy} onSave={(billing) => void save({ billing })} />
       <Card>
         <h2 className="mb-2 font-semibold">Budget</h2>
         <p className="mb-2 text-[13px] text-muted" data-dynamic>
@@ -105,16 +117,53 @@ export function AiSettingsView() {
         <h2 className="mb-2 font-semibold">Models</h2>
         <div className="grid gap-2 sm:grid-cols-3">
           {(["triage", "standard", "deep"] as const).map((t) => (
-            <ModelCombobox
-              key={t}
-              backend="hermes"
-              label={t === "triage" ? "Fast (triage, schedule)" : t === "standard" ? "Standard" : "Deep (opt-in)"}
-              value={{ model: s.models[t] ?? undefined }}
-              onChange={(v) => void save({ models: { ...s.models, [t]: v.model ?? null } })}
-              defaultHint="Hermes default"
-            />
+            <div key={t} className="grid gap-2">
+              <ModelCombobox
+                backend="hermes"
+                label={t === "triage" ? "Fast (triage, schedule)" : t === "standard" ? "Standard" : "Deep (opt-in)"}
+                value={{ model: s.models[t] ?? undefined, provider: s.providers[t] ?? undefined }}
+                onChange={(v) =>
+                  void save({
+                    models: { ...s.models, [t]: v.model ?? null },
+                    ...(v.provider ? { providers: { ...s.providers, [t]: v.provider } } : {}),
+                  })
+                }
+                defaultHint="Hermes default"
+              />
+              <Field id={`ai-prov-${t}`} label={`Provider: ${t}`} hint="e.g. openai-codex. Blank: the profile's provider">
+                <input
+                  id={`ai-prov-${t}`}
+                  key={`${t}:${s.providers[t] ?? ""}`}
+                  className={inputCls}
+                  defaultValue={s.providers[t] ?? ""}
+                  maxLength={80}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim() || null;
+                    if (v !== s.providers[t]) void save({ providers: { ...s.providers, [t]: v } });
+                  }}
+                />
+              </Field>
+              <Field id={`ai-reason-${t}`} label={`Reasoning: ${t}`}>
+                <select
+                  id={`ai-reason-${t}`}
+                  className={inputCls}
+                  value={s.reasoning[t] ?? ""}
+                  onChange={(e) => void save({ reasoning: { ...s.reasoning, [t]: (e.target.value || null) as ReasoningEffort | null } })}
+                >
+                  <option value="">Model default</option>
+                  {REASONING_EFFORTS.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
           ))}
         </div>
+        <p className="mt-2 text-[12.5px] text-muted">
+          Provider, model and reasoning are sent per run (needs &quot;Hermes honours a per-run model&quot;), so no Hermes aliases are needed.
+        </p>
       </Card>
       <Card>
         <h2 className="mb-2 font-semibold">Captures</h2>
@@ -203,5 +252,98 @@ export function AiSettingsView() {
         )}
       </Card>
     </div>
+  );
+}
+
+const METER_TONE: Record<MeterView["state"], "ok" | "warn" | "danger"> = { api: "ok", ok: "ok", stop: "danger", stale: "warn", missing: "warn" };
+const METER_BADGE: Record<MeterView["state"], string> = {
+  api: "$ budget",
+  ok: "Background AI on",
+  stop: "Background AI paused",
+  stale: "Usage stale",
+  missing: "Usage unknown",
+};
+
+/** Settings → AI → Usage meter: billing mode + weekly subscription window (Hermes usage snapshot). */
+function UsageMeterCard({
+  meter,
+  billing,
+  busy,
+  onSave,
+}: {
+  meter: MeterView;
+  billing: AiSettings["billing"];
+  busy: boolean;
+  onSave: (b: AiSettings["billing"]) => void;
+}) {
+  const sub = meter.mode !== "api";
+  const used = meter.usedPct ?? 0;
+  return (
+    <Card>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Usage meter</h2>
+        <Badge tone={METER_TONE[meter.state]}>{METER_BADGE[meter.state]}</Badge>
+      </div>
+      {sub ? (
+        <div className="mb-2" data-testid="ai-usage-meter" data-state={meter.state}>
+          <p className="text-[14px] font-semibold tabular-nums" data-dynamic>
+            {meter.summary}
+          </p>
+          <div
+            role="meter"
+            aria-label={`${meter.label} weekly usage`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(used)}
+            aria-valuetext={meter.usedPct == null ? "unknown" : `${Math.round(used)}% used, background AI stops at ${meter.stopAtPct}%`}
+            className="relative mt-1 h-2 overflow-hidden rounded-full bg-surface-2"
+          >
+            <div className={meter.state === "ok" ? "h-full bg-ok" : "h-full bg-warn"} style={{ width: `${Math.min(100, used)}%` }} />
+            <div aria-hidden="true" className="absolute top-0 h-full w-0.5 bg-text" style={{ left: `${meter.stopAtPct}%` }} />
+          </div>
+          <p className="mt-1 text-[13px] text-muted" data-dynamic>
+            Background AI (capture triage, auto-investigate, Skylight and Daily Compass syncs) stops at {meter.stopAtPct}% of the week; chat and actions you
+            start only warn.
+            {meter.resetsAt ? ` Resets ${new Date(meter.resetsAt).toLocaleString()}.` : ""}
+            {meter.fetchedAt ? ` Read ${new Date(meter.fetchedAt).toLocaleTimeString()}.` : ""}
+          </p>
+          {meter.warning ? (
+            <p className="mt-1 text-[13px] text-warn" role="status">
+              {meter.warning}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mb-2 text-[13px] text-muted">Pay per token: jobs are gated by the daily $ budget below.</p>
+      )}
+      <form
+        className="grid gap-2 sm:grid-cols-3"
+        aria-label="Usage meter settings"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          const stop = Number(f.get("stopAt"));
+          onSave({ mode: String(f.get("mode")) as BillingMode, stopAtPct: Number.isFinite(stop) && stop >= 1 && stop <= 100 ? stop : billing.stopAtPct });
+        }}
+      >
+        <Field id="ai-billing" label="Hermes billing">
+          <select id="ai-billing" name="mode" className={inputCls} defaultValue={billing.mode}>
+            {BILLING_MODES.map((m) => (
+              <option key={m} value={m}>
+                {m === "api" ? BILLING_LABEL[m] : `${BILLING_LABEL[m]} subscription`}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field id="ai-stop-at" label="Stop background at (% of week)">
+          <input id="ai-stop-at" name="stopAt" className={inputCls} inputMode="decimal" defaultValue={billing.stopAtPct} />
+        </Field>
+        <div className="flex items-end">
+          <Button type="submit" size="sm" disabled={busy}>
+            Save meter
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
