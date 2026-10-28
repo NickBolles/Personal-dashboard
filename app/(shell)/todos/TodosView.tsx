@@ -7,6 +7,7 @@ import { api } from "@/lib/client/api";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
+import { SourceFilter, matchesSource } from "@/components/actions/SourceFilter";
 import { Button, Field, PageHeader, Spinner, inputCls, useOnline, useToast } from "@/components/ui";
 
 const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
@@ -19,7 +20,9 @@ const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
 export function TodosView() {
   const q = useSource("todos");
   const provider = (q.data?.data?.extra?.provider as string | undefined) ?? undefined;
-  const actions = q.data?.data?.actions ?? [];
+  const all = q.data?.data?.actions ?? [];
+  const [source, setSource] = useState("");
+  const actions = all.filter(matchesSource(source));
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -31,6 +34,7 @@ export function TodosView() {
       {q.isLoading ? <Spinner label="Loading todos…" /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
       {provider === "jarvis" ? <AddTodo /> : null}
+      <SourceFilter items={all} value={source} onChange={setSource} />
       {q.data?.data
         ? GROUPS.map((g) => {
             const items = actions.filter(g.match);

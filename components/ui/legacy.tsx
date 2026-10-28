@@ -198,13 +198,21 @@ const SOURCE_DOT: Record<string, string> = {
   jarvis: "bg-[#5b5f57]",
 };
 
-export function SourceBadge({ source }: { source: ActionSource | "jarvis" }) {
+export function SourceBadge({ source, label }: { source: ActionSource | "jarvis"; label?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
+    <span data-testid="source-chip" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
       <span aria-hidden="true" className={cx("h-2 w-2 rounded-full", SOURCE_DOT[source])} />
-      {source === "jarvis" ? "Jarvis" : SOURCE_LABELS[source]}
+      {label || (source === "jarvis" ? "Jarvis" : SOURCE_LABELS[source])}
     </span>
   );
+}
+
+/** Who a task belongs to; "Up for grabs" is styled distinctly. Hidden when it's simply yours. */
+export function AssigneeChip({ assignee }: { assignee?: { kind: "mine" | "up_for_grabs" | "other"; name?: string } }) {
+  if (!assignee) return null;
+  if (assignee.kind === "up_for_grabs") return <Badge tone="violet">Up for grabs</Badge>;
+  if (assignee.kind === "other") return <Badge tone="neutral">{assignee.name ? `${assignee.name}'s` : "Someone else's"}</Badge>;
+  return assignee.name ? <Badge tone="accent">{`Assigned to ${assignee.name}`}</Badge> : null;
 }
 
 export type Tone = "neutral" | "ok" | "warn" | "danger" | "accent" | "violet";

@@ -5,6 +5,7 @@ import { adapterContext, cachedSource, scopeResult } from "@/server/sources";
 import { localDate } from "@/lib/time";
 import type { NextAction } from "@/lib/contracts";
 import { briefContext, weekContext } from "./workflows";
+import { isOwnersTask } from "@/lib/task-source";
 
 /**
  * Context refs (`@ctx:<name>`) in a run's attached context are resolved here,
@@ -54,15 +55,18 @@ export function formatOverdue(rows: { ref: string; title: string; due: string; s
   return out.join("\n");
 }
 
+/** Source column: the chip label (e.g. "Google Tasks · Groceries"), "Todos" when unknown. */
+const sourceColumn = (a: NextAction) => (a.sourceLabel ?? "Todos").replace(/[\n|]/g, " ");
+
 export function overdueTodosContext(user: CurrentUser, now = new Date()): string {
   if (!can(user, "todos.view")) return "Overdue todos: not available to you.";
   const ctx = adapterContext(now);
   const actions = scopeResult(user, cachedSource("todos", now))?.data?.actions ?? [];
   const rows = actions
     .map((a) => ({ a, due: overdueDate(a, ctx.timezone, ctx.today, now) }))
-    .filter((x): x is { a: NextAction; due: string } => Boolean(x.due))
+    .filter((x): x is { a: NextAction; due: string } => Boolean(x.due) && isOwnersTask(x.a))
     .sort((x, y) => (x.due < y.due ? 1 : x.due > y.due ? -1 : x.a.sourceId < y.a.sourceId ? -1 : 1))
-    .map(({ a, due }) => ({ ref: `todo:${a.sourceId}`, title: a.title.replace(/[\n|]/g, " "), due, source: "Todos" }));
+    .map(({ a, due }) => ({ ref: `todo:${a.sourceId}`, title: a.title.replace(/[\n|]/g, " "), due, source: sourceColumn(a) }));
   return rows.length ? formatOverdue(rows) : "Overdue todos: none right now.";
 }
 

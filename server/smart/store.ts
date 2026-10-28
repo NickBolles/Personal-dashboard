@@ -91,7 +91,7 @@ export function lookup(user: CurrentUser): Lookup {
         title: a.title,
         due: dueDate(a, tz),
         status: a.status,
-        where: "Todos",
+        where: a.sourceLabel ?? "Todos",
         href: a.href,
         done: a.status === "completed",
         // a due time (not just a date) can't be restored by a date-only snooze
