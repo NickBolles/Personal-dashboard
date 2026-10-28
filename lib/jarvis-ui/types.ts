@@ -15,6 +15,7 @@ export type HydratedRef =
       where?: string;
       href?: string;
       done?: boolean;
+      timed?: boolean;
     }
   | { ref: string; unavailable: "unknown" | "finance" | "forbidden" };
 

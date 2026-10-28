@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { ComponentRegistry, ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog";
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
-import type { HydratedRef } from "@/lib/jarvis-ui/types";
+import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
 import { Badge, Button, OverflowMenu, cx, type MenuItem } from "@/components/ui";
 import { InlineText, useSurface } from "./context";
@@ -23,6 +23,11 @@ function DuePill({ due, today }: { due?: string; today: string }) {
   const late = daysBetween(due, today);
   if (late > 0) return <Badge tone="danger">{late === 1 ? "1 day late" : `${late} days late`}</Badge>;
   return <Badge tone={late === 0 ? "warn" : "neutral"}>{late === 0 ? "Today" : fmtDay(due)}</Badge>;
+}
+
+/** Undo is offered only when the server recorded a way to restore the previous state. */
+function canUndo(e: AppliedEntry) {
+  return (e.undo as { type?: string } | undefined)?.type !== "none";
 }
 
 function title(h: HydratedRef | undefined) {
@@ -81,9 +86,11 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
       {s.readOnly || unavailable ? null : applied ? (
         <span className="flex shrink-0 items-center gap-1 text-xs">
           <span className="text-ok">✓ {applied.message}</span>
-          <Button size="sm" variant="ghost" busy={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
-            Undo
-          </Button>
+          {canUndo(applied) ? (
+            <Button size="sm" variant="ghost" busy={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
+              Undo
+            </Button>
+          ) : null}
         </span>
       ) : (
         <span className="flex shrink-0 items-center gap-1">
@@ -184,7 +191,7 @@ function DecisionCard({ element }: P<"DecisionCard">) {
       {appliedOpt ? (
         <p className="mt-2 flex items-center gap-2 text-xs">
           <span className="text-ok">✓ Recorded “{appliedOpt.label}”</span>
-          {s.readOnly ? null : (
+          {s.readOnly || !canUndo(s.applied.get(intentTarget(appliedOpt.intent!))!) ? null : (
             <Button
               size="sm"
               variant="ghost"

@@ -55,9 +55,10 @@ async function execute(user: CurrentUser, c: Checked, correlationId: string): Pr
       await todosAdapter.act!(i.ref.slice(5), "complete", opts);
       return { message: "Marked done", undo: { type: "reopen" } };
     case "todo.snooze": {
-      const prev = c.hydrated[i.ref]!.due;
+      const h = c.hydrated[i.ref]!;
       await todosAdapter.act!(i.ref.slice(5), "snooze", { ...opts, until: i.date });
-      return { message: `Moved to ${i.date}`, undo: prev ? { type: "snooze", date: prev } : { type: "none" } };
+      // Only a date-only due can be restored exactly; a due time or "no due date" can't (no undo offered).
+      return { message: `Moved to ${i.date}`, undo: h.due && !("timed" in h && h.timed) ? { type: "snooze", date: h.due } : { type: "none" } };
     }
     case "todo.drop":
       await dropTodo(i.ref.slice(5), i.note, opts);

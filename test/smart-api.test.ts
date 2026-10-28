@@ -208,6 +208,46 @@ describe("smart UI API", () => {
     expect(todosAdapter.act).not.toHaveBeenCalled();
   });
 
+  it("a conversation shared with someone renders read-only for them: no surface, no writes", async () => {
+    const { item } = await setup();
+    const { getDb, schema } = await import("@/server/db");
+    getDb().insert(schema.sessionMeta).values({ sessionId: "sess-shared", userId: owner, shared: true }).run();
+    await call(settingsRoute.PUT, { user: other, method: "PUT", body: { enabled: true } });
+    const v = await (
+      await call(surfacesRoute.PUT, { user: other, method: "PUT", body: { sessionId: "sess-shared", blockIndex: 0, spec: spec(item.id) } })
+    ).json();
+    expect(v).toMatchObject({ id: "", readOnly: true, applied: [] });
+    expect(
+      getDb()
+        .select()
+        .from(schema.uiSurfaces)
+        .all()
+        .filter((r) => r.userId === other),
+    ).toHaveLength(0);
+    // The owner still gets a writable surface for the same conversation.
+    const mine = await (await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "sess-shared", blockIndex: 0, spec: spec(item.id) } })).json();
+    expect(mine.readOnly).toBe(false);
+  });
+
+  it("snoozing a todo with a due time records no undo (it couldn't be restored exactly)", async () => {
+    TODOS.push({ id: "todos:gt-9", source: "todos", sourceId: "gt-9", title: "Timed", status: "open", dueAt: "2026-10-20T15:30:00.000Z", dueIsDate: false });
+    try {
+      const { surfaceId } = await setup();
+      const timedSpec = { root: "a", elements: { a: { type: "TaskList", props: { title: "T", rows: [{ ref: "todo:gt-9", suggestion: "do_week" }] } } } };
+      const t = await (await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "sess-3", blockIndex: 0, spec: timedSpec } })).json();
+      void surfaceId;
+      const r = await (
+        await call(applyRoute.POST, {
+          body: { surfaceId: t.id, intents: [{ kind: "todo.snooze", ref: "todo:gt-9", date: "2026-10-30" }], idempotencyKey: "timed-snooze-1" },
+        })
+      ).json();
+      expect(r.surface.applied[0].undo).toEqual({ type: "none" });
+      expect((await call(undoRoute.POST, { body: { surfaceId: t.id, intentHash: r.results[0].intentHash } })).status).toBe(409);
+    } finally {
+      TODOS.pop();
+    }
+  });
+
   it("saves checklist ticks as surface state (≤ 16 KB) without running anything", async () => {
     const { surfaceId } = await setup();
     const r = await call(stateRoute.PATCH, { method: "PATCH", params: { id: surfaceId }, body: { state: { checks: ["Runbook::one"] } } });

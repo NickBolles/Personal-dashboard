@@ -93,6 +93,8 @@ export function lookup(user: CurrentUser): Lookup {
         where: "Todos",
         href: a.href,
         done: a.status === "completed",
+        // a due time (not just a date) can't be restored by a date-only snooze
+        timed: Boolean(a.dueAt && !a.dueIsDate),
       };
     },
     item(ref) {
@@ -166,6 +168,8 @@ export function upsertSurface(user: CurrentUser, input: { sessionId: string; blo
   const specJson = canonicalJson(v.spec);
   if (specJson.length > LIMITS.blockBytes) throw new HttpError(400, "too_large", "That interactive reply is too large");
   const specHash = sha256(specJson);
+  // A conversation shared with this person is read-only: render, but no surface, tray or writes.
+  if (!sessionWritable(user.id, input.sessionId)) return { id: "", specHash, state: {}, applied: [], readOnly: true };
   const db = getDb();
   const where = and(eq(T.userId, user.id), eq(T.sessionId, input.sessionId), eq(T.messageKey, specHash), eq(T.blockIndex, input.blockIndex));
   const existing = db.select().from(T).where(where).get();
@@ -186,6 +190,12 @@ export function upsertSurface(user: CurrentUser, input: { sessionId: string; blo
     .onConflictDoNothing()
     .run();
   return toView(db.select().from(T).where(where).get()!, user);
+}
+
+/** Someone else's (shared) conversation is read-only for this person. */
+export function sessionWritable(userId: string, sessionId: string) {
+  const m = getDb().select({ userId: schema.sessionMeta.userId }).from(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, sessionId)).get();
+  return !m || m.userId === userId;
 }
 
 export function saveState(user: CurrentUser, id: string, state: Record<string, unknown>): SurfaceView {

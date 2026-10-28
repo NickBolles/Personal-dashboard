@@ -133,7 +133,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
       });
     },
     undo: async (entry) => {
-      if (!view) return;
+      if (!view || view.readOnly) return;
       setUndoing(entry.intentHash);
       try {
         const r = await api.post<{ surface: SurfaceView }>("/api/smart/undo", { surfaceId: view.id, intentHash: entry.intentHash });
@@ -147,7 +147,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
       }
     },
     toggleCheck: async (id) => {
-      if (!view) return;
+      if (!view || view.readOnly) return;
       const next = checks.includes(id) ? checks.filter((c) => c !== id) : [...checks, id];
       setView({ ...view, state: { ...view.state, checks: next } });
       try {
