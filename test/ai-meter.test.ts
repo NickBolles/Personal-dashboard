@@ -132,5 +132,7 @@ describe("background syncs (Skylight / Daily Compass)", () => {
     const e = await runStructured(request).catch((x) => x);
     expect(e.message).toMatch(/Skylight sync paused: Codex usage can't be read/);
     expect(sessions.create).not.toHaveBeenCalled();
+    // A person's own request (Daily Compass completion, connection test) still goes through.
+    await expect(runStructured({ ...request, interactive: true })).resolves.toEqual({ ok: true });
   });
 });

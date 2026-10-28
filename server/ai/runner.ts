@@ -107,7 +107,8 @@ export async function runnerTick(now = new Date()) {
     s.lastDay = day;
     // Subscription billing: the weekly-window meter gates background jobs (fail closed when unreadable).
     const meter = subscriptionMeter(now, settings);
-    if (meter.mode !== "api" && meter.backgroundAllowed) releaseQuotaBlocked();
+    // Also after switching back to API billing: held jobs must not wait for a new day.
+    if (meter.backgroundAllowed) releaseQuotaBlocked();
 
     // 1. Our own in-flight jobs: renew leases; propagate cancel requests.
     maintainInflight(now);

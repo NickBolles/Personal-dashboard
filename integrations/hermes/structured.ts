@@ -36,6 +36,8 @@ export type StructuredRequest<T> = {
   schema: z.ZodType<T>;
   example: unknown;
   timeoutMs?: number;
+  /** a person asked for it (e.g. completing the Daily Compass, a connection test): the usage meter doesn't stop it */
+  interactive?: boolean;
 };
 
 const pollMs = () => Number(process.env.JARVIS_STRUCTURED_POLL_MS ?? 750);
@@ -71,7 +73,7 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
   const conn = hermesConn();
   const settings = getAiSettings();
   const meter = subscriptionMeter(new Date(), settings);
-  if (!meter.backgroundAllowed) throw new UpstreamError(req.label, "unsupported", `${req.label} sync paused: ${meterStopText(meter)}`);
+  if (!req.interactive && !meter.backgroundAllowed) throw new UpstreamError(req.label, "unsupported", `${req.label} sync paused: ${meterStopText(meter)}`);
   const model = syncModel(settings);
   const observe = (status: string) => {
     lastStatus = [...RUN_TERMINAL, "queued", "running", "stopping", "waiting_for_approval"].includes(status) ? status : "unknown";

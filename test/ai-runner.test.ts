@@ -460,6 +460,11 @@ describe("AI actions end to end (fake Hermes)", () => {
       write(10, new Date(Date.now() - 3 * 3600_000));
       await settle();
       expect(getJobRow(bg.id)!.state).toBe("budget_blocked");
+      // Switching back to API billing releases held jobs too.
+      saveAiSettings({ dailyBudgetUsd: 5, billing: { mode: "api", stopAtPct: 48 } });
+      await settle();
+      expect(getJobRow(bg.id)!.state).toBe("succeeded");
+      saveAiSettings({ billing: { mode: "codex", stopAtPct: 48 } });
       // Fresh and under the line: released and run.
       write(10);
       await settle();
