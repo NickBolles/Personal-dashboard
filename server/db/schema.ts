@@ -1385,3 +1385,37 @@ export const conversationIndex = sqliteTable("conversation_index", {
   /** last time the person opened a view using it (the warmer skips idle people) */
   accessedAt: text("accessed_at").notNull().default(now),
 });
+
+/**
+ * Smart-UI surfaces (phase 6, docs/smart-ui.md): one validated `jarvis-ui@1`
+ * block from an assistant message. The canonical spec is stored on first
+ * render so apply can check that every intent was really offered (and so the
+ * surface reopens if Hermes compacts history). Per person; never model text in logs.
+ */
+export const uiSurfaces = sqliteTable(
+  "ui_surfaces",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** message · coordinator · report */
+    origin: text("origin").notNull().default("message"),
+    sessionId: text("session_id"),
+    /** sha256 of the assistant message text (stable across live stream and transcript) */
+    messageKey: text("message_key"),
+    blockIndex: integer("block_index").notNull().default(0),
+    reportId: text("report_id"),
+    catalog: text("catalog").notNull(),
+    specHash: text("spec_hash").notNull(),
+    /** canonical spec JSON (≤ 64 KB) */
+    specJson: text("spec_json").notNull(),
+    /** UI state: checklist ticks (≤ 16 KB) */
+    stateJson: text("state_json").notNull().default("{}"),
+    /** JSON AppliedEntry[] */
+    appliedJson: text("applied_json").notNull().default("[]"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("ui_surfaces_key_idx").on(t.userId, t.sessionId, t.messageKey, t.blockIndex), index("ui_surfaces_session_idx").on(t.sessionId)],
+);

@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "catalog": "jarvis-ui@1",
+  "root": "r",
+  "elements": {
+    "r": {
+      "type": "Stack",
+      "props": {},
+      "children": ["t", "c"]
+    },
+    "t": {
+      "type": "Text",
+      "props": {
+        "text": "<img src=x onerror=alert(1)> **<script>alert(2)</script>**"
+      }
+    },
+    "c": {
+      "type": "Callout",
+      "props": {
+        "tone": "warn",
+        "title": "<b>hi</b>",
+        "text": "javascript:alert(3)"
+      }
+    }
+  }
+}

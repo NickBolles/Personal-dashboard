@@ -306,7 +306,29 @@ export function createHermes({ apiKey }) {
       }
     }
     const slow = /slow|long/i.test(said);
-    const reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
+    let reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
+    // Smart replies (jarvis-ui@1): a triage block built from the refs Jarvis attached.
+    if (typeof instructions === "string" && instructions.includes("jarvis-ui@1") && /triage/i.test(said)) {
+      const refs = [...input.matchAll(/^(todo:[^\s|]+) \| /gm)].map((m) => m[1]);
+      const later = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+      const bucket = (k) => refs.filter((_, i) => i % 3 === k);
+      const list = (key, title, b, extra) => ({
+        type: "TaskList",
+        props: { title, bucket: b, rows: bucket(key).map((ref) => ({ ref, suggestion: b, ...extra })) },
+      });
+      const elements = { r: { type: "Stack", props: {}, children: [] } };
+      for (const [k, title, b, extra] of [
+        [0, "Do this week", "do_week", {}],
+        [1, "Reschedule", "reschedule", { suggestedDate: later }],
+        [2, "Drop", "drop", { reason: "Not worth it now" }],
+      ])
+        if (bucket(k).length) {
+          elements[`l${k}`] = list(k, title, b, extra);
+          elements.r.children.push(`l${k}`);
+        }
+      const spec = { v: 1, catalog: "jarvis-ui@1", root: "r", elements };
+      reply = `Here's a pass on ${refs.length} overdue todos. Nothing changes until you apply.\n\n\`\`\`jarvis-ui\n${JSON.stringify(spec)}\n\`\`\``;
+    }
     const words = reply.split(/(?<= )/);
     for (const w of words) {
       if (run.status === "stopping") {

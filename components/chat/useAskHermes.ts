@@ -1,5 +1,6 @@
 "use client";
 
+import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -36,7 +37,12 @@ export function useAskHermes() {
       qc.invalidateQueries({ queryKey: ["work"] });
       const key = newIdempotencyKey("qc");
       await kvSet(`pending:${session.id}`, { input: text, key, context: opts.context });
-      await api.post(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, { input: text, idempotencyKey: key, context: opts.context });
+      await api.post(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, {
+        input: text,
+        idempotencyKey: key,
+        context: opts.context,
+        capabilities: [SMART_CAPABILITY],
+      });
       await kvDel(`pending:${session.id}`);
       router.push(`/chat/${encodeURIComponent(session.id)}`);
       return true;

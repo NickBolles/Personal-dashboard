@@ -14,6 +14,8 @@ export const ASSIST_LIMIT = 2;
 export const TRIAGE_MIN = 3;
 export const NOT_HELPFUL_DAYS = 14;
 export const CONTEXT_MAX = 1500;
+/** Resolved server-side when the message is sent (server/smart/context.ts CTX_OVERDUE). */
+export const OVERDUE_CTX_REF = "@ctx:overdue_todos";
 /** Christmas gift planning shows from Nov 1 through Dec 20 (local). */
 const CHRISTMAS = { from: "11-01", until: "12-20" };
 const CALENDAR_MILESTONE = /\b(birthday|bday|anniversary)\b/i;
@@ -83,21 +85,27 @@ function overdueTriage(input: AssistInput, today: string): Draft | undefined {
 
   let chat: AssistCard["chat"];
   if (input.canChat) {
-    const head = `Overdue tasks Jarvis can see (${n} total, most recently due first):`;
+    // Todos go by context ref: the server resolves @ctx:overdue_todos at send
+    // time to ALL overdue todos (cap 100, server/smart/context.ts), so the
+    // list is never cut to "…and N more". Other sources are listed inline.
+    const others = sorted.filter((a) => a.source !== "todos");
     const lines: string[] = [];
-    let len = head.length;
-    for (const a of sorted) {
+    let len = 0;
+    for (const a of others) {
       const line = `- ${trim(a.title, 100)} (due ${dueDate(a)}) [${a.source}:${trim(a.sourceId, 60)}]`;
       if (len + line.length + 40 > CONTEXT_MAX) break;
       lines.push(line);
       len += line.length + 1;
     }
-    const more = n - lines.length;
+    const more = others.length - lines.length;
     chat = {
       label: "Help me triage",
       draft:
         "Help me triage my overdue tasks. This is read-only planning: don’t complete, reschedule or delete anything. For each one, suggest do it this week, reschedule (with a date) or drop, and I’ll make the changes in Jarvis myself.",
-      context: [head, ...lines, ...(more > 0 ? [`…and ${more} more`] : [])].join("\n"),
+      context: [
+        ...(list.some((a) => a.source === "todos") ? [OVERDUE_CTX_REF] : []),
+        ...(others.length ? [`Other overdue tasks (${others.length}):`, ...lines, ...(more > 0 ? [`…and ${more} more`] : [])] : []),
+      ].join("\n"),
     };
   }
   const bucket = n <= 5 ? "3-5" : n <= 10 ? "6-10" : n <= 20 ? "11-20" : "21+";
