@@ -30,6 +30,8 @@ const isAreasPath = (p: string) => p === "/areas" || p.startsWith("/areas/") || 
 const SETTINGS: Dest = { key: "settings", href: "/settings", label: "Settings", icon: GearIcon, match: (p) => p.startsWith("/settings") };
 
 function destFor(path: string) {
+  // Chat has its own memory slot: the top row's Areas link must not return to a chat route.
+  if (CHAT.match(path)) return CHAT;
   return [...PRIMARY, SETTINGS, ...DESTINATIONS].find((d) => d.match(path));
 }
 
