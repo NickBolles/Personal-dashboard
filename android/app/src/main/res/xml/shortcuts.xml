@@ -12,8 +12,8 @@
     <shortcut android:shortcutId="areas" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_areas">
         <intent android:action="android.intent.action.VIEW" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.web.TwaLauncherActivity" android:data="jarvis://open/areas" />
     </shortcut>
-    <!-- Fallback for one release: the old native screens. Last, so launchers that show four hide it. -->
-    <shortcut android:shortcutId="classic" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_classic" android:shortcutLongLabel="@string/shortcut_classic_long" android:shortcutRank="10">
+    <!-- Fallback for one release: the old native screens. Last in the list, so launchers that show four hide it. -->
+    <shortcut android:shortcutId="classic" android:enabled="true" android:icon="@mipmap/ic_launcher" android:shortcutShortLabel="@string/shortcut_classic" android:shortcutLongLabel="@string/shortcut_classic_long">
         <intent android:action="android.intent.action.MAIN" android:targetPackage="com.nickbolles.jarvis" android:targetClass="com.nickbolles.jarvis.MainActivity" />
     </shortcut>
 </shortcuts>
