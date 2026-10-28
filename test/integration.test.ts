@@ -21,7 +21,7 @@ import { adapterContext, getHome, refreshSource } from "@/server/sources";
 import { evaluateException, homeHealth, parseAllowlist } from "@/integrations/home-assistant/adapter";
 import { executeControl, listControls } from "@/integrations/home-assistant/controls";
 import { track, trackIdempotencyKey } from "@/integrations/paperclip/service";
-import { tick } from "@/server/worker";
+import { alertIntegrationFailures, tick } from "@/server/worker";
 import { updatePreferences } from "@/server/settings";
 import { clearSnapshot, extractJson, parseStructured, saveSnapshot } from "@/integrations/hermes/structured";
 import { mapHermesAnswer, skylightHermesRequest } from "@/integrations/skylight/adapter";
@@ -372,6 +372,24 @@ describe("worker", () => {
     expect(titles).toContain("Paperclip is failing");
     expect(titles.some((t) => t.startsWith("House alarm"))).toBe(true);
     await mock("/fail", { restore: ["paperclip"] });
+  });
+
+  it("alerts on sustained failures without the worker (production dispatcher path), once per streak", async () => {
+    updatePreferences({ integrationFailureAlertMinutes: 5 });
+    await mock("/fail", { services: ["paperclip"] });
+    await refreshSource("paperclip", adapterContext());
+    const since = new Date(Date.now() - 20 * 60000).toISOString();
+    getDb().update(schema.sourceSnapshots).set({ firstFailureAt: since }).where(eq(schema.sourceSnapshots.source, "paperclip")).run();
+    const count = () =>
+      listNotifications(userId).filter((n) => n.type === "integration.failure" && n.source === "paperclip" && n.dedupeKey === `integration:paperclip:${since}`)
+        .length;
+    expect(alertIntegrationFailures()).toContain("paperclip");
+    expect(count()).toBe(1);
+    alertIntegrationFailures();
+    expect(count()).toBe(1);
+    await mock("/fail", { restore: ["paperclip"] });
+    await refreshSource("paperclip", adapterContext());
+    expect(alertIntegrationFailures()).not.toContain("paperclip");
   });
 });
 
