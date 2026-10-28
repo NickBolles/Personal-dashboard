@@ -31,13 +31,17 @@ export function WorkflowSurface({ kind, prRef, compact = false }: { kind: Workfl
   const qc = useQueryClient();
   const { toast } = useToast();
   const settings = useSmartSettings();
-  const key = ["smart-workflow", kind, prRef ?? ""];
+  // The local day is part of the identity, so a page left open past midnight (or a week
+  // boundary) asks the server again, which picks that period's surface.
+  const day = new Date().toLocaleDateString("en-CA");
+  const key = ["smart-workflow", kind, prRef ?? "", kind === "pr" ? "" : day];
   const enabled = settings.data?.enabled === true;
   const q = useQuery({
     queryKey: key,
     queryFn: () => api.post<WorkflowResponse>("/api/smart/workflows", { kind, ...(prRef ? { ref: prRef } : {}) }),
     enabled,
-    staleTime: Infinity,
+    // Refetching returns the stored surface for the period (same builtAt, no remount), so focus refetches are cheap.
+    staleTime: 5 * 60_000,
   });
   const rebuild = useMutation({
     mutationFn: () => api.post<WorkflowResponse>("/api/smart/workflows", { kind, ...(prRef ? { ref: prRef } : {}), rebuild: true }),

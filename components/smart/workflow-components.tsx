@@ -279,7 +279,9 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
     const d = pos(b).day;
     return d && hyd(s.refs[b.ref], ["todo", "item"]) && d !== dueOf(b.ref) && !s.staged.has(b.ref) && !s.applied.get(b.ref);
   });
-  const calCandidates = p.blocks.filter((b) => pos(b).day && pos(b).start && hyd(s.refs[b.ref], ["todo", "item"]) && !s.staged.has(`cal:${b.ref}`));
+  const calCandidates = p.blocks.filter(
+    (b) => pos(b).day && pos(b).start && hyd(s.refs[b.ref], ["todo", "item"]) && !s.staged.has(`cal:${b.ref}`) && !s.applied.get(`cal:${b.ref}`),
+  );
 
   const fixedMin = (d: string) =>
     (cal?.events ?? [])
