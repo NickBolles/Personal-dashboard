@@ -815,10 +815,10 @@
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 640px) {
   .pb-nav {
-    /* the command dock lives in the rail on desktop: no reserved gutter */
-    padding-bottom: 2rem;
+    /* tablet/desktop: gutter for the bottom-centre command dock */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
   }
 }
 
@@ -989,7 +989,14 @@ details.jv-why > summary::-webkit-details-marker {
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
   -webkit-touch-callout: none;
 }
-.dock-orb:focus-visible {
+.dock-tide {
+  box-shadow:
+    0 0 0 4px var(--bg),
+    0 6px 18px color-mix(in srgb, var(--o2) 45%, transparent);
+  -webkit-touch-callout: none;
+}
+.dock-orb:focus-visible,
+.dock-tide:focus-visible {
   outline: 3px solid var(--text);
   outline-offset: 3px;
 }

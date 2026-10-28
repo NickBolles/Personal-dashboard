@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, useOnline } from "@/components/ui";
-import { GearIcon, MoreIcon, PanelIcon, SearchIcon } from "@/components/icons";
+import { ChatIcon, ChevronIcon, GearIcon, MoreIcon, PlusIcon, SearchIcon, TodoIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
@@ -23,9 +23,15 @@ const MORE: Dest = {
   match: (p) => p === "/more" || DESTINATIONS.some((d) => d.match(p)) || p.startsWith("/settings"),
 };
 
+const INBOX: Dest = { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: TodoIcon, match: () => false };
+const CHAT: Dest = { key: "chat", href: "/chat", label: "Chat", icon: ChatIcon, match: (p) => p.startsWith("/chat") };
+const isAreasPath = (p: string) => p === "/areas" || p.startsWith("/areas/") || p === "/work" || p.startsWith("/work/");
+
 const SETTINGS: Dest = { key: "settings", href: "/settings", label: "Settings", icon: GearIcon, match: (p) => p.startsWith("/settings") };
 
 function destFor(path: string) {
+  // Chat has its own memory slot: the top row's Areas link must not return to a chat route.
+  if (CHAT.match(path)) return CHAT;
   return [...PRIMARY, SETTINGS, ...DESTINATIONS].find((d) => d.match(path));
 }
 
@@ -74,67 +80,29 @@ export function useUnreadCount() {
   });
 }
 
-/*
- * Rail state: one global state everywhere (design review D3), so moving
- * between Home and Areas never shifts the layout. Default: the icon rail up
- * to 1440px wide, expanded above; the person's explicit choice ("jarvis:rail")
- * wins and is remembered.
- */
-const RAIL_EVENT = "jarvis:rail-change";
-const WIDE_RAIL = "(min-width: 1441px)";
-function subscribeRail(cb: () => void) {
-  const m = window.matchMedia(WIDE_RAIL);
-  m.addEventListener("change", cb);
-  window.addEventListener(RAIL_EVENT, cb);
-  window.addEventListener("storage", cb);
-  return () => {
-    m.removeEventListener("change", cb);
-    window.removeEventListener(RAIL_EVENT, cb);
-    window.removeEventListener("storage", cb);
-  };
-}
-function readPref(key: string) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function useRail() {
-  const wide = useSyncExternalStore(
-    subscribeRail,
-    () => window.matchMedia(WIDE_RAIL).matches,
-    () => false,
-  );
-  const pref = useSyncExternalStore(
-    subscribeRail,
-    () => readPref("jarvis:rail"),
-    () => null,
-  );
-  const collapsed = pref === "collapsed" || (pref !== "expanded" && !wide);
-  const toggle = () => {
-    try {
-      localStorage.setItem("jarvis:rail", collapsed ? "expanded" : "collapsed");
-    } catch {
-      /* private mode: no memory */
-    }
-    window.dispatchEvent(new Event(RAIL_EVENT));
-  };
-  return { collapsed, toggle };
-}
-
 export function AppShell({ children, userName }: { children: ReactNode; userName: string }) {
   const pathname = usePathname();
   const hrefFor = useNavMemory(pathname);
   const online = useOnline();
   const unread = useUnreadCount().data?.unread ?? 0;
-  const { collapsed, toggle: toggleRail } = useRail();
   const mainRef = useRef<HTMLElement>(null);
   const { capabilities } = useAccess();
   const primary = PRIMARY.filter((d) => allowed(d, capabilities));
-  const destinations = DESTINATIONS.filter((d) => allowed(d, capabilities));
+  // The phone bar holds four destinations around the orb; Hermes-only people (no Areas) keep Chat.
+  const barItems = primary.filter((d) => d.key !== "chat" || !primary.some((p) => p.key === "areas")).slice(0, 3);
+  const hasAreas = primary.some((p) => p.key === "areas");
+  const canChat = capabilities.includes("hermes.chat");
+  // Desktop/tablet top row (§5): Today · Inbox · Areas · Chat · Alerts · More.
+  const topItems: Dest[] = [
+    ...primary.filter((d) => d.key === "home"),
+    ...(hasAreas ? [INBOX, { ...primary.find((d) => d.key === "areas")!, match: isAreasPath }] : []),
+    ...(canChat ? [CHAT] : []),
+    ...primary.filter((d) => d.key === "alerts"),
+    MORE,
+  ];
   const [searchOpen, setSearchOpen] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [newMenu, setNewMenu] = useState(false);
   const canWork = capabilities.includes("work.use");
   const newChat = useAskHermes();
   const startChat = useRef(newChat.start);
@@ -189,106 +157,146 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     ) : null;
   const badgeLabel = unread > 0 ? `, ${unread} unread` : "";
 
-  // Rail rows keep a 44px hit area (touch laptops; e2e a11y contract) but read as compact rows.
-  const railItem = (d: Dest) => {
-    const active = d.match(pathname);
+  const initials =
+    userName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join("") || "?";
+  // Top-row items keep a 44px hit area (touch laptops; e2e a11y contract); labels drop to icons below 1024px.
+  const topItem = (d: Dest) => {
+    const active = d.key === "more" ? MORE.match(pathname) && !topItems.some((p) => p.key !== "more" && p.match(pathname)) : d.match(pathname);
     const Icon = d.icon;
     return (
       <li key={d.key}>
         <Link
-          href={hrefFor(d)}
+          href={d.key === "more" || d.key === "inbox" ? d.href : hrefFor(d)}
           aria-current={active ? "page" : undefined}
-          aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
-          title={collapsed ? d.label : undefined}
+          aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : d.label}
+          title={d.label}
           className={cx(
-            "group relative flex min-h-11 items-center gap-2.5 rounded-[8px] px-2.5 text-[0.875rem]",
-            active ? "bg-surface font-semibold text-text shadow-[var(--shadow)] ring-1 ring-line" : "text-muted hover:bg-surface hover:text-text",
-            collapsed && "justify-center px-0",
+            "relative flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[8px] px-2 text-[0.875rem] lg:px-2.5",
+            active ? "bg-surface-2 font-semibold text-text" : "text-muted hover:bg-surface-2 hover:text-text",
           )}
         >
           <span className="relative">
             <Icon className={cx("h-[18px] w-[18px]", active ? "text-accent" : "")} />
-            {d.key === "alerts" && collapsed ? badge : null}
+            {d.key === "alerts" ? badge : null}
           </span>
-          <span className={collapsed ? "sr-only" : "min-w-0 flex-1 truncate"}>
+          <span aria-hidden="true" className="hidden lg:inline">
             {d.label}
-            {d.key === "alerts" ? <span className="sr-only">{badgeLabel}</span> : null}
           </span>
-          {d.key === "alerts" && !collapsed && unread > 0 ? (
-            <span aria-hidden="true" data-dynamic className="rounded-full bg-warn-soft px-1.5 text-[11px] leading-[18px] font-bold text-warn">
-              {unread > 99 ? "99+" : unread}
-            </span>
-          ) : null}
         </Link>
       </li>
     );
   };
+  const newPrimary = () => {
+    setNewMenu(false);
+    if (canWork) setCapturing(true);
+    else if (canChat) window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+  };
 
   return (
-    <div className="min-h-dvh lg:flex">
-      {/* Desktop / tablet rail */}
-      <nav
-        aria-label="Primary"
-        className={cx(
-          "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-line bg-surface-2 px-2.5 py-2.5 lg:flex",
-          collapsed ? "w-[66px]" : "w-[232px]",
-        )}
-      >
-        <div className={cx("mb-1 flex items-center", collapsed ? "justify-center" : "justify-between pl-1.5")}>
-          {!collapsed ? (
-            <span className="flex items-center gap-2 text-[0.9375rem] font-bold tracking-[-0.01em]">
-              <span aria-hidden="true" className="brand-mark" />
-              Jarvis
-            </span>
-          ) : null}
+    <div className="min-h-dvh">
+      {/* Desktop / tablet: one top row (§5). */}
+      <header className="hidden border-b border-line bg-surface sm:block">
+        <nav aria-label="Primary" className="flex h-11 items-center gap-1 px-2 lg:px-3">
+          <Link
+            href="/home"
+            aria-label="Jarvis home"
+            className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em]"
+          >
+            <span aria-hidden="true" className="brand-mark" />
+            <span className="hidden xl:inline">Jarvis</span>
+          </Link>
+          <ul className="flex min-w-0 items-center gap-0.5">{topItems.map(topItem)}</ul>
+          <span className="flex-1" />
           <button
             type="button"
-            onClick={toggleRail}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
-            aria-expanded={!collapsed}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface hover:text-text"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search (Ctrl K)"
+            title="Search (Ctrl K)"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
           >
-            <PanelIcon className="h-[18px] w-[18px]" />
+            <SearchIcon className="h-[18px] w-[18px]" />
           </button>
-        </div>
-        <button
-          type="button"
-          onClick={() => setSearchOpen(true)}
-          title={collapsed ? "Search (Ctrl K)" : undefined}
-          className={cx(
-            "mb-2 flex min-h-11 w-full items-center gap-2 rounded-[9px] text-[0.8125rem] text-muted hover:text-text",
-            collapsed ? "justify-center hover:bg-surface" : "border border-line bg-surface px-2.5 shadow-[var(--shadow)] hover:border-line-strong",
-          )}
-        >
-          <SearchIcon className="h-4 w-4 shrink-0" />
-          <span className={collapsed ? "sr-only" : "flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap"}>
-            Search…
-            {!collapsed ? <kbd className="kbd">Ctrl K</kbd> : null}
-          </span>
-        </button>
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
-          <ul>{primary.map(railItem)}</ul>
-          {collapsed ? (
-            <hr className="my-2 border-line" />
-          ) : (
-            <p aria-hidden="true" className="eyebrow px-2.5 pt-3 pb-1">
-              Spaces
-            </p>
-          )}
-          <ul>{destinations.map(railItem)}</ul>
-        </div>
-        <div className={cx("mt-2 border-t border-line pt-2", collapsed && "flex flex-col items-center")}>
-          {/* Command dock: docked in the rail foot on desktop so it never covers page content. */}
-          <CommandDock variant="rail" compact={collapsed} />
-          <p className={cx("flex min-h-7 items-center gap-2 px-2.5 text-xs text-muted", collapsed && "justify-center px-0")} role="status">
-            <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full", online ? "bg-ok" : "bg-warn")} />
-            <span className={collapsed ? "sr-only" : "truncate"}>{online ? `Online · ${userName}` : "Offline"}</span>
-          </p>
-          <ul className={collapsed ? "w-full" : undefined}>{railItem(SETTINGS)}</ul>
-        </div>
-      </nav>
+          {canWork || canChat ? (
+            <div className="relative flex items-center">
+              <button
+                type="button"
+                onClick={newPrimary}
+                aria-label={canWork ? "New capture" : "New chat"}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-l-[8px] bg-accent px-3 text-[0.8125rem] font-semibold text-accent-contrast hover:opacity-90"
+              >
+                <PlusIcon className="h-4 w-4" />
+                <span className="hidden lg:inline">New</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewMenu((o) => !o)}
+                aria-label="More new options"
+                aria-haspopup="menu"
+                aria-expanded={newMenu}
+                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-r-[8px] border-l border-black/15 bg-accent text-accent-contrast hover:opacity-90"
+              >
+                <ChevronIcon className="h-3.5 w-3.5 rotate-90" />
+              </button>
+              {newMenu ? (
+                <div
+                  role="menu"
+                  aria-label="New"
+                  className="absolute top-full right-0 z-50 mt-1 w-44 rounded-[10px] border border-line bg-surface p-1 shadow-[var(--sh2,var(--shadow))]"
+                >
+                  {canWork ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setNewMenu(false);
+                        setCapturing(true);
+                      }}
+                      className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
+                    >
+                      Capture
+                    </button>
+                  ) : null}
+                  {canChat ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setNewMenu(false);
+                        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+                      }}
+                      className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
+                    >
+                      Chat
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <Link
+            href={hrefFor(SETTINGS)}
+            aria-label={`Settings · ${online ? "online" : "offline"} · ${userName}`}
+            aria-current={SETTINGS.match(pathname) ? "page" : undefined}
+            title={online ? `Online · ${userName}` : "Offline"}
+            className="relative ml-1 inline-flex min-h-11 min-w-11 items-center justify-center"
+          >
+            <span
+              aria-hidden="true"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-surface-2 text-[11px] font-bold text-text ring-1 ring-line"
+            >
+              {initials}
+            </span>
+            <span aria-hidden="true" className={cx("absolute right-1.5 bottom-1.5 h-2 w-2 rounded-full ring-2 ring-surface", online ? "bg-ok" : "bg-warn")} />
+          </Link>
+        </nav>
+      </header>
 
-      <main id="main" ref={mainRef} tabIndex={-1} className="pb-nav min-w-0 flex-1 outline-none">
+      <main id="main" ref={mainRef} tabIndex={-1} className="pb-nav min-w-0 outline-none">
         {!online ? (
           <div role="status" className="sticky top-0 z-30 border-b border-warn bg-warn-soft px-4 py-2 text-center text-sm text-warn">
             You’re offline. Showing last-known data; changes and home controls are paused.
@@ -296,14 +304,22 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         ) : null}
         {children}
       </main>
+      {/* Tablet / desktop: bottom-centre command dock (§5). Chat has its own composer there. */}
+      {!pathname.startsWith("/chat") ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 hidden justify-center px-4 sm:flex">
+          <div className="pointer-events-auto w-full max-w-[520px]">
+            <CommandDock variant="dock" />
+          </div>
+        </div>
+      ) : null}
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
 
-      {/* Mobile bottom bar: fixed four items */}
-      <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur lg:hidden">
-        <ul className={cx("mx-auto grid max-w-xl overflow-hidden", primary.length === 3 ? "grid-cols-5" : "grid-cols-4")}>
-          {[...primary, MORE].map((d, i, all) => {
-            const active = d.key === "more" ? MORE.match(pathname) && !primary.some((p) => p.match(pathname)) : d.match(pathname);
+      {/* Phone bottom bar (§5): Today · Areas · [orb] · Alerts · More. Chat and Inbox are reached from the orb / More. */}
+      <nav aria-label="Primary" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur sm:hidden">
+        <ul className="mx-auto grid max-w-xl grid-cols-5">
+          {[...barItems, MORE].map((d, i, all) => {
+            const active = d.key === "more" ? MORE.match(pathname) && !barItems.some((p) => p.match(pathname)) : d.match(pathname);
             const Icon = d.icon;
             // The command dock is the centre item of the bar (never overlapping it).
             const dock =
