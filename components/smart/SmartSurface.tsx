@@ -6,10 +6,10 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { LIMITS, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
-import { describeIntent, intentKey, intentTarget, type Intent } from "@/lib/jarvis-ui/intents";
+import { describeIntent, intentKey, intentTarget, isExternal, type Intent } from "@/lib/jarvis-ui/intents";
 import { canonicalJson, specRefs } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, ApplyResult, HydrateResponse, SurfaceView } from "@/lib/jarvis-ui/types";
-import { Button, cx, useToast } from "@/components/ui";
+import { Button, Dialog, cx, useToast } from "@/components/ui";
 import { SurfaceContext, type SurfaceCtx } from "./context";
 import { registry } from "./registry";
 
@@ -23,6 +23,9 @@ function localToday() {
  * re-validates it), hydrates refs from live Jarvis data, and keeps a change
  * tray: taps stage intents; nothing is written until "Apply N changes".
  */
+/** Components that can stage a change; surfaces without one (a PR card) show no tray. */
+const STAGING = new Set(["TaskList", "DecisionCard", "ApprovalChips", "WeekPlan"]);
+
 export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: JarvisSpec; sessionId: string; blockIndex: number; dropped: number }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -44,6 +47,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const [staged, setStaged] = useState<Map<string, Intent>>(new Map());
   const [errors, setErrors] = useState<Map<string, string>>(new Map());
   const [review, setReview] = useState(false);
+  const [approveCal, setApproveCal] = useState(false);
   const [undoing, setUndoing] = useState<string>();
   const batch = useRef<{ sig: string; key: string }>(undefined);
   const checkSeq = useRef(0);
@@ -56,6 +60,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     return m;
   }, [view]);
   const checks = Array.isArray(view?.state.checks) ? (view!.state.checks as string[]) : [];
+  const skips = Array.isArray(view?.state.skips) ? (view!.state.skips as string[]) : [];
 
   const setView = (v: SurfaceView) => qc.setQueryData(surfaceKey, v);
   // Apply/undo responses carry the applied history; keep the newest local UI state (checklist ticks).
@@ -63,8 +68,9 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const refreshData = () => qc.invalidateQueries({ queryKey: ["smart-hydrate"] });
 
   const apply = useMutation({
-    mutationFn: async () => {
-      const entries = [...staged.entries()];
+    mutationFn: async (external: boolean) => {
+      // Calendar blocks never ride along with an ordinary Apply: they go out only from their own approval.
+      const entries = [...staged.entries()].filter(([, i]) => isExternal(i) === external);
       // One idempotency key per staged batch (unique across reloads and devices);
       // a retry of the very same batch reuses it so the server can replay.
       const sig = canonicalJson(entries);
@@ -78,6 +84,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
           surfaceId: view!.id,
           intents: chunk.map(([, intent]) => intent),
           idempotencyKey: `${batch.current.key}:${i / LIMITS.applyIntents}`,
+          ...(external ? { external: true } : {}),
         });
         results.push(...r.results);
         next = r.surface;
@@ -101,8 +108,14 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
         for (const [k, key] of done) if (keep.get(k) && intentKey(keep.get(k)!) === key) keep.delete(k);
         return keep;
       });
-      setErrors(errs);
+      setErrors((prev) => {
+        const next = new Map(prev);
+        for (const [k] of entries) next.delete(k);
+        for (const [k, v] of errs) next.set(k, v);
+        return next;
+      });
       setReview(false);
+      setApproveCal(false);
       const ok = results.filter((r) => r.ok).length;
       toast(errs.size ? `${ok} applied, ${errs.size} failed (still staged)` : `${ok} ${ok === 1 ? "change" : "changes"} applied`, errs.size ? "warn" : "ok");
       refreshData();
@@ -151,32 +164,43 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
         setUndoing(undefined);
       }
     },
-    toggleCheck: (id) => {
-      if (!view || view.readOnly) return;
-      const next = checks.includes(id) ? checks.filter((c) => c !== id) : [...checks, id];
-      setView({ ...view, state: { ...view.state, checks: next } });
-      // Saves run one at a time and only the newest edit is sent, so a slow or
-      // out-of-order response can never drop a newer tick.
-      const mine = ++checkSeq.current;
-      saveChain.current = saveChain.current.then(async () => {
-        if (mine !== checkSeq.current) return;
-        const latest = qc.getQueryData<SurfaceView>(surfaceKey);
-        if (!latest) return;
-        try {
-          const saved = await api.patch<SurfaceView>(`/api/smart/surfaces/${encodeURIComponent(latest.id)}/state`, { state: latest.state });
-          if (mine === checkSeq.current) qc.setQueryData<SurfaceView>(surfaceKey, (prev) => (prev ? { ...prev, state: saved.state } : saved));
-        } catch {
-          toast("Couldn't save that tick", "danger");
-        }
-      });
-    },
+    toggleCheck: (id) => patchState({ checks: checks.includes(id) ? checks.filter((c) => c !== id) : [...checks, id] }, "Couldn't save that tick"),
+    skips,
+    toggleSkip: (ref) => patchState({ skips: skips.includes(ref) ? skips.filter((c) => c !== ref) : [...skips, ref] }, "Couldn't save that"),
+    uiState: view?.state ?? {},
+    patchState: (patch) => patchState(patch, "Couldn't save the plan"),
   };
+
+  /** Surface UI state (ticks, skips, block positions): never a write to your data, saved one at a time, newest wins. */
+  function patchState(patch: Record<string, unknown>, failMsg: string) {
+    if (!view || view.readOnly) return;
+    const cur = qc.getQueryData<SurfaceView>(surfaceKey) ?? view;
+    setView({ ...cur, state: { ...cur.state, ...patch } });
+    // Saves run one at a time and only the newest edit is sent, so a slow or
+    // out-of-order response can never drop a newer change.
+    const mine = ++checkSeq.current;
+    saveChain.current = saveChain.current.then(async () => {
+      if (mine !== checkSeq.current) return;
+      const latest = qc.getQueryData<SurfaceView>(surfaceKey);
+      if (!latest) return;
+      try {
+        const saved = await api.patch<SurfaceView>(`/api/smart/surfaces/${encodeURIComponent(latest.id)}/state`, { state: latest.state });
+        if (mine === checkSeq.current) qc.setQueryData<SurfaceView>(surfaceKey, (prev) => (prev ? { ...prev, state: saved.state } : saved));
+      } catch {
+        toast(failMsg, "danger");
+      }
+    });
+  }
 
   const titleOf = (ref: string) => {
     const h = ctx.refs[ref];
     return h && "title" in h ? h.title : undefined;
   };
-  const n = staged.size;
+  const stagedList = [...staged.entries()];
+  const regular = stagedList.filter(([, i]) => !isExternal(i));
+  const external = stagedList.filter(([, i]) => isExternal(i));
+  const n = regular.length;
+  const stageable = Object.values(spec.elements).some((e) => STAGING.has(e.type));
 
   if (surface.isError) {
     return <p className="text-xs text-muted">Interactive part unavailable: {surface.error instanceof ApiError ? surface.error.message : "try again later"}.</p>;
@@ -191,11 +215,11 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
           </JSONUIProvider>
           {dropped ? <p className="text-xs text-muted">Some content couldn’t be shown.</p> : null}
         </div>
-        {readOnly ? null : (
+        {readOnly || !stageable ? null : (
           <div className="sticky bottom-0 border-t border-line-strong bg-surface">
             {review && n ? (
               <ul className="max-h-60 overflow-y-auto border-b border-line px-3 py-1.5 text-sm" aria-label="Staged changes">
-                {[...staged.entries()].map(([k, i]) => (
+                {regular.map(([k, i]) => (
                   <li key={k} className="flex items-center gap-2 py-1">
                     <span className="min-w-0 flex-1">{describeIntent(i, titleOf)}</span>
                     <Button size="sm" variant="ghost" onClick={() => ctx.stage(k, undefined)} aria-label={`Remove: ${describeIntent(i, titleOf)}`}>
@@ -214,15 +238,52 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
                   <Button size="sm" variant="ghost" aria-expanded={review} onClick={() => setReview((r) => !r)}>
                     {review ? "Hide" : "Review"}
                   </Button>
-                  <Button size="sm" variant="primary" busy={apply.isPending} onClick={() => apply.mutate()}>
+                  <Button size="sm" variant="primary" busy={apply.isPending && !approveCal} onClick={() => apply.mutate(false)}>
                     Apply {n} {n === 1 ? "change" : "changes"}
                   </Button>
                 </>
               ) : null}
             </div>
+            {external.length ? (
+              <div className="flex items-center gap-2 border-t border-line px-3 py-2">
+                <p className="min-w-0 flex-1 text-sm" data-testid="smart-calendar-count">
+                  {external.length} calendar {external.length === 1 ? "block" : "blocks"} staged · needs its own approval
+                </p>
+                <Button size="sm" onClick={() => setApproveCal(true)}>
+                  Review calendar…
+                </Button>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
+      {approveCal && external.length ? (
+        <Dialog
+          open
+          onClose={() => setApproveCal(false)}
+          title={`Add ${external.length} ${external.length === 1 ? "block" : "blocks"} to the calendar?`}
+          description="These are written to the household calendar in Home Assistant and read back. Jarvis can't remove them later; delete them in the calendar if you change your mind."
+          footer={
+            <>
+              <Button onClick={() => setApproveCal(false)}>Cancel</Button>
+              <Button variant="primary" busy={apply.isPending} onClick={() => apply.mutate(true)}>
+                Add to calendar
+              </Button>
+            </>
+          }
+        >
+          <ul className="space-y-1 text-sm" aria-label="Calendar blocks to add">
+            {external.map(([k, i]) => (
+              <li key={k} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1">{describeIntent(i, titleOf)}</span>
+                <Button size="sm" variant="ghost" onClick={() => ctx.stage(k, undefined)} aria-label={`Remove: ${describeIntent(i, titleOf)}`}>
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Dialog>
+      ) : null}
     </SurfaceContext.Provider>
   );
 }

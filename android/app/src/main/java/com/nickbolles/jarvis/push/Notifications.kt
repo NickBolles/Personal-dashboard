@@ -5,11 +5,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.nickbolles.jarvis.MainActivity
+import com.nickbolles.jarvis.web.TwaLauncherActivity
 import com.nickbolles.jarvis.R
 
 /** Builds phone notifications from Jarvis's FCM data messages. */
@@ -39,8 +38,8 @@ object Notifications {
     }
 
     fun openIntent(context: Context, path: String, requestCode: Int): PendingIntent {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("jarvis://open${if (path.startsWith("/")) path else "/$path"}"), context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        // Opens the web page for the notification's deep link in the app (Trusted Web Activity).
+        val intent = TwaLauncherActivity.intent(context, path)
         return PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 

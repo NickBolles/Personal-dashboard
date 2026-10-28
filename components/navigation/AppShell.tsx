@@ -164,6 +164,13 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     const onOpen = () => setSearchOpen(true);
     window.addEventListener("keydown", onKey);
     window.addEventListener(OPEN_SEARCH_EVENT, onOpen);
+    // ?search=1 opens search (the Android app's search shortcut; there's no /search page).
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("search") === "1") {
+      url.searchParams.delete("search");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+      window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
+    }
     return () => {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener(OPEN_SEARCH_EVENT, onOpen);

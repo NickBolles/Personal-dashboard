@@ -1,6 +1,7 @@
 "use client";
 
 import { QuickCapture } from "@/components/chat/QuickCapture";
+import { ContextNote } from "@/components/chat/ContextNote";
 import { SessionList } from "@/components/chat/SessionList";
 import { BackendSwitch } from "@/components/chat/backend";
 import { ConversationsView } from "@/components/areas/ConversationsView";
@@ -15,12 +16,7 @@ export function ChatIndex({ startNew, context, draft, view }: { startNew?: boole
     <Page width="narrow">
       <PageHeader title="Hermes" subtitle="Start something new or pick up a conversation." actions={<BackendSwitch />} />
       <div className="mb-5">
-        {context ? (
-          <div className="mb-2 rounded-[10px] border border-line bg-surface-2 px-3 py-2 text-sm">
-            <p className="eyebrow">Attached context</p>
-            <p className="mt-0.5">{context}</p>
-          </div>
-        ) : null}
+        {context ? <ContextNote context={context} /> : null}
         <QuickCapture
           key={draft ?? "q"}
           mode="ask"

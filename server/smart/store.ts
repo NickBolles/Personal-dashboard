@@ -27,11 +27,12 @@ const settingsKey = (userId: string) => `smart:user:${userId}`;
 
 export function getSmartSettings(userId: string): SmartSettings {
   const s = getSetting<Partial<SmartSettings>>(settingsKey(userId));
-  return { enabled: s?.enabled === true };
+  return { enabled: s?.enabled === true, calendarWrites: s?.calendarWrites === true };
 }
 
 export function saveSmartSettings(userId: string, patch: Partial<SmartSettings>): SmartSettings {
-  const next = { ...getSmartSettings(userId), ...patch };
+  const clean = Object.fromEntries(Object.entries(patch).filter(([, v]) => typeof v === "boolean"));
+  const next = { ...getSmartSettings(userId), ...clean };
   setSetting(settingsKey(userId), next);
   return next;
 }
@@ -118,12 +119,24 @@ export function lookup(user: CurrentUser): Lookup {
   };
 }
 
-export function hydrate(user: CurrentUser, refs: string[]): Record<string, HydratedRef> {
+export async function hydrate(user: CurrentUser, refs: string[]): Promise<Record<string, HydratedRef>> {
   const l = lookup(user);
   const out: Record<string, HydratedRef> = {};
+  const data = await import("./data");
+  const prs: Promise<void>[] = [];
+  let prCount = 0;
   for (const ref of [...new Set(refs)].slice(0, LIMITS.hydrateRefs)) {
-    out[ref] = ref.startsWith("todo:") ? l.todo(ref) : ref.startsWith("item:") ? l.item(ref) : { ref, unavailable: "unknown" };
+    if (ref.startsWith("todo:")) out[ref] = l.todo(ref);
+    else if (ref.startsWith("item:")) out[ref] = l.item(ref);
+    else if (ref.startsWith("metric:")) {
+      const id = ref.slice(7);
+      out[ref] = data.isMetric(id) ? data.metric(user, id) : { ref, unavailable: "unknown" };
+    } else if (ref.startsWith("cal:week:")) out[ref] = data.calendarWeek(user, ref);
+    // A reply may show a few PR cards; each costs read-only GitHub GETs (cached 60 s).
+    else if (ref.startsWith("pr:") && ++prCount <= 5) prs.push(data.pullRequest(user, ref).then((h) => void (out[ref] = h)));
+    else out[ref] = { ref, unavailable: "unknown" };
   }
+  await Promise.all(prs);
   return out;
 }
 

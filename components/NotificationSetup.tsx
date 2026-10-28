@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from "@/lib/client/push";
+import { isAndroidWrapper } from "@/lib/client/wrapper";
 import { Badge, Button, useToast } from "@/components/ui";
 
 export function PushControls() {
@@ -13,8 +14,11 @@ export function PushControls() {
   const [subscribed, setSubscribed] = useState<boolean>();
   const [perm, setPerm] = useState<string>("default");
   const [busy, setBusy] = useState(false);
+  // Inside the Android app the phone gets native (FCM) notifications: no web push opt-in here.
+  const [inApp, setInApp] = useState(false);
 
   useEffect(() => {
+    setInApp(isAndroidWrapper());
     setSupport(pushSupport());
     if (typeof Notification !== "undefined") setPerm(Notification.permission);
     currentSubscription().then((s) => setSubscribed(Boolean(s)));
@@ -35,7 +39,9 @@ export function PushControls() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span>This device:</span>
-        {support === "supported" ? (
+        {inApp && !subscribed ? (
+          <Badge tone="ok">Notifications from the Jarvis app</Badge>
+        ) : support === "supported" ? (
           subscribed ? (
             <Badge tone="ok">Push enabled</Badge>
           ) : perm === "denied" ? (
@@ -51,11 +57,16 @@ export function PushControls() {
           <Badge tone="warn">Not supported in this browser</Badge>
         )}
       </div>
-      {support === "insecure" ? (
+      {inApp ? (
+        <p className="text-sm text-muted" data-testid="android-app-push-note">
+          This phone gets notifications from the Jarvis app, so web push stays off here and nothing arrives twice.
+        </p>
+      ) : null}
+      {support === "insecure" && !inApp ? (
         <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Jarvis through its HTTPS address.</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {support === "supported" && !subscribed ? (
+        {support === "supported" && !subscribed && !inApp ? (
           <Button
             variant="primary"
             busy={busy}

@@ -92,6 +92,18 @@ export function specRefs(spec: JarvisSpec): string[] {
         if (o.intent?.parentRef) refs.add(o.intent.parentRef);
       }
     if (el.type === "TaskList" && p.promoteParentRef) refs.add(p.promoteParentRef as string);
+    if (el.type === "ApprovalChips") for (const r of p.rows as { ref: string }[]) refs.add(r.ref);
+    if (el.type === "WeekPlan") {
+      for (const b of p.blocks as { ref: string }[]) refs.add(b.ref);
+      refs.add(calendarRef(p.weekOf as string, (p.days as 5 | 7 | undefined) ?? 5));
+    }
+    if (el.type === "PRCard") refs.add(p.ref as string);
+    if ((el.type === "Gauge" || el.type === "Sparkline") && typeof p.metric === "string") refs.add(p.metric);
   }
   return [...refs];
+}
+
+/** The hydration ref for a week plan's fixed calendar events (synthesized by Jarvis; never written by the model). */
+export function calendarRef(weekOf: string, days: 5 | 7) {
+  return `cal:week:${weekOf}:${days}`;
 }

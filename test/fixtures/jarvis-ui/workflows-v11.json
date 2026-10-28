@@ -1,0 +1,73 @@
+{
+  "v": 1,
+  "catalog": "jarvis-ui@1",
+  "root": "r",
+  "elements": {
+    "r": {
+      "type": "Stack",
+      "props": {},
+      "children": ["n", "c", "w", "p"]
+    },
+    "n": {
+      "type": "Stack",
+      "props": {
+        "direction": "row",
+        "gap": "sm"
+      },
+      "children": ["g", "s"]
+    },
+    "g": {
+      "type": "Gauge",
+      "props": {
+        "metric": "metric:ai_spend_today"
+      }
+    },
+    "s": {
+      "type": "Sparkline",
+      "props": {
+        "metric": "metric:ai_spend_7d"
+      }
+    },
+    "c": {
+      "type": "ApprovalChips",
+      "props": {
+        "title": "Worth doing today",
+        "rows": [
+          {
+            "ref": "todo:gt-1",
+            "reason": "5 min"
+          },
+          {
+            "ref": "item:wi_1"
+          }
+        ]
+      }
+    },
+    "w": {
+      "type": "WeekPlan",
+      "props": {
+        "weekOf": "2026-10-26",
+        "days": 5,
+        "blocks": [
+          {
+            "ref": "todo:gt-1",
+            "day": "2026-10-28",
+            "start": "09:00",
+            "minutes": 30
+          },
+          {
+            "ref": "item:wi_1",
+            "day": null,
+            "minutes": 90
+          }
+        ]
+      }
+    },
+    "p": {
+      "type": "PRCard",
+      "props": {
+        "ref": "pr:NickBolles/jarvis#7"
+      }
+    }
+  }
+}

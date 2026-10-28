@@ -16,6 +16,8 @@ import { AreaSettingsCard } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
+import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
+import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
@@ -2065,6 +2067,8 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
   const remove = useWorkMutation(() => api.del(url), { ok: "Link removed" });
   const pull = useWorkMutation(() => api.post(`${url}/refresh`), { ok: "Refreshed from GitHub" });
   const name = l.title || l.targetId || l.url || "";
+  const smart = useSmartSettings();
+  const [reviewing, setReviewing] = useState(false);
   return (
     <li className="py-2 first:pt-0.5 last:pb-0.5">
       <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
@@ -2104,6 +2108,11 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
             Open<span className="sr-only">: {name} (opens in a new tab)</span>
           </a>
         ) : null}
+        {l.kind === "github_pr" && l.targetId && smart.data?.enabled ? (
+          <Button size="sm" variant="ghost" onClick={() => setReviewing(true)} aria-label={`Review card: ${name}`}>
+            Review card
+          </Button>
+        ) : null}
         {l.kind === "github_pr" && l.externalState !== "merged" ? (
           <Button size="sm" variant="ghost" onClick={() => state.mutate("merged")} busy={state.isPending}>
             Mark merged
@@ -2128,6 +2137,11 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
           ]}
         />
       </div>
+      {reviewing && l.targetId ? (
+        <Dialog open onClose={() => setReviewing(false)} title="Pull request" size="lg">
+          <WorkflowSurface kind="pr" prRef={`pr:${l.targetId}`} compact />
+        </Dialog>
+      ) : null}
     </li>
   );
 }
