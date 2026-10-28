@@ -20,7 +20,8 @@ test("inside the Android app without Firebase, web push is offered (FCM not conf
   await page.goto("/settings/notifications?source=android");
   const status = page.getByTestId("push-status");
   await expect(status).toContainText("This phone:");
-  await expect(status).toContainText("web push off");
+  // Headless Chromium may still report "denied" (→ "blocked"); either way the opt-in stays offered.
+  await expect(status).toContainText(/web push (off|blocked)/);
   await expect(page.getByTestId("fcm-status")).toHaveText("FCM not configured");
   await expect(page.getByTestId("android-app-webpush-note")).toBeVisible();
   await expect(page.getByTestId("android-app-push-note")).toHaveCount(0);
