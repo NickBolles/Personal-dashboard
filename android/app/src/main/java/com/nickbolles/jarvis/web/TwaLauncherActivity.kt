@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Bundle
 import com.google.androidbrowserhelper.trusted.LauncherActivity
 import com.nickbolles.jarvis.BuildConfig
+import com.nickbolles.jarvis.MainActivity
 import com.nickbolles.jarvis.data.AppGraph
 import com.nickbolles.jarvis.widgets.WidgetUpdater
 import kotlinx.coroutines.MainScope
@@ -21,6 +22,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Origin = the paired server when there is one, else the build-time default (jarvisOrigin).
  * Chrome checks /.well-known/assetlinks.json on that origin; if it fails, the page still opens
  * but with a URL bar.
+ *
+ * A phone that isn't paired yet goes through the native pairing screen first: pairing is what
+ * registers FCM and asks for the notification permission, and the web app turns web push off
+ * inside the app. After pairing, [MainActivity] hands back to this activity.
  */
 class TwaLauncherActivity : LauncherActivity() {
     private val scope = MainScope()
@@ -36,8 +41,13 @@ class TwaLauncherActivity : LauncherActivity() {
         runCatching { WidgetUpdater.requestRefresh(this) }
         val raw = intent?.data?.toString()
         scope.launch {
-            val paired = withTimeoutOrNull(2_000) { pairedServer(this@TwaLauncherActivity) }
-            target = Uri.parse(resolve(raw, paired))
+            val read = withTimeoutOrNull(2_000) { readPairedServer(this@TwaLauncherActivity) }
+            if (needsNativeSetup(read)) {
+                startActivity(setupIntent(this@TwaLauncherActivity))
+                finish()
+                return@launch
+            }
+            target = Uri.parse(resolve(raw, read?.getOrNull()))
             if (!isFinishing) launchTwa()
         }
     }
@@ -56,7 +66,19 @@ class TwaLauncherActivity : LauncherActivity() {
         fun resolve(raw: String?, pairedServer: String?): String =
             WebLinks.launchUrl(raw, WebLinks.origin(pairedServer, BuildConfig.JARVIS_ORIGIN), BuildConfig.JARVIS_ORIGIN)
 
-        private suspend fun pairedServer(context: Context): String? = runCatching { AppGraph.get(context).store.pairedServer() }.getOrNull()
+        private suspend fun readPairedServer(context: Context): Result<String?> = runCatching { AppGraph.get(context).store.pairedServer() }
+
+        /**
+         * Native setup first only when we know the phone isn't paired (the store read worked and
+         * holds no pairing). A slow or failing read opens the web app as before.
+         */
+        fun needsNativeSetup(read: Result<String?>?): Boolean = read != null && read.isSuccess && read.getOrNull() == null
+
+        /** Extra on [setupIntent]: once paired, MainActivity opens the web app and finishes. */
+        const val EXTRA_SETUP = "com.nickbolles.jarvis.extra.SETUP"
+
+        fun setupIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).putExtra(EXTRA_SETUP, true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         /** Explicit intent for widgets, the tile and notifications: opens [path] (a native or web path) in the app. */
         fun intent(context: Context, path: String): Intent =

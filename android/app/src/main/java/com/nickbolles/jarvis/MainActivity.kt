@@ -16,6 +16,7 @@ import com.nickbolles.jarvis.data.PairingState
 import com.nickbolles.jarvis.push.PushRegistrar
 import com.nickbolles.jarvis.ui.nav.JarvisRoot
 import com.nickbolles.jarvis.ui.nav.LaunchRequest
+import com.nickbolles.jarvis.web.TwaLauncherActivity
 import com.nickbolles.jarvis.widgets.WidgetUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterIsInstance
@@ -24,7 +25,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val requests = MutableStateFlow<LaunchRequest?>(null)
-    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { handOffAfterSetup() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,17 +36,27 @@ class MainActivity : ComponentActivity() {
         val graph = AppGraph.get(this)
         lifecycleScope.launch {
             graph.pairingState.filterIsInstance<PairingState.Paired>().first()
-            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
+            val ask = Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            if (ask) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
             PushRegistrar.register(graph)
             graph.prefs.refresh()
             WidgetUpdater.requestRefresh(this@MainActivity)
+            // Launched for first-run setup: with no permission prompt open, go on to the web app now.
+            if (!ask) handOffAfterSetup()
         }
+    }
+
+    /** First-run setup from the launcher (unpaired phone) is done: open the web app in its place. */
+    private fun handOffAfterSetup() {
+        if (!intent.getBooleanExtra(TwaLauncherActivity.EXTRA_SETUP, false) || isFinishing) return
+        intent.removeExtra(TwaLauncherActivity.EXTRA_SETUP)
+        startActivity(TwaLauncherActivity.intent(this, "/home"))
+        finish()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         LaunchRequest.from(intent)?.let { requests.value = it }
     }
 }

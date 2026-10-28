@@ -7,6 +7,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.nickbolles.jarvis.web.TwaLauncherActivity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +42,17 @@ class TwaWiringTest {
         assertEquals("https://jarvis.nickbolles.com/areas?item=abc&source=android", TwaLauncherActivity.resolve(i.dataString, null))
         assertEquals("https://jarvis.nickbolles.com/home?source=android", TwaLauncherActivity.resolve(null, null))
         assertEquals("https://jarvis.example.com/alerts?source=android", TwaLauncherActivity.resolve("jarvis://open/alerts", "https://jarvis.example.com"))
+    }
+
+    @Test fun anUnpairedPhoneGoesThroughNativePairingFirst() {
+        assertTrue(TwaLauncherActivity.needsNativeSetup(Result.success(null)))
+        assertFalse(TwaLauncherActivity.needsNativeSetup(Result.success("https://jarvis.nickbolles.com")))
+        // Slow or failing store read: open the web app rather than strand the user.
+        assertFalse(TwaLauncherActivity.needsNativeSetup(null))
+        assertFalse(TwaLauncherActivity.needsNativeSetup(Result.failure(IllegalStateException("x"))))
+        val i = TwaLauncherActivity.setupIntent(ctx)
+        assertEquals(ComponentName(ctx, MainActivity::class.java), i.component)
+        assertTrue(i.getBooleanExtra(TwaLauncherActivity.EXTRA_SETUP, false))
     }
 
     @Test fun assetStatementsNameTheSite() {
