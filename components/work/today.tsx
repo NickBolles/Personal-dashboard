@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ErrorNote, Spinner, cx } from "@/components/ui";
 import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
-import type { InboxResponse, TodayCard, TodayResponse } from "@/lib/work";
+import { STATUS_LABELS, type InboxResponse, type TodayCard, type TodayResponse } from "@/lib/work";
 
 export function useToday() {
   return useQuery({ queryKey: ["work", "today"], queryFn: () => api.get<TodayResponse>("/api/work/today") });
@@ -118,12 +118,9 @@ function CardList({
       {cards.length ? (
         <ul className="wk-rows">
           {cards.map((c) => (
-            <li
-              key={c.id}
-              className={cx("wk-row-hover flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-1.5", urgent && "border-l-[3px] border-l-warn pl-[9px]")}
-            >
+            <li key={c.id} className={cx("wk-row-hover flex items-center gap-x-2.5 px-3 py-1.5", urgent && "border-l-[3px] border-l-warn pl-[9px]")}>
               <StatusDot status={c.status} />
-              <div className="min-w-0 flex-1 basis-48">
+              <div className="min-w-0 flex-1">
                 <button
                   type="button"
                   className="tap min-w-0 text-left text-[14px] leading-snug font-semibold break-words hover:underline"
@@ -131,12 +128,16 @@ function CardList({
                 >
                   {c.title}
                 </button>
-                <p className="text-xs break-words text-muted">
+                <p className="line-clamp-2 text-xs break-words text-muted">
                   {[c.path, c.detail, c.due ? `due ${fmtShort(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              <span className="ml-auto flex shrink-0 items-center gap-2">
-                <StatusBadge status={c.status} />
+              {/* Phones: the dot carries the status; the pill joins it from 640px. The action stays on the right. */}
+              <span className="flex shrink-0 items-center gap-2 self-center">
+                <span className="hidden sm:inline-flex">
+                  <StatusBadge status={c.status} />
+                </span>
+                <span className="sr-only sm:hidden">{STATUS_LABELS[c.status]}</span>
                 <Button size="sm" variant={urgent ? "primary" : "secondary"} onClick={() => onOpen(c.id, action.do)} aria-label={`${action.label}: ${c.title}`}>
                   {action.label}
                 </Button>

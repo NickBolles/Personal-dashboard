@@ -581,6 +581,9 @@ button.wk-kpi:hover {
   .wk-hub .wk-nav li {
     min-width: 0;
   }
+  .wk-hub .wk-nav-item > span[aria-hidden] {
+    display: none;
+  }
   .wk-hub .wk-nav li .wk-nav-item {
     width: 100%;
     justify-content: center;

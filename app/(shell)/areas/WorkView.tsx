@@ -840,6 +840,8 @@ function ItemDetail({
     );
 
   const kids = d.children.filter((c) => !c.archived);
+  // "PR merged — settle?" carries the Settle action itself; nothing else repeats it.
+  const settlePrompt = item.status === "ready_to_settle" && !container;
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
     <span className="inline-flex items-center gap-1" data-status={item.status}>
@@ -932,7 +934,7 @@ function ItemDetail({
         </div>
         {item.summary ? <Summary key={item.id} text={item.summary} /> : null}
         {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
-        {item.status === "ready_to_settle" && !container ? (
+        {settlePrompt ? (
           <div
             role="status"
             data-testid="settle-prompt"
@@ -955,7 +957,7 @@ function ItemDetail({
             <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
               + {childLabel}
             </Button>
-          ) : (
+          ) : settlePrompt ? null : (
             primary
           )}
           {canChat && item.kind !== "conversation" ? (
@@ -1016,7 +1018,12 @@ function ItemDetail({
                     );
                     const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
                     const validations = (
-                      <Validations d={d} onSettle={() => setDialog("settle")} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} />
+                      <Validations
+                        d={d}
+                        onSettle={settlePrompt ? undefined : () => setDialog("settle")}
+                        onReopen={() => setDialog("reopen")}
+                        focusRecord={initialAction === "validate"}
+                      />
                     );
                     const children = kids.length ? (
                       <ChildrenCard label="Sub-items" parent={item} list={kids} items={items} onSelect={onSelect} addLabel="Add a sub-item" />
@@ -1534,7 +1541,8 @@ function PacketRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; onSettle: () => void; onReopen: () => void; focusRecord?: boolean }) {
+/** `onSettle` undefined: the page's primary action (or the settle prompt) already offers Settle. */
+function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; onSettle?: () => void; onReopen: () => void; focusRecord?: boolean }) {
   const [adding, setAdding] = useState(false);
   const [templates, setTemplates] = useState(false);
   const failed = d.validations.some((v) => v.status === "fail");
@@ -1557,7 +1565,7 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
           <Button size="sm" variant="ghost" onClick={() => setTemplates(true)}>
             Add from template
           </Button>
-          {d.item.status !== "settled" ? (
+          {d.item.status !== "settled" && onSettle ? (
             <Button size="sm" variant="primary" disabled={!d.settle.allowed} onClick={onSettle} aria-describedby={d.settle.allowed ? undefined : "settle-why"}>
               Settle
             </Button>
@@ -1933,7 +1941,7 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   );
 }
 
-function Dependencies({ d, items, onSelect, phone, open, onToggle }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void } & SectionProps) {
+function Dependencies({ d, items, onSelect, open, onToggle }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void } & SectionProps) {
   const [dest, setDest] = useState("");
   const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
     ok: "Dependency added",
@@ -1962,17 +1970,8 @@ function Dependencies({ d, items, onSelect, phone, open, onToggle }: { d: WorkDe
   return (
     <Section
       title="Dependencies"
-      meta={
-        phone
-          ? openBlockers
-            ? `Blocked by ${openBlockers}`
-            : d.blockedBy.length + d.blocking.length
-              ? `${d.blockedBy.length + d.blocking.length} linked`
-              : "None"
-          : undefined
-      }
-      aside={!phone && openBlockers ? <Badge tone="warn">Blocked by {openBlockers}</Badge> : undefined}
-      phone={phone}
+      meta={openBlockers ? `Blocked by ${openBlockers}` : d.blockedBy.length + d.blocking.length ? `${d.blockedBy.length + d.blocking.length} linked` : "None"}
+      phone
       open={open}
       onToggle={onToggle}
     >
@@ -2019,7 +2018,7 @@ function linkLabel(l: WorkLink) {
   return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
 }
 
-function Links({ d, canChat, phone, open, onToggle }: { d: WorkDetail; canChat: boolean } & SectionProps) {
+function Links({ d, canChat, open, onToggle }: { d: WorkDetail; canChat: boolean } & SectionProps) {
   const hasChat = d.links.some((l) => l.kind === "chat_session");
   const convs = useConversations(canChat && hasChat);
   const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
@@ -2035,14 +2034,7 @@ function Links({ d, canChat, phone, open, onToggle }: { d: WorkDetail; canChat: 
         .join(" · ")
     : "None";
   return (
-    <Section
-      title="Links"
-      meta={phone ? meta : d.links.length ? String(d.links.length) : undefined}
-      phone={phone}
-      open={open}
-      onToggle={onToggle}
-      testId="work-links"
-    >
+    <Section title="Links" meta={meta} phone open={open} onToggle={onToggle} testId="work-links">
       {d.links.length ? (
         <ul className="wk-rows">
           {d.links.map((l) => (
