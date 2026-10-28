@@ -1,62 +1,209 @@
 @import "tailwindcss";
 
 /*
- * Jarvis design tokens: compact, border-light, typography/spacing-led.
- * Contrast: text ≥ 4.5:1 and UI boundaries ≥ 3:1 in both themes.
+ * Jarvis Command Center — design tokens v1 (2026-10-28)
+ * Base: jarvis-design.html (v0 "Command Center · Design Spec v1").
+ * Theme: jarvis-sea.html "Tide with Lagoon text" (pine → sea orb, solid Lagoon teal for agents).
+ * Canonical spec: DESIGN-SYSTEM.md (same folder). Repo copy: this block of app/globals.css (PR1). Keep in sync with /opt/data/worktrees/jarvis-v0-design/tokens.css.
+ *
+ * Theme: <html data-theme="dark|light">; without it, prefers-color-scheme decides (dark-first).
+ * Density: container/viewport tiers phone <600 · tablet 600–1099 · desktop ≥1100
+ *          (override with <html data-density="touch|comfortable|compact">).
+ * Contrast (WCAG 2.2 AA, computed): every text token ≥4.5:1 on s0–s3 in both themes;
+ * --bdc (control boundary) ≥3:1 on s0–s3. --bd/--bd2 are decorative dividers only.
  */
 :root {
-  --bg: #f6f6f3;
-  --surface: #ffffff;
-  --surface-2: #f0f0ec;
-  --text: #1c1d1a;
-  --muted: #5b5f57;
-  --line: #d9dbd4;
-  --line-strong: #8a8f85;
-  --accent: #2749d8;
-  --accent-contrast: #ffffff;
-  --accent-soft: #e7ecff;
-  --danger: #b3261e;
-  --danger-soft: #fdeceb;
-  --warn: #8a5300;
-  --warn-soft: #fff3de;
-  --ok: #1d6b3a;
-  --ok-soft: #e5f4ea;
-  --violet: #6b3fc4;
-  --violet-soft: #f0e9ff;
-  --focus: #2749d8;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.05);
-  /* Raised surfaces only (menus, dialogs, palette). */
-  --shadow-pop: 0 4px 12px rgb(0 0 0 / 0.08), 0 20px 60px rgb(0 0 0 / 0.18);
-  --brand-gradient: linear-gradient(135deg, var(--accent), var(--violet));
-  color-scheme: light;
+  --sans:
+    var(--font-geist, "Geist"), "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji";
+  --mono: var(--font-geist-mono, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r1: 4px;
+  --r2: 6px;
+  --r3: 8px;
+  --r4: 12px;
+  --d1: 120ms;
+  --d2: 160ms;
+  --d3: 200ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1);
+  /* Orb: pine → sea → periwinkle (Tide). Gradient lives ONLY on the orb, agent glyph and agent progress. */
+  --o1: #3b8070;
+  --o2: #3f8f9f;
+  --o3: #6f8fe8;
+  --orb: linear-gradient(135deg, var(--o1) 0%, var(--o2) 55%, var(--o3) 100%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111210;
-    --surface: #1a1b19;
-    --surface-2: #232521;
-    --text: #f1f2ee;
-    --muted: #a8aca4;
-    --line: #33362f;
-    --line-strong: #7b8074;
-    --accent: #8fa6ff;
-    --accent-contrast: #0b1024;
-    --accent-soft: #1f2748;
-    --danger: #ff8a80;
-    --danger-soft: #3a1a18;
-    --warn: #ffc56b;
-    --warn-soft: #33260f;
-    --ok: #7fd49a;
-    --ok-soft: #15301f;
-    --violet: #c4a8ff;
-    --violet-soft: #2a2145;
-    --focus: #8fa6ff;
-    --shadow: none;
-    --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.04), 0 20px 60px rgb(0 0 0 / 0.55);
-    color-scheme: dark;
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --s0: #0c0d0f;
+  --s1: #121316;
+  --s2: #17191c;
+  --s3: #1f2125;
+  --s4: #282b30;
+  --bd: #23262b;
+  --bd2: #30343b;
+  --bdc: #70757e;
+  --t1: #ebecee;
+  --t2: #a3a7af;
+  --t3: #8a8f97;
+  --ac: #8ea2ff;
+  --acb: #4b62e0;
+  --acs: rgba(142, 162, 255, 0.13);
+  --ai: #4fd8c4;
+  --ais: rgba(79, 216, 196, 0.1);
+  --aib: rgba(79, 216, 196, 0.45);
+  --ok: #52c48c;
+  --oks: rgba(82, 196, 140, 0.13);
+  --wn: #e3a64e;
+  --wns: rgba(227, 166, 78, 0.13);
+  --bad: #f0716b;
+  --bads: rgba(240, 113, 107, 0.13);
+  --inf: #71aeef;
+  --infs: rgba(113, 174, 239, 0.13);
+  --sh1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --sh2: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px var(--bd2);
+  --scrim: rgba(4, 5, 6, 0.62);
+  --ag-cos: #4fd8c4;
+  --ag-mom: #e39a5f;
+  --ag-dev: #8ea2ff;
+  --ag-lab: #a9bc6b;
+  --ag-jar: #ebecee;
+  --glow-a: 15%;
+  --glow-b: 10%;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --s0: #f2f3f5;
+  --s1: #ffffff;
+  --s2: #f8f8fa;
+  --s3: #eff0f3;
+  --s4: #e5e7eb;
+  --bd: #e4e5e9;
+  --bd2: #d3d6dc;
+  --bdc: #868b94;
+  --t1: #14161a;
+  --t2: #4e535b;
+  --t3: #5f646d;
+  --ac: #3a54d6;
+  --acb: #3a54d6;
+  --acs: rgba(58, 84, 214, 0.09);
+  --ai: #05706b;
+  --ais: rgba(5, 112, 107, 0.07);
+  --aib: rgba(5, 112, 107, 0.5);
+  --ok: #167449;
+  --oks: rgba(22, 116, 73, 0.1);
+  --wn: #8c5810;
+  --wns: rgba(194, 128, 24, 0.12);
+  --bad: #b83229;
+  --bads: rgba(184, 50, 41, 0.09);
+  --inf: #2563ae;
+  --infs: rgba(37, 99, 174, 0.09);
+  --sh1: 0 1px 2px rgba(16, 18, 24, 0.07);
+  --sh2: 0 16px 40px rgba(16, 18, 24, 0.16), 0 0 0 1px var(--bd2);
+  --scrim: rgba(20, 22, 28, 0.3);
+  --ag-cos: #05706b;
+  --ag-mom: #b25e1f;
+  --ag-dev: #3a54d6;
+  --ag-lab: #5e7220;
+  --ag-jar: #14161a;
+  --glow-a: 12%;
+  --glow-b: 8%;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --s0: #f2f3f5;
+    --s1: #ffffff;
+    --s2: #f8f8fa;
+    --s3: #eff0f3;
+    --s4: #e5e7eb;
+    --bd: #e4e5e9;
+    --bd2: #d3d6dc;
+    --bdc: #868b94;
+    --t1: #14161a;
+    --t2: #4e535b;
+    --t3: #5f646d;
+    --ac: #3a54d6;
+    --acb: #3a54d6;
+    --acs: rgba(58, 84, 214, 0.09);
+    --ai: #05706b;
+    --ais: rgba(5, 112, 107, 0.07);
+    --aib: rgba(5, 112, 107, 0.5);
+    --ok: #167449;
+    --oks: rgba(22, 116, 73, 0.1);
+    --wn: #8c5810;
+    --wns: rgba(194, 128, 24, 0.12);
+    --bad: #b83229;
+    --bads: rgba(184, 50, 41, 0.09);
+    --inf: #2563ae;
+    --infs: rgba(37, 99, 174, 0.09);
+    --sh1: 0 1px 2px rgba(16, 18, 24, 0.07);
+    --sh2: 0 16px 40px rgba(16, 18, 24, 0.16), 0 0 0 1px var(--bd2);
+    --scrim: rgba(20, 22, 28, 0.3);
+    --ag-cos: #05706b;
+    --ag-mom: #b25e1f;
+    --ag-dev: #3a54d6;
+    --ag-lab: #5e7220;
+    --ag-jar: #14161a;
+    --glow-a: 12%;
+    --glow-b: 8%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/*
+ * Legacy aliases: existing pages/components use these names. They now resolve to
+ * the v1 tokens above, so every page picks up the new theme without edits.
+ * --violet* is the AI hue (now Lagoon teal), --accent is the action blue.
+ */
+:root {
+  --bg: var(--s0);
+  --surface: var(--s1);
+  --surface-2: var(--s2);
+  --surface-3: var(--s3);
+  --text: var(--t1);
+  --muted: var(--t2);
+  --faint: var(--t3);
+  --line: var(--bd);
+  --line-strong: var(--bdc);
+  --accent: var(--ac);
+  --accent-contrast: #0b1024;
+  --accent-soft: var(--acs);
+  --danger: var(--bad);
+  --danger-soft: var(--bads);
+  --warn: var(--wn);
+  --warn-soft: var(--wns);
+  --ok-soft: var(--oks);
+  --info: var(--inf);
+  --info-soft: var(--infs);
+  --violet: var(--ai);
+  --violet-soft: var(--ais);
+  --focus: var(--ac);
+  --radius: var(--r4);
+  --radius-sm: var(--r3);
+  --shadow: none;
+  --shadow-pop: var(--sh2);
+  --brand-gradient: var(--orb);
+}
+[data-theme="light"] {
+  --accent-contrast: #ffffff;
+  --shadow: var(--sh1);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --accent-contrast: #ffffff;
+    --shadow: var(--sh1);
   }
 }
 
@@ -66,6 +213,9 @@
  * `dense:` variant for anything that should tighten only there.
  */
 @custom-variant dense (@media (min-width: 1024px) and (pointer: fine));
+/* v1 density tiers: tablet 600–1099, desktop ≥1100. */
+@custom-variant tablet (@media (min-width: 600px));
+@custom-variant desk (@media (min-width: 1100px));
 
 @theme inline {
   --color-bg: var(--bg);
@@ -86,10 +236,28 @@
   --color-ok-soft: var(--ok-soft);
   --color-violet: var(--violet);
   --color-violet-soft: var(--violet-soft);
+  --color-s0: var(--s0);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-s3: var(--s3);
+  --color-s4: var(--s4);
+  --color-bd: var(--bd);
+  --color-bd2: var(--bd2);
+  --color-bdc: var(--bdc);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-t3: var(--t3);
+  --color-ac: var(--ac);
+  --color-acb: var(--acb);
+  --color-acs: var(--acs);
+  --color-ai: var(--ai);
+  --color-ais: var(--ais);
+  --color-aib: var(--aib);
+  --color-inf: var(--inf);
+  --color-infs: var(--infs);
   /* Emoji fallbacks: source titles carry emoji (Skylight) that would otherwise render as tofu. */
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji";
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
   --radius-card: var(--radius);
   /* Type scale: hierarchy comes from weight and colour, not size. text-base stays 16px (inputs: no iOS zoom). */
   --text-xs: 0.75rem;
@@ -657,10 +825,14 @@
   --tier-calm: var(--line-strong);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --tier-compass: #f08fd0;
-    --tier-overdue: #ffab70;
+:root:not([data-theme="light"]) {
+  --tier-compass: #f08fd0;
+  --tier-overdue: #ffab70;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --tier-compass: #a0287a;
+    --tier-overdue: #b54708;
   }
 }
 
