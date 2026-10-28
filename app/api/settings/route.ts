@@ -34,7 +34,7 @@ export const PUT = api(
           .object({
             defaultModel: z.string().max(100).optional(),
             defaultProvider: z.string().max(100).optional(),
-            defaultReasoning: reasoningEffort.optional(),
+            defaultReasoning: reasoningEffort.or(z.literal("")).optional(),
             showToolDetails: z.boolean(),
           })
           .partial(),

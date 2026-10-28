@@ -178,7 +178,7 @@ import { listReports } from "@/server/ai/reports";
 import { dispatchOnce } from "@/server/notifications/dispatcher";
 import { deliverPendingPushes, saveSubscription } from "@/server/notifications/push";
 import { notify } from "@/server/notifications";
-import { updatePreferences } from "@/server/settings";
+import { getPreferences, updatePreferences } from "@/server/settings";
 import { workerGlobal } from "@/server/worker/status";
 import * as actionRoute from "@/app/api/work/items/[id]/ai-actions/route";
 import * as itemAiRoute from "@/app/api/work/items/[id]/ai/route";
@@ -447,6 +447,13 @@ describe("AI actions end to end (fake Hermes)", () => {
       delete process.env.JARVIS_HERMES_USAGE_FILE;
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it('chat default reasoning: "" resets it to the model default', () => {
+    updatePreferences({ hermes: { defaultReasoning: "high" } }, owner);
+    expect(getPreferences(owner).hermes.defaultReasoning).toBe("high");
+    updatePreferences({ hermes: { defaultReasoning: "" } }, owner);
+    expect(getPreferences(owner).hermes.defaultReasoning).toBeUndefined();
   });
 
   it("subscription meter: background jobs stop at the weekly line (fail closed), user jobs run, $ budget ignored", async () => {

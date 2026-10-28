@@ -17,7 +17,7 @@ type Prefs = {
   displayName: string;
   timezone: string;
   refreshIntervalMinutes: number;
-  hermes: { defaultModel?: string; defaultProvider?: string; defaultReasoning?: (typeof REASONING_EFFORTS)[number]; showToolDetails: boolean };
+  hermes: { defaultModel?: string; defaultProvider?: string; defaultReasoning?: (typeof REASONING_EFFORTS)[number] | ""; showToolDetails: boolean };
 };
 
 export function SettingsView() {
@@ -154,7 +154,7 @@ export function SettingsView() {
                         onChange={(e) =>
                           setForm({
                             ...form,
-                            hermes: { ...form.hermes, defaultReasoning: (e.target.value || undefined) as (typeof REASONING_EFFORTS)[number] | undefined },
+                            hermes: { ...form.hermes, defaultReasoning: e.target.value as (typeof REASONING_EFFORTS)[number] | "" },
                           })
                         }
                       >
