@@ -171,7 +171,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         <Link
           href={d.key === "more" || d.key === "inbox" ? d.href : hrefFor(d)}
           aria-current={active ? "page" : undefined}
-          aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : undefined}
+          aria-label={d.key === "alerts" ? `Alerts${badgeLabel}` : d.label}
           title={d.label}
           className={cx(
             "relative flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-[8px] px-2 text-[0.875rem] lg:px-2.5",
@@ -182,7 +182,9 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             <Icon className={cx("h-[18px] w-[18px]", active ? "text-accent" : "")} />
             {d.key === "alerts" ? badge : null}
           </span>
-          <span className="sr-only lg:not-sr-only">{d.label}</span>
+          <span aria-hidden="true" className="hidden lg:inline">
+            {d.label}
+          </span>
         </Link>
       </li>
     );
