@@ -5,12 +5,15 @@ import { isAllowedPushEndpoint, listSubscriptions, removeSubscription, saveSubsc
 const subSchema = z.object({
   endpoint: z.string().url().max(2000).refine(isAllowedPushEndpoint, "Not a browser push service endpoint"),
   keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
+  /** Set by the client when it runs inside the Jarvis Android app. */
+  source: z.enum(["android-app", "browser"]).optional(),
 });
 
 export const GET = api(({ user }) => ({
   subscriptions: listSubscriptions(user.id).map((s) => ({
     endpoint: s.endpoint,
     userAgent: s.userAgent,
+    source: s.source,
     createdAt: s.createdAt,
     lastSuccessAt: s.lastSuccessAt,
   })),
@@ -18,7 +21,7 @@ export const GET = api(({ user }) => ({
 
 export const POST = api<z.infer<typeof subSchema>>(
   ({ body, user, req }) => {
-    saveSubscription(user.id, body, req.headers.get("user-agent"));
+    saveSubscription(user.id, body, req.headers.get("user-agent"), body.source ?? "browser");
     return { ok: true };
   },
   { body: subSchema },

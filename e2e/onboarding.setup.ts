@@ -35,7 +35,7 @@ setup("onboarding: claim, connect, test, finish", async ({ page, request }) => {
 
   await page.getByRole("button", { name: "Continue" }).last().click();
   await expect(page.getByRole("heading", { level: 1, name: "Notifications" })).toBeVisible();
-  await page.getByRole("button", { name: "Send a test alert" }).click();
+  await page.getByRole("button", { name: "Send test notification" }).click();
   await expect(page.getByText(/Test alert added to your inbox/)).toBeVisible();
 
   await page.getByRole("button", { name: "Continue" }).last().click();

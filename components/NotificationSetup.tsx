@@ -7,6 +7,14 @@ import { currentSubscription, disablePush, enablePush, pushSupport, type PushSup
 import { isAndroidWrapper } from "@/lib/client/wrapper";
 import { Badge, Button, useToast } from "@/components/ui";
 
+export type PushCapabilities = {
+  fcmConfigured: boolean;
+  phoneTokens: number;
+  nativePhonePush: boolean;
+  webSubscriptions: number;
+  androidAppSubscriptions: number;
+};
+
 export function PushControls() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -14,8 +22,11 @@ export function PushControls() {
   const [subscribed, setSubscribed] = useState<boolean>();
   const [perm, setPerm] = useState<string>("default");
   const [busy, setBusy] = useState(false);
-  // Inside the Android app the phone gets native (FCM) notifications: no web push opt-in here.
+  // Inside the Android app (a Trusted Web Activity) Chrome handles notification permission and web push.
   const [inApp, setInApp] = useState(false);
+  const caps = useQuery({ queryKey: ["push-capabilities"], queryFn: () => api.get<PushCapabilities>("/api/push/capabilities") });
+  // Only hide web push in the app when the server can really reach this phone over FCM.
+  const nativePush = inApp && Boolean(caps.data?.nativePhonePush);
 
   useEffect(() => {
     setInApp(isAndroidWrapper());
@@ -25,30 +36,34 @@ export function PushControls() {
   }, []);
 
   const test = useMutation({
-    mutationFn: () => api.post<{ subscriptions: number; delivered: number; quietHours: boolean }>("/api/notifications/test"),
+    mutationFn: () => api.post<{ subscriptions: number; phones: number; delivered: number; quietHours: boolean }>("/api/notifications/test"),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["notifications"] });
-      if (!r.subscriptions) toast("Test alert added to your inbox. Enable push on this device to also get it on your phone.", "warn");
+      if (!r.subscriptions && !(caps.data?.nativePhonePush ?? false))
+        toast("Test alert added to your inbox. Enable notifications on this device to also get it on your phone.", "warn");
       else if (r.delivered) toast(`Test sent to ${r.delivered} device${r.delivered > 1 ? "s" : ""}. Check your notifications.`, "ok");
-      else toast("Push delivery failed. The alert is in your inbox; try re-enabling push.", "danger");
+      else toast("Push delivery failed. The alert is in your inbox; try enabling notifications again.", "danger");
     },
     onError: (e) => toast((e as Error).message, "danger"),
   });
 
+  const webPushLabel = subscribed ? "web push on" : perm === "denied" ? "web push blocked" : "web push off";
+  const fcmLabel = caps.data
+    ? caps.data.fcmConfigured
+      ? caps.data.phoneTokens
+        ? "app push (FCM) on"
+        : "FCM: no phone registered"
+      : "FCM not configured"
+    : null;
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span>This device:</span>
-        {inApp && !subscribed ? (
+      <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="push-status">
+        <span>{inApp ? "This phone:" : "This device:"}</span>
+        {nativePush && !subscribed ? (
           <Badge tone="ok">Notifications from the Jarvis app</Badge>
         ) : support === "supported" ? (
-          subscribed ? (
-            <Badge tone="ok">Push enabled</Badge>
-          ) : perm === "denied" ? (
-            <Badge tone="danger">Blocked in browser</Badge>
-          ) : (
-            <Badge>Push off</Badge>
-          )
+          <Badge tone={subscribed ? "ok" : perm === "denied" ? "danger" : undefined}>{webPushLabel}</Badge>
         ) : support === "insecure" ? (
           <Badge tone="warn">Needs HTTPS</Badge>
         ) : support === "needs-install" ? (
@@ -56,27 +71,40 @@ export function PushControls() {
         ) : (
           <Badge tone="warn">Not supported in this browser</Badge>
         )}
+        {inApp && fcmLabel ? (
+          <span data-testid="fcm-status">
+            <Badge tone={nativePush ? "ok" : undefined}>{fcmLabel}</Badge>
+          </span>
+        ) : null}
       </div>
-      {inApp ? (
+      {nativePush ? (
         <p className="text-sm text-muted" data-testid="android-app-push-note">
           This phone gets notifications from the Jarvis app, so web push stays off here and nothing arrives twice.
         </p>
+      ) : inApp ? (
+        <p className="text-sm text-muted" data-testid="android-app-webpush-note">
+          The Jarvis app delivers notifications through Chrome until Firebase is set up. Enable them here; Android asks once.
+        </p>
       ) : null}
-      {support === "insecure" && !inApp ? (
+      {perm === "denied" && support === "supported" && !subscribed ? (
+        <p className="text-sm text-muted">Notifications are blocked. Allow them for this site in Chrome (site settings → Notifications), then try again.</p>
+      ) : null}
+      {support === "insecure" && !nativePush ? (
         <p className="text-sm text-muted">Browsers only allow push (and app install) on HTTPS. Open Jarvis through its HTTPS address.</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {support === "supported" && !subscribed && !inApp ? (
+        {support === "supported" && !subscribed && !nativePush ? (
           <Button
             variant="primary"
             busy={busy}
             onClick={async () => {
               setBusy(true);
               try {
-                await enablePush();
+                await enablePush({ androidApp: inApp });
                 setSubscribed(true);
                 setPerm("granted");
-                toast("Push notifications enabled on this device", "ok");
+                qc.invalidateQueries({ queryKey: ["push-capabilities"] });
+                toast("Notifications enabled on this device", "ok");
               } catch (err) {
                 toast((err as Error).message, "danger");
               } finally {
@@ -84,7 +112,7 @@ export function PushControls() {
               }
             }}
           >
-            Enable push on this device
+            Enable notifications
           </Button>
         ) : null}
         {subscribed ? (
@@ -95,6 +123,7 @@ export function PushControls() {
               setBusy(true);
               await disablePush();
               setSubscribed(false);
+              qc.invalidateQueries({ queryKey: ["push-capabilities"] });
               setBusy(false);
             }}
           >
@@ -102,7 +131,7 @@ export function PushControls() {
           </Button>
         ) : null}
         <Button busy={test.isPending} onClick={() => test.mutate()}>
-          Send a test alert
+          Send test notification
         </Button>
       </div>
     </div>

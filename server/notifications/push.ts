@@ -54,7 +54,14 @@ export function isAllowedPushEndpoint(endpoint: string) {
   return PUSH_HOSTS.includes(host) || PUSH_HOST_SUFFIXES.some((s) => host.endsWith(s) && /^[a-z0-9.-]+$/.test(host));
 }
 
-export function saveSubscription(userId: string, sub: { endpoint: string; keys: { p256dh: string; auth: string } }, userAgent?: string | null) {
+export type SubscriptionSource = "android-app" | "browser";
+
+export function saveSubscription(
+  userId: string,
+  sub: { endpoint: string; keys: { p256dh: string; auth: string } },
+  userAgent?: string | null,
+  source: SubscriptionSource = "browser",
+) {
   if (!isAllowedPushEndpoint(sub.endpoint)) throw new HttpError(400, "push_endpoint", "That isn't a browser push service address.");
   const values = {
     id: newId("push"),
@@ -63,12 +70,13 @@ export function saveSubscription(userId: string, sub: { endpoint: string; keys: 
     p256dh: sub.keys.p256dh,
     auth: sub.keys.auth,
     userAgent: userAgent?.slice(0, 200),
+    source,
     failureCount: 0,
   };
   getDb()
     .insert(schema.pushSubscriptions)
     .values(values)
-    .onConflictDoUpdate({ target: schema.pushSubscriptions.endpoint, set: { p256dh: values.p256dh, auth: values.auth, userId, failureCount: 0 } })
+    .onConflictDoUpdate({ target: schema.pushSubscriptions.endpoint, set: { p256dh: values.p256dh, auth: values.auth, userId, source, failureCount: 0 } })
     .run();
 }
 
@@ -84,8 +92,8 @@ export function listSubscriptions(userId: string) {
   return getDb().select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId)).all();
 }
 
-export async function sendToUser(userId: string, payload: PushPayload, opts: { urgency?: "high" | "normal" | "low" } = {}) {
-  const all = listSubscriptions(userId);
+export async function sendToUser(userId: string, payload: PushPayload, opts: { urgency?: "high" | "normal" | "low"; skipAndroidApp?: boolean } = {}) {
+  const all = listSubscriptions(userId).filter((s) => !(opts.skipAndroidApp && s.source === "android-app"));
   // Endpoints saved before the allowlist existed are dropped, never contacted.
   for (const s of all) if (!isAllowedPushEndpoint(s.endpoint)) removeSubscription(s.endpoint);
   const subs = all.filter((s) => isAllowedPushEndpoint(s.endpoint));
@@ -154,15 +162,34 @@ export async function deliverPendingPushes(now = new Date()) {
         { action: "file", title: "File it" },
       ];
     const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
-    // Browsers (web push) and paired phones (FCM) both get it.
-    const [web, phone] = await Promise.all([
-      sendToUser(n.userId, payload, { urgency }),
-      sendFcmToUser(n.userId, fcmData({ ...payload, category: n.category, unread: unreadActionableCount(n.userId) }), { urgency }),
-    ]);
+    // Paired phones (FCM) first, then browsers (web push). Without Firebase (or when no phone has a
+    // working token) the Android app's own web push subscription is the phone's channel; when FCM did
+    // reach a phone, that app subscription is skipped so the phone doesn't buzz twice.
+    const phone = await sendFcmToUser(n.userId, fcmData({ ...payload, category: n.category, unread: unreadActionableCount(n.userId) }), { urgency });
+    const web = await sendToUser(n.userId, payload, { urgency, skipAndroidApp: phone.sent > 0 });
     const total = web.total + phone.total;
     const sent = web.sent + phone.sent;
     setPushState(n.id, total === 0 ? "suppressed" : sent > 0 ? "sent" : "failed");
     delivered += sent;
   }
   return delivered;
+}
+
+/**
+ * What push channels exist for this user. The Android app shows its web push opt-in unless the
+ * server can actually deliver FCM to a paired phone (Firebase configured and a token registered).
+ */
+export async function pushCapabilities(userId: string) {
+  const { fcmStatus } = await import("./fcm");
+  const { pushDevices } = await import("@/server/devices");
+  const fcmConfigured = fcmStatus().configured;
+  const phoneTokens = pushDevices(userId).length;
+  const subs = listSubscriptions(userId).filter((s) => isAllowedPushEndpoint(s.endpoint));
+  return {
+    fcmConfigured,
+    phoneTokens,
+    nativePhonePush: fcmConfigured && phoneTokens > 0,
+    webSubscriptions: subs.length,
+    androidAppSubscriptions: subs.filter((s) => s.source === "android-app").length,
+  };
 }
