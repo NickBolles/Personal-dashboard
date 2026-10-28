@@ -152,7 +152,7 @@ function BriefRow({ row }: { row: PropsOf<"ApprovalChips">["rows"][number] }) {
   const chosen = skipped ? "skip" : choiceOf(staged);
   return (
     <li
-      className={cx("smart-row flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-3 py-2", (skipped || applied) && "opacity-70")}
+      className={cx("smart-row flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-3 py-2", (skipped || applied) && "bg-surface-2")}
       data-ref={row.ref}
     >
       <div className="min-w-0 flex-1 basis-48">
