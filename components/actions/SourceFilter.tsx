@@ -4,8 +4,19 @@ import { sourceFilterOptions, taskSourceLabel } from "@/lib/task-source";
 import { inputCls } from "@/components/ui";
 
 /** "Source" filter for task lists: one option per source chip label. Hidden with fewer than two sources. */
-export function SourceFilter({ items, value, onChange }: { items: { source: string; sourceLabel?: string }[]; value: string; onChange: (v: string) => void }) {
-  const options = sourceFilterOptions(items);
+export function SourceFilter({
+  items,
+  options: given,
+  value,
+  onChange,
+}: {
+  items?: { source: string; sourceLabel?: string }[];
+  /** Precomputed labels (e.g. from the server when the list is paged). */
+  options?: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const options = given ?? sourceFilterOptions(items ?? []);
   if (options.length < 2 && !value) return null;
   return (
     <label className="mt-3 flex items-center gap-2 text-sm">

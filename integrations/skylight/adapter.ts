@@ -311,7 +311,12 @@ export const skylightAdapter: SourceAdapter = {
       api(`/frames/${frame}/chores`, { after: ctx.today, before: ctx.today, include_late: "true" })
         .then((d) => doc.parse(d))
         .catch(() => ({ data: [] as z.infer<typeof resource>[] })),
-      listMembers(frame).catch(() => [] as SkylightMember[]),
+      // Configured member ids filter without names; auto-matching needs the list, so a failure then
+      // fails the sync (keeping the last filtered snapshot) instead of showing everyone's chores.
+      listMembers(frame).catch((err) => {
+        if (cfg().prefs.members.length) return [] as SkylightMember[];
+        throw err;
+      }),
     ]);
     const prefs = cfg().prefs;
     const mine = await ownerMembers(members, prefs.members);

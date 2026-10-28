@@ -6,7 +6,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import type { AttentionBucket, HomeItemsPage } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
 import { ActionCard } from "@/components/actions/ActionCard";
-import { SourceFilter, matchesSource } from "@/components/actions/SourceFilter";
+import { SourceFilter } from "@/components/actions/SourceFilter";
 import { Button, Empty, ErrorNote, PageHeader, Spinner, cx } from "@/components/ui";
 
 const TABS: { id: AttentionBucket; label: string; hint: string }[] = [
@@ -25,15 +25,16 @@ const PAGE = 25;
 /** Every open item in one Home bucket, ranked exactly like Home, with an honest total. */
 export function AllItemsView({ initial }: { initial: AttentionBucket }) {
   const [bucket, setBucket] = useState<AttentionBucket>(initial);
+  const [source, setSource] = useState("");
   const q = useInfiniteQuery({
-    queryKey: ["home", "items", bucket],
-    queryFn: ({ pageParam }) => api.get<HomeItemsPage>(`/api/home/items?bucket=${bucket}&offset=${pageParam}&limit=${PAGE}`),
+    queryKey: ["home", "items", bucket, source],
+    queryFn: ({ pageParam }) =>
+      api.get<HomeItemsPage>(`/api/home/items?bucket=${bucket}&offset=${pageParam}&limit=${PAGE}${source ? `&source=${encodeURIComponent(source)}` : ""}`),
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextOffset,
   });
-  const loaded = q.data?.pages.flatMap((p) => p.items) ?? [];
-  const [source, setSource] = useState("");
-  const items = loaded.filter(matchesSource(source));
+  // The server filters by source before paging; `sources` lists every label in the bucket.
+  const items = q.data?.pages.flatMap((p) => p.items) ?? [];
   const total = q.data?.pages[0]?.total;
   const tab = TABS.find((t) => t.id === bucket)!;
 
@@ -72,7 +73,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
           {tab.hint}
           {total !== undefined ? <span data-dynamic> {total === 1 ? "1 item." : `${total} items.`}</span> : null}
         </p>
-        <SourceFilter items={loaded} value={source} onChange={setSource} />
+        <SourceFilter options={q.data?.pages[0]?.sources ?? []} value={source} onChange={setSource} />
         {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
         {q.isPending ? (
           <Spinner label="Loading…" />
@@ -90,7 +91,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
         {q.hasNextPage ? (
           <div className="mt-4 flex justify-center">
             <Button onClick={() => q.fetchNextPage()} busy={q.isFetchingNextPage}>
-              Show more ({loaded.length} of {total})
+              Show more ({items.length} of {total})
             </Button>
           </div>
         ) : null}

@@ -205,7 +205,14 @@ export type HomePayload = {
 };
 
 /** GET /api/home/items: one bucket, ranked, paged. */
-export type HomeItemsPage = { bucket: AttentionBucket; items: NextAction[]; total: number; offset: number; nextOffset?: number };
+export type HomeItemsPage = {
+  bucket: AttentionBucket;
+  items: NextAction[];
+  total: number;
+  offset: number;
+  nextOffset?: number;
+  /** every source label in the unfiltered bucket */ sources?: string[];
+};
 
 /** Home sections the user can reorder or hide (phone app and web share this layout). */
 export const HOME_SECTIONS = [
