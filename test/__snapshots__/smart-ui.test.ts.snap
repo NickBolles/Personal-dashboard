@@ -14,8 +14,13 @@ Divider {}
 TaskList {title, bucket?, actions?: [done|week|snooze|drop|promote], promoteParentRef?: item ref, rows:[{ref, reason?, suggestion?: do_week|reschedule|drop|snooze|keep|done, suggestedDate?: YYYY-MM-DD}]} rows show live title/due from the ref
 DecisionCard {title, context?, options:[{id, label, consequence?, recommended?, intent?}]} one choice; the chosen option's intent is staged
 Checklist {title, steps:[{id, label, detail?, runBy?: you|agent}]} ticks are recorded, never run
-Gauge {label, value, max, unit?, note?} display only; say where the number came from in note
+Gauge {metric} live Jarvis number, or {label, value, max, unit?, note?} as your estimate
+Sparkline {metric, label?} trend from a Jarvis series
+ApprovalChips {title, rows:[{ref, reason?}]} brief rows: Today/Snooze/Skip
+WeekPlan {weekOf: Monday, days?: 5|7, blocks:[{ref, day: YYYY-MM-DD|null, start?: HH:MM, minutes}]} Jarvis adds calendar events
+PRCard {ref: pr:owner/repo#n} checks/reviews from GitHub
 Table {columns:[{key,label,align?}], rows:[{ref?, cells:{key: text|number}}]} read-only, ≤50 rows
 ItemRef {ref} inline chip
+Metric refs: metric:ai_spend_today metric:ai_spend_7d metric:items_done_14d metric:overdue_count. Never type numbers for them.
 Intent objects (DecisionCard option.intent): todo.complete{ref} todo.snooze{ref,date} todo.drop{ref,note?} todo.promote{ref,parentRef} item.update{ref,patch:{status?,nextAction?,targetDate?}} item.create{parentRef,title,itemKind?}. Never settle, delete or merge. If unsure, reply in plain text."
 `;

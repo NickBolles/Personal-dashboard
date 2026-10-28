@@ -8,7 +8,7 @@ import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
 import { useInbox } from "@/components/work/today";
 import { CaptureSheet } from "@/components/capture/CaptureSheet";
-import { CaptureExtras } from "@/components/capture/CaptureExtras";
+import { CaptureExtras, CaptureRowMenu } from "@/components/capture/CaptureExtras";
 import type { InboxEntry, WorkItem } from "@/lib/work";
 
 /**
@@ -172,7 +172,11 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                 <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
                   {e.source === "github_issue" ? "Accept…" : "File…"}
                 </Button>
-                <OverflowMenu label={`More for ${e.title}`} items={[{ label: "Dismiss", onSelect: () => dismiss.mutate(e.id), danger: true }]} />
+                {e.capture ? (
+                  <CaptureRowMenu entry={e} label={`More for ${e.title}`} onDismiss={() => dismiss.mutate(e.id)} />
+                ) : (
+                  <OverflowMenu label={`More for ${e.title}`} items={[{ label: "Dismiss", onSelect: () => dismiss.mutate(e.id), danger: true }]} />
+                )}
               </div>
             </li>
           ))}

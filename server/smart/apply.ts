@@ -7,20 +7,28 @@ import { todosAdapter, dropTodo, reopenTodo } from "@/integrations/todos/adapter
 import { refreshSource } from "@/server/sources";
 import { createItem, updateItem } from "@/server/work/store";
 import { LIMITS } from "@/lib/jarvis-ui/catalog";
-import { intentInSpec, intentKey, intentSchema, type Intent } from "@/lib/jarvis-ui/intents";
-import type { AppliedEntry, ApplyResult, HydratedRef, SurfaceView } from "@/lib/jarvis-ui/types";
+import { intentInSpec, intentKey, intentSchema, isExternal, type Intent } from "@/lib/jarvis-ui/intents";
+import { addCalendarBlock, requireCalendarWrites } from "./calendar";
+import { isTask, type AppliedEntry, type ApplyResult, type SurfaceView, type TaskRef } from "@/lib/jarvis-ui/types";
 import { lookup, ownedSurface, sha256, storedSpec, todayLocal, toView, writeApplied } from "./store";
 
-type Checked = { intent: Intent; hash: string; hydrated: Record<string, Extract<HydratedRef, { kind: string }>> };
+type Checked = { intent: Intent; hash: string; hydrated: Record<string, TaskRef> };
 
-const capFor = (i: Intent) => (i.kind.startsWith("todo.") ? (i.kind === "todo.promote" ? ["todos.edit", "work.use"] : ["todos.edit"]) : ["work.use"]);
+const capFor = (i: Intent) =>
+  i.kind.startsWith("todo.")
+    ? i.kind === "todo.promote"
+      ? ["todos.edit", "work.use"]
+      : ["todos.edit"]
+    : i.kind === "calendar.block"
+      ? ["home_assistant.calendar"]
+      : ["work.use"];
 
 /**
  * Validate the whole batch before writing anything. Any intent that isn't
  * well-formed, isn't offered by the stored spec, or points at something this
  * person can't see → 400 for the batch; Finance → 403 (spec §12).
  */
-function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeof storedSpec>): Checked[] {
+function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeof storedSpec>, external: boolean): Checked[] {
   const spec = specOf();
   const today = todayLocal();
   const l = lookup(user);
@@ -29,6 +37,10 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
     const p = intentSchema.safeParse(r);
     if (!p.success) throw new HttpError(400, "invalid_intent", "That change isn't allowed");
     const intent = p.data;
+    // External writes go only through their own approval, never mixed into an ordinary Apply.
+    if (isExternal(intent) !== external)
+      throw new HttpError(400, external ? "not_external" : "needs_approval", external ? "Only calendar blocks can be approved here" : "Calendar blocks need their own approval");
+    if (isExternal(intent)) requireCalendarWrites(user);
     if (!capFor(intent).every((c) => can(user, c))) throw new HttpError(403, "forbidden", "You don't have access to that.");
     if (!intentInSpec(spec, intent, today)) throw new HttpError(400, "not_offered", "That change wasn't offered by this reply");
     if (intent.kind === "item.create" || intent.kind === "todo.promote") creates++;
@@ -41,6 +53,7 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
         if (h.unavailable === "finance") throw new HttpError(403, "finance_excluded", "Finance is never changed from an AI reply");
         throw new HttpError(400, "unavailable", "Something in that change isn't available any more");
       }
+      if (!isTask(h)) throw new HttpError(400, "unavailable", "Something in that change isn't available any more");
       hydrated[ref] = h;
     }
     return { intent, hash: sha256(intentKey(intent)).slice(0, 32), hydrated };
@@ -91,6 +104,9 @@ async function execute(user: CurrentUser, c: Checked, correlationId: string): Pr
       );
       return { message: "Created", undo: { type: "archive", itemId: item.id } };
     }
+    case "calendar.block":
+      // The title is the live one from Jarvis, never client- or model-supplied.
+      return addCalendarBlock(user, i, c.hydrated[i.ref]!.title);
   }
 }
 
@@ -112,7 +128,7 @@ async function withSurfaceLock<T>(surfaceId: string, fn: () => Promise<T>): Prom
   }
 }
 
-export function applyIntents(user: CurrentUser, body: { surfaceId: string; intents: unknown[]; idempotencyKey: string }, correlationId: string) {
+export function applyIntents(user: CurrentUser, body: { surfaceId: string; intents: unknown[]; idempotencyKey: string; external?: true }, correlationId: string) {
   return withSurfaceLock(body.surfaceId, () => applyLocked(user, body, correlationId));
 }
 
@@ -122,7 +138,7 @@ export function undoIntent(user: CurrentUser, body: { surfaceId: string; intentH
 
 async function applyLocked(
   user: CurrentUser,
-  body: { surfaceId: string; intents: unknown[]; idempotencyKey: string },
+  body: { surfaceId: string; intents: unknown[]; idempotencyKey: string; external?: true },
   correlationId: string,
 ): Promise<{ results: ApplyResult[]; surface: SurfaceView }> {
   const row = ownedSurface(user.id, body.surfaceId);
@@ -136,7 +152,7 @@ async function applyLocked(
       surface: toView(row, user),
     };
 
-  const checked = check(user, body.intents, () => storedSpec(row));
+  const checked = check(user, body.intents, () => storedSpec(row), body.external === true);
   const results: ApplyResult[] = [];
   const at = new Date().toISOString();
   let touchedTodos = false;
@@ -170,7 +186,7 @@ async function applyLocked(
     sourceRecord: row.id,
     result: results.every((r) => r.ok) ? "ok" : "error",
     correlationId,
-    detail: { kinds: checked.map((c) => c.intent.kind), ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length },
+    detail: { kinds: checked.map((c) => c.intent.kind), external: body.external === true, ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length },
   });
   return { results, surface: toView({ ...row, appliedJson: JSON.stringify(applied) }, user) };
 }

@@ -20,6 +20,7 @@ export function createHomeAssistant({ token }) {
     state.entities.clear();
     state.todos.clear();
     state.calls = [];
+    state.createdEvents = [];
     set("alarm_control_panel.wausau_alarm", "disarmed", { friendly_name: "House alarm" });
     set("lock.front_door_lock", "locked", { friendly_name: "Front door lock" });
     set("cover.garage_door", "open", { friendly_name: "Garage door", device_class: "garage" }, 42);
@@ -117,6 +118,10 @@ export function createHomeAssistant({ token }) {
           recurrence_id: null,
           rrule: null,
         },
+        // Events created through calendar.create_event (smart week plan), inside the requested window.
+        ...(state.createdEvents ?? []).filter(
+          (e) => e.entity_id === decodeURIComponent(match[1]) && e.start.dateTime < url.searchParams.get("end") && e.end.dateTime > url.searchParams.get("start"),
+        ),
       ]);
     }
     if ((match = path.match(/^\/api\/services\/([^/]+)\/([^/]+)$/)) && m === "POST") {
@@ -124,6 +129,20 @@ export function createHomeAssistant({ token }) {
       const body = await readBody(req);
       const wantsResponse = url.searchParams.has("return_response");
       state.calls.push({ domain, service, body, at: new Date().toISOString() });
+      if (domain === "calendar" && service === "create_event") {
+        const iso = (v) => new Date(v).toISOString();
+        (state.createdEvents ??= []).push({
+          entity_id: body.entity_id,
+          start: { dateTime: iso(body.start_date_time) },
+          end: { dateTime: iso(body.end_date_time) },
+          summary: body.summary,
+          description: body.description ?? null,
+          uid: `created-${state.createdEvents.length + 1}`,
+          recurrence_id: null,
+          rrule: null,
+        });
+        return json(res, 200, []);
+      }
       if (domain === "todo" && service === "get_items") {
         if (!wantsResponse) return json(res, 400, { message: "Service call requires responses but caller did not ask for responses" });
         const ids = [].concat(body.entity_id);

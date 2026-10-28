@@ -87,7 +87,7 @@ async function setup() {
 
 describe("smart UI API", () => {
   it("is off by default and refuses everything until the person turns it on", async () => {
-    expect(await (await call(settingsRoute.GET, { method: "GET" })).json()).toEqual({ enabled: false });
+    expect(await (await call(settingsRoute.GET, { method: "GET" })).json()).toEqual({ enabled: false, calendarWrites: false });
     const r = await call(hydrateRoute.POST, { body: { refs: ["todo:gt-1"] } });
     expect(r.status).toBe(403);
     expect((await r.json()).code).toBe("smart_off");

@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { addDays, daysBetween } from "@/lib/time";
-import { inlineIntentSchema, LIMITS, ROW_ACTIONS, type InlineIntent, type JarvisSpec, type PropsOf, type RowAction } from "./catalog";
+import {
+  externalIntentSchema,
+  inlineIntentSchema,
+  LIMITS,
+  ROW_ACTIONS,
+  type ExternalIntent,
+  type InlineIntent,
+  type JarvisSpec,
+  type PropsOf,
+  type RowAction,
+} from "./catalog";
 import { canonicalJson } from "./validator";
 
 /**
@@ -11,8 +21,13 @@ import { canonicalJson } from "./validator";
  * anything the surface never offered. There is no delete, settle or merge
  * intent, and none will be added (owner decisions D2/D3).
  */
-export const intentSchema = inlineIntentSchema;
-export type Intent = InlineIntent;
+export const intentSchema = z.discriminatedUnion("kind", [...inlineIntentSchema.options, externalIntentSchema]);
+export type Intent = InlineIntent | ExternalIntent;
+
+/** External writes never go out with the ordinary Apply: they need their own approval. */
+export function isExternal(intent: Intent): intent is ExternalIntent {
+  return intent.kind === "calendar.block";
+}
 export type IntentKind = Intent["kind"];
 
 export const applyBodySchema = z
@@ -20,6 +35,8 @@ export const applyBodySchema = z
     surfaceId: z.string().regex(/^uis_[A-Za-z0-9_-]{6,60}$/),
     intents: z.array(z.unknown()).min(1).max(LIMITS.applyIntents),
     idempotencyKey: z.string().min(8).max(120),
+    /** set by the separate external-write approval (calendar); the batch must then hold only external intents */
+    external: z.literal(true).optional(),
   })
   .strict();
 
@@ -36,7 +53,55 @@ export function intentKey(intent: Intent) {
 
 /** The ref a staged intent is about (one staged change per ref per surface). */
 export function intentTarget(intent: Intent): string {
-  return intent.kind === "item.create" ? `new:${intent.parentRef}:${intent.title}` : intent.ref;
+  if (intent.kind === "item.create") return `new:${intent.parentRef}:${intent.title}`;
+  // A calendar block is a second, separate change for the same ref (its date move stays staged too).
+  if (intent.kind === "calendar.block") return `cal:${intent.ref}`;
+  return intent.ref;
+}
+
+// --- daily brief (ApprovalChips) and week plan (WeekPlan) ---
+
+export const BRIEF_CHOICES = ["today", "snooze", "skip"] as const;
+export type BriefChoice = (typeof BRIEF_CHOICES)[number];
+
+/**
+ * The write a brief chip stages: "Today" moves the todo/item to today,
+ * "Snooze" to tomorrow. "Skip" writes nothing (it only hides the row on this
+ * surface), so it has no intent. `due` is the hydrated date.
+ */
+export function chipIntent(ref: string, choice: BriefChoice, today: string, due?: string): Intent | undefined {
+  if (choice === "skip") return undefined;
+  const date = choice === "today" ? today : addDays(today, 1);
+  if (due === date) return undefined;
+  return ref.startsWith("item:") ? { kind: "item.update", ref, patch: { targetDate: date } } : { kind: "todo.snooze", ref, date };
+}
+
+/** The dates a week plan covers (Mon…Fri, or Mon…Sun). */
+export function weekDays(weekOf: string, days: 5 | 7 = 5): string[] {
+  return Array.from({ length: days }, (_, i) => addDays(weekOf, i));
+}
+
+/** The Monday of `today`'s week; on Sat/Sun the coming Monday (plan next week). */
+export function planWeekOf(today: string) {
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  if (dow === 6) return addDays(today, 2);
+  if (dow === 0) return addDays(today, 1);
+  return addDays(today, 1 - dow);
+}
+
+/** Moving a block to another day stages that day as the todo's due / the item's target date. */
+export function blockMoveIntent(ref: string, day: string): Intent {
+  return ref.startsWith("item:") ? { kind: "item.update", ref, patch: { targetDate: day } } : { kind: "todo.snooze", ref, date: day };
+}
+
+export const DAY_START = "07:00";
+export const DAY_END = "21:00";
+const mins = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/** A block fits the planner grid: on a quarter hour, inside 07:00–21:00. */
+export function blockFits(start: string, minutes: number) {
+  const s = mins(start);
+  return s % 15 === 0 && s >= mins(DAY_START) && s + minutes <= mins(DAY_END);
 }
 
 function inWindow(date: string, today: string) {
@@ -122,8 +187,26 @@ export function intentInSpec(spec: JarvisSpec, intent: Intent, today: string): b
     intent.kind === "item.create" ? intent.targetDate : undefined,
   ].filter((d): d is string => Boolean(d));
   if (dates.some((d) => !inWindow(d, today))) return false;
+  if (intent.kind === "calendar.block" && !inWindow(intent.date, today)) return false;
   const key = intentKey(intent);
+  const ref = "ref" in intent ? intent.ref : undefined;
+  const dateOf = intent.kind === "todo.snooze" ? intent.date : intent.kind === "item.update" ? intent.patch.targetDate : undefined;
+  const onlyTargetDate = intent.kind === "item.update" && Object.keys(intent.patch).length === 1 && Boolean(intent.patch.targetDate);
+  const isMove = (intent.kind === "todo.snooze" && ref?.startsWith("todo:")) || (onlyTargetDate && ref?.startsWith("item:"));
   for (const el of Object.values(spec.elements)) {
+    if (el.type === "ApprovalChips") {
+      const p = el.props as PropsOf<"ApprovalChips">;
+      if (isMove && p.rows.some((r) => r.ref === ref) && (dateOf === today || dateOf === addDays(today, 1))) return true;
+      continue;
+    }
+    if (el.type === "WeekPlan") {
+      const p = el.props as PropsOf<"WeekPlan">;
+      const days = weekDays(p.weekOf, p.days ?? 5).filter((d) => d >= today);
+      if (!p.blocks.some((b) => b.ref === ref)) continue;
+      if (isMove && dateOf && days.includes(dateOf)) return true;
+      if (intent.kind === "calendar.block" && days.includes(intent.date) && blockFits(intent.start, intent.minutes)) return true;
+      continue;
+    }
     if (el.type === "DecisionCard") {
       const p = el.props as PropsOf<"DecisionCard">;
       if (p.options.some((o) => o.intent && intentKey(o.intent) === key)) return true;
@@ -194,7 +277,14 @@ export function describeIntent(intent: Intent, titleOf: (ref: string) => string 
     }
     case "item.create":
       return `Create “${intent.title}” under ${titleOf(intent.parentRef) ?? "the chosen item"}`;
+    case "calendar.block":
+      return `Add “${t(intent.ref)}” to the calendar on ${fmtDate(intent.date)} at ${intent.start} for ${fmtMinutes(intent.minutes)}`;
   }
+}
+
+export function fmtMinutes(m: number) {
+  const h = Math.floor(m / 60);
+  return h ? `${h} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`;
 }
 
 /** Short verb for a row's staged state ("Done", "→ Fri Oct 30", "Drop"). */
@@ -212,5 +302,7 @@ export function intentChip(intent: Intent): string {
       return intent.patch.status === "abandoned" ? "Drop" : intent.patch.targetDate ? `→ ${fmtDate(intent.patch.targetDate)}` : "Update";
     case "item.create":
       return "Create";
+    case "calendar.block":
+      return "Calendar";
   }
 }

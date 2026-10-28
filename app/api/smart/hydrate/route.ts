@@ -7,9 +7,9 @@ const body = z.object({ refs: z.array(z.string().max(320)).max(LIMITS.hydrateRef
 
 /** Live titles/dates/status for the refs a smart reply mentions; unknown, foreign and Finance refs come back unavailable. */
 export const POST = api<z.infer<typeof body>>(
-  ({ user, body }) => {
+  async ({ user, body }) => {
     requireSmart(user);
-    return { refs: hydrate(user, body.refs), today: todayLocal() };
+    return { refs: await hydrate(user, body.refs), today: todayLocal() };
   },
   { body, cap: ["work.use", "todos.view"] },
 );

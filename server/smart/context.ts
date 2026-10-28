@@ -4,6 +4,7 @@ import { can } from "@/server/access";
 import { adapterContext, cachedSource, scopeResult } from "@/server/sources";
 import { localDate } from "@/lib/time";
 import type { NextAction } from "@/lib/contracts";
+import { briefContext, weekContext } from "./workflows";
 
 /**
  * Context refs (`@ctx:<name>`) in a run's attached context are resolved here,
@@ -11,6 +12,10 @@ import type { NextAction } from "@/lib/contracts";
  * to "…and N more" (spec §4.5).
  */
 export const CTX_OVERDUE = "@ctx:overdue_todos";
+export const CTX_BRIEF = "@ctx:morning_brief";
+export const CTX_WEEK = "@ctx:week_plan";
+/** Friendly names for the composer's context chips. */
+export const CTX_LABELS: Record<string, string> = { [CTX_OVERDUE]: "Overdue tasks", [CTX_BRIEF]: "Morning brief", [CTX_WEEK]: "This week's plan" };
 export const OVERDUE_MAX_ROWS = 100;
 export const OVERDUE_MAX_CHARS = 8000;
 
@@ -68,8 +73,13 @@ export function resolveContextRefs(user: CurrentUser, context: string | undefine
   const rest = context
     .split("\n")
     .filter((l) => {
-      if (l.trim() === CTX_OVERDUE) {
+      const t = l.trim();
+      if (t === CTX_OVERDUE) {
         blocks.push(overdueTodosContext(user));
+        return false;
+      }
+      if (t === CTX_BRIEF || t === CTX_WEEK) {
+        blocks.push(t === CTX_BRIEF ? briefContext(user) : weekContext(user));
         return false;
       }
       return true;
@@ -77,4 +87,14 @@ export function resolveContextRefs(user: CurrentUser, context: string | undefine
     .join("\n")
     .trim();
   return { context: rest || undefined, blocks };
+}
+
+/** How many rows each context ref stands for right now (for the composer's chip: "Overdue tasks (12)"). */
+export function contextRefCounts(user: CurrentUser, now = new Date()): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (can(user, "todos.view")) {
+    const ctx = adapterContext(now);
+    out[CTX_OVERDUE] = (scopeResult(user, cachedSource("todos", now))?.data?.actions ?? []).filter((a) => overdueDate(a, ctx.timezone, ctx.today, now)).length;
+  }
+  return out;
 }

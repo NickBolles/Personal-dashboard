@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { QuickCapture } from "@/components/chat/QuickCapture";
+import { ContextNote } from "@/components/chat/ContextNote";
 import { BackendSwitch } from "@/components/chat/backend";
 import { Badge, Button, ErrorNote, Spinner, cx } from "@/components/ui";
 import { ChatIcon } from "@/components/icons";
@@ -84,12 +85,7 @@ export function ConversationsView({
         </div>
         <BackendSwitch />
       </header>
-      {context ? (
-        <div className="mb-2 rounded-[10px] border border-line bg-surface-2 px-3 py-2 text-sm">
-          <p className="eyebrow">Attached context</p>
-          <p className="mt-0.5">{context}</p>
-        </div>
-      ) : null}
+      {context ? <ContextNote context={context} /> : null}
       <div className="mb-3">
         <QuickCapture
           key={draft ?? "q"}

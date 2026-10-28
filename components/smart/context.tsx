@@ -21,6 +21,12 @@ export type SurfaceCtx = {
   undoing?: string;
   checks: string[];
   toggleCheck: (id: string) => void;
+  /** brief rows skipped on this surface (no write) */
+  skips: string[];
+  toggleSkip: (ref: string) => void;
+  /** the surface's saved UI state (e.g. week-plan block positions) */
+  uiState: Record<string, unknown>;
+  patchState: (patch: Record<string, unknown>) => void;
 };
 
 export const SurfaceContext = createContext<SurfaceCtx | null>(null);
