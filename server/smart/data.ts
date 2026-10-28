@@ -236,6 +236,9 @@ async function fetchPr(p: { owner: string; repo: string; number: number }, auth:
       const state = st.state === "success" ? "pass" : st.state === "pending" ? "pending" : "fail";
       checks.push({ name: s(st.context, 120) ?? "status", state, ...(s(st.description, 120) ? { detail: s(st.description, 120) } : {}) });
     }
+  // A check source GitHub didn't return may hold failing or running checks: keep readiness pending.
+  if (okSha && (runs?.status !== 200 || status?.status !== 200))
+    checks.push({ name: "Checks on GitHub", state: "pending", detail: "Couldn't load every check" });
   // More check runs than one page returned: readiness can't be complete, so keep it pending.
   const totalRuns = runs?.status === 200 ? num(asObj(runs.body)?.total_count) : undefined;
   if (totalRuns !== undefined && totalRuns > asArr(asObj(runs?.body)?.check_runs).length)

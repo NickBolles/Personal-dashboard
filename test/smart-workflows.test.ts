@@ -59,7 +59,7 @@ vi.mock("@/integrations/home-assistant/client", () => ({
     calendarEvents: vi.fn(async () => ha.created.map((b) => ({ summary: b.summary, start: { dateTime: b.start_date_time } }))),
   },
 }));
-const gh = vi.hoisted(() => ({ calls: [] as string[] }));
+const gh = vi.hoisted(() => ({ calls: [] as string[], runsDown: false }));
 vi.mock("@/server/work/github", async (orig) => {
   const real = await orig<typeof import("@/server/work/github")>();
   return {
@@ -80,6 +80,7 @@ vi.mock("@/server/work/github", async (orig) => {
           deletions: 96,
           changed_files: 14,
         });
+      if (path.includes("/check-runs") && gh.runsDown) return { status: 502, headers: new Headers(), body: null };
       if (path.includes("/check-runs"))
         return ok({
           check_runs: [
@@ -125,6 +126,7 @@ beforeEach(() => {
   __setTestDatabase();
   ha.created = [];
   gh.calls = [];
+  gh.runsDown = false;
   __resetPrCache();
   owner = claimInstance({ setupCode: "TESTCODE", name: "Owner", passcode: "synthetic-pass" });
 });
@@ -308,6 +310,17 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
     await store.addLink(me, finItem.id, { kind: "github_pr", url: "https://github.com/NickBolles/taxes/pull/3" } as never, cid).catch(() => undefined);
     const f = await (await call(hydrateRoute.POST, { body: { refs: ["pr:NickBolles/taxes#3"] } })).json();
     expect(f.refs["pr:NickBolles/taxes#3"].unavailable).toBe("finance");
+  });
+
+  it("PR card: a check source GitHub didn't return keeps readiness pending", async () => {
+    const { me, item } = seed();
+    await enable();
+    await store.addLink(me, item.id, { kind: "github_pr", url: "https://github.com/NickBolles/jarvis/pull/7" } as never, cid).catch(() => undefined);
+    gh.runsDown = true;
+    const h = await (await call(hydrateRoute.POST, { body: { refs: ["pr:NickBolles/jarvis#7"] } })).json();
+    const pr = h.refs["pr:NickBolles/jarvis#7"];
+    expect(pr.checks).toEqual([{ name: "Checks on GitHub", state: "pending", detail: "Couldn't load every check" }]);
+    expect(pr.readiness.blockers).toEqual(["1 check running"]);
   });
 
   it("chat context refs resolve to Jarvis refs, and the composer chip shows a count", async () => {
