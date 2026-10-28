@@ -180,6 +180,8 @@ export const sessionMeta = sqliteTable("session_meta", {
   shared: integer("shared", { mode: "boolean" }).notNull().default(false),
   lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull().default(now),
+  /** Hermes profile the session lives on (null = default profile); fixed at creation (Settings → Agents routing) */
+  hermesProfile: text("hermes_profile"),
 });
 
 /** Runs Jarvis started, tracked until Hermes confirms a terminal state. */
@@ -197,6 +199,8 @@ export const runs = sqliteTable(
     completedAt: text("completed_at"),
     lastCheckedAt: text("last_checked_at"),
     notifiedCompletion: integer("notified_completion", { mode: "boolean" }).notNull().default(false),
+    /** Hermes profile the run executes on (null = default profile) */
+    hermesProfile: text("hermes_profile"),
   },
   (t) => [index("runs_status_idx").on(t.status)],
 );

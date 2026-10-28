@@ -80,6 +80,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           return json(res, 200, {
             haCalls: services.ha.state.calls,
             hermesStructuredRequests: services.hermes.state.structuredCount,
+            hermesProfileRequests: services.hermes.state.profileRequests,
             fcmMessages: services.fcm.state.messages,
             monarchRefreshes: services.monarch.state.refreshes,
             anthropicRequests: services.anthropic.state.requests,

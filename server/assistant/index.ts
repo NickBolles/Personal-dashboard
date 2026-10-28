@@ -50,10 +50,11 @@ function indexed<T extends SessionSummary>(user: CurrentUser, s: T, opts: { inse
   return s;
 }
 
-export async function createSession(user: CurrentUser, title?: string, backend?: AssistantBackend) {
+/** `profile`: the routed Hermes profile for this conversation (Settings → Agents); ignored for Claude. */
+export async function createSession(user: CurrentUser, title?: string, backend?: AssistantBackend, profile?: string | null) {
   const b = backend ?? defaultBackend();
   if (!backendAvailable(b)) throw new HttpError(409, "backend_unavailable", b === "claude" ? "Claude isn't set up yet." : "Hermes isn't connected.");
-  return b === "claude" ? local.createLocalSession(user, title) : indexed(user, await hermes.createSession(user, title));
+  return b === "claude" ? local.createLocalSession(user, title) : indexed(user, await hermes.createSession(user, title, profile));
 }
 
 // Reads refresh that conversation's row in the persisted index (and its tree title) without adding new rows.
@@ -103,8 +104,9 @@ export const stopRun = (user: CurrentUser, runId: string, correlationId: string)
 
 export const reconcileRun = (runId: string) => (isLocalRun(runId) ? Promise.resolve(local.reconcileLocalRun(runId)) : hermes.reconcileRun(runId));
 
-export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string | undefined, signal: AbortSignal) {
-  return isLocalRun(runId) ? local.relayLocalEvents(user, runId, lastSeq, signal) : hermes.relayRunEvents(user, runId, lastSeq, signal);
+/** `format: "agui"` streams AG-UI events (Hermes runs only; Claude-direct keeps Jarvis events, which the client also reads). */
+export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string | undefined, signal: AbortSignal, format: "jarvis" | "agui" = "jarvis") {
+  return isLocalRun(runId) ? local.relayLocalEvents(user, runId, lastSeq, signal) : hermes.relayRunEvents(user, runId, lastSeq, signal, { format });
 }
 
 export function respondApproval(user: CurrentUser, runId: string, body: Parameters<typeof hermes.respondApproval>[2], correlationId: string) {

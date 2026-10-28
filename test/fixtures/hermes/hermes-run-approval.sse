@@ -1,0 +1,53 @@
+: open
+
+id: 0
+data: {"event": "tool.started", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192891.0744975, "tool": "terminal", "preview": "rm -rf /tmp/jarvis-agui-fixture-missing-dir", "seq": 0}
+
+id: 1
+data: {"command": "rm -rf /tmp/jarvis-agui-fixture-missing-dir", "pattern_key": "delete in root path", "pattern_keys": ["delete in root path"], "description": "delete in root path", "allow_permanent": true, "allow_session": true, "request_id": "b117d6dc7e684ec99017e93c8d794f08", "event": "approval.request", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192892.5015895, "choices": ["once", "session", "always", "deny"], "seq": 1}
+
+id: 2
+data: {"event": "approval.responded", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192892.5538435, "choice": "deny", "request_id": "b117d6dc7e684ec99017e93c8d794f08", "resolved": 1, "seq": 2}
+
+id: 3
+data: {"event": "tool.completed", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192892.567665, "tool": "terminal", "duration": 1.487, "error": true, "preview": "{\"output\": \"\", \"exit_code\": -1, \"error\": \"BLOCKED: Command denied by user. The user has NOT consented to this action. Do NOT retry this command, do NOT rephrase it, and do NOT attempt the same outcome via a different command. Stop the current workflow and wait for the user to respond before taking any further destructive or irreversible action.\", \"status\": \"blocked\", \"user_summary\": \"You denied this command \u2014 it did not run.\"}", "seq": 3}
+
+id: 4
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.4751248, "delta": "\n\nRefused", "seq": 4}
+
+id: 5
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.643826, "delta": "\u2014", "seq": 5}
+
+id: 6
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.6444519, "delta": "the", "seq": 6}
+
+id: 7
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.645311, "delta": " terminal", "seq": 7}
+
+id: 8
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.6461911, "delta": " tool", "seq": 8}
+
+id: 9
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.646841, "delta": " blocked", "seq": 9}
+
+id: 10
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.647468, "delta": " the destruct", "seq": 10}
+
+id: 11
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.660245, "delta": "ive rm", "seq": 11}
+
+id: 12
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.684034, "delta": " command pending", "seq": 12}
+
+id: 13
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.7083564, "delta": " your", "seq": 13}
+
+id: 14
+data: {"event": "message.delta", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.7346282, "delta": " consent.", "seq": 14}
+
+id: 15
+data: {"event": "reasoning.available", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.789277, "text": "Refused\u2014the terminal tool blocked the destructive rm command pending your consent.", "seq": 15}
+
+id: 16
+data: {"event": "run.completed", "run_id": "run_fe85445cfd444ee6b802bd8be2d039e0", "timestamp": 1793192893.8417137, "output": "Refused\u2014the terminal tool blocked the destructive rm command pending your consent.", "usage": {"input_tokens": 49169, "output_tokens": 90, "total_tokens": 49259, "cache_read_tokens": 46478, "cache_write_tokens": 2683}, "runtime": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001", "route_source": "raw_request", "requested": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}}, "completed": true, "partial": false, "interrupted": false, "seq": 16}
+

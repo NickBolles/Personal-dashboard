@@ -55,7 +55,11 @@ export function AreaSettingsCard({ area }: { area: WorkItem }) {
             <fieldset className="space-y-3">
               <legend className="eyebrow mb-1">Agent</legend>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field id="as-mode" label="Agent mode" hint="A Hermes profile or role, e.g. momentumchief. Sent to Hermes with each message here.">
+                <Field
+                  id="as-mode"
+                  label="Agent mode"
+                  hint="A Hermes profile, e.g. momentumchief. With a route in Settings → Agents, new chats and AI actions here run on that profile; otherwise it's sent as a hint."
+                >
                   <input
                     id="as-mode"
                     className={inputCls}

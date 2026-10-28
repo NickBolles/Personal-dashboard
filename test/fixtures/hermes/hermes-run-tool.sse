@@ -1,0 +1,29 @@
+: open
+
+id: 0
+data: {"event": "tool.started", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192886.3321602, "tool": "terminal", "preview": "echo jarvis-fixture", "seq": 0}
+
+id: 1
+data: {"event": "tool.completed", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192887.3018703, "tool": "terminal", "duration": 0.194, "error": false, "preview": "{\"output\": \"jarvis-fixture\", \"exit_code\": 0, \"error\": null}", "seq": 1}
+
+id: 2
+data: {"event": "message.delta", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192887.9295282, "delta": "\n\nThe", "seq": 2}
+
+id: 3
+data: {"event": "message.delta", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.0142877, "delta": " command", "seq": 3}
+
+id: 4
+data: {"event": "message.delta", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.0153573, "delta": " printed", "seq": 4}
+
+id: 5
+data: {"event": "message.delta", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.0163016, "delta": " `", "seq": 5}
+
+id: 6
+data: {"event": "message.delta", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.037323, "delta": "jarvis-fixture`.", "seq": 6}
+
+id: 7
+data: {"event": "reasoning.available", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.080648, "text": "The command printed `jarvis-fixture`.", "seq": 7}
+
+id: 8
+data: {"event": "run.completed", "run_id": "run_c4352166f1e24442aaac2bcda0eb0c78", "timestamp": 1793192888.125033, "output": "The command printed `jarvis-fixture`.", "usage": {"input_tokens": 43898, "output_tokens": 71, "total_tokens": 43969, "cache_read_tokens": 21900, "cache_write_tokens": 21990}, "runtime": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001", "route_source": "raw_request", "requested": {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}}, "completed": true, "partial": false, "interrupted": false, "seq": 8}
+

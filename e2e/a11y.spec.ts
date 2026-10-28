@@ -35,6 +35,7 @@ const PAGES = [
   "/areas/map",
   "/capture",
   "/settings/ai",
+  "/settings/agents",
 ];
 
 for (const path of PAGES) {

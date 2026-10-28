@@ -9,6 +9,8 @@ import { resolveContextRefs } from "@/server/smart/context";
 import { getSmartSettings } from "@/server/smart/store";
 import { smartInstructions } from "@/server/smart/prompt";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
+import { sessionProfile } from "@/integrations/hermes/service";
+import { isLocalSession } from "@/lib/assistant";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -42,9 +44,12 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     const context = [await buildContext(user, sources, extra), ...resolved.blocks].filter(Boolean).join("\n\n");
     const input = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
     const s = area?.settings;
+    // The agent-mode hint is only for conversations NOT already running on that Hermes profile (Settings → Agents).
+    const onProfile = isLocalSession(params.id) ? null : sessionProfile(params.id);
+    const modeHint = s?.agentMode && s.agentMode.trim().toLowerCase() !== onProfile ? s.agentMode : null;
     const areaInstructions =
-      s && (s.agentMode || s.instructions)
-        ? [`Jarvis area: ${area!.area.title}.`, s.agentMode ? `Agent mode: ${s.agentMode}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
+      s && (modeHint || s.instructions)
+        ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
     const instructions = [areaInstructions, smart].filter(Boolean).join("\n\n") || undefined;

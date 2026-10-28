@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { config } from "@/server/config";
@@ -8,7 +8,9 @@ import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
 import { getOwner, type CurrentUser } from "@/server/auth";
-import { hermesConn, HermesExecutionClient, HermesSessionClient } from "./client";
+import { HermesExecutionClient, HermesSessionClient, type HermesConn } from "./client";
+import { connForProfile } from "@/server/agents/routing";
+import { HermesAguiTranslator } from "@/server/agui/hermes";
 import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
 import { SYNC_SESSION_SOURCE } from "./structured";
 import { RUN_TERMINAL, runEventSchema } from "./types";
@@ -32,6 +34,15 @@ function activeRunsFor(ids: string[]) {
 }
 
 type Meta = typeof schema.sessionMeta.$inferSelect;
+
+/** The Hermes profile a session lives on (null = default), recorded when Jarvis created it. */
+export function sessionProfile(id: string) {
+  return metaFor([id]).get(id)?.hermesProfile ?? null;
+}
+
+/** Sessions and runs keep using the profile they were created on (Settings → Agents). */
+const connForSession = (id: string): HermesConn => connForProfile(sessionProfile(id));
+const connForRun = (row: { hermesProfile: string | null } | undefined): HermesConn => connForProfile(row?.hermesProfile ?? null);
 
 /**
  * Conversations are private to the person who started them. Sessions Jarvis
@@ -70,6 +81,7 @@ function decorate(list: SessionSummary[], user?: CurrentUser): SessionSummary[] 
       title: m?.titleOverride ?? s.title,
       forkedFromSessionId: m?.forkedFromSessionId ?? undefined,
       forkedFromMessageId: m?.forkedFromMessageId ?? undefined,
+      agentProfile: m?.hermesProfile ?? undefined,
       parentSessionId: s.parentSessionId ?? m?.forkedFromSessionId ?? undefined,
       activeRun: r
         ? {
@@ -112,7 +124,10 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
     throw new HttpError(400, "bad_offset", "Invalid conversation offset");
   }
   opts.signal?.throwIfAborted();
-  const res = await HermesSessionClient.list(hermesConn(), { limit, offset, includeChildren: true, signal: opts.signal });
+  const [res, routed] = await Promise.all([
+    HermesSessionClient.list(connForProfile(null), { limit, offset, includeChildren: true, signal: opts.signal }),
+    offset === 0 ? routedSessions(user, opts.signal) : Promise.resolve([]),
+  ]);
   if ((res.offset !== undefined && res.offset !== offset) || (res.limit !== undefined && res.limit !== limit)) {
     throw new UpstreamError("Hermes", "bad_response", "Hermes returned a different conversation window");
   }
@@ -120,13 +135,43 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
   // when a pin occupies the recency window. Err toward continuation, not loss.
   const hasMore = res.has_more === true || res.data.length >= limit;
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
-  const sessions = decorate(visible.map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
+  const sessions = decorate([...visible, ...routed].map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
   return {
     sessions: [...new Map(sessions.map((s) => [s.id, s])).values()],
     // Advance by the SQL window, not the filtered count or appended pin count.
     nextOffset: hasMore ? offset + limit : null,
   };
 }
+
+/**
+ * Conversations Jarvis started on other Hermes profiles (Settings → Agents) live in
+ * those profiles' stores, so the default list never returns them. Fetch the most
+ * recent ones by id on the first page (no list scans); unreachable ones are skipped.
+ */
+async function routedSessions(user: CurrentUser, signal?: AbortSignal) {
+  const rows = db()
+    .select({
+      sessionId: schema.sessionMeta.sessionId,
+      profile: schema.sessionMeta.hermesProfile,
+      userId: schema.sessionMeta.userId,
+      shared: schema.sessionMeta.shared,
+    })
+    .from(schema.sessionMeta)
+    .where(isNotNull(schema.sessionMeta.hermesProfile))
+    .orderBy(desc(schema.sessionMeta.lastSeenAt), desc(schema.sessionMeta.createdAt))
+    .limit(200)
+    .all()
+    .filter((r) => r.userId === user.id || r.shared)
+    .slice(0, ROUTED_LIST_LIMIT);
+  const got = await Promise.allSettled(
+    rows.map(async (r) => {
+      signal?.throwIfAborted();
+      return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
+    }),
+  );
+  return got.flatMap((g) => (g.status === "fulfilled" && !g.value.hidden ? [g.value] : []));
+}
+const ROUTED_LIST_LIMIT = 30;
 
 // Existing non-chat callers retain their bounded legacy window.
 export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
@@ -136,7 +181,7 @@ export async function listSessions(user: CurrentUser, opts: { includeArchived?: 
 export async function getSessionDetail(user: CurrentUser, id: string) {
   assertSessionId(id);
   assertAccess(user, id, "read");
-  const conn = hermesConn();
+  const conn = connForSession(id);
   const [session, messages] = await Promise.all([HermesSessionClient.get(conn, id), HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 })]);
   const [summary] = decorate([normalizeSession(session.session)], user);
   // Children (forks) of this session, for reciprocal lineage links.
@@ -161,16 +206,17 @@ export async function getSessionDetail(user: CurrentUser, id: string) {
 export async function getSessionSummary(user: CurrentUser, id: string) {
   assertSessionId(id);
   assertAccess(user, id, "read");
-  const res = await HermesSessionClient.get(hermesConn(), id);
+  const res = await HermesSessionClient.get(connForSession(id), id);
   const [summary] = decorate([normalizeSession(res.session)], user);
   if (!summary) throw new HttpError(404, "session_not_found", "Conversation not found");
   return summary;
 }
 
-export async function createSession(user: CurrentUser, title?: string) {
-  const conn = hermesConn();
+/** `profile`: a routed Hermes profile (server/agents/routing.ts resolveAgent), null/undefined = default. */
+export async function createSession(user: CurrentUser, title?: string, profile?: string | null) {
+  const conn = connForProfile(profile ?? null);
   const res = await HermesSessionClient.create(conn, { title: title?.trim() || undefined, source: "api_server" });
-  touchMeta(user, res.session.id);
+  touchMeta(user, res.session.id, profile ? { hermesProfile: profile } : {});
   return decorate([normalizeSession(res.session)], user)[0]!;
 }
 
@@ -183,7 +229,8 @@ export async function updateSession(
   assertSessionId(id);
   assertAccess(user, id, "write");
   const { shared, ...upstream } = patch;
-  const res = Object.keys(upstream).length ? await HermesSessionClient.update(hermesConn(), id, upstream) : await HermesSessionClient.get(hermesConn(), id);
+  const conn = connForSession(id);
+  const res = Object.keys(upstream).length ? await HermesSessionClient.update(conn, id, upstream) : await HermesSessionClient.get(conn, id);
   touchMeta(user, id, {
     ...(patch.archived !== undefined ? { archived: patch.archived } : {}),
     ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}),
@@ -214,13 +261,15 @@ export type ForkInput = {
 export async function forkSession(user: CurrentUser, id: string, input: ForkInput, correlationId: string) {
   assertSessionId(id);
   assertAccess(user, id, "read");
-  const conn = hermesConn();
+  const profile = sessionProfile(id);
+  const conn = connForProfile(profile);
+  const lineage = profile ? { hermesProfile: profile } : {};
   let child: SessionSummary;
   let run: RunView | undefined;
   if (!input.fromMessageId) {
     const res = await HermesSessionClient.fork(conn, id, { title: input.title?.trim() || undefined });
     child = normalizeSession(res.session);
-    touchMeta(user, child.id, { forkedFromSessionId: id });
+    touchMeta(user, child.id, { forkedFromSessionId: id, ...lineage });
   } else {
     if (!input.prompt?.trim()) {
       throw new HttpError(400, "prompt_required", "Forking from an earlier message needs a first prompt.");
@@ -269,7 +318,7 @@ export async function forkSession(user: CurrentUser, id: string, input: ForkInpu
       source: "api_server",
     });
     child = normalizeSession(created.session);
-    touchMeta(user, child.id, { forkedFromSessionId: id, forkedFromMessageId: input.fromMessageId });
+    touchMeta(user, child.id, { forkedFromSessionId: id, forkedFromMessageId: input.fromMessageId, ...lineage });
     run = await startRun(
       user,
       {
@@ -315,13 +364,15 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
   if (existing) {
     return { runId: existing.runId, sessionId: existing.sessionId, status: existing.status as RunView["status"] };
   }
-  const res = await HermesExecutionClient.start(hermesConn(), r);
+  const profile = sessionProfile(r.sessionId);
+  const res = await HermesExecutionClient.start(connForProfile(profile), r);
   db()
     .insert(schema.runs)
     .values({
       runId: res.run_id,
       sessionId: r.sessionId,
       userId: user.id,
+      hermesProfile: profile,
       idempotencyKey: r.idempotencyKey,
       status: "running",
       inputPreview: r.input.slice(0, 140),
@@ -353,7 +404,7 @@ function updateRunRow(runId: string, patch: Partial<typeof schema.runs.$inferIns
 export async function reconcileRun(runId: string): Promise<RunView> {
   const row = db().select().from(schema.runs).where(eq(schema.runs.runId, runId)).get();
   try {
-    const s = await HermesExecutionClient.status(hermesConn(), runId);
+    const s = await HermesExecutionClient.status(connForRun(row), runId);
     const approval = s.status === "waiting_for_approval" ? normalizeApproval(s.approval ?? undefined) : undefined;
     const terminal = isTerminal(s.status);
     updateRunRow(runId, {
@@ -389,7 +440,7 @@ export async function getRun(user: CurrentUser, runId: string) {
 
 export async function stopRun(user: CurrentUser, runId: string, correlationId: string): Promise<RunView> {
   const row = assertRunOwner(user, runId);
-  const res = await HermesExecutionClient.stop(hermesConn(), runId);
+  const res = await HermesExecutionClient.stop(connForRun(row), runId);
   // Remain "stopping" until Hermes confirms a terminal state.
   const status = isTerminal(res.status) ? res.status : "stopping";
   updateRunRow(runId, { status });
@@ -403,9 +454,9 @@ export async function respondApproval(
   body: { choice: "once" | "session" | "always" | "deny"; requestId?: string },
   correlationId: string,
 ) {
-  assertRunOwner(user, runId);
+  const row = assertRunOwner(user, runId);
   try {
-    const res = await HermesExecutionClient.approve(hermesConn(), runId, { choice: body.choice, request_id: body.requestId });
+    const res = await HermesExecutionClient.approve(connForRun(row), runId, { choice: body.choice, request_id: body.requestId });
     updateRunRow(runId, { pendingApproval: null, status: "running" });
     audit({ actor: user.id, action: "hermes.approval", source: "hermes", sourceRecord: runId, result: "ok", correlationId, detail: body });
     return res;
@@ -424,8 +475,8 @@ export async function respondApproval(
 }
 
 export async function steerRun(user: CurrentUser, runId: string, input: string, correlationId: string) {
-  assertRunOwner(user, runId);
-  const res = await HermesExecutionClient.steer(hermesConn(), runId, input);
+  const row = assertRunOwner(user, runId);
+  const res = await HermesExecutionClient.steer(connForRun(row), runId, input);
   audit({ actor: user.id, action: "hermes.steer", source: "hermes", sourceRecord: runId, result: "ok", correlationId });
   return res;
 }
@@ -439,8 +490,19 @@ const streams = processSingleton("hermes_streams", () => ({ active: 0 }));
  * The upstream key never reaches the browser. When the upstream stream ends
  * without a terminal event we emit `stream.closed` so the client reconciles.
  */
-export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string | undefined, clientSignal: AbortSignal) {
-  assertRunOwner(user, runId);
+export function relayRunEvents(
+  user: CurrentUser,
+  runId: string,
+  lastSeq: string | undefined,
+  clientSignal: AbortSignal,
+  opts: { format?: "jarvis" | "agui" } = {},
+) {
+  const row = assertRunOwner(user, runId);
+  // AG-UI (Coordinators C1, Settings → Agents flag): same relay, events translated by server/agui/hermes.ts.
+  const agui =
+    opts.format === "agui"
+      ? new HermesAguiTranslator({ threadId: row.sessionId, hermesRunId: runId, resumeFromSeq: lastSeq !== undefined ? Number(lastSeq) : undefined })
+      : null;
   if (streams.active >= config.maxStreams) throw new HttpError(429, "too_many_streams", "Too many open streams");
   streams.active++;
   const upstreamAbort = new AbortController();
@@ -468,12 +530,16 @@ export function relayRunEvents(user: CurrentUser, runId: string, lastSeq: string
           return false;
         }
       };
-      const send = (e: RunEvent, id?: number) => write(formatSse(e, id !== undefined ? { id } : {}));
+      const send = (e: RunEvent, id?: number) => {
+        if (!agui) return write(formatSse(e, id !== undefined ? { id } : {}));
+        for (const a of agui.push(e)) if (!write(formatSse(a, id !== undefined ? { id } : {}))) return false;
+        return true;
+      };
       write(": relay open\n\nretry: 2000\n\n");
       const keepalive = setInterval(() => write(": keepalive\n\n"), 15_000);
       let sawTerminal = false;
       try {
-        const res = await HermesExecutionClient.events(hermesConn(), runId, lastSeq, upstreamAbort.signal);
+        const res = await HermesExecutionClient.events(connForRun(row), runId, lastSeq, upstreamAbort.signal);
         if (!res.body) throw new UpstreamError("Hermes", "bad_response", "Hermes returned an empty event stream");
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         const parser = new SseParser();

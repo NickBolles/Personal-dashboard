@@ -75,6 +75,8 @@ export default defineConfig({
         JARVIS_ANTHROPIC_BASE_URL: `${MOCK_URL}/anthropic`,
         // GitHub reads go to the mock (tests never reach api.github.com).
         JARVIS_GITHUB_API_URL: `${MOCK_URL}/github`,
+        // Settings → Agents e2e: the mock Hermes' momentumchief profile key (mock-upstreams/hermes.mjs MOCK_PROFILE_KEYS).
+        JARVIS_HERMES_KEY_MOMENTUMCHIEF: "mock-hermes-momentumchief-key-0123456789",
         JARVIS_SETUP_CODE: "E2E-SETUP",
         JARVIS_WORKER_INTERVAL_MS: "3600000",
         JARVIS_SECURE_COOKIES: "false",
