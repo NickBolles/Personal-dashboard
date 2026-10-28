@@ -34,6 +34,18 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] conversation warmer didn't start", (err as Error).message);
   }
+  // Integration failure alerts: the worker derives them in tick(), but production runs with it
+  // disabled, so failing syncs (e.g. Skylight) were never surfaced. Read-only check of recorded streaks.
+  try {
+    const { config } = await import("./server/config");
+    if (!config.workerEnabled) {
+      const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+      const { alertIntegrationFailures } = await import("./server/worker");
+      registerDispatcherTask("integration_failure_alerts", 5 * 60_000, (now) => alertIntegrationFailures(now));
+    }
+  } catch (err) {
+    console.error("[jarvis] integration failure alerts didn't start", (err as Error).message);
+  }
   // AI job runner: only arms itself while ai.enabled and Hermes is configured (server/ai/runner.ts).
   try {
     const { startAiRunner } = await import("./server/ai/runner");

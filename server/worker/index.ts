@@ -5,13 +5,16 @@ import { getPreferences } from "@/server/settings";
 import { notify, notifyHolders, pruneNotifications } from "@/server/notifications";
 import { deliverPendingPushes } from "@/server/notifications/push";
 import { collectSources, failureInfo } from "@/server/sources";
-import { SOURCE_LABELS, type ActionSource } from "@/lib/contracts";
+import { ACTION_SOURCES, SOURCE_LABELS, type ActionSource } from "@/lib/contracts";
 import { MINUTE } from "@/lib/time";
 import { markCompletionNotified, runsNeedingCompletionNotice, unfinishedRuns } from "@/integrations/hermes/service";
 import { reconcileRun } from "@/server/assistant";
 import { isLocalRun } from "@/lib/assistant";
 import { isConfigured } from "@/integrations/store";
+import { INTEGRATIONS } from "@/integrations/registry";
 import { reminderInstant } from "@/integrations/daily-compass/adapter";
+
+const INTEGRATION_KINDS = new Set<string>(INTEGRATIONS.map((d) => d.kind));
 
 const g = globalThis as unknown as { __jarvisWorker?: { timer: NodeJS.Timeout; running: boolean; lastRun?: string; lastError?: string } };
 
@@ -127,25 +130,7 @@ export async function tick(now = new Date()) {
         );
       }
     }
-    const f = failureInfo(src);
-    if (f?.firstFailureAt && (f.state === "error" || f.state === "unauthorized")) {
-      const minutes = (now.getTime() - new Date(f.firstFailureAt).getTime()) / MINUTE;
-      if (minutes >= prefs.integrationFailureAlertMinutes) {
-        notifyHolders(
-          {
-            type: "integration.failure",
-            category: "integration_failure",
-            severity: f.state === "unauthorized" ? "high" : "normal",
-            title: `${SOURCE_LABELS[src]} ${f.state === "unauthorized" ? "needs re-authentication" : "is failing"}`,
-            body: f.error ?? "Repeated errors",
-            source: src,
-            deepLink: "/settings/connections",
-            dedupeKey: `integration:${src}:${f.firstFailureAt}`,
-          },
-          "admin",
-        );
-      }
-    }
+    alertIntegrationFailure(src, now, prefs.integrationFailureAlertMinutes);
   }
 
   // 3. Outbox
@@ -155,6 +140,44 @@ export async function tick(now = new Date()) {
   pruneSessions();
   pruneNotifications();
   return summary;
+}
+
+/** Alert admins once per failure streak when a source has failed for longer than the configured threshold. */
+export function alertIntegrationFailure(src: ActionSource, now: Date, thresholdMinutes: number) {
+  const f = failureInfo(src);
+  if (!f?.firstFailureAt || (f.state !== "error" && f.state !== "unauthorized")) return false;
+  const minutes = (now.getTime() - new Date(f.firstFailureAt).getTime()) / MINUTE;
+  if (minutes < thresholdMinutes) return false;
+  notifyHolders(
+    {
+      type: "integration.failure",
+      category: "integration_failure",
+      severity: f.state === "unauthorized" ? "high" : "normal",
+      title: `${SOURCE_LABELS[src]} ${f.state === "unauthorized" ? "needs re-authentication" : "is failing"}`,
+      body: `${f.error ?? "Repeated errors"} (${f.consecutiveFailures} failed syncs)`,
+      source: src,
+      deepLink: "/settings/connections",
+      dedupeKey: `integration:${src}:${f.firstFailureAt}`,
+    },
+    "admin",
+  );
+  return true;
+}
+
+/**
+ * Production runs with the worker disabled, so tick() never derives failure
+ * alerts there. Sources are still refreshed on demand (Home, pages); this
+ * checks their recorded failure streaks without fetching anything.
+ */
+export function alertIntegrationFailures(now = new Date()) {
+  if (!getOwner()) return [];
+  const threshold = getPreferences().integrationFailureAlertMinutes;
+  const alerted: ActionSource[] = [];
+  for (const src of ACTION_SOURCES) {
+    if (INTEGRATION_KINDS.has(src) && !isConfigured(src)) continue;
+    if (alertIntegrationFailure(src, now, threshold)) alerted.push(src);
+  }
+  return alerted;
 }
 
 export function startWorker() {
