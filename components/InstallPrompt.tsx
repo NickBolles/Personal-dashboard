@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge, Button } from "@/components/ui";
+import { isAndroidWrapper } from "@/lib/client/wrapper";
 
 type BIPEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
@@ -21,7 +22,7 @@ export function InstallPrompt() {
   const [secure, setSecure] = useState(true);
   useEffect(() => {
     setSecure(window.isSecureContext);
-    setInstalled(window.matchMedia("(display-mode: standalone)").matches);
+    setInstalled(isAndroidWrapper() || window.matchMedia("(display-mode: standalone)").matches);
     setCanPrompt(Boolean(deferred));
     const l = () => setCanPrompt(Boolean(deferred));
     listeners.add(l);

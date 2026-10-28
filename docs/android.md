@@ -2,7 +2,9 @@
 
 A native app (Kotlin, Jetpack Compose, Material 3) in `android/`. It is a client of your Jarvis server: integrations, ranking, readback checks and Hermes all stay on the server. The app adds native screens, an instant-open cache, widgets, a Quick Settings tile, share-to-Jarvis, and notifications. One APK works with any Jarvis, because the server address comes from pairing.
 
-The web app is still there for desktop and for setup (connections, onboarding). Chrome's "Install app" also still works, but the native app is the better phone experience.
+**Since 1.0.7x the app opens the Jarvis web app** full screen in Chrome (a Trusted Web Activity, `web/TwaLauncherActivity.kt`). Widgets, the Quick Settings tile, launcher shortcuts and notification taps stay native and open the matching web page (`web/WebLinks.kt` maps the old native links, e.g. `jarvis://areas/<id>` → `/areas?item=<id>`, `/search` → Home with search open, capture chips → `/capture?attach=…`). Notifications stay on FCM (channels, **Mark handled**); the web app hides its own push opt-in inside the app (`?source=android` / the `android-app://` referrer, remembered per tab), so nothing arrives twice. The site serves `/.well-known/assetlinks.json` (package + signing-key SHA-256, env `JARVIS_ANDROID_CERT_SHA256`); if Chrome can't verify it, the app still works but shows a URL bar. The web origin is the paired server, or `-PjarvisOrigin` (default `https://jarvis.nickbolles.com`) before pairing.
+
+The native screens below are still in this release behind a hidden **Classic app** launcher shortcut (long-press the icon) as a fallback; pairing (`jarvis://pair`) and Share → Jarvis still use them. They go away after a week of use (wrapper plan S5).
 
 ## What you can do from the app
 

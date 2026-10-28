@@ -15,21 +15,64 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.Jarvis">
 
+        <!-- Digital Asset Links: the app's side of the site ↔ app link (the site serves /.well-known/assetlinks.json). -->
+        <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
+
+        <!--
+          Launcher: the Jarvis web app full screen in Chrome (Trusted Web Activity). Widgets, the tile,
+          shortcuts and notifications open their pages here (web/WebLinks.kt maps the old native links).
+          Not singleTask: androidbrowserhelper keeps one task itself and navigates the running app.
+        -->
         <activity
-            android:name=".MainActivity"
+            android:name=".web.TwaLauncherActivity"
             android:exported="true"
-            android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustResize">
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Jarvis.Launcher">
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="${jarvisDefaultUrl}" />
+            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/brand" />
+            <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK" android:resource="@color/dark_background" />
+            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/window_background" />
+            <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK" android:resource="@color/dark_background" />
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Pairing QR: jarvis://pair?server=…&code=… ; in-app links: jarvis://open/<path> -->
+            <!-- In-app links from widgets, the tile, shortcuts, notifications: jarvis://open/<path>, jarvis://areas/<id> -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="jarvis" />
+                <data android:scheme="jarvis" android:host="open" />
+                <data android:scheme="jarvis" android:host="areas" />
+            </intent-filter>
+            <!-- App Links: Jarvis links elsewhere on the phone open the app (verified by the site's assetlinks.json). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${jarvisHost}" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Classic native screens, kept for one release behind the hidden "Classic app" shortcut
+          (long-press the icon) as a fallback. Also handles pairing links and shared text.
+          Own task so it never stacks on the web app.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/classic_app"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.nickbolles.jarvis.classic"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Pairing QR: jarvis://pair?server=…&code=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="jarvis" android:host="pair" />
             </intent-filter>
             <!-- Share text or a link to Jarvis → Ask Hermes with it -->
             <intent-filter>
@@ -37,7 +80,6 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
         <activity
