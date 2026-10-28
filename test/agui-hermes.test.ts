@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { EventSchemas } from "@ag-ui/core/schemas";
 import { EventType, type AGUIEvent, type BaseEvent } from "@ag-ui/core";
 import { verifyEvents } from "@ag-ui/client";
-import { from, lastValueFrom, toArray } from "rxjs";
+import { from, lastValueFrom, toArray, type OperatorFunction } from "rxjs";
 import { SseParser } from "@/lib/sse";
 import { normalizeRunEvent } from "@/integrations/hermes/normalize";
 import { runEventSchema } from "@/integrations/hermes/types";
@@ -34,6 +34,7 @@ function translate(events: RunEvent[], opts: { resumeFromSeq?: number; close?: b
   return out;
 }
 
+// @ag-ui/client bundles its own rxjs copy, so its operator type is cast to ours.
 /** Split into AG-UI runs (one per RUN_STARTED) and run the protocol verifier on each. */
 async function verifyRuns(events: AGUIEvent[]) {
   const runs: AGUIEvent[][] = [];
@@ -42,7 +43,7 @@ async function verifyRuns(events: AGUIEvent[]) {
     runs.at(-1)!.push(e);
   }
   for (const r of runs) {
-    const ok = await lastValueFrom(from(r as BaseEvent[]).pipe(verifyEvents(false), toArray()));
+    const ok = await lastValueFrom(from(r as BaseEvent[]).pipe(verifyEvents(false) as unknown as OperatorFunction<BaseEvent, BaseEvent>, toArray()));
     expect(ok).toHaveLength(r.length);
   }
   return runs;
