@@ -225,17 +225,21 @@ async function fetchPr(p: { owner: string; repo: string; number: number }, auth:
   ]);
   const checks: PrData["checks"] = [];
   if (runs?.status === 200)
-    for (const r of asArr(asObj(runs.body)?.check_runs).slice(0, 60))
+    for (const r of asArr(asObj(runs.body)?.check_runs))
       checks.push({
         name: s(r.name, 120) ?? "check",
         state: checkState(r.status, r.conclusion),
         ...(s(r.conclusion, 40) ? { detail: s(r.conclusion, 40) } : {}),
       });
   if (status?.status === 200)
-    for (const st of asArr(asObj(status.body)?.statuses).slice(0, 40)) {
+    for (const st of asArr(asObj(status.body)?.statuses)) {
       const state = st.state === "success" ? "pass" : st.state === "pending" ? "pending" : "fail";
       checks.push({ name: s(st.context, 120) ?? "status", state, ...(s(st.description, 120) ? { detail: s(st.description, 120) } : {}) });
     }
+  // More check runs than one page returned: readiness can't be complete, so keep it pending.
+  const totalRuns = runs?.status === 200 ? num(asObj(runs.body)?.total_count) : undefined;
+  if (totalRuns !== undefined && totalRuns > asArr(asObj(runs?.body)?.check_runs).length)
+    checks.push({ name: "More checks on GitHub", state: "pending", detail: `${totalRuns} in total` });
   // Latest review per reviewer decides; comments don't override an approval.
   const latest = new Map<string, PrData["reviews"][number]["state"]>();
   if (reviews.status === 200)
@@ -269,7 +273,11 @@ async function fetchPr(p: { owner: string; repo: string; number: number }, auth:
     mergeableState: s(b.mergeable_state, 40),
     codexFindings,
   };
-  return { ...data, readiness: readiness(data) };
+  // Readiness counts every returned check; only the displayed list is trimmed (blockers first).
+  const ready = readiness(data);
+  const rank = { fail: 0, pending: 1, pass: 2, skipped: 3 } as Record<string, number>;
+  const shown = checks.length <= 100 ? checks : [...checks].sort((x, y) => (rank[x.state] ?? 4) - (rank[y.state] ?? 4)).slice(0, 100);
+  return { ...data, checks: shown, readiness: ready };
 }
 
 export async function pullRequest(user: CurrentUser, ref: string, now = Date.now()): Promise<Out> {
