@@ -57,6 +57,7 @@ export function AllItemsView({ initial }: { initial: AttentionBucket }) {
             aria-controls="all-items"
             onClick={() => {
               setBucket(t.id);
+              setSource("");
               window.history.replaceState(null, "", `/home/all?bucket=${t.id}`);
             }}
             className={cx(
