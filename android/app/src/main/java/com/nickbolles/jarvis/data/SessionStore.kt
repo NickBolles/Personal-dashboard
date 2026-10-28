@@ -52,6 +52,9 @@ class SessionStore(private val context: Context, private val crypto: TokenCrypto
 
     suspend fun current(): Pairing? = context.dataStore.data.first().toPairing()
 
+    /** The paired server URL without touching the token (the web app's origin in the wrapper). */
+    suspend fun pairedServer(): String? = context.dataStore.data.first().let { if (it[K.token] != null) it[K.server] else null }
+
     suspend fun savePairing(p: Pairing) {
         context.dataStore.edit {
             it[K.server] = p.server
