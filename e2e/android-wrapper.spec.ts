@@ -14,20 +14,42 @@ test("asset links are public JSON for the Jarvis Android package", async ({ play
   await anon.dispose();
 });
 
-test("inside the Android app the web push opt-in is hidden for the whole tab", async ({ page }) => {
+test("inside the Android app without Firebase, web push is offered (FCM not configured)", async ({ page, context }) => {
+  // Headless CI Chromium reports notifications as "denied" unless granted ("web push blocked").
+  await context.grantPermissions(["notifications"]);
+  await page.goto("/settings/notifications?source=android");
+  const status = page.getByTestId("push-status");
+  await expect(status).toContainText("This phone:");
+  await expect(status).toContainText("web push off");
+  await expect(page.getByTestId("fcm-status")).toHaveText("FCM not configured");
+  await expect(page.getByTestId("android-app-webpush-note")).toBeVisible();
+  await expect(page.getByTestId("android-app-push-note")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Enable notifications" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send test notification" })).toBeVisible();
+  // Later navigations in the same tab no longer carry ?source=android but still count as the app.
+  await page.goto("/settings/notifications");
+  await expect(page.getByTestId("fcm-status")).toHaveText("FCM not configured");
+  await expect(page.getByRole("button", { name: "Enable notifications" })).toBeVisible();
+});
+
+test("inside the Android app with working FCM the web push opt-in is hidden", async ({ page }) => {
+  await page.route("**/api/push/capabilities", (route) =>
+    route.fulfill({
+      json: { fcmConfigured: true, phoneTokens: 1, nativePhonePush: true, webSubscriptions: 0, androidAppSubscriptions: 0 },
+    }),
+  );
   await page.goto("/settings/notifications?source=android");
   await expect(page.getByTestId("android-app-push-note")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enable push on this device" })).toHaveCount(0);
-  // Later navigations in the same tab no longer carry ?source=android.
-  await page.goto("/settings/notifications");
-  await expect(page.getByTestId("android-app-push-note")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Enable push on this device" })).toHaveCount(0);
+  await expect(page.getByTestId("fcm-status")).toHaveText("app push (FCM) on");
+  await expect(page.getByRole("button", { name: "Enable notifications" })).toHaveCount(0);
 });
 
 test("a plain browser tab keeps the web push controls", async ({ page }) => {
   await page.goto("/settings/notifications");
   await expect(page.getByRole("heading", { name: "Push on this device" })).toBeVisible();
   await expect(page.getByTestId("android-app-push-note")).toHaveCount(0);
+  await expect(page.getByTestId("fcm-status")).toHaveCount(0);
+  await expect(page.getByTestId("push-status")).toContainText("This device:");
 });
 
 test("?search=1 opens search (the app's search shortcut)", async ({ page }) => {

@@ -32,7 +32,7 @@ export async function currentSubscription() {
   return (await reg?.pushManager.getSubscription()) ?? null;
 }
 
-export async function enablePush() {
+export async function enablePush(opts: { androidApp?: boolean } = {}) {
   const permission = await Notification.requestPermission();
   if (permission !== "granted")
     throw new Error(permission === "denied" ? "Notifications are blocked for this site. Allow them in your browser settings." : "Permission was not granted.");
@@ -42,7 +42,7 @@ export async function enablePush() {
   const sub =
     (await reg.pushManager.getSubscription()) ??
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) }));
-  await api.post("/api/push/subscribe", sub.toJSON());
+  await api.post("/api/push/subscribe", { ...sub.toJSON(), source: opts.androidApp ? "android-app" : "browser" });
   return sub;
 }
 
