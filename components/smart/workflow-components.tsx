@@ -251,7 +251,13 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
   const plannable = days.filter((d) => d >= s.today);
   const cal = hyd(s.refs[calendarRef(p.weekOf, p.days ?? 5)], "calendar");
   const saved = (s.uiState.blocks ?? {}) as Record<string, Pos>;
-  const pos = (b: (typeof p.blocks)[number]): Pos => saved[b.ref] ?? { day: b.day && b.day >= s.today ? b.day : null, start: b.start };
+  // Saved (moved) positions get the same past-day guard as the model's: a block left on a day
+  // that has since passed goes back to Unscheduled, so it never stages a past date (which the
+  // server rejects, failing the whole apply batch).
+  const pos = (b: (typeof p.blocks)[number]): Pos => {
+    const at = saved[b.ref] ?? { day: b.day ?? null, start: b.start };
+    return at.day && at.day >= s.today ? at : { day: null };
+  };
   const [drag, setDrag] = useState<{ ref: string; x: number; y: number; dy: number; w: number; h: number; over?: string | null } | null>(null);
   const dragStart = useRef<{ ref: string; x: number; y: number; dy: number; w: number; h: number } | null>(null);
 

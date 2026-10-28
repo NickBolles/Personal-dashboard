@@ -10,7 +10,7 @@ import { SurfaceContext, type SurfaceCtx } from "@/components/smart/context";
 
 const FIX = path.join(import.meta.dirname, "fixtures/jarvis-ui");
 
-function html(name: string, refs: SurfaceCtx["refs"] = {}) {
+function html(name: string, refs: SurfaceCtx["refs"] = {}, uiState: SurfaceCtx["uiState"] = {}) {
   const v = validateBlock(fs.readFileSync(path.join(FIX, name), "utf8"));
   if (!v.ok) throw new Error(v.reason);
   const ctx: SurfaceCtx = {
@@ -27,7 +27,7 @@ function html(name: string, refs: SurfaceCtx["refs"] = {}) {
     toggleCheck: () => undefined,
     skips: [],
     toggleSkip: () => undefined,
-    uiState: {},
+    uiState,
     patchState: () => undefined,
   };
   return renderToStaticMarkup(
@@ -118,5 +118,16 @@ describe("smart renderer (web)", () => {
     expect(out).toContain("Open on GitHub to merge ↗");
     expect(out).not.toMatch(/>\s*Merge\s*</);
     expect(out).toContain('href="https://github.com/NickBolles/jarvis/pull/7"');
+  });
+  it("puts a block saved on a day that has passed back in Unscheduled", () => {
+    const refs: SurfaceCtx["refs"] = {
+      "todo:gt-1": { ref: "todo:gt-1", kind: "todo", title: "Return ladder", due: "2026-10-26", status: "open" },
+      "item:wi_1": { ref: "item:wi_1", kind: "item", title: "Team totals", due: "2026-10-27", status: "in_progress", where: "Momentum" },
+    };
+    // today is 2026-10-27: a block moved to Monday yesterday must not keep (and stage) that past date
+    const past = html("workflows-v11.json", refs, { blocks: { "todo:gt-1": { day: "2026-10-26", start: "09:00" } } });
+    expect(past).toContain("Unscheduled (2)");
+    const future = html("workflows-v11.json", refs, { blocks: { "todo:gt-1": { day: "2026-10-29", start: "09:00" } } });
+    expect(future).toContain("Unscheduled (1)");
   });
 });
