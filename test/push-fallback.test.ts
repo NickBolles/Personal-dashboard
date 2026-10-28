@@ -98,4 +98,15 @@ describe("delivery dedupe", () => {
     expect(await deliverPendingPushes()).toBe(2);
     expect(endpointsSent()).toEqual([laptopSub.endpoint]);
   });
+
+  it("a second app subscription keeps web push when FCM reached only one phone", async () => {
+    fcm.configured = true;
+    fcm.sent = 1;
+    const otherPhone = { endpoint: "https://fcm.googleapis.com/fcm/send/phone-twa-2", keys: { p256dh: "p", auth: "a" } };
+    await call(subscribeRoute.POST, "POST", { ...phoneSub, source: "android-app" });
+    await call(subscribeRoute.POST, "POST", { ...otherPhone, source: "android-app" });
+    alert("dedupe-2");
+    await deliverPendingPushes();
+    expect(endpointsSent().sort()).toEqual([phoneSub.endpoint, otherPhone.endpoint].sort());
+  });
 });

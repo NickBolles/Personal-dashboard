@@ -9,7 +9,8 @@ import { HttpError } from "@/server/http/errors";
 import { inWindow, localMinutes } from "@/lib/time";
 import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contracts";
 import { claimPush, pendingPushes, setPushState, unreadActionableCount } from "./index";
-import { fcmData, sendFcmToUser } from "./fcm";
+import { fcmData, fcmStatus, sendFcmToUser } from "./fcm";
+import { pushDevices } from "@/server/devices";
 
 type Vapid = { publicKey: string; privateKey: string };
 
@@ -92,8 +93,12 @@ export function listSubscriptions(userId: string) {
   return getDb().select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId)).all();
 }
 
-export async function sendToUser(userId: string, payload: PushPayload, opts: { urgency?: "high" | "normal" | "low"; skipAndroidApp?: boolean } = {}) {
-  const all = listSubscriptions(userId).filter((s) => !(opts.skipAndroidApp && s.source === "android-app"));
+export async function sendToUser(userId: string, payload: PushPayload, opts: { urgency?: "high" | "normal" | "low"; fcmPhonesReached?: number } = {}) {
+  let all = listSubscriptions(userId);
+  // Skip the Android app's web push only when FCM reached at least as many phones as there are app
+  // subscriptions (subscriptions aren't tied to a device): a duplicate beats a phone getting nothing.
+  const appSubs = all.filter((s) => s.source === "android-app").length;
+  if (appSubs && (opts.fcmPhonesReached ?? 0) >= appSubs) all = all.filter((s) => s.source !== "android-app");
   // Endpoints saved before the allowlist existed are dropped, never contacted.
   for (const s of all) if (!isAllowedPushEndpoint(s.endpoint)) removeSubscription(s.endpoint);
   const subs = all.filter((s) => isAllowedPushEndpoint(s.endpoint));
@@ -166,7 +171,7 @@ export async function deliverPendingPushes(now = new Date()) {
     // working token) the Android app's own web push subscription is the phone's channel; when FCM did
     // reach a phone, that app subscription is skipped so the phone doesn't buzz twice.
     const phone = await sendFcmToUser(n.userId, fcmData({ ...payload, category: n.category, unread: unreadActionableCount(n.userId) }), { urgency });
-    const web = await sendToUser(n.userId, payload, { urgency, skipAndroidApp: phone.sent > 0 });
+    const web = await sendToUser(n.userId, payload, { urgency, fcmPhonesReached: phone.failed ? 0 : phone.sent });
     const total = web.total + phone.total;
     const sent = web.sent + phone.sent;
     setPushState(n.id, total === 0 ? "suppressed" : sent > 0 ? "sent" : "failed");
@@ -179,9 +184,7 @@ export async function deliverPendingPushes(now = new Date()) {
  * What push channels exist for this user. The Android app shows its web push opt-in unless the
  * server can actually deliver FCM to a paired phone (Firebase configured and a token registered).
  */
-export async function pushCapabilities(userId: string) {
-  const { fcmStatus } = await import("./fcm");
-  const { pushDevices } = await import("@/server/devices");
+export function pushCapabilities(userId: string) {
   const fcmConfigured = fcmStatus().configured;
   const phoneTokens = pushDevices(userId).length;
   const subs = listSubscriptions(userId).filter((s) => isAllowedPushEndpoint(s.endpoint));
