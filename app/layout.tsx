@@ -1,7 +1,13 @@
 import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { AndroidWrapperMarker } from "@/components/AndroidWrapperMarker";
+import { ThemeSync } from "@/components/ui/ThemeSync";
+
+// Self-hosted at build time by next/font: no font CDN request at runtime.
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist", display: "swap" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "Jarvis", template: "%s · Jarvis" },
@@ -24,14 +30,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f6f6f3" },
-    { media: "(prefers-color-scheme: dark)", color: "#111210" },
+    { media: "(prefers-color-scheme: light)", color: "#f2f3f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0c0d0f" },
   ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className={`h-full antialiased ${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="min-h-full">
         <a
           href="#main"
@@ -40,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <AndroidWrapperMarker />
+        <ThemeSync />
         <Providers>{children}</Providers>
       </body>
     </html>

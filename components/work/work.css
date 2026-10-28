@@ -1,7 +1,7 @@
 /*
  * Work hub: Command center density (design artifact "Direction C").
  * Scoped to .work-ui so nothing leaks into the rest of Jarvis. Tokens come from
- * app/globals.css; the two violet tokens extend them for review/merge states.
+ * app/globals.css; violet = the AI hue from the v1 tokens.
  *
  * Density rules: compact only for fine pointers (mouse/trackpad). Touch keeps
  * the shared 44px targets (and never drops below 40px).
@@ -11,16 +11,8 @@
  */
 
 .work-ui {
-  --violet: #6b3fc4;
-  --violet-soft: #f0e9ff;
   --wk-side: 256px;
   --wk-rail: 288px; /* keep in sync with RAIL_MIN_CONTENT (WorkView) */
-}
-@media (prefers-color-scheme: dark) {
-  .work-ui {
-    --violet: #c4a8ff;
-    --violet-soft: #2a2145;
-  }
 }
 
 /* ---- type helpers ---- */
