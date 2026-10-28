@@ -4,17 +4,7 @@ import Link from "next/link";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf } from "@/lib/jarvis-ui/catalog";
-import {
-  blockFits,
-  blockMoveIntent,
-  chipIntent,
-  DAY_END,
-  DAY_START,
-  fmtMinutes,
-  weekDays,
-  type BriefChoice,
-  type Intent,
-} from "@/lib/jarvis-ui/intents";
+import { blockFits, blockMoveIntent, chipIntent, DAY_END, DAY_START, fmtMinutes, weekDays, type BriefChoice, type Intent } from "@/lib/jarvis-ui/intents";
 import { calendarRef } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
@@ -161,7 +151,10 @@ function BriefRow({ row }: { row: PropsOf<"ApprovalChips">["rows"][number] }) {
   };
   const chosen = skipped ? "skip" : choiceOf(staged);
   return (
-    <li className={cx("smart-row flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-3 py-2", (skipped || applied) && "opacity-70")} data-ref={row.ref}>
+    <li
+      className={cx("smart-row flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-line px-3 py-2", (skipped || applied) && "opacity-70")}
+      data-ref={row.ref}
+    >
       <div className="min-w-0 flex-1 basis-48">
         <p className={cx("truncate font-medium", skipped && "line-through")}>{name}</p>
         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted" data-dynamic>
@@ -289,7 +282,9 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
   const calCandidates = p.blocks.filter((b) => pos(b).day && pos(b).start && hyd(s.refs[b.ref], ["todo", "item"]) && !s.staged.has(`cal:${b.ref}`));
 
   const fixedMin = (d: string) =>
-    (cal?.events ?? []).filter((e) => e.day === d && !e.allDay && e.start).reduce((n, e) => n + Math.max(15, (e.end ? toMin(e.end) : toMin(e.start!) + 60) - toMin(e.start!)), 0);
+    (cal?.events ?? [])
+      .filter((e) => e.day === d && !e.allDay && e.start)
+      .reduce((n, e) => n + Math.max(15, (e.end ? toMin(e.end) : toMin(e.start!) + 60) - toMin(e.start!)), 0);
   const blockMin = (d: string) => p.blocks.filter((b) => pos(b).day === d).reduce((n, b) => n + b.minutes, 0);
   const scheduled = p.blocks.filter((b) => pos(b).day);
   const totalMin = scheduled.reduce((n, b) => n + b.minutes, 0);
@@ -348,7 +343,10 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
         items.push(
           calStaged
             ? { label: "Don’t add to calendar", onSelect: () => s.stage(`cal:${b.ref}`, undefined) }
-            : { label: "Add to calendar…", onSelect: () => s.stage(`cal:${b.ref}`, { kind: "calendar.block", ref: b.ref, date: at.day!, start: at.start!, minutes: b.minutes }) },
+            : {
+                label: "Add to calendar…",
+                onSelect: () => s.stage(`cal:${b.ref}`, { kind: "calendar.block", ref: b.ref, date: at.day!, start: at.start!, minutes: b.minutes }),
+              },
         );
       if (applied && canUndo(applied)) items.push({ label: "Undo date change", onSelect: () => s.undo(applied) });
     }

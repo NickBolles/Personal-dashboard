@@ -39,7 +39,11 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
     const intent = p.data;
     // External writes go only through their own approval, never mixed into an ordinary Apply.
     if (isExternal(intent) !== external)
-      throw new HttpError(400, external ? "not_external" : "needs_approval", external ? "Only calendar blocks can be approved here" : "Calendar blocks need their own approval");
+      throw new HttpError(
+        400,
+        external ? "not_external" : "needs_approval",
+        external ? "Only calendar blocks can be approved here" : "Calendar blocks need their own approval",
+      );
     if (isExternal(intent)) requireCalendarWrites(user);
     if (!capFor(intent).every((c) => can(user, c))) throw new HttpError(403, "forbidden", "You don't have access to that.");
     if (!intentInSpec(spec, intent, today)) throw new HttpError(400, "not_offered", "That change wasn't offered by this reply");
@@ -128,7 +132,11 @@ async function withSurfaceLock<T>(surfaceId: string, fn: () => Promise<T>): Prom
   }
 }
 
-export function applyIntents(user: CurrentUser, body: { surfaceId: string; intents: unknown[]; idempotencyKey: string; external?: true }, correlationId: string) {
+export function applyIntents(
+  user: CurrentUser,
+  body: { surfaceId: string; intents: unknown[]; idempotencyKey: string; external?: true },
+  correlationId: string,
+) {
   return withSurfaceLock(body.surfaceId, () => applyLocked(user, body, correlationId));
 }
 
@@ -186,7 +194,12 @@ async function applyLocked(
     sourceRecord: row.id,
     result: results.every((r) => r.ok) ? "ok" : "error",
     correlationId,
-    detail: { kinds: checked.map((c) => c.intent.kind), external: body.external === true, ok: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length },
+    detail: {
+      kinds: checked.map((c) => c.intent.kind),
+      external: body.external === true,
+      ok: results.filter((r) => r.ok).length,
+      failed: results.filter((r) => !r.ok).length,
+    },
   });
   return { results, surface: toView({ ...row, appliedJson: JSON.stringify(applied) }, user) };
 }

@@ -218,8 +218,7 @@ export const COMPONENT_DOCS: Record<ComponentName, string> = {
   Gauge: "{metric} live Jarvis number, or {label, value, max, unit?, note?} as your estimate",
   Sparkline: "{metric, label?} trend from a Jarvis series",
   ApprovalChips: "{title, rows:[{ref, reason?}]} brief rows: Today/Snooze/Skip",
-  WeekPlan:
-    "{weekOf: Monday, days?: 5|7, blocks:[{ref, day: YYYY-MM-DD|null, start?: HH:MM, minutes}]} Jarvis adds calendar events",
+  WeekPlan: "{weekOf: Monday, days?: 5|7, blocks:[{ref, day: YYYY-MM-DD|null, start?: HH:MM, minutes}]} Jarvis adds calendar events",
   PRCard: "{ref: pr:owner/repo#n} checks/reviews from GitHub",
   Table: "{columns:[{key,label,align?}], rows:[{ref?, cells:{key: text|number}}]} read-only, ≤50 rows",
   ItemRef: "{ref} inline chip",

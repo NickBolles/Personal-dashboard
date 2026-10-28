@@ -6,12 +6,7 @@
     "r": {
       "type": "Stack",
       "props": {},
-      "children": [
-        "n",
-        "c",
-        "w",
-        "p"
-      ]
+      "children": ["n", "c", "w", "p"]
     },
     "n": {
       "type": "Stack",
@@ -19,10 +14,7 @@
         "direction": "row",
         "gap": "sm"
       },
-      "children": [
-        "g",
-        "s"
-      ]
+      "children": ["g", "s"]
     },
     "g": {
       "type": "Gauge",

@@ -120,7 +120,8 @@ export function createHomeAssistant({ token }) {
         },
         // Events created through calendar.create_event (smart week plan), inside the requested window.
         ...(state.createdEvents ?? []).filter(
-          (e) => e.entity_id === decodeURIComponent(match[1]) && e.start.dateTime < url.searchParams.get("end") && e.end.dateTime > url.searchParams.get("start"),
+          (e) =>
+            e.entity_id === decodeURIComponent(match[1]) && e.start.dateTime < url.searchParams.get("end") && e.end.dateTime > url.searchParams.get("start"),
         ),
       ]);
     }

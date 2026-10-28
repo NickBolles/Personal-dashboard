@@ -75,7 +75,10 @@ export function metric(user: CurrentUser, id: MetricId, now = new Date()): Out {
     case "ai_spend_7d": {
       if (!can(user, "work.ai")) return { ref, unavailable: "forbidden" };
       const days = new Map(usage(null, 7, now).days.map((d) => [d.day, d.costUsd]));
-      const series = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map((d) => ({ label: dayLabel(d), value: Math.round((days.get(d) ?? 0) * 100) / 100 }));
+      const series = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map((d) => ({
+        label: dayLabel(d),
+        value: Math.round((days.get(d) ?? 0) * 100) / 100,
+      }));
       const total = series.reduce((n, s) => n + s.value, 0);
       return { ref, kind: "metric", label: "AI spend · 7 d", value: Math.round(total * 100) / 100, unit: "usd", series, note: "from the AI usage ledger" };
     }
@@ -95,7 +98,14 @@ export function metric(user: CurrentUser, id: MetricId, now = new Date()): Out {
     case "overdue_count": {
       if (!can(user, "todos.view") && !can(user, "work.use")) return { ref, unavailable: "forbidden" };
       const items = openItems(user).items.filter((i) => i.targetDate && i.targetDate < today).length;
-      return { ref, kind: "metric", label: "Overdue", value: overdueTodos(user, now).length + items, unit: "count", note: "todos and work items past their date" };
+      return {
+        ref,
+        kind: "metric",
+        label: "Overdue",
+        value: overdueTodos(user, now).length + items,
+        unit: "count",
+        note: "todos and work items past their date",
+      };
     }
   }
 }
@@ -157,7 +167,9 @@ function linkedItem(user: CurrentUser, target: string) {
     .select({ itemId: schema.workLinks.itemId })
     .from(schema.workLinks)
     .innerJoin(schema.workItems, eq(schema.workItems.id, schema.workLinks.itemId))
-    .where(and(eq(schema.workLinks.kind, "github_pr"), sql`lower(${schema.workLinks.targetId}) = ${target.toLowerCase()}`, eq(schema.workItems.userId, user.id)))
+    .where(
+      and(eq(schema.workLinks.kind, "github_pr"), sql`lower(${schema.workLinks.targetId}) = ${target.toLowerCase()}`, eq(schema.workItems.userId, user.id)),
+    )
     .all();
   return rows.map((r) => r.itemId);
 }
@@ -209,7 +221,11 @@ async function fetchPr(p: { owner: string; repo: string; number: number }, auth:
   const checks: PrData["checks"] = [];
   if (runs?.status === 200)
     for (const r of asArr(asObj(runs.body)?.check_runs).slice(0, 60))
-      checks.push({ name: s(r.name, 120) ?? "check", state: checkState(r.status, r.conclusion), ...(s(r.conclusion, 40) ? { detail: s(r.conclusion, 40) } : {}) });
+      checks.push({
+        name: s(r.name, 120) ?? "check",
+        state: checkState(r.status, r.conclusion),
+        ...(s(r.conclusion, 40) ? { detail: s(r.conclusion, 40) } : {}),
+      });
   if (status?.status === 200)
     for (const st of asArr(asObj(status.body)?.statuses).slice(0, 40)) {
       const state = st.state === "success" ? "pass" : st.state === "pending" ? "pending" : "fail";

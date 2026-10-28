@@ -69,7 +69,17 @@ vi.mock("@/server/work/github", async (orig) => {
       gh.calls.push(path);
       const ok = (body: unknown) => ({ status: 200, headers: new Headers(), body });
       if (path.endsWith("/pulls/7"))
-        return ok({ title: "Grading on V5", state: "open", draft: false, mergeable: true, head: { sha: "abc1234", ref: "feat/v5" }, base: { ref: "main" }, additions: 412, deletions: 96, changed_files: 14 });
+        return ok({
+          title: "Grading on V5",
+          state: "open",
+          draft: false,
+          mergeable: true,
+          head: { sha: "abc1234", ref: "feat/v5" },
+          base: { ref: "main" },
+          additions: 412,
+          deletions: 96,
+          changed_files: 14,
+        });
       if (path.includes("/check-runs"))
         return ok({
           check_runs: [
@@ -79,8 +89,16 @@ vi.mock("@/server/work/github", async (orig) => {
           ],
         });
       if (path.endsWith("/status")) return ok({ statuses: [] });
-      if (path.includes("/reviews")) return ok([{ user: { login: "nick" }, state: "APPROVED" }, { user: { login: "nick" }, state: "COMMENTED" }]);
-      if (path.includes("/comments")) return ok([{ user: { login: "chatgpt-codex-connector[bot]" }, in_reply_to_id: null }, { user: { login: "nick" }, in_reply_to_id: 1 }]);
+      if (path.includes("/reviews"))
+        return ok([
+          { user: { login: "nick" }, state: "APPROVED" },
+          { user: { login: "nick" }, state: "COMMENTED" },
+        ]);
+      if (path.includes("/comments"))
+        return ok([
+          { user: { login: "chatgpt-codex-connector[bot]" }, in_reply_to_id: null },
+          { user: { login: "nick" }, in_reply_to_id: 1 },
+        ]);
       return { status: 404, headers: new Headers(), body: null };
     },
   };
@@ -252,7 +270,11 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
     expect(plan.blocks.find((b) => b.ref === "todo:gt-1")!.day).toBe("2026-10-27");
     // Wednesday's dentist (10:00–11:30 local) isn't double-booked.
     const h = await (await call(hydrateRoute.POST, { body: { refs: specRefs(w.body.spec) } })).json();
-    expect(h.refs["cal:week:2026-10-26:5"]).toMatchObject({ kind: "calendar", writable: false, events: [{ title: "Dentist", day: "2026-10-28", start: "10:00", end: "11:30" }] });
+    expect(h.refs["cal:week:2026-10-26:5"]).toMatchObject({
+      kind: "calendar",
+      writable: false,
+      events: [{ title: "Dentist", day: "2026-10-28", start: "10:00", end: "11:30" }],
+    });
     const s = await surfaceFor(w.body);
     expect((await apply(s.id, [{ kind: "todo.snooze", ref: "todo:gt-2", date: "2026-10-30" }])).body.results[0].ok).toBe(true);
     const block: Intent = { kind: "calendar.block", ref: "todo:gt-2", date: "2026-10-30", start: "13:00", minutes: 30 };

@@ -48,7 +48,13 @@ function candidates(user: CurrentUser, until: string, now: Date, opts: { undated
   const { items } = openItems(user);
   const dated: Candidate[] = items
     .filter((i) => i.targetDate && i.targetDate <= until)
-    .map((i) => ({ ref: `item:${i.id}`, title: i.title, due: i.targetDate!, minutes: 90, reason: i.nextAction ? `Next: ${i.nextAction}`.slice(0, 300) : undefined }));
+    .map((i) => ({
+      ref: `item:${i.id}`,
+      title: i.title,
+      due: i.targetDate!,
+      minutes: 90,
+      reason: i.nextAction ? `Next: ${i.nextAction}`.slice(0, 300) : undefined,
+    }));
   const undated: Candidate[] = opts.undated
     ? items
         .filter((i) => !i.targetDate && i.status === "in_progress")
@@ -118,7 +124,8 @@ export function buildWeek(user: CurrentUser, now = new Date()): JarvisSpec {
   const busy = new Map<string, [number, number][]>(days.map((d) => [d, []]));
   if ("events" in cal)
     for (const e of cal.events)
-      if (!e.allDay && e.start && busy.has(e.day)) busy.get(e.day)!.push([toMin(e.start), e.end ? Math.max(toMin(e.end), toMin(e.start) + 15) : toMin(e.start) + 60]);
+      if (!e.allDay && e.start && busy.has(e.day))
+        busy.get(e.day)!.push([toMin(e.start), e.end ? Math.max(toMin(e.end), toMin(e.start) + 15) : toMin(e.start) + 60]);
   const place = (from: string, minutes: number) => {
     for (const d of days.filter((x) => x >= from)) {
       const taken = busy.get(d)!.sort((a, b) => a[0] - b[0]);
@@ -195,7 +202,10 @@ export function workflowSurface(user: CurrentUser, input: { kind: WorkflowKind; 
       createdAt: new Date().toISOString(),
     })
     // Rebuilding unchanged data lands on the same surface (same hash), which becomes the current one again.
-    .onConflictDoUpdate({ target: [T.userId, T.sessionId, T.messageKey, T.blockIndex], set: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } })
+    .onConflictDoUpdate({
+      target: [T.userId, T.sessionId, T.messageKey, T.blockIndex],
+      set: { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    })
     .run();
   return { kind: input.kind, sessionId, blockIndex: 0, spec: built, builtAt: now.toISOString() };
 }
@@ -223,7 +233,8 @@ export function weekContext(user: CurrentUser, now = new Date()) {
   const end = addDays(weekOf, 4);
   const rows = candidates(user, end, now, { undated: true });
   const cal = calendarWeek(user, calendarRef(weekOf, 5), now);
-  const events = "events" in cal ? cal.events.map((e) => `${e.day} ${e.allDay ? "all day" : `${e.start}${e.end ? `–${e.end}` : ""}`} ${e.title.slice(0, 60)}`) : [];
+  const events =
+    "events" in cal ? cal.events.map((e) => `${e.day} ${e.allDay ? "all day" : `${e.start}${e.end ? `–${e.end}` : ""}`} ${e.title.slice(0, 60)}`) : [];
   return [
     `Week plan: WeekPlan weekOf ${weekOf} (Mon–Fri, today ${today}). Place blocks on days ≥ today, 07:00–21:00, around these fixed events (Jarvis shows them; don't add them as blocks):`,
     ...(events.length ? events.slice(0, 40) : ["(no calendar events)"]),

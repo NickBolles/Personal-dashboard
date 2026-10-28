@@ -39,7 +39,12 @@ export async function addCalendarBlock(user: CurrentUser, intent: ExternalIntent
     end_date_time: end.toISOString(),
   });
   // Readback: the event must be on the calendar at that time before we say it is.
-  const around = await HomeAssistantClient.calendarEvents(conn, cal, new Date(start.getTime() - MINUTE).toISOString(), new Date(end.getTime() + MINUTE).toISOString());
+  const around = await HomeAssistantClient.calendarEvents(
+    conn,
+    cal,
+    new Date(start.getTime() - MINUTE).toISOString(),
+    new Date(end.getTime() + MINUTE).toISOString(),
+  );
   const found = around.some((e) => {
     const at = (e.start as { dateTime?: string } | undefined)?.dateTime;
     return e.summary === summary && at && Math.abs(new Date(at).getTime() - start.getTime()) < MINUTE;

@@ -67,8 +67,8 @@ export function WorkflowSurface({ kind, prRef, compact = false }: { kind: Workfl
       {compact ? null : (
         <div className="flex flex-wrap items-center gap-2">
           <p className="min-w-0 flex-1 text-xs text-muted" data-dynamic>
-            Built from Jarvis data {new Date(q.data.builtAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}. Nothing changes until
-            you apply.
+            Built from Jarvis data {new Date(q.data.builtAt).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}. Nothing
+            changes until you apply.
           </p>
           <Button size="sm" variant="ghost" busy={rebuild.isPending} onClick={() => rebuild.mutate()}>
             Rebuild

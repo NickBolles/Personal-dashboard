@@ -13,7 +13,14 @@ const body = z.object({ enabled: z.boolean().optional(), calendarWrites: z.boole
 export const PUT = api<z.infer<typeof body>>(
   ({ user, body, correlationId }) => {
     const next = saveSmartSettings(user.id, body);
-    audit({ actor: user.id, action: "smart.settings", source: "smart", result: "ok", correlationId, detail: { enabled: next.enabled, calendarWrites: next.calendarWrites } });
+    audit({
+      actor: user.id,
+      action: "smart.settings",
+      source: "smart",
+      result: "ok",
+      correlationId,
+      detail: { enabled: next.enabled, calendarWrites: next.calendarWrites },
+    });
     return next;
   },
   { body, cap: "hermes.chat" },
