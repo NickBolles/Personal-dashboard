@@ -815,10 +815,10 @@
   padding-bottom: calc(76px + env(safe-area-inset-bottom));
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 640px) {
   .pb-nav {
-    /* the command dock lives in the rail on desktop: no reserved gutter */
-    padding-bottom: 2rem;
+    /* tablet/desktop: gutter for the bottom-centre command dock */
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
   }
 }
 

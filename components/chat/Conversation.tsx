@@ -334,7 +334,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   return (
     <AssistantName.Provider value={who}>
       <SmartSession.Provider value={sessionId}>
-        <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] flex-col lg:min-h-dvh">
+        <div className="mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] flex-col sm:min-h-[calc(100dvh-44px)]">
           <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6">
             <div className="flex items-start gap-2">
               <Link
@@ -960,7 +960,7 @@ function Composer({
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
   return (
-    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6 lg:bottom-0">
+    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:bottom-0 sm:px-6">
       <div className="mb-1.5 flex flex-wrap items-center gap-1">
         <button
           type="button"

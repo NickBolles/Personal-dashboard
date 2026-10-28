@@ -47,7 +47,7 @@ const PETALS: Petal[] = [
       { cmd: "work.timeline", label: "Timeline" },
       { cmd: "work.dashboard", label: "Dashboard" },
       { cmd: "work.map", label: "Map" },
-      { cmd: "go.home", label: "Home" },
+      { cmd: "go.home", label: "Today" },
       { cmd: "go.chat", label: "Hermes" },
       { cmd: "go.alerts", label: "Alerts" },
     ],
@@ -137,7 +137,7 @@ function subLayout(center: Pt, R: number, petal: { x: number }, count: number) {
   });
 }
 
-export function CommandDock({ variant, compact = false }: { variant: "bar" | "rail"; compact?: boolean }) {
+export function CommandDock({ variant, compact = false }: { variant: "bar" | "dock"; compact?: boolean }) {
   const commands = useCommands();
   const petals = useMemo(() => resolvePetals(commands), [commands]);
   const orb = useRef<HTMLButtonElement>(null);
@@ -290,7 +290,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
   // ⌘/Ctrl+. toggles the map; while it's open, arrows/Tab/Enter/Esc drive it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Two docks are mounted (phone bar, desktop rail); only the visible one owns the keyboard,
+      // Two docks are mounted (phone bar, tablet/desktop bottom dock); only the visible one owns the keyboard,
       // or the bar's when neither is visible.
       const mine = !!orb.current?.getClientRects().length;
       const anyVisible = Array.from(document.querySelectorAll('[data-testid="dock-orb"]')).some((el) => el.getClientRects().length > 0);
@@ -385,14 +385,14 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
             open("keyboard");
           }
         }}
-        title={variant === "rail" && compact ? "Commands (tap) · action map (hold or Ctrl+.)" : undefined}
+        title={variant === "dock" && compact ? "Commands (tap) · action map (hold or Ctrl+.)" : undefined}
         className={cx(
           "relative inline-flex shrink-0 touch-none items-center select-none",
           variant === "bar"
             ? "k-orb dock-tide h-[52px] w-[52px] -translate-y-5 justify-center rounded-full text-lg font-bold text-white"
             : compact
               ? "h-11 w-11 justify-center rounded-[10px] hover:bg-surface"
-              : "min-h-11 w-full gap-2.5 rounded-[8px] px-1.5 text-[0.875rem] text-muted hover:bg-surface hover:text-text",
+              : "min-h-11 w-full gap-2.5 rounded-full border border-line bg-surface-2 py-1 pr-2 pl-1.5 text-[0.875rem] text-muted shadow-[var(--sh2,var(--shadow))] hover:border-line-strong hover:text-text",
           variant === "bar" && charging && "dock-charging",
         )}
       >
@@ -416,8 +416,8 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "ra
             </span>
             {!compact ? (
               <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">
-                Commands
-                <kbd className="kbd">Ctrl .</kbd>
+                Ask Jarvis or search…
+                <kbd className="kbd">Ctrl K</kbd>
               </span>
             ) : null}
           </>

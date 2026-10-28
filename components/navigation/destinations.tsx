@@ -34,7 +34,7 @@ const isAreas = (p: string) => p === "/areas" || p.startsWith("/areas/") || p ==
  * view); everyone else who chats keeps the plain Hermes list.
  */
 export const PRIMARY: Dest[] = [
-  { key: "home", href: "/home", label: "Home", icon: HomeIcon, match: (p) => p === "/home" || p === "/" },
+  { key: "home", href: "/home", label: "Today", icon: HomeIcon, match: (p) => p === "/home" || p === "/" },
   {
     key: "areas",
     href: "/areas",
