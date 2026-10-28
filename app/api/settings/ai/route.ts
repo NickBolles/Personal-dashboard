@@ -6,6 +6,7 @@ import { getAiSettings, saveAiSettings } from "@/server/ai/settings";
 import { aiRunnerStatus, startAiRunner, stopAiRunner } from "@/server/ai/runner";
 import { dispatcherStatus } from "@/server/notifications/dispatcher";
 import { spendToday } from "@/server/ai/budget";
+import { subscriptionMeter } from "@/server/ai/meter";
 import { isConfigured } from "@/integrations/store";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ const view = () => ({
   runner: aiRunnerStatus(),
   dispatcher: dispatcherStatus(),
   today: spendToday(),
+  meter: subscriptionMeter(),
   hermesConfigured: isConfigured("hermes"),
 });
 

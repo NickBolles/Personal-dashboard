@@ -8,6 +8,7 @@ import { processSingleton } from "@/server/singleton";
 import { listItems } from "@/server/work/store";
 import { githubGet, resolveGithubToken, type ResolvedToken } from "@/server/work/github";
 import { spendToday, usage } from "@/server/ai/budget";
+import { subscriptionMeter } from "@/server/ai/meter";
 import { getAiSettings } from "@/server/ai/settings";
 import { resolveIntegration } from "@/integrations/store";
 import { parseLines } from "@/integrations/home-assistant/adapter";
@@ -59,6 +60,25 @@ export function metric(user: CurrentUser, id: MetricId, now = new Date()): Out {
   switch (id) {
     case "ai_spend_today": {
       if (!can(user, "work.ai")) return { ref, unavailable: "forbidden" };
+      const meter = subscriptionMeter(now);
+      if (meter.mode !== "api") {
+        // Subscription billing: the ring shows the weekly window used (Hermes reports $0 per call).
+        return {
+          ref,
+          kind: "metric",
+          label: meter.summary,
+          value: meter.usedPct == null ? 0 : Math.round(meter.usedPct),
+          max: 100,
+          unit: "pct",
+          note:
+            meter.state === "ok"
+              ? `background AI stops at ${meter.stopAtPct}%`
+              : meter.state === "stop"
+                ? "background AI paused · chat still works"
+                : "usage unreadable · background AI paused",
+          href: "/settings/ai",
+        };
+      }
       const t = spendToday(now);
       const budget = getAiSettings().dailyBudgetUsd;
       return {

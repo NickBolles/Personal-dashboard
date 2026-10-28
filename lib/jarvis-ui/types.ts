@@ -24,7 +24,7 @@ export type HydratedRef =
       /** gauges: value of max (e.g. $ spent of the daily budget) */
       value?: number;
       max?: number;
-      unit?: "usd" | "count";
+      unit?: "usd" | "count" | "pct";
       /** sparklines: oldest first */
       series?: { label: string; value: number }[];
       note: string;

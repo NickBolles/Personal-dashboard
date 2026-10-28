@@ -31,6 +31,7 @@ export const JOB_ERROR_CODES = [
   "hermes_unavailable",
   "cancelled",
   "ai_disabled",
+  "quota",
 ] as const;
 export type JobErrorCode = (typeof JOB_ERROR_CODES)[number];
 
@@ -311,9 +312,39 @@ export type UsageResponse = {
   days: UsageDay[];
   totals: { jobs: number; costUsd: number; overCap: number };
   today: { spentUsd: number; reservedUsd: number; budgetUsd: number };
+  meter: MeterView;
 };
 
 // --- Settings (settings key `ai.settings`; admin) ---
+
+export const BILLING_MODES = ["api", "codex", "claude"] as const;
+export type BillingMode = (typeof BILLING_MODES)[number];
+/** Hermes provider id in `hermes usage --json` for each subscription mode. */
+export const BILLING_PROVIDER: Record<Exclude<BillingMode, "api">, string> = { codex: "openai-codex", claude: "anthropic" };
+export const BILLING_LABEL: Record<BillingMode, string> = { api: "API (pay per token)", codex: "Codex", claude: "Claude" };
+
+/**
+ * Subscription meter (read from the Hermes usage snapshot). `state`:
+ * ok = background jobs may run; stop = at/over the stop line; stale/missing = the snapshot
+ * is older than 2 h or unreadable, so background jobs stop (fail closed). `api` = $ budget mode.
+ */
+export type MeterState = "api" | "ok" | "stop" | "stale" | "missing";
+export type MeterView = {
+  mode: BillingMode;
+  provider: string | null;
+  label: string;
+  state: MeterState;
+  usedPct: number | null;
+  stopAtPct: number;
+  resetsAt: string | null;
+  fetchedAt: string | null;
+  /** background (auto) AI jobs and syncs may start */
+  backgroundAllowed: boolean;
+  /** short UI text, e.g. "Codex 12% of week" */
+  summary: string;
+  /** warning for chat/user-started actions; null when fine */
+  warning: string | null;
+};
 
 export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const usd = z.number().min(0).max(100);
@@ -366,6 +397,17 @@ export const aiSettingsSchema = z
       })
       .strict(),
     dispatchSeconds: z.number().int().min(5).max(600),
+    /**
+     * How the Hermes provider bills. `api` = pay per token: the $ daily budget gates jobs.
+     * `codex`/`claude` = subscription (Hermes reports $0): background jobs stop once the
+     * provider's weekly window reaches `stopAtPct` used; chat and user-started actions only warn.
+     */
+    billing: z
+      .object({
+        mode: z.enum(BILLING_MODES),
+        stopAtPct: z.number().min(1).max(100),
+      })
+      .strict(),
   })
   .strict();
 export type AiSettings = z.infer<typeof aiSettingsSchema>;
@@ -383,6 +425,8 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   schedule: { calendars: [], workHours: { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5] }, calendarWrite: { enabled: false, entityId: null } },
   hermes: { perRunModel: false, midRunCost: false, imageInput: false },
   dispatchSeconds: 30,
+  /** owner decision 2026-10-28: keep ≥50% of the weekly subscription window free → stop background at 48% */
+  billing: { mode: "api", stopAtPct: 48 },
 };
 
 export const aiSettingsPatchSchema = aiSettingsSchema.partial().strict();
