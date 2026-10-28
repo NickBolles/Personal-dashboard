@@ -132,15 +132,20 @@ export function calendarWeek(user: CurrentUser, ref: string, now = new Date()): 
     return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
   };
   const events = visibleEvents(user, now)
-    .map((e) => {
-      const day = e.allDay ? e.startsAt.slice(0, 10) : localDate(new Date(e.startsAt), tz);
-      return {
-        id: e.id.slice(0, 200),
-        title: e.title.slice(0, 200),
-        day,
-        allDay: Boolean(e.allDay),
-        ...(e.allDay ? {} : { start: hhmm(e.startsAt), ...(e.endsAt ? { end: hhmm(e.endsAt) } : {}) }),
-      };
+    .flatMap((e): { id: string; title: string; day: string; allDay: boolean; start?: string; end?: string }[] => {
+      const base = { id: e.id.slice(0, 200), title: e.title.slice(0, 200) };
+      if (e.allDay) return [{ ...base, day: e.startsAt.slice(0, 10), allDay: true }];
+      const day = localDate(new Date(e.startsAt), tz);
+      const endDay = e.endsAt ? localDate(new Date(e.endsAt), tz) : day;
+      const end = e.endsAt ? hhmm(e.endsAt) : undefined;
+      if (endDay <= day) return [{ ...base, day, allDay: false, start: hhmm(e.startsAt), ...(end ? { end } : {}) }];
+      // Timed events that cross midnight occupy every day they touch: clip one interval per day.
+      const out = [{ ...base, day, allDay: false, start: hhmm(e.startsAt), end: "23:59" }];
+      for (let d = addDays(day, 1); d <= endDay && out.length < 8; d = addDays(d, 1)) {
+        if (d === endDay && end === "00:00") break;
+        out.push({ ...base, id: `${base.id}:${d}`.slice(0, 200), day: d, allDay: false, start: "00:00", end: d === endDay ? end! : "23:59" });
+      }
+      return out;
     })
     .filter((e) => days.has(e.day))
     .sort((a, b) => (a.day + (a.start ?? "") < b.day + (b.start ?? "") ? -1 : 1))

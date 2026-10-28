@@ -6,7 +6,7 @@ import { HttpError } from "@/server/http/errors";
 import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { adapterContext, cachedSource, scopeResult } from "@/server/sources";
-import { addDays, localDate } from "@/lib/time";
+import { addDays, localDate, localMinutes } from "@/lib/time";
 import { CATALOG_ID, LIMITS, PR_REF, type JarvisSpec, type UIElement } from "@/lib/jarvis-ui/catalog";
 import { DAY_END, planWeekOf, weekDays } from "@/lib/jarvis-ui/intents";
 import { calendarRef, canonicalJson, validateSpec } from "@/lib/jarvis-ui/validator";
@@ -116,7 +116,10 @@ const WORK_END = toMin("17:00");
  * around the fixed calendar events; what doesn't fit is left unscheduled.
  */
 export function buildWeek(user: CurrentUser, now = new Date()): JarvisSpec {
-  const today = localDate(now, adapterContext(now).timezone);
+  const tz = adapterContext(now).timezone;
+  const today = localDate(now, tz);
+  // Never place a block in the past: today starts at the next quarter hour.
+  const todayStart = Math.max(WORK_START, Math.ceil(localMinutes(now, tz) / 15) * 15);
   const weekOf = planWeekOf(today);
   const all = weekDays(weekOf, 5);
   const days = all.filter((d) => d >= today);
@@ -129,7 +132,7 @@ export function buildWeek(user: CurrentUser, now = new Date()): JarvisSpec {
   const place = (from: string, minutes: number) => {
     for (const d of days.filter((x) => x >= from)) {
       const taken = busy.get(d)!.sort((a, b) => a[0] - b[0]);
-      let t = WORK_START;
+      let t = d === today ? todayStart : WORK_START;
       for (const [s, e] of taken) {
         if (t + minutes <= s) break;
         t = Math.max(t, Math.ceil(e / 15) * 15);
