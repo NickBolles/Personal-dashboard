@@ -40,8 +40,10 @@ function DuePill({ due, today }: { due?: string; today: string }) {
 
 function metricValue(m: Hyd<"metric">) {
   if (m.value == null) return "—";
-  return m.unit === "usd" ? fmtUsd(m.value) : String(m.value);
+  return m.unit === "usd" ? fmtUsd(m.value) : m.unit === "pct" ? `${m.value}%` : String(m.value);
 }
+
+const maxText = (m: Hyd<"metric">, max: number) => (m.unit === "usd" ? fmtUsd(max) : m.unit === "pct" ? `${max}%` : String(max));
 
 export function MetricGauge({ metric, label }: { metric: string; label?: string }) {
   const s = useSurface();
@@ -63,7 +65,7 @@ export function MetricGauge({ metric, label }: { metric: string; label?: string 
       <p className="text-xs font-semibold tracking-wide text-muted uppercase">{name}</p>
       <p className="text-lg font-bold tabular-nums" data-dynamic>
         {metricValue(m)}
-        {max ? <span className="text-xs font-medium text-muted"> / {m.unit === "usd" ? fmtUsd(max) : max}</span> : null}
+        {max ? <span className="text-xs font-medium text-muted"> / {maxText(m, max)}</span> : null}
       </p>
       {max ? (
         <div
@@ -72,7 +74,7 @@ export function MetricGauge({ metric, label }: { metric: string; label?: string 
           aria-valuemin={0}
           aria-valuemax={max}
           aria-valuenow={m.value ?? 0}
-          aria-valuetext={`${metricValue(m)} of ${m.unit === "usd" ? fmtUsd(max) : max}`}
+          aria-valuetext={`${metricValue(m)} of ${maxText(m, max)}`}
           className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2"
         >
           <div className={cx("h-full", tone)} style={{ width: `${pct * 100}%` }} />

@@ -85,6 +85,8 @@ async function askHermes(kind: "status" | "complete", date: string, timezone: st
     task: fill(kind === "status" ? c.statusPrompt : c.completePrompt, { date, timezone }),
     schema: hermesSchema,
     example: HERMES_EXAMPLE,
+    // Completing is the user's own action; only the periodic status sync is background.
+    interactive: kind === "complete",
   });
   if (answer.date !== date) {
     throw new UpstreamError("Daily Compass", "bad_response", `Hermes answered for ${answer.date}, not ${date}`);

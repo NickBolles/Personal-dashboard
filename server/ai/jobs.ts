@@ -122,8 +122,25 @@ export type EnqueueInput = {
   financeOverride?: boolean;
   /** start no earlier than (ISO) */
   notBefore?: string;
+  /** started by Jarvis, not a person (capture auto-triage/investigate): stopped by the subscription meter */
+  background?: boolean;
   correlationId: string;
 };
+
+/** Background jobs carry `params.background = true` (set only by the server, see enqueue). */
+export const isBackgroundJob = (params: string | null | undefined) => {
+  try {
+    return (JSON.parse(params || "{}") as { background?: unknown }).background === true;
+  } catch {
+    return false;
+  }
+};
+
+function jobParams(input: EnqueueInput) {
+  const { background: _ignored, ...rest } = input.params ?? {};
+  void _ignored;
+  return input.background ? { ...rest, background: true } : rest;
+}
 
 /** Idempotent: an identical active job (same subject + kind) is returned instead of a new one. */
 export function enqueue(input: EnqueueInput): { job: JobView; created: boolean } {
@@ -195,7 +212,7 @@ export function enqueue(input: EnqueueInput): { job: JobView; created: boolean }
       hermesProfile: agent.routed ? agent.profile : null,
       visibleSession: visibleFor(input.kind),
       idempotencyKey: key,
-      params: JSON.stringify(input.params ?? {}).slice(0, 4096),
+      params: JSON.stringify(jobParams(input)).slice(0, 4096),
       promptVersion: PROMPT_VERSIONS[input.kind],
       notBefore: input.notBefore ?? at,
       budgetOverride: !!input.budgetOverride,
@@ -388,9 +405,23 @@ export function retryJob(userId: string, id: string, budgetOverride: boolean | u
 export function runAnyway(userId: string, id: string, correlationId: string) {
   const r = ownedJob(userId, id);
   if (r.state !== "budget_blocked") throw new HttpError(409, "not_blocked", "That job isn't waiting for budget");
-  const out = transition(id, "budget_blocked", "queued", { budgetOverride: true, notBefore: nowIso() });
+  const out = transition(id, "budget_blocked", "queued", { budgetOverride: true, notBefore: nowIso(), errorCode: null, errorMessage: null });
   audit({ actor: userId, action: "ai.budget_override", source: "ai", sourceRecord: id, result: "ok", correlationId });
   return toJobView(out ?? getJobRow(id)!);
+}
+
+/**
+ * Jobs held by the subscription meter (errorCode `quota`) go back to the queue once background AI may run again.
+ * `includeDollar`: also release $-budget holds (subscription billing makes the $ gate inapplicable; the meter re-gates them).
+ */
+export function releaseQuotaBlocked(includeDollar = false) {
+  const rows = getDb()
+    .select()
+    .from(J)
+    .where(includeDollar ? eq(J.state, "budget_blocked") : and(eq(J.state, "budget_blocked"), eq(J.errorCode, "quota")))
+    .all();
+  for (const r of rows) transition(r.id, "budget_blocked", "queued", { notBefore: nowIso(), errorCode: null, errorMessage: null });
+  return rows.length;
 }
 
 /** Budget-blocked jobs return to the queue on a new local day. */

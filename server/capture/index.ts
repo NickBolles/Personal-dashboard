@@ -348,6 +348,7 @@ function queueFollowUp(user: CurrentUser, id: string, mode: "triage_and_investig
         subjectType: "inbox",
         subjectId: id,
         clientKey: `cap${id.replace(/[^A-Za-z0-9]/g, "").slice(-24)}`,
+        background: true,
         correlationId,
       });
     } else {
@@ -358,6 +359,7 @@ function queueFollowUp(user: CurrentUser, id: string, mode: "triage_and_investig
         subjectId: id,
         clientKey: `cap${id.replace(/[^A-Za-z0-9]/g, "").slice(-24)}`,
         params: { investigateMode: mode === "triage_only" ? "triage_only" : "auto" },
+        background: true,
         correlationId,
       });
     }

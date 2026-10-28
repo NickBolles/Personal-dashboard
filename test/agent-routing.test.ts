@@ -16,6 +16,7 @@ import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser, userById } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { saveIntegration } from "@/integrations/store";
+import { hermesConn } from "@/integrations/hermes/client";
 import { demoPresets } from "@/integrations/demo";
 import * as store from "@/server/work/store";
 import { conversationAreaContext, startConversation } from "@/server/areas";
@@ -99,6 +100,22 @@ describe("agent settings", () => {
     expect(agentSettingsSchema.safeParse({ ...ok, routes: [{ ...ok.routes[0], profile: "../default" }] }).success).toBe(false);
     expect(agentSettingsSchema.safeParse({ ...ok, routes: [ok.routes[0], ok.routes[0]] }).success).toBe(false);
     expect(agentSettingsSchema.safeParse({ ...ok, routes: [{ ...ok.routes[0], baseUrl: "javascript:alert(1)" }] }).success).toBe(false);
+  });
+
+  it("a route without a key env reuses the main Hermes key, but only on the main Hermes server", () => {
+    saveAgentSettings({ routes: [{ profile: "devchief", keyEnv: null, baseUrl: null }] });
+    expect(agentSettingsSchema.safeParse({ routing: true, aguiStream: false, routes: [{ profile: "devchief", keyEnv: "", baseUrl: null }] }).success).toBe(
+      true,
+    );
+    expect(resolveAgent("devchief")).toMatchObject({ profile: "devchief", routed: true, reason: "routed" });
+    const main = hermesConn();
+    const conn = connForProfile("devchief");
+    expect(conn.apiKey).toBe(main.apiKey);
+    expect(conn.baseUrl).toMatch(/\/p\/devchief$/);
+    // A custom host never receives the main key.
+    saveAgentSettings({ routes: [{ profile: "devchief", keyEnv: null, baseUrl: "https://elsewhere.example" }] });
+    expect(resolveAgent("devchief")).toMatchObject({ routed: false, reason: "missing_key" });
+    expect(() => connForProfile("devchief")).toThrow(/key isn't configured/);
   });
 
   it("resolution explains why a requested profile does or doesn't answer", () => {

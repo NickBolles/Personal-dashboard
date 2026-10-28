@@ -325,7 +325,16 @@ export const skylightAdapter: SourceAdapter = {
           run: async () => {
             const { adapterContext } = await import("@/server/sources");
             const ctx = adapterContext();
-            const answer = await runStructured(skylightHermesRequest(ctx));
+            let answer: HermesAnswer;
+            try {
+              answer = await runStructured({ ...skylightHermesRequest(ctx), interactive: true });
+            } catch (err) {
+              if (!(err instanceof UpstreamError) || err.kind !== "bad_response") throw err;
+              // The usual cause: the Hermes profile serving Jarvis lacks the reader skill or its Skylight credentials.
+              throw new Error(
+                `${err.message}. Check that the Hermes profile serving Jarvis has the jarvis-skylight-read skill installed and SKYLIGHT_USERNAME, SKYLIGHT_PASSWORD and SKYLIGHT_FRAME_ID set (docs/operations/skylight-reliability.md), or switch to “Directly” and sign in.`,
+              );
+            }
             saveSnapshot("skylight", ctx.today, answer);
             const open = answer.chores.filter((c) => !c.completed).length;
             return `${answer.events.length} events this week, ${open} open chores today`;
