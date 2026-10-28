@@ -1,3 +1,4 @@
+import { requestedAgentFor } from "@/server/agents/routing";
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { startRun } from "@/server/assistant";
@@ -46,7 +47,9 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     const s = area?.settings;
     // The agent-mode hint is only for conversations NOT already running on that Hermes profile (Settings → Agents).
     const onProfile = isLocalSession(params.id) ? null : sessionProfile(params.id);
-    const modeHint = s?.agentMode && s.agentMode.trim().toLowerCase() !== onProfile ? s.agentMode : null;
+    // Same nearest-ancestor walk as routing, so a project's override beats its area's mode.
+    const agentMode = area ? requestedAgentFor(user.id, area.nodeId).agentMode : null;
+    const modeHint = agentMode && agentMode.trim().toLowerCase() !== onProfile ? agentMode : null;
     const areaInstructions =
       s && (modeHint || s.instructions)
         ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")

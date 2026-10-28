@@ -269,7 +269,7 @@ export function areaDefaultsFor(user: CurrentUser, sessionId: string) {
   for (let n = 0; area?.parentId && n < 100; n++) area = byId.get(area.parentId);
   if (!area || area.parentId !== null) return null;
   const raw = getDb().select({ settings: schema.workItems.settings }).from(schema.workItems).where(eq(schema.workItems.id, area.id)).get();
-  return { area: { id: area.id, title: area.title, builtIn: area.builtIn }, settings: parseAreaSettings(raw?.settings) };
+  return { area: { id: area.id, title: area.title, builtIn: area.builtIn }, nodeId: start!.id, settings: parseAreaSettings(raw?.settings) };
 }
 
 export function assertAreaOwned(user: CurrentUser, areaId: string) {
