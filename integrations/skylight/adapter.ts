@@ -12,7 +12,7 @@ import { SKYLIGHT_DEFAULT_PROMPT } from "@/integrations/registry";
 import { baseAction, classifyInstant } from "@/integrations/actions";
 import { cachedStructured, runStructured, saveSnapshot } from "@/integrations/hermes/structured";
 import type { AdapterContext, SourceAdapter, SourceData } from "@/integrations/types";
-import { autoMatchMembers, classifySkylightChore, keepAssigned, skylightPrefs, type SkylightMember } from "@/lib/task-source";
+import { autoGroupMembers, autoMatchMembers, classifySkylightChore, groupMemberIds, keepAssigned, skylightPrefs, type SkylightMember } from "@/lib/task-source";
 
 /**
  * Skylight has no official API. Two modes:
@@ -140,7 +140,15 @@ export async function listMembers(frame?: string): Promise<SkylightMember[]> {
     id: c.id,
     name: String(c.attributes.label ?? c.attributes.name ?? c.id),
     linkedToProfile: Boolean(c.attributes.linked_to_profile),
+    isGroup: isGroupCategory(c.attributes),
   }));
+}
+
+/** Skylight's own household/group marker on a category, when the API exposes one. */
+function isGroupCategory(a: Record<string, unknown>): boolean {
+  if (a.is_family === true || a.family === true || a.is_group === true || a.group === true || a.household === true) return true;
+  const kind = String(a.category_type ?? a.kind ?? a.type ?? "");
+  return /\b(family|group|household)\b/i.test(kind);
 }
 
 function choreCategory(rel: Record<string, unknown> | undefined): string | null {
@@ -321,6 +329,7 @@ export const skylightAdapter: SourceAdapter = {
     const prefs = cfg().prefs;
     const mine = await ownerMembers(members, prefs.members);
     const effective = { ...prefs, members: mine };
+    const groups = groupMemberIds(members, prefs);
     let hidden = 0;
     const events: CalendarEvent[] = eventsDoc.data
       .map((e) => {
@@ -343,7 +352,7 @@ export const skylightAdapter: SourceAdapter = {
       .filter((c) => c.attributes.status !== "complete" && c.attributes.status !== "skipped")
       .map((c) => ({
         c,
-        who: classifySkylightChore({ categoryId: choreCategory(c.relationships), upForGrabs: c.attributes.up_for_grabs === true }, members, mine),
+        who: classifySkylightChore({ categoryId: choreCategory(c.relationships), upForGrabs: c.attributes.up_for_grabs === true }, members, mine, groups),
       }))
       .filter(({ who }) => {
         const keep = keepAssigned(who, effective);
@@ -440,7 +449,10 @@ export const skylightAdapter: SourceAdapter = {
           name: "List family members",
           run: async () => {
             members = await listMembers().catch(() => []);
-            return members.length ? `${members.length} members: pick yours under “Whose tasks to show”` : "No members found (all chores shown)";
+            if (!members.length) return "No members found (all chores shown)";
+            // Groups stay a free-text list (several ids allowed), so list names + ids here instead of a single-choice picker.
+            const auto = autoGroupMembers(members).map((id) => members.find((m) => m.id === id)?.name);
+            return `${members.length} members: pick yours under “Whose tasks to show”. Up-for-grabs groups (auto): ${auto.join(", ") || "none"}. Ids: ${members.map((m) => `${m.name}=${m.id}`).join(", ")}`;
           },
         },
       ],

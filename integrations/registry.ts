@@ -392,6 +392,13 @@ export const INTEGRATIONS: IntegrationDef[] = [
         showWhen: { field: "mode", oneOf: ["direct"] },
       },
       {
+        key: "groups",
+        label: "Up-for-grabs groups",
+        type: "text",
+        showWhen: { field: "mode", oneOf: ["direct"] },
+        help: "Skylight members that are household groups: their chores count as up for grabs. Blank = auto (members named “Family…” or marked as a group by Skylight); “none” = no groups; else comma-separated member ids. “Test connection” lists the members.",
+      },
+      {
         key: "showOthers",
         label: "Show others' chores as read-only context",
         type: "select",

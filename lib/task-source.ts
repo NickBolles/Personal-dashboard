@@ -6,7 +6,7 @@
 export type AssigneeKind = "mine" | "up_for_grabs" | "other";
 export type TaskAssignee = { kind: AssigneeKind; name?: string };
 
-export type SkylightMember = { id: string; name: string; linkedToProfile?: boolean };
+export type SkylightMember = { id: string; name: string; linkedToProfile?: boolean; /** Skylight marks it as a household/group category. */ isGroup?: boolean };
 
 export type SkylightAssignmentPrefs = {
   /** Skylight category ids that are "me". Empty = not configured yet. */
@@ -15,9 +15,26 @@ export type SkylightAssignmentPrefs = {
   includeUpForGrabs: boolean;
   /** Keep other people's chores as read-only context (default off). */
   showOthers: boolean;
+  /**
+   * Skylight member ids that are household groups (their chores are up for grabs).
+   * null = auto-detect (names "Family…" or Skylight's own group flag); [] = none.
+   */
+  groups: string[] | null;
 };
 
 const UP_FOR_GRABS = /\b(up[\s_-]*for[\s_-]*grabs|anyone|unassigned)\b/i;
+/** Household group members: "Family", "Family chores", "Family-Bolles"… */
+const FAMILY_GROUP = /^\s*family\b/i;
+
+/** Members auto-detected as household groups (default for the up-for-grabs groups setting). */
+export function autoGroupMembers(members: SkylightMember[]): string[] {
+  return members.filter((m) => m.isGroup || FAMILY_GROUP.test(m.name)).map((m) => m.id);
+}
+
+/** Effective up-for-grabs group ids: the configured list, else auto-detected. */
+export function groupMemberIds(members: SkylightMember[], prefs: Pick<SkylightAssignmentPrefs, "groups">): string[] {
+  return prefs.groups ?? autoGroupMembers(members);
+}
 
 /** Parse the stored comma-separated member ids + toggles (integration config strings). */
 export function skylightPrefs(config: Record<string, string | undefined>): SkylightAssignmentPrefs {
@@ -29,7 +46,19 @@ export function skylightPrefs(config: Record<string, string | undefined>): Skyli
       .filter(Boolean),
     includeUpForGrabs: flag(config.includeUpForGrabs, true),
     showOthers: flag(config.showOthers, false),
+    groups: parseGroups(config.groups),
   };
+}
+
+/** Blank/"auto" = auto-detect; "none" = no groups; else comma-separated ids. */
+function parseGroups(v: string | undefined): string[] | null {
+  const t = (v ?? "").trim();
+  if (!t || t.toLowerCase() === "auto") return null;
+  if (t.toLowerCase() === "none") return [];
+  return t
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -46,7 +75,7 @@ export function autoMatchMembers(members: SkylightMember[], user: { name?: strin
   const local = (user.email ?? "").split("@")[0];
   if (local) candidates.add(norm(local.split(/[._+-]/)[0] ?? local));
   candidates.delete("");
-  const people = members.filter((m) => !UP_FOR_GRABS.test(m.name));
+  const people = members.filter((m) => !UP_FOR_GRABS.test(m.name) && !m.isGroup && !FAMILY_GROUP.test(m.name));
   const hits = people.filter((m) => {
     const n = norm(m.name);
     const nFirst = norm(m.name.trim().split(/\s+/)[0] ?? "");
@@ -55,10 +84,19 @@ export function autoMatchMembers(members: SkylightMember[], user: { name?: strin
   return hits.length === 1 ? [hits[0]!.id] : [];
 }
 
-/** Classify one Skylight chore from its category (assignee) and up_for_grabs flag. */
-export function classifySkylightChore(chore: { categoryId?: string | null; upForGrabs?: boolean }, members: SkylightMember[], mine: string[]): TaskAssignee {
+/**
+ * Classify one Skylight chore from its category (assignee) and up_for_grabs flag.
+ * Chores assigned to a household group (`groups`, e.g. "Family") are up for grabs.
+ */
+export function classifySkylightChore(
+  chore: { categoryId?: string | null; upForGrabs?: boolean },
+  members: SkylightMember[],
+  mine: string[],
+  groups: string[] = [],
+): TaskAssignee {
   const cat = chore.categoryId ? members.find((m) => m.id === chore.categoryId) : undefined;
   if (chore.upForGrabs || !chore.categoryId || (cat && UP_FOR_GRABS.test(cat.name))) return { kind: "up_for_grabs", name: "Up for grabs" };
+  if (groups.includes(chore.categoryId) && !mine.includes(chore.categoryId)) return { kind: "up_for_grabs", name: "Up for grabs" };
   if (mine.includes(chore.categoryId)) return { kind: "mine", name: cat?.name };
   return { kind: "other", name: cat?.name };
 }
