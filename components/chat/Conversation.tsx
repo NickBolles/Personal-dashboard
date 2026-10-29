@@ -92,7 +92,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
-  const [restore, setRestore] = useState<{ text: string; at: number }>();
+  const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
   const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file">(null);
   const router = useRouter();
   const newChat = useAskHermes();
@@ -168,7 +168,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       (err) => {
         setPendingInput(undefined);
         void kvSet(`draft:${sessionId}`, first.input);
-        setRestore({ text: first.input, at: Date.now() });
+        setRestore({ text: first.input, key: first.key, at: Date.now() });
         toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
       },
     );
@@ -842,7 +842,7 @@ function Composer({
   restore,
 }: {
   sessionId: string;
-  restore?: { text: string; at: number };
+  restore?: { text: string; key: string; at: number };
   phase?: RunPhase;
   online: boolean;
   context: { label: string; ref: string }[];
@@ -882,6 +882,10 @@ function Composer({
     setSeenRestore(restore);
     if (restore) setText(restore.text);
   }
+  // Retry with the same key: if the first send did reach Hermes, it isn't run twice.
+  useEffect(() => {
+    if (restore) pendingKey.current = restore.key;
+  }, [restore]);
   const listId = useId();
   const { rows, loading, partial, searched } = useTriggerRows(trigger, repo);
   const activeIdx = Math.min(active, Math.max(0, rows.length - 1));

@@ -70,10 +70,15 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const target = useComposerTarget();
   const asker = useAskHermes();
   type Row = { kind: "command"; c: Command } | { kind: "result"; r: SearchResult } | { kind: "ask" };
-  const askRow: Row[] = canAsk && q.trim() ? [{ kind: "ask" }] : [];
+  // Not until we know who answers here: an early ask would land in Miscellaneous on plain Jarvis.
+  const canAskNow = canAsk && Boolean(q.trim()) && !target.loading;
+  const askRow: Row[] = canAskNow ? [{ kind: "ask" }] : [];
   const commandRows: Row[] = commands.map((c) => ({ kind: "command" as const, c }));
-  // A matching command keeps Enter (“today” ↵ still goes to Today); otherwise Enter asks.
-  const rows: Row[] = [...(commandRows.length ? [...commandRows, ...askRow] : [...askRow]), ...results.map((r) => ({ kind: "result" as const, r }))];
+  const resultRows: Row[] = results.map((r) => ({ kind: "result" as const, r }));
+  // Enter keeps opening commands and results ("today" ↵, "skylight" ↵); a question (4+ words or "?") asks first.
+  // Ctrl/⌘ ↵ always asks.
+  const question = /\?\s*$/.test(q) || q.trim().split(/\s+/).length >= 4;
+  const rows: Row[] = question && !commandRows.length ? [...askRow, ...resultRows] : [...commandRows, ...resultRows, ...askRow];
 
   useEffect(() => {
     if (!open) return;
@@ -128,7 +133,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
                 setActive((i) => Math.max(i - 1, 0));
-              } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canAsk && q.trim()) {
+              } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canAskNow) {
                 e.preventDefault();
                 go({ kind: "ask" });
               } else if (e.key === "Enter") {
@@ -176,7 +181,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     {target.node ? <span className="text-muted"> · {target.node.title}</span> : null}
                     <span className="text-muted">: “{q.trim()}”</span>
                   </span>
-                  <kbd className="kbd shrink-0">{commandRows.length ? "Ctrl ↵" : "↵"}</kbd>
+                  <kbd className="kbd shrink-0">{i === 0 ? "↵" : "Ctrl ↵"}</kbd>
                 </>
               ) : row.kind === "command" ? (
                 <>

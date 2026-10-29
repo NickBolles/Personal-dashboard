@@ -160,7 +160,7 @@ test("new chat budget: Ask opens the conversation before Hermes answers the run 
   await page.waitForURL(/\/chat\/.+/);
   // Conversation UI + the question are visible while the run POST is still held and the detail read is delayed.
   await expect(page.locator("#composer")).toBeVisible({ timeout: 2_000 });
-  await expect(page.getByText(question).first()).toBeVisible({ timeout: 2_000 });
+  await expect(page.getByLabel("Conversation timeline").getByText(question).first()).toBeVisible({ timeout: 2_000 });
   const visibleMs = Date.now() - t0;
   // Budget: conversation visible ≤ 300 ms after creation locally; CI runners get 1.5 s headroom.
   expect(visibleMs, `new chat visible after ${visibleMs} ms`).toBeLessThan(process.env.CI ? 1_500 : 1_000);

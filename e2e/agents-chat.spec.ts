@@ -161,7 +161,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   expect(session.placedIn).toBe(areaId);
   await page.waitForURL(/\/chat\/.+/);
   // The question shows at once, the reply streams from the area's agent.
-  await expect(page.getByText("what should we bet on next week").first()).toBeVisible();
+  await expect(page.getByLabel("Conversation timeline").getByText("what should we bet on next week").first()).toBeVisible();
   await expect(page.getByTestId("agent-chip")).toContainText("momentumchief");
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await profileHits(page)).toBeGreaterThan(before);

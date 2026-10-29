@@ -7,7 +7,8 @@ import type { RunView } from "@/lib/hermes";
  * conversation exists and posts the first run in the background. The conversation
  * page picks the in-flight send up here (shows the message at once, then streams).
  */
-export type FirstRun = { input: string; run: Promise<RunView> };
+/** `key`: the run's idempotency key, reused if the owner retries after a lost response. */
+export type FirstRun = { input: string; key: string; run: Promise<RunView> };
 
 const pending = new Map<string, FirstRun>();
 

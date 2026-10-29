@@ -40,13 +40,14 @@ export function useAskHermes() {
         areaId: opts.areaId ?? undefined,
       });
       // Send the first message in the background; the conversation page shows it right away and streams the reply.
+      const key = newIdempotencyKey("qc");
       const run = api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, {
         input: text,
-        idempotencyKey: newIdempotencyKey("qc"),
+        idempotencyKey: key,
         context: opts.context,
         capabilities: [SMART_CAPABILITY],
       });
-      setFirstRun(session.id, { input: text, run });
+      setFirstRun(session.id, { input: text, key, run });
       open(session);
       setBusy(false);
       return true;
