@@ -210,8 +210,8 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     <SurfaceContext.Provider value={ctx}>
       <div className="smart-surface my-2 overflow-hidden rounded-[10px] border border-line bg-surface" data-testid="smart-surface">
         <div className="flex min-h-9 items-center gap-2 border-b border-line px-3 text-[12.5px]">
-          <span className="font-semibold">{stageable ? "Proposed changes" : "Jarvis view"}</span>
-          <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-ai">
+          <span className="min-w-0 truncate font-semibold">{stageable ? "Proposed changes" : "Jarvis view"}</span>
+          <span className="ml-auto inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[11.5px] text-ai">
             Proposed by <span className="font-medium">@jarvis</span>
           </span>
         </div>
@@ -235,24 +235,24 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
                 ))}
               </ul>
             ) : null}
-            <div className="flex min-h-11 items-center gap-2 px-3 py-1.5" aria-live="polite">
+            <div className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5" aria-live="polite">
               {n ? (
                 <span className="smart-tray-n" aria-hidden="true">
                   {n}
                 </span>
               ) : null}
-              <p className={cx("min-w-0 flex-1 text-sm", n ? "font-semibold" : "text-muted")} data-testid="smart-tray-count">
+              <p className={cx("min-w-[7.5rem] flex-1 text-sm", n ? "font-semibold" : "text-muted")} data-testid="smart-tray-count">
                 {n ? `${n} ${n === 1 ? "change" : "changes"} staged` : "Nothing changes until you apply"}
               </p>
               {n ? (
-                <>
+                <span className="ml-auto flex items-center gap-2">
                   <Button size="sm" variant="ghost" aria-expanded={review} onClick={() => setReview((r) => !r)}>
                     {review ? "Hide" : "Review"}
                   </Button>
                   <Button size="sm" variant="primary" busy={apply.isPending && !approveCal} onClick={() => apply.mutate(false)}>
                     Apply {n} {n === 1 ? "change" : "changes"}
                   </Button>
-                </>
+                </span>
               ) : null}
             </div>
             {external.length ? (
