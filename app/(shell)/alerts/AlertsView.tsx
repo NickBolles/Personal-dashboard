@@ -122,11 +122,8 @@ export function AlertsView() {
                   </p>
                 </div>
                 <div className="col-start-2 row-start-2 flex flex-wrap gap-2 sm:col-start-3 sm:row-start-1 sm:self-center">
-                  <Button size="sm" variant="primary" onClick={() => open(n)}>
-                    Open
-                  </Button>
                   {!n.actedAt ? (
-                    <Button size="sm" onClick={() => t.mutate({ id: n.id, transition: "acted" })}>
+                    <Button size="sm" variant="secondary" onClick={() => t.mutate({ id: n.id, transition: "acted" })}>
                       Mark done
                     </Button>
                   ) : null}
@@ -135,6 +132,7 @@ export function AlertsView() {
                   <OverflowMenu
                     label={`More actions for ${n.title}`}
                     items={[
+                      { label: "Open", onSelect: () => open(n) },
                       n.readAt
                         ? { label: "Mark unread", onSelect: () => t.mutate({ id: n.id, transition: "unread" }) }
                         : { label: "Mark read", onSelect: () => t.mutate({ id: n.id, transition: "read" }) },
