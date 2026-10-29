@@ -65,7 +65,7 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
   const done = h && "done" in h && h.done;
   return (
     <li
-      className={cx("smart-row flex items-center gap-2 border-t border-line px-3 py-2", staged && "bg-accent-soft/50", (applied || done) && "opacity-70")}
+      className={cx("smart-row flex items-center gap-2 border-t border-line px-3 py-2", staged && "smart-pend", (applied || done) && "opacity-70")}
       data-ref={row.ref}
     >
       <div className="min-w-0 flex-1">
@@ -109,7 +109,7 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
               {SUGGESTION_LABEL[sug]}
             </Button>
           ) : null}
-          {staged && !isSug ? <Badge tone="accent">{intentChip(staged)}</Badge> : null}
+          {staged && !isSug ? <span className="chg">{intentChip(staged)}</span> : null}
           <OverflowMenu label={`More actions for ${name}`} items={items} />
         </span>
       )}
