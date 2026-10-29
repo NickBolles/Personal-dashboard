@@ -1,6 +1,39 @@
 // Mock Skylight unofficial API (OAuth refresh-token rotation + JSON:API resources).
 import { randomBytes } from "node:crypto";
-import { json, readBody, notFound, isoDate, addDays } from "./util.mjs";
+import { json, readBody, notFound, addDays } from "./util.mjs";
+
+// The mock frame's timezone (matches the e2e server's TZ).
+const FRAME_TZ = "America/Chicago";
+
+/** Local date + "HH:MM" of `d` in the frame timezone. */
+function frameNow(d = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: FRAME_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
+}
+
+/**
+ * Day a chore is scheduled on, in the frame's local calendar. Timed chores
+ * roll to tomorrow once their time has passed, so the seeded chores are never
+ * overdue: otherwise Home's overdue counts depend on the wall clock (e.g. the
+ * 18:00 chore turned overdue between 18:00 local and midnight UTC).
+ */
+export function choreDay(startTime, d = new Date()) {
+  const now = frameNow(d);
+  if (!startTime || startTime > now.time) return now.date;
+  return frameNow(addDays(d, 1)).date;
+}
 
 export function createSkylight({ refreshToken }) {
   const state = { refresh: null, access: null, chores: new Map() };
@@ -11,9 +44,9 @@ export function createSkylight({ refreshToken }) {
     state.chores = new Map([
       ["55900629", { id: "55900629", summary: "Schedule vet appointment", emoji_icon: "🐾", status: "pending", start_time: null }],
       [
-        "55780859-" + isoDate(new Date()) + "-1800",
+        "55780859-" + choreDay("18:00") + "-1800",
         {
-          id: "55780859-" + isoDate(new Date()) + "-1800",
+          id: "55780859-" + choreDay("18:00") + "-1800",
           summary: "Take out recycling",
           emoji_icon: "♻️",
           status: "pending",
@@ -93,7 +126,7 @@ export function createSkylight({ refreshToken }) {
         data: [...state.chores.values()].map((c) => ({
           id: c.id,
           type: "chore",
-          attributes: { ...c, category: undefined, start: isoDate(new Date()), recurring: c.id.includes("-") },
+          attributes: { ...c, category: undefined, start: choreDay(c.start_time), recurring: c.id.includes("-") },
           relationships: { category: { data: c.category ? { id: c.category, type: "category" } : null } },
         })),
       });
