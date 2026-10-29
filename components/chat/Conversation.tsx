@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffe
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
+import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
 import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
@@ -90,6 +91,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
+  /** A first message that failed to send goes back into the mounted composer. */
+  const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
   const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file">(null);
   const router = useRouter();
   const newChat = useAskHermes();
@@ -144,6 +147,32 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   useEffect(() => {
     kvGet<{ model?: string; provider?: string }>(`model:${sessionId}`).then((m) => m && setModel(m));
   }, [sessionId]);
+
+  // "Ask" opened this conversation before its first message was sent: show it now, stream when the run starts.
+  const firstRun = useRef<string | null>(null);
+  useEffect(() => {
+    if (firstRun.current === sessionId) return;
+    firstRun.current = sessionId;
+    const first = takeFirstRun(sessionId);
+    if (!first) return;
+    setPendingInput(first.input);
+    first.run.then(
+      (r) => {
+        // The resume effect may already have picked this run up from a detail refetch.
+        if (resumed.current !== r.runId) {
+          resumed.current = r.runId;
+          run.start(r.runId);
+        }
+        refreshSessionLists(qc);
+      },
+      (err) => {
+        setPendingInput(undefined);
+        void kvSet(`draft:${sessionId}`, first.input);
+        setRestore({ text: first.input, key: first.key, at: Date.now() });
+        toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
+      },
+    );
+  }, [sessionId, run, qc, toast]);
 
   useEffect(() => {
     if (run.state.phase === "waiting_for_approval") announce("Hermes needs your approval");
@@ -497,6 +526,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
               onAttach={() => setDialog("context")}
               onSend={send}
+              restore={restore}
               onSteer={steer}
               onStop={run.stop}
               onCommand={runCommand}
@@ -809,8 +839,10 @@ function Composer({
   modelLabel,
   onModel,
   agent,
+  restore,
 }: {
   sessionId: string;
+  restore?: { text: string; key: string; at: number };
   phase?: RunPhase;
   online: boolean;
   context: { label: string; ref: string }[];
@@ -845,6 +877,15 @@ function Composer({
     setSeenRepo(areaRepo);
     setRepo(areaRepo);
   }
+  const [seenRestore, setSeenRestore] = useState(restore);
+  if (restore !== seenRestore) {
+    setSeenRestore(restore);
+    if (restore) setText(restore.text);
+  }
+  // Retry with the same key: if the first send did reach Hermes, it isn't run twice.
+  useEffect(() => {
+    if (restore) pendingKey.current = restore.key;
+  }, [restore]);
   const listId = useId();
   const { rows, loading, partial, searched } = useTriggerRows(trigger, repo);
   const activeIdx = Math.min(active, Math.max(0, rows.length - 1));

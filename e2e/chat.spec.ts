@@ -135,3 +135,35 @@ test("Track in Paperclip: create once, reuse from another conversation", async (
   await page.goto("/initiatives");
   await expect(page.getByRole("heading", { name: "Household budget automation v2" })).toHaveCount(1);
 });
+
+test("new chat budget: Ask opens the conversation before Hermes answers the run or the detail read", async ({ page }) => {
+  // Hold the first run and the transcript read: the page must not wait for either.
+  let releaseRun!: () => void;
+  const runGate = new Promise<void>((r) => (releaseRun = r));
+  await page.route(/\/api\/hermes\/sessions\/[^/]+\/runs$/, async (route) => {
+    await runGate;
+    await route.continue();
+  });
+  await page.route(/\/api\/hermes\/sessions\/[^/?]+$/, async (route) => {
+    if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, 4_000));
+    await route.continue();
+  });
+  await page.goto("/home");
+  const question = `budget check ${Date.now().toString(36)}`;
+  await page.getByLabel("Capture or ask Hermes").fill(question);
+  const created = page.waitForResponse((r) => r.url().endsWith("/api/hermes/sessions") && r.request().method() === "POST");
+  const runRequested = page.waitForRequest((r) => /\/runs$/.test(r.url()) && r.method() === "POST");
+  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
+  await created;
+  const t0 = Date.now();
+  await runRequested; // kicked off right away, in the background
+  await page.waitForURL(/\/chat\/.+/);
+  // Conversation UI + the question are visible while the run POST is still held and the detail read is delayed.
+  await expect(page.locator("#composer")).toBeVisible({ timeout: 2_000 });
+  await expect(page.getByLabel("Conversation timeline").getByText(question).first()).toBeVisible({ timeout: 2_000 });
+  const visibleMs = Date.now() - t0;
+  // Budget: conversation visible ≤ 300 ms after creation locally; CI runners get 1.5 s headroom.
+  expect(visibleMs, `new chat visible after ${visibleMs} ms`).toBeLessThan(process.env.CI ? 1_500 : 1_000);
+  releaseRun();
+  await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
+});

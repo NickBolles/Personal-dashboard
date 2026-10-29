@@ -199,22 +199,33 @@ export async function listSessions(user: CurrentUser, opts: { includeArchived?: 
   return (await listSessionPage(user, opts)).sessions;
 }
 
+/** Forks listed on a conversation page (each is one Hermes GET). */
+const MAX_LINEAGE = 20;
+
 export async function getSessionDetail(user: CurrentUser, id: string) {
   assertSessionId(id);
   assertAccess(user, id, "read");
   const conn = connForSession(id);
   const [session, messages] = await Promise.all([HermesSessionClient.get(conn, id), HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 })]);
   const [summary] = decorate([normalizeSession(session.session)], user);
-  // Children (forks) of this session, for reciprocal lineage links.
-  const all = await HermesSessionClient.list(conn, { limit: 200, includeChildren: true }).catch(() => ({ data: [] }));
-  const localChildren = db().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.forkedFromSessionId, id)).all();
-  const childIds = new Set([...all.data.filter((s) => s.parent_session_id === id).map((s) => s.id), ...localChildren.map((c) => c.sessionId)]);
-  const children = decorate(all.data.filter((s) => childIds.has(s.id)).map(normalizeSession), user);
-  let parent: SessionSummary | undefined;
-  if (summary!.parentSessionId) {
-    const p = all.data.find((s) => s.id === summary!.parentSessionId);
-    if (p) parent = decorate([normalizeSession(p)], user)[0];
-  }
+  // Lineage without a session-list scan: Hermes' list is slow (it materialises every session before LIMIT,
+  // ~9 s on prod), and it ran on every conversation open, so a new chat took ~10 s to appear. Jarvis records
+  // every fork it makes in session_meta, so children come from there; the parent is one GET.
+  const localChildren = db().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.forkedFromSessionId, id)).limit(MAX_LINEAGE).all();
+  const getSummary = (sid: string) =>
+    HermesSessionClient.get(connForSession(sid), sid)
+      .then((r) => normalizeSession(r.session))
+      .catch(() => null);
+  const parentId = summary!.parentSessionId;
+  const [childRows, parentRow] = await Promise.all([
+    Promise.all(localChildren.map((c) => getSummary(c.sessionId))),
+    parentId ? getSummary(parentId) : Promise.resolve(null),
+  ]);
+  const children = decorate(
+    childRows.filter((c): c is SessionSummary => Boolean(c)),
+    user,
+  );
+  const parent: SessionSummary | undefined = parentRow ? decorate([parentRow], user)[0] : undefined;
   return {
     session: summary!,
     timeline: messagesToTimeline(messages.data),
@@ -233,10 +244,30 @@ export async function getSessionSummary(user: CurrentUser, id: string) {
   return summary;
 }
 
+/**
+ * Hermes rejects a title another session already uses (400 invalid_title), so asking the same
+ * question twice failed. Retry with a numbered title, then untitled (Hermes titles it later).
+ */
+async function createWithFreeTitle(conn: HermesConn, title: string | undefined) {
+  const attempts = title ? [title, `${title} (2)`, `${title} (3)`, undefined] : [undefined];
+  let last: unknown;
+  for (const t of attempts) {
+    try {
+      return await HermesSessionClient.create(conn, { title: t, source: "api_server" });
+    } catch (err) {
+      if (!isTitleTaken(err)) throw err;
+      last = err;
+    }
+  }
+  throw last;
+}
+
+export const isTitleTaken = (err: unknown) => err instanceof UpstreamError && /invalid_title|already in use/i.test(err.message);
+
 /** `profile`: a routed Hermes profile (server/agents/routing.ts resolveAgent), null/undefined = default. */
 export async function createSession(user: CurrentUser, title?: string, profile?: string | null) {
   const conn = connForProfile(profile ?? null);
-  const res = await HermesSessionClient.create(conn, { title: title?.trim() || undefined, source: "api_server" });
+  const res = await createWithFreeTitle(conn, title?.trim() || undefined);
   touchMeta(user, res.session.id, profile ? { hermesProfile: profile } : {});
   return decorate([normalizeSession(res.session)], user)[0]!;
 }

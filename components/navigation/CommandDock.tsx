@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { cx } from "@/components/ui";
 import { OPEN_PALETTE_EVENT, useCommands, type Command } from "./commands";
+import { useComposerTarget } from "@/components/agents/useComposerTarget";
 
 /**
  * The command dock: one orb. Phones (design system §5): the Tide orb, lifted
@@ -139,6 +140,8 @@ function subLayout(center: Pt, R: number, petal: { x: number }, count: number) {
 
 export function CommandDock({ variant, compact = false }: { variant: "bar" | "dock"; compact?: boolean }) {
   const commands = useCommands();
+  // Inside an area the orb asks that area's agent (the palette's Ask row and chip say so too).
+  const target = useComposerTarget();
   const petals = useMemo(() => resolvePetals(commands), [commands]);
   const orb = useRef<HTMLButtonElement>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -354,9 +357,10 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
       ? `${petals[subFor]!.label} → ${subActive >= 0 ? petals[subFor]!.sub[subActive]!.label : "choose"}`
       : active >= 0
         ? `${petals[active]!.label}${map.via === "keyboard" ? " · Tab or Enter opens" : " · keep holding to open"}`
-        : map.via === "pointer"
-          ? "Slide to an action · release to run · release on the orb to cancel"
-          : "Arrows to choose · Tab/Enter opens · Enter runs · Esc closes";
+        : (target.node ? `Asking ${target.agent} · ${target.node.title} · ` : "") +
+          (map.via === "pointer"
+            ? "Slide to an action · release to run · release on the orb to cancel"
+            : "Arrows to choose · Tab/Enter opens · Enter runs · Esc closes");
 
   return (
     <>
@@ -416,8 +420,11 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
             </span>
             {!compact ? (
               <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">
-                Ask Jarvis or search…
-                <kbd className="kbd">Ctrl K</kbd>
+                <span className="min-w-0 truncate" data-testid="dock-ask-target" data-agent={target.agent} data-routed={target.routed ? "1" : "0"}>
+                  Ask <span className={cx(target.node && "font-semibold text-text")}>{target.agent}</span>
+                  {target.node ? <span> · {target.node.title}</span> : null} or search…
+                </span>
+                <kbd className="kbd shrink-0">Ctrl K</kbd>
               </span>
             ) : null}
           </>
@@ -444,9 +451,10 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
               <div id="command-map" role="menu" aria-label="Action map" className="fixed h-0 w-0" style={{ left: map.center.x, top: map.center.y }}>
                 <span
                   aria-hidden="true"
-                  className="dock-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center rounded-full text-xs font-bold text-white"
+                  className="dock-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
+                  data-testid="map-ask-target"
                 >
-                  Jarvis
+                  {target.agent}
                 </span>
                 {petals.map((p, i) => (
                   <button

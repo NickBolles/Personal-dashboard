@@ -6,9 +6,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { kvDel, kvSet } from "@/lib/client/idb";
+import { setFirstRun } from "@/lib/client/first-run";
 import { useToast } from "@/components/ui";
-import type { SessionSummary } from "@/lib/hermes";
+import type { RunView, SessionSummary } from "@/lib/hermes";
 import type { AssistantBackend } from "@/lib/assistant";
 
 /**
@@ -22,6 +22,13 @@ export function useAskHermes() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  /** The conversation exists: show it now (no detail round trip), refresh lists in the background. */
+  const open = (session: SessionSummary) => {
+    qc.setQueryData(["session", session.id], (old: unknown) => old ?? { session, timeline: [], children: [], links: [] });
+    router.push(`/chat/${encodeURIComponent(session.id)}`);
+    // Lists (Hermes' session list is slow) refresh after navigation and never block it.
+    void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
+  };
   const ask = async (input: string, opts: { backend?: AssistantBackend; context?: string; areaId?: string | null } = {}) => {
     const text = input.trim();
     if (!text || busy) return false;
@@ -32,19 +39,17 @@ export function useAskHermes() {
         backend: opts.backend,
         areaId: opts.areaId ?? undefined,
       });
-      // Refresh even if the run fails; the conversation already exists.
-      void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
-      qc.invalidateQueries({ queryKey: ["work"] });
+      // Send the first message in the background; the conversation page shows it right away and streams the reply.
       const key = newIdempotencyKey("qc");
-      await kvSet(`pending:${session.id}`, { input: text, key, context: opts.context });
-      await api.post(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, {
+      const run = api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(session.id)}/runs`, {
         input: text,
         idempotencyKey: key,
         context: opts.context,
         capabilities: [SMART_CAPABILITY],
       });
-      await kvDel(`pending:${session.id}`);
-      router.push(`/chat/${encodeURIComponent(session.id)}`);
+      setFirstRun(session.id, { input: text, key, run });
+      open(session);
+      setBusy(false);
       return true;
     } catch (err) {
       toast((err as Error).message, "danger");
@@ -58,9 +63,8 @@ export function useAskHermes() {
     setBusy(true);
     try {
       const session = await api.post<SessionSummary>("/api/hermes/sessions", { backend: opts.backend, areaId: opts.areaId ?? undefined });
-      void refreshSessionLists(qc).catch(() => {});
-      qc.invalidateQueries({ queryKey: ["work"] });
-      router.push(`/chat/${encodeURIComponent(session.id)}`);
+      open(session);
+      setBusy(false);
       return true;
     } catch (err) {
       toast((err as Error).message, "danger");
