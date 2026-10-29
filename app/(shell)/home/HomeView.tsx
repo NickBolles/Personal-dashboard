@@ -13,7 +13,8 @@ import { AssistCard } from "@/components/home/AssistCard";
 import { TriageDialog } from "@/components/home/TriageDialog";
 import type { AssistCard as Assist } from "@/lib/contracts";
 import { QuickCapture } from "@/components/chat/QuickCapture";
-import { Badge, Empty, ErrorNote, Page, SectionLabel, Spinner, cx, useOnline } from "@/components/ui";
+import { Badge, Empty, ErrorNote, OverflowMenu, Page, SectionLabel, Spinner, cx, useOnline } from "@/components/ui";
+import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 
@@ -138,6 +139,40 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
   );
 }
 
+/** Overdue · Now · Later today · Backlog — one dense strip under the header (design PR4). */
+function KpiStrip({ a }: { a: AttentionSummary }) {
+  const t = a.totals;
+  const cell = "flex min-h-11 flex-col justify-center gap-0.5 px-3 py-1.5 sm:min-h-10";
+  const label = "text-[0.6875rem] font-semibold tracking-[0.06em] text-muted uppercase";
+  const value = "text-[1.0625rem] leading-6 font-semibold tabular-nums";
+  return (
+    <dl aria-label="Today at a glance" className="mb-4 grid grid-cols-4 divide-x divide-line rounded-[var(--radius)] border border-line bg-surface">
+      <div className={cell}>
+        <dt className={label}>Overdue</dt>
+        <dd className={cx(value, t.overdue ? "text-warn" : undefined)}>{t.overdue}</dd>
+      </div>
+      <div className={cell}>
+        <dt className={label}>Now</dt>
+        <dd className={value}>{t.now}</dd>
+      </div>
+      <div className={cell}>
+        <dt className={label}>Later</dt>
+        <dd className={value}>{t.today}</dd>
+      </div>
+      <div className={cell}>
+        <dt className={label}>Backlog</dt>
+        <dd className={value}>
+          <Link href="/home/all?bucket=backlog" className="hover:underline">
+            <span className="sr-only">Backlog: </span>
+            {t.backlog}
+            <span className="sr-only"> items{t.overdue ? `, ${t.overdue} overdue across Home` : ""}</span>
+          </Link>
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 /** Same shape as the loaded page, so nothing jumps when data arrives. */
 function HomeSkeleton() {
   return (
@@ -192,6 +227,7 @@ export function HomeView() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const att = data?.attention;
+  const router = useRouter();
 
   const later: Partial<Record<HomeSectionId, (d: HomePayload) => React.ReactNode>> = {
     later_today: (d) =>
@@ -200,7 +236,7 @@ export function HomeView() {
           <SectionTitle id="today-h" count={String(d.later.laterToday.length)}>
             Later today
           </SectionTitle>
-          <ol className="space-y-1.5">
+          <ol className="jv-feed">
             {d.later.laterToday.map((a) => (
               <li key={a.id} className="jv-rise">
                 <ActionCard action={a} explain />
@@ -219,7 +255,7 @@ export function HomeView() {
           >
             Next two weeks
           </SectionTitle>
-          <ul className="space-y-1.5">
+          <ul className="jv-feed">
             {d.later.upcoming.map((a) => (
               <li key={a.id}>
                 <ActionCard action={a} explain />
@@ -236,18 +272,28 @@ export function HomeView() {
 
   return (
     <Page>
-      <header className="mb-4">
-        <p className="eyebrow" data-dynamic>
-          {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-        </p>
-        <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">{greeting}</h1>
-        {att ? <AttentionLine a={att} /> : null}
+      <header className="mb-3 flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow" data-dynamic>
+            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </p>
+          <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">{greeting}</h1>
+          {att ? <AttentionLine a={att} /> : null}
+        </div>
+        <OverflowMenu
+          label="Today options"
+          items={[
+            { label: "All of Home", onSelect: () => router.push("/home/all") },
+            { label: "Customize Today", onSelect: () => router.push("/settings/home") },
+          ]}
+        />
       </header>
+      {att ? <KpiStrip a={att} /> : null}
 
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
-      <div className="grid gap-x-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-x-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           {visible("now") ? (
             <section aria-labelledby="now-h" aria-busy={!data || undefined} className="mb-5">
@@ -263,7 +309,7 @@ export function HomeView() {
                 </>
               ) : data.now.length ? (
                 <>
-                  <ol className="space-y-1.5">
+                  <ol className="jv-feed">
                     {data.now.map((a) => (
                       <li key={a.id} className="jv-rise">
                         <ActionCard action={a} explain />
@@ -342,45 +388,8 @@ export function HomeView() {
         </div>
 
         {/* Context rail: beside the feed on wide screens, after it on phones. */}
-        <aside aria-label="At a glance" className="min-w-0 space-y-5 xl:pt-0">
-          {att ? (
-            <section aria-labelledby="backlog-h">
-              <h2 id="backlog-h" className="sr-only">
-                Backlog
-              </h2>
-              <Link href="/home/all?bucket=backlog" className="card press flex items-center justify-between gap-3 px-3.5 py-3 hover:bg-surface-2">
-                <span className="min-w-0">
-                  <span className="block font-semibold">
-                    Backlog <span className="font-normal text-muted">· {att.totals.backlog}</span>
-                  </span>
-                  <span className="block text-sm text-muted">
-                    {att.totals.backlog
-                      ? "Older overdue, undated, later dates and anything over today’s limit. Nothing is deleted."
-                      : "Everything open is on Home."}
-                  </span>
-                  {att.totals.overdue ? (
-                    <Badge tone="warn" dot className="mt-1.5">
-                      {att.totals.overdue} overdue across Home
-                    </Badge>
-                  ) : null}
-                </span>
-                <ChevronIcon className="h-4 w-4 shrink-0 text-muted" />
-              </Link>
-            </section>
-          ) : null}
-
+        <aside aria-label="At a glance" className="min-w-0 space-y-5">
           {data && visible("glance") ? <Glance data={data} /> : null}
-
-          {data ? (
-            <p className="text-sm">
-              <Link
-                href="/settings/home"
-                className="tap inline-flex items-center rounded-[8px] px-1 text-muted underline-offset-2 hover:text-text hover:underline"
-              >
-                Tune what Home shows
-              </Link>
-            </p>
-          ) : null}
         </aside>
       </div>
     </Page>
@@ -395,8 +404,8 @@ function Glance({ data }: { data: HomePayload }) {
   return (
     <section aria-labelledby="glance-h">
       <SectionLabel id="glance-h">Household</SectionLabel>
-      <ul className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-        <li className="card px-3.5 py-3">
+      <ul className="jv-feed jv-glance grid sm:max-[1099px]:grid-cols-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Next event</h3>
           {data.glance.nextEvent ? (
             <>
@@ -409,7 +418,7 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">Calendar not connected</p>
           )}
         </li>
-        <li className="card px-3.5 py-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Daily Compass</h3>
           {data.glance.compass ? (
             <p className="mt-1">
@@ -425,7 +434,7 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">{compass?.state === "error" ? "Couldn’t load" : "Not set up"}</p>
           )}
         </li>
-        <li className="card px-3.5 py-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Home</h3>
           {ha?.state === "ok" || ha?.state === "stale" ? (
             data.glance.homeExceptions.length ? (

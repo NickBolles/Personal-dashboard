@@ -23,6 +23,15 @@ const REASON_TONE: Record<NextAction["priorityReason"], Tone> = {
   upcoming: "neutral",
 };
 
+/** Leading emoji in source titles ("🧹 Vacuum") become an optional glyph so titles scan cleanly. */
+const LEAD_EMOJI =
+  /^((?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u200D|\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier})*)\s*/u;
+export function splitGlyph(title: string): { glyph?: string; text: string } {
+  const m = LEAD_EMOJI.exec(title);
+  if (!m || m[0].length >= title.length) return { text: title };
+  return { glyph: m[1], text: title.slice(m[0].length) };
+}
+
 export function useActionMutation() {
   const qc = useQueryClient();
   const { toast, announce } = useToast();
@@ -54,6 +63,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
   const primary = action.primaryAction;
   const titleId = `act-${action.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const rank = explain ? action.rank : undefined;
+  const { glyph, text: titleText } = splitGlyph(action.title);
 
   // "Done" only shows after the server confirmed (readback); the card then leaves on refetch.
   const run = (kind: PrimaryActionKind | "pin" | "unpin") => m.mutate({ actionId: action.id, kind }, { onSuccess: () => kind === "complete" && setDone(true) });
@@ -82,12 +92,12 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
   const primaryButton =
     primary && !compact ? (
       primary.kind === "open" ? (
-        <ButtonLink href={action.href} external={action.external} variant="primary" size="sm" aria-describedby={titleId}>
+        <ButtonLink href={action.href} external={action.external} variant={rank ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
           {primary.label}
         </ButtonLink>
       ) : (
         <Button
-          variant="primary"
+          variant={rank ? "secondary" : "primary"}
           size="sm"
           busy={m.isPending}
           disabled={!online || done}
@@ -141,25 +151,39 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
 
   // Phones: title/meta beside the menu, primary action right-aligned below. Wider: one row — content, action, menu.
   // Two text lines: title, then source · status · detail · due · "Why this?" (design review D4).
+  // Home feed (explain): a dense list row — tier dot · title/meta · neutral action · ⋯ (design PR4).
+  // Feed rows on phones: action under the ⋯, beside the text. Elsewhere: the standalone card. Phones put the action on its own line so long labels never squeeze the title.
+  const titleNode = (
+    <>
+      {glyph ? (
+        <span aria-hidden="true" className="jv-glyph">
+          {glyph}
+        </span>
+      ) : null}
+      {titleText}
+    </>
+  );
   return (
     <article
       aria-labelledby={titleId}
       data-tier={rank?.tier}
       className={cx(
-        "card grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 px-3.5 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:py-2 dense:py-2",
-        rank && "jv-accent pl-4",
+        rank
+          ? "jv-frow grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1 py-2 pr-2 pl-7 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:py-1.5"
+          : "card grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 px-3.5 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:py-2 dense:py-2",
         done && "jv-done",
       )}
     >
-      <div className="col-start-1 row-start-1 min-w-0 space-y-0.5">
-        <h3 id={titleId} className="text-[0.9375rem] leading-snug font-semibold dense:text-[0.875rem]">
+      {rank ? <span aria-hidden="true" className="jv-tierdot" /> : null}
+      <div className={cx("col-start-1 row-start-1 min-w-0 space-y-0.5", rank && "row-span-2 sm:row-span-1")}>
+        <h3 id={titleId} className={cx("leading-snug font-semibold", rank ? "text-[0.875rem] font-medium" : "text-[0.9375rem] dense:text-[0.875rem]")}>
           {action.external ? (
             <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
-              {action.title}
+              {titleNode}
             </a>
           ) : (
             <Link href={action.href} className="hover:underline">
-              {action.title}
+              {titleNode}
             </Link>
           )}
         </h3>
@@ -189,9 +213,16 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
       <div className="col-start-2 row-start-1 self-start justify-self-end sm:col-start-3 sm:self-center">
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
-      {/* Phones: the main action sits on the right (owner default), on its own line so a long label never squeezes the title. */}
       {primaryButton ? (
-        <div className="col-span-2 col-start-1 row-start-2 flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">{primaryButton}</div>
+        <div
+          className={cx(
+            "flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1",
+            // Feed rows keep the action beside the text on phones (no empty button line).
+            rank ? "col-start-2 row-start-2 self-end sm:self-center" : "col-span-2 col-start-1 row-start-2",
+          )}
+        >
+          {primaryButton}
+        </div>
       ) : null}
     </article>
   );
