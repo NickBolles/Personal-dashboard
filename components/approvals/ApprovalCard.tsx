@@ -98,7 +98,7 @@ export function ApprovalCard({
     >
       <div className="flex min-w-0 items-center gap-2">
         <AgentMark name={name} size={18} busy={Boolean(live || busy)} />
-        <h2 id={headingId} className="min-w-0 truncate text-sm font-semibold">
+        <h2 id={headingId} className="min-w-0 line-clamp-2 text-sm font-semibold break-words">
           {name} needs your approval
         </h2>
         <span className="chip ml-auto shrink-0" data-tone="warn">

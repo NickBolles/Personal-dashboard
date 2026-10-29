@@ -205,6 +205,9 @@ for (const theme of ["light", "dark"] as const) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.waitForTimeout(300);
     await expect(card).toHaveScreenshot(`approval-card-${theme}.png`, { animations: "disabled" });
+    // Resolve it so the pending request doesn't leak into other specs' screenshots.
+    await card.getByRole("button", { name: "Deny" }).click();
+    await expect(card).toBeHidden({ timeout: 15_000 });
   });
 }
 

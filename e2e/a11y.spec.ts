@@ -90,6 +90,9 @@ test("approval card: axe clean and no overflow at 200% text zoom (choices + undo
   // Undo leaves the request unanswered (still awaiting a choice).
   await card.getByRole("button", { name: "Undo" }).click();
   await expect(card.getByRole("button", { name: "Approve once" })).toBeVisible();
+  // Resolve the request so its "needs approval" item doesn't leak into later specs (home-all visual).
+  await card.getByRole("button", { name: "Deny" }).click();
+  await expect(card).toBeHidden({ timeout: 15_000 });
 });
 
 test("touch targets in primary navigation are at least 44px", async ({ page }) => {
