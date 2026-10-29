@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
-import { createPathSchema, defaultChildKind, isContainer, parseQuickPath, primaryAction, rollup, type WorkItem } from "@/lib/work";
+import { createPathSchema, defaultChildKind, isContainer, parseQuickPath, itemPrimary, primaryAction, rollup, type WorkItem } from "@/lib/work";
 import * as store from "@/server/work/store";
 import * as pathRoute from "@/app/api/work/items/path/route";
 
@@ -61,6 +61,35 @@ describe("primaryAction", () => {
     expect(primaryAction(d("awaiting_validation", { validations: [{ status: "pass" }] }), true)).toBe("settle");
     expect(primaryAction(d("settled"), true)).toBe("reopen");
     expect(primaryAction(d("exploring", { kind: "conversation", sessionId: "s1" }), true)).toBe("open_chat");
+  });
+});
+
+describe("itemPrimary", () => {
+  const d = (
+    status: string,
+    extra: Partial<{
+      packets: unknown[];
+      validations: { status: string }[];
+      links: { kind: string; url: string | null }[];
+      blockedBy: { open: boolean }[];
+    }> = {},
+  ) => ({
+    item: { kind: "thread" as WorkItem["kind"], status: status as WorkItem["status"], sessionId: null },
+    packets: extra.packets ?? [],
+    validations: extra.validations ?? [],
+    links: extra.links ?? [],
+    blockedBy: extra.blockedBy ?? [],
+  });
+  const pr = [{ kind: "github_pr", url: "https://github.com/o/r/pull/1" }];
+  it("maps every state to exactly one primary", () => {
+    expect(itemPrimary(d("in_progress", { packets: [{}] }), true)).toBe("continue");
+    expect(itemPrimary(d("in_review", { links: pr }), true)).toBe("open_pr");
+    expect(itemPrimary(d("in_review"), true)).toBe("packet");
+    expect(itemPrimary(d("awaiting_validation", { validations: [{ status: "pending" }] }), true)).toBe("record");
+    expect(itemPrimary(d("ready_to_settle", { blockedBy: [{ open: true }] }), true)).toBe("settle");
+    expect(itemPrimary(d("settled"), true)).toBe("reopen");
+    expect(itemPrimary(d("in_progress", { packets: [{}], blockedBy: [{ open: true }] }), true)).toBe("resolve_blocker");
+    expect(itemPrimary(d("in_progress", { blockedBy: [{ open: false }] }), true)).toBe("packet");
   });
 });
 

@@ -93,6 +93,19 @@ export function primaryAction(
   return "packet";
 }
 
+/** Item-page primary (design-system PR7): one action per state. Blockers and an open PR in review win over packet/continue. */
+export type ItemPrimary = PrimaryAction | "open_pr" | "resolve_blocker";
+export function itemPrimary(
+  d: Parameters<typeof primaryAction>[0] & { links?: { kind: string; url: string | null }[]; blockedBy?: { open: boolean }[] },
+  canChat: boolean,
+): ItemPrimary {
+  const base = primaryAction(d, canChat);
+  if (base !== "continue" && base !== "packet") return base;
+  if (d.blockedBy?.some((b) => b.open)) return "resolve_blocker";
+  if (d.item.status === "in_review" && d.links?.some((l) => l.kind === "github_pr" && l.url)) return "open_pr";
+  return base;
+}
+
 export type Rollup = { containers: number; total: number; open: number; active: number; done: number; proofDue: number; conversations: number };
 /** Counts over everything under `rootId` (not including it). */
 export function rollup(items: Pick<WorkItem, "id" | "parentId" | "kind" | "status" | "archived">[], rootId: string): Rollup {

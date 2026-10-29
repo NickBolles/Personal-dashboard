@@ -34,7 +34,7 @@ import {
   isContainer,
   KIND_LABELS,
   handoffMarkdown,
-  primaryAction,
+  itemPrimary,
   rollup,
   todayIso,
   STATUS_LABELS,
@@ -444,12 +444,6 @@ const RAIL_RELATION: Record<string, string> = {
   handoff_from: "↖ Follow-up of",
 };
 const CMP_TEXT: Record<string, string> = { "<=": "≤", ">=": "≥", "<": "<", ">": ">", "=": "=" };
-const V_STATE: Record<string, { text: string; s: WorkStatus }> = {
-  pass: { text: "passing", s: "settled" },
-  fail: { text: "failing", s: "reopened" },
-  pending: { text: "pending", s: "awaiting_validation" },
-  waived: { text: "waived", s: "on_hold" },
-};
 
 function prRef(l: WorkLink) {
   const m = l.url?.match(/github\.com\/([^/]+)\/([^/]+)\/(?:pull|issues)\/(\d+)/);
@@ -461,7 +455,7 @@ function prRef(l: WorkLink) {
  * lineage, dates and conversations, always visible next to the workspace.
  * Read-only summaries; every action stays in the workspace itself.
  */
-function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect: (id: string) => void; onShowValidations: () => void }) {
+function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => void }) {
   const { item } = d;
   const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue");
   const convs = d.links.filter((l) => l.kind === "chat_session");
@@ -476,44 +470,8 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
     .slice(0, 6);
-  const open = d.validations.filter((v) => v.status === "pending" || v.status === "fail").length;
   return (
     <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail">
-      <Block
-        label="Validation"
-        aside={
-          d.validations.length ? (
-            <button type="button" className="text-xs text-accent hover:underline" onClick={onShowValidations}>
-              {open ? "Record results" : "Show all"}
-            </button>
-          ) : null
-        }
-      >
-        {d.validations.length ? (
-          <ul className="space-y-1.5">
-            {d.validations.slice(0, 5).map((v) => (
-              <li key={v.id} className="flex items-start justify-between gap-2 text-[13px]">
-                <span className="min-w-0 break-words">
-                  {v.metric} {CMP_TEXT[v.comparator]} {v.threshold}
-                  {v.unit ? ` ${v.unit}` : ""}
-                  {v.overdue ? <span className="block text-xs font-medium text-danger">overdue · due {shortDate(v.dueDate!)}</span> : null}
-                  {!v.overdue && v.dueDate && v.status === "pending" ? <span className="block text-xs text-muted">due {shortDate(v.dueDate)}</span> : null}
-                </span>
-                <span className="status-pill shrink-0 text-[11px]" data-s={V_STATE[v.status]?.s}>
-                  {V_STATE[v.status]?.text ?? v.status}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <>
-            <p className="text-[13px] text-muted">{d.settle.allowed ? "None declared." : "Settling needs a declared measurement."}</p>
-            <button type="button" className="mt-1 text-xs text-accent hover:underline" onClick={onShowValidations}>
-              Declare one
-            </button>
-          </>
-        )}
-      </Block>
       {prs.length ? (
         <Block label="Pull requests">
           <ul className="space-y-2">
@@ -573,9 +531,29 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
           </ul>
         </Block>
       ) : null}
-      <Block label="Dates">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
-          <dt className="text-muted">Planned</dt>
+      <Block label="Properties">
+        <dl className="wk-kv">
+          <dt>Status</dt>
+          <dd>{STATUS_LABELS[item.status]}</dd>
+          {d.area ? (
+            <>
+              <dt>Area</dt>
+              <dd className="truncate">{d.area.title}</dd>
+            </>
+          ) : null}
+          {d.area?.settings.defaultRepo ? (
+            <>
+              <dt>Repo</dt>
+              <dd className="truncate font-mono text-xs">{d.area.settings.defaultRepo}</dd>
+            </>
+          ) : null}
+          {d.area ? (
+            <>
+              <dt>Settle</dt>
+              <dd>{SETTLE_TEXT[d.area.settings.settlePolicy] ?? d.area.settings.settlePolicy}</dd>
+            </>
+          ) : null}
+          <dt>Planned</dt>
           <dd>
             {item.startDate || item.targetDate
               ? `${item.startDate ? shortDate(item.startDate) : "—"} → ${item.targetDate ? shortDate(item.targetDate) : "—"}`
@@ -583,13 +561,13 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
           </dd>
           {item.completedAt ? (
             <>
-              <dt className="text-muted">Closed</dt>
+              <dt>Closed</dt>
               <dd>{shortDate(item.completedAt)}</dd>
             </>
           ) : null}
           {d.blockedBy.length ? (
             <>
-              <dt className="text-muted">Waits on</dt>
+              <dt>Waits on</dt>
               <dd>
                 {d.blockedBy.filter((b) => b.open).length} open of {d.blockedBy.length}
               </dd>
@@ -616,6 +594,35 @@ function ItemRail({ d, onSelect, onShowValidations }: { d: WorkDetail; onSelect:
         </Block>
       ) : null}
     </aside>
+  );
+}
+
+const SETTLE_TEXT: Record<string, string> = { manual: "Manual", suggest: "Suggest when quiet", auto_after_quiet: "Auto when quiet" };
+
+/** Chats tab: conversations linked to this item, newest first as the server sends them. */
+function ItemChats({ chats, canChat, onNew, busy }: { chats: WorkLink[]; canChat: boolean; onNew: () => void; busy: boolean }) {
+  return (
+    <section aria-label="Chats">
+      {chats.length ? (
+        <ul className="k-card wk-node-rows overflow-hidden">
+          {chats.map((l) => (
+            <li key={l.id}>
+              <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="wk-node-row" aria-label={`Chat: ${l.title || l.targetId}`}>
+                <span className="min-w-0 flex-1 truncate">{l.title || <span className="font-mono text-xs">{l.targetId}</span>}</span>
+                <span className="shrink-0 text-xs text-muted">{l.role}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-muted">No chats linked yet.</p>
+      )}
+      {canChat ? (
+        <Button size="sm" className="mt-2" busy={busy} onClick={onNew}>
+          New chat here
+        </Button>
+      ) : null}
+    </section>
   );
 }
 
@@ -721,7 +728,7 @@ function ItemDetail({
   onMove: (ids: string[]) => void;
 }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
-  const [tab, setTab] = useState<"overview" | "activity">("overview");
+  const [tab, setTab] = useState<"overview" | "chats" | "activity">("overview");
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -781,40 +788,48 @@ function ItemDetail({
     setTab("overview");
     requestAnimationFrame(() => document.getElementById("work-validations")?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
-  const action = primaryAction(d, canChat);
+  const action = itemPrimary(d, canChat);
+  const openPr = d.links.find((l) => l.kind === "github_pr" && l.url);
+  const chats = d.links.filter((l) => l.kind === "chat_session");
+  const showBlockers = () => {
+    setTab("overview");
+    setSections((o) => ({ ...o, deps: true }));
+    requestAnimationFrame(() => document.querySelector('[data-testid="work-deps"]')?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
   const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
   const childLabel = isArea ? "Project" : "Item";
   const has = (x: MenuItem | false | null | undefined): x is MenuItem => !!x;
-  const menu: MenuItem[] = [
-    container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
-    isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
-    isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
-    isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
-    container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
-    // A project with no items yet can still be worked directly.
-    (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
-      ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
-      : null,
-    { label: "Rename", hint: "F2", onSelect: () => setRenaming(item.title), disabled: item.builtIn },
-    { label: "Move…", hint: "M", onSelect: () => onMove([item.id]), disabled: item.builtIn },
-    { label: "Move up", onSelect: () => reorder.mutate("up") },
-    { label: "Move down", onSelect: () => reorder.mutate("down") },
-    item.kind === "project" && !isArea
-      ? { label: "Convert to item", onSelect: () => patch.mutate({ kind: "thread" }) }
-      : !isArea && item.kind !== "conversation"
-        ? { label: "Convert to project", onSelect: () => patch.mutate({ kind: "project" }) }
+  const menu: MenuItem[] = (
+    [
+      container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
+      isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
+      isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
+      container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+      // A project with no items yet can still be worked directly.
+      (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
+        ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
         : null,
-    isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
-    container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
-    !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
-    ...(container ? [] : aiItems),
-    {
-      label: item.archived ? "Unarchive" : "Archive",
-      onSelect: () => patch.mutate({ archived: !item.archived }),
-      disabled: item.builtIn,
-      danger: !item.archived,
-    },
-  ].filter(has);
+      { label: "Rename", hint: "F2", onSelect: () => setRenaming(item.title), disabled: item.builtIn },
+      { label: "Move…", hint: "M", onSelect: () => onMove([item.id]), disabled: item.builtIn },
+      { label: "Move up", onSelect: () => reorder.mutate("up") },
+      { label: "Move down", onSelect: () => reorder.mutate("down") },
+      item.kind === "project" && !isArea
+        ? { label: "Convert to item", onSelect: () => patch.mutate({ kind: "thread" }) }
+        : !isArea && item.kind !== "conversation"
+          ? { label: "Convert to project", onSelect: () => patch.mutate({ kind: "project" }) }
+          : null,
+      isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
+      container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
+      !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
+      {
+        label: item.archived ? "Unarchive" : "Archive",
+        onSelect: () => patch.mutate({ archived: !item.archived }),
+        disabled: item.builtIn,
+        danger: !item.archived,
+      },
+    ] as (MenuItem | null)[]
+  ).filter(has);
 
   const primary =
     action === "open_chat" && item.sessionId ? (
@@ -830,12 +845,21 @@ function ItemDetail({
         Record result
       </Button>
     ) : action === "reopen" ? (
-      <Button size="sm" variant="primary" onClick={() => setDialog("reopen")}>
+      // Settled work: reopening is possible but not the expected next step, so it is not styled as the primary.
+      <Button size="sm" variant={item.status === "settled" ? "secondary" : "primary"} onClick={() => setDialog("reopen")}>
         Reopen
       </Button>
     ) : action === "continue" ? (
       <Button size="sm" variant="primary" onClick={() => setDialog("continue")}>
-        Continue
+        Continue in chat
+      </Button>
+    ) : action === "open_pr" && openPr?.url ? (
+      <ButtonLink href={openPr.url} external variant="primary" size="sm">
+        Open PR
+      </ButtonLink>
+    ) : action === "resolve_blocker" ? (
+      <Button size="sm" variant="primary" onClick={showBlockers}>
+        Resolve blocker
       </Button>
     ) : (
       <Button size="sm" variant="primary" onClick={() => setDialog("packet")}>
@@ -972,6 +996,15 @@ function ItemDetail({
           ) : null}
           {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
         </div>
+        {!container && aiItems.length ? (
+          <div className="wk-ai-chips" role="group" aria-label="AI actions">
+            {aiItems.map((a) => (
+              <button key={a.label} type="button" className="wk-ai-chip" onClick={a.onSelect}>
+                {a.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {container ? (
@@ -983,9 +1016,10 @@ function ItemDetail({
               {(
                 [
                   ["overview", "Overview"],
+                  ["chats", chats.length ? `Chats ${chats.length}` : "Chats"],
                   ["activity", "Activity"],
                 ] as const
-              ).map(([k, label]) => (
+              ).map(([k, label], ix, all) => (
                 <button
                   key={k}
                   type="button"
@@ -997,7 +1031,7 @@ function ItemDetail({
                   onClick={() => setTab(k)}
                   onKeyDown={(e) => {
                     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                      const n = k === "overview" ? "activity" : "overview";
+                      const n = all[(ix + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length][0];
                       setTab(n);
                       document.getElementById(`tab-${n}`)?.focus();
                     }
@@ -1063,12 +1097,14 @@ function ItemDetail({
                   <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
                   <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
                 </>
+              ) : tab === "chats" ? (
+                <ItemChats chats={chats} canChat={canChat} onNew={() => newChat.start({ areaId: item.id })} busy={newChat.busy} />
               ) : (
                 <Activity d={d} onSelect={onSelect} />
               )}
             </div>
           </div>
-          {wide ? <ItemRail d={d} onSelect={onSelect} onShowValidations={showValidations} /> : null}
+          {wide ? <ItemRail d={d} onSelect={onSelect} /> : null}
         </div>
       )}
 
@@ -2018,6 +2054,7 @@ function Dependencies({ d, items, onSelect, open, onToggle }: { d: WorkDetail; i
   return (
     <Section
       title="Dependencies"
+      testId="work-deps"
       meta={openBlockers ? `Blocked by ${openBlockers}` : d.blockedBy.length + d.blocking.length ? `${d.blockedBy.length + d.blocking.length} linked` : "None"}
       phone
       open={open}
