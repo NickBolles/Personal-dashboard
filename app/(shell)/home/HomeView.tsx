@@ -142,8 +142,8 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
 /** Overdue · Now · Later today · Backlog — one dense strip under the header (design PR4). */
 function KpiStrip({ a }: { a: AttentionSummary }) {
   const t = a.totals;
-  const cell = "flex min-h-11 min-w-0 flex-col justify-center gap-0.5 px-3 py-1.5 sm:min-h-10";
-  const label = "text-[0.6875rem] font-semibold [overflow-wrap:anywhere] tracking-[0.06em] text-muted uppercase";
+  const cell = "flex min-h-11 min-w-0 flex-col justify-center gap-0.5 px-2 py-1.5 sm:min-h-10 sm:px-3";
+  const label = "text-[0.625rem] font-semibold [overflow-wrap:anywhere] tracking-[0.04em] text-muted uppercase sm:text-[0.6875rem] sm:tracking-[0.06em]";
   const value = "text-[1.0625rem] leading-6 font-semibold tabular-nums";
   return (
     <dl
