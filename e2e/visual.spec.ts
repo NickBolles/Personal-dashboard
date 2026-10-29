@@ -253,12 +253,13 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-// PR11 slice 3: Settings, Tasks, House and People pages, light + dark (viewport only).
+// PR11 slices 3–4: Settings, Tasks, House, People and Workouts pages, light + dark (viewport only).
 for (const [name, path] of [
   ["settings", "/settings"],
   ["todos", "/todos"],
   ["house", "/home-control"],
   ["people", "/settings/people"],
+  ["workouts", "/workouts"],
 ] as const) {
   for (const scheme of ["light", "dark"] as const) {
     test(`visual: ${name} page (${scheme})`, async ({ page }) => {
@@ -273,6 +274,7 @@ for (const [name, path] of [
           await route.fulfill({ json: { ...body, people } });
         });
       }
+      if (name === "workouts") await page.route(/\/api\/workouts$/, (route) => route.fulfill({ json: { workouts: [] } }));
       await page.goto(path);
       await page.locator("h1").first().waitFor();
       await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
