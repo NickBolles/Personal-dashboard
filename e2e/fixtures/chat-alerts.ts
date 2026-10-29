@@ -110,3 +110,40 @@ export const areasVisual = {
   linkedConversations: [{ itemId: "wk_garage", sessionId: "sess_garage", title: "Shelving options" }],
 };
 export const inboxVisual = { items: [], conversations: [], conversationsTotal: 0, unavailable: [], count: 2 };
+
+/** Area + project pages (design-system PR6): fixed details over the areasVisual tree. */
+const visualItem = (id: string) => areasVisual.items.find((i) => i.id === id)!;
+const detailOf = (id: string, breadcrumb: { id: string; title: string }[]) => ({
+  item: visualItem(id),
+  breadcrumb,
+  children: areasVisual.items.filter((i) => i.parentId === id),
+  links: [],
+  packets: [],
+  validations: [],
+  events: [],
+  lineage: [],
+  settle: { allowed: false, reason: null },
+  validationDefault: { value: "required", explicit: false, areaId: "wk_mb", areaTitle: "Momentum Bets" },
+  area: {
+    id: "wk_mb",
+    title: "Momentum Bets",
+    builtIn: false,
+    settings: {
+      agentMode: null,
+      instructions: null,
+      defaultBackend: null,
+      defaultModel: null,
+      defaultProvider: null,
+      defaultRepo: null,
+      contextSources: [],
+      settlePolicy: "suggest",
+      quietDays: 14,
+      aiPolicy: "allowed",
+    },
+  },
+  githubRefresh: false,
+  blockedBy: [],
+  blocking: [],
+});
+export const areaDetailVisual = detailOf("wk_mb", []);
+export const projectDetailVisual = detailOf("wk_ce", [{ id: "wk_mb", title: "Momentum Bets" }]);
