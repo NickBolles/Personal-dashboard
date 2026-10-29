@@ -958,6 +958,11 @@ function ItemDetail({
           {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
           <div className="ml-auto flex items-center gap-1">
             {container ? <ViewSwitch id={item.id} /> : null}
+            {container && canChat ? (
+              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                Chat here
+              </Button>
+            ) : null}
             {container ? (
               <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
                 + {childLabel}
@@ -966,7 +971,12 @@ function ItemDetail({
             <OverflowMenu label="More item actions" items={menu} />
           </div>
         </div>
-        {container ? <ContainerMeta d={d} items={items} /> : null}
+        {container ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <ContainerMeta d={d} items={items} />
+            {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+          </div>
+        ) : null}
         {item.summary ? <Summary key={item.id} text={item.summary} /> : null}
         {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
         {settlePrompt ? (
@@ -987,15 +997,17 @@ function ItemDetail({
           <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={patch.isPending} onSave={(nextAction) => patch.mutate({ nextAction })} />
         )}
         {container ? null : <JobChip itemId={item.id} />}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          {container || settlePrompt ? null : primary}
-          {canChat && item.kind !== "conversation" ? (
-            <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-              Chat here
-            </Button>
-          ) : null}
-          {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
-        </div>
+        {container ? null : (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {settlePrompt ? null : primary}
+            {canChat && item.kind !== "conversation" ? (
+              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                Chat here
+              </Button>
+            ) : null}
+            {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+          </div>
+        )}
         {!container && aiItems.length ? (
           <div className="wk-ai-chips" role="group" aria-label="AI actions">
             {aiItems.map((a) => (
