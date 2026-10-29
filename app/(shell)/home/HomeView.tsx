@@ -142,11 +142,14 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
 /** Overdue · Now · Later today · Backlog — one dense strip under the header (design PR4). */
 function KpiStrip({ a }: { a: AttentionSummary }) {
   const t = a.totals;
-  const cell = "flex min-h-11 flex-col justify-center gap-0.5 px-3 py-1.5 sm:min-h-10";
-  const label = "text-[0.6875rem] font-semibold tracking-[0.06em] text-muted uppercase";
+  const cell = "flex min-h-11 min-w-0 flex-col justify-center gap-0.5 px-3 py-1.5 sm:min-h-10";
+  const label = "text-[0.6875rem] font-semibold [overflow-wrap:anywhere] tracking-[0.06em] text-muted uppercase";
   const value = "text-[1.0625rem] leading-6 font-semibold tabular-nums";
   return (
-    <dl aria-label="Today at a glance" className="mb-4 grid grid-cols-4 divide-x divide-line rounded-[var(--radius)] border border-line bg-surface">
+    <dl
+      aria-label="Today at a glance"
+      className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,4rem),1fr))] divide-x divide-line rounded-[var(--radius)] border border-line bg-surface"
+    >
       <div className={cell}>
         <dt className={label}>Overdue</dt>
         <dd className={cx(value, t.overdue ? "text-warn" : undefined)}>{t.overdue}</dd>
