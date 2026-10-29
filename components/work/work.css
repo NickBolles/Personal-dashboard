@@ -1016,3 +1016,49 @@ button.wk-kpi:hover {
     padding: 3px 10px;
   }
 }
+
+/* ---- Item page (PR7): AI chips under the actions, inspector key/value list ---- */
+.wk-ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.wk-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--ai);
+  background: transparent;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.wk-ai-chip:hover {
+  background: var(--ais);
+}
+@media (min-width: 640px) {
+  .wk-ai-chip {
+    min-height: 28px;
+  }
+}
+@media (pointer: coarse) {
+  .wk-ai-chip {
+    min-height: 44px;
+  }
+}
+.wk-kv {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  font-size: 13px;
+}
+.wk-kv > dt {
+  color: var(--muted);
+}
+.wk-kv > dd {
+  min-width: 0;
+}
