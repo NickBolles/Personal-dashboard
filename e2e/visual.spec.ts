@@ -276,6 +276,11 @@ for (const [name, path] of [
       await page.goto(path);
       await page.locator("h1").first().waitFor();
       await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      if (name === "house") {
+        // Exception detail ("Open for N min … since h:mm") is masked but its length varies with the clock,
+        // which changes wrapping and shifts everything below: keep it on one line for the snapshot.
+        await page.addStyleTag({ content: "li.card p.text-sm.text-muted { white-space: nowrap; overflow: hidden; }" });
+      }
       await page.waitForTimeout(1200);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
