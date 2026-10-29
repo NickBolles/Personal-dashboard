@@ -404,8 +404,8 @@ function Glance({ data }: { data: HomePayload }) {
   return (
     <section aria-labelledby="glance-h">
       <SectionLabel id="glance-h">Household</SectionLabel>
-      <ul className="grid gap-2 sm:grid-cols-3 min-[1100px]:grid-cols-1">
-        <li className="card px-3.5 py-3">
+      <ul className="jv-feed jv-glance grid sm:max-[1099px]:grid-cols-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Next event</h3>
           {data.glance.nextEvent ? (
             <>
@@ -418,7 +418,7 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">Calendar not connected</p>
           )}
         </li>
-        <li className="card px-3.5 py-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Daily Compass</h3>
           {data.glance.compass ? (
             <p className="mt-1">
@@ -434,7 +434,7 @@ function Glance({ data }: { data: HomePayload }) {
             <p className="mt-1 text-sm text-muted">{compass?.state === "error" ? "Couldn’t load" : "Not set up"}</p>
           )}
         </li>
-        <li className="card px-3.5 py-3">
+        <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Home</h3>
           {ha?.state === "ok" || ha?.state === "stale" ? (
             data.glance.homeExceptions.length ? (

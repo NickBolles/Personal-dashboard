@@ -873,6 +873,13 @@
 .jv-frow {
   position: relative;
 }
+/* Household glance: one card; hairlines between cells (side by side 640–1099px, stacked in the rail). */
+@media (min-width: 640px) and (max-width: 1099px) {
+  .jv-glance > li + li {
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
 .jv-tierdot {
   position: absolute;
   top: 0.95rem;

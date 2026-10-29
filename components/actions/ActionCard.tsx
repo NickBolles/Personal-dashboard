@@ -152,7 +152,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
   // Phones: title/meta beside the menu, primary action right-aligned below. Wider: one row — content, action, menu.
   // Two text lines: title, then source · status · detail · due · "Why this?" (design review D4).
   // Home feed (explain): a dense list row — tier dot · title/meta · neutral action · ⋯ (design PR4).
-  // Elsewhere: the standalone card. Phones put the action on its own line so long labels never squeeze the title.
+  // Feed rows on phones: action under the ⋯, beside the text. Elsewhere: the standalone card. Phones put the action on its own line so long labels never squeeze the title.
   const titleNode = (
     <>
       {glyph ? (
@@ -175,7 +175,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
       )}
     >
       {rank ? <span aria-hidden="true" className="jv-tierdot" /> : null}
-      <div className="col-start-1 row-start-1 min-w-0 space-y-0.5">
+      <div className={cx("col-start-1 row-start-1 min-w-0 space-y-0.5", rank && "row-span-2 sm:row-span-1")}>
         <h3 id={titleId} className={cx("leading-snug font-semibold", rank ? "text-[0.875rem] font-medium" : "text-[0.9375rem] dense:text-[0.875rem]")}>
           {action.external ? (
             <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
@@ -214,7 +214,15 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </div>
       {primaryButton ? (
-        <div className="col-span-2 col-start-1 row-start-2 flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">{primaryButton}</div>
+        <div
+          className={cx(
+            "flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1",
+            // Feed rows keep the action beside the text on phones (no empty button line).
+            rank ? "col-start-2 row-start-2 self-end" : "col-span-2 col-start-1 row-start-2",
+          )}
+        >
+          {primaryButton}
+        </div>
       ) : null}
     </article>
   );
