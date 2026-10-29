@@ -599,17 +599,36 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
 
 const SETTLE_TEXT: Record<string, string> = { manual: "Manual", suggest: "Suggest when quiet", auto_after_quiet: "Auto when quiet" };
 
-/** Chats tab: conversations linked to this item, newest first as the server sends them. */
-function ItemChats({ chats, canChat, onNew, busy }: { chats: WorkLink[]; canChat: boolean; onNew: () => void; busy: boolean }) {
+type ChatRow = { key: string; sessionId: string; title: string; note: string };
+
+/** Chats tab rows: linked chat sessions plus conversations filed under the item (deduped by session). */
+function itemChatRows(d: { links: WorkLink[]; children: WorkItem[] }): ChatRow[] {
+  const rows: ChatRow[] = [];
+  const seen = new Set<string>();
+  for (const l of d.links) {
+    if (l.kind !== "chat_session" || !l.targetId || seen.has(l.targetId)) continue;
+    seen.add(l.targetId);
+    rows.push({ key: l.id, sessionId: l.targetId, title: l.title, note: l.role });
+  }
+  for (const c of d.children) {
+    if (c.kind !== "conversation" || c.archived || !c.sessionId || seen.has(c.sessionId)) continue;
+    seen.add(c.sessionId);
+    rows.push({ key: c.id, sessionId: c.sessionId, title: c.title, note: "filed here" });
+  }
+  return rows;
+}
+
+/** Chats tab: conversations linked to or filed under this item. */
+function ItemChats({ chats, canChat, onNew, busy }: { chats: ChatRow[]; canChat: boolean; onNew: () => void; busy: boolean }) {
   return (
     <section aria-label="Chats">
       {chats.length ? (
         <ul className="k-card wk-node-rows overflow-hidden">
           {chats.map((l) => (
-            <li key={l.id}>
-              <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="wk-node-row" aria-label={`Chat: ${l.title || l.targetId}`}>
-                <span className="min-w-0 flex-1 truncate">{l.title || <span className="font-mono text-xs">{l.targetId}</span>}</span>
-                <span className="shrink-0 text-xs text-muted">{l.role}</span>
+            <li key={l.key}>
+              <Link href={`/chat/${encodeURIComponent(l.sessionId)}`} className="wk-node-row" aria-label={`Chat: ${l.title || l.sessionId}`}>
+                <span className="min-w-0 flex-1 truncate">{l.title || <span className="font-mono text-xs">{l.sessionId}</span>}</span>
+                <span className="shrink-0 text-xs text-muted">{l.note}</span>
               </Link>
             </li>
           ))}
@@ -790,7 +809,7 @@ function ItemDetail({
   };
   const action = itemPrimary(d, canChat);
   const openPr = d.links.find((l) => l.kind === "github_pr" && l.url);
-  const chats = d.links.filter((l) => l.kind === "chat_session");
+  const chats = itemChatRows(d);
   const showBlockers = () => {
     setTab("overview");
     setSections((o) => ({ ...o, deps: true }));
