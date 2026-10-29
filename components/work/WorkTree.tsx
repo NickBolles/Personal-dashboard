@@ -444,7 +444,7 @@ export function WorkTree({
     const id = `add:${parent?.id ?? ""}`;
     if (adding === id)
       return (
-        <li key={id} role="none" className="py-0.5" style={{ paddingLeft: `${(level - 1) * 10}px` }}>
+        <li key={id} role="none" className="py-0.5" style={{ paddingLeft: `${(level - 1) * 14}px` }}>
           <InlineAdd
             parent={parent}
             onCreated={(n) => onCreated?.(n)}
@@ -455,8 +455,10 @@ export function WorkTree({
           />
         </li>
       );
-    const empty = parent ? !realKids(parent.id).length : false;
-    const label = !parent ? "New area" : empty ? `Add the first ${parent.parentId === null ? "project" : "item"} to ${parent.title}` : `Add to ${parent.title}`;
+    // Short visible label ("Add project" / "Add item", per the design tree); the accessible name keeps the parent.
+    const what = parent?.parentId === null ? "project" : "item";
+    const label = !parent ? "New area" : `Add ${what === "project" ? "a project" : "an item"} to ${parent.title}`;
+    const shown = !parent ? "New area" : `Add ${what}`;
     return (
       <li
         key={id}
@@ -484,12 +486,12 @@ export function WorkTree({
       >
         <div
           className="wk-tree-row wk-add-row flex cursor-pointer items-center gap-1.5 pr-2 text-[12.5px] hover:bg-surface"
-          style={{ paddingLeft: `${(level - 1) * 10 + 22}px` }}
+          style={{ paddingLeft: `${(level - 1) * 14 + 22}px` }}
         >
           <span aria-hidden="true" className="wk-plus">
             +
           </span>
-          <span className="truncate">{label}</span>
+          <span className="truncate">{shown}</span>
         </div>
       </li>
     );
@@ -554,7 +556,7 @@ export function WorkTree({
               drag?.active && drag.target?.id === i.id && drag.target.pos === "before" && "shadow-[inset_0_2px_0_var(--accent)]",
               drag?.active && drag.target?.id === i.id && drag.target.pos === "after" && "shadow-[inset_0_-2px_0_var(--accent)]",
             )}
-            style={{ paddingLeft: `${(level - 1) * 10 + 2}px` }}
+            style={{ paddingLeft: `${(level - 1) * 14 + 2}px` }}
           >
             {multi && selectable(i) ? (
               <span
