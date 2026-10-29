@@ -103,7 +103,7 @@ export function AssistantSettings() {
           />
         </Field>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <Button type="submit" variant="primary" busy={save.isPending}>
+          <Button type="submit" variant="secondary" busy={save.isPending}>
             Save
           </Button>
           {s.claude.keySet ? (
