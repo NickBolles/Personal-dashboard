@@ -1948,6 +1948,24 @@ details.jv-why > summary::-webkit-details-marker {
     text-align: center;
     color: var(--t2);
   }
+  .k-empty-sm {
+    gap: 6px;
+    padding: 16px;
+    border: 1px dashed var(--bd);
+    border-radius: var(--r3);
+  }
+  .k-empty-b {
+    font: 13px/1.45 var(--sans);
+    color: var(--t2);
+  }
+  .k-offline {
+    padding: 6px 16px;
+    text-align: center;
+    font: 500 13px var(--sans);
+    color: var(--t1);
+    background: color-mix(in srgb, var(--wn) 16%, var(--s1));
+    border-bottom: 1px solid color-mix(in srgb, var(--wn) 40%, transparent);
+  }
   .k-empty-ic {
     color: var(--t3);
   }

@@ -241,24 +241,23 @@ export function Badge({ tone = "neutral", children, className, dot }: { tone?: T
   );
 }
 
+/** Empty state with at most one action (kit `EmptyState`, compact). */
 export function Empty({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-[var(--radius)] border border-dashed border-line px-4 py-4 text-center">
-      <p className="text-[0.875rem] font-medium">{title}</p>
-      {children ? <div className="mt-0.5 text-sm text-muted">{children}</div> : null}
-      {action ? <div className="mt-2.5 flex justify-center">{action}</div> : null}
+    <div className="k-empty k-empty-sm">
+      <p className="k-empty-t">{title}</p>
+      {children ? <div className="k-empty-b">{children}</div> : null}
+      {action ? <div className="flex justify-center">{action}</div> : null}
     </div>
   );
 }
 
+/** Error with an optional Retry (kit `Banner` tone bad). */
 export function ErrorNote({ error, retry }: { error: unknown; retry?: () => void }) {
   const msg = error instanceof Error ? error.message : String(error ?? "Something went wrong");
   return (
-    <div
-      role="alert"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-danger bg-danger-soft px-3 py-2 text-sm text-danger"
-    >
-      <span>{msg}</span>
+    <div role="alert" className="k-banner k-t-bad flex-wrap">
+      <span className="k-banner-c min-w-0">{msg}</span>
       {retry ? (
         <Button size="sm" variant="secondary" onClick={retry}>
           Retry

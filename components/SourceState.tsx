@@ -1,45 +1,59 @@
 "use client";
 
-import Link from "next/link";
 import type { SourceStatus } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
-import { Empty } from "@/components/ui";
+import { Banner, ButtonLink, EmptyState } from "@/components/ui/kit";
 
-/** Honest state for a source: unknown is never rendered as empty. Returns null when data is usable. */
-export function SourceState({ status, hasData }: { status?: SourceStatus; hasData: boolean }) {
+/**
+ * Per-source state (design system §States): unknown is never rendered as empty.
+ * - not connected → empty state with one action (Connect)
+ * - error/unauthorized without cached data → danger banner + Check connection
+ * - error/unauthorized/stale with cached data → warning banner, cached data stays visible
+ * Returns null when data is usable.
+ */
+export function SourceBanner({ status, hasData }: { status?: SourceStatus; hasData: boolean }) {
   if (!status) return null;
   if (status.state === "unconfigured" || status.state === "disabled") {
     return (
-      <Empty
+      <EmptyState
         title={`${status.label} isn’t connected`}
         action={
-          <Link className="underline" href="/settings/connections">
+          <ButtonLink href="/settings/connections" variant="primary" size="sm">
             Connect {status.label}
-          </Link>
+          </ButtonLink>
         }
       >
         Jarvis doesn’t know this source’s state yet.
-      </Empty>
+      </EmptyState>
     );
   }
   if ((status.state === "error" || status.state === "unauthorized") && !hasData) {
     return (
-      <div role="alert" className="rounded-[var(--radius)] border border-danger bg-danger-soft p-4 text-sm text-danger">
-        <p className="font-semibold">{status.state === "unauthorized" ? `${status.label} needs re-authentication` : `Couldn’t load ${status.label}`}</p>
-        {status.error ? <p className="mt-1">{status.error}</p> : null}
-        <Link href="/settings/connections" className="mt-2 inline-block underline">
-          Check connection
-        </Link>
-      </div>
+      <Banner
+        tone="bad"
+        action={
+          <ButtonLink href="/settings/connections" variant="secondary" size="sm">
+            Check connection
+          </ButtonLink>
+        }
+      >
+        <span className="block font-semibold">
+          {status.state === "unauthorized" ? `${status.label} needs re-authentication` : `Couldn’t load ${status.label}`}
+        </span>
+        {status.error ? <span className="mt-0.5 block text-[13px] text-[var(--t2)]">{status.error}</span> : null}
+      </Banner>
     );
   }
   if (status.state === "error" || status.state === "unauthorized" || status.state === "stale") {
     return (
-      <p role="status" className="rounded-xl bg-warn-soft px-3 py-2 text-sm text-warn">
+      <Banner tone="wn">
         Showing data from {status.fetchedAt ? relativeTime(status.fetchedAt) : "earlier"}
         {status.error ? ` — ${status.error}` : ""}
-      </p>
+      </Banner>
     );
   }
   return null;
 }
+
+/** @deprecated use SourceBanner */
+export const SourceState = SourceBanner;

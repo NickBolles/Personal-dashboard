@@ -3,6 +3,7 @@ import { mock, setHa, startConversation } from "./helpers";
 import { homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
+import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -286,6 +287,22 @@ for (const [name, path] of [
       await page.waitForTimeout(1200);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+    });
+  }
+}
+
+// PR12 states: per-source error banner and not-connected empty state, light + dark.
+for (const name of Object.keys(SOURCE_STATES) as (keyof typeof SOURCE_STATES)[]) {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`visual: state ${name} (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      const path = await forceSourceState(page, name);
+      await page.goto(path);
+      await page.locator("h1").first().waitFor();
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.waitForTimeout(1200);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect(page).toHaveScreenshot(`state-${name}-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     });
   }
 }

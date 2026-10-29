@@ -299,7 +299,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
 
       <main id="main" ref={mainRef} tabIndex={-1} className="pb-nav min-w-0 outline-none">
         {!online ? (
-          <div role="status" className="sticky top-0 z-30 border-b border-warn bg-warn-soft px-4 py-2 text-center text-sm text-warn">
+          <div role="status" className="k-offline sticky top-0 z-30">
             You’re offline. Showing last-known data; changes and home controls are paused.
           </div>
         ) : null}
