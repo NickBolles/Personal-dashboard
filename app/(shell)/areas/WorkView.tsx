@@ -6,6 +6,7 @@ import { useCallback, useState, useSyncExternalStore, type ReactNode } from "rea
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
+import { SectionHeader } from "@/components/ui/kit";
 import { Badge, Button, ButtonLink, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast, type MenuItem } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { Markdown } from "@/components/markdown/Markdown";
@@ -932,9 +933,26 @@ function ItemDetail({
           {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
           {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
           <div className="ml-auto flex items-center gap-1">
+            {container ? <ViewSwitch id={item.id} /> : null}
+            {container && canChat ? (
+              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                Chat here
+              </Button>
+            ) : null}
+            {container ? (
+              <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
+                + {childLabel}
+              </Button>
+            ) : null}
             <OverflowMenu label="More item actions" items={menu} />
           </div>
         </div>
+        {container ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <ContainerMeta d={d} items={items} />
+            {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+          </div>
+        ) : null}
         {item.summary ? <Summary key={item.id} text={item.summary} /> : null}
         {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
         {settlePrompt ? (
@@ -955,21 +973,17 @@ function ItemDetail({
           <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={patch.isPending} onSave={(nextAction) => patch.mutate({ nextAction })} />
         )}
         {container ? null : <JobChip itemId={item.id} />}
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          {container ? (
-            <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
-              + {childLabel}
-            </Button>
-          ) : settlePrompt ? null : (
-            primary
-          )}
-          {canChat && item.kind !== "conversation" ? (
-            <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-              Chat here
-            </Button>
-          ) : null}
-          {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
-        </div>
+        {container ? null : (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {settlePrompt ? null : primary}
+            {canChat && item.kind !== "conversation" ? (
+              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                Chat here
+              </Button>
+            ) : null}
+            {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+          </div>
+        )}
       </section>
 
       {container ? (
@@ -1133,111 +1147,154 @@ function ContainerBody({
     .slice(0, 5);
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
   return (
-    <div className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
-      <div className="wk-kpis" aria-label="Progress">
-        <div>
-          <b>{isArea ? r.containers : `${r.done}/${r.total}`}</b>
-          <span>{isArea ? "Projects" : "Done"}</span>
+    <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+      <div className="wk-cpage-main min-w-0 space-y-3">
+        <div className="wk-kpis" aria-label="Progress">
+          <div>
+            <b>{isArea ? r.containers : `${r.done}/${r.total}`}</b>
+            <span>{isArea ? "Projects" : "Done"}</span>
+          </div>
+          <div>
+            <b>{r.open}</b>
+            <span>Open</span>
+          </div>
+          <div>
+            <b>{r.active}</b>
+            <span>Active</span>
+          </div>
+          <div>
+            <b>{r.proofDue}</b>
+            <span>Proof due</span>
+          </div>
         </div>
-        <div>
-          <b>{r.open}</b>
-          <span>Open</span>
-        </div>
-        <div>
-          <b>{r.active}</b>
-          <span>Active</span>
-        </div>
-        <div>
-          <b>{r.proofDue}</b>
-          <span>Proof due</span>
-        </div>
+        {isArea ? (
+          <>
+            <ChildrenCard
+              label="Projects"
+              parent={item}
+              list={projects}
+              items={items}
+              onSelect={onSelect}
+              addLabel={projects.length ? "Add a project" : "Add your first project"}
+              addKind="project"
+              empty="Projects group related work. Add one, or type a path like “Launch / pricing page”."
+            />
+            <ChildrenCard
+              label="Filed in this area"
+              testId="items-chats-here"
+              parent={item}
+              list={rest}
+              items={items}
+              onSelect={onSelect}
+              addLabel="Add an item"
+              addKind="thread"
+              empty={canChat ? "Loose items and chats filed straight into this area show here." : "Loose items show here."}
+            />
+          </>
+        ) : (
+          <ChildrenCard
+            label="Work"
+            parent={item}
+            list={kids}
+            items={items}
+            onSelect={onSelect}
+            addLabel={kids.length ? "Add item, sub-project or path" : "Add the first item"}
+            empty="Break the project into items. Type “Sub-project / item” to nest."
+          />
+        )}
+        {recent.length ? (
+          <section aria-labelledby="recent-h">
+            <SectionHeader id="recent-h" label="Recent activity" count={recent.length} />
+            <ul className="wk-recent">
+              {recent.map((i) => (
+                <li key={i.id}>
+                  <button type="button" className="tap min-w-0 truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
+                    {i.title}
+                  </button>
+                  <span className="shrink-0 text-xs text-muted" data-dynamic>
+                    {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {usedAsWork ? (
+          <>
+            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
+            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
+          </>
+        ) : null}
+        <details className="wk-disclosure card">
+          <summary className="tap cursor-pointer font-semibold">Activity</summary>
+          <div className="mt-2 space-y-3">
+            <Activity d={d} onSelect={onSelect} />
+          </div>
+        </details>
       </div>
-      {isArea ? (
-        <>
-          <ChildrenCard
-            label="Projects"
-            parent={item}
-            list={projects}
-            items={items}
-            onSelect={onSelect}
-            addLabel={projects.length ? "Add a project" : "Add your first project"}
-            addKind="project"
-            empty="Projects group related work. Add one, or type a path like “Launch / pricing page”."
-          />
-          <ChildrenCard
-            label="Items & chats here"
-            parent={item}
-            list={rest}
-            items={items}
-            onSelect={onSelect}
-            addLabel="Add an item"
-            addKind="thread"
-            empty={canChat ? "Loose items and chats filed straight into this area show here." : "Loose items show here."}
-          />
-        </>
-      ) : (
-        <ChildrenCard
-          label="Work"
-          parent={item}
-          list={kids}
-          items={items}
-          onSelect={onSelect}
-          addLabel={kids.length ? "Add item, sub-project or path" : "Add the first item"}
-          empty="Break the project into items. Type “Sub-project / item” to nest."
+      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
+      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
+        {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
+        <EditItem
+          key={item.updatedAt}
+          item={item}
+          validationDefault={d.validationDefault}
+          phone={phone}
+          open={sections.details ?? false}
+          onToggle={toggle("details")}
         />
-      )}
-      {recent.length ? (
-        <Block label="Recently updated">
-          <ul className="wk-rows text-[13px]">
-            {recent.map((i) => (
-              <li key={i.id} className="flex items-center justify-between gap-2 py-1">
-                <button type="button" className="tap min-w-0 truncate text-left hover:underline" onClick={() => onSelect(i.id)}>
-                  {i.title}
-                </button>
-                <span className="shrink-0 text-xs text-muted" data-dynamic>
-                  {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      ) : null}
-      {usedAsWork ? (
-        <>
-          <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
-          <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
-        </>
-      ) : null}
-      <EditItem
-        key={item.updatedAt}
-        item={item}
-        validationDefault={d.validationDefault}
-        phone={phone}
-        open={sections.details ?? false}
-        onToggle={toggle("details")}
-      />
-      {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
-      {isArea ? null : (
-        <>
-          <Dependencies
-            d={d}
-            items={items}
-            onSelect={onSelect}
-            phone={phone}
-            open={sections.deps ?? d.blockedBy.some((b) => b.open)}
-            onToggle={toggle("deps")}
-          />
-          <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
-        </>
-      )}
-      <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
-      <details className="wk-disclosure card">
-        <summary className="tap cursor-pointer font-semibold">Activity</summary>
-        <div className="mt-2 space-y-3">
-          <Activity d={d} onSelect={onSelect} />
-        </div>
-      </details>
+        {isArea ? null : (
+          <>
+            <Dependencies
+              d={d}
+              items={items}
+              onSelect={onSelect}
+              phone={phone}
+              open={sections.deps ?? d.blockedBy.some((b) => b.open)}
+              onToggle={toggle("deps")}
+            />
+            <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
+          </>
+        )}
+        <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
+      </aside>
     </div>
+  );
+}
+
+/** One meta line under a container title: what's inside and what's moving (design: agent · validation · settle). */
+function ContainerMeta({ d, items }: { d: WorkDetail; items: WorkItem[] }) {
+  const { item } = d;
+  const isArea = item.parentId === null;
+  const r = rollup(items, item.id);
+  const parts = [
+    isArea ? `${r.containers} ${r.containers === 1 ? "project" : "projects"}` : `${r.done} of ${r.total} done`,
+    `${r.open} open`,
+    r.active ? `${r.active} active` : null,
+    r.proofDue ? `${r.proofDue} need proof` : null,
+  ].filter(Boolean);
+  return (
+    <p className="wk-cmeta" data-dynamic>
+      {parts.join(" · ")}
+    </p>
+  );
+}
+
+/** List · Timeline · Map view switch for an area/project (the other views are scoped routes). */
+function ViewSwitch({ id }: { id: string }) {
+  const q = `?root=${encodeURIComponent(id)}`;
+  return (
+    <nav aria-label="Views" className="wk-views hidden sm:flex">
+      <span aria-current="page" className="wk-view">
+        List
+      </span>
+      <Link href={`/areas/timeline${q}`} className="wk-view">
+        Timeline
+      </Link>
+      <Link href={`/areas/map${q}`} className="wk-view">
+        Map
+      </Link>
+    </nav>
   );
 }
 
@@ -1251,8 +1308,10 @@ function ChildrenCard({
   addLabel,
   addKind,
   empty,
+  testId,
 }: {
   label: string;
+  testId?: string;
   parent: WorkItem;
   list: WorkItem[];
   items: WorkItem[];
@@ -1266,64 +1325,61 @@ function ChildrenCard({
   const open = list.filter((i) => !isClosed(i.status) || i.kind === "project" || i.kind === "conversation");
   const done = list.filter((i) => !open.includes(i));
   const rows = showDone ? [...open, ...done] : open;
-  const slug = label.toLowerCase().replace(/[^a-z]+/g, "-");
+  const slug = testId ?? label.toLowerCase().replace(/[^a-z]+/g, "-");
   return (
-    <section aria-labelledby={`kids-${slug}`} className="overflow-hidden rounded-[10px] border border-line bg-surface" data-testid={`children-${slug}`}>
-      <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
-        <h3 id={`kids-${slug}`} className="wk-label">
-          {label}
-          {list.length ? ` · ${list.length}` : ""}
-        </h3>
-      </div>
-      {rows.length ? (
-        <ul className="wk-node-rows border-t border-line">
-          {rows.map((c) => (
-            <li key={c.id}>
-              <NodeRow
-                i={c}
-                items={items}
-                onSelect={(x) => onSelect(x.id)}
-                status={
-                  c.kind === "conversation" ? (
-                    <span className="text-xs text-muted" data-dynamic>
-                      {fmtWhen(c.updatedAt)}
-                    </span>
-                  ) : (
-                    <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
-                  )
-                }
-              />
-            </li>
-          ))}
-        </ul>
-      ) : !adding && empty ? (
-        <p className="px-3 pb-2 text-[13px] text-muted">{empty}</p>
-      ) : null}
-      {done.length ? (
-        <button
-          type="button"
-          className="tap w-full border-t border-line px-3 py-1.5 text-left text-xs text-muted hover:text-text"
-          onClick={() => setShowDone((s) => !s)}
-        >
-          {showDone ? "Hide done" : `${done.length} done · show`}
-        </button>
-      ) : null}
-      <div className="border-t border-line">
-        {adding ? (
-          <InlineAdd
-            parent={parent}
-            kind={addKind}
-            onDone={() => setAdding(false)}
-            placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined}
-          />
-        ) : (
-          <button type="button" className="wk-node-row wk-add-row" onClick={() => setAdding(true)}>
-            <span aria-hidden="true" className="wk-plus">
-              +
-            </span>
-            {addLabel}
+    <section aria-labelledby={`kids-${slug}`} data-testid={`children-${slug}`}>
+      <SectionHeader id={`kids-${slug}`} label={label} count={list.length || undefined} />
+      <div className="k-card overflow-hidden">
+        {rows.length ? (
+          <ul className="wk-node-rows">
+            {rows.map((c) => (
+              <li key={c.id}>
+                <NodeRow
+                  i={c}
+                  items={items}
+                  onSelect={(x) => onSelect(x.id)}
+                  status={
+                    c.kind === "conversation" ? (
+                      <span className="text-xs text-muted" data-dynamic>
+                        {fmtWhen(c.updatedAt)}
+                      </span>
+                    ) : (
+                      <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                    )
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        ) : !adding && empty ? (
+          <p className="px-3 py-2 text-[13px] text-muted">{empty}</p>
+        ) : null}
+        {done.length ? (
+          <button
+            type="button"
+            className="tap w-full border-t border-line px-3 py-1.5 text-left text-xs text-muted hover:text-text"
+            onClick={() => setShowDone((s) => !s)}
+          >
+            {showDone ? "Hide done" : `${done.length} done · show`}
           </button>
-        )}
+        ) : null}
+        <div className="border-t border-line">
+          {adding ? (
+            <InlineAdd
+              parent={parent}
+              kind={addKind}
+              onDone={() => setAdding(false)}
+              placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined}
+            />
+          ) : (
+            <button type="button" className="wk-node-row wk-add-row" onClick={() => setAdding(true)}>
+              <span aria-hidden="true" className="wk-plus">
+                +
+              </span>
+              {addLabel}
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

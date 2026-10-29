@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa } from "./helpers";
 import { homeVisual } from "./fixtures/home";
-import { alertsVisual, areasVisual, chatVisual, inboxVisual, visualNow } from "./fixtures/chat-alerts";
+import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 
 /**
@@ -159,3 +159,19 @@ test("visual: markdown in a chat message", async ({ page }) => {
   await page.waitForTimeout(300);
   await expect(message).toHaveScreenshot("markdown.png");
 });
+
+for (const [name, detail] of [
+  ["area", areaDetailVisual],
+  ["project", projectDetailVisual],
+] as const) {
+  test(`visual: ${name} page`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(new RegExp(`/api/work/items/${detail.item.id}$`), (route) => route.fulfill({ json: detail }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto(`/areas?item=${detail.item.id}`);
+    await expect(page.getByRole("heading", { level: 2, name: detail.item.title })).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(page).toHaveScreenshot(`${name}-page.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+  });
+}

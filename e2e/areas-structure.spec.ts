@@ -35,7 +35,7 @@ test("build structure: area page, inline path add, project page, decluttered ite
 
   // Empty area guides to the first project; a path creates the project and the item in one go.
   await tree(page)
-    .getByRole("treeitem", { name: `Add the first project to ${area}` })
+    .getByRole("treeitem", { name: `Add a project to ${area}` })
     .click();
   const input = page.getByLabel(`New item in ${area}`);
   await input.fill("Scoring engine / Cache warmup");

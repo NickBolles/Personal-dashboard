@@ -947,3 +947,72 @@ button.wk-kpi:hover {
     font-size: 11.5px;
   }
 }
+
+/* ---- Container pages (PR6): main + 300px side column at ≥1100, one meta line, view switch ---- */
+.wk-cpage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@media (min-width: 1100px) {
+  .wk-cpage {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+}
+.wk-cpage .k-sh {
+  padding: 4px 0 6px;
+}
+.wk-cmeta {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.wk-views {
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  margin-right: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.wk-view {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.wk-view:hover {
+  color: var(--text);
+}
+.wk-view[aria-current="page"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.wk-recent {
+  font-size: 13px;
+}
+.wk-recent > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+}
+.wk-cpage .wk-node-row {
+  min-height: 40px;
+}
+@media (pointer: fine) and (min-width: 1024px) {
+  .wk-cpage .wk-node-row {
+    min-height: 34px;
+    padding: 3px 10px;
+  }
+}
