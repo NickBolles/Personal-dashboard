@@ -847,7 +847,7 @@
   }
 }
 
-/* No overflow clipping: cards hold dropdown menus. The bar sits inside the border. */
+/* No overflow clipping: cards hold dropdown menus. The bar sits inside the border (Alerts, Assist cards). */
 .jv-accent {
   position: relative;
 }
@@ -861,25 +861,51 @@
   background: var(--accent-bar, transparent);
 }
 
-.jv-accent[data-tier="critical"] {
+/* Today feed (design PR4): one bordered list, hairline rows, a leading tier dot instead of a colour bar. */
+.jv-feed {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.jv-feed > li + li {
+  border-top: 1px solid var(--line);
+}
+.jv-frow {
+  position: relative;
+}
+.jv-tierdot {
+  position: absolute;
+  top: 0.95rem;
+  left: 0.75rem;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-bar, var(--faint, var(--muted)));
+}
+.jv-glyph {
+  margin-right: 0.375rem;
+  font-size: 0.8125rem;
+}
+
+:is(.jv-accent, .jv-frow)[data-tier="critical"] {
   --accent-bar: var(--tier-critical);
 }
-.jv-accent[data-tier="awaiting_user"],
-.jv-accent[data-tier="pinned"] {
+:is(.jv-accent, .jv-frow)[data-tier="awaiting_user"],
+:is(.jv-accent, .jv-frow)[data-tier="pinned"] {
   --accent-bar: var(--tier-attention);
 }
-.jv-accent[data-tier="compass"] {
+:is(.jv-accent, .jv-frow)[data-tier="compass"] {
   --accent-bar: var(--tier-compass);
 }
-.jv-accent[data-tier="overdue_recent"],
-.jv-accent[data-tier="overdue_stale"] {
+:is(.jv-accent, .jv-frow)[data-tier="overdue_recent"],
+:is(.jv-accent, .jv-frow)[data-tier="overdue_stale"] {
   --accent-bar: var(--tier-overdue);
 }
-.jv-accent[data-tier="due_soon"],
-.jv-accent[data-tier="checkin_window"] {
+:is(.jv-accent, .jv-frow)[data-tier="due_soon"],
+:is(.jv-accent, .jv-frow)[data-tier="checkin_window"] {
   --accent-bar: var(--tier-soon);
 }
-.jv-accent[data-tier="today"] {
+:is(.jv-accent, .jv-frow)[data-tier="today"] {
   --accent-bar: var(--tier-calm);
 }
 
