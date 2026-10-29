@@ -464,7 +464,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
           <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
             {detail.timeline.length === 0 && !showLive && !pendingInput ? (
               <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
-                <p className="text-[0.9375rem] font-semibold">Start the conversation</p>
+                <p className="text-[0.9375rem] font-semibold">
+                  Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
+                </p>
                 <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
                 <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
                   <li className="chip">
@@ -493,7 +495,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               {showPendingUser ? (
                 <li className="flex justify-end">
                   <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
-                    <p className="prose-chat">{pendingInput}</p>
+                    <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{pendingInput}</p>
                   </div>
                 </li>
               ) : null}
@@ -647,7 +649,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   }
   return (
     <li className="text-center text-xs text-muted">
-      <p className="prose-chat">{item.text}</p>
+      <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{item.text}</p>
     </li>
   );
 }
@@ -662,7 +664,7 @@ function UserText({ text }: { text: string }) {
   const ctx = at >= 0 ? text.slice(at + CONTEXT_MARK.length).trim() : "";
   return (
     <>
-      <p className="prose-chat select-text">
+      <p className="[overflow-wrap:anywhere] whitespace-pre-wrap select-text">
         {splitReferences(body).map((p, i) =>
           "ref" in p ? (
             <span key={i} className="chip mx-0.5" data-tone="accent" data-ref={`${p.ref.type}:${p.ref.id}`}>

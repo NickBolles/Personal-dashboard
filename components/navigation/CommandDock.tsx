@@ -15,19 +15,19 @@ import { createPortal } from "react-dom";
 import { cx } from "@/components/ui";
 import { OPEN_PALETTE_EVENT, useCommands, type Command } from "./commands";
 import { useComposerTarget } from "@/components/agents/useComposerTarget";
+import { shortcutLabel, useModKey } from "@/lib/client/platform";
 
 /**
  * The command dock: one orb. Phones (design system §5): the Tide orb, lifted
- * out of the middle of the bottom bar; a tap opens the radial command menu
- * (focus on the first action, arrows cycle, Esc/scrim returns focus to the
- * orb) and Search there opens the palette. Desktop:
- * docked in the foot of the app rail (never floating over content). Tap →
- * command palette. Press and
- * hold (~320 ms) → radial action map: slide onto a petal (pausing ~⅓ s opens
- * its sub-menu), release to run, release on the orb to cancel. ⌘/Ctrl+. opens
- * the map from the keyboard (arrows choose, Tab/Enter opens a sub-menu, Enter
- * runs, Esc closes). Every action is also a palette command. Pointer events,
- * no dependencies; Work actions only appear with `work.use`.
+ * out of the middle of the bottom bar. Tablets: a bottom-centre pill; desktop
+ * (≥1024): the same pill in the top row (never floating over content).
+ * Everywhere, a tap opens the command palette (Raycast-style: type to ask or
+ * run an action). Press and hold (~320 ms) → radial action map: slide onto a
+ * petal (pausing ~⅓ s opens its sub-menu), release to run, release on the orb
+ * to cancel. ⌘/Ctrl+. (or ↑ on the focused orb) opens the map from the
+ * keyboard (arrows choose, Tab/Enter opens a sub-menu, Enter runs, Esc
+ * closes). Every action is also a palette command. Pointer events, no
+ * dependencies; Work actions only appear with `work.use`.
  */
 
 export const HOLD_MS = 320;
@@ -159,6 +159,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
   });
 
   const phone = variant === "bar";
+  const mod = useModKey();
   const palette = () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
   const vibrate = (ms: number) => {
     try {
@@ -280,9 +281,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
     if (st.current.map) {
       track(e.clientX, e.clientY);
       commit();
-    } else if (phone)
-      open("keyboard"); // tap → radial command menu, focus on its first action
-    else palette();
+    } else palette(); // tap → command palette (phone and desktop); hold → radial map
   };
   const onPointerCancel = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -368,7 +367,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
         ref={orb}
         type="button"
         data-testid="dock-orb"
-        aria-label={phone ? "Jarvis commands" : "Jarvis commands: tap for the command palette, hold for the action map (Ctrl+.)"}
+        aria-label="Jarvis commands: tap for the command palette, hold for the action map (Ctrl+.)"
         aria-haspopup="menu"
         aria-expanded={!!map}
         onPointerDown={onPointerDown}
@@ -378,10 +377,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
         onContextMenu={(e) => e.preventDefault()}
         onClick={(e) => {
           // Keyboard activation (Enter/Space) has detail 0; pointer taps are handled on pointerup.
-          if (e.detail === 0) {
-            if (phone) open("keyboard");
-            else palette();
-          }
+          if (e.detail === 0) palette();
         }}
         onKeyDown={(e: ReactKeyboardEvent) => {
           if (e.key === "ArrowUp" && !map) {
@@ -424,7 +420,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
                   Ask <span className={cx(target.node && "font-semibold text-text")}>{target.agent}</span>
                   {target.node ? <span> · {target.node.title}</span> : null} or search…
                 </span>
-                <kbd className="kbd shrink-0">Ctrl K</kbd>
+                <kbd className="kbd shrink-0">{shortcutLabel(mod, "K")}</kbd>
               </span>
             ) : null}
           </>

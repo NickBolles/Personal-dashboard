@@ -164,7 +164,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const inboxCount = inbox.data?.count ?? null;
   const first = t.continue[0];
   const [y, m, d] = t.today.split("-").map(Number);
-  const dateLabel = new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
+  const dateLabel = new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   return (
     <section aria-labelledby="today-title" className="space-y-2.5" data-testid="work-today">
       <div>

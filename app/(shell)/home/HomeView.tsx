@@ -278,7 +278,7 @@ export function HomeView() {
       <header className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="eyebrow" data-dynamic>
-            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+            {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           </p>
           <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">{greeting}</h1>
           {att ? <AttentionLine a={att} /> : null}

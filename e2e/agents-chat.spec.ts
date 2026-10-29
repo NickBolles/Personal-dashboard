@@ -142,7 +142,8 @@ test("the global composer asks the open area's agent, files the chat there; the 
     await expect(dock).toHaveAttribute("data-agent", "momentumchief");
     await expect(dock).toContainText(title);
   } else {
-    await page.locator('[data-testid="dock-orb"]:visible').click();
+    await page.locator('[data-testid="dock-orb"]:visible').focus();
+    await page.keyboard.press("ArrowUp"); // radial map (a tap opens the palette)
     await expect(page.getByTestId("map-ask-target")).toHaveText("momentumchief");
     await page.keyboard.press("Escape");
   }
