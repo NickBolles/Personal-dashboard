@@ -8,6 +8,7 @@ import { relativeTime } from "@/lib/time";
 import type { PlanMode, PlanRow } from "@/lib/finance/plan";
 import type { PlanView as Plan, ActualView } from "@/server/finance/plan";
 import { Badge, Button, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { Button as KButton, SectionHeader } from "@/components/ui/kit";
 import { useAccess } from "@/components/access";
 import { Delta, Money, centsToInput, toCents } from "@/components/finance/money";
 
@@ -509,9 +510,9 @@ export function PlanView() {
           <p className="text-sm">
             Other years:{" "}
             {q.data.years.map((x) => (
-              <button key={x} type="button" className="mr-2 underline" onClick={() => go(x)}>
+              <KButton key={x} variant="ghost" size="sm" className="mr-2" onClick={() => go(x)}>
                 {x}
-              </button>
+              </KButton>
             ))}
           </p>
         ) : null}
@@ -544,15 +545,19 @@ export function PlanView() {
           canEdit ? (
             <>
               {p.revision.kind === "hypothetical" ? (
-                <Button variant="primary" busy={promote.isPending} onClick={() => promote.mutate(p)}>
+                <KButton variant="primary" loading={promote.isPending} onClick={() => promote.mutate(p)}>
                   Make active
-                </Button>
+                </KButton>
               ) : null}
-              <Button onClick={() => setNewRev(true)}>New revision</Button>
-              {editable ? <Button onClick={() => setEditing("new")}>Add event</Button> : null}
-              <Button variant="ghost" onClick={() => setComments({ type: "revision", id: p.revision.id, title: p.revision.name })}>
+              {editable ? (
+                <KButton variant={p.revision.kind === "hypothetical" ? "secondary" : "primary"} onClick={() => setEditing("new")}>
+                  Add event
+                </KButton>
+              ) : null}
+              <KButton onClick={() => setNewRev(true)}>New revision</KButton>
+              <KButton variant="ghost" onClick={() => setComments({ type: "revision", id: p.revision.id, title: p.revision.name })}>
                 Comments
-              </Button>
+              </KButton>
             </>
           ) : null
         }
@@ -590,11 +595,12 @@ export function PlanView() {
           ))}
         </div>
         {canEdit ? (
-          <Button variant="ghost" onClick={() => setImporting(true)}>
+          <KButton variant="ghost" onClick={() => setImporting(true)}>
             Import block
-          </Button>
+          </KButton>
         ) : null}
       </div>
+      <SectionHeader label="Events" count={r.rows.length} />
       <p className="text-sm text-muted">
         {mode === "plan"
           ? "Estimates in this revision."
@@ -665,43 +671,35 @@ export function PlanView() {
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
                       {editable && !row.notInRevision ? (
-                        <button type="button" className="text-accent underline" onClick={() => setEditing(row)}>
+                        <KButton variant="ghost" size="sm" onClick={() => setEditing(row)}>
                           Edit estimate
-                        </button>
+                        </KButton>
                       ) : null}
                       {canEdit && row.status !== "complete" ? (
-                        <button type="button" className="text-accent underline" onClick={() => setActualFor(row)}>
+                        <KButton variant="ghost" size="sm" onClick={() => setActualFor(row)}>
                           Record actual
-                        </button>
+                        </KButton>
                       ) : null}
                       {canEdit && row.status === "partial" ? (
-                        <button
-                          type="button"
-                          className="text-accent underline"
-                          onClick={() => eventPatch.mutate({ id: ev.id, version: ev.version, body: { status: "complete" } })}
-                        >
+                        <KButton variant="ghost" size="sm" onClick={() => eventPatch.mutate({ id: ev.id, version: ev.version, body: { status: "complete" } })}>
                           Mark done
-                        </button>
+                        </KButton>
                       ) : null}
                       {canEdit && ev.imported ? (
-                        <button
-                          type="button"
-                          className="text-accent underline"
-                          onClick={() => eventPatch.mutate({ id: ev.id, version: ev.version, body: { reconciled: true } })}
-                        >
+                        <KButton variant="ghost" size="sm" onClick={() => eventPatch.mutate({ id: ev.id, version: ev.version, body: { reconciled: true } })}>
                           Reviewed
-                        </button>
+                        </KButton>
                       ) : null}
                       {canEdit
                         ? actuals.map((a) => (
-                            <button key={a.id} type="button" className="text-accent underline" onClick={() => setCorrecting(a)}>
+                            <KButton key={a.id} variant="ghost" size="sm" onClick={() => setCorrecting(a)}>
                               Correct {a.date} actual
-                            </button>
+                            </KButton>
                           ))
                         : null}
-                      <button type="button" className="text-accent underline" onClick={() => setComments({ type: "event", id: ev.id, title: ev.label })}>
+                      <KButton variant="ghost" size="sm" onClick={() => setComments({ type: "event", id: ev.id, title: ev.label })}>
                         Comments
-                      </button>
+                      </KButton>
                     </div>
                   </th>
                   <td className="px-3 py-2">{row.date}</td>
