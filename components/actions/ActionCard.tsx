@@ -218,7 +218,7 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
           className={cx(
             "flex justify-end gap-2 sm:col-span-1 sm:col-start-2 sm:row-start-1",
             // Feed rows keep the action beside the text on phones (no empty button line).
-            rank ? "col-start-2 row-start-2 self-end" : "col-span-2 col-start-1 row-start-2",
+            rank ? "col-start-2 row-start-2 self-end sm:self-center" : "col-span-2 col-start-1 row-start-2",
           )}
         >
           {primaryButton}
