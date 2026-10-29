@@ -69,8 +69,8 @@ export function SettingsView() {
   return (
     <Page>
       <PageHeader title="Settings" />
-      <div className="grid items-start gap-x-5 gap-y-4 md:grid-cols-[minmax(0,248px)_minmax(0,1fr)] lg:gap-x-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <nav aria-labelledby="settings-sections-h" className="md:sticky md:top-4">
+      <div className="grid grid-cols-1 items-start gap-x-5 gap-y-4 md:grid-cols-[minmax(0,248px)_minmax(0,1fr)] lg:gap-x-6 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+        <nav aria-labelledby="settings-sections-h" className="min-w-0 md:sticky md:top-4">
           {/* The account avatar lives here (the command orb carries the Jarvis mark instead). */}
           <div className="card mb-3 flex items-center gap-3 px-3 py-2.5" data-testid="settings-account">
             <span

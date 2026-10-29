@@ -51,7 +51,18 @@ export function useActionMutation() {
  * One action. `explain` (Home) adds the tier accent and a "Why this?"
  * disclosure with the ranking's reasons and per-person feedback.
  */
-export function ActionCard({ action, compact, explain }: { action: NextAction; compact?: boolean; explain?: boolean }) {
+export function ActionCard({
+  action,
+  compact,
+  explain,
+  quiet,
+}: {
+  action: NextAction;
+  compact?: boolean;
+  explain?: boolean;
+  /** Lists of many cards (Todos): the per-row action is neutral so the page keeps one primary. */
+  quiet?: boolean;
+}) {
   const router = useRouter();
   const online = useOnline();
   const m = useActionMutation();
@@ -92,12 +103,12 @@ export function ActionCard({ action, compact, explain }: { action: NextAction; c
   const primaryButton =
     primary && !compact ? (
       primary.kind === "open" ? (
-        <ButtonLink href={action.href} external={action.external} variant={rank ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
+        <ButtonLink href={action.href} external={action.external} variant={rank || quiet ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
           {primary.label}
         </ButtonLink>
       ) : (
         <Button
-          variant={rank ? "secondary" : "primary"}
+          variant={rank || quiet ? "secondary" : "primary"}
           size="sm"
           busy={m.isPending}
           disabled={!online || done}

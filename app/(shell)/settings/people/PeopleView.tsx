@@ -212,7 +212,7 @@ function Capabilities({ person, onSave, busy }: { person: Person; onSave: (caps:
       {!admin ? (
         <div className="flex gap-2">
           <Button
-            variant="primary"
+            variant="secondary"
             disabled={!changed}
             busy={busy}
             onClick={() => onSave(Object.fromEntries(MODULES.flatMap((m) => m.capabilities).map((c) => [c.id, caps.has(c.id)])))}

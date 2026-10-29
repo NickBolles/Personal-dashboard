@@ -46,7 +46,7 @@ export function TodosView() {
                 <ul className="space-y-2">
                   {items.map((a) => (
                     <li key={a.id} id={`todo-${a.sourceId}`}>
-                      <ActionCard action={a} compact={a.status === "completed"} />
+                      <ActionCard action={a} compact={a.status === "completed"} quiet />
                     </li>
                   ))}
                 </ul>

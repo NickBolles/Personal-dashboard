@@ -252,3 +252,38 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+// PR11 slice 3: Settings, Tasks, House and People pages, light + dark (viewport only).
+for (const [name, path] of [
+  ["settings", "/settings"],
+  ["todos", "/todos"],
+  ["house", "/home-control"],
+  ["people", "/settings/people"],
+] as const) {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`visual: ${name} page (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      if (name === "people") {
+        // Other specs add people to the shared DB: show only the owner, with a fixed join date.
+        await page.route(/\/api\/people$/, async (route) => {
+          if (route.request().method() !== "GET") return route.continue();
+          const res = await route.fetch();
+          const body = (await res.json()) as { people: { owner: boolean; createdAt: string }[] };
+          const people = body.people.filter((p) => p.owner).map((p) => ({ ...p, createdAt: "2026-01-01T12:00:00.000Z" }));
+          await route.fulfill({ json: { ...body, people } });
+        });
+      }
+      await page.goto(path);
+      await page.locator("h1").first().waitFor();
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      if (name === "house") {
+        // Exception detail ("Open for N min … since h:mm") is masked but its length varies with the clock,
+        // which changes wrapping and shifts everything below: keep it on one line for the snapshot.
+        await page.addStyleTag({ content: "li.card p.text-sm.text-muted { white-space: nowrap; overflow: hidden; }" });
+      }
+      await page.waitForTimeout(1200);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+    });
+  }
+}

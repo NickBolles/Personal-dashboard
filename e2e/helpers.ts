@@ -29,7 +29,7 @@ export async function workerTick(page: Page) {
 }
 
 /** Fail on horizontal overflow (WCAG reflow), naming the widest offenders. */
-export async function expectNoHorizontalOverflow(page: Page) {
+export async function expectNoHorizontalOverflow(page: Page, opts: { soft?: boolean } = {}) {
   const r = await page.evaluate(() => {
     const cw = document.documentElement.clientWidth;
     const offenders: string[] = [];
@@ -52,7 +52,7 @@ export async function expectNoHorizontalOverflow(page: Page) {
     }
     return { sw: document.documentElement.scrollWidth, cw, path: location.pathname, offenders: offenders.filter((o) => !o.includes("fixed")).slice(0, 4) };
   });
-  expect(r.sw, `${r.path}: scrollWidth ${r.sw} > viewport ${r.cw}: ${r.offenders.join(" | ")}`).toBeLessThanOrEqual(r.cw + 1);
+  (opts.soft ? expect.soft : expect)(r.sw, `${r.path}: scrollWidth ${r.sw} > viewport ${r.cw}: ${r.offenders.join(" | ")}`).toBeLessThanOrEqual(r.cw + 1);
 }
 
 export async function startConversation(page: Page, text: string) {
