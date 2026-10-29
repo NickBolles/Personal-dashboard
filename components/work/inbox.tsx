@@ -218,6 +218,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                         aria-current={sel?.id === e.id ? "true" : undefined}
                         className="text-left hover:underline focus-visible:underline"
                         onClick={() => setPicked(e.id)}
+                        onFocus={() => setPicked(e.id)}
                       >
                         {e.title}
                       </button>
