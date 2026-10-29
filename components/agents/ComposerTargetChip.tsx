@@ -31,7 +31,7 @@ export function ComposerTargetChip({ target, className }: { target: ComposerTarg
     >
       <span aria-hidden="true">✦</span>
       <span className="truncate font-semibold">{target.switchedToJarvis ? "Jarvis" : target.agent}</span>
-      {!target.switchedToJarvis ? <span className="truncate text-muted">· {area}</span> : null}
+      {!target.switchedToJarvis ? <span className="hidden truncate text-muted sm:inline">· {area}</span> : null}
     </button>
   );
 }

@@ -138,7 +138,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             }}
           />
           {res.isFetching ? <Spinner label="Searching" /> : null}
-          {canAsk ? <ComposerTargetChip target={target} className="hidden sm:inline-flex" /> : null}
+          {canAsk ? <ComposerTargetChip target={target} /> : null}
           <button
             type="button"
             onClick={onClose}

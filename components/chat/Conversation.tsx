@@ -156,7 +156,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     setPendingInput(first.input);
     first.run.then(
       (r) => {
-        run.start(r.runId);
+        // The resume effect may already have picked this run up from a detail refetch.
+        if (resumed.current !== r.runId) {
+          resumed.current = r.runId;
+          run.start(r.runId);
+        }
         refreshSessionLists(qc);
       },
       (err) => {
