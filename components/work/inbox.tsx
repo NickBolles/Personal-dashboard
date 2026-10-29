@@ -226,7 +226,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                       e.title
                     )}
                   </p>
-                  {e.note ? <p className="line-clamp-2 text-[13px] break-words whitespace-pre-wrap text-muted sm:line-clamp-1">{e.note}</p> : null}
+                  {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted sm:line-clamp-1">{e.note}</p> : null}
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
                     <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
                     {e.repo ? (
@@ -345,7 +345,7 @@ function InboxPreview({
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Button size="sm" variant="primary" onClick={onPrimary} busy={busy} aria-keyshortcuts="Enter">
           {s ? "File here" : e.source === "github_issue" ? "Accept…" : "File…"}
-          <kbd className={cx(kbd, "border-white/40 text-current")}>⏎</kbd>
+          <kbd className={cx(kbd, "border-white/40 text-current")}>Enter</kbd>
         </Button>
         {s ? (
           <Button size="sm" onClick={onChoose} aria-keyshortcuts="M">
