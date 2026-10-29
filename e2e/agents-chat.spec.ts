@@ -80,6 +80,8 @@ test("a chat started under a routed area runs on its profile, streamed as AG-UI"
   await expect(card).toBeVisible({ timeout: 15_000 });
   await expect(card).toContainText("rm -rf build");
   await card.getByRole("button", { name: "Approve once" }).click();
+  // Approvals wait 8 s with Undo; skip the wait.
+  await card.getByRole("button", { name: "Send now" }).click();
   await expect(card).toBeHidden();
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await profileHits(page)).toBeGreaterThan(before);

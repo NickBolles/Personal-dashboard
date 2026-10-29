@@ -27,6 +27,7 @@ import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, 
 import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsResponse } from "@/lib/work";
 import type { AgentResolution } from "@/lib/agents";
 import { AgentChip } from "@/components/agents/AgentChip";
+import { ApprovalCard } from "@/components/approvals/ApprovalCard";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -376,7 +377,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
                 {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-                <div className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
+                <div data-scroll-x className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
                   {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                   {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
                   {readOnly ? (
@@ -729,7 +730,6 @@ function ActivityRow({ a }: { a: Activity }) {
 
 function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c: ApprovalRequest["choices"][number]) => void; onRetry: () => void }) {
   const who = useContext(AssistantName);
-  const [busy, setBusy] = useState<string>();
   const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
   return (
     <section aria-label="Current run" className="space-y-2">
@@ -741,33 +741,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
         </ul>
       ) : null}
 
-      {state.approval ? (
-        <div role="group" aria-labelledby="approval-h" className="rounded-[12px] border-2 border-warn bg-warn-soft p-3.5">
-          <h2 id="approval-h" className="font-semibold text-warn">
-            Hermes needs your approval
-          </h2>
-          {state.approval.description ? <p className="mt-1 text-sm">{state.approval.description}</p> : null}
-          {state.approval.command ? <pre className="mt-2 overflow-x-auto rounded-lg bg-surface p-2 text-xs">{state.approval.command}</pre> : null}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {state.approval.choices.map((c) => (
-              <Button
-                key={c}
-                size="sm"
-                variant={c === "deny" ? "danger" : c === "once" ? "primary" : "secondary"}
-                busy={busy === c}
-                disabled={Boolean(busy)}
-                onClick={async () => {
-                  setBusy(c);
-                  await onApprove(c);
-                  setBusy(undefined);
-                }}
-              >
-                {c === "once" ? "Approve once" : c === "session" ? "Approve for this session" : c === "always" ? "Always allow" : "Deny"}
-              </Button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
@@ -1004,7 +978,7 @@ function Composer({
         </span>
       </div>
       <form
-        className="chat-comp relative flex items-end gap-1"
+        className="chat-comp relative flex flex-wrap items-end gap-1"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -1081,7 +1055,7 @@ function Composer({
               onStop();
             }
           }}
-          className="block max-h-[200px] min-h-11 w-full resize-none rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
+          className="block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
         />
         {running ? (
           <Button type="button" variant="secondary" onClick={onStop} aria-label="Stop the run (Escape)" disabled={phase === "stopping"} className="shrink-0">

@@ -1,3 +1,4 @@
+import { AgentMark } from "@/components/brand/AgentMark";
 import { AGENT_REASON_TEXT, agentChipLabel, type AgentResolution } from "@/lib/agents";
 
 /**
@@ -10,7 +11,7 @@ export function AgentChip({ agent, prefix = "Agent", testId = "agent-chip" }: { 
   return (
     <span className="chip relative" data-tone={agent.routed ? "accent" : undefined} title={why} data-testid={testId} data-routed={agent.routed ? "1" : "0"}>
       <span>{prefix}</span>
-      <span aria-hidden="true">✦</span>
+      <AgentMark name={agent.routed ? agent.profile : agent.requested} />
       {label}
       <span className="sr-only">. {why}</span>
     </span>

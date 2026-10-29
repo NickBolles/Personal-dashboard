@@ -12,6 +12,8 @@ test("approval requested inline, answered, then run completes", async ({ page })
   await expect(card).toContainText("rm -rf build");
   await expect(page.getByText("Needs your approval", { exact: true })).toBeVisible();
   await card.getByRole("button", { name: "Approve once" }).click();
+  // Approvals wait 8 s with Undo; skip the wait.
+  await card.getByRole("button", { name: "Send now" }).click();
   await expect(card).toBeHidden();
   await expect(page.getByText(/Ran a command/)).toBeVisible();
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
