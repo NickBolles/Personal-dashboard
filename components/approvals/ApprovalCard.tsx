@@ -34,6 +34,8 @@ export function ApprovalCard({
   const [pending, setPending] = useState<{ choice: Choice; left: number; requestId?: string }>();
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const name = agent || "Hermes";
+  // Identity of the prompt; falls back to its content when Hermes sends no id.
+  const reqKey = approval.requestId ?? `${approval.command ?? ""}\u0000${approval.description ?? ""}`;
 
   const clear = () => {
     if (timer.current) clearInterval(timer.current);
@@ -56,18 +58,18 @@ export function ApprovalCard({
   );
 
   // A pending approval only applies to the request it was made for.
-  const live = pending && pending.requestId === approval.requestId ? pending : undefined;
+  const live = pending && pending.requestId === reqKey ? pending : undefined;
 
   // Latest values for the countdown callback (it outlives renders).
-  const latest = useRef({ send, requestId: approval.requestId });
+  const latest = useRef({ send, requestId: reqKey });
   useEffect(() => {
-    latest.current = { send, requestId: approval.requestId };
+    latest.current = { send, requestId: reqKey };
   });
 
   const choose = (c: Choice) => {
     if (c === "deny") return void send(c);
     clear();
-    const requestId = approval.requestId;
+    const requestId = reqKey;
     let left = APPROVE_UNDO_SECONDS;
     setPending({ choice: c, left, requestId });
     timer.current = setInterval(() => {

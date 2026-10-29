@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mock, setHa } from "./helpers";
+import { mock, setHa, startConversation } from "./helpers";
 import { homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
@@ -190,5 +190,20 @@ for (const [name, detail] of [
     await expect(page.getByRole("heading", { level: 2, name: detail.item.title })).toBeVisible();
     await page.waitForTimeout(800);
     await expect(page).toHaveScreenshot(`${name}-page.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+  });
+}
+
+// PR10 approval card (agent mark, mono command, Approve/Deny), light + dark.
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: approval card (${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await startConversation(page, "please delete the build folder");
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const card = page.getByTestId("approval-card");
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card).toContainText("rm -rf build");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.waitForTimeout(300);
+    await expect(card).toHaveScreenshot(`approval-card-${theme}.png`, { animations: "disabled" });
   });
 }

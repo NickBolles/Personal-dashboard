@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { expectNoHorizontalOverflow } from "./helpers";
+import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
 
 const PAGES = [
   "/home",
@@ -65,6 +65,31 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     await page.waitForTimeout(200);
     await expectNoHorizontalOverflow(page);
   }
+});
+
+test("approval card: axe clean and no overflow at 200% text zoom (choices + undo states)", async ({ page, request }) => {
+  await mock(request, "/reset");
+  await startConversation(page, "please delete the build folder");
+  const card = page.getByTestId("approval-card");
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  const axe = async () => {
+    const results = await new AxeBuilder({ page: page as never })
+      .include('[data-testid="approval-card"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+      .analyze();
+    expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  };
+  await axe();
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page);
+  await card.getByRole("button", { name: "Approve once" }).click();
+  await expect(card.getByRole("button", { name: "Undo" })).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await axe();
+  // Undo leaves the request unanswered (still awaiting a choice).
+  await card.getByRole("button", { name: "Undo" }).click();
+  await expect(card.getByRole("button", { name: "Approve once" })).toBeVisible();
 });
 
 test("touch targets in primary navigation are at least 44px", async ({ page }) => {
