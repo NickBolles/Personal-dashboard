@@ -22,7 +22,8 @@ test("home-critical condition creates one deduplicated alert that deep-links to 
       .getByRole("link", { name: /Alerts, \d+ unread/ })
       .first(),
   ).toBeAttached();
-  await item.getByRole("button", { name: "Open" }).click();
+  // DS: no filled per-row button; the title is the open action.
+  await item.locator("h2 button").click();
   await expect(page).toHaveURL(/\/home-control\?entity=alarm_control_panel.wausau_alarm/);
   await setHa(request, "alarm_control_panel.wausau_alarm", "disarmed");
 });
