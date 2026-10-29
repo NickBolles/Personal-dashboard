@@ -8,6 +8,7 @@ import type { CalendarEvent, HomeHealth, SourceStatus } from "@/lib/contracts";
 import type { DeviceView } from "@/integrations/home-assistant/devices";
 import { CameraIcon, LightIcon } from "@/components/icons";
 import { useSource } from "@/components/useSource";
+import { Banner, SectionHeader } from "@/components/ui/kit";
 import { SourceState } from "@/components/SourceState";
 import { Badge, Button, ButtonLink, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
 
@@ -97,9 +98,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
 
         {home.data?.data && can("home_assistant.view") ? (
           <section aria-labelledby="ex-h" className="mt-4">
-            <h2 id="ex-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-              Exceptions
-            </h2>
+            <SectionHeader id="ex-h" label="Exceptions" />
             {exceptions.length ? (
               <ul className="space-y-2">
                 {exceptions.map((e) => (
@@ -131,13 +130,9 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
 
         {can("home_assistant.control_doors") ? (
           <section aria-labelledby="ctl-h" className="mt-6">
-            <h2 id="ctl-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-              Controls
-            </h2>
+            <SectionHeader id="ctl-h" label="Controls" />
             {!online ? (
-              <p role="status" className="rounded-xl bg-warn-soft p-3 text-sm text-warn">
-                Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.
-              </p>
+              <Banner tone="wn">Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.</Banner>
             ) : null}
             {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
             {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
@@ -158,7 +153,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
                         <Button
                           key={s.service}
                           size="sm"
-                          variant={s.wouldChange ? "primary" : "secondary"}
+                          variant="secondary"
                           disabled={!online || !controlsFresh || c.state === "missing" || pendingId === c.entityId}
                           busy={pendingId === c.entityId && exec.variables?.service === s.service}
                           onClick={() => setConfirm({ control: c, service: s.service, label: s.label })}
@@ -217,9 +212,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
 function CalendarSection({ events }: { events: CalendarEvent[] }) {
   return (
     <section aria-labelledby="cal-h" className="mt-4">
-      <h2 id="cal-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-        Household calendar
-      </h2>
+      <SectionHeader id="cal-h" label="Household calendar" />
       <ul className="card divide-y divide-line">
         {events.slice(0, 10).map((e) => (
           <li key={e.id} className="flex flex-wrap justify-between gap-2 p-3 text-sm">
@@ -276,9 +269,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
     <>
       {d.doors.length ? (
         <section aria-labelledby="doors-h" className="mt-6">
-          <h2 id="doors-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Doors, locks and garage
-          </h2>
+          <SectionHeader id="doors-h" label="Doors, locks and garage" />
           <ul className="card divide-y divide-line">
             {d.doors.map((x) => (
               <li key={x.entityId} className={cx("flex flex-wrap items-center justify-between gap-2 p-3", focusEntity === x.entityId && "bg-accent-soft")}>
@@ -295,9 +286,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       ) : null}
       {d.lights.length ? (
         <section aria-labelledby="lights-h" className="mt-6">
-          <h2 id="lights-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Lights
-          </h2>
+          <SectionHeader id="lights-h" label="Lights" />
           {!online ? <p className="mb-2 text-sm text-warn">Light switches are off while offline.</p> : null}
           <ul className="grid gap-2 sm:grid-cols-2">
             {d.lights.map((x) => {
@@ -336,9 +325,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       ) : null}
       {d.cameras.length ? (
         <section aria-labelledby="cams-h" className="mt-6">
-          <h2 id="cams-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            Cameras
-          </h2>
+          <SectionHeader id="cams-h" label="Cameras" />
           <ul className="grid gap-3 sm:grid-cols-2">
             {d.cameras.map((c) => (
               <CameraCard key={c.entityId} camera={c} online={online} />
@@ -409,9 +396,7 @@ function HealthPanel({ status, health }: { status: SourceStatus; health?: HomeHe
   ];
   return (
     <section aria-labelledby="health-h" className="mt-6">
-      <h2 id="health-h" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-        Home Assistant health
-      </h2>
+      <SectionHeader id="health-h" label="Home Assistant health" />
       <Card as="div">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           {rows.map((r) => (

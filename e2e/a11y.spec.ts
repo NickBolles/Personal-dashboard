@@ -59,7 +59,7 @@ for (const path of PAGES) {
 }
 
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
-  for (const path of ["/home", "/chat/sess_morning", "/alerts"]) {
+  for (const path of ["/home", "/chat/sess_morning", "/alerts", "/settings", "/todos", "/home-control", "/settings/people"]) {
     await page.goto(path);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await page.waitForTimeout(200);
