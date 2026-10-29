@@ -491,7 +491,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               ))}
               {showPendingUser ? (
                 <li className="flex justify-end">
-                  <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
+                  <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
                     <p className="prose-chat">{pendingInput}</p>
                   </div>
                 </li>
@@ -601,7 +601,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   if (item.kind === "user") {
     return (
       <li className="group flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-[12px] rounded-br-[4px] bg-accent-soft px-3.5 py-2">
+        <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
           <span className="sr-only">You said: </span>
           <UserText text={item.text} />
         </div>
@@ -612,7 +612,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   if (item.kind === "assistant") {
     return (
       <li className="flex flex-col gap-1">
-        <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
+        <div className="min-w-0 max-w-full">
           <span className="sr-only">{who} said: </span>
           <AssistantText text={item.text} />
         </div>
@@ -623,15 +623,7 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
   if (item.kind === "tool") {
     return (
       <li>
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          className={cx(
-            "flex min-h-11 w-full items-center gap-2 rounded-[10px] border border-dashed border-line px-3 text-left font-mono text-xs text-muted hover:bg-surface-2 dense:min-h-8",
-            item.error && "text-danger",
-          )}
-        >
+        <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={cx("chat-tool", item.error && "text-danger")}>
           <ToolIcon className="h-4 w-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">
             {toolLabel(item.tool)}
@@ -717,12 +709,7 @@ function ActivityRow({ a }: { a: Activity }) {
   const status = !a.done ? "running" : a.kind === "tool" && a.error ? "failed" : "done";
   return (
     <li>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="flex min-h-11 w-full items-center gap-2 rounded-[10px] border border-dashed border-line px-3 text-left font-mono text-xs text-muted hover:bg-surface-2 dense:min-h-8"
-      >
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className={cx("text-xs", status === "failed" && "text-danger")}>{status}</span>
@@ -783,16 +770,10 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
       ) : null}
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
-        <div className="max-w-[95%] rounded-[12px] rounded-bl-[4px] border border-line bg-surface px-3.5 py-2.5">
+        <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
           <span className="sr-only">{who} is saying: </span>
           {text ? <AssistantText text={text} live={!isTerminal(state.phase)} /> : null}
-          {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? (
-            <p className="mt-1 flex items-center gap-1 text-muted" aria-hidden="true">
-              <span className="typing-dot">●</span>
-              <span className="typing-dot [animation-delay:0.2s]">●</span>
-              <span className="typing-dot [animation-delay:0.4s]">●</span>
-            </p>
-          ) : null}
+          {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? <span className="chat-caret" aria-hidden="true" /> : null}
         </div>
       ) : null}
 
@@ -1001,8 +982,8 @@ function Composer({
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
   return (
-    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:bottom-0 sm:px-6">
-      <div className="mb-1.5 flex flex-wrap items-center gap-1">
+    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-3 py-2 backdrop-blur sm:bottom-0 sm:px-6">
+      <div className="mx-auto mb-1.5 flex max-w-[760px] flex-wrap items-center gap-1">
         <button
           type="button"
           className="chip cursor-pointer hover:border-line-strong"
@@ -1023,7 +1004,7 @@ function Composer({
         </span>
       </div>
       <form
-        className="relative flex items-end gap-2"
+        className="chat-comp relative flex items-end gap-1"
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -1100,7 +1081,7 @@ function Composer({
               onStop();
             }
           }}
-          className="block max-h-[200px] min-h-11 w-full resize-none rounded-[12px] border border-line-strong bg-surface px-3 py-2.5 text-base dense:min-h-10 dense:py-2 dense:text-[0.875rem]"
+          className="block max-h-[200px] min-h-11 w-full resize-none rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
         />
         {running ? (
           <Button type="button" variant="secondary" onClick={onStop} aria-label="Stop the run (Escape)" disabled={phase === "stopping"} className="shrink-0">

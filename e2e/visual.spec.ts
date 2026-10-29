@@ -160,6 +160,23 @@ test("visual: markdown in a chat message", async ({ page }) => {
   await expect(message).toHaveScreenshot("markdown.png");
 });
 
+// Dark theme of the chat thread (DS kit tokens: s3 user bubble, mono tool rows, composer box).
+test("visual: chat (dark)", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.clock.setFixedTime(new Date(visualNow));
+  const timeline = [...chatVisual.timeline, { kind: "assistant" as const, id: "visual-markdown", text: MARKDOWN_FIXTURE, at: visualNow }];
+  await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+  await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: { ...chatVisual, timeline } }));
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.goto("/chat/sess_morning");
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.waitForTimeout(800);
+  await expect(page).toHaveScreenshot("chat-dark.png", { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+});
+
 for (const [name, detail] of [
   ["area", areaDetailVisual],
   ["project", projectDetailVisual],
