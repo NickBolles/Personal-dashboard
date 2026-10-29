@@ -116,7 +116,7 @@ it.each([1, 4, 12])("labels the overdue total as all-Home, not the backlog count
   };
   render(<HomeView />);
   const backlog = screen.getByRole("link", { name: /^Backlog/ });
-  expect(backlog.textContent).toContain(`Backlog · ${a.backlog.length}`);
+  expect(backlog.textContent).toContain(`Backlog: ${a.backlog.length} items`);
   expect(backlog.textContent).toContain(`${count} overdue across Home`);
   expect(a.totals.overdue).toBeGreaterThan(a.backlog.length);
 });
