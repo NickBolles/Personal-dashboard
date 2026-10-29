@@ -175,3 +175,45 @@ for (const [name, detail] of [
     await expect(page).toHaveScreenshot(`${name}-page.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
   });
 }
+
+// Smart UI kit (PR9): a proposed-changes surface with one staged row, light and dark.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: smart surface (${scheme})`, async ({ page, request }) => {
+    await mock(request, "/google/tasks", {
+      tasks: [
+        { title: "Visualsmart gutter clean", dueDays: -4 },
+        { title: "Visualsmart library book", dueDays: -5 },
+      ],
+    });
+    const put = (path: string, data: unknown) => page.request.put(path, { data, headers: { "x-jarvis-csrf": "1" } });
+    const post = async (path: string, data: unknown) => {
+      const res = await page.request.post(path, { data, headers: { "x-jarvis-csrf": "1" } });
+      expect(res.ok(), await res.text()).toBeTruthy();
+      return res.json();
+    };
+    await put("/api/smart/settings", { enabled: true });
+    try {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto("/todos");
+      await expect(page.getByText("Visualsmart gutter clean").first()).toBeVisible({ timeout: 15_000 });
+      const { id } = (await post("/api/hermes/sessions", { title: `Visualsmart ${scheme}` })) as { id: string };
+      await post(`/api/hermes/sessions/${encodeURIComponent(id)}/runs`, {
+        input: "Help me triage my overdue tasks",
+        idempotencyKey: `visualsmart-${scheme}-${Date.now()}`,
+        context: "@ctx:overdue_todos",
+        capabilities: ["jarvis-ui@1"],
+      });
+      await page.goto(`/chat/${encodeURIComponent(id)}`);
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      const surface = page.getByTestId("smart-surface").first();
+      await expect(surface).toBeVisible({ timeout: 20_000 });
+      await surface.getByRole("button", { name: "Drop: Visualsmart library book" }).click();
+      await expect(surface.getByTestId("smart-tray-count")).toHaveText("1 change staged");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.waitForTimeout(500);
+      await expect(surface).toHaveScreenshot(`smart-surface-${scheme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    } finally {
+      await put("/api/smart/settings", { enabled: false });
+    }
+  });
+}
