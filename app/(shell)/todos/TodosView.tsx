@@ -9,6 +9,7 @@ import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter, matchesSource } from "@/components/actions/SourceFilter";
 import { Button, Field, PageHeader, Spinner, inputCls, useOnline, useToast } from "@/components/ui";
+import { EmptyState, SectionHeader } from "@/components/ui/kit";
 
 const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
   { title: "Overdue", match: (a) => a.status === "open" && a.priorityReason === "overdue" },
@@ -40,10 +41,8 @@ export function TodosView() {
             const items = actions.filter(g.match);
             if (!items.length) return null;
             return (
-              <section key={g.title} className="mt-5" aria-labelledby={`g-${g.title}`}>
-                <h2 id={`g-${g.title}`} className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-                  {g.title} ({items.length})
-                </h2>
+              <section key={g.title} className="mt-4" aria-labelledby={`g-${g.title}`}>
+                <SectionHeader id={`g-${g.title}`} label={g.title} count={items.length} />
                 <ul className="space-y-2">
                   {items.map((a) => (
                     <li key={a.id} id={`todo-${a.sourceId}`}>
@@ -55,7 +54,11 @@ export function TodosView() {
             );
           })
         : null}
-      {q.data?.data && !actions.length ? <p className="mt-6 text-muted">No open todos.</p> : null}
+      {q.data?.data && !actions.length ? (
+        <div className="mt-6">
+          <EmptyState title="No open todos." />
+        </div>
+      ) : null}
     </div>
   );
 }

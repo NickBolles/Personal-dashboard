@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { clearAllLocal } from "@/lib/client/idb";
 import { Button, Card, Field, Page, PageHeader, SectionLabel, inputCls, useToast } from "@/components/ui";
+import { SectionHeader } from "@/components/ui/kit";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { AssistantSettings } from "./AssistantSettings";
@@ -105,7 +106,7 @@ export function SettingsView() {
         <div className="min-w-0 space-y-4">
           {form ? (
             <Card>
-              <h2 className="eyebrow mb-3">Preferences</h2>
+              <SectionHeader label="Preferences" />
               <form
                 className="grid items-start gap-3 sm:grid-cols-2"
                 onSubmit={(e) => {
@@ -181,7 +182,7 @@ export function SettingsView() {
 
           {me.data?.authMode === "local" ? (
             <Card>
-              <h2 className="eyebrow mb-3">Security</h2>
+              <SectionHeader label="Security" />
               <form
                 className="grid items-start gap-3 sm:grid-cols-2"
                 onSubmit={(e) => {
@@ -214,13 +215,13 @@ export function SettingsView() {
             </Card>
           ) : (
             <Card>
-              <h2 className="eyebrow">Security</h2>
+              <SectionHeader label="Security" />
               <p className="mt-1 text-sm text-muted">Sign-in is handled by your reverse proxy ({me.data?.user.via}).</p>
             </Card>
           )}
 
           <Card>
-            <h2 className="eyebrow mb-3">This device</h2>
+            <SectionHeader label="This device" />
             <div className="flex flex-wrap gap-2">
               {isAdmin ? (
                 <Button

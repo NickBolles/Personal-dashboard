@@ -399,7 +399,7 @@ function ActionDetails({ action, data, onEdit, editable }: { action: ActionView;
       {editable ? (
         <div className="flex flex-wrap gap-2">
           {action.status !== "settled" ? (
-            <Button size="sm" variant="primary" busy={patch.isPending} onClick={() => patch.mutate({ status: "settled" })}>
+            <Button size="sm" variant="secondary" busy={patch.isPending} onClick={() => patch.mutate({ status: "settled" })}>
               Mark done
             </Button>
           ) : (
