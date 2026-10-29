@@ -91,6 +91,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
+  /** A first message that failed to send goes back into the mounted composer. */
+  const [restore, setRestore] = useState<{ text: string; at: number }>();
   const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file">(null);
   const router = useRouter();
   const newChat = useAskHermes();
@@ -166,6 +168,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       (err) => {
         setPendingInput(undefined);
         void kvSet(`draft:${sessionId}`, first.input);
+        setRestore({ text: first.input, at: Date.now() });
         toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
       },
     );
@@ -523,6 +526,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               onRemoveContext={(ref) => setContext((c) => c.filter((x) => x.ref !== ref))}
               onAttach={() => setDialog("context")}
               onSend={send}
+              restore={restore}
               onSteer={steer}
               onStop={run.stop}
               onCommand={runCommand}
@@ -835,8 +839,10 @@ function Composer({
   modelLabel,
   onModel,
   agent,
+  restore,
 }: {
   sessionId: string;
+  restore?: { text: string; at: number };
   phase?: RunPhase;
   online: boolean;
   context: { label: string; ref: string }[];
@@ -870,6 +876,11 @@ function Composer({
   if (areaRepo !== seenRepo) {
     setSeenRepo(areaRepo);
     setRepo(areaRepo);
+  }
+  const [seenRestore, setSeenRestore] = useState(restore);
+  if (restore !== seenRestore) {
+    setSeenRestore(restore);
+    if (restore) setText(restore.text);
   }
   const listId = useId();
   const { rows, loading, partial, searched } = useTriggerRows(trigger, repo);

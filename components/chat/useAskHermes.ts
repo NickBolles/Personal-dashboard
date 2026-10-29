@@ -24,7 +24,7 @@ export function useAskHermes() {
   const [busy, setBusy] = useState(false);
   /** The conversation exists: show it now (no detail round trip), refresh lists in the background. */
   const open = (session: SessionSummary) => {
-    qc.setQueryData(["session", session.id], (old: unknown) => old ?? { session, timeline: [], children: [] });
+    qc.setQueryData(["session", session.id], (old: unknown) => old ?? { session, timeline: [], children: [], links: [] });
     router.push(`/chat/${encodeURIComponent(session.id)}`);
     // Lists (Hermes' session list is slow) refresh after navigation and never block it.
     void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
