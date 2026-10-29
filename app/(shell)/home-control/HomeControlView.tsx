@@ -294,9 +294,12 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
               const canSwitch = can("home_assistant.control_lights") && x.services.length > 0;
               const busy = light.isPending && light.variables?.entityId === x.entityId;
               return (
-                <li key={x.entityId} className={cx("card flex items-center justify-between gap-3 p-3", focusEntity === x.entityId && "border-accent")}>
-                  <span className="flex items-center gap-2">
-                    <LightIcon className={cx("h-6 w-6", on ? "text-warn" : "text-muted")} />
+                <li
+                  key={x.entityId}
+                  className={cx("card flex flex-wrap items-center justify-between gap-3 p-3", focusEntity === x.entityId && "border-accent")}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <LightIcon className={cx("h-6 w-6 shrink-0", on ? "text-warn" : "text-muted")} />
                     <span>
                       <span className="block font-medium">{x.name}</span>
                       <span className="text-xs text-muted">
