@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/components/access";
 import { Badge, PageHeader } from "@/components/ui";
+import { Button, SectionHeader } from "@/components/ui/kit";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import {
   EQUIPMENT,
@@ -20,8 +21,6 @@ import {
 
 // Shared control language (ui.tsx): 9px radius, hairline borders, density from `.tap`.
 const button = "tap inline-flex items-center justify-center rounded-[9px] border px-3.5 text-sm font-medium transition-colors disabled:opacity-50";
-const primary = `${button} border-accent bg-accent font-semibold text-accent-contrast hover:opacity-90`;
-const secondary = `${button} border-line bg-surface hover:border-line-strong hover:bg-surface-2`;
 const field = "min-w-0 w-full rounded-[8px] border border-line-strong bg-surface px-3 py-2 tabular-nums sm:py-1.5";
 type Save = { id: string; version: number; requestId: string; session: WorkoutSession };
 function today() {
@@ -188,19 +187,19 @@ export function WorkoutView() {
           <div role="alert" className="space-y-2 rounded-xl bg-danger-soft p-3 text-sm text-danger">
             <p>{error}</p>
             {pending && (
-              <button className={secondary} disabled={busy} onClick={() => void save(pending)}>
+              <Button variant="secondary" disabled={busy} onClick={() => void save(pending)}>
                 Retry save
-              </button>
+              </Button>
             )}
-            <button
-              className={`${button} underline`}
+            <Button
+              variant="ghost"
               disabled={busy}
               onClick={() => {
                 if ((!dirty && !pending) || window.confirm("Reload server state? Unsaved edits will be lost.")) window.location.reload();
               }}
             >
               Reload saved state
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -295,14 +294,15 @@ export function WorkoutView() {
                   />
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  <button className={secondary} onClick={() => persist(draft.session)}>
+                  <Button variant="secondary" onClick={() => persist(draft.session)}>
                     Save edits
-                  </button>
-                  <button className={`${primary} flex-1`} onClick={() => persist({ ...draft.session, status: "completed" })}>
+                  </Button>
+                  <Button variant="primary" className="flex-1" onClick={() => persist({ ...draft.session, status: "completed" })}>
                     Finish workout
-                  </button>
-                  <button
-                    className={`${secondary} w-full sm:w-auto`}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full sm:w-auto"
                     onClick={() => {
                       if (window.confirm("Discard this workout? It will not count toward history or records.")) {
                         const saved = rows.find((r) => r.id === draft.id)!;
@@ -311,7 +311,7 @@ export function WorkoutView() {
                     }}
                   >
                     Discard workout
-                  </button>
+                  </Button>
                 </div>
               </fieldset>
             </section>
@@ -364,12 +364,7 @@ export function WorkoutView() {
                   </label>
                 </div>
                 <div className="space-y-4 rounded-2xl bg-surface p-4 sm:p-5">
-                  <div className="flex justify-between gap-2">
-                    <h3 className="font-semibold">Your plan</h3>
-                    <span className="text-xs text-muted">
-                      {plan.length} exercises · ~{options.minutes} min
-                    </span>
-                  </div>
+                  <SectionHeader label="Your plan" count={plan.length} action={<span className="text-xs text-muted">~{options.minutes} min</span>} />
                   <p className="text-xs text-muted">
                     Deterministic plan from your completed Jarvis sets, not AI. Includes time for warm-up and rests; adjust to your pace.
                   </p>
@@ -383,8 +378,9 @@ export function WorkoutView() {
                     </div>
                   ))}
                   {!plan.length && <p className="text-sm text-muted">Select a focus and matching equipment. Core uses bodyweight.</p>}
-                  <button
-                    className={`${primary} w-full`}
+                  <Button
+                    variant="primary"
+                    className="w-full"
                     disabled={!plan.length}
                     onClick={() =>
                       persist(
@@ -400,7 +396,7 @@ export function WorkoutView() {
                     }
                   >
                     Start workout
-                  </button>
+                  </Button>
                 </div>
               </fieldset>
             </section>
@@ -413,7 +409,7 @@ export function WorkoutView() {
       ) : (
         <section className="space-y-5" aria-label="Workout history">
           <div>
-            <h2 className="text-xl font-semibold">Your training history</h2>
+            <SectionHeader label="Your training history" count={history.length} />
             <p className="mt-1 text-sm text-muted">Completed sessions, exactly as recorded.</p>
           </div>
           <input
@@ -498,9 +494,9 @@ export function WorkoutView() {
                     {importData.workouts.length} sessions · {importData.profile.displayName} · {importData.profile.units}
                   </p>
                   <p className="text-xs text-muted">Equipment is unknown in legacy imports. We preserve every source value without inferring PRs.</p>
-                  <button className={primary} disabled={busy} onClick={() => void confirmImport()}>
+                  <Button variant="primary" disabled={busy} onClick={() => void confirmImport()}>
                     Confirm import
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>

@@ -8,6 +8,7 @@ import type { FinanceOverview } from "@/server/finance/overview";
 import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, cx, useToast } from "@/components/ui";
 import { AlertIcon, CheckIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
+import { SectionHeader } from "@/components/ui/kit";
 import { Delta, Money } from "@/components/finance/money";
 import { StartCheckinButton, monthLabel } from "./checkin/CheckinList";
 
@@ -79,7 +80,7 @@ export function FinanceOverviewView() {
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
-            <h2 className="font-semibold">Where we stand</h2>
+            <SectionHeader label="Where we stand" />
             {o.totals ? (
               <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
@@ -130,7 +131,7 @@ export function FinanceOverviewView() {
             </div>
           </Card>
           <Card>
-            <h2 className="font-semibold">Coming up (30 days)</h2>
+            <SectionHeader label="Coming up (30 days)" />
             {o.upcoming.length ? (
               <ul className="mt-2 space-y-2 text-sm">
                 {o.upcoming.map((u) => (
@@ -154,7 +155,7 @@ export function FinanceOverviewView() {
           </Card>
           {o.issues.length ? (
             <Card className="lg:col-span-2">
-              <h2 className="font-semibold">To look at</h2>
+              <SectionHeader label="To look at" />
               <ul className="mt-2 space-y-1 text-sm">
                 {o.issues.slice(0, 8).map((i) => (
                   <li key={`${i.code}:${i.ref ?? ""}`} className="flex gap-2">
@@ -167,7 +168,7 @@ export function FinanceOverviewView() {
           ) : null}
           {o.funds.length ? (
             <Card>
-              <h2 className="font-semibold">Funds</h2>
+              <SectionHeader label="Funds" />
               <ul className="mt-2 space-y-1 text-sm">
                 {o.funds.map((f) => (
                   <li key={f.fundId} className="flex justify-between gap-2">
