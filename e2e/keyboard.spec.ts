@@ -62,3 +62,38 @@ test("keyboard-only tree structure: indent, outdent, rename (F2) and Move to… 
   await page.keyboard.press("Enter");
   await expect.poll(() => parentOf(b.id)).toBe(a.id);
 });
+
+test("keyboard-only inbox triage: j/k move, Enter files, M chooses, E dismisses (two-pane)", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 640, "two-pane triage is >=640px");
+  const nonce = Date.now().toString(36);
+  const titles = [1, 2, 3, 4, 5].map((n) => `Triage key ${nonce} ${n}`);
+  for (const text of titles) {
+    const r = await page.request.post("/api/work/inbox", { data: { text }, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok()).toBeTruthy();
+  }
+  await page.goto("/areas?view=inbox");
+  const preview = page.getByTestId("inbox-preview");
+  const pick = (t: string) => page.locator(`[data-inbox-pick]`, { hasText: t });
+  await expect(pick(titles[0])).toBeVisible();
+  // The tree is no longer rendered below the inbox on narrow layouts; the preview shows the selection.
+  await pick(titles[0]).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog", { name: "File capture" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await pick(titles[1]).focus();
+  await page.keyboard.press("j");
+  await expect(page.locator("[data-inbox-pick][aria-current=true]")).not.toHaveText(titles[1]);
+  await page.keyboard.press("k");
+  await expect(pick(titles[1])).toHaveAttribute("aria-current", "true");
+  await expect(preview.getByRole("heading", { name: titles[1] })).toBeVisible();
+  await page.keyboard.press("m");
+  await expect(page.getByRole("dialog", { name: "File capture" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  for (const t of titles) {
+    await pick(t).focus();
+    await expect(preview.getByRole("heading", { name: t })).toBeVisible();
+    await page.keyboard.press("e");
+    await expect(pick(t)).toHaveCount(0);
+  }
+});
