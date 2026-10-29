@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, useOnline } from "@/components/ui";
@@ -14,6 +14,7 @@ import { CommandDock } from "./CommandDock";
 import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
+import { ComposerRouteWatcher } from "@/components/agents/useComposerTarget";
 
 const MORE: Dest = {
   key: "more",
@@ -312,6 +313,9 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           </div>
         </div>
       ) : null}
+      <Suspense fallback={null}>
+        <ComposerRouteWatcher />
+      </Suspense>
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
 

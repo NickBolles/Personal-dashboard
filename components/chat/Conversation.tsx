@@ -8,6 +8,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffe
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
+import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
 import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
@@ -144,6 +145,27 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   useEffect(() => {
     kvGet<{ model?: string; provider?: string }>(`model:${sessionId}`).then((m) => m && setModel(m));
   }, [sessionId]);
+
+  // "Ask" opened this conversation before its first message was sent: show it now, stream when the run starts.
+  const firstRun = useRef<string | null>(null);
+  useEffect(() => {
+    if (firstRun.current === sessionId) return;
+    firstRun.current = sessionId;
+    const first = takeFirstRun(sessionId);
+    if (!first) return;
+    setPendingInput(first.input);
+    first.run.then(
+      (r) => {
+        run.start(r.runId);
+        refreshSessionLists(qc);
+      },
+      (err) => {
+        setPendingInput(undefined);
+        void kvSet(`draft:${sessionId}`, first.input);
+        toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
+      },
+    );
+  }, [sessionId, run, qc, toast]);
 
   useEffect(() => {
     if (run.state.phase === "waiting_for_approval") announce("Hermes needs your approval");

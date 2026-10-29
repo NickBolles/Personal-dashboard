@@ -6,6 +6,8 @@ import { localDate } from "@/lib/time";
 import type { NextAction } from "@/lib/contracts";
 import { briefContext, weekContext } from "./workflows";
 import { isOwnersTask } from "@/lib/task-source";
+import { nodeContextBlock } from "@/server/agents/composer";
+import { NODE_CTX_PREFIX, NODE_ID_RE } from "@/lib/composer-target";
 
 /**
  * Context refs (`@ctx:<name>`) in a run's attached context are resolved here,
@@ -80,6 +82,15 @@ export function resolveContextRefs(user: CurrentUser, context: string | undefine
       const t = l.trim();
       if (t === CTX_OVERDUE) {
         blocks.push(overdueTodosContext(user));
+        return false;
+      }
+      if (t.startsWith(NODE_CTX_PREFIX)) {
+        // Asked from an area/project/item (global composer): that node's path and open items, if it's yours.
+        const id = t.slice(NODE_CTX_PREFIX.length);
+        if (NODE_ID_RE.test(id) && can(user, "work.use")) {
+          const block = nodeContextBlock(user.id, id);
+          if (block) blocks.push(block);
+        }
         return false;
       }
       if (t === CTX_BRIEF || t === CTX_WEEK) {
