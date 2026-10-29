@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
+import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 
 const PAGES = [
   "/home",
@@ -76,6 +77,21 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await page.waitForTimeout(200);
     // Soft: report every overflowing page in one run instead of stopping at the first.
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
+});
+
+test("forced source states: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  for (const name of Object.keys(SOURCE_STATES) as (keyof typeof SOURCE_STATES)[]) {
+    await page.unrouteAll();
+    const path = await forceSourceState(page, name);
+    await page.goto(path);
+    await page.locator("h1").first().waitFor();
+    await page.waitForTimeout(500);
+    const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${name} ${v.id}`)).toEqual([]);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
     await expectNoHorizontalOverflow(page, { soft: true });
   }
 });
