@@ -63,7 +63,8 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     await page.goto(path);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await page.waitForTimeout(200);
-    await expectNoHorizontalOverflow(page);
+    // Soft: report every overflowing page in one run instead of stopping at the first.
+    await expectNoHorizontalOverflow(page, { soft: true });
   }
 });
 
