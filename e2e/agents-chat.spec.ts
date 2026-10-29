@@ -119,9 +119,16 @@ test("the global composer asks the open area's agent, files the chat there; the 
   const areaId = await routedArea(page, title);
 
   // Outside Areas the composer is plain Jarvis.
-  await page.goto("/home");
-  await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Search" });
+  // Retry until the page has hydrated and the shortcut is listening.
+  const openPalette = () =>
+    expect(async () => {
+      await page.keyboard.press("Control+k");
+      await expect(palette.getByRole("combobox")).toBeFocused({ timeout: 1000 });
+    }).toPass();
+  await page.goto("/home");
+  await page.getByRole("heading", { name: "Now" }).waitFor();
+  await openPalette();
   await expect(palette.getByTestId("composer-target")).toHaveAttribute("data-agent", "Jarvis");
   await page.keyboard.press("Escape");
 
@@ -139,7 +146,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   }
 
   // The chip switches to plain Jarvis and back.
-  await page.keyboard.press("Control+k");
+  await openPalette();
   const chip = palette.getByTestId("composer-target");
   await expect(chip).toHaveAttribute("data-agent", "momentumchief");
   await expect(chip).toHaveAttribute("data-routed", "1");
