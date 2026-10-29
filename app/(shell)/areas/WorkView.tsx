@@ -808,7 +808,13 @@ function ItemDetail({
     requestAnimationFrame(() => document.getElementById("work-validations")?.scrollIntoView({ block: "start", behavior: "smooth" }));
   };
   const action = itemPrimary(d, canChat);
-  const openPr = d.links.find((l) => l.kind === "github_pr" && l.url);
+  // Links come oldest first: prefer the newest open PR (implementation role first), else the newest PR.
+  const prLinks = d.links.filter((l) => l.kind === "github_pr" && l.url).reverse();
+  const openPr =
+    prLinks.find((l) => l.externalState === "open" && l.role === "implementation") ??
+    prLinks.find((l) => l.externalState === "open") ??
+    prLinks.find((l) => l.externalState !== "merged" && l.externalState !== "closed") ??
+    prLinks[0];
   const chats = itemChatRows(d);
   const showBlockers = () => {
     setTab("overview");
