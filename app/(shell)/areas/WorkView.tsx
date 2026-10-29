@@ -216,7 +216,7 @@ export function WorkView({
       <div
         id="work-tree"
         className={`min-w-0 px-3 pb-4 lg:order-none lg:col-start-1 lg:row-start-2 lg:block lg:self-start lg:px-0 lg:pb-0 ${
-          view.kind === "tree" ? "order-1" : view.kind !== "item" ? "order-3" : "hidden"
+          view.kind === "tree" ? "order-1" : view.kind === "today" ? "order-3" : "hidden"
         }`}
       >
         <div className="wk-side-sticky min-w-0 rounded-[10px] border border-line bg-surface p-2 lg:rounded-none lg:border-0 lg:bg-transparent lg:px-2.5 lg:pt-1 lg:pb-24">
