@@ -27,6 +27,7 @@ import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, 
 import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsResponse } from "@/lib/work";
 import type { AgentResolution } from "@/lib/agents";
 import { AgentChip } from "@/components/agents/AgentChip";
+import { ApprovalCard } from "@/components/approvals/ApprovalCard";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -729,7 +730,6 @@ function ActivityRow({ a }: { a: Activity }) {
 
 function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c: ApprovalRequest["choices"][number]) => void; onRetry: () => void }) {
   const who = useContext(AssistantName);
-  const [busy, setBusy] = useState<string>();
   const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
   return (
     <section aria-label="Current run" className="space-y-2">
@@ -741,33 +741,7 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
         </ul>
       ) : null}
 
-      {state.approval ? (
-        <div role="group" aria-labelledby="approval-h" className="rounded-[12px] border-2 border-warn bg-warn-soft p-3.5">
-          <h2 id="approval-h" className="font-semibold text-warn">
-            Hermes needs your approval
-          </h2>
-          {state.approval.description ? <p className="mt-1 text-sm">{state.approval.description}</p> : null}
-          {state.approval.command ? <pre className="mt-2 overflow-x-auto rounded-lg bg-surface p-2 text-xs">{state.approval.command}</pre> : null}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {state.approval.choices.map((c) => (
-              <Button
-                key={c}
-                size="sm"
-                variant={c === "deny" ? "danger" : c === "once" ? "primary" : "secondary"}
-                busy={busy === c}
-                disabled={Boolean(busy)}
-                onClick={async () => {
-                  setBusy(c);
-                  await onApprove(c);
-                  setBusy(undefined);
-                }}
-              >
-                {c === "once" ? "Approve once" : c === "session" ? "Approve for this session" : c === "always" ? "Always allow" : "Deny"}
-              </Button>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
