@@ -377,7 +377,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
                 {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-                <div className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
+                <div data-scroll-x className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
                   {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                   {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
                   {readOnly ? (

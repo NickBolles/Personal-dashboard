@@ -2296,6 +2296,14 @@ details.jv-why > summary::-webkit-details-marker {
     border-radius: var(--radius-sm);
     background: var(--surface-2);
     padding: 10px 12px;
+    /* Reflow at 320 px / 200% text: never wider than its column. */
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .appr button {
+    max-width: 100%;
+    white-space: normal;
   }
   .appr-cmd {
     margin-top: 8px;
