@@ -2413,6 +2413,11 @@ details.jv-why > summary::-webkit-details-marker {
     flex-direction: column;
     gap: 0.25rem;
   }
+  /* Steps inside a work summary read as prose: sans, not the mono tool-row default. */
+  .chat-work-steps .chat-tool {
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
   .chat-work-shimmer {
     background: linear-gradient(90deg, var(--muted) 25%, var(--ai) 50%, var(--muted) 75%);
     background-size: 200% 100%;
