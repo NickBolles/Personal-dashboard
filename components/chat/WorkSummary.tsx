@@ -75,6 +75,13 @@ export function WorkSummary({
 }) {
   const [choice, setChoice] = useState<boolean | null>(() => (typeof window === "undefined" ? null : readOpen(id)));
   const open = choice ?? defaultOpen;
+  // Announce the finished summary once (when a live run settles), never on every streamed step.
+  const [wasLive, setWasLive] = useState(!!live);
+  const [announce, setAnnounce] = useState(false);
+  if (wasLive && !live) {
+    setWasLive(false);
+    setAnnounce(true);
+  }
   const failed = steps.filter((s) => s.error).length;
   const what = summarizeSteps(steps);
   const head = live ? "Working" : formatWorked(seconds);
@@ -100,6 +107,9 @@ export function WorkSummary({
         {failed ? <span className="sr-only">Includes a failed step.</span> : null}
         <ChevronIcon className={cx("h-4 w-4 shrink-0 transition-transform", open && "rotate-90")} />
       </button>
+      <span className="sr-only" role="status">
+        {announce ? label : ""}
+      </span>
       {open ? <ul className="chat-work-steps">{children}</ul> : alwaysShown ? <ul className="chat-work-steps">{alwaysShown}</ul> : null}
     </div>
   );
