@@ -575,6 +575,15 @@
     border-color: transparent;
     color: var(--accent);
   }
+  /* AI suggestion chip (Inbox rows): Lagoon tint, one tap to accept. */
+  .ai-chip {
+    background: color-mix(in oklab, var(--ai) 14%, transparent);
+    color: var(--ai);
+    border: 1px solid color-mix(in oklab, var(--ai) 30%, transparent);
+  }
+  .ai-chip:hover {
+    background: color-mix(in oklab, var(--ai) 22%, transparent);
+  }
   .chip[data-tone="ok"] {
     background: var(--ok-soft);
     border-color: transparent;
