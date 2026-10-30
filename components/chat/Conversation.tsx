@@ -21,6 +21,7 @@ import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ContextPicker, ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
 import { useAskHermes } from "./useAskHermes";
+import { WorkSummary } from "./WorkSummary";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import { FileUnderDialog } from "@/components/work/conversations";
 import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
@@ -482,16 +483,26 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               </div>
             ) : null}
             <ol className="space-y-3">
-              {detail.timeline.map((item) => (
-                <TimelineRow
-                  key={item.id}
-                  item={item}
-                  onFork={() => {
-                    setForkFrom(item);
-                    setDialog("fork");
-                  }}
-                />
-              ))}
+              {groupTimeline(detail.timeline).map((g) => {
+                const row = (item: TimelineItem) => (
+                  <TimelineRow
+                    key={item.id}
+                    item={item}
+                    onFork={() => {
+                      setForkFrom(item);
+                      setDialog("fork");
+                    }}
+                  />
+                );
+                if (!("tools" in g)) return row(g);
+                return (
+                  <li key={`work-${g.tools[0].id}`}>
+                    <WorkSummary id={g.tools[0].id} steps={g.tools} seconds={g.seconds} alwaysShown={g.tools.filter((t) => t.error).map(row)}>
+                      {g.tools.map(row)}
+                    </WorkSummary>
+                  </li>
+                );
+              })}
               {showPendingUser ? (
                 <li className="flex justify-end">
                   <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
@@ -595,6 +606,42 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       </SmartSession.Provider>
     </AssistantName.Provider>
   );
+}
+
+type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
+type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number };
+
+/** Fold each run of consecutive tool rows into one summary group (UI only; data unchanged). */
+export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
+  const out: TimelineGroup[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.kind !== "tool") {
+      out.push(it);
+      continue;
+    }
+    const tools: ToolItem[] = [];
+    while (i < items.length && items[i].kind === "tool") tools.push(items[i++] as ToolItem);
+    const startAt = tools[0].at ? Date.parse(tools[0].at) : NaN;
+    const endItem = items[i] ?? tools[tools.length - 1];
+    const endAt = endItem?.at ? Date.parse(endItem.at) : NaN;
+    const seconds = Number.isFinite(startAt) && Number.isFinite(endAt) && endAt >= startAt ? (endAt - startAt) / 1000 : undefined;
+    out.push({ tools, seconds });
+    i--;
+  }
+  return out;
+}
+
+function liveSeconds(activity: Activity[]): number | undefined {
+  const starts = activity.map((a) => Date.parse(a.startedAt)).filter(Number.isFinite);
+  if (!starts.length) return undefined;
+  const first = Math.min(...starts);
+  const last = activity.reduce((m, a) => {
+    const s = Date.parse(a.startedAt);
+    const d = a.kind === "tool" && a.durationSec !== undefined ? a.durationSec * 1000 : 0;
+    return Number.isFinite(s) ? Math.max(m, s + d) : m;
+  }, first);
+  return (last - first) / 1000;
 }
 
 function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void }) {
@@ -714,7 +761,7 @@ function ActivityRow({ a }: { a: Activity }) {
     <li>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={cx("min-w-0 flex-1 truncate", status === "running" && "chat-work-shimmer")}>{label}</span>
         <span className={cx("text-xs", status === "failed" && "text-danger")}>{status}</span>
       </button>
       {open && a.kind === "tool" ? (
@@ -736,11 +783,22 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
   return (
     <section aria-label="Current run" className="space-y-2">
       {state.activity.length ? (
-        <ul className="space-y-1">
+        <WorkSummary
+          id={`live-${state.runId ?? "run"}`}
+          steps={state.activity}
+          live={!isTerminal(state.phase)}
+          seconds={liveSeconds(state.activity)}
+          defaultOpen={!text && !isTerminal(state.phase)}
+          alwaysShown={state.activity
+            .filter((a) => a.kind === "tool" && a.error)
+            .map((a) => (
+              <ActivityRow key={a.id} a={a} />
+            ))}
+        >
           {state.activity.map((a) => (
             <ActivityRow key={a.id} a={a} />
           ))}
-        </ul>
+        </WorkSummary>
       ) : null}
 
       {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
