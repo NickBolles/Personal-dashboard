@@ -687,7 +687,7 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
       <li>
         <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={cx("chat-tool", item.error && "text-danger")}>
           <ToolIcon className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
+          <span className="min-w-0 flex-1 break-words">
             {toolLabel(item.tool)}
             {item.summary ? ` · ${item.summary}` : ""}
           </span>
@@ -776,8 +776,8 @@ function ActivityRow({ a }: { a: Activity }) {
     <li>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
-        <span className={cx("min-w-0 flex-1 truncate", status === "running" && "chat-work-shimmer")}>{label}</span>
-        <span className={cx("text-xs", status === "failed" && "text-danger")}>{status}</span>
+        <span className={cx("min-w-0 flex-1 break-words", status === "running" && "chat-work-shimmer")}>{label}</span>
+        <span className={cx("shrink-0 text-xs", status === "failed" && "text-danger")}>{status}</span>
       </button>
       {open && a.kind === "tool" ? (
         <div className="ml-9 mt-1 rounded-lg border border-line bg-surface-2 p-3 text-xs">

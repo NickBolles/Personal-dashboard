@@ -110,7 +110,7 @@ export function WorkSummary({
         <span aria-hidden="true" className="chat-work-mark">
           ✦
         </span>
-        <span className={cx("min-w-0 flex-1 truncate", live && "chat-work-shimmer")} data-dynamic>
+        <span className={cx("min-w-0 flex-1 break-words", live && "chat-work-shimmer")} data-dynamic>
           {label}
         </span>
         {failed ? <span className="sr-only">Includes a failed step.</span> : null}

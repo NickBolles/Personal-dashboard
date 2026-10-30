@@ -2393,9 +2393,10 @@ details.jv-why > summary::-webkit-details-marker {
     align-items: center;
     gap: 0.5rem;
     border-radius: 6px;
-    padding: 0 0.5rem;
+    padding: 0.375rem 0.5rem;
     color: var(--muted);
     font-size: 0.8125rem;
+    line-height: 1.35;
     text-align: left;
   }
   .chat-work-head:hover {
@@ -2414,9 +2415,12 @@ details.jv-why > summary::-webkit-details-marker {
     gap: 0.25rem;
   }
   /* Steps inside a work summary read as prose: sans, not the mono tool-row default. */
+  /* Long labels wrap instead of truncating (no ellipsis at 320px). */
   .chat-work-steps .chat-tool {
     font-family: var(--font-sans);
     font-size: 13px;
+    line-height: 1.35;
+    padding-block: 0.375rem;
   }
   .chat-work-shimmer {
     background: linear-gradient(90deg, var(--muted) 25%, var(--ai) 50%, var(--muted) 75%);

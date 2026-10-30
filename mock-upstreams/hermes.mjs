@@ -310,6 +310,8 @@ export function createHermes({ apiKey }) {
         pushEvent(run, { event: "tool.started", tool: "terminal", preview: "rm -rf build" });
         await sleep(t);
         pushEvent(run, { event: "tool.completed", tool: "terminal", duration: 0.1, error: false, preview: "" });
+        // Like real Hermes, the tool call lands in history (else the summary vanishes once history replaces live rows).
+        addMessage(run.session_id, { role: "tool", content: "", tool_name: "terminal" });
       }
     }
     const slow = /slow|long/i.test(said);
