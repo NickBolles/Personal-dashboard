@@ -15,8 +15,15 @@ test("approval requested inline, answered, then run completes", async ({ page })
   // Approvals wait 8 s with Undo; skip the wait.
   await card.getByRole("button", { name: "Send now" }).click();
   await expect(card).toBeHidden();
-  await expect(page.getByText(/Ran a command/)).toBeVisible();
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
+  // CH-R1: tool use folds into one summary line; Enter expands it to the step rows.
+  const work = page.getByRole("button", { name: /^Worked.*ran 1 command/ }).last();
+  await expect(work).toBeVisible();
+  await expect(work).toHaveAttribute("aria-expanded", "false");
+  await work.focus();
+  await page.keyboard.press("Enter");
+  await expect(work).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText(/Ran a command/).last()).toBeVisible();
 });
 
 test("stop stays 'stopping' until Hermes confirms, then shows stopped", async ({ page }) => {

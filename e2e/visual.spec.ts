@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa, startConversation } from "./helpers";
 import { homeVisual } from "./fixtures/home";
-import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
+import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 
@@ -305,4 +305,32 @@ for (const name of Object.keys(SOURCE_STATES) as (keyof typeof SOURCE_STATES)[])
       await expect(page).toHaveScreenshot(`state-${name}-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     });
   }
+}
+
+// CH-R1: the per-turn work summary, collapsed (failed step stays visible) and expanded, light + dark.
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat work summary (${theme})`, async ({ page }) => {
+    if (theme === "dark") await page.emulateMedia({ colorScheme: "dark" });
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatWorkVisual }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto("/chat/sess_morning");
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const work = page.locator(".chat-work").first();
+    const head = work.getByRole("button", { name: /Worked for 13s · searched 1 source, ran 1 command, browsed 1 page, read 1 file · 1 failed/ });
+    await expect(head).toHaveAttribute("aria-expanded", "false");
+    // Collapsed: only the failed step shows, with its duration and status.
+    await expect(work.locator(".chat-tool")).toHaveCount(1);
+    await expect(work.locator(".chat-tool")).toContainText("1s · failed");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(work).toHaveScreenshot(`chat-work-collapsed-${theme}.png`, { animations: "disabled" });
+    await head.click();
+    await expect(head).toHaveAttribute("aria-expanded", "true");
+    await expect(work.locator(".chat-tool")).toHaveCount(4);
+    await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · done");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" });
+  });
 }

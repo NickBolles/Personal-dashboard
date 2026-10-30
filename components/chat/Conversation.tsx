@@ -21,6 +21,7 @@ import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ContextPicker, ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
 import { useAskHermes } from "./useAskHermes";
+import { WorkSummary, formatStepSec } from "./WorkSummary";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import { FileUnderDialog } from "@/components/work/conversations";
 import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
@@ -482,16 +483,32 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               </div>
             ) : null}
             <ol className="space-y-3">
-              {detail.timeline.map((item) => (
-                <TimelineRow
-                  key={item.id}
-                  item={item}
-                  onFork={() => {
-                    setForkFrom(item);
-                    setDialog("fork");
-                  }}
-                />
-              ))}
+              {groupTimeline(detail.timeline).map((g) => {
+                const row = (item: TimelineItem, stepSec?: number) => (
+                  <TimelineRow
+                    key={item.id}
+                    item={item}
+                    stepSec={stepSec}
+                    onFork={() => {
+                      setForkFrom(item);
+                      setDialog("fork");
+                    }}
+                  />
+                );
+                if (!("tools" in g)) return row(g);
+                return (
+                  <li key={`work-${g.tools[0].id}`}>
+                    <WorkSummary
+                      id={g.tools[0].id}
+                      steps={g.tools}
+                      seconds={g.seconds}
+                      alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
+                    >
+                      {g.tools.map((t, j) => row(t, g.durations[j]))}
+                    </WorkSummary>
+                  </li>
+                );
+              })}
               {showPendingUser ? (
                 <li className="flex justify-end">
                   <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
@@ -597,7 +614,49 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   );
 }
 
-function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void }) {
+type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
+type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number; durations: (number | undefined)[] };
+
+function span(from?: string, to?: string): number | undefined {
+  const a = from ? Date.parse(from) : NaN;
+  const b = to ? Date.parse(to) : NaN;
+  return Number.isFinite(a) && Number.isFinite(b) && b >= a ? (b - a) / 1000 : undefined;
+}
+
+/** Fold each run of consecutive tool rows into one summary group (UI only; data unchanged). */
+export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
+  const out: TimelineGroup[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.kind !== "tool") {
+      out.push(it);
+      continue;
+    }
+    const tools: ToolItem[] = [];
+    while (i < items.length && items[i].kind === "tool") tools.push(items[i++] as ToolItem);
+    const endItem = items[i] ?? tools[tools.length - 1];
+    const seconds = span(tools[0].at, endItem?.at);
+    // A step lasts until the next step (or the reply) starts; the last step of a turn with no reply has no end.
+    const durations = tools.map((t, j) => span(t.at, (tools[j + 1] ?? items[i])?.at));
+    out.push({ tools, seconds, durations });
+    i--;
+  }
+  return out;
+}
+
+function liveSeconds(activity: Activity[]): number | undefined {
+  const starts = activity.map((a) => Date.parse(a.startedAt)).filter(Number.isFinite);
+  if (!starts.length) return undefined;
+  const first = Math.min(...starts);
+  const last = activity.reduce((m, a) => {
+    const s = Date.parse(a.startedAt);
+    const d = a.kind === "tool" && a.durationSec !== undefined ? a.durationSec * 1000 : 0;
+    return Number.isFinite(s) ? Math.max(m, s + d) : m;
+  }, first);
+  return (last - first) / 1000;
+}
+
+function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: () => void; stepSec?: number }) {
   const who = useContext(AssistantName);
   const [open, setOpen] = useState(false);
   const time = item.at ? formatTime(item.at) : undefined;
@@ -628,10 +687,13 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
       <li>
         <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={cx("chat-tool", item.error && "text-danger")}>
           <ToolIcon className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">
+          <span className="min-w-0 flex-1 break-words">
             {toolLabel(item.tool)}
             {item.summary ? ` · ${item.summary}` : ""}
-            {item.error ? " · failed" : ""}
+          </span>
+          <span className={cx("shrink-0 text-xs tabular-nums", item.error ? "text-danger" : "text-muted")} data-dynamic>
+            {stepSec !== undefined ? `${formatStepSec(stepSec)} · ` : ""}
+            {item.error ? "failed" : "done"}
           </span>
           <ChevronIcon className={cx("h-4 w-4 transition-transform", open && "rotate-90")} />
         </button>
@@ -714,8 +776,8 @@ function ActivityRow({ a }: { a: Activity }) {
     <li>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
         {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className={cx("text-xs", status === "failed" && "text-danger")}>{status}</span>
+        <span className={cx("min-w-0 flex-1 break-words", status === "running" && "chat-work-shimmer")}>{label}</span>
+        <span className={cx("shrink-0 text-xs", status === "failed" && "text-danger")}>{status}</span>
       </button>
       {open && a.kind === "tool" ? (
         <div className="ml-9 mt-1 rounded-lg border border-line bg-surface-2 p-3 text-xs">
@@ -736,11 +798,22 @@ function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c
   return (
     <section aria-label="Current run" className="space-y-2">
       {state.activity.length ? (
-        <ul className="space-y-1">
+        <WorkSummary
+          id={`live-${state.runId ?? "run"}`}
+          steps={state.activity}
+          live={!isTerminal(state.phase)}
+          seconds={liveSeconds(state.activity)}
+          defaultOpen={!text && !isTerminal(state.phase)}
+          alwaysShown={state.activity
+            .filter((a) => a.kind === "tool" && a.error)
+            .map((a) => (
+              <ActivityRow key={a.id} a={a} />
+            ))}
+        >
           {state.activity.map((a) => (
             <ActivityRow key={a.id} a={a} />
           ))}
-        </ul>
+        </WorkSummary>
       ) : null}
 
       {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
