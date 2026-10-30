@@ -58,6 +58,9 @@ export function ProjectIcon({ className }: { className?: string }) {
  * conversation an item merely links (work_links) shows as a read-only child
  * row of that item. Selecting either opens the conversation.
  */
+/** Row actions the tree hands to a custom row menu (undefined = not available for that row). */
+export type RowActions = { rename?: () => void; move?: () => void; add?: () => void; addLabel: string };
+
 export function WorkTree({
   items: realItems,
   selected,
@@ -74,6 +77,7 @@ export function WorkTree({
   onToggleSelect,
   rowMenu,
   rowDrag,
+  addOnDemand,
 }: {
   items: WorkItem[];
   selected: string | null;
@@ -94,10 +98,12 @@ export function WorkTree({
   selection?: Set<string>;
   selectMode?: boolean;
   onToggleSelect?: (id: string) => void;
-  /** optional per-row ⋯ menu (desktop sidebar: Pin to sidebar) */
-  rowMenu?: (i: WorkItem) => ReactNode;
+  /** optional per-row ⋯ menu (desktop sidebar). Gets the tree's own row actions (inline rename/add, Move…) when available. */
+  rowMenu?: (i: WorkItem, actions: RowActions) => ReactNode;
   /** optional HTML5 drag payload for a row (desktop sidebar: drag an area onto Pinned) */
   rowDrag?: (i: WorkItem) => { mime: string; data: string } | null;
+  /** hide the "Add project/item" rows until asked for (row ⋯ → Add…); the sidebar tree stays compact */
+  addOnDemand?: boolean;
 }) {
   const { items, virtual } = useMemo(() => {
     const ids = new Set(realItems.map((i) => i.id));
@@ -211,7 +217,7 @@ export function WorkTree({
   }
 
   const isOpen = (id: string) => !!visibleSet || !collapsed.has(id);
-  const showAdd = (i: WorkItem) => canAdd && !visibleSet && !virtual.has(i.id) && isContainer(i) && !i.archived;
+  const showAdd = (i: WorkItem) => canAdd && !visibleSet && !virtual.has(i.id) && isContainer(i) && !i.archived && (!addOnDemand || adding === `add:${i.id}`);
   const order: (WorkItem | AddRow)[] = [];
   const walk = (parent: string | null) => {
     for (const i of kids.get(parent) ?? []) {
@@ -224,13 +230,17 @@ export function WorkTree({
     }
   };
   walk(null);
-  if (canAdd && !visibleSet) order.push({ id: "add:", parentId: null });
+  if (canAdd && !visibleSet && !addOnDemand) order.push({ id: "add:", parentId: null });
   const tabStop = order.some((o) => o.id === focusId) ? focusId : (order[0]?.id ?? null);
 
   function focus(id: string | undefined) {
     if (!id) return;
     setFocusId(id);
     refs.current.get(id)?.focus();
+  }
+  /** after an inline add closes: back to its add row, or (on-demand rows vanish) to the row it was added under */
+  function focusAddDone(addId: string) {
+    focus(refs.current.has(addId) ? addId : addId.slice(4) || undefined);
   }
   function toggle(id: string, open?: boolean) {
     setCollapsed((c) => {
@@ -239,6 +249,22 @@ export function WorkTree({
       else n.add(id);
       return n;
     });
+  }
+
+  function rowActions(i: WorkItem): RowActions {
+    const own = !i.builtIn && !virtual.has(i.id);
+    return {
+      rename: onRename && own ? () => setRenaming({ id: i.id, title: i.title }) : undefined,
+      move: onMove && own ? () => onMove(i.id) : undefined,
+      add:
+        canAdd && !visibleSet && isContainer(i) && !i.archived && !virtual.has(i.id)
+          ? () => {
+              toggle(i.id, true);
+              setAdding(`add:${i.id}`);
+            }
+          : undefined,
+      addLabel: i.parentId === null ? "Add project" : "Add item",
+    };
   }
 
   const realKids = (id: string | null) => (kids.get(id) ?? []).filter((k) => !virtual.has(k.id) && !k.archived);
@@ -456,7 +482,7 @@ export function WorkTree({
             onCreated={(n) => onCreated?.(n)}
             onDone={() => {
               setAdding(null);
-              requestAnimationFrame(() => focus(id));
+              requestAnimationFrame(() => focusAddDone(id));
             }}
           />
         </li>
@@ -636,7 +662,7 @@ export function WorkTree({
               </span>
             )}
             {count(i)}
-            {rowMenu && !virtual.has(i.id) ? rowMenu(i) : null}
+            {rowMenu && !virtual.has(i.id) ? rowMenu(i, rowActions(i)) : null}
           </div>
           {hasKids && open ? (
             <ul role="group">
@@ -665,7 +691,7 @@ export function WorkTree({
       {order.length ? (
         <ul role="tree" aria-label="Areas" aria-multiselectable={multi || undefined}>
           {render(null, 1)}
-          {canAdd && !visibleSet ? addLi(null, 1) : null}
+          {canAdd && !visibleSet && !addOnDemand ? addLi(null, 1) : null}
         </ul>
       ) : (
         <p className="p-2 text-sm text-muted">{filter ? "Nothing matches." : "No areas yet."}</p>

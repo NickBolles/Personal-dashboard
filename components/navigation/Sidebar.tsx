@@ -5,9 +5,10 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx, ErrorNote, Spinner } from "@/components/ui";
+import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
 import { BellIcon, ChatIcon, GearIcon, InboxIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
-import { WorkTree } from "@/components/work/WorkTree";
+import { WorkTree, type RowActions } from "@/components/work/WorkTree";
+import { MoveToDialog } from "@/components/work/structure";
 import "@/components/work/work.css";
 import { useWorkMutation } from "@/components/work/common";
 import { useInbox } from "@/components/work/today";
@@ -89,6 +90,11 @@ export function Sidebar({
   const place = useWorkMutation((v: { id: string; parentId: string | null; index: number }) =>
     api.post(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
   );
+  const rename = useWorkMutation((v: { id: string; title: string }) => api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }), {
+    ok: "Renamed",
+  });
+  const { toast } = useToast();
+  const [moving, setMoving] = useState<string[] | null>(null);
   const [pins, setPins] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
   useEffect(() => {
@@ -295,21 +301,32 @@ export function Sidebar({
                 onSelect={(id) => router.push(`/areas?item=${encodeURIComponent(id)}`)}
                 onOpenConversation={(sid) => router.push(`/chat/${encodeURIComponent(sid)}`)}
                 onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
+                onRename={(id, title) => rename.mutate({ id, title })}
+                onMove={(id) => setMoving([id])}
+                onCreated={() => toast("Added", "ok")}
+                addOnDemand
                 rowDrag={(i) => (i.kind === "area" && !i.archived ? { mime: PIN_MIME, data: i.id } : null)}
-                rowMenu={(i) =>
-                  i.kind === "area" && !i.archived ? (
-                    <RowMenu
-                      title={i.title}
-                      pinned={pins.includes(i.id)}
-                      onToggle={() => updatePins(pins.includes(i.id) ? pins.filter((p) => p !== i.id) : [...pins, i.id])}
-                    />
-                  ) : null
-                }
+                rowMenu={(i, actions) => (
+                  <RowMenu
+                    title={i.title}
+                    actions={actions}
+                    onOpen={() =>
+                      router.push(
+                        i.kind === "conversation" && i.sessionId && canChat
+                          ? `/chat/${encodeURIComponent(i.sessionId)}`
+                          : `/areas?item=${encodeURIComponent(i.id)}`,
+                      )
+                    }
+                    pinned={i.kind === "area" && !i.archived ? pins.includes(i.id) : undefined}
+                    onTogglePin={() => updatePins(pins.includes(i.id) ? pins.filter((p) => p !== i.id) : [...pins, i.id])}
+                  />
+                )}
               />
             )}
           </section>
         ) : null}
       </nav>
+      {moving ? <MoveToDialog ids={moving} items={list} onClose={() => setMoving(null)} onDone={() => setMoving(null)} /> : null}
       <div className="border-t border-line p-2">
         <Link href="/settings" aria-current={path.startsWith("/settings") ? "page" : undefined} className={rowCls(path.startsWith("/settings"))}>
           <GearIcon className="h-[18px] w-[18px] shrink-0" />
@@ -320,9 +337,36 @@ export function Sidebar({
   );
 }
 
-/** Row ⋯ menu in the sidebar tree: Pin to sidebar / Unpin. Hidden until row hover/focus on fine pointers. */
-function RowMenu({ title, pinned, onToggle }: { title: string; pinned: boolean; onToggle: () => void }) {
+/**
+ * Row ⋯ menu in the sidebar tree: Open, Rename (inline), Add project/item (inline), Move…, Pin/Unpin.
+ * Hidden until row hover/focus on fine pointers. Arrow keys move between items; Esc closes and returns focus.
+ */
+function RowMenu({
+  title,
+  actions,
+  onOpen,
+  pinned,
+  onTogglePin,
+}: {
+  title: string;
+  actions: RowActions;
+  onOpen: () => void;
+  /** undefined = this row can't be pinned (not an area) */
+  pinned?: boolean;
+  onTogglePin: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const entries: { label: string; run: () => void }[] = [
+    { label: "Open", run: onOpen },
+    ...(actions.rename ? [{ label: "Rename", run: actions.rename }] : []),
+    ...(actions.add ? [{ label: actions.addLabel, run: actions.add }] : []),
+    ...(actions.move ? [{ label: "Move…", run: actions.move }] : []),
+    ...(pinned !== undefined ? [{ label: pinned ? "Unpin from sidebar" : "Pin to sidebar", run: onTogglePin }] : []),
+  ];
+  const close = (btn?: HTMLElement | null) => {
+    setOpen(false);
+    btn?.focus();
+  };
   return (
     <span className="jv-row-menu relative shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
       <button
@@ -330,7 +374,19 @@ function RowMenu({ title, pinned, onToggle }: { title: string; pinned: boolean; 
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`More for ${title}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          const btn = e.currentTarget;
+          setOpen((o) => !o);
+          if (!open) requestAnimationFrame(() => btn.nextElementSibling?.querySelector<HTMLElement>("[role=menuitem]")?.focus());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            const btn = e.currentTarget;
+            setOpen(true);
+            requestAnimationFrame(() => btn.nextElementSibling?.querySelector<HTMLElement>("[role=menuitem]")?.focus());
+          }
+        }}
         onBlur={(e) => {
           if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node | null)) setOpen(false);
         }}
@@ -343,19 +399,37 @@ function RowMenu({ title, pinned, onToggle }: { title: string; pinned: boolean; 
           role="menu"
           aria-label={`${title} actions`}
           className="absolute top-full right-0 z-50 mt-1 block min-w-40 rounded-[8px] border border-line bg-surface p-1 shadow-lg"
+          onBlur={(e) => {
+            if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node | null)) setOpen(false);
+          }}
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onToggle();
-              setOpen(false);
-            }}
-            onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-            className="block w-full rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-2"
-          >
-            {pinned ? "Unpin from sidebar" : "Pin to sidebar"}
-          </button>
+          {entries.map((m) => (
+            <button
+              key={m.label}
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              onClick={() => {
+                setOpen(false);
+                m.run();
+              }}
+              onKeyDown={(e) => {
+                const items = [...(e.currentTarget.parentElement?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? [])];
+                const at = items.indexOf(e.currentTarget);
+                if (e.key === "Escape") close(e.currentTarget.parentElement?.previousElementSibling as HTMLElement | null);
+                else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  items[(at + 1) % items.length]?.focus();
+                } else if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  items[(at - 1 + items.length) % items.length]?.focus();
+                } else if (e.key === "Tab") setOpen(false);
+              }}
+              className="block w-full rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-2 focus:bg-surface-2 focus:outline-none"
+            >
+              {m.label}
+            </button>
+          ))}
         </span>
       ) : null}
     </span>
