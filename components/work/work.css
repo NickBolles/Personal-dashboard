@@ -573,7 +573,8 @@ button.wk-kpi:hover {
   .wk-hub .wk-nav li {
     min-width: 0;
   }
-  .wk-hub .wk-nav-item > span[aria-hidden] {
+  .wk-hub .wk-nav-item > span[aria-hidden],
+  .wk-hub .wk-nav-item > svg {
     display: none;
   }
   .wk-hub .wk-nav li .wk-nav-item {

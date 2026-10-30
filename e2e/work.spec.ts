@@ -304,9 +304,20 @@ async function items(page: Page) {
 
 /** Drag with real pointer events from one element's centre to a point inside another. */
 async function dragTo(page: Page, from: ReturnType<Page["locator"]>, to: ReturnType<Page["locator"]>, at: { x: number; y: number } = { x: 0.5, y: 0.5 }) {
+  // Both ends must be on screen: earlier tests can leave the target below the fold (order-sensitive flake).
+  await to.scrollIntoViewIfNeeded();
   await from.scrollIntoViewIfNeeded();
-  const a = (await from.boundingBox())!;
-  const b = (await to.boundingBox())!;
+  let a = (await from.boundingBox())!;
+  let b = (await to.boundingBox())!;
+  const vh = page.viewportSize()?.height ?? 800;
+  if (b.y < 0 || b.y + b.height > vh) {
+    // Centre the span between source and target, then re-measure.
+    const mid = (Math.min(a.y, b.y) + Math.max(a.y + a.height, b.y + b.height)) / 2;
+    await page.mouse.wheel(0, mid - vh / 2);
+    await expect.poll(async () => (await to.boundingBox())?.y ?? -1).toBeGreaterThanOrEqual(0);
+    a = (await from.boundingBox())!;
+    b = (await to.boundingBox())!;
+  }
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
   const tx = b.x + b.width * at.x;
