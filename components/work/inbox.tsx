@@ -243,7 +243,7 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                       <span>Why: {e.reason}</span>
                     )}
                   </p>
-                  {e.capture && !twoPane ? <CaptureExtras entry={e} onAccepted={onOpenItem} /> : null}
+                  {e.capture && !twoPane ? <CaptureExtras entry={e} onAccepted={onOpenItem} onChoose={() => setAccepting(e)} /> : null}
                 </div>
                 {/* Phones: one visible action (File/Accept) + ⋯ (Dismiss). >=640 the preview pane holds the actions. */}
                 {twoPane ? null : (
@@ -258,9 +258,16 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
                         Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
                       </a>
                     ) : null}
-                    <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
-                      {e.source === "github_issue" ? "Accept…" : "File…"}
-                    </Button>
+                    {e.capture?.suggestion ? (
+                      // The suggestion chip is the row's 1-tap action; this picks somewhere else.
+                      <Button size="sm" variant="ghost" onClick={() => setAccepting(e)} aria-label={`Choose where to file: ${e.title}`}>
+                        Choose…
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
+                        {e.source === "github_issue" ? "Accept…" : "File…"}
+                      </Button>
+                    )}
                     {e.capture ? (
                       <CaptureRowMenu entry={e} label={`More for ${e.title}`} onDismiss={() => dismiss.mutate(e.id)} />
                     ) : (

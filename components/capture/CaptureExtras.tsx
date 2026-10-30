@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Dialog, OverflowMenu, type MenuItem } from "@/components/ui";
 import { useAccess } from "@/components/access";
@@ -19,9 +19,15 @@ const SKIP_TEXT: Record<string, string> = {
 };
 
 /** Phase 5 additions to a capture row: triage state, one-tap filing under the suggestion, report, thumbnails, investigate. */
-export function CaptureExtras({ entry, onAccepted }: { entry: InboxEntry; onAccepted: (id: string) => void }) {
+export function CaptureExtras({ entry, onAccepted, onChoose }: { entry: InboxEntry; onAccepted: (id: string) => void; onChoose?: () => void }) {
   const c = entry.capture!;
   const [report, setReport] = useState<string | null>(null);
+  // Long-press on the suggestion chip = "Choose…" (pick another destination); a tap files under it.
+  const hold = useRef<{ t: ReturnType<typeof setTimeout> | null; fired: boolean }>({ t: null, fired: false });
+  const endHold = () => {
+    if (hold.current.t) clearTimeout(hold.current.t);
+    hold.current.t = null;
+  };
   const file = useWorkMutation(
     () => api.post<{ item: WorkItem }>(`/api/work/inbox/${encodeURIComponent(entry.id)}/accept`, { parentId: null, useSuggestion: true }),
     { ok: "Filed", onSuccess: (r) => onAccepted(r.item.id) },
@@ -59,16 +65,41 @@ export function CaptureExtras({ entry, onAccepted }: { entry: InboxEntry; onAcce
       ) : null}
       <div className="flex flex-wrap items-center gap-1.5">
         {c.suggestion ? (
-          <Button
-            size="sm"
-            onClick={() => file.mutate(undefined)}
-            busy={file.isPending}
+          <button
+            type="button"
+            onClick={() => {
+              if (hold.current.fired) {
+                hold.current.fired = false;
+                return;
+              }
+              file.mutate(undefined);
+            }}
+            onPointerDown={() => {
+              if (!onChoose) return;
+              hold.current.fired = false;
+              hold.current.t = setTimeout(() => {
+                hold.current.fired = true;
+                onChoose();
+              }, 500);
+            }}
+            onPointerUp={endHold}
+            onPointerLeave={endHold}
+            onPointerCancel={endHold}
+            onContextMenu={(e) => {
+              if (!onChoose) return;
+              e.preventDefault();
+            }}
+            disabled={file.isPending}
+            aria-busy={file.isPending || undefined}
+            aria-label={`File under ${c.suggestion.title}`}
             data-testid="file-under-suggestion"
-            title={c.suggestion.reason ?? undefined}
+            title={[c.suggestion.reason, onChoose ? "Tap to file · hold to choose another place" : null].filter(Boolean).join(" · ") || undefined}
+            className="ai-chip inline-flex min-h-11 max-w-full items-center gap-1 rounded-full px-3 text-[13px] font-medium select-none disabled:opacity-60 sm:min-h-8"
           >
-            File under {c.suggestion.title}
-            {c.suggestion.confidence != null ? ` · ${Math.round(c.suggestion.confidence * 100)}%` : ""}
-          </Button>
+            <span aria-hidden="true">→</span>
+            <span className="min-w-0 truncate">{c.suggestion.title}</span>
+            {c.suggestion.confidence != null ? <span className="tabular-nums opacity-70">{Math.round(c.suggestion.confidence * 100)}%</span> : null}
+          </button>
         ) : null}
         {c.report ? (
           <Button size="sm" variant="ghost" onClick={() => setReport(c.report!.id)} data-testid="report-ready">
