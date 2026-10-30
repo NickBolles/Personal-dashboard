@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWorked, summarizeSteps } from "./WorkSummary";
+import { formatStepSec, formatWorked, summarizeSteps } from "./WorkSummary";
 
 describe("summarizeSteps", () => {
   it("counts steps by verb in first-seen order", () => {
@@ -24,5 +24,13 @@ describe("formatWorked", () => {
     expect(formatWorked(14.2)).toBe("Worked for 14s");
     expect(formatWorked(125)).toBe("Worked for 2m 5s");
     expect(formatWorked(undefined)).toBe("Worked");
+  });
+});
+
+describe("formatStepSec", () => {
+  it("formats per-step durations", () => {
+    expect(formatStepSec(0.4)).toBe("<1s");
+    expect(formatStepSec(4.4)).toBe("4s");
+    expect(formatStepSec(125)).toBe("2m 5s");
   });
 });

@@ -41,6 +41,15 @@ export function formatWorked(sec?: number): string {
   return `Worked for ${m}m${s ? ` ${s}s` : ""}`;
 }
 
+/** Per-step duration: "<1s", "4s", "2m 5s". */
+export function formatStepSec(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 1) return "<1s";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m${s ? ` ${s}s` : ""}`;
+}
+
 const KEY = "jarvis:work-open:";
 function readOpen(id: string): boolean | null {
   try {

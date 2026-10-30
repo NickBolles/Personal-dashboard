@@ -27,6 +27,20 @@ export const chatVisual = {
   links: [],
 } satisfies { session: SessionSummary; timeline: TimelineItem[]; children: SessionSummary[]; links: EntityLink[] };
 
+/** A turn with several tool steps (CH-R1 work summary): fixed step timings. */
+const step = (sec: number) => new Date(Date.parse(visualNow) + sec * 1000).toISOString();
+export const chatWorkVisual = {
+  ...chatVisual,
+  timeline: [
+    { kind: "user", id: "work-user", text: "Is the garage door sensor flaky?", at: step(0) },
+    { kind: "tool", id: "work-t1", tool: "search_files", summary: "garage door sensor history", detail: "12 matches", at: step(1), error: false },
+    { kind: "tool", id: "work-t2", tool: "terminal", summary: "ha history cover.garage_door --days 7", detail: "34 state changes", at: step(3), error: false },
+    { kind: "tool", id: "work-t3", tool: "web_extract", summary: "zigbee tilt sensor battery notes", detail: "timeout", at: step(9), error: true },
+    { kind: "tool", id: "work-t4", tool: "read_file", summary: "automations.yaml", detail: "garage_left_open", at: step(10), error: false },
+    { kind: "assistant", id: "work-answer", text: "Yes — it flapped 34 times this week, mostly overnight. The battery is likely low.", at: step(14) },
+  ],
+} satisfies { session: SessionSummary; timeline: TimelineItem[]; children: SessionSummary[]; links: EntityLink[] };
+
 export const alertsVisual = {
   notifications: [
     {

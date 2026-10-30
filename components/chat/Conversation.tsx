@@ -21,7 +21,7 @@ import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ContextPicker, ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { TriggerPopover, useTriggerRows, type PickerRow } from "./ComposerPicker";
 import { useAskHermes } from "./useAskHermes";
-import { WorkSummary } from "./WorkSummary";
+import { WorkSummary, formatStepSec } from "./WorkSummary";
 import { ModelSelectDialog } from "@/components/areas/ModelPicker";
 import { FileUnderDialog } from "@/components/work/conversations";
 import { displayRef, encodeMessage, splitReferences, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
@@ -484,10 +484,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
             ) : null}
             <ol className="space-y-3">
               {groupTimeline(detail.timeline).map((g) => {
-                const row = (item: TimelineItem) => (
+                const row = (item: TimelineItem, stepSec?: number) => (
                   <TimelineRow
                     key={item.id}
                     item={item}
+                    stepSec={stepSec}
                     onFork={() => {
                       setForkFrom(item);
                       setDialog("fork");
@@ -497,8 +498,13 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 if (!("tools" in g)) return row(g);
                 return (
                   <li key={`work-${g.tools[0].id}`}>
-                    <WorkSummary id={g.tools[0].id} steps={g.tools} seconds={g.seconds} alwaysShown={g.tools.filter((t) => t.error).map(row)}>
-                      {g.tools.map(row)}
+                    <WorkSummary
+                      id={g.tools[0].id}
+                      steps={g.tools}
+                      seconds={g.seconds}
+                      alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
+                    >
+                      {g.tools.map((t, j) => row(t, g.durations[j]))}
                     </WorkSummary>
                   </li>
                 );
@@ -609,7 +615,13 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 }
 
 type ToolItem = Extract<TimelineItem, { kind: "tool" }>;
-type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number };
+type TimelineGroup = TimelineItem | { tools: ToolItem[]; seconds?: number; durations: (number | undefined)[] };
+
+function span(from?: string, to?: string): number | undefined {
+  const a = from ? Date.parse(from) : NaN;
+  const b = to ? Date.parse(to) : NaN;
+  return Number.isFinite(a) && Number.isFinite(b) && b >= a ? (b - a) / 1000 : undefined;
+}
 
 /** Fold each run of consecutive tool rows into one summary group (UI only; data unchanged). */
 export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
@@ -622,11 +634,11 @@ export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
     }
     const tools: ToolItem[] = [];
     while (i < items.length && items[i].kind === "tool") tools.push(items[i++] as ToolItem);
-    const startAt = tools[0].at ? Date.parse(tools[0].at) : NaN;
     const endItem = items[i] ?? tools[tools.length - 1];
-    const endAt = endItem?.at ? Date.parse(endItem.at) : NaN;
-    const seconds = Number.isFinite(startAt) && Number.isFinite(endAt) && endAt >= startAt ? (endAt - startAt) / 1000 : undefined;
-    out.push({ tools, seconds });
+    const seconds = span(tools[0].at, endItem?.at);
+    // A step lasts until the next step (or the reply) starts; the last step of a turn with no reply has no end.
+    const durations = tools.map((t, j) => span(t.at, (tools[j + 1] ?? items[i])?.at));
+    out.push({ tools, seconds, durations });
     i--;
   }
   return out;
@@ -644,7 +656,7 @@ function liveSeconds(activity: Activity[]): number | undefined {
   return (last - first) / 1000;
 }
 
-function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void }) {
+function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: () => void; stepSec?: number }) {
   const who = useContext(AssistantName);
   const [open, setOpen] = useState(false);
   const time = item.at ? formatTime(item.at) : undefined;
@@ -678,7 +690,10 @@ function TimelineRow({ item, onFork }: { item: TimelineItem; onFork: () => void 
           <span className="min-w-0 flex-1 truncate">
             {toolLabel(item.tool)}
             {item.summary ? ` · ${item.summary}` : ""}
-            {item.error ? " · failed" : ""}
+          </span>
+          <span className={cx("shrink-0 text-xs tabular-nums", item.error ? "text-danger" : "text-muted")} data-dynamic>
+            {stepSec !== undefined ? `${formatStepSec(stepSec)} · ` : ""}
+            {item.error ? "failed" : "done"}
           </span>
           <ChevronIcon className={cx("h-4 w-4 transition-transform", open && "rotate-90")} />
         </button>
