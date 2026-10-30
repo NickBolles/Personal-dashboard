@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ComponentType, type ReactNode } from "react";
+import { AreasIcon, InboxIcon, SunIcon } from "@/components/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Badge, cx, useToast, type Tone } from "@/components/ui";
 import { api } from "@/lib/client/api";
@@ -10,10 +11,10 @@ import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/
 
 export type AreasSection = "today" | "inbox" | "tree" | "timeline" | "dashboard" | "map";
 
-const SECTIONS: { key: AreasSection; href: string; label: string; icon?: string }[] = [
-  { key: "today", href: "/areas", label: "Today", icon: "☀" },
-  { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: "↓" },
-  { key: "tree", href: "/areas?view=tree", label: "Areas", icon: "▸" },
+const SECTIONS: { key: AreasSection; href: string; label: string; icon?: ComponentType<{ className?: string }> }[] = [
+  { key: "today", href: "/areas", label: "Today", icon: SunIcon },
+  { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: InboxIcon },
+  { key: "tree", href: "/areas?view=tree", label: "Areas", icon: AreasIcon },
   { key: "timeline", href: "/areas/timeline", label: "Timeline" },
   { key: "dashboard", href: "/areas/dashboard", label: "Dashboard" },
   { key: "map", href: "/areas/map", label: "Map" },
@@ -52,11 +53,7 @@ export function AreasNav({
         {SECTIONS.map((s, n) => {
           const body = (
             <>
-              {s.icon ? (
-                <span aria-hidden="true" className="text-muted">
-                  {s.icon}
-                </span>
-              ) : null}
+              {s.icon ? <s.icon className="h-4 w-4 shrink-0 text-muted" /> : null}
               <span>{s.label}</span>
               {s.key === "inbox" && inboxCount ? (
                 <span className="wk-count" aria-label={`${inboxCount} waiting`}>

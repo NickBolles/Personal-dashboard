@@ -7,6 +7,7 @@ import { addDays, localDate } from "@/lib/time";
 import { api, ApiError } from "@/lib/client/api";
 import { Button, ButtonLink, Dialog, Field, cx, inputCls, useOnline, useToast } from "@/components/ui";
 import { chatHref } from "./chat";
+import { splitGlyph } from "@/components/actions/ActionCard";
 
 type Item = NonNullable<AssistCard["triage"]>["items"][number];
 type Result = { state: "pending" | "ok" | "unverified"; message?: string };
@@ -199,7 +200,7 @@ export function TriageDialog({
                       onChange={() => toggle(i.id)}
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate">{i.title}</span>
+                      <span className="block truncate">{splitGlyph(i.title).text}</span>
                       <span id={`due-${i.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`} className="text-xs text-muted">
                         Was due {choices.fmt(i.due)}
                       </span>
@@ -277,7 +278,7 @@ export function TriageDialog({
                     {r?.state === "ok" ? "✓" : r?.state === "unverified" ? "!" : "…"}
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate">{i.title}</span>
+                    <span className="block truncate">{splitGlyph(i.title).text}</span>
                     <span className={cx("text-xs", r?.state === "unverified" ? "text-danger" : "text-muted")}>
                       {r?.state === "ok"
                         ? `Now due ${choices.fmt(date)}`
