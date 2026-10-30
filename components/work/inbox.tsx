@@ -352,7 +352,7 @@ function InboxPreview({
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <Button size="sm" variant="primary" onClick={onPrimary} busy={busy} aria-keyshortcuts="Enter">
           {s ? "File here" : e.source === "github_issue" ? "Accept…" : "File…"}
-          <kbd className={cx(kbd, "border-white/40 text-current")}>Enter</kbd>
+          <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-[10px] opacity-75">Enter</kbd>
         </Button>
         {s ? (
           <Button size="sm" onClick={onChoose} aria-keyshortcuts="M">

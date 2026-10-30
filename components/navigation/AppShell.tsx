@@ -15,6 +15,7 @@ import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ComposerRouteWatcher } from "@/components/agents/useComposerTarget";
+import { shortcutLabel, useModKey } from "@/lib/client/platform";
 
 const MORE: Dest = {
   key: "more",
@@ -192,6 +193,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       </li>
     );
   };
+  const mod = useModKey();
   const newPrimary = () => {
     setNewMenu(false);
     if (canWork) setCapturing(true);
@@ -213,12 +215,21 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
           </Link>
           <ul className="flex min-w-0 items-center gap-0.5">{topItems.map(topItem)}</ul>
           <span className="flex-1" />
+          {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content. */}
+          {!pathname.startsWith("/chat") ? (
+            <div className="mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block" data-testid="dock-top">
+              <CommandDock variant="dock" />
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            aria-label="Search (Ctrl K)"
-            title="Search (Ctrl K)"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
+            aria-label={`Search (${shortcutLabel(mod, "K")})`}
+            title={`Search (${shortcutLabel(mod, "K")})`}
+            className={cx(
+              "inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text",
+              !pathname.startsWith("/chat") && "lg:hidden",
+            )}
           >
             <SearchIcon className="h-[18px] w-[18px]" />
           </button>
@@ -228,7 +239,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                 type="button"
                 onClick={newPrimary}
                 aria-label={canWork ? "New capture" : "New chat"}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-l-[8px] bg-accent px-3 text-[0.8125rem] font-semibold text-accent-contrast hover:opacity-90"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-l-[8px] border border-line bg-surface px-3 text-[0.8125rem] font-medium text-text hover:border-line-strong hover:bg-surface-2"
               >
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden lg:inline">New</span>
@@ -239,7 +250,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                 aria-label="More new options"
                 aria-haspopup="menu"
                 aria-expanded={newMenu}
-                className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-r-[8px] border-l border-black/15 bg-accent text-accent-contrast hover:opacity-90"
+                className="-ml-px inline-flex min-h-11 min-w-11 items-center justify-center rounded-r-[8px] border border-line bg-surface text-muted hover:border-line-strong hover:bg-surface-2 hover:text-text"
               >
                 <ChevronIcon className="h-3.5 w-3.5 rotate-90" />
               </button>
@@ -307,7 +318,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       </main>
       {/* Tablet / desktop: bottom-centre command dock (§5). Chat has its own composer there. */}
       {!pathname.startsWith("/chat") ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 hidden justify-center px-4 sm:flex">
+        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 hidden justify-center px-4 sm:flex lg:hidden">
           <div className="pointer-events-auto w-full max-w-[520px]">
             <CommandDock variant="dock" />
           </div>
