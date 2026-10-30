@@ -31,12 +31,20 @@ function actionMap(page: Page) {
 function orb(page: Page) {
   return page.locator('[data-testid="dock-orb"]:visible');
 }
-/** Orb tap → radial menu → Search → palette. */
+/** Orb tap → command palette. */
 async function openPalette(page: Page) {
   await expect(async () => {
-    if (!(await actionMap(page).count())) await orb(page).click();
-    await actionMap(page).click();
+    if (!(await page.getByRole("combobox", { name: "Search Jarvis" }).count())) await orb(page).click();
     await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused({ timeout: 1000 });
+  }).toPass();
+}
+async function actionMapOpen(page: Page) {
+  await expect(async () => {
+    if (!(await actionMap(page).count())) {
+      await orb(page).focus();
+      await page.keyboard.press("ArrowUp");
+    }
+    await expect(actionMap(page)).toBeVisible({ timeout: 1000 });
   }).toPass();
 }
 async function centre(l: Locator) {
@@ -200,7 +208,7 @@ test("settings → connections → GitHub: add, test, warn, webhook secret; assi
   await removeConnections(page);
 });
 
-test("command dock: tap opens the radial menu, Search opens the palette, hold-and-slide runs an action, release on the orb cancels, Ctrl+. works", async ({
+test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-slide runs an action, release on the orb cancels, Ctrl+. works", async ({
   page,
 }) => {
   await page.goto("/home");
@@ -208,14 +216,20 @@ test("command dock: tap opens the radial menu, Search opens the palette, hold-an
   const o = orb(page);
   await expect(o).toBeVisible();
 
-  // Tap → radial command menu (focus on the first action); Esc returns focus to the orb.
-  await o.click();
+  // ↑ on the focused orb → radial command menu (focus on the first action); Esc returns focus to the orb.
+  await o.focus();
+  await page.keyboard.press("ArrowUp");
   await expect(page.locator('[data-petal="search"]')).toBeFocused();
   await expect(o).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Escape");
   await expect(actionMap(page)).toHaveCount(0);
   await expect(o).toBeFocused();
-  // Search in the radial menu → command palette with Work commands.
+  // Search in the radial menu → command palette.
+  await actionMapOpen(page);
+  await actionMap(page).click();
+  await expect(page.getByRole("combobox", { name: "Search Jarvis" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  // Tap → command palette with Work commands.
   await openPalette(page);
   const box = page.getByRole("combobox", { name: "Search Jarvis" });
   await box.fill("inbox");

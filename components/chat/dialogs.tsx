@@ -138,7 +138,7 @@ export function ForkDialog({
         {preview ? (
           <div className="rounded-xl border border-line bg-surface-2 p-3">
             <p className="text-xs font-medium text-muted">Fork point</p>
-            <p className="prose-chat mt-1 line-clamp-4 text-sm">{preview}</p>
+            <p className="[overflow-wrap:anywhere] mt-1 whitespace-pre-wrap line-clamp-4 text-sm">{preview}</p>
           </div>
         ) : null}
         <Field id="fork-title" label="Title (optional)">

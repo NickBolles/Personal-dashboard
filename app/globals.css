@@ -408,11 +408,11 @@
 
   /* Uppercase micro-label for sections and blocks. */
   .eyebrow {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 0.6875rem;
     line-height: 1rem;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--muted);
   }
@@ -808,19 +808,6 @@
   display: none;
 }
 
-.prose-chat {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-.prose-chat code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-  background: var(--surface-2);
-  border-radius: 4px;
-  padding: 0.05em 0.3em;
-}
-
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -831,8 +818,15 @@
 
 @media (min-width: 640px) {
   .pb-nav {
-    /* tablet/desktop: gutter for the bottom-centre command dock */
+    /* tablet: gutter for the bottom-centre command dock */
     padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pb-nav {
+    /* desktop: the dock lives in the top row, nothing floats over content */
+    padding-bottom: 1.5rem;
   }
 }
 
