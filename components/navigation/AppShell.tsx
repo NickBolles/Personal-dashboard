@@ -11,6 +11,7 @@ import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
+import { Sidebar, useSidebarCollapsed } from "./Sidebar";
 import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
@@ -71,6 +72,26 @@ function useNavMemory(pathname: string) {
     // Tapping the active destination returns to its root.
     return m && !d.match(pathname) ? m : d.href;
   };
+}
+
+const SEGMENT_LABELS: Record<string, string> = { "home-control": "House", "daily-compass": "Daily Compass", home: "Today", chat: "Chat" };
+const titleize = (s: string) =>
+  SEGMENT_LABELS[s] ??
+  decodeURIComponent(s)
+    .replace(/[-_]+/g, " ")
+    .replace(/^./, (c) => c.toUpperCase());
+
+/** Path crumbs for the desktop header bar: destination, then the sub-path (chat ids collapse to "Conversation"). */
+export function breadcrumbFor(pathname: string): { href: string; label: string }[] {
+  const parts = pathname.split("/").filter(Boolean);
+  if (!parts.length) return [{ href: "/home", label: "Today" }];
+  const out: { href: string; label: string }[] = [];
+  parts.forEach((seg, i) => {
+    const href = "/" + parts.slice(0, i + 1).join("/");
+    const label = i === 0 ? (destFor(href)?.label ?? titleize(seg)) : parts[0] === "chat" ? "Conversation" : titleize(seg);
+    out.push({ href, label: i === 0 && parts[0] === "chat" ? "Chat" : label });
+  });
+  return out.slice(0, 4);
 }
 
 export function useUnreadCount() {
@@ -194,6 +215,8 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     );
   };
   const mod = useModKey();
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
+  const crumbs = breadcrumbFor(pathname);
   const newPrimary = () => {
     setNewMenu(false);
     if (canWork) setCapturing(true);
@@ -201,19 +224,39 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   };
 
   return (
-    <div className="min-h-dvh">
-      {/* Desktop / tablet: one top row (§5). */}
+    <div className="jv-shell min-h-dvh" data-sidebar={sidebarCollapsed ? "collapsed" : "open"}>
+      {/* Desktop (≥1024): Arc-style left sidebar (D1). Tablet keeps the top row, phones the bottom bar. */}
+      <Suspense fallback={null}>
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} unread={unread} canWork={canWork} canChat={canChat} />
+      </Suspense>
+      {/* Tablet: one top row (§5). Desktop: the page header bar (breadcrumb + page actions) beside the sidebar. */}
       <header className="hidden border-b border-line bg-surface sm:block">
         <nav aria-label="Primary" className="flex h-11 items-center gap-1 px-2 lg:px-3">
           <Link
             href="/home"
             aria-label="Jarvis home"
-            className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em]"
+            className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em] lg:hidden"
           >
             <span aria-hidden="true" className="brand-mark" />
             <span className="hidden xl:inline">Jarvis</span>
           </Link>
-          <ul className="flex min-w-0 items-center gap-0.5">{topItems.map(topItem)}</ul>
+          <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
+          <ol aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 text-[0.875rem] lg:flex" data-testid="page-breadcrumb">
+            {crumbs.map((c, i) => (
+              <li key={c.href} className="flex min-w-0 items-center gap-1">
+                {i > 0 ? <ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" /> : null}
+                {i === crumbs.length - 1 ? (
+                  <span aria-current="page" className="truncate font-semibold text-text">
+                    {c.label}
+                  </span>
+                ) : (
+                  <Link href={c.href} className="inline-flex min-h-11 items-center truncate text-muted hover:text-text">
+                    {c.label}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ol>
           <span className="flex-1" />
           {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content. */}
           {!pathname.startsWith("/chat") ? (

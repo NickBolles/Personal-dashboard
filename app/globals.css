@@ -839,6 +839,26 @@
   }
 }
 
+/* Desktop Arc-style sidebar (D1): everything beside it shifts by its width. */
+.jv-shell {
+  --sidebar-w: 0px;
+}
+@media (min-width: 1024px) {
+  .jv-shell {
+    --sidebar-w: 248px;
+  }
+  .jv-shell[data-sidebar="collapsed"] {
+    --sidebar-w: 60px;
+  }
+  .jv-shell > header,
+  .jv-shell > main {
+    margin-left: var(--sidebar-w);
+  }
+  .jv-sidebar {
+    width: var(--sidebar-w);
+  }
+}
+
 /*
  * Home: calm cards with one purposeful accent. The accent bar is decorative;
  * every card also says its reason in text. Motion is short and subtle, and the
