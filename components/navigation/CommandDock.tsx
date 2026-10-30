@@ -88,13 +88,14 @@ type Pt = { x: number; y: number };
 /**
  * Where the radial map is centred. Normally on the orb; when the orb sits near
  * a screen edge (the desktop rail foot) the centre moves inwards so every petal
- * fits, and the orb stays a cancel zone.
+ * fits, and the orb stays a cancel zone. The petals sit on an upper arc, so a
+ * top-row orb (desktop header) pushes the centre down until the arc fits.
  */
 export function mapCentre(orb: Pt, vw: number): Pt {
   const margin = 215; // max radius 165 + petal half-width + gutter
   const lo = Math.min(margin, vw / 2);
   const hi = Math.max(vw - margin, vw / 2);
-  return { x: Math.max(lo, Math.min(hi, orb.x)), y: orb.y };
+  return { x: Math.max(lo, Math.min(hi, orb.x)), y: Math.max(margin, orb.y) };
 }
 
 /** Petals the person can use: sub-entries map to commands they hold; empty petals disappear. */
