@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner } from "@/components/ui";
 import { BellIcon, ChatIcon, GearIcon, InboxIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
 import { WorkTree } from "@/components/work/WorkTree";
+import "@/components/work/work.css";
 import { useWorkMutation } from "@/components/work/common";
 import { useInbox } from "@/components/work/today";
 import { OPEN_SEARCH_EVENT } from "@/components/search/SearchDialog";
@@ -101,7 +102,6 @@ export function Sidebar({
 
   const list = items.data?.items ?? [];
   const byId = new Map(list.map((i) => [i.id, i]));
-  const areas = list.filter((i) => i.kind === "area" && !i.archived);
   const pinned = pins.map((id) => byId.get(id)).filter((i): i is WorkItem => !!i);
   const selectedItem = path.startsWith("/areas") ? params.get("item") : null;
   const sessionId = path.startsWith("/chat/") ? decodeURIComponent(path.slice(6)) : null;
@@ -222,9 +222,9 @@ export function Sidebar({
             onDrop={(e) => onDropPin(e, null)}
             className={cx("rounded-[10px]", dropping && "ring-2 ring-accent/50")}
           >
-            {!collapsed ? <h2 className="wk-label px-1 pb-1">Pinned</h2> : null}
+            {!collapsed ? <h2 className="jv-side-eyebrow px-1 pb-1">Pinned</h2> : null}
             {pinned.length === 0 && !collapsed ? (
-              <p className="px-1 text-[12px] text-muted">Drag an area here to pin it.</p>
+              <p className="px-1 text-[12px] text-muted">Drag an area here, or use ⋯ → Pin to sidebar.</p>
             ) : (
               <ul className={cx("grid gap-1", collapsed ? "grid-cols-1" : "grid-cols-2")}>
                 {pinned.map((a) => {
@@ -276,35 +276,13 @@ export function Sidebar({
         ) : null}
 
         {canWork && !collapsed ? (
-          <section aria-label="Areas" className="min-h-0">
+          <section aria-label="Areas" className="work-ui jv-side-tree min-h-0">
             <div className="flex items-center justify-between px-1 pb-1">
-              <h2 className="wk-label">Areas</h2>
+              <h2 className="jv-side-eyebrow">Areas</h2>
               <Link href="/areas" className="text-[12px] text-muted hover:text-text">
                 All
               </Link>
             </div>
-            {/* Top-level areas are draggable onto Pinned; the tree below keeps its own pointer drag for re-parenting. */}
-            {areas.length ? (
-              <ul className="mb-1 flex flex-wrap gap-1 px-1" aria-label="Areas you can pin">
-                {areas
-                  .filter((a) => !pins.includes(a.id))
-                  .map((a) => (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        draggable
-                        onDragStart={dragStart(a.id)}
-                        onClick={() => updatePins([...pins, a.id])}
-                        aria-label={`Pin ${a.title}`}
-                        title="Click or drag to Pinned"
-                        className="rounded-full border border-dashed border-line px-2 py-0.5 text-[11.5px] text-muted hover:border-line-strong hover:text-text"
-                      >
-                        + {a.title}
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
             {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
             {items.isPending ? (
               <Spinner label="Loading areas…" />
@@ -317,6 +295,16 @@ export function Sidebar({
                 onSelect={(id) => router.push(`/areas?item=${encodeURIComponent(id)}`)}
                 onOpenConversation={(sid) => router.push(`/chat/${encodeURIComponent(sid)}`)}
                 onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
+                rowDrag={(i) => (i.kind === "area" && !i.archived ? { mime: PIN_MIME, data: i.id } : null)}
+                rowMenu={(i) =>
+                  i.kind === "area" && !i.archived ? (
+                    <RowMenu
+                      title={i.title}
+                      pinned={pins.includes(i.id)}
+                      onToggle={() => updatePins(pins.includes(i.id) ? pins.filter((p) => p !== i.id) : [...pins, i.id])}
+                    />
+                  ) : null
+                }
               />
             )}
           </section>
@@ -329,5 +317,88 @@ export function Sidebar({
         </Link>
       </div>
     </aside>
+  );
+}
+
+/** Row ⋯ menu in the sidebar tree: Pin to sidebar / Unpin. Hidden until row hover/focus on fine pointers. */
+function RowMenu({ title, pinned, onToggle }: { title: string; pinned: boolean; onToggle: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="jv-row-menu relative shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`More for ${title}`}
+        onClick={() => setOpen((o) => !o)}
+        onBlur={(e) => {
+          if (!e.currentTarget.parentElement?.contains(e.relatedTarget as Node | null)) setOpen(false);
+        }}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-muted hover:bg-surface-2 hover:text-text"
+      >
+        ⋯
+      </button>
+      {open ? (
+        <span
+          role="menu"
+          aria-label={`${title} actions`}
+          className="absolute top-full right-0 z-50 mt-1 block min-w-40 rounded-[8px] border border-line bg-surface p-1 shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onToggle();
+              setOpen(false);
+            }}
+            onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+            className="block w-full rounded-[6px] px-2 py-1.5 text-left text-[13px] hover:bg-surface-2"
+          >
+            {pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+          </button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * Desktop header crumbs. On /areas?item=… they walk the item's ancestry
+ * (area › project › item) from the shared items query; elsewhere they are the path crumbs.
+ */
+export function HeaderCrumbs({ base, canWork, chevron }: { base: { href: string; label: string }[]; canWork: boolean; chevron: ReactNode }) {
+  const path = usePathname();
+  const params = useSearchParams();
+  const itemId = path.startsWith("/areas") ? params.get("item") : null;
+  const items = useQuery({
+    queryKey: ["work", "items", false],
+    queryFn: () => api.get<ItemsResponse>("/api/work/items"),
+    enabled: canWork && !!itemId,
+  });
+  let crumbs = base;
+  if (itemId && items.data) {
+    const byId = new Map(items.data.items.map((i) => [i.id, i]));
+    const chain: WorkItem[] = [];
+    for (let cur = byId.get(itemId), n = 0; cur && n < 8; cur = cur.parentId ? byId.get(cur.parentId) : undefined, n++) chain.unshift(cur);
+    if (chain.length)
+      crumbs = [{ href: "/areas", label: "Areas" }, ...chain.slice(-3).map((i) => ({ href: `/areas?item=${encodeURIComponent(i.id)}`, label: i.title }))];
+  }
+  return (
+    <ol aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 text-[0.875rem] lg:flex" data-testid="page-breadcrumb">
+      {crumbs.map((c, i) => (
+        <li key={c.href} className={cx("flex min-w-0 items-center gap-1", i < crumbs.length - 1 && "shrink-[2]")}>
+          {i > 0 ? chevron : null}
+          {i === crumbs.length - 1 ? (
+            <span aria-current="page" className="truncate font-semibold text-text" data-dynamic>
+              {c.label}
+            </span>
+          ) : (
+            <Link href={c.href} className="inline-flex min-h-11 min-w-0 items-center truncate text-muted hover:text-text" data-dynamic>
+              <span className="truncate">{c.label}</span>
+            </Link>
+          )}
+        </li>
+      ))}
+    </ol>
   );
 }

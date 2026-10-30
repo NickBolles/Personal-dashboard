@@ -11,7 +11,7 @@ import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
-import { Sidebar, useSidebarCollapsed } from "./Sidebar";
+import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
 import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
@@ -241,26 +241,13 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             <span className="hidden xl:inline">Jarvis</span>
           </Link>
           <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
-          <ol aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 text-[0.875rem] lg:flex" data-testid="page-breadcrumb">
-            {crumbs.map((c, i) => (
-              <li key={c.href} className="flex min-w-0 items-center gap-1">
-                {i > 0 ? <ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" /> : null}
-                {i === crumbs.length - 1 ? (
-                  <span aria-current="page" className="truncate font-semibold text-text">
-                    {c.label}
-                  </span>
-                ) : (
-                  <Link href={c.href} className="inline-flex min-h-11 items-center truncate text-muted hover:text-text">
-                    {c.label}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ol>
+          <Suspense fallback={null}>
+            <HeaderCrumbs base={crumbs} canWork={canWork} chevron={<ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" />} />
+          </Suspense>
           <span className="flex-1" />
           {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content. */}
           {!pathname.startsWith("/chat") ? (
-            <div className="mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block" data-testid="dock-top">
+            <div className="jv-dock-inline mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block" data-testid="dock-top">
               <CommandDock variant="dock" />
             </div>
           ) : null}

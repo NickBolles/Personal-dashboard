@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cx, inputCls } from "@/components/ui";
 import { KIND_LABELS, STATUS_LABELS, isContainer, rollup, type LinkedConversationRow, type WorkItem } from "@/lib/work";
 import { ChatIcon } from "@/components/icons";
@@ -72,6 +72,8 @@ export function WorkTree({
   selection,
   selectMode,
   onToggleSelect,
+  rowMenu,
+  rowDrag,
 }: {
   items: WorkItem[];
   selected: string | null;
@@ -92,6 +94,10 @@ export function WorkTree({
   selection?: Set<string>;
   selectMode?: boolean;
   onToggleSelect?: (id: string) => void;
+  /** optional per-row ⋯ menu (desktop sidebar: Pin to sidebar) */
+  rowMenu?: (i: WorkItem) => ReactNode;
+  /** optional HTML5 drag payload for a row (desktop sidebar: drag an area onto Pinned) */
+  rowDrag?: (i: WorkItem) => { mime: string; data: string } | null;
 }) {
   const { items, virtual } = useMemo(() => {
     const ids = new Set(realItems.map((i) => i.id));
@@ -543,6 +549,17 @@ export function WorkTree({
           <div
             data-row-id={i.id}
             data-kind={i.kind}
+            draggable={rowDrag && !virtual.has(i.id) && rowDrag(i) ? true : undefined}
+            onDragStart={
+              rowDrag
+                ? (e) => {
+                    const d = rowDrag(i);
+                    if (!d) return;
+                    e.dataTransfer.setData(d.mime, d.data);
+                    e.dataTransfer.effectAllowed = "copyMove";
+                  }
+                : undefined
+            }
             data-selected={sel || undefined}
             className={cx(
               "wk-tree-row relative flex cursor-pointer items-center gap-1.5 pr-2 text-[13.5px]",
@@ -619,6 +636,7 @@ export function WorkTree({
               </span>
             )}
             {count(i)}
+            {rowMenu && !virtual.has(i.id) ? rowMenu(i) : null}
           </div>
           {hasKids && open ? (
             <ul role="group">

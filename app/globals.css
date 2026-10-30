@@ -857,6 +857,54 @@
   .jv-sidebar {
     width: var(--sidebar-w);
   }
+  /* The sidebar owns the Areas tree at >=1024: drop the in-page column on /areas and /chat. */
+  .jv-shell .wk-hub {
+    background: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jv-shell .wk-hub > #work-content {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .jv-shell .wk-hub > #work-tree,
+  .jv-shell .jv-chat-aside {
+    display: none;
+  }
+}
+/* Ask Jarvis dock seated in the 44px header row: a flat 32px field, not a floating pill. */
+@media (min-width: 1024px) {
+  .jv-dock-inline [data-testid="dock-orb"] {
+    min-height: 32px;
+    box-shadow: none;
+    padding-block: 0;
+  }
+}
+/* Sidebar eyebrows: sentence case, 11px semibold (same in light and dark). */
+.jv-side-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--muted);
+}
+/* Sidebar tree: ~30px rows on fine pointers (rows are treeitems, not Primary nav, so the 44px rule
+   doesn't apply; WCAG 2.5.8 24px minimum is met). Grip and ⋯ appear on hover/focus only. */
+@media (pointer: fine) {
+  .jv-side-tree .wk-tree-row {
+    min-height: 30px;
+    font-size: 13px;
+  }
+  .jv-side-tree [role="treeitem"] {
+    padding-block: 0;
+  }
+  .jv-side-tree .jv-row-menu {
+    opacity: 0;
+  }
+  .jv-side-tree .wk-tree-row:hover .jv-row-menu,
+  .jv-side-tree .jv-row-menu:focus-within,
+  .jv-side-tree [role="treeitem"]:focus-visible > .wk-tree-row .jv-row-menu {
+    opacity: 1;
+  }
 }
 
 /*
