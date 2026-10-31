@@ -214,7 +214,7 @@ self.addEventListener("push", (event) => {
 async function fileFromNotification(url) {
   const u = new URL(url, self.location.origin);
   const entry = u.searchParams.get("entry");
-  if (u.origin !== self.location.origin || u.searchParams.get("view") !== "inbox" || !entry) return null;
+  if (u.origin !== self.location.origin || (u.pathname !== "/inbox" && u.searchParams.get("view") !== "inbox") || !entry) return null;
   try {
     const res = await fetch(`/api/work/inbox/${encodeURIComponent(entry)}/file-suggestion`, {
       method: "POST",
