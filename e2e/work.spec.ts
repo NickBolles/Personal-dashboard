@@ -400,8 +400,8 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
 
   // Drag-and-drop: drop V2 onto the middle of V4 → it becomes V4's child (moved_from recorded).
   await showTree(page);
-  const handle = page.locator(`[data-drag-handle="${ids["V2 baseline"]}"]`);
-  const target = page.locator(`[data-row-id="${ids["V4 lessons"]}"]`);
+  const handle = page.locator(`#work-tree [data-drag-handle="${ids["V2 baseline"]}"]`);
+  const target = page.locator(`#work-tree [data-row-id="${ids["V4 lessons"]}"]`);
   await dragTo(page, handle, target);
   await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V2 baseline"])?.parentId).toBe(ids["V4 lessons"]);
   // Undo (shown for ~10 s) puts it back.
@@ -411,7 +411,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V2 baseline"])?.parentId).toBe(ids.project);
 
   // Reorder by dragging onto the top edge of V2: V5 goes first among the project's children.
-  await dragTo(page, page.locator(`[data-drag-handle="${ids["V5 evaluator contract"]}"]`), page.locator(`[data-row-id="${ids["V2 baseline"]}"]`), {
+  await dragTo(page, page.locator(`#work-tree [data-drag-handle="${ids["V5 evaluator contract"]}"]`), page.locator(`#work-tree [data-row-id="${ids["V2 baseline"]}"]`), {
     x: 0.5,
     y: 0.1,
   });
