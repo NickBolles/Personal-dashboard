@@ -1,7 +1,7 @@
 import "server-only";
 import { and, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { attachmentsFor, createCapture, moveCaptureToItem } from "@/server/capture";
-import { repointReports } from "@/server/ai/reports";
+import { repointReports, unpointReports } from "@/server/ai/reports";
 import type { z } from "zod";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
@@ -12,7 +12,7 @@ import type { captureSchema, inboxAcceptSchema, InboxEntry, InboxResponse } from
 import { unfiledConversations } from "./conversations";
 import type { AssignedIssue } from "./github-rules";
 import type { StoredConnection } from "./github";
-import { addLink, createItem, ensureMiscellaneous } from "./store";
+import { addLink, createItem, ensureMiscellaneous, updateItem } from "./store";
 
 /**
  * The Work inbox (docs/work.md): GitHub issues assigned to you (poller and
@@ -344,6 +344,42 @@ export async function fileSuggestion(user: CurrentUser, id: string, correlationI
     detail: { item: item.id, via: "push" },
   });
   return { itemId: item.id, title: item.title, parentTitle: live.title, already: false };
+}
+
+/** How long a bulk "Accept N suggestions" can be undone. */
+export const UNDO_ACCEPT_MS = 10 * 60_000;
+
+/**
+ * Undo of acceptEntry (the Inbox's bulk "Accept N suggestions" → Undo): the entry is
+ * back in the Inbox, its attachments and reports point at it again and the thread it
+ * created is archived (never deleted, so nothing added since is lost). Only within
+ * UNDO_ACCEPT_MS of the accept. Idempotent: an entry that isn't filed answers ok.
+ */
+export function unacceptEntry(user: CurrentUser, id: string, correlationId: string, now = new Date()) {
+  const r = ownedEntry(user.id, id);
+  if (!r.acceptedAt) return { ok: true, undone: false };
+  if (now.getTime() - Date.parse(r.acceptedAt) > UNDO_ACCEPT_MS) throw new HttpError(409, "undo_expired", "Too late to undo; archive the thread instead");
+  const itemId = r.acceptedItemId;
+  if (itemId) {
+    try {
+      updateItem(user, itemId, { archived: true }, correlationId);
+    } catch {
+      /* already gone: just reopen the entry */
+    }
+    getDb().update(schema.captureAttachments).set({ itemId: null }).where(eq(schema.captureAttachments.inboxId, id)).run();
+    unpointReports(user.id, id, itemId);
+  }
+  getDb().update(I).set({ acceptedAt: null, acceptedItemId: null, updatedAt: nowIso() }).where(eq(I.id, id)).run();
+  audit({
+    actor: user.id,
+    action: "work.inbox_unaccept",
+    source: "work",
+    sourceRecord: id,
+    result: "ok",
+    correlationId,
+    detail: { item: itemId, kind: r.source },
+  });
+  return { ok: true, undone: true };
 }
 
 export function dismissEntry(user: CurrentUser, id: string, correlationId: string) {

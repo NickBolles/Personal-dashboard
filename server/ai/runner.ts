@@ -445,7 +445,7 @@ async function handleFailure(id: string, e: unknown, kind: AiJobKind, title: str
         body: errorText(code),
         source: "work",
         deepLink:
-          row.subjectType === "work_item" ? `/areas?item=${encodeURIComponent(row.subjectId)}` : `/areas?view=inbox&entry=${encodeURIComponent(row.subjectId)}`,
+          row.subjectType === "work_item" ? `/areas?item=${encodeURIComponent(row.subjectId)}` : `/inbox?entry=${encodeURIComponent(row.subjectId)}`,
         dedupeKey: `ai:failed:${id}`,
       },
       row.userId,
@@ -635,7 +635,7 @@ function notifyReport(row: typeof J.$inferSelect, reportId: string, title: strin
   const deepLink =
     row.subjectType === "work_item"
       ? `/areas?item=${encodeURIComponent(row.subjectId)}&report=${encodeURIComponent(reportId)}`
-      : `/areas?view=inbox&entry=${encodeURIComponent(row.subjectId)}`;
+      : `/inbox?entry=${encodeURIComponent(row.subjectId)}`;
   if (recent >= 3) {
     // Batch: >3 in 10 minutes collapse into one escalating row.
     notify(

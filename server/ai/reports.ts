@@ -394,6 +394,15 @@ export function childIdsOfPlanOp(payload: string): string[] {
 }
 
 /** Re-point an inbox entry's reports to the item it was filed as (spec §4.2). */
+/** Undo of repointReports: reports that moved to `itemId` when the entry was filed go back to the inbox entry. */
+export function unpointReports(userId: string, inboxId: string, itemId: string) {
+  getDb()
+    .update(R)
+    .set({ subjectType: "inbox", subjectId: inboxId })
+    .where(and(eq(R.userId, userId), eq(R.subjectType, "work_item"), eq(R.subjectId, itemId), eq(R.originInboxId, inboxId)))
+    .run();
+}
+
 export function repointReports(userId: string, inboxId: string, itemId: string) {
   getDb()
     .update(R)

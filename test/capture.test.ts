@@ -51,7 +51,7 @@ vi.mock("@/integrations/hermes/client", () => {
 });
 vi.mock("@/integrations/store", async (orig) => ({ ...(await orig<typeof import("@/integrations/store")>()), isConfigured: () => true }));
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession } from "@/server/auth";
 import { createPerson } from "@/server/people";
@@ -71,6 +71,7 @@ import * as tokenRoute from "@/app/api/devices/capture-tokens/[id]/route";
 import * as acceptRoute from "@/app/api/work/inbox/[id]/accept/route";
 import * as fileSuggestionRoute from "@/app/api/work/inbox/[id]/file-suggestion/route";
 import * as dismissRoute from "@/app/api/work/inbox/[id]/dismiss/route";
+import * as unacceptRoute from "@/app/api/work/inbox/[id]/unaccept/route";
 import { purgeDismissedCaptures } from "@/server/capture/purge";
 import { dispatchOnce } from "@/server/notifications/dispatcher";
 import { contains32, jpegWithGps, LAT_MARK } from "./fixtures/exif";
@@ -216,6 +217,44 @@ describe("POST /api/capture", () => {
     const att = getDb().select().from(schema.captureAttachments).get()!;
     expect(links.map((l) => l.url).sort()).toEqual([`/api/capture/attachments/${att.id}`, "https://example.com/post"].sort());
     expect(att.itemId).toBe(item.id);
+  });
+
+  it("bulk accept → one Undo: entries return to the inbox, attachments re-point, threads archived", async () => {
+    const ids: string[] = [];
+    for (const [n, t] of ["Bulk undo alpha", "Bulk undo beta"].entries()) {
+      const r = await req(captureRoute.POST, {
+        body: multipart({ text: t, clientCaptureId: `bulk-undo-${n}` }, [{ name: "s.png", type: "image/png", data: PNG }]),
+      });
+      ids.push((await r.json()).entry.id);
+    }
+    const made: string[] = [];
+    for (const id of ids) made.push((await (await req(acceptRoute.POST, { json: { parentId: null }, params: { id } })).json()).item.id);
+    for (const id of ids) {
+      const u = await req(unacceptRoute.POST, { params: { id } });
+      expect(u.status).toBe(200);
+      expect((await u.json()).undone).toBe(true);
+    }
+    const rows = getDb().select().from(schema.workInbox).where(inArray(schema.workInbox.id, ids)).all();
+    expect(rows.every((r) => r.acceptedAt === null && r.acceptedItemId === null)).toBe(true);
+    expect(
+      getDb()
+        .select()
+        .from(schema.captureAttachments)
+        .where(inArray(schema.captureAttachments.inboxId, ids))
+        .all()
+        .every((a) => a.itemId === null),
+    ).toBe(true);
+    expect(
+      getDb()
+        .select()
+        .from(schema.workItems)
+        .where(inArray(schema.workItems.id, made))
+        .all()
+        .every((i) => i.archived),
+    ).toBe(true);
+    // Idempotent, and it can be filed again.
+    expect((await (await req(unacceptRoute.POST, { params: { id: ids[0] } })).json()).undone).toBe(false);
+    expect((await req(acceptRoute.POST, { json: { parentId: null }, params: { id: ids[0] } })).status).toBe(200);
   });
 
   it("limits: 415 on type mismatch or SVG, 413 on too many / too large files", async () => {

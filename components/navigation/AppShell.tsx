@@ -26,7 +26,7 @@ const MORE: Dest = {
   match: (p) => p === "/more" || DESTINATIONS.some((d) => d.match(p)) || p.startsWith("/settings"),
 };
 
-const INBOX: Dest = { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: TodoIcon, match: () => false };
+const INBOX: Dest = { key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon, match: () => false };
 const CHAT: Dest = { key: "chat", href: "/chat", label: "Chat", icon: ChatIcon, match: (p) => p.startsWith("/chat") };
 const isAreasPath = (p: string) => p === "/areas" || p.startsWith("/areas/") || p === "/work" || p.startsWith("/work/");
 
