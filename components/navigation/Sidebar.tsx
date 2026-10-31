@@ -42,8 +42,12 @@ function savePins(pins: string[]) {
 export function useSidebarCollapsed() {
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount (SSR has no storage)
-    setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount (SSR has no storage)
+      setCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+    } catch {
+      /* storage blocked: keep the default */
+    }
   }, []);
   const toggle = () =>
     setCollapsed((c) => {

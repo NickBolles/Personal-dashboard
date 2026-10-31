@@ -642,7 +642,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               sessionId={sessionId}
               areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
               selected={context}
-              onToggle={(chip) => setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 20)))}
+              onToggle={(chip) => setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))}
             />
             <Dialog open={dialog === "links"} onClose={() => setDialog(null)} title="Context & links">
               <LinksPanel links={panel.links} context={context} readOnly={readOnly} onPatch={panel.patch} onRemoveContext={removeContext} />
