@@ -163,9 +163,9 @@ export function WorkView({
 
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
-      <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
+      <div className="wk-hub-top min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
         <header className="mb-2 flex items-center justify-between gap-2 px-1">
-          <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
+          <h1 className="wk-hub-title text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
           {/* Desktop: the sidebar owns the tree, so bulk select is a page mode (multi-select list in the page body). */}
           <Button
             size="sm"
@@ -207,7 +207,7 @@ export function WorkView({
               }
             />
             {selection.size ? (
-              <div className="wk-bulk mt-2" role="region" aria-label="Selection">
+              <div className="wk-bulk mt-2 lg:max-w-2xl" role="region" aria-label="Selection">
                 <span className="mr-auto">{selection.size} selected</span>
                 <Button size="sm" onClick={() => setMoving([...selection])}>
                   Move to…
@@ -215,7 +215,7 @@ export function WorkView({
                 <Button size="sm" busy={bulkArchive.isPending} onClick={() => bulkArchive.mutate([...selection])}>
                   Archive
                 </Button>
-                <Button size="sm" variant="ghost" className="text-inherit" onClick={() => setSelection(new Set())}>
+                <Button size="sm" variant="ghost" className="wk-bulk-clear" onClick={() => setSelection(new Set())}>
                   Clear
                 </Button>
               </div>
@@ -975,7 +975,7 @@ function ItemDetail({
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
       <section className="bg-surface px-3 pt-3 pb-3 sm:px-5 lg:px-6 lg:pt-4">
-        <nav aria-label="Breadcrumb">
+        <nav aria-label="Breadcrumb" className="wk-crumbs">
           <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
             {d.breadcrumb.map((b) => (
               <li key={b.id} className="flex items-center gap-0.5">
