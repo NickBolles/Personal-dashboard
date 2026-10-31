@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, newIdempotencyKey } from "@/lib/client/api";
-import type { HomePayload, JarvisNotification } from "@/lib/contracts";
 import type { RunView, SessionSummary, TimelineItem } from "@/lib/hermes";
 import { Button, Dialog, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
 
@@ -152,57 +151,6 @@ export function ForkDialog({
           <textarea id="fork-prompt" rows={3} className={inputCls} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
         </Field>
       </div>
-    </Dialog>
-  );
-}
-
-/** Attach an action, alert, or Paperclip issue as context for the next message. */
-export function ContextPicker({ open, onClose, onPick }: { open: boolean; onClose: () => void; onPick: (label: string, ref: string) => void }) {
-  const home = useQuery({ queryKey: ["home", "cached"], queryFn: () => api.get<HomePayload>("/api/home?cached=1"), enabled: open });
-  const alerts = useQuery({
-    queryKey: ["notifications", "inbox"],
-    queryFn: () => api.get<{ notifications: JarvisNotification[] }>("/api/notifications"),
-    enabled: open,
-  });
-  const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])].slice(0, 12);
-  const alertItems = alerts.data?.notifications ?? [];
-  const pick = (label: string, ref: string) => {
-    onPick(label, ref);
-    onClose();
-  };
-  return (
-    <Dialog open={open} onClose={onClose} title="Attach context" description="Hermes receives a short reference with your next message." size="lg">
-      {home.isLoading || alerts.isLoading ? <Spinner label="Loading…" /> : null}
-      <h3 className="mb-1 text-sm font-semibold">Actions</h3>
-      <ul className="mb-4 space-y-1">
-        {actions.map((a) => (
-          <li key={a.id}>
-            <button
-              type="button"
-              onClick={() => pick(a.title, `${a.source}:${a.sourceId}`)}
-              className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2"
-            >
-              {a.title} <span className="text-muted">· {a.source}</span>
-            </button>
-          </li>
-        ))}
-        {!actions.length && !home.isLoading ? <li className="text-sm text-muted">No actions.</li> : null}
-      </ul>
-      <h3 className="mb-1 text-sm font-semibold">Alerts</h3>
-      <ul className="space-y-1">
-        {alertItems.slice(0, 10).map((n) => (
-          <li key={n.id}>
-            <button
-              type="button"
-              onClick={() => pick(n.title, `alert:${n.id}`)}
-              className="min-h-11 w-full rounded-lg px-3 text-left text-sm hover:bg-surface-2"
-            >
-              {n.title}
-            </button>
-          </li>
-        ))}
-        {!alertItems.length && !alerts.isLoading ? <li className="text-sm text-muted">No alerts.</li> : null}
-      </ul>
     </Dialog>
   );
 }
