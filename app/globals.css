@@ -839,6 +839,149 @@
   }
 }
 
+/* Desktop Arc-style sidebar (D1): everything beside it shifts by its width. */
+.jv-shell {
+  --sidebar-w: 0px;
+}
+@media (min-width: 1024px) {
+  .jv-shell {
+    --sidebar-w: 264px;
+  }
+  .jv-shell[data-sidebar="collapsed"] {
+    --sidebar-w: 60px;
+  }
+  .jv-shell > header,
+  .jv-shell > main {
+    margin-left: var(--sidebar-w);
+  }
+  .jv-sidebar {
+    width: var(--sidebar-w);
+  }
+  /* The sidebar owns the Areas tree at >=1024: drop the in-page column on /areas and /chat. */
+  .jv-shell .wk-hub {
+    background: none;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .jv-shell .wk-hub > #work-content {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .jv-shell .wk-hub > #work-tree,
+  .jv-shell .jv-chat-aside {
+    display: none;
+  }
+}
+/* Shared page header at >=1024: the header bar shows the crumb (Areas › area › …) and the sidebar has
+   Today/Inbox/the tree, so the in-page hub drops its "Areas" title (kept for screen readers) and the
+   Today/Inbox/Areas tier, leaving Timeline/Dashboard/Map tabs on one row with Select + New. Item pages
+   keep only the kind label from their in-page crumb. */
+@media (min-width: 1024px) {
+  .jv-shell .wk-hub-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .jv-shell .wk-hub-top > header {
+    order: 2;
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+  .jv-shell .wk-hub-top > .wk-nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 420px;
+  }
+  .jv-shell .wk-hub-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .jv-shell .wk-hub .wk-nav li:nth-child(-n + 3) {
+    display: none;
+  }
+  .jv-shell .wk-hub .wk-nav li:nth-child(n + 4) {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .jv-shell .wk-crumbs li:not([aria-current]) {
+    display: none;
+  }
+}
+.wk-bulk .wk-bulk-clear {
+  color: var(--bg);
+  text-decoration: underline;
+}
+/* Ask Jarvis dock seated in the 44px header row: a flat 32px field, not a floating pill. */
+@media (min-width: 1024px) {
+  .jv-dock-inline [data-testid="dock-orb"] {
+    min-height: 32px;
+    box-shadow: none;
+    padding-block: 0;
+  }
+}
+/* 1024–1279: the 264px sidebar leaves little header room, so keep Areas › parent › current crumbs. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .jv-crumb-mid {
+    display: none;
+  }
+}
+/* Sidebar eyebrows: sentence case, 11px semibold (same in light and dark). */
+.jv-side-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--muted);
+}
+/* Sidebar tree: ~30px rows on fine pointers (rows are treeitems, not Primary nav, so the 44px rule
+   doesn't apply; WCAG 2.5.8 24px minimum is met). Grip and ⋯ appear on hover/focus only. */
+@media (pointer: fine) {
+  .jv-side-tree .wk-tree-row {
+    min-height: 30px;
+    font-size: 13px;
+  }
+  .jv-side-tree [role="treeitem"] {
+    padding-block: 0;
+  }
+  /* Titles get the full row: the grip hangs in a 12px gutter left of the tree and the ⋯ button
+     overlays the row's right edge (over the count) instead of reserving width when hidden. Full
+     titles stay available via the treeitem's title tooltip; ellipsis only when they really overflow. */
+  .jv-side-tree [role="tree"] {
+    padding-left: 12px;
+  }
+  .jv-side-tree .wk-tree-row .wk-grip {
+    position: absolute;
+    left: -13px;
+    top: 50%;
+    width: 12px;
+    height: 24px;
+    transform: translateY(-50%);
+  }
+  .jv-side-tree .jv-row-menu {
+    position: absolute;
+    right: 2px;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+  }
+  .jv-side-tree .jv-row-menu > button[aria-haspopup="menu"] {
+    min-height: 24px;
+    min-width: 24px;
+    background: var(--surface-2);
+  }
+  .jv-side-tree .wk-tree-row:hover .jv-row-menu,
+  .jv-side-tree .jv-row-menu:focus-within,
+  .jv-side-tree [role="treeitem"]:focus-visible > .wk-tree-row .jv-row-menu {
+    opacity: 1;
+  }
+}
+
 /*
  * Home: calm cards with one purposeful accent. The accent bar is decorative;
  * every card also says its reason in text. Motion is short and subtle, and the
