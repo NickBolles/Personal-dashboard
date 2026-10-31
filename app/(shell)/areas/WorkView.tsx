@@ -23,6 +23,7 @@ import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
 import { NEW_WORK_EVENT } from "@/components/navigation/commands";
+import { useShowArchived } from "@/lib/client/show-archived";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
 import { TodayView, useInbox } from "@/components/work/today";
 import { CaptureDialog, InboxView } from "@/components/work/inbox";
@@ -91,7 +92,7 @@ export function WorkView({
   const { toast } = useToast();
   const canChat = can("hermes.chat");
   const newChat = useAskHermes();
-  const [archived, setArchived] = useState(false);
+  const [archived, setArchived] = useShowArchived();
   const items = useItems(archived);
   const [view, setView] = useState<View>(initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView ?? "today" });
   const [adding, setAdding] = useState<{ kind?: CreatableKind; parent: WorkItem | null } | null>(null);

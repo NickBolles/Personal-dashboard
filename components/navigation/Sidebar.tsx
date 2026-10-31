@@ -6,7 +6,8 @@ import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
-import { BellIcon, ChatIcon, GearIcon, InboxIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
+import { BellIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
+import { useShowArchived } from "@/lib/client/show-archived";
 import { WorkTree, type RowActions } from "@/components/work/WorkTree";
 import { MoveToDialog } from "@/components/work/structure";
 import "@/components/work/work.css";
@@ -81,9 +82,10 @@ export function Sidebar({
   const params = useSearchParams();
   const router = useRouter();
   const mod = useModKey();
+  const [archived, setArchived] = useShowArchived();
   const items = useQuery({
-    queryKey: ["work", "items", false],
-    queryFn: () => api.get<ItemsResponse>("/api/work/items"),
+    queryKey: ["work", "items", archived],
+    queryFn: () => api.get<ItemsResponse>(`/api/work/items${archived ? "?archived=1" : ""}`),
     enabled: canWork,
   });
   const inbox = useInbox();
@@ -285,9 +287,15 @@ export function Sidebar({
           <section aria-label="Areas" className="work-ui jv-side-tree min-h-0">
             <div className="flex items-center justify-between px-1 pb-1">
               <h2 className="jv-side-eyebrow">Areas</h2>
-              <Link href="/areas" className="text-[12px] text-muted hover:text-text">
-                All
-              </Link>
+              <div className="flex items-center gap-2">
+                <label className="flex min-h-11 items-center gap-1.5 text-[12px] text-muted hover:text-text" title="Show archived areas and items">
+                  <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+                  Archived
+                </label>
+                <Link href="/areas?view=tree" className="inline-flex min-h-11 items-center text-[12px] text-muted hover:text-text">
+                  All
+                </Link>
+              </div>
             </div>
             {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
             {items.isPending ? (
@@ -328,6 +336,10 @@ export function Sidebar({
       </nav>
       {moving ? <MoveToDialog ids={moving} items={list} onClose={() => setMoving(null)} onDone={() => setMoving(null)} /> : null}
       <div className="border-t border-line p-2">
+        <Link href="/more" aria-current={path === "/more" ? "page" : undefined} className={rowCls(path === "/more")}>
+          <MoreIcon className="h-[18px] w-[18px] shrink-0" />
+          {!collapsed ? <span>More</span> : <span className="sr-only">More</span>}
+        </Link>
         <Link href="/settings" aria-current={path.startsWith("/settings") ? "page" : undefined} className={rowCls(path.startsWith("/settings"))}>
           <GearIcon className="h-[18px] w-[18px] shrink-0" />
           {!collapsed ? <span>Settings</span> : <span className="sr-only">Settings</span>}

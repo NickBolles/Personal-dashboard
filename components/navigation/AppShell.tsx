@@ -15,7 +15,7 @@ import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
 import { NEW_CHAT_EVENT, NEW_WORK_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
-import { ComposerRouteWatcher } from "@/components/agents/useComposerTarget";
+import { ComposerRouteWatcher, useComposerTarget } from "@/components/agents/useComposerTarget";
 import { shortcutLabel, useModKey } from "@/lib/client/platform";
 
 const MORE: Dest = {
@@ -128,6 +128,9 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const [newMenu, setNewMenu] = useState(false);
   const canWork = capabilities.includes("work.use");
   const newChat = useAskHermes();
+  // New → Chat follows the area-contextual composer target (lib/composer-target.ts): inside an area,
+  // project or item it files the chat there; elsewhere it is plain Jarvis (Miscellaneous).
+  const composer = useComposerTarget();
   const startChat = useRef(newChat.start);
   useEffect(() => {
     startChat.current = newChat.start;
@@ -220,7 +223,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const newPrimary = () => {
     setNewMenu(false);
     if (canWork) setCapturing(true);
-    else if (canChat) window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+    else if (canChat) window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: composer.areaId } }));
   };
 
   return (
@@ -317,15 +320,16 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                       role="menuitem"
                       onClick={() => {
                         setNewMenu(false);
-                        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+                        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: composer.areaId } }));
                       }}
                       className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
                     >
                       Chat
                     </button>
                   ) : null}
-                  {/* On Areas the in-page "+ New" is phone/tablet only, so the header menu carries its kinds. */}
-                  {canWork && pathname.startsWith("/areas")
+                  {/* On /areas (WorkView, which listens for NEW_WORK_EVENT) the in-page "+ New" is phone/tablet only,
+                      so the header menu carries its kinds. Timeline/Dashboard/Map have no creation handler. */}
+                  {canWork && pathname === "/areas"
                     ? (["thread", "project", "area"] as const).map((kind) => (
                         <button
                           key={kind}
