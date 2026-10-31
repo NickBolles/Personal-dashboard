@@ -17,6 +17,7 @@ import { Badge, Empty, ErrorNote, OverflowMenu, Page, SectionLabel, Spinner, cx,
 import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
+import { Skeleton } from "@/components/ui/kit";
 
 const PROBLEM: SourceStatus["state"][] = ["stale", "error", "unauthorized", "refreshing"];
 
@@ -182,9 +183,9 @@ function HomeSkeleton() {
     <div aria-hidden="true" className="space-y-3">
       {[0, 1, 2].map((i) => (
         <div key={i} className="card space-y-2 px-3.5 py-3 pl-4">
-          <div className="jv-skeleton h-3 w-28" />
-          <div className="jv-skeleton h-4 w-3/4" />
-          <div className="jv-skeleton h-3 w-1/2" />
+          <Skeleton w={112} h={12} className="block" />
+          <Skeleton w="75%" h={16} className="block" />
+          <Skeleton w="50%" h={12} className="block" />
         </div>
       ))}
     </div>

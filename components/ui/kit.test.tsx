@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { Button, Checkbox, LockBar, Menu, Orb, Pill, ProgressBar, Segmented, SplitButton, StatusCircle, Toggle } from "./kit";
+import { Button, Checkbox, LockBar, Menu, PermissionLock, Orb, Pill, ProgressBar, Segmented, SplitButton, StatusCircle, Toggle } from "./kit";
 import * as ui from "./index";
 
 afterEach(cleanup);
@@ -110,4 +110,11 @@ it("ProgressBar clamps, Orb exposes expanded, LockBar unlocks", () => {
   expect(screen.getByRole("button", { name: "Jarvis commands" }).getAttribute("aria-expanded")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
   expect(unlock).toHaveBeenCalled();
+});
+
+it("PermissionLock names the missing capability", () => {
+  render(<PermissionLock capability="hermes.chat" label="Chat" />);
+  const note = screen.getByRole("note");
+  expect(note.textContent).toContain("Needs Chat access");
+  expect(note.textContent).toContain("hermes.chat");
 });
