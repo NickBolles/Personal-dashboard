@@ -1449,3 +1449,29 @@ export const conversationLinks = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.sessionId, t.url] }), index("conversation_links_session_idx").on(t.sessionId)],
 );
+
+/** Chat attachments (files & pictures, PR B). Bytes live under ${JARVIS_DATA_DIR}/chat-files/<userId>/<id> (0600). */
+export const chatFiles = sqliteTable(
+  "chat_files",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    mime: text("mime").notNull(),
+    kind: text("kind").notNull(), // image | pdf | text
+    bytes: integer("bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    storageKey: text("storage_key").notNull(),
+    /** extracted text (pdf/text) sent to the model */
+    extractedText: text("extracted_text"),
+    textStatus: text("text_status"), // ok | none | truncated
+    locationRemoved: integer("location_removed", { mode: "boolean" }).notNull().default(false),
+    /** run that carried it; null while it's still a draft chip in the composer */
+    runId: text("run_id"),
+    sentAt: text("sent_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("chat_files_session_idx").on(t.sessionId), index("chat_files_user_idx").on(t.userId)],
+);

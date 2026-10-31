@@ -12,6 +12,8 @@ import { smartInstructions } from "@/server/smart/prompt";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { sessionProfile } from "@/integrations/hermes/service";
 import { isLocalSession } from "@/lib/assistant";
+import { CHAT_FILE_LIMITS } from "@/lib/chat-files";
+import { markFilesSent, prepareRunFiles } from "@/server/chat/files";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -23,6 +25,8 @@ const schema = z.object({
   contextSources: z.array(z.enum(CONTEXT_SOURCES)).max(CONTEXT_SOURCES.length).optional(),
   /** renderers this client has (web: ["jarvis-ui@1"]); smart-reply instructions are added only when declared */
   capabilities: z.array(z.string().max(40)).max(8).optional(),
+  /** draft attachments uploaded to /files for this conversation */
+  files: z.array(z.string().max(80)).max(CHAT_FILE_LIMITS.perMessage).optional(),
 });
 
 /**
@@ -42,7 +46,13 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     // context cap, so they are never cut to "…and N more" (≤ 8 000 chars each).
     const resolved = resolveContextRefs(user, body.context);
     const extra = [refs, resolved.context].filter(Boolean).join("\n\n") || undefined;
-    const context = [await buildContext(user, sources, extra), ...resolved.blocks].filter(Boolean).join("\n\n");
+    const files = body.files?.length ? await prepareRunFiles(user, params.id, body.files) : null;
+    // Images can only reach Hermes; the on-device assistant gets a note instead.
+    const local = isLocalSession(params.id);
+    const imageNote = local && files?.imageUrls.length ? `(${files.imageUrls.length} picture(s) attached — this assistant can't see pictures)` : "";
+    const context = [await buildContext(user, sources, extra), ...resolved.blocks, ...(files?.textBlocks ?? []), imageNote, files?.marker]
+      .filter(Boolean)
+      .join("\n\n");
     const input = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
     const s = area?.settings;
     // The agent-mode hint is only for conversations NOT already running on that Hermes profile (Settings → Agents).
@@ -56,11 +66,12 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
     const instructions = [areaInstructions, smart].filter(Boolean).join("\n\n") || undefined;
-    return startRun(
+    const run = await startRun(
       user,
       {
         sessionId: params.id,
         input,
+        ...(files?.imageUrls.length && !local ? { images: files.imageUrls } : {}),
         idempotencyKey: body.idempotencyKey,
         model: body.model || s?.defaultModel || prefs.defaultModel || undefined,
         provider: body.provider || (body.model ? undefined : s?.defaultProvider) || prefs.defaultProvider || undefined,
@@ -70,6 +81,8 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
       },
       correlationId,
     );
+    if (files) markFilesSent(files.ids, run.runId);
+    return run;
   },
   { body: schema, cap: "hermes.chat" },
 );

@@ -317,7 +317,8 @@ export function createHermes({ apiKey }) {
     const slow = /slow|long/i.test(said);
     let reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
     // Links panel e2e: a reply that shares an artifact (view + asset URL = one row).
-    if (/share the zephyr board/i.test(said))
+    if (/\[mock: (\d+) image\(s\)\]/.test(input)) reply = `I can see ${input.match(/\[mock: (\d+) image\(s\)\]/)[1]} picture(s).`;
+    else if (/share the zephyr board/i.test(said))
       reply = "Published: https://artifacts.ai.nickbolles.com/v/zephyr-board-e2e/ (hero: https://artifacts.ai.nickbolles.com/a/zephyr-board-e2e/hero.png).";
     // Smart replies (jarvis-ui@1): a triage block built from the refs Jarvis attached.
     if (typeof instructions === "string" && instructions.includes("jarvis-ui@1") && /triage/i.test(said)) {
@@ -602,7 +603,24 @@ export function createHermes({ apiKey }) {
       };
       state.runs.set(run.run_id, run);
       if (key) state.idem.set(key, { runId: run.run_id, body: JSON.stringify(body) });
-      const input = typeof body.input === "string" ? body.input : (body.input.at(-1)?.content ?? "");
+      // Like Hermes /v1/runs: a string, or a messages list whose last content may be text + image_url parts.
+      const content = typeof body.input === "string" ? body.input : (body.input.at(-1)?.content ?? "");
+      let input = content;
+      if (Array.isArray(content)) {
+        let images = 0;
+        const texts = [];
+        for (const p of content) {
+          const t = String(p?.type ?? "").toLowerCase();
+          if (t === "text" || t === "input_text") texts.push(String(p.text ?? ""));
+          else if (t === "image_url" || t === "input_image") {
+            const u = typeof p.image_url === "string" ? p.image_url : p.image_url?.url;
+            if (!/^(https?:|data:image\/)/.test(String(u ?? ""))) return hermesError(res, 400, "invalid_image_url", "image_url must be http(s) or data:image/");
+            images++;
+          } else return hermesError(res, 400, "unsupported_content_type", "Only text and image_url/input_image parts are supported.");
+        }
+        input = texts.join("\n") + (images ? `\n[mock: ${images} image(s)]` : "");
+        state.lastImages = images;
+      }
       setTimeout(() => execute(run, input, body.instructions), 5);
       return json(res, 202, { run_id: run.run_id, status: "started", replayed: false });
     }
