@@ -845,7 +845,7 @@
 }
 @media (min-width: 1024px) {
   .jv-shell {
-    --sidebar-w: 248px;
+    --sidebar-w: 264px;
   }
   .jv-shell[data-sidebar="collapsed"] {
     --sidebar-w: 60px;
@@ -941,8 +941,33 @@
   .jv-side-tree [role="treeitem"] {
     padding-block: 0;
   }
+  /* Titles get the full row: the grip hangs in a 12px gutter left of the tree and the ⋯ button
+     overlays the row's right edge (over the count) instead of reserving width when hidden. Full
+     titles stay available via the treeitem's title tooltip; ellipsis only when they really overflow. */
+  .jv-side-tree [role="tree"] {
+    padding-left: 12px;
+  }
+  .jv-side-tree .wk-tree-row .wk-grip {
+    position: absolute;
+    left: -13px;
+    top: 50%;
+    width: 12px;
+    height: 24px;
+    transform: translateY(-50%);
+  }
   .jv-side-tree .jv-row-menu {
+    position: absolute;
+    right: 2px;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
     opacity: 0;
+  }
+  .jv-side-tree .jv-row-menu > button[aria-haspopup="menu"] {
+    min-height: 24px;
+    min-width: 24px;
+    background: var(--surface-2);
   }
   .jv-side-tree .wk-tree-row:hover .jv-row-menu,
   .jv-side-tree .jv-row-menu:focus-within,
