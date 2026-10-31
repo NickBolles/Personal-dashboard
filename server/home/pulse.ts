@@ -52,6 +52,12 @@ export function homePulse(user: Capable & { id: string }, now = new Date()): Hom
     approvals,
     awaitingValidation: open.filter((r) => r.status === "awaiting_validation").length,
     mergedNotSettled: merged.size,
-    trend: addedVsCompleted(rows, now, TZ),
+    // Only settled work counts as completed: abandoned/superseded also stamp
+    // completedAt (lifecycle planTransition) but stay in the added series only.
+    trend: addedVsCompleted(
+      rows.map((r) => ({ createdAt: r.createdAt, completedAt: r.status === "settled" ? r.completedAt : null })),
+      now,
+      TZ,
+    ),
   };
 }
