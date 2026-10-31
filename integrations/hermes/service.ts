@@ -400,6 +400,8 @@ export async function forkSession(user: CurrentUser, id: string, input: ForkInpu
 export type StartRunRequest = {
   sessionId: string;
   input: string;
+  /** image URLs (data:/https) for Hermes `image_url` parts; Claude-direct ignores them */
+  images?: string[];
   idempotencyKey: string;
   model?: string;
   provider?: string;

@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
+import { PHOTO_PNG } from "./fixtures/chat-files";
 
 const PAGES = [
   "/home",
@@ -153,4 +154,29 @@ test("touch targets in primary navigation are at least 44px", async ({ page }) =
   );
   expect(sizes.length).toBeGreaterThan(0);
   expect(sizes.filter((s) => s.w < 44 || s.h < 44)).toEqual([]);
+});
+
+test("chat composer with attachments: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  await startConversation(page, "kestrel attachments zoom");
+  await expect(page.getByText(/Got it: "kestrel attachments/)).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId("chat-file-input").setInputFiles([
+    { name: "kestrel-a-very-long-picture-name-for-the-overflow-check.png", mimeType: "image/png", buffer: PHOTO_PNG },
+    { name: "kestrel-notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") },
+  ]);
+  await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
+  const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  // Every composer control stays a 44 px target and inside the viewport.
+  const vw = page.viewportSize()!.width;
+  for (const name of ["Attach context", "Attach files or pictures", "Take a photo"]) {
+    const button = page.getByRole("button", { name, exact: true });
+    if (!(await button.count())) continue; // camera is hidden on pointer:fine
+    const box = await button.boundingBox();
+    if (!box) continue;
+    expect.soft(box.x + box.width, name).toBeLessThanOrEqual(vw);
+    expect.soft(box.height, name).toBeGreaterThanOrEqual(44);
+  }
 });

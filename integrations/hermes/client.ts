@@ -1,4 +1,5 @@
 import "server-only";
+import { buildRunInput } from "@/lib/chat-files";
 import { z } from "zod";
 import { UpstreamError } from "@/server/http/errors";
 import { upstream, type UpstreamRequest } from "@/server/http/fetch";
@@ -106,6 +107,8 @@ export const HermesSessionClient = {
 export type StartRunInput = {
   sessionId: string;
   input: string;
+  /** data:/https image URLs sent as `image_url` parts (input becomes a one-message list) */
+  images?: string[];
   idempotencyKey: string;
   model?: string;
   provider?: string;
@@ -125,7 +128,7 @@ export const HermesExecutionClient = {
         method: "POST",
         headers: { "idempotency-key": r.idempotencyKey },
         body: {
-          input: r.input,
+          input: buildRunInput(r.input, r.images ?? []),
           session_id: r.sessionId,
           ...(r.model ? { model: r.model } : {}),
           ...(r.provider ? { provider: r.provider } : {}),

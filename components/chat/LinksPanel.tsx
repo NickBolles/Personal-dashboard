@@ -1,5 +1,7 @@
 "use client";
 
+import { FilesSection } from "./Attachments";
+
 import { useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
@@ -47,12 +49,14 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
 
 /** Attached context / Files / Links for one conversation. */
 export function LinksPanel({
+  sessionId,
   links,
   context,
   readOnly,
   onPatch,
   onRemoveContext,
 }: {
+  sessionId: string;
   links: PanelLink[];
   context: ContextChip[];
   readOnly: boolean;
@@ -79,12 +83,7 @@ export function LinksPanel({
           <p className="text-xs text-muted">Nothing attached to the next message. Use + to add context.</p>
         )}
       </section>
-      <section aria-labelledby="lp-files">
-        <h3 id="lp-files" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
-          Files
-        </h3>
-        <p className="text-xs text-muted">Files and pictures you attach will show here.</p>
-      </section>
+      <FilesSection sessionId={sessionId} />
       <section aria-labelledby="lp-links">
         <h3 id="lp-links" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
           Links{links.length ? ` (${links.length})` : ""}
