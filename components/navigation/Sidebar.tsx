@@ -460,14 +460,21 @@ export function HeaderCrumbs({ base, canWork, chevron }: { base: { href: string;
   return (
     <ol aria-label="Breadcrumb" className="hidden min-w-0 items-center gap-1 text-[0.875rem] lg:flex" data-testid="page-breadcrumb">
       {crumbs.map((c, i) => (
-        <li key={c.href} className={cx("flex min-w-0 items-center gap-1", i < crumbs.length - 1 && "shrink-[2]")}>
+        <li
+          key={c.href}
+          className={cx(
+            "flex min-w-0 items-center gap-1",
+            i === 0 ? "shrink-0" : i < crumbs.length - 1 && "shrink-[2]",
+            i > 0 && i < crumbs.length - 2 && "jv-crumb-mid",
+          )}
+        >
           {i > 0 ? chevron : null}
           {i === crumbs.length - 1 ? (
-            <span aria-current="page" className="truncate font-semibold text-text" data-dynamic>
+            <span aria-current="page" title={c.label} className="truncate font-semibold text-text" data-dynamic>
               {c.label}
             </span>
           ) : (
-            <Link href={c.href} className="inline-flex min-h-11 min-w-0 items-center truncate text-muted hover:text-text" data-dynamic>
+            <Link href={c.href} title={c.label} className="inline-flex min-h-11 min-w-0 items-center truncate text-muted hover:text-text" data-dynamic>
               <span className="truncate">{c.label}</span>
             </Link>
           )}

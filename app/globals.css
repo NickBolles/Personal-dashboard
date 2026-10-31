@@ -923,6 +923,12 @@
     padding-block: 0;
   }
 }
+/* 1024–1279: the 264px sidebar leaves little header room, so keep Areas › parent › current crumbs. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .jv-crumb-mid {
+    display: none;
+  }
+}
 /* Sidebar eyebrows: sentence case, 11px semibold (same in light and dark). */
 .jv-side-eyebrow {
   font-size: 11px;
