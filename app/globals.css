@@ -867,7 +867,8 @@
     grid-row: 2;
   }
   .jv-shell .wk-hub > #work-tree,
-  .jv-shell .jv-chat-aside {
+  .jv-shell[data-sidebar-tree="on"] .jv-chat-aside {
+    /* Chat-only users (no work.use) have no sidebar tree, so they keep the in-page conversation list. */
     display: none;
   }
 }

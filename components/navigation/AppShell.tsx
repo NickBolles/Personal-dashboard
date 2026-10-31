@@ -227,7 +227,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   };
 
   return (
-    <div className="jv-shell min-h-dvh" data-sidebar={sidebarCollapsed ? "collapsed" : "open"}>
+    <div className="jv-shell min-h-dvh" data-sidebar={sidebarCollapsed ? "collapsed" : "open"} data-sidebar-tree={canWork ? "on" : "off"}>
       {/* Desktop (≥1024): Arc-style left sidebar (D1). Tablet keeps the top row, phones the bottom bar. */}
       <Suspense fallback={null}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} unread={unread} canWork={canWork} canChat={canChat} />

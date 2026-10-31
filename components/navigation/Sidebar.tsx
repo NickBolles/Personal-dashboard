@@ -307,7 +307,7 @@ export function Sidebar({
                 selected={selectedItem}
                 selectedSession={sessionId}
                 onSelect={(id) => router.push(`/areas?item=${encodeURIComponent(id)}`)}
-                onOpenConversation={(sid) => router.push(`/chat/${encodeURIComponent(sid)}`)}
+                onOpenConversation={canChat ? (sid) => router.push(`/chat/${encodeURIComponent(sid)}`) : undefined}
                 onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
                 onRename={(id, title) => rename.mutate({ id, title })}
                 onMove={(id) => setMoving([id])}
