@@ -1,5 +1,6 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { mock, startConversation } from "./helpers";
+import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -50,4 +51,27 @@ test("an artifact shared in a reply lands in Links (one row per artifact)", asyn
   await expect(row.getByRole("link", { name: /^Open / })).toHaveAttribute("href", "https://artifacts.ai.nickbolles.com/v/zephyr-board-e2e/");
   await row.getByRole("button", { name: /^Pin / }).click();
   await expect(row.getByRole("button", { name: /^Unpin / })).toBeVisible();
+});
+
+test("context sheet and Links: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  await startConversation(page, "please share the zephyr board");
+  await expect(page.getByText(/Published:/)).toBeVisible({ timeout: 15_000 });
+  const axe = async (label: string) => {
+    const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${label} ${v.id}`)).toEqual([]);
+  };
+  await page.getByTestId("links-button").click();
+  const dialog = page.getByRole("dialog", { name: "Context & links" });
+  await expect(dialog.locator('[data-kind="artifact"]')).toHaveCount(1, { timeout: 15_000 });
+  await axe("links");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Attach context" }).click();
+  await expect(page.getByRole("dialog", { name: "Add context" }).getByRole("option").first()).toBeVisible({ timeout: 10_000 });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("sheet");
+  await page.keyboard.press("Escape");
 });

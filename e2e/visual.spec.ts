@@ -401,3 +401,53 @@ test("tide orb: reduced motion stops flow, aura and twinkle", async ({ page }, i
   expect(r).toEqual({ orb: "none", aura: "none", glyph: "none" });
   await expect(page).toHaveScreenshot("tide-orb-bar-reduced.png", { clip: await orbClip(page) });
 });
+
+// CH-CX1/CH-CX3: Add-context sheet and the Links panel (≥1100 px column, phone dialog), light + dark.
+const LINKS_VISUAL = [
+  {
+    url: "https://artifacts.ai.nickbolles.com/v/visual-board/",
+    kind: "artifact",
+    domain: "artifacts.ai.nickbolles.com",
+    title: "Visual board",
+    slug: "visual-board",
+    pinned: true,
+  },
+  {
+    url: "https://github.com/NickBolles/Personal-dashboard/pull/72",
+    kind: "github",
+    domain: "github.com",
+    title: "Chat context sheet",
+    repo: "NickBolles/Personal-dashboard",
+    number: 72,
+    ghType: "pull",
+    state: "open",
+    pinned: false,
+  },
+  { url: "https://example.com/notes", kind: "web", domain: "example.com", title: "Release notes", pinned: false },
+];
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat context sheet + links (${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatVisual }));
+    await page.route(/\/api\/hermes\/sessions\/sess_morning\/links-panel$/, (route) => route.fulfill({ json: { links: LINKS_VISUAL } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto("/chat/sess_morning");
+    await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+    await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+    const wide = (page.viewportSize()?.width ?? 0) >= 1100;
+    const panel = wide ? page.getByRole("complementary", { name: "Context and links" }) : page.getByRole("dialog", { name: "Context & links" });
+    if (!wide) await page.getByTestId("links-button").click();
+    await expect(panel.locator('[data-kind="artifact"]')).toHaveCount(1);
+    await page.waitForTimeout(600);
+    await expect(page).toHaveScreenshot(`chat-links-${theme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+    if (!wide) await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Attach context" }).click();
+    const sheet = page.getByRole("dialog", { name: "Add context" });
+    await expect(sheet.getByRole("combobox", { name: "Search context" })).toBeFocused();
+    await page.waitForTimeout(600);
+    await expect(page).toHaveScreenshot(`chat-context-sheet-${theme}.png`, { fullPage: false, mask: [...MASK, "[role=listbox]"].map((m) => page.locator(m)) });
+  });
+}
