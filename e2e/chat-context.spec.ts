@@ -16,6 +16,8 @@ test("Add context sheet: search, keyboard multi-select, chips, Esc", async ({ pa
   await expect(search).toBeFocused();
   const options = sheet.getByRole("option");
   await expect(options.first()).toBeVisible({ timeout: 10_000 });
+  // The tap on "Attach context" leaves the pointer over the sheet, and hover moves the active row.
+  await options.first().hover();
   const first = (await options.first().locator("span.truncate").first().textContent())?.trim() ?? "";
   await page.keyboard.press("Enter");
   await expect(options.first()).toHaveAttribute("aria-selected", "true");
