@@ -634,10 +634,12 @@ export function groupTimeline(items: TimelineItem[]): TimelineGroup[] {
     }
     const tools: ToolItem[] = [];
     while (i < items.length && items[i].kind === "tool") tools.push(items[i++] as ToolItem);
-    const endItem = items[i] ?? tools[tools.length - 1];
-    const seconds = span(tools[0].at, endItem?.at);
-    // A step lasts until the next step (or the reply) starts; the last step of a turn with no reply has no end.
-    const durations = tools.map((t, j) => span(t.at, (tools[j + 1] ?? items[i])?.at));
+    const last = tools[tools.length - 1];
+    // The turn ends at the assistant reply; without one (stopped turn), at the last tool result — never at a later user message.
+    const endAt = items[i]?.kind === "assistant" ? items[i].at : last.at;
+    const seconds = span(tools[0].startedAt ?? tools[0].at, endAt);
+    // A step runs from its call to its result (`at` is the result time); rows without a call time get no duration.
+    const durations = tools.map((t) => span(t.startedAt, t.at));
     out.push({ tools, seconds, durations });
     i--;
   }

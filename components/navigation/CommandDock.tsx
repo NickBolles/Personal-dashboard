@@ -1,6 +1,5 @@
 "use client";
 
-import { JarvisMark } from "@/components/brand/JarvisMark";
 import {
   useCallback,
   useEffect,
@@ -91,11 +90,44 @@ type Pt = { x: number; y: number };
  * fits, and the orb stays a cancel zone. The petals sit on an upper arc, so a
  * top-row orb (desktop header) pushes the centre down until the arc fits.
  */
-export function mapCentre(orb: Pt, vw: number): Pt {
+export function mapCentre(orb: Pt, vw: number, vh = Infinity, bottomInset = 0): Pt {
   const margin = 215; // max radius 165 + petal half-width + gutter
   const lo = Math.min(margin, vw / 2);
   const hi = Math.max(vw - margin, vw / 2);
-  return { x: Math.max(lo, Math.min(hi, orb.x)), y: Math.max(margin, orb.y) };
+  // The lowest petals sit ~0.2R above the centre plus their half-height (34): keep the centre
+  // BOTTOM_CLEAR above the visible bottom (bottom bar, safe area, OS sheets) so none clip.
+  const maxY = vh - bottomInset - BOTTOM_CLEAR;
+  const y = Math.max(margin, orb.y);
+  return { x: Math.max(lo, Math.min(hi, orb.x)), y: Math.max(Math.min(margin, maxY), Math.min(y, maxY)) };
+}
+
+/** Clearance between the map centre and the visible bottom edge (petal half-height + bar + gutter). */
+export const BOTTOM_CLEAR = 96;
+
+/** The visual viewport's bottom (pinch zoom / on-screen keyboard aware) and the safe-area inset. */
+function viewportBottom(): { vh: number; inset: number } {
+  const vv = window.visualViewport;
+  const vh = vv ? vv.height + vv.offsetTop : window.innerHeight;
+  let inset = 0;
+  try {
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;pointer-events:none;padding-bottom:env(safe-area-inset-bottom)";
+    document.body.appendChild(probe);
+    inset = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+  } catch {
+    /* no DOM */
+  }
+  return { vh, inset };
+}
+
+/** Drop any text selection the OS started (Android long-press) so no Copy/Search toolbar shows. */
+function clearSelection() {
+  try {
+    window.getSelection()?.removeAllRanges();
+  } catch {
+    /* not supported */
+  }
 }
 
 /** Petals the person can use: sub-entries map to commands they hold; empty petals disappear. */
@@ -184,7 +216,9 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
     if (!r) return;
     // A hidden orb opens the map from the bottom centre.
     const at = r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth / 2, y: window.innerHeight - 48 };
-    setMap({ center: mapCentre(at, window.innerWidth), orb: at, via });
+    const { vh, inset } = viewportBottom();
+    clearSelection();
+    setMap({ center: mapCentre(at, window.innerWidth, vh, inset), orb: at, via });
     setSubFor(-1);
     setSubActive(-1);
     setActive(via === "keyboard" ? 0 : -1);
@@ -275,6 +309,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
   };
   const onPointerUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
+    clearSelection();
     setCharging(false);
     const was = pressing.current;
     pressing.current = false;
@@ -289,6 +324,36 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
     pressing.current = false;
     setCharging(false);
   };
+
+  // Android/Chrome: a long-press would select nearby text (Copy / Web search toolbar, Touch-to-Search
+  // sheet) or open a context menu. Cancel the native touch default on the orb (taps and holds are
+  // driven by pointer events, which still fire), and block selection/context menus while a hold or
+  // the map is live.
+  useEffect(() => {
+    const el = orb.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => el.removeEventListener("touchstart", onTouchStart);
+  }, []);
+  const live = charging || !!map;
+  useEffect(() => {
+    if (!live) return;
+    const block = (e: Event) => {
+      if (pressing.current || st.current.map) {
+        e.preventDefault();
+        if (e.type === "selectstart") clearSelection();
+      }
+    };
+    document.addEventListener("selectstart", block, true);
+    document.addEventListener("contextmenu", block, true);
+    return () => {
+      document.removeEventListener("selectstart", block, true);
+      document.removeEventListener("contextmenu", block, true);
+    };
+  }, [live]);
 
   // ⌘/Ctrl+. toggles the map; while it's open, arrows/Tab/Enter/Esc drive it.
   useEffect(() => {
@@ -388,7 +453,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
         }}
         title={variant === "dock" && compact ? "Commands (tap) · action map (hold or Ctrl+.)" : undefined}
         className={cx(
-          "relative inline-flex shrink-0 touch-none items-center select-none",
+          "dock-nosel relative inline-flex shrink-0 touch-none items-center select-none",
           variant === "bar"
             ? "k-orb dock-tide h-[52px] w-[52px] -translate-y-5 justify-center rounded-full text-lg font-bold text-white"
             : compact
@@ -401,7 +466,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
           <>
             <span aria-hidden="true" className="k-orb-aura" />
             <span aria-hidden="true" className="dock-ring" />
-            <JarvisMark className="h-7 w-7" />
+            <OrbSparkle className="k-orb-g h-[22px] w-[22px]" />
           </>
         ) : (
           <>
@@ -412,8 +477,9 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
                 charging && "dock-charging",
               )}
             >
+              <span className="dock-orb-aura" />
               <span className="dock-ring" />
-              <JarvisMark className="h-[18px] w-[18px]" />
+              <OrbSparkle className="dock-glyph h-4 w-4" />
             </span>
             {!compact ? (
               <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">
@@ -431,7 +497,9 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
         ? // Portalled to <body>: the phone bar's backdrop-filter would otherwise contain the fixed overlay.
           createPortal(
             <div
-              className="fixed inset-0 z-[70] touch-none bg-[var(--scrim)] backdrop-blur-[6px]"
+              className="dock-nosel fixed inset-0 z-[70] touch-none bg-[var(--scrim)] backdrop-blur-[6px]"
+              data-testid="command-map-overlay"
+              onContextMenu={(e) => e.preventDefault()}
               onPointerDown={(e) => {
                 if (e.target === e.currentTarget) close();
               }}
@@ -448,7 +516,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
               <div id="command-map" role="menu" aria-label="Action map" className="fixed h-0 w-0" style={{ left: map.center.x, top: map.center.y }}>
                 <span
                   aria-hidden="true"
-                  className="dock-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
+                  className="dock-map-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
                   data-testid="map-ask-target"
                 >
                   {target.agent}
@@ -510,5 +578,15 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
           )
         : null}
     </>
+  );
+}
+
+/** The v0 orb glyph: a four-point sparkle with a small companion star (stroke, inherits colour). */
+function OrbSparkle({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
+    </svg>
   );
 }

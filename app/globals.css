@@ -1228,29 +1228,55 @@ details.jv-why > summary::-webkit-details-marker {
  * Command dock (components/navigation/CommandDock.tsx): the orb and the radial
  * action map. Motion is short; prefers-reduced-motion turns it off.
  */
+/* Tide orb (v0 jarvis-sea.html, "Tide with Lagoon text"): flat 135° pine→teal→periwinkle,
+ * slow flow, aura pulse, sparkle twinkle. Gradient lives ONLY on the orb (DESIGN-SYSTEM.md). */
 .dock-orb {
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #6b3fc4));
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 40%, transparent);
+  position: relative;
+  background: var(--orb);
+  background-size: 170% 170%;
+  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--o2) 75%, transparent);
   -webkit-touch-callout: none;
+  animation: k-flow 7s ease-in-out infinite alternate;
 }
 .dock-tide {
   box-shadow:
     0 0 0 4px var(--bg),
-    0 6px 18px color-mix(in srgb, var(--o2) 45%, transparent);
+    0 8px 22px -8px color-mix(in srgb, var(--o2) 75%, transparent);
   -webkit-touch-callout: none;
+  transition: transform var(--d1) var(--ease);
+}
+.dock-tide:active,
+button:active > .dock-orb {
+  transform: scale(0.94);
 }
 .dock-orb:focus-visible,
 .dock-tide:focus-visible {
   outline: 3px solid var(--text);
   outline-offset: 3px;
 }
+/* Small orb aura (desktop/tablet dock + compact header): ring just outside the 32px orb. */
+.dock-orb-aura {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--o2) 55%, transparent);
+  animation: k-aura 3.6s ease-out infinite;
+  pointer-events: none;
+}
+.dock-glyph {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
+  animation: k-twinkle 3.6s ease-in-out infinite;
+}
+/* Hold-to-charge: a Lagoon arc sweeps once around the orb before the radial opens. */
 .dock-ring {
   position: absolute;
   inset: -5px;
   border-radius: 9999px;
   border: 3px solid transparent;
-  border-top-color: var(--accent);
+  border-top-color: var(--ai);
+  border-right-color: color-mix(in srgb, var(--ai) 45%, transparent);
   opacity: 0;
+  pointer-events: none;
 }
 .dock-charging .dock-ring {
   opacity: 1;
@@ -1261,13 +1287,84 @@ details.jv-why > summary::-webkit-details-marker {
     transform: rotate(360deg);
   }
 }
+/* Expanded (radial open) or charging: everything holds still. */
+[aria-expanded="true"].k-orb,
+[aria-expanded="true"] .k-orb-aura,
+[aria-expanded="true"] .k-orb-g,
+[aria-expanded="true"] .dock-orb,
+[aria-expanded="true"] .dock-orb-aura,
+[aria-expanded="true"] .dock-glyph,
+.dock-charging .k-orb-aura,
+.dock-charging .dock-orb-aura {
+  animation-play-state: paused;
+}
+[aria-expanded="true"] .k-orb-aura,
+[aria-expanded="true"] .dock-orb-aura {
+  opacity: 0;
+}
+/* Radial centre orb inside the open map: Tide, but still (menu open). */
+.dock-map-orb {
+  /* Carries the agent name as 10px text: a deepened Tide keeps white text ≥4.5:1. */
+  background: linear-gradient(135deg, color-mix(in srgb, var(--o1) 78%, #000), color-mix(in srgb, var(--o3) 62%, #000));
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--o2) 75%, transparent);
+}
 .dock-petal {
-  animation: dock-petal-in 0.16s ease-out both;
+  animation: dock-petal-in 0.2s var(--ease-pop) both;
+}
+.dock-petal > span[aria-hidden="true"] {
+  color: var(--ai);
+}
+.dock-petal[class*="bg-accent"] > span[aria-hidden="true"] {
+  color: inherit;
+}
+/* Long-press on the orb must never start a native text selection, callout or tap flash. */
+.dock-nosel,
+.dock-nosel * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
 }
 @keyframes dock-petal-in {
   from {
     opacity: 0;
-    scale: 0.6;
+    scale: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-orb,
+  .dock-orb-aura,
+  .dock-glyph,
+  .k-orb,
+  .k-orb-aura,
+  .k-orb-g,
+  .dock-petal,
+  .k-greet {
+    animation: none !important;
+  }
+  .dock-orb-aura,
+  .k-orb-aura {
+    display: none;
+  }
+  .dock-tide,
+  .dock-tide:active,
+  button:active > .dock-orb {
+    transition: none;
+    transform: none;
+  }
+}
+/* Today greeting: the one gradient headline (v0 Playful). Text colours only, not the orb gradient. */
+.k-greet {
+  background: linear-gradient(90deg, var(--t1) 0%, var(--ac) 55%, var(--ai) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@media (forced-colors: active) {
+  .k-greet {
+    background: none;
+    color: CanvasText;
   }
 }
 
@@ -2375,10 +2472,10 @@ details.jv-why > summary::-webkit-details-marker {
 }
 @keyframes k-flow {
   from {
-    background-position: 0% 50%;
+    background-position: 0% 0%;
   }
   to {
-    background-position: 100% 50%;
+    background-position: 100% 100%;
   }
 }
 @keyframes k-aura {
@@ -2393,11 +2490,12 @@ details.jv-why > summary::-webkit-details-marker {
 }
 @keyframes k-twinkle {
   0%,
+  84%,
   100% {
-    opacity: 1;
+    transform: scale(1) rotate(0);
   }
-  50% {
-    opacity: 0.75;
+  90% {
+    transform: scale(1.16) rotate(18deg);
   }
 }
 @keyframes k-drift {

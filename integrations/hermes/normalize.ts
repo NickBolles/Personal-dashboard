@@ -153,6 +153,8 @@ export function messagesToTimeline(messages: HermesMessage[]): TimelineItem[] {
         summary: summarizeArgs(call?.args) ?? "",
         detail,
         at,
+        // `at` is the tool-result time; the call was issued with the assistant message that requested it.
+        startedAt: call?.at,
         error: /^(error|BLOCKED:)/i.test(text.trim()),
       });
     } else if (m.role === "system") {

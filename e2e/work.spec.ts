@@ -305,10 +305,18 @@ async function items(page: Page) {
 /** Drag with real pointer events from one element's centre to a point inside another. */
 async function dragTo(page: Page, from: ReturnType<Page["locator"]>, to: ReturnType<Page["locator"]>, at: { x: number; y: number } = { x: 0.5, y: 0.5 }) {
   // Both ends must be on screen: earlier tests can leave the target below the fold (order-sensitive flake).
-  await to.scrollIntoViewIfNeeded();
-  await from.scrollIntoViewIfNeeded();
-  let a = (await from.boundingBox())!;
-  let b = (await to.boundingBox())!;
+  // The tree re-renders after a refetch (e.g. right after Undo), so a row can detach mid-scroll: retry until both are stable.
+  let a!: NonNullable<Awaited<ReturnType<typeof from.boundingBox>>>;
+  let b!: NonNullable<Awaited<ReturnType<typeof to.boundingBox>>>;
+  await expect(async () => {
+    await to.scrollIntoViewIfNeeded({ timeout: 2000 });
+    await from.scrollIntoViewIfNeeded({ timeout: 2000 });
+    const fa = await from.boundingBox({ timeout: 2000 });
+    const tb = await to.boundingBox({ timeout: 2000 });
+    expect(fa && tb).toBeTruthy();
+    a = fa!;
+    b = tb!;
+  }).toPass({ timeout: 15_000 });
   const vh = page.viewportSize()?.height ?? 800;
   if (b.y < 0 || b.y + b.height > vh) {
     // Centre the span between source and target, then re-measure.
