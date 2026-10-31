@@ -81,6 +81,17 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   }
 });
 
+test("200% text zoom at 1024 (sidebar + header dock) does not cause horizontal scrolling", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "desktop sidebar layout only");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  for (const path of ["/home", "/areas", "/alerts", "/settings"]) {
+    await page.goto(path);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
+});
+
 test("forced source states: axe clean and no overflow at 200% text zoom", async ({ page }) => {
   for (const name of Object.keys(SOURCE_STATES) as (keyof typeof SOURCE_STATES)[]) {
     await page.unrouteAll();

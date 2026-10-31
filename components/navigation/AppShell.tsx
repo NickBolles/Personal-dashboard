@@ -231,23 +231,31 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       </Suspense>
       {/* Tablet: one top row (§5). Desktop: the page header bar (breadcrumb + page actions) beside the sidebar. */}
       <header className="hidden border-b border-line bg-surface sm:block">
-        <nav aria-label="Primary" className="flex h-11 items-center gap-1 px-2 lg:px-3">
-          <Link
-            href="/home"
-            aria-label="Jarvis home"
-            className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em] lg:hidden"
-          >
-            <span aria-hidden="true" className="brand-mark" />
-            <span className="hidden xl:inline">Jarvis</span>
-          </Link>
-          <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
-          <Suspense fallback={null}>
-            <HeaderCrumbs base={crumbs} canWork={canWork} chevron={<ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" />} />
-          </Suspense>
-          <span className="flex-1" />
-          {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content. */}
+        <div className="flex h-11 items-center gap-1 px-2 lg:px-3">
+          <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-1">
+            <Link
+              href="/home"
+              aria-label="Jarvis home"
+              className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em] lg:hidden"
+            >
+              <span aria-hidden="true" className="brand-mark" />
+              <span className="hidden xl:inline">Jarvis</span>
+            </Link>
+            <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
+            <Suspense fallback={null}>
+              <HeaderCrumbs base={crumbs} canWork={canWork} chevron={<ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" />} />
+            </Suspense>
+            <span className="flex-1" />
+          </nav>
+          {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content.
+              It's a command/search field, not navigation, so it lives in its own search landmark. */}
           {!pathname.startsWith("/chat") ? (
-            <div className="jv-dock-inline mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block" data-testid="dock-top">
+            <div
+              role="search"
+              aria-label="Ask Jarvis"
+              className="jv-dock-inline mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block"
+              data-testid="dock-top"
+            >
               <CommandDock variant="dock" />
             </div>
           ) : null}
@@ -352,7 +360,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             </span>
             <span aria-hidden="true" className={cx("absolute right-1.5 bottom-1.5 h-2 w-2 rounded-full ring-2 ring-surface", online ? "bg-ok" : "bg-warn")} />
           </Link>
-        </nav>
+        </div>
       </header>
 
       <main id="main" ref={mainRef} tabIndex={-1} className="pb-nav min-w-0 outline-none">
