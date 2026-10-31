@@ -334,3 +334,70 @@ for (const theme of ["light", "dark"] as const) {
     await expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" });
   });
 }
+
+// Tide orb (v0 "Tide with Lagoon text", Playful): phone bar orb + open radial at 390, desktop dock orb at 1440.
+async function orbClip(page: import("@playwright/test").Page, pad = 28) {
+  const b = (await page.locator('[data-testid="dock-orb"]:visible').boundingBox())!;
+  const vp = page.viewportSize()!;
+  const x = Math.max(0, b.x - pad);
+  const y = Math.max(0, b.y - pad);
+  return { x, y, width: Math.min(vp.width - x, b.width + pad * 2), height: Math.min(vp.height - y, b.height + pad * 2) };
+}
+const TIDE_O1 = "rgb(59, 128, 112)";
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: tide orb phone bar + radial (${theme})`, async ({ page }, info) => {
+    test.skip(info.project.name !== "mobile", "phone bar orb is shot once at 390");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.goto("/more");
+    await page.locator("h1").first().waitFor();
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const orb = page.locator('[data-testid="dock-orb"]:visible');
+    await expect(orb).toBeVisible();
+    const look = await orb.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const g = el.querySelector(".k-orb-g")!;
+      return { bg: cs.backgroundImage, anim: cs.animationName, glyph: getComputedStyle(g).animationName, svg: el.querySelector("svg path") !== null };
+    });
+    expect(look.bg).toContain(TIDE_O1);
+    expect(look.anim).toBe("k-flow");
+    expect(look.glyph).toBe("k-twinkle");
+    await expect(page).toHaveScreenshot(`tide-orb-bar-${theme}.png`, { clip: await orbClip(page) });
+    await orb.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(page.locator('#command-map [data-petal="search"]')).toBeVisible();
+    await expect(orb).toHaveAttribute("aria-expanded", "true");
+    expect(await orb.evaluate((el) => getComputedStyle(el).animationPlayState)).toBe("paused");
+    await page.waitForTimeout(300);
+    await expect(page).toHaveScreenshot(`tide-orb-radial-${theme}.png`, { mask: [page.locator('[role="status"]')] });
+    await page.keyboard.press("Escape");
+  });
+}
+test("visual: tide orb desktop dock (1440)", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "desktop dock orb");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/more");
+  await page.locator("h1").first().waitFor();
+  const dot = page.locator('[data-testid="dock-orb"]:visible .dock-orb');
+  await expect(dot).toBeVisible();
+  const look = await dot.evaluate((el) => ({ bg: getComputedStyle(el).backgroundImage, anim: getComputedStyle(el).animationName }));
+  expect(look.bg).toContain(TIDE_O1);
+  expect(look.bg).not.toContain("107, 63, 196");
+  expect(look.anim).toBe("k-flow");
+  await expect(page).toHaveScreenshot("tide-orb-desktop.png", { clip: await orbClip(page, 16) });
+});
+test("tide orb: reduced motion stops flow, aura and twinkle", async ({ page }, info) => {
+  test.skip(info.project.name !== "mobile", "computed-style check, once");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/more");
+  const orb = page.locator('[data-testid="dock-orb"]:visible');
+  await expect(orb).toBeVisible();
+  const r = await orb.evaluate((el) => ({
+    orb: getComputedStyle(el).animationName,
+    aura: getComputedStyle(el.querySelector(".k-orb-aura")!).display,
+    glyph: getComputedStyle(el.querySelector(".k-orb-g")!).animationName,
+  }));
+  expect(r).toEqual({ orb: "none", aura: "none", glyph: "none" });
+  await expect(page).toHaveScreenshot("tide-orb-bar-reduced.png", { clip: await orbClip(page) });
+});
