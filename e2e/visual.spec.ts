@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mock, setHa, startConversation } from "./helpers";
-import { homeVisual } from "./fixtures/home";
+import { homePulseVisual, homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
@@ -31,6 +31,7 @@ for (const [name, path] of [
       // wall-clock freshness. Real provider/selector behavior is tested separately.
       await page.clock.setFixedTime(new Date(homeVisual.generatedAt));
       await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
+      await page.route(/\/api\/home\/pulse(?:\?.*)?$/, (route) => route.fulfill({ json: homePulseVisual }));
     }
     if (name === "chat" || name === "alerts") {
       await page.clock.setFixedTime(new Date(visualNow));

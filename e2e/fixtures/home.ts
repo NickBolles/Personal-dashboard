@@ -1,4 +1,5 @@
 import type { HomePayload } from "../../lib/contracts";
+import type { HomePulse } from "../../lib/pulse";
 
 /** Recorded mock-backed Home response, isolated from mutable integration tests.
  * Keep its generatedAt as the browser clock so dates and freshness cannot drift.
@@ -346,4 +347,16 @@ export const homeVisual: HomePayload = {
     },
   },
   assists: [],
+};
+
+/** Fixed Today counts + 14-day trend for the Home visual (real counts depend on other specs' data). */
+export const homePulseVisual: HomePulse = {
+  approvals: 1,
+  awaitingValidation: 2,
+  mergedNotSettled: 1,
+  trend: {
+    days: ["2026-09-28", "2026-09-29", "2026-09-30", ...Array.from({ length: 11 }, (_, i) => `2026-10-${String(i + 1).padStart(2, "0")}`)],
+    added: [2, 1, 3, 0, 2, 4, 1, 2, 3, 1, 0, 2, 3, 2],
+    completed: [1, 2, 2, 1, 3, 2, 2, 1, 4, 2, 1, 3, 2, 3],
+  },
 };

@@ -48,7 +48,13 @@ test("Settings → Agents: add a profile route, test it, turn routing on", async
   await row.getByRole("button", { name: "Test momentumchief" }).click();
   await expect(row.getByRole("status")).toHaveText("Connected");
   await page.getByLabel(/Route areas to their Hermes profile/).check();
-  await expect(page.getByText("Saved")).toBeVisible();
+  // Scope to the toast: "Saved" also appears elsewhere on the page on desktop (strict-mode flake).
+  await expect(
+    page
+      .getByRole("status")
+      .filter({ hasText: /^Saved$/ })
+      .first(),
+  ).toBeVisible();
   // The key value itself is never in the page.
   await expect(page.locator("body")).not.toContainText("mock-hermes-momentumchief-key");
   await expectNoHorizontalOverflow(page);
