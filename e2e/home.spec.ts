@@ -181,3 +181,20 @@ test("Home capture: Enter goes to the Inbox; Ask Hermes starts a conversation an
   await expect(page.getByText(/Here's what I found/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("Done", { exact: true })).toBeVisible();
 });
+
+test("Today counts: approvals, validation and merged KPIs link to their views, with a 14-day trend", async ({ page }) => {
+  await page.goto("/home");
+  const strip = page.getByLabel("Today at a glance");
+  await expect(strip).toBeVisible();
+  // Real counts from local data; each a way in.
+  await expect(strip.getByRole("link", { name: /^Approvals waiting: \d+$/ })).toHaveAttribute("href", "/alerts");
+  await expect(strip.getByRole("link", { name: /^Awaiting validation: \d+$/ })).toHaveAttribute("href", "/areas#today-proof");
+  await expect(strip.getByRole("link", { name: /^Merged, not settled: \d+$/ })).toHaveAttribute("href", "/areas#today-settle");
+  await expect(page.getByTestId("today-trend")).toContainText(/\d+ completed vs \d+ added · 14 days/);
+  await strip.getByRole("link", { name: /^Awaiting validation/ }).click();
+  await expect(page).toHaveURL(/\/areas#today-proof$/);
+  await expect(page.getByTestId("work-today")).toBeVisible();
+  // The anchor lands after Today loads: the section is scrolled into view.
+  await expect(page.locator("#today-proof")).toBeInViewport();
+  await expectNoHorizontalOverflow(page);
+});

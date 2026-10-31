@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
@@ -154,10 +155,33 @@ function CardList({
 }
 
 /** Today: the /work front door. Continue first, then what needs proof, settling or attention. */
+/**
+ * Deep links like /areas#today-proof land before the Today data loads, so the
+ * browser's own anchor jump finds nothing. Once the data is ready (the target
+ * has mounted), scroll the hashed section into view — once per hash.
+ */
+function useHashScroll(ready: boolean) {
+  const done = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const hash = decodeURIComponent(window.location.hash.slice(1));
+    if (!hash || !hash.startsWith("today-") || done.current === hash) return;
+    const raf = requestAnimationFrame(() => {
+      const el = document.getElementById(hash);
+      if (!el) return;
+      done.current = hash;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      el.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [ready]);
+}
+
 export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: string) => void; onInbox: () => void }) {
   const q = useToday();
   const inbox = useInbox();
   const smart = useSmartSettings();
+  useHashScroll(q.isSuccess);
   if (q.isPending) return <Spinner label="Loading today…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const t = q.data;
