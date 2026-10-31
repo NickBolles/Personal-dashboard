@@ -115,3 +115,18 @@ test("attachments: axe clean and no overflow at 200% text zoom", async ({ page }
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
 });
+
+test("a brand-new empty chat takes attachments before its first message", async ({ page }) => {
+  await page.goto("/home");
+  const created = await page.evaluate(async () => {
+    const r = await fetch("/api/hermes/sessions", { method: "POST", headers: { "content-type": "application/json", "x-jarvis-csrf": "1" }, body: "{}" });
+    return (await r.json()) as { id: string };
+  });
+  await page.goto(`/chat/${encodeURIComponent(created.id)}`);
+  await page.getByTestId("chat-file-input").setInputFiles([{ name: "osprey-first.png", mimeType: "image/png", buffer: PNG }]);
+  // Picture only, no text: send is allowed once the upload is ready.
+  await expect(page.getByTestId("attachment-chip")).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
+  await page.getByRole("button", { name: /^Send/ }).click();
+  await expect(page.getByText("I can see 1 picture(s).")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("message-attachments").last().getByRole("button", { name: "Open picture osprey-first.png" })).toBeVisible();
+});

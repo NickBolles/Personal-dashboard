@@ -1251,10 +1251,17 @@ function Composer({
               onStop();
             }
           }}
-          className="block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
+          className="block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none max-[400px]:order-first max-[400px]:basis-full rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
         />
         {running ? (
-          <Button type="button" variant="secondary" onClick={onStop} aria-label="Stop the run (Escape)" disabled={phase === "stopping"} className="shrink-0">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onStop}
+            aria-label="Stop the run (Escape)"
+            disabled={phase === "stopping"}
+            className="shrink-0 max-[400px]:ml-auto"
+          >
             <StopIcon className="h-5 w-5" />
           </Button>
         ) : null}
@@ -1262,9 +1269,11 @@ function Composer({
           type="submit"
           variant="primary"
           busy={busy}
-          disabled={!text.trim() || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)}
+          disabled={
+            (!text.trim() && !attachments.readyIds.length) || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)
+          }
           aria-label={running ? "Send guidance" : "Send"}
-          className="shrink-0"
+          className={running ? "shrink-0" : "shrink-0 max-[400px]:ml-auto"}
         >
           {!busy ? <SendIcon className="h-5 w-5" /> : null}
         </Button>

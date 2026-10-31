@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { mock, setHa, startConversation } from "./helpers";
 import { homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
+import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 
@@ -449,5 +450,44 @@ for (const theme of ["light", "dark"] as const) {
     await expect(sheet.getByRole("combobox", { name: "Search context" })).toBeFocused();
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-context-sheet-${theme}.png`, { fullPage: false, mask: [...MASK, "[role=listbox]"].map((m) => page.locator(m)) });
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat files and pictures (${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_files$/, (route) => route.fulfill({ json: chatFilesVisual }));
+    await page.route(/\/api\/hermes\/sessions\/sess_files\/links-panel$/, (route) => route.fulfill({ json: { links: [] } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_files\/files\/[^/?]+(\?thumb=1)?$/, (route) =>
+      route.fulfill({ body: PHOTO_PNG, contentType: "image/png" }),
+    );
+    // List: the sent files. Upload: the picture is ready at once, the PDF stays in flight (progress chip).
+    await page.route(/\/api\/hermes\/sessions\/sess_files\/files$/, async (route) => {
+      if (route.request().method() === "GET") return route.fulfill({ json: { files: filesVisual } });
+      if ((route.request().postData() ?? "").includes("plan.pdf")) return; // never answers: stays uploading
+      return route.fulfill({ json: { file: { ...filesVisual[0], id: "cf_visual_draft1", name: "corner.png", sentAt: null } } });
+    });
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto("/chat/sess_files");
+    await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+    await expect(page.getByText(chatFilesVisual.timeline[1].text, { exact: true })).toBeVisible();
+    await page.getByTestId("chat-file-input").setInputFiles([
+      { name: "corner.png", mimeType: "image/png", buffer: PHOTO_PNG },
+      { name: "plan.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%visual\n") },
+    ]);
+    await expect(page.getByTestId("attachment-chip").first()).toHaveAttribute("data-status", "ready");
+    await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "uploading");
+    await page.waitForTimeout(600);
+    const mask = [...MASK, "[role=progressbar]"].map((m) => page.locator(m));
+    await expect(page).toHaveScreenshot(`chat-files-${theme}.png`, { fullPage: false, mask });
+    const wide = (page.viewportSize()?.width ?? 0) >= 1100;
+    const panel = wide ? page.getByRole("complementary", { name: "Context and links" }) : page.getByRole("dialog", { name: "Context & links" });
+    if (!wide) await page.getByTestId("links-button").click();
+    await expect(panel.getByText("shelf-measurements.txt")).toBeVisible();
+    await page.waitForTimeout(600);
+    await expect(page).toHaveScreenshot(`chat-files-panel-${theme}.png`, { fullPage: false, mask });
   });
 }
