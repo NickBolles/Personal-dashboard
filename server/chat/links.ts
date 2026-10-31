@@ -110,9 +110,11 @@ export async function syncPanelLinks(user: CurrentUser & Parameters<typeof resol
         const c = classifyUrl(r.url);
         if (!c?.repo || !c.number) return;
         const g = await resolveGithubRef(user, `${c.repo}#${c.number}`).catch(() => null);
+        // GitHub down, rate-limited or no token yet: leave resolvedAt unset so a later call retries.
+        if (!g) return;
         db()
           .update(schema.conversationLinks)
-          .set({ title: g?.title ?? null, state: g?.state ?? null, resolvedAt: new Date().toISOString() })
+          .set({ title: g.title ?? null, state: g.state ?? null, resolvedAt: new Date().toISOString() })
           .where(and(eq(schema.conversationLinks.sessionId, sessionId), eq(schema.conversationLinks.url, r.url)))
           .run();
       }),
