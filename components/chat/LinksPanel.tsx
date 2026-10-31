@@ -21,7 +21,8 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
   const sent = useRef(new Set<string>());
   useEffect(() => {
     if (readOnly) return;
-    const fresh = seen.filter((l) => !sent.current.has(l.url));
+    // The route caps URLs at 2048 chars; one oversized URL would reject the whole batch.
+    const fresh = seen.filter((l) => l.url.length <= 2048 && !sent.current.has(l.url));
     if (!fresh.length) return;
     const t = setTimeout(() => {
       for (const l of fresh) sent.current.add(l.url);
