@@ -72,7 +72,7 @@ test("keyboard-only inbox triage: j/k move, Enter files, M chooses, E dismisses 
     const r = await page.request.post("/api/work/inbox", { data: { text }, headers: { "x-jarvis-csrf": "1" } });
     expect(r.ok()).toBeTruthy();
   }
-  await page.goto("/areas?view=inbox");
+  await page.goto("/inbox");
   const preview = page.getByTestId("inbox-preview");
   const pick = (t: string) => page.locator(`[data-inbox-pick]`, { hasText: t });
   await expect(pick(titles[0])).toBeVisible();

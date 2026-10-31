@@ -65,7 +65,7 @@ test("work opens on Today; capture to the inbox, file it, no sideways scrolling"
     .getByRole("navigation", { name: "Areas sections" })
     .getByRole("button", { name: /^Inbox/ })
     .click();
-  await expect(page).toHaveURL(/view=inbox/);
+  await expect(page).toHaveURL(/\/inbox/);
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
   await page.getByLabel("Capture to inbox").fill(`Call the HVAC company ${nonce}\nAsk about filters`);
   await page.getByRole("button", { name: "Capture", exact: true }).last().click();
@@ -158,7 +158,7 @@ test("settings → connections → GitHub: add, test, warn, webhook secret; assi
   await page.locator("#panel-github").getByRole("button", { name: "Check now" }).click();
   await expect(page.getByTestId("gh-poll-result")).toContainText("assigned issues");
 
-  await page.goto("/areas?view=inbox");
+  await page.goto("/inbox");
   const entry = page.locator("[data-inbox-entry]", { hasText: issue.title });
   await expect(entry).toContainText("GitHub issue");
   await expect(entry).toContainText("Why: Assigned to you on GitHub (momentumbets)");
@@ -235,7 +235,7 @@ test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-s
   await box.fill("inbox");
   await expect(page.locator('[data-command="work.inbox"]')).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/areas\?view=inbox/);
+  await expect(page).toHaveURL(/\/inbox/);
   await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
 
   // Hold → radial map; slide onto "Go to", pause for its sub-menu, slide to "Timeline", release.
@@ -320,7 +320,7 @@ test.describe("phone, 320 px", () => {
     await page.goto("/areas");
     await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
-    await page.goto("/areas?view=inbox");
+    await page.goto("/inbox");
     await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     const r = await appPost(page, "/api/work/items", { kind: "thread", title: "Phone packet check" });
@@ -336,4 +336,10 @@ test.describe("phone, 320 px", () => {
     expect(o!.y).toBeGreaterThanOrEqual(bar!.y - 21);
     expect(o!.y + o!.height).toBeLessThanOrEqual(bar!.y + bar!.height + 1);
   });
+});
+
+test("old /areas?view=inbox links redirect to /inbox (params kept)", async ({ page }) => {
+  await page.goto("/areas?view=inbox&entry=nope");
+  await expect(page).toHaveURL(/\/inbox\?entry=nope$/);
+  await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
 });

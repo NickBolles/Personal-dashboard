@@ -161,7 +161,7 @@ export async function deliverPendingPushes(now = new Date()) {
     // Claim (conditional update) so the worker and the standalone dispatcher never send the same row twice.
     if (!claimPush(n.id, now)) continue;
     const payload: PushPayload = { id: n.id, title: n.title, body: n.body, url: n.deepLink, tag: n.dedupeKey ?? n.id, severity: n.severity };
-    if (n.category === "ai_report" && n.deepLink.includes("view=inbox"))
+    if (n.category === "ai_report" && (n.deepLink.startsWith("/inbox?") || n.deepLink.includes("view=inbox")))
       payload.actions = [
         { action: "open", title: "Open report" },
         { action: "file", title: "File it" },

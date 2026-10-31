@@ -235,7 +235,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
                   href={
                     r.itemId
                       ? `/areas?item=${encodeURIComponent(r.itemId)}&report=${encodeURIComponent(r.reportId)}`
-                      : `/areas?view=inbox&entry=${encodeURIComponent(r.inboxId ?? "")}`
+                      : `/inbox?entry=${encodeURIComponent(r.inboxId ?? "")}`
                   }
                 >
                   <span className="truncate text-[14px] font-medium">✦ {r.title}</span>

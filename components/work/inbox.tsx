@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls } from "@/components/ui";
+import { Badge, Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
@@ -107,7 +107,17 @@ function useTwoPane() {
 
 const SOURCE: Record<InboxEntry["source"], string> = { github_issue: "GitHub issue", capture: "Capture" };
 
-export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem: (id: string) => void }) {
+export function InboxView({
+  items,
+  onOpenItem,
+  initialEntry,
+  initialFocus,
+}: {
+  items: WorkItem[];
+  onOpenItem: (id: string) => void;
+  initialEntry?: string;
+  initialFocus?: boolean;
+}) {
   const q = useInbox();
   const canChat = useAccess().can("hermes.chat");
   const [accepting, setAccepting] = useState<InboxEntry | null>(null);
@@ -115,12 +125,51 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
   const entries = q.data?.items ?? [];
   // Two-pane triage (>=640): the list selects, the preview acts. Keys: j/k or arrows move, Enter files, M chooses, E dismisses.
   const twoPane = useTwoPane();
-  const [picked, setPicked] = useState<string | null>(null);
-  const sel = entries.find((e) => e.id === picked) ?? entries[0] ?? null;
+  const [picked, setPicked] = useState<string | null>(initialEntry ?? null);
+  // "Triage one at a time": one entry full-width, auto-advance, progress n of N (N fixed when it starts).
+  const [focus, setFocus] = useState<{ total: number; done: number; skipped: string[] } | null>(null);
+  const [focusRequested, setFocusRequested] = useState(!!initialFocus);
+  if (focusRequested && q.data) {
+    setFocusRequested(false);
+    if (entries.length) setFocus({ total: entries.length, done: 0, skipped: [] });
+  }
+  const focusQueue = focus ? entries.filter((e) => !focus.skipped.includes(e.id)) : [];
+  const focusEntry = focus ? (focusQueue[0] ?? null) : null;
+  const sel = focus ? focusEntry : (entries.find((e) => e.id === picked) ?? entries[0] ?? null);
   const listRef = useRef<HTMLUListElement>(null);
+  const advance = () => setFocus((f) => (f ? { ...f, done: f.done + 1 } : f));
   const fileHere = useWorkMutation(
     (e: InboxEntry) => api.post<{ item: WorkItem }>(`/api/work/inbox/${encodeURIComponent(e.id)}/accept`, { parentId: null, useSuggestion: true }),
-    { ok: "Filed", onSuccess: (r) => onOpenItem(r.item.id) },
+    { ok: "Filed", onSuccess: (r) => (focus ? advance() : onOpenItem(r.item.id)) },
+  );
+  // Bulk "Accept N suggestions": files every capture under its suggestion; one Undo reverts the batch.
+  const { toast } = useToast();
+  const suggested = entries.filter((e) => e.capture?.suggestion);
+  const [bulkUndo, setBulkUndo] = useState<string[] | null>(null);
+  const bulkAccept = useWorkMutation(
+    async (list: InboxEntry[]) => {
+      const done: string[] = [];
+      for (const e of list)
+        try {
+          await api.post(`/api/work/inbox/${encodeURIComponent(e.id)}/accept`, { parentId: null, useSuggestion: true });
+          done.push(e.id);
+        } catch {
+          /* filed elsewhere meanwhile, or the suggestion is gone: leave it in the Inbox */
+        }
+      return { done, failed: list.length - done.length };
+    },
+    {
+      onSuccess: ({ done, failed }) => {
+        toast(failed ? `Filed ${done.length}; ${failed} left in the Inbox` : `Filed ${done.length}`, failed ? "warn" : "ok");
+        if (done.length) setBulkUndo(done);
+      },
+    },
+  );
+  const undoBulk = useWorkMutation(
+    async (ids: string[]) => {
+      for (const id of ids) await api.post(`/api/work/inbox/${encodeURIComponent(id)}/unaccept`);
+    },
+    { ok: "Undone: back in the Inbox", onSuccess: () => setBulkUndo(null) },
   );
   const primary = (e: InboxEntry) => (e.capture?.suggestion ? fileHere.mutate(e) : setAccepting(e));
   const move = (d: number) => {
@@ -139,15 +188,17 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
   useEffect(() => {
     keys.current = (ev) => {
       const t = ev.target as HTMLElement;
-      if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey || !twoPane || !sel) return;
+      if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey || (!twoPane && !focus) || !sel) return;
       if (t !== document.body && !sectionRef.current?.contains(t)) return;
       if (t.closest("input, textarea, select, [contenteditable], [role=menu], [role=dialog]")) return;
       const k = ev.key.toLowerCase();
-      if (k === "j" || k === "arrowdown") move(1);
-      else if (k === "k" || k === "arrowup") move(-1);
-      else if (k === "enter" && (t.dataset.inboxPick || t === document.body)) primary(sel);
+      if (!focus && (k === "j" || k === "arrowdown")) move(1);
+      else if (!focus && (k === "k" || k === "arrowup")) move(-1);
+      else if (k === "enter" && (t.dataset.inboxPick || t.dataset.inboxFocus != null || t === document.body)) primary(sel);
       else if (k === "m") setAccepting(sel);
-      else if (k === "e") dismiss.mutate(sel.id);
+      else if (k === "e") dismiss.mutate(sel.id, { onSuccess: () => advance() });
+      else if (k === "s" && focus) setFocus({ ...focus, skipped: [...focus.skipped, sel.id] });
+      else if (k === "escape" && focus) setFocus(null);
       else return;
       ev.preventDefault();
     };
@@ -166,131 +217,173 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
             Inbox
           </h2>
         </div>
-        {q.data ? <span className="text-[13px] text-muted tabular-nums">{q.data.count} waiting</span> : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {q.data ? <span className="text-[13px] text-muted tabular-nums">{q.data.count} waiting</span> : null}
+          {!focus && suggested.length > 1 ? (
+            <Button size="sm" onClick={() => bulkAccept.mutate(suggested)} busy={bulkAccept.isPending}>
+              Accept {suggested.length} suggestions
+            </Button>
+          ) : null}
+          {!focus && entries.length ? (
+            <Button size="sm" variant={suggested.length > 1 ? "ghost" : undefined} onClick={() => setFocus({ total: entries.length, done: 0, skipped: [] })}>
+              Triage one at a time
+            </Button>
+          ) : null}
+        </div>
       </div>
-      <div className="wk-card px-3 py-2.5">
-        <CaptureForm inline />
-      </div>
-      <div className="min-w-0 gap-3 sm:grid sm:grid-cols-[minmax(0,330px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <section aria-labelledby="inbox-items" className="wk-card min-w-0 self-start overflow-hidden">
-          <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <h3 id="inbox-items" className="wk-label">
-              Assigned issues and captures
-            </h3>
-            {entries.length ? <span className="text-xs text-muted tabular-nums">{entries.length}</span> : null}
+      {bulkUndo ? (
+        <div role="status" className="wk-card flex flex-wrap items-center justify-between gap-2 px-3 py-2" data-testid="inbox-bulk-undo">
+          <span className="text-[13px]">Filed {bulkUndo.length} under their suggestions.</span>
+          <span className="flex items-center gap-1">
+            <Button size="sm" variant="primary" busy={undoBulk.isPending} onClick={() => undoBulk.mutate(bulkUndo)}>
+              Undo
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setBulkUndo(null)} aria-label="Dismiss undo">
+              ✕
+            </Button>
+          </span>
+        </div>
+      ) : null}
+      {focus ? (
+        <FocusTriage
+          entry={focusEntry}
+          n={Math.min(focus.total, focus.done + focus.skipped.length + 1)}
+          total={focus.total}
+          busy={fileHere.isPending}
+          onPrimary={() => focusEntry && primary(focusEntry)}
+          onChoose={() => focusEntry && setAccepting(focusEntry)}
+          onDismiss={() => focusEntry && dismiss.mutate(focusEntry.id, { onSuccess: () => advance() })}
+          onSkip={() => focusEntry && setFocus({ ...focus, skipped: [...focus.skipped, focusEntry.id] })}
+          onExit={() => setFocus(null)}
+          onOpenItem={onOpenItem}
+        />
+      ) : (
+        <>
+          <div className="wk-card px-3 py-2.5">
+            <CaptureForm inline />
           </div>
-          {q.isPending ? (
-            <div className="p-3">
-              <Spinner label="Loading inbox…" />
-            </div>
-          ) : null}
-          {q.error ? (
-            <div className="p-3">
-              <ErrorNote error={q.error} retry={() => q.refetch()} />
-            </div>
-          ) : null}
-          {q.data && !entries.length ? (
-            <p className="px-3 py-2.5 text-[13px] text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p>
-          ) : null}
-          <ul className="wk-rows" ref={listRef}>
-            {entries.map((e) => (
-              <li
-                key={e.id}
-                className={cx("wk-row-hover flex items-start gap-x-2.5 px-3 py-2", sel?.id === e.id && "sm:bg-surface-2")}
-                data-inbox-entry={e.id}
-                data-selected={sel?.id === e.id ? "" : undefined}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cx(
-                    "mt-0.5 inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-bold",
-                    e.source === "github_issue" ? "bg-text text-bg" : "bg-surface-2 text-muted ring-1 ring-line",
-                  )}
-                >
-                  {e.source === "github_issue" ? "GH" : "CA"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[14px] leading-snug font-semibold break-words">
-                    {twoPane ? (
-                      <button
-                        type="button"
-                        data-inbox-pick={e.id}
-                        aria-current={sel?.id === e.id ? "true" : undefined}
-                        className="text-left hover:underline focus-visible:underline"
-                        onClick={() => setPicked(e.id)}
-                        onFocus={() => setPicked(e.id)}
-                      >
-                        {e.title}
-                      </button>
-                    ) : (
-                      e.title
-                    )}
-                  </p>
-                  {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted sm:line-clamp-1">{e.note}</p> : null}
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
-                    <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
-                    {e.repo ? (
-                      <span className="font-mono">
-                        {e.repo}#{e.number}
-                      </span>
-                    ) : null}
-                    <span>{fmtWhen(e.createdAt)}</span>
-                    {twoPane ? (
-                      e.capture?.suggestion ? (
-                        <span className="truncate text-accent">→ {e.capture.suggestion.title}</span>
-                      ) : null
-                    ) : (
-                      <span>Why: {e.reason}</span>
-                    )}
-                  </p>
-                  {e.capture && !twoPane ? <CaptureExtras entry={e} onAccepted={onOpenItem} onChoose={() => setAccepting(e)} /> : null}
+          <div className="min-w-0 gap-3 sm:grid sm:grid-cols-[minmax(0,330px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+            <section aria-labelledby="inbox-items" className="wk-card min-w-0 self-start overflow-hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+                <h3 id="inbox-items" className="wk-label">
+                  Assigned issues and captures
+                </h3>
+                {entries.length ? <span className="text-xs text-muted tabular-nums">{entries.length}</span> : null}
+              </div>
+              {q.isPending ? (
+                <div className="p-3">
+                  <Spinner label="Loading inbox…" />
                 </div>
-                {/* Phones: one visible action (File/Accept) + ⋯ (Dismiss). >=640 the preview pane holds the actions. */}
-                {twoPane ? null : (
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    {e.url ? (
-                      <a
-                        href={e.url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent hover:underline sm:min-h-9"
-                      >
-                        Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
-                      </a>
-                    ) : null}
-                    {e.capture?.suggestion ? (
-                      // The suggestion chip is the row's 1-tap action; this picks somewhere else.
-                      <Button size="sm" variant="ghost" onClick={() => setAccepting(e)} aria-label={`Choose where to file: ${e.title}`}>
-                        Choose…
-                      </Button>
-                    ) : (
-                      <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
-                        {e.source === "github_issue" ? "Accept…" : "File…"}
-                      </Button>
+              ) : null}
+              {q.error ? (
+                <div className="p-3">
+                  <ErrorNote error={q.error} retry={() => q.refetch()} />
+                </div>
+              ) : null}
+              {q.data && !entries.length ? (
+                <p className="px-3 py-2.5 text-[13px] text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p>
+              ) : null}
+              <ul className="wk-rows" ref={listRef}>
+                {entries.map((e) => (
+                  <li
+                    key={e.id}
+                    className={cx("wk-row-hover flex items-start gap-x-2.5 px-3 py-2", sel?.id === e.id && "sm:bg-surface-2")}
+                    data-inbox-entry={e.id}
+                    data-selected={sel?.id === e.id ? "" : undefined}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cx(
+                        "mt-0.5 inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-bold",
+                        e.source === "github_issue" ? "bg-text text-bg" : "bg-surface-2 text-muted ring-1 ring-line",
+                      )}
+                    >
+                      {e.source === "github_issue" ? "GH" : "CA"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[14px] leading-snug font-semibold break-words">
+                        {twoPane ? (
+                          <button
+                            type="button"
+                            data-inbox-pick={e.id}
+                            aria-current={sel?.id === e.id ? "true" : undefined}
+                            className="text-left hover:underline focus-visible:underline"
+                            onClick={() => setPicked(e.id)}
+                            onFocus={() => setPicked(e.id)}
+                          >
+                            {e.title}
+                          </button>
+                        ) : (
+                          e.title
+                        )}
+                      </p>
+                      {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted sm:line-clamp-1">{e.note}</p> : null}
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+                        <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
+                        {e.repo ? (
+                          <span className="font-mono">
+                            {e.repo}#{e.number}
+                          </span>
+                        ) : null}
+                        <span>{fmtWhen(e.createdAt)}</span>
+                        {twoPane ? (
+                          e.capture?.suggestion ? (
+                            <span className="truncate text-accent">→ {e.capture.suggestion.title}</span>
+                          ) : null
+                        ) : (
+                          <span>Why: {e.reason}</span>
+                        )}
+                      </p>
+                      {e.capture && !twoPane ? <CaptureExtras entry={e} onAccepted={onOpenItem} onChoose={() => setAccepting(e)} /> : null}
+                    </div>
+                    {/* Phones: one visible action (File/Accept) + ⋯ (Dismiss). >=640 the preview pane holds the actions. */}
+                    {twoPane ? null : (
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        {e.url ? (
+                          <a
+                            href={e.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent hover:underline sm:min-h-9"
+                          >
+                            Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
+                          </a>
+                        ) : null}
+                        {e.capture?.suggestion ? (
+                          // The suggestion chip is the row's 1-tap action; this picks somewhere else.
+                          <Button size="sm" variant="ghost" onClick={() => setAccepting(e)} aria-label={`Choose where to file: ${e.title}`}>
+                            Choose…
+                          </Button>
+                        ) : (
+                          <Button size="sm" onClick={() => setAccepting(e)} aria-label={`${e.source === "github_issue" ? "Accept" : "File"}: ${e.title}`}>
+                            {e.source === "github_issue" ? "Accept…" : "File…"}
+                          </Button>
+                        )}
+                        {e.capture ? (
+                          <CaptureRowMenu entry={e} label={`More for ${e.title}`} onDismiss={() => dismiss.mutate(e.id)} />
+                        ) : (
+                          <OverflowMenu label={`More for ${e.title}`} items={[{ label: "Dismiss", onSelect: () => dismiss.mutate(e.id), danger: true }]} />
+                        )}
+                      </div>
                     )}
-                    {e.capture ? (
-                      <CaptureRowMenu entry={e} label={`More for ${e.title}`} onDismiss={() => dismiss.mutate(e.id)} />
-                    ) : (
-                      <OverflowMenu label={`More for ${e.title}`} items={[{ label: "Dismiss", onSelect: () => dismiss.mutate(e.id), danger: true }]} />
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-        {twoPane && sel ? (
-          <InboxPreview
-            entry={sel}
-            busy={fileHere.isPending}
-            onPrimary={() => primary(sel)}
-            onChoose={() => setAccepting(sel)}
-            onDismiss={() => dismiss.mutate(sel.id)}
-            onOpenItem={onOpenItem}
-          />
-        ) : null}
-      </div>
-      {canChat ? <UnfiledPanel items={items.filter((i) => !i.archived)} dismissable /> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            {twoPane && sel ? (
+              <InboxPreview
+                entry={sel}
+                busy={fileHere.isPending}
+                onPrimary={() => primary(sel)}
+                onChoose={() => setAccepting(sel)}
+                onDismiss={() => dismiss.mutate(sel.id)}
+                onOpenItem={onOpenItem}
+              />
+            ) : null}
+          </div>
+          {canChat ? <UnfiledPanel items={items.filter((i) => !i.archived)} dismissable /> : null}
+        </>
+      )}
       {accepting ? (
         <AcceptDialog
           entry={accepting}
@@ -298,10 +391,105 @@ export function InboxView({ items, onOpenItem }: { items: WorkItem[]; onOpenItem
           onClose={() => setAccepting(null)}
           onAccepted={(id) => {
             setAccepting(null);
-            onOpenItem(id);
+            if (focus) advance();
+            else onOpenItem(id);
           }}
         />
       ) : null}
+    </section>
+  );
+}
+
+/** "Triage one at a time": one entry full-width with its suggestion and actions; filing or dismissing advances. */
+function FocusTriage({
+  entry: e,
+  n,
+  total,
+  busy,
+  onPrimary,
+  onChoose,
+  onDismiss,
+  onSkip,
+  onExit,
+  onOpenItem,
+}: {
+  entry: InboxEntry | null;
+  n: number;
+  total: number;
+  busy: boolean;
+  onPrimary: () => void;
+  onChoose: () => void;
+  onDismiss: () => void;
+  onSkip: () => void;
+  onExit: () => void;
+  onOpenItem: (id: string) => void;
+}) {
+  const kbd = "ml-1.5 rounded border border-line px-1 font-mono text-[10px] text-muted";
+  const s = e?.capture?.suggestion;
+  return (
+    <section aria-label="Triage one at a time" className="wk-card min-w-0 p-4 sm:p-6" data-testid="inbox-focus">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="wk-label tabular-nums" aria-live="polite" data-testid="inbox-focus-progress">
+          {e ? `${n} of ${total}` : `Done · ${total} triaged`}
+        </p>
+        <Button size="sm" variant="ghost" onClick={onExit} aria-keyshortcuts="Escape">
+          Exit focus<kbd className={kbd}>Esc</kbd>
+        </Button>
+      </div>
+      <div className="mt-2 h-1 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+        <div className="h-full bg-accent" style={{ width: `${Math.round(((e ? n - 1 : total) / Math.max(1, total)) * 100)}%` }} />
+      </div>
+      {e ? (
+        <div className="mt-4 min-w-0">
+          <p className="wk-eyebrow">
+            {SOURCE[e.source]}
+            {e.repo ? (
+              <span className="ml-1.5 font-mono normal-case">
+                {e.repo}#{e.number}
+              </span>
+            ) : null}
+          </p>
+          <h3 className="mt-0.5 text-lg leading-snug font-semibold break-words">{e.title}</h3>
+          <p data-dynamic className="mt-0.5 text-xs text-muted">
+            {fmtWhen(e.createdAt)} · Why: {e.reason}
+          </p>
+          {e.note ? <p className="mt-2 text-[14px] break-words whitespace-pre-wrap">{e.note}</p> : null}
+          {s ? (
+            <div className="mt-3 rounded-[8px] border border-line bg-surface-2 px-3 py-2" data-testid="inbox-suggestion">
+              <p className="wk-label">Suggested destination</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[13px]">
+                <span className="font-medium break-words">{s.path || s.title}</span>
+                {s.confidence != null ? <Badge tone="accent">{Math.round(s.confidence * 100)}%</Badge> : null}
+              </p>
+              {s.reason ? <p className="mt-0.5 text-xs text-muted">{s.reason}</p> : null}
+            </div>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
+            <Button size="sm" variant="primary" onClick={onPrimary} busy={busy} aria-keyshortcuts="Enter" data-inbox-focus="">
+              {s ? "File here" : e.source === "github_issue" ? "Accept…" : "File…"}
+              <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-[10px] opacity-75">Enter</kbd>
+            </Button>
+            {s ? (
+              <Button size="sm" onClick={onChoose} aria-keyshortcuts="M">
+                Choose…<kbd className={kbd}>M</kbd>
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={onDismiss} aria-keyshortcuts="E">
+              Dismiss<kbd className={kbd}>E</kbd>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onSkip} aria-keyshortcuts="S">
+              Skip<kbd className={kbd}>S</kbd>
+            </Button>
+          </div>
+          {e.capture ? (
+            <div className="mt-2 [&_[data-testid=file-under-suggestion]]:hidden">
+              <CaptureExtras entry={e} onAccepted={onOpenItem} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-4 text-[14px] text-muted">Inbox triaged. Skipped entries are still in the list.</p>
+      )}
     </section>
   );
 }

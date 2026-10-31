@@ -26,7 +26,7 @@ import { NEW_WORK_EVENT } from "@/components/navigation/commands";
 import { useShowArchived } from "@/lib/client/show-archived";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
 import { TodayView, useInbox } from "@/components/work/today";
-import { CaptureDialog, InboxView } from "@/components/work/inbox";
+import { CaptureDialog } from "@/components/work/inbox";
 import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
 import {
@@ -241,13 +241,9 @@ export function WorkView({
           {view.kind === "today" ? (
             <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
               <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-                <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
+                <TodayView onOpen={openWith} onInbox={() => router.push("/inbox")} />
               </div>
               {wide ? <TodayRail items={list} onSelect={select} /> : null}
-            </div>
-          ) : view.kind === "inbox" ? (
-            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-              <InboxView items={list} onOpenItem={select} />
             </div>
           ) : view.kind === "tree" ? (
             <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
