@@ -69,6 +69,7 @@ function Sheet({
   const listId = useId();
   const titleId = useId();
   const input = useRef<HTMLInputElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const restore = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -138,6 +139,23 @@ function Sheet({
       e.preventDefault();
       e.stopPropagation();
       onClose();
+    } else if (e.key === "Tab") {
+      // Keep focus inside the modal sheet (aria-modal), like the shared Dialog.
+      const items = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input, a[href], [tabindex]:not([tabindex="-1"])') ?? []);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      if (e.shiftKey && (at === first || !panel.current?.contains(at))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (at === last || !panel.current?.contains(at))) {
+        e.preventDefault();
+        first.focus();
+      }
+    } else if (e.target !== input.current) {
+      // Arrow/Enter belong to the search combobox; buttons keep their native activation.
+      return;
     } else if (e.key === "ArrowDown" && rows.length) {
       e.preventDefault();
       setActive((a) => (Math.min(a, rows.length - 1) + 1) % rows.length);
@@ -159,6 +177,7 @@ function Sheet({
     <div className="fixed inset-0 z-50" onKeyDown={onKey}>
       <div className="absolute inset-0 bg-black/40" aria-hidden="true" onClick={onClose} />
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
