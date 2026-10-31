@@ -280,7 +280,9 @@ export function HomeView() {
           <p className="eyebrow" data-dynamic>
             {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
           </p>
-          <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">{greeting}</h1>
+          <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">
+            <span className="k-greet">{greeting}</span>
+          </h1>
           {att ? <AttentionLine a={att} /> : null}
         </div>
         <OverflowMenu

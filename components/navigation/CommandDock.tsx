@@ -1,6 +1,5 @@
 "use client";
 
-import { JarvisMark } from "@/components/brand/JarvisMark";
 import {
   useCallback,
   useEffect,
@@ -467,7 +466,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
           <>
             <span aria-hidden="true" className="k-orb-aura" />
             <span aria-hidden="true" className="dock-ring" />
-            <JarvisMark className="h-7 w-7" />
+            <OrbSparkle className="k-orb-g h-[22px] w-[22px]" />
           </>
         ) : (
           <>
@@ -478,8 +477,9 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
                 charging && "dock-charging",
               )}
             >
+              <span className="dock-orb-aura" />
               <span className="dock-ring" />
-              <JarvisMark className="h-[18px] w-[18px]" />
+              <OrbSparkle className="dock-glyph h-4 w-4" />
             </span>
             {!compact ? (
               <span aria-hidden="true" className="flex min-w-0 flex-1 items-center justify-between gap-2 whitespace-nowrap">
@@ -516,7 +516,7 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
               <div id="command-map" role="menu" aria-label="Action map" className="fixed h-0 w-0" style={{ left: map.center.x, top: map.center.y }}>
                 <span
                   aria-hidden="true"
-                  className="dock-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
+                  className="dock-map-orb absolute -mt-7 -ml-7 inline-flex h-14 w-14 items-center justify-center overflow-hidden rounded-full px-1 text-center text-[10px] leading-tight font-bold break-all text-white"
                   data-testid="map-ask-target"
                 >
                   {target.agent}
@@ -578,5 +578,15 @@ export function CommandDock({ variant, compact = false }: { variant: "bar" | "do
           )
         : null}
     </>
+  );
+}
+
+/** The v0 orb glyph: a four-point sparkle with a small companion star (stroke, inherits colour). */
+function OrbSparkle({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
+    </svg>
   );
 }
