@@ -12,7 +12,7 @@ import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialo
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
 import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
-import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
+import { NEW_CHAT_EVENT, NEW_WORK_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ComposerRouteWatcher } from "@/components/agents/useComposerTarget";
@@ -316,6 +316,23 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                       Chat
                     </button>
                   ) : null}
+                  {/* On Areas the in-page "+ New" is phone/tablet only, so the header menu carries its kinds. */}
+                  {canWork && pathname.startsWith("/areas")
+                    ? (["thread", "project", "area"] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setNewMenu(false);
+                            window.dispatchEvent(new CustomEvent(NEW_WORK_EVENT, { detail: { kind } }));
+                          }}
+                          className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
+                        >
+                          {kind === "thread" ? "Item" : kind === "project" ? "Project" : "Area"}
+                        </button>
+                      ))
+                    : null}
                 </div>
               ) : null}
             </div>

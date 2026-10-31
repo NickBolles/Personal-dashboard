@@ -25,6 +25,8 @@ export const OPEN_PALETTE_EVENT = "jarvis:search";
 export const OPEN_CAPTURE_EVENT = "jarvis:work-capture";
 /** Start a new conversation now (AppShell handles it): `detail.areaId` files it there, else Miscellaneous. */
 export const NEW_CHAT_EVENT = "jarvis:new-chat";
+/** Header "New" menu → Areas page: create an item/project/area where you are (detail: { kind }). */
+export const NEW_WORK_EVENT = "jarvis:new-work";
 
 /** The Work item open in /work right now, if any. */
 function currentWorkItem() {

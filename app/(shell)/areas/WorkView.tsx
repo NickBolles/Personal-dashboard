@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
@@ -22,6 +22,7 @@ import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
+import { NEW_WORK_EVENT } from "@/components/navigation/commands";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
 import { TodayView, useInbox } from "@/components/work/today";
 import { CaptureDialog, InboxView } from "@/components/work/inbox";
@@ -161,6 +162,16 @@ export function WorkView({
   const open = current ? list.find((i) => i.id === current) : undefined;
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
 
+  // Header bar "New" → Item/Project/Area, created in the open container like the in-page menu.
+  useEffect(() => {
+    const onNew = (e: Event) => {
+      const kind = (e as CustomEvent<{ kind?: CreatableKind }>).detail?.kind;
+      if (kind) setAdding({ kind, parent: kind === "area" ? null : contextNode });
+    };
+    window.addEventListener(NEW_WORK_EVENT, onNew);
+    return () => window.removeEventListener(NEW_WORK_EVENT, onNew);
+  }, [contextNode]);
+
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="wk-hub-top min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
@@ -180,14 +191,17 @@ export function WorkView({
           >
             {selectMode ? "Done selecting" : "Select"}
           </Button>
-          <NewMenu
-            canChat={canChat}
-            busy={newChat.busy}
-            context={contextNode}
-            onChat={() => newChat.start(contextNode ? { areaId: contextNode.id } : undefined)}
-            onNew={(kind) => setAdding({ kind, parent: kind === "area" ? null : contextNode })}
-            onCapture={() => setCapturing(true)}
-          />
+          {/* >=1024 the header bar's New menu is the one "+ New" (it dispatches NEW_WORK_EVENT here). */}
+          <div className="lg:hidden">
+            <NewMenu
+              canChat={canChat}
+              busy={newChat.busy}
+              context={contextNode}
+              onChat={() => newChat.start(contextNode ? { areaId: contextNode.id } : undefined)}
+              onNew={(kind) => setAdding({ kind, parent: kind === "area" ? null : contextNode })}
+              onCapture={() => setCapturing(true)}
+            />
+          </div>
         </header>
         <AreasNav current={view.kind === "item" ? "tree" : view.kind} inboxCount={inboxCount} onPick={(k) => go({ kind: k })} className="px-1" />
       </div>
