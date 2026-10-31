@@ -1131,6 +1131,7 @@ function Composer({
     setBusy(false);
   };
 
+  const awaitingApproval = phase === "waiting_for_approval";
   const placeholder = !online
     ? "Offline — drafts are saved, not sent"
     : phase === "waiting_for_approval"
@@ -1191,8 +1192,10 @@ function Composer({
         <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3">
           +
         </Button>
-        <AttachButton onFiles={attachments.add} disabled={!online} />
-        <CameraButton onFiles={attachments.add} disabled={!online} />
+        {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
+            so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
+        {!awaitingApproval ? <AttachButton onFiles={attachments.add} disabled={!online} /> : null}
+        {!awaitingApproval ? <CameraButton onFiles={attachments.add} disabled={!online} /> : null}
         <label htmlFor="composer" className="sr-only">
           {running ? "Guidance for the current run" : `Message ${who}`}
         </label>
@@ -1251,7 +1254,7 @@ function Composer({
               onStop();
             }
           }}
-          className="block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none max-[400px]:order-first max-[400px]:basis-full rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5"
+          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${awaitingApproval ? "" : "max-[400px]:order-first max-[400px]:basis-full"} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
         />
         {running ? (
           <Button

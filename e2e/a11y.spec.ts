@@ -172,8 +172,10 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
   // Every composer control stays a 44 px target and inside the viewport.
   const vw = page.viewportSize()!.width;
   for (const name of ["Attach context", "Attach files or pictures", "Take a photo"]) {
-    const box = await page.getByRole("button", { name, exact: true }).boundingBox();
-    if (!box) continue; // camera is hidden on pointer:fine
+    const button = page.getByRole("button", { name, exact: true });
+    if (!(await button.count())) continue; // camera is hidden on pointer:fine
+    const box = await button.boundingBox();
+    if (!box) continue;
     expect.soft(box.x + box.width, name).toBeLessThanOrEqual(vw);
     expect.soft(box.height, name).toBeGreaterThanOrEqual(44);
   }
