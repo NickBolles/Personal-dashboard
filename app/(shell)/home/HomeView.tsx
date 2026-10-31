@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { Skeleton } from "@/components/ui/kit";
+import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
 
 const PROBLEM: SourceStatus["state"][] = ["stale", "error", "unauthorized", "refreshing"];
 
@@ -140,40 +141,93 @@ function LaterGroup({ id, title, items }: { id: string; title: string; items: Ne
   );
 }
 
-/** Overdue · Now · Later today · Backlog — one dense strip under the header (design PR4). */
-function KpiStrip({ a }: { a: AttentionSummary }) {
+/**
+ * Overdue · Now · Later today · Backlog, then (when the person can see them)
+ * Approvals waiting · Awaiting validation · Merged, not settled — one dense
+ * strip under the header (design PR4 + design review "Today counts"). Counts
+ * the person can't see are hidden, never shown as zero.
+ */
+function KpiStrip({ a, pulse }: { a: AttentionSummary; pulse?: HomePulse }) {
   const t = a.totals;
   const cell = "flex min-h-11 min-w-0 flex-col justify-center gap-0.5 px-2 py-1.5 sm:min-h-10 sm:px-3";
   const label = "text-[0.625rem] font-semibold [overflow-wrap:anywhere] tracking-[0.04em] text-muted uppercase sm:text-[0.6875rem] sm:tracking-[0.06em]";
   const value = "text-[1.0625rem] leading-6 font-semibold tabular-nums";
+  const extra: { key: string; short: string; long: string; n: number | null | undefined; href: string; tone: string }[] = [
+    { key: "approvals", short: "Approvals", long: "Approvals waiting", n: pulse?.approvals, href: "/alerts", tone: "text-warn" },
+    { key: "validation", short: "Validation", long: "Awaiting validation", n: pulse?.awaitingValidation, href: "/areas#today-proof", tone: "text-warn" },
+    { key: "merged", short: "Merged", long: "Merged, not settled", n: pulse?.mergedNotSettled, href: "/areas#today-settle", tone: "text-ok" },
+  ];
   return (
-    <dl
-      aria-label="Today at a glance"
-      className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,4rem),1fr))] divide-x divide-line rounded-[var(--radius)] border border-line bg-surface"
-    >
-      <div className={cell}>
-        <dt className={label}>Overdue</dt>
-        <dd className={cx(value, t.overdue ? "text-warn" : undefined)}>{t.overdue}</dd>
-      </div>
-      <div className={cell}>
-        <dt className={label}>Now</dt>
-        <dd className={value}>{t.now}</dd>
-      </div>
-      <div className={cell}>
-        <dt className={label}>Later</dt>
-        <dd className={value}>{t.today}</dd>
-      </div>
-      <div className={cell}>
-        <dt className={label}>Backlog</dt>
-        <dd className={value}>
-          <Link href="/home/all?bucket=backlog" className="hover:underline">
-            <span className="sr-only">Backlog: </span>
-            {t.backlog}
-            <span className="sr-only"> items{t.overdue ? `, ${t.overdue} overdue across Home` : ""}</span>
-          </Link>
-        </dd>
-      </div>
-    </dl>
+    <div className="mb-4 space-y-1.5">
+      <dl
+        aria-label="Today at a glance"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,4rem),1fr))] divide-x divide-line rounded-[var(--radius)] border border-line bg-surface"
+      >
+        <div className={cell}>
+          <dt className={label}>Overdue</dt>
+          <dd className={cx(value, t.overdue ? "text-warn" : undefined)}>{t.overdue}</dd>
+        </div>
+        <div className={cell}>
+          <dt className={label}>Now</dt>
+          <dd className={value}>{t.now}</dd>
+        </div>
+        <div className={cell}>
+          <dt className={label}>Later</dt>
+          <dd className={value}>{t.today}</dd>
+        </div>
+        <div className={cell}>
+          <dt className={label}>Backlog</dt>
+          <dd className={value}>
+            <Link href="/home/all?bucket=backlog" className="hover:underline">
+              <span className="sr-only">Backlog: </span>
+              {t.backlog}
+              <span className="sr-only"> items{t.overdue ? `, ${t.overdue} overdue across Home` : ""}</span>
+            </Link>
+          </dd>
+        </div>
+        {extra
+          .filter((k) => typeof k.n === "number")
+          .map((k) => (
+            <div key={k.key} className={cell} data-kpi={k.key}>
+              <dt className={label} title={k.long}>
+                {k.short}
+              </dt>
+              <dd className={cx(value, k.n ? k.tone : undefined)}>
+                <Link href={k.href} className="hover:underline" aria-label={`${k.long}: ${k.n}`}>
+                  {k.n}
+                </Link>
+              </dd>
+            </div>
+          ))}
+      </dl>
+      {pulse?.trend ? <TrendLine trend={pulse.trend} /> : null}
+    </div>
+  );
+}
+
+/** Completed vs added over 14 days: a compact two-line sparkline (no gradient — spec keeps gradients to orb/glyph/progress). */
+function TrendLine({ trend }: { trend: PulseTrend }) {
+  const done = sum(trend.completed);
+  const added = sum(trend.added);
+  const max = Math.max(1, ...trend.completed, ...trend.added);
+  const w = 112;
+  const h = 20;
+  return (
+    <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[0.75rem] text-muted" data-testid="today-trend">
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="shrink-0 overflow-visible">
+        <polyline
+          points={sparkPoints(trend.added, w, h, max)}
+          fill="none"
+          stroke="var(--color-line-strong, currentColor)"
+          strokeWidth="1.25"
+          strokeDasharray="2 2"
+        />
+        <polyline points={sparkPoints(trend.completed, w, h, max)} fill="none" stroke="var(--color-accent, currentColor)" strokeWidth="1.5" />
+      </svg>
+      <span data-dynamic>
+        <span className="font-medium text-text">{done}</span> completed vs <span className="font-medium text-text">{added}</span> added · 14 days
+      </span>
+    </p>
   );
 }
 
@@ -212,6 +266,14 @@ export function HomeView() {
   const live = useQuery({
     queryKey: ["home", "live"],
     queryFn: () => api.get<HomePayload>("/api/home"),
+    refetchInterval: 60_000,
+    enabled: online,
+  });
+
+  // Today counts + 14-day trend (local data only, cheap): hidden until loaded, never faked.
+  const pulse = useQuery({
+    queryKey: ["home", "pulse"],
+    queryFn: () => api.get<HomePulse>("/api/home/pulse"),
     refetchInterval: 60_000,
     enabled: online,
   });
@@ -294,7 +356,7 @@ export function HomeView() {
           ]}
         />
       </header>
-      {att ? <KpiStrip a={att} /> : null}
+      {att ? <KpiStrip a={att} pulse={pulse.data} /> : null}
 
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
