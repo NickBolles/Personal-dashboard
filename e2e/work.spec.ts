@@ -411,10 +411,15 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect.poll(async () => (await items(page)).find((i) => i.id === ids["V2 baseline"])?.parentId).toBe(ids.project);
 
   // Reorder by dragging onto the top edge of V2: V5 goes first among the project's children.
-  await dragTo(page, page.locator(`#work-tree [data-drag-handle="${ids["V5 evaluator contract"]}"]`), page.locator(`#work-tree [data-row-id="${ids["V2 baseline"]}"]`), {
-    x: 0.5,
-    y: 0.1,
-  });
+  await dragTo(
+    page,
+    page.locator(`#work-tree [data-drag-handle="${ids["V5 evaluator contract"]}"]`),
+    page.locator(`#work-tree [data-row-id="${ids["V2 baseline"]}"]`),
+    {
+      x: 0.5,
+      y: 0.1,
+    },
+  );
   await expect
     .poll(async () =>
       (await items(page))
