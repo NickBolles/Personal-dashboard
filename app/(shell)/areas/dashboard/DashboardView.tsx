@@ -9,6 +9,7 @@ import { CustomHtmlWidget } from "@/components/work/CustomHtmlWidget";
 import { MapCanvas } from "@/components/work/WorkMap";
 import { fmtWhen } from "@/components/work/conversations";
 import { useAccess } from "@/components/access";
+import { PermissionLock } from "@/components/ui/kit";
 import { Gantt } from "@/components/work/Gantt";
 import { StatusBadge, StatusDot, WorkPageHeader, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { KpiStrip } from "@/components/work/today";
@@ -237,7 +238,7 @@ function WidgetCard({
 function UnfiledWidget() {
   const canChat = useAccess().can("hermes.chat");
   const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled"), enabled: canChat });
-  if (!canChat) return <p className="text-sm text-muted">Conversations need chat access.</p>;
+  if (!canChat) return <PermissionLock capability="hermes.chat" label="Chat" />;
   if (q.isPending) return <Spinner label="Loading conversations…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const d = q.data;

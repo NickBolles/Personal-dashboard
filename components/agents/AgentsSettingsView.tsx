@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { SectionHeader } from "@/components/ui/kit";
 import { KEY_ENV_PREFIX, suggestedKeyEnv, type AgentRoute, type AgentSettings } from "@/lib/agents";
 
 type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean; sharedKey?: boolean };
@@ -96,7 +97,7 @@ export function AgentsSettingsView() {
         </div>
       </Card>
       <Card>
-        <h2 className="mb-1 font-semibold">Profile routes</h2>
+        <SectionHeader label="Profile routes" count={q.data.routes.length} />
         <p className="mb-2 text-[13px] text-muted">
           Each profile needs its own Hermes API key. Put it in the Jarvis secrets env file as the variable below (it never goes in the database), then recreate
           the container.
