@@ -316,6 +316,9 @@ export function createHermes({ apiKey }) {
     }
     const slow = /slow|long/i.test(said);
     let reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
+    // Links panel e2e: a reply that shares an artifact (view + asset URL = one row).
+    if (/share the zephyr board/i.test(said))
+      reply = "Published: https://artifacts.ai.nickbolles.com/v/zephyr-board-e2e/ (hero: https://artifacts.ai.nickbolles.com/a/zephyr-board-e2e/hero.png).";
     // Smart replies (jarvis-ui@1): a triage block built from the refs Jarvis attached.
     if (typeof instructions === "string" && instructions.includes("jarvis-ui@1") && /triage/i.test(said)) {
       const refs = [...input.matchAll(/^(todo:[^\s|]+) \| /gm)].map((m) => m[1]);

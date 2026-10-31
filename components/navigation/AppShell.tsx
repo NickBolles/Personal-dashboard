@@ -11,10 +11,11 @@ import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
-import { NEW_CHAT_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
+import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
+import { NEW_CHAT_EVENT, NEW_WORK_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
-import { ComposerRouteWatcher } from "@/components/agents/useComposerTarget";
+import { ComposerRouteWatcher, useComposerTarget } from "@/components/agents/useComposerTarget";
 import { shortcutLabel, useModKey } from "@/lib/client/platform";
 
 const MORE: Dest = {
@@ -73,6 +74,26 @@ function useNavMemory(pathname: string) {
   };
 }
 
+const SEGMENT_LABELS: Record<string, string> = { "home-control": "House", "daily-compass": "Daily Compass", home: "Today", chat: "Chat" };
+const titleize = (s: string) =>
+  SEGMENT_LABELS[s] ??
+  decodeURIComponent(s)
+    .replace(/[-_]+/g, " ")
+    .replace(/^./, (c) => c.toUpperCase());
+
+/** Path crumbs for the desktop header bar: destination, then the sub-path (chat ids collapse to "Conversation"). */
+export function breadcrumbFor(pathname: string): { href: string; label: string }[] {
+  const parts = pathname.split("/").filter(Boolean);
+  if (!parts.length) return [{ href: "/home", label: "Today" }];
+  const out: { href: string; label: string }[] = [];
+  parts.forEach((seg, i) => {
+    const href = "/" + parts.slice(0, i + 1).join("/");
+    const label = i === 0 ? (destFor(href)?.label ?? titleize(seg)) : parts[0] === "chat" ? "Conversation" : titleize(seg);
+    out.push({ href, label: i === 0 && parts[0] === "chat" ? "Chat" : label });
+  });
+  return out.slice(0, 4);
+}
+
 export function useUnreadCount() {
   return useQuery({
     queryKey: ["notifications", "count"],
@@ -107,6 +128,9 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
   const [newMenu, setNewMenu] = useState(false);
   const canWork = capabilities.includes("work.use");
   const newChat = useAskHermes();
+  // New → Chat follows the area-contextual composer target (lib/composer-target.ts): inside an area,
+  // project or item it files the chat there; elsewhere it is plain Jarvis (Miscellaneous).
+  const composer = useComposerTarget();
   const startChat = useRef(newChat.start);
   useEffect(() => {
     startChat.current = newChat.start;
@@ -194,30 +218,47 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     );
   };
   const mod = useModKey();
+  const [sidebarCollapsed, toggleSidebar] = useSidebarCollapsed();
+  const crumbs = breadcrumbFor(pathname);
   const newPrimary = () => {
     setNewMenu(false);
     if (canWork) setCapturing(true);
-    else if (canChat) window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+    else if (canChat) window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: composer.areaId } }));
   };
 
   return (
-    <div className="min-h-dvh">
-      {/* Desktop / tablet: one top row (§5). */}
+    <div className="jv-shell min-h-dvh" data-sidebar={sidebarCollapsed ? "collapsed" : "open"} data-sidebar-tree={canWork ? "on" : "off"}>
+      {/* Desktop (≥1024): Arc-style left sidebar (D1). Tablet keeps the top row, phones the bottom bar. */}
+      <Suspense fallback={null}>
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} unread={unread} canWork={canWork} canChat={canChat} />
+      </Suspense>
+      {/* Tablet: one top row (§5). Desktop: the page header bar (breadcrumb + page actions) beside the sidebar. */}
       <header className="hidden border-b border-line bg-surface sm:block">
-        <nav aria-label="Primary" className="flex h-11 items-center gap-1 px-2 lg:px-3">
-          <Link
-            href="/home"
-            aria-label="Jarvis home"
-            className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em]"
-          >
-            <span aria-hidden="true" className="brand-mark" />
-            <span className="hidden xl:inline">Jarvis</span>
-          </Link>
-          <ul className="flex min-w-0 items-center gap-0.5">{topItems.map(topItem)}</ul>
-          <span className="flex-1" />
-          {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content. */}
+        <div className="flex h-11 items-center gap-1 px-2 lg:px-3">
+          <nav aria-label="Primary" className="flex min-w-0 flex-1 items-center gap-1">
+            <Link
+              href="/home"
+              aria-label="Jarvis home"
+              className="mr-1 flex min-h-11 min-w-11 items-center justify-center gap-2 px-1.5 text-[0.9375rem] font-bold tracking-[-0.01em] lg:hidden"
+            >
+              <span aria-hidden="true" className="brand-mark" />
+              <span className="hidden xl:inline">Jarvis</span>
+            </Link>
+            <ul className="flex min-w-0 items-center gap-0.5 lg:hidden">{topItems.map(topItem)}</ul>
+            <Suspense fallback={null}>
+              <HeaderCrumbs base={crumbs} canWork={canWork} chevron={<ChevronIcon className="h-3.5 w-3.5 shrink-0 text-muted" />} />
+            </Suspense>
+            <span className="flex-1" />
+          </nav>
+          {/* Desktop: the Ask dock sits in the top row, so nothing floats over page content.
+              It's a command/search field, not navigation, so it lives in its own search landmark. */}
           {!pathname.startsWith("/chat") ? (
-            <div className="mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block" data-testid="dock-top">
+            <div
+              role="search"
+              aria-label="Ask Jarvis"
+              className="jv-dock-inline mx-2 hidden w-[clamp(220px,30vw,420px)] min-w-0 lg:block"
+              data-testid="dock-top"
+            >
               <CommandDock variant="dock" />
             </div>
           ) : null}
@@ -279,13 +320,31 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
                       role="menuitem"
                       onClick={() => {
                         setNewMenu(false);
-                        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: null } }));
+                        window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: composer.areaId } }));
                       }}
                       className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
                     >
                       Chat
                     </button>
                   ) : null}
+                  {/* On /areas (WorkView, which listens for NEW_WORK_EVENT) the in-page "+ New" is phone/tablet only,
+                      so the header menu carries its kinds. Timeline/Dashboard/Map have no creation handler. */}
+                  {canWork && pathname === "/areas"
+                    ? (["thread", "project", "area"] as const).map((kind) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setNewMenu(false);
+                            window.dispatchEvent(new CustomEvent(NEW_WORK_EVENT, { detail: { kind } }));
+                          }}
+                          className="flex min-h-11 w-full items-center rounded-[8px] px-2.5 text-left text-sm hover:bg-surface-2"
+                        >
+                          {kind === "thread" ? "Item" : kind === "project" ? "Project" : "Area"}
+                        </button>
+                      ))
+                    : null}
                 </div>
               ) : null}
             </div>
@@ -305,7 +364,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             </span>
             <span aria-hidden="true" className={cx("absolute right-1.5 bottom-1.5 h-2 w-2 rounded-full ring-2 ring-surface", online ? "bg-ok" : "bg-warn")} />
           </Link>
-        </nav>
+        </div>
       </header>
 
       <main id="main" ref={mainRef} tabIndex={-1} className="pb-nav min-w-0 outline-none">

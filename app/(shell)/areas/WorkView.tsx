@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
@@ -22,6 +22,8 @@ import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
+import { NEW_WORK_EVENT } from "@/components/navigation/commands";
+import { useShowArchived } from "@/lib/client/show-archived";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
 import { TodayView, useInbox } from "@/components/work/today";
 import { CaptureDialog, InboxView } from "@/components/work/inbox";
@@ -90,7 +92,7 @@ export function WorkView({
   const { toast } = useToast();
   const canChat = can("hermes.chat");
   const newChat = useAskHermes();
-  const [archived, setArchived] = useState(false);
+  const [archived, setArchived] = useShowArchived();
   const items = useItems(archived);
   const [view, setView] = useState<View>(initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView ?? "today" });
   const [adding, setAdding] = useState<{ kind?: CreatableKind; parent: WorkItem | null } | null>(null);
@@ -161,58 +163,117 @@ export function WorkView({
   const open = current ? list.find((i) => i.id === current) : undefined;
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
 
+  // Header bar "New" → Item/Project/Area, created in the open container like the in-page menu.
+  useEffect(() => {
+    const onNew = (e: Event) => {
+      const kind = (e as CustomEvent<{ kind?: CreatableKind }>).detail?.kind;
+      if (kind) setAdding({ kind, parent: kind === "area" ? null : contextNode });
+    };
+    window.addEventListener(NEW_WORK_EVENT, onNew);
+    return () => window.removeEventListener(NEW_WORK_EVENT, onNew);
+  }, [contextNode]);
+
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
-      <div className="min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
+      <div className="wk-hub-top min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
         <header className="mb-2 flex items-center justify-between gap-2 px-1">
-          <h1 className="text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
-          <NewMenu
-            canChat={canChat}
-            busy={newChat.busy}
-            context={contextNode}
-            onChat={() => newChat.start(contextNode ? { areaId: contextNode.id } : undefined)}
-            onNew={(kind) => setAdding({ kind, parent: kind === "area" ? null : contextNode })}
-            onCapture={() => setCapturing(true)}
-          />
+          <h1 className="wk-hub-title text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
+          {/* Desktop: the sidebar owns the tree, so bulk select is a page mode (multi-select list in the page body). */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="ml-auto hidden lg:inline-flex"
+            aria-pressed={selectMode}
+            onClick={() => {
+              setSelectMode((m) => !m);
+              setSelection(new Set());
+            }}
+            title="Select several rows to move or archive them together"
+          >
+            {selectMode ? "Done selecting" : "Select"}
+          </Button>
+          {/* >=1024 the header bar's New menu is the one "+ New" (it dispatches NEW_WORK_EVENT here). */}
+          <div className="lg:hidden">
+            <NewMenu
+              canChat={canChat}
+              busy={newChat.busy}
+              context={contextNode}
+              onChat={() => newChat.start(contextNode ? { areaId: contextNode.id } : undefined)}
+              onNew={(kind) => setAdding({ kind, parent: kind === "area" ? null : contextNode })}
+              onCapture={() => setCapturing(true)}
+            />
+          </div>
         </header>
         <AreasNav current={view.kind === "item" ? "tree" : view.kind} inboxCount={inboxCount} onPick={(k) => go({ kind: k })} className="px-1" />
       </div>
       <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
-        {view.kind === "today" ? (
-          <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
-            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-              <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
+        {selectMode ? (
+          <section aria-label="Select items" className="wk-select-page hidden min-w-0 px-3 py-3 sm:px-5 lg:block lg:px-6 lg:py-5">
+            <SelectList
+              items={list}
+              selection={selection}
+              onToggle={(id) =>
+                setSelection((s) => {
+                  const n = new Set(s);
+                  if (n.has(id)) n.delete(id);
+                  else n.add(id);
+                  return n;
+                })
+              }
+            />
+            {selection.size ? (
+              <div className="wk-bulk mt-2 lg:max-w-2xl" role="region" aria-label="Selection">
+                <span className="mr-auto">{selection.size} selected</span>
+                <Button size="sm" onClick={() => setMoving([...selection])}>
+                  Move to…
+                </Button>
+                <Button size="sm" busy={bulkArchive.isPending} onClick={() => bulkArchive.mutate([...selection])}>
+                  Archive
+                </Button>
+                <Button size="sm" variant="ghost" className="wk-bulk-clear" onClick={() => setSelection(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+        <div className={selectMode ? "lg:hidden" : undefined}>
+          {view.kind === "today" ? (
+            <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
+              <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+                <TodayView onOpen={openWith} onInbox={() => go({ kind: "inbox" })} />
+              </div>
+              {wide ? <TodayRail items={list} onSelect={select} /> : null}
             </div>
-            {wide ? <TodayRail items={list} onSelect={select} /> : null}
-          </div>
-        ) : view.kind === "inbox" ? (
-          <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-            <InboxView items={list} onOpenItem={select} />
-          </div>
-        ) : view.kind === "tree" ? (
-          <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-            <AreasOverview items={list} onSelect={select} onNewArea={() => setAdding({ kind: "area", parent: null })} />
-          </div>
-        ) : current ? (
-          <ItemDetail
-            key={current}
-            id={current}
-            items={list}
-            onSelect={select}
-            onOp={onOp}
-            initialAction={view.kind === "item" ? view.action : undefined}
-            onAdd={(kind, parent) => setAdding({ kind, parent })}
-            onMove={(ids) => setMoving(ids)}
-          />
-        ) : items.isPending || items.isFetching ? (
-          <div className="p-6">
-            <Spinner label="Loading…" />
-          </div>
-        ) : (
-          <div className="p-6">
-            <Empty title="That item isn't here">It may be archived or belong to someone else.</Empty>
-          </div>
-        )}
+          ) : view.kind === "inbox" ? (
+            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+              <InboxView items={list} onOpenItem={select} />
+            </div>
+          ) : view.kind === "tree" ? (
+            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+              <AreasOverview items={list} onSelect={select} onNewArea={() => setAdding({ kind: "area", parent: null })} />
+            </div>
+          ) : current ? (
+            <ItemDetail
+              key={current}
+              id={current}
+              items={list}
+              onSelect={select}
+              onOp={onOp}
+              initialAction={view.kind === "item" ? view.action : undefined}
+              onAdd={(kind, parent) => setAdding({ kind, parent })}
+              onMove={(ids) => setMoving(ids)}
+            />
+          ) : items.isPending || items.isFetching ? (
+            <div className="p-6">
+              <Spinner label="Loading…" />
+            </div>
+          ) : (
+            <div className="p-6">
+              <Empty title="That item isn't here">It may be archived or belong to someone else.</Empty>
+            </div>
+          )}
+        </div>
       </div>
       <div
         id="work-tree"
@@ -929,7 +990,7 @@ function ItemDetail({
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
       <section className="bg-surface px-3 pt-3 pb-3 sm:px-5 lg:px-6 lg:pt-4">
-        <nav aria-label="Breadcrumb">
+        <nav aria-label="Breadcrumb" className="wk-crumbs">
           <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
             {d.breadcrumb.map((b) => (
               <li key={b.id} className="flex items-center gap-0.5">
@@ -2698,5 +2759,43 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
         </ol>
       </Card>
     </>
+  );
+}
+
+/** Desktop bulk select: a flat, indented checkbox list of the tree (the sidebar owns the tree itself). */
+function SelectList({ items, selection, onToggle }: { items: WorkItem[]; selection: Set<string>; onToggle: (id: string) => void }) {
+  const live = items.filter((i) => !i.builtIn && !i.archived);
+  const kids = new Map<string | null, WorkItem[]>();
+  const ids = new Set(live.map((i) => i.id));
+  for (const i of live) {
+    const k = i.parentId && ids.has(i.parentId) ? i.parentId : null;
+    kids.set(k, [...(kids.get(k) ?? []), i]);
+  }
+  const rows: { item: WorkItem; depth: number }[] = [];
+  const walk = (p: string | null, depth: number) => {
+    for (const i of kids.get(p) ?? []) {
+      rows.push({ item: i, depth });
+      walk(i.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return (
+    <div className="min-w-0">
+      <p className="mb-2 text-sm text-muted">Pick rows, then Move to… or Archive.</p>
+      <ul className="max-w-2xl divide-y divide-line rounded-[10px] border border-line bg-surface">
+        {rows.map(({ item, depth }) => (
+          <li key={item.id}>
+            <label
+              className="flex min-h-9 cursor-pointer items-center gap-2 px-3 py-1 text-[13.5px] hover:bg-surface-2"
+              style={{ paddingLeft: `${12 + depth * 18}px` }}
+            >
+              <input type="checkbox" checked={selection.has(item.id)} onChange={() => onToggle(item.id)} />
+              <span className="min-w-0 flex-1 truncate">{item.title}</span>
+              <span className="shrink-0 text-xs text-muted">{KIND_LABELS[item.kind] ?? item.kind}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

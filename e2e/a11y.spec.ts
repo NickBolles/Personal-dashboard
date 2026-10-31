@@ -81,6 +81,17 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   }
 });
 
+test("200% text zoom at 1024 (sidebar + header dock) does not cause horizontal scrolling", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 1024, "desktop sidebar layout only");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  for (const path of ["/home", "/areas", "/alerts", "/settings"]) {
+    await page.goto(path);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
+});
+
 test("forced source states: axe clean and no overflow at 200% text zoom", async ({ page }) => {
   for (const name of Object.keys(SOURCE_STATES) as (keyof typeof SOURCE_STATES)[]) {
     await page.unrouteAll();
@@ -126,12 +137,20 @@ test("approval card: axe clean and no overflow at 200% text zoom (choices + undo
 
 test("touch targets in primary navigation are at least 44px", async ({ page }) => {
   await page.goto("/home");
-  const links = page.getByRole("navigation", { name: "Primary" }).locator("a:visible, button:visible");
-  const n = await links.count();
-  expect(n).toBeGreaterThan(0);
-  for (let i = 0; i < n; i++) {
-    const box = await links.nth(i).boundingBox();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-  }
+  // Primary nav (phone bar / tablet top row) plus the header bar's own actions (New, Settings…).
+  // The Ask dock is a search field in its own landmark (compact by design), not a nav target.
+  const sizes = await page.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        'nav[aria-label="Primary"] a, nav[aria-label="Primary"] button, .jv-shell > header a, .jv-shell > header button',
+      ),
+    ]
+      .filter((el) => !el.closest('[role="search"]') && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden")
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { name: el.getAttribute("aria-label") ?? el.textContent?.trim() ?? el.tagName, w: r.width, h: r.height };
+      }),
+  );
+  expect(sizes.length).toBeGreaterThan(0);
+  expect(sizes.filter((s) => s.w < 44 || s.h < 44)).toEqual([]);
 });

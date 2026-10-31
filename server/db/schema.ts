@@ -1425,3 +1425,27 @@ export const uiSurfaces = sqliteTable(
   },
   (t) => [uniqueIndex("ui_surfaces_key_idx").on(t.userId, t.sessionId, t.messageKey, t.blockIndex), index("ui_surfaces_session_idx").on(t.sessionId)],
 );
+
+/**
+ * Chat Links side panel: URLs seen in a conversation (auto-collected from user,
+ * assistant and tool messages), with cached titles and the owner's pin/remove.
+ * Additive; keyed by conversation + canonical URL.
+ */
+export const conversationLinks = sqliteTable(
+  "conversation_links",
+  {
+    sessionId: text("session_id").notNull(),
+    url: text("url").notNull(),
+    kind: text("kind").notNull(), // artifact | github | web
+    title: text("title"),
+    /** GitHub PR/issue state (open/closed/merged) when known */
+    state: text("state"),
+    pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+    removed: integer("removed", { mode: "boolean" }).notNull().default(false),
+    source: text("source"),
+    firstSeenAt: text("first_seen_at"),
+    resolvedAt: text("resolved_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.url] }), index("conversation_links_session_idx").on(t.sessionId)],
+);

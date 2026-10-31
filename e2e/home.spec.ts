@@ -176,7 +176,8 @@ test("Home capture: Enter goes to the Inbox; Ask Hermes starts a conversation an
   await box.fill("What is the weather?");
   await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
-  await expect(page.getByText(/Searched the web/)).toBeVisible();
+  // A fast run can finish before the live step renders; then it is folded into the "searched 1 source" summary.
+  await expect(page.getByText(/Searched the web|searched 1 source/).first()).toBeVisible();
   await expect(page.getByText(/Here's what I found/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("Done", { exact: true })).toBeVisible();
 });

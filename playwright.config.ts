@@ -56,7 +56,7 @@ export default defineConfig({
     {
       name: "desktop",
       dependencies: ["setup"],
-      testMatch: /(a11y|visual|chat|keyboard)\.spec\.ts/,
+      testMatch: /(a11y|visual|chat|keyboard|sidebar)\.spec\.ts/,
       use: { viewport: { width: 1280, height: 800 }, browserName: "chromium", storageState: "e2e/.auth/state.json" },
     },
   ],

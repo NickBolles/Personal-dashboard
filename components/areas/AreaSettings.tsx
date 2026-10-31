@@ -41,8 +41,10 @@ export function AreaSettingsCard({ area }: { area: WorkItem }) {
     <section className="card" aria-label="Area settings">
       <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} data-testid="area-settings">
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 dense:min-h-9">
-          <span className="text-[13.5px] font-semibold">Area settings</span>
-          <span className="min-w-0 truncate text-xs text-muted">{summary}</span>
+          <span className="shrink-0 whitespace-nowrap text-[13.5px] font-semibold">Area settings</span>
+          <span className="min-w-0 truncate text-xs text-muted" title={summary || undefined}>
+            {summary}
+          </span>
         </summary>
         <form
           className="space-y-3 border-t border-line p-3"
