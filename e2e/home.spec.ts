@@ -194,5 +194,7 @@ test("Today counts: approvals, validation and merged KPIs link to their views, w
   await strip.getByRole("link", { name: /^Awaiting validation/ }).click();
   await expect(page).toHaveURL(/\/areas#today-proof$/);
   await expect(page.getByTestId("work-today")).toBeVisible();
+  // The anchor lands after Today loads: the section is scrolled into view.
+  await expect(page.locator("#today-proof")).toBeInViewport();
   await expectNoHorizontalOverflow(page);
 });

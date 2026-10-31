@@ -161,7 +161,7 @@ function KpiStrip({ a, pulse }: { a: AttentionSummary; pulse?: HomePulse }) {
     <div className="mb-4 space-y-1.5">
       <dl
         aria-label="Today at a glance"
-        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,4rem),1fr))] divide-x divide-line rounded-[var(--radius)] border border-line bg-surface"
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,5.75rem),1fr))] divide-x divide-line rounded-[var(--radius)] border border-line bg-surface"
       >
         <div className={cell}>
           <dt className={label}>Overdue</dt>
