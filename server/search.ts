@@ -1,7 +1,6 @@
 import "server-only";
 import { can, type Capable } from "@/server/access";
 import { homeSelection, cachedSource, scopeResult, sourceVisible } from "@/server/sources";
-import { listSessions } from "@/integrations/hermes/service";
 import { isConfigured } from "@/integrations/store";
 import { listDevices } from "@/integrations/home-assistant/devices";
 import { listPeople } from "@/server/people";
@@ -16,6 +15,7 @@ import { getDb, schema } from "@/server/db";
 import { monthName } from "@/server/finance/common";
 import { listItems as listWorkItems } from "@/server/work/store";
 import { STATUS_LABELS } from "@/lib/work";
+import { chatEntries, memo, pathIndex } from "@/server/search-index";
 
 /**
  * One search across every module the person can see. Each provider is gated
@@ -75,8 +75,11 @@ const providers: SearchProvider[] = [
     visible: () => true,
     search: async (q, user) => {
       // The whole ranked list, not just Home's budgeted preview: backlog items stay findable.
-      const { attention: h } = await homeSelection(user, { live: false });
-      const all = [...h.now, ...h.today, ...h.upcoming, ...h.backlog, ...h.waiting];
+      // Cached per person (stale-while-revalidate): ranking every card on each keystroke was the palette's other cost.
+      const all = await memo(`home:${user.id}`, 20_000, async () => {
+        const { attention: h } = await homeSelection(user, { live: false });
+        return [...h.now, ...h.today, ...h.upcoming, ...h.backlog, ...h.waiting];
+      });
       return all.map((a) => ({
         id: `action:${a.id}`,
         kind: "action" as const,
@@ -116,16 +119,19 @@ const providers: SearchProvider[] = [
   {
     id: "conversations",
     label: "Conversations",
-    visible: (u) => can(u, "hermes.chat") && isConfigured("hermes"),
-    search: async (q, user) =>
-      (await listSessions(user, { includeArchived: true })).map((s) => ({
-        id: `conversation:${s.id}`,
+    visible: (u) => can(u, "hermes.chat"),
+    // The cached conversation index + filed conversation nodes: never a live Hermes call per keystroke.
+    search: (q, user) =>
+      chatEntries(user).map((c) => ({
+        id: `conversation:${c.sessionId}`,
         kind: "conversation" as const,
         module: "hermes",
-        title: s.title || "Untitled conversation",
-        subtitle: s.preview,
-        href: `/chat/${encodeURIComponent(s.id)}`,
-        _s: matchScore(q, s.title, s.preview),
+        group: "Chats & notes",
+        title: c.title,
+        subtitle: [c.path, c.preview].filter(Boolean).join(" · ").slice(0, 160) || undefined,
+        href: `/chat/${encodeURIComponent(c.sessionId)}`,
+        updatedAt: c.lastActiveAt,
+        _s: matchScore(q, c.title, c.preview, c.path) * (c.archived ? 0.5 : 1),
       })),
   },
   {
@@ -133,13 +139,15 @@ const providers: SearchProvider[] = [
     label: "Home devices",
     visible: (u) => (can(u, "home_assistant.view") || can(u, "home_assistant.cameras")) && isConfigured("home_assistant"),
     search: async (q, user) => {
-      const d = await listDevices({
-        doors: can(user, "home_assistant.view"),
-        lights: can(user, "home_assistant.view"),
-        cameras: can(user, "home_assistant.cameras"),
-        doorControls: false,
-        lightControls: false,
-      });
+      const d = await memo(`devices:${user.id}`, 30_000, () =>
+        listDevices({
+          doors: can(user, "home_assistant.view"),
+          lights: can(user, "home_assistant.view"),
+          cameras: can(user, "home_assistant.cameras"),
+          doorControls: false,
+          lightControls: false,
+        }),
+      );
       return [...d.doors, ...d.lights, ...d.cameras].map((x) => ({
         id: `device:${x.entityId}`,
         kind: "device" as const,
@@ -214,19 +222,26 @@ const providers: SearchProvider[] = [
     id: "work",
     label: "Work",
     visible: (u) => can(u, "work.use"),
-    search: (q, user) =>
-      listWorkItems(user.id, { includeArchived: true })
-        // Conversation nodes are found by the Conversations provider (no duplicates).
-        .filter((i) => !i.builtIn && i.kind !== "conversation")
-        .map((i) => ({
-          id: `work:${i.id}`,
-          kind: "work" as const,
-          module: "work",
-          title: i.title,
-          subtitle: [STATUS_LABELS[i.status], i.nextAction ? `Next: ${i.nextAction}` : i.summary].filter(Boolean).join(" · ").slice(0, 160),
-          href: `/areas?item=${encodeURIComponent(i.id)}`,
-          _s: matchScore(q, i.title, i.summary, i.nextAction),
-        })),
+    search: (q, user) => {
+      const items = listWorkItems(user.id, { includeArchived: true });
+      const p = pathIndex(items);
+      return (
+        items
+          // Conversation nodes are found by the Conversations provider (no duplicates).
+          .filter((i) => !i.builtIn && i.kind !== "conversation")
+          .map((i) => ({
+            id: `work:${i.id}`,
+            kind: "work" as const,
+            module: "work",
+            group: i.parentId === null ? "Areas" : i.kind === "project" ? "Projects" : "Items",
+            updatedAt: i.updatedAt,
+            title: i.title,
+            subtitle: [STATUS_LABELS[i.status], i.nextAction ? `Next: ${i.nextAction}` : i.summary].filter(Boolean).join(" · ").slice(0, 160),
+            href: `/areas?item=${encodeURIComponent(i.id)}`,
+            _s: matchScore(q, i.title, i.summary, i.nextAction, p.path(i.id)),
+          }))
+      );
+    },
   },
   {
     id: "people",
@@ -256,11 +271,60 @@ function bounded<T>(p: Promise<T>): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS).unref?.())]);
 }
 
-type Scored = SearchResult & { _s: number };
+type Scored = SearchResult & { _s: number; updatedAt?: string };
+
+const GROUP_BY_KIND: Record<SearchResult["kind"], string> = {
+  page: "Pages",
+  setting: "Settings",
+  action: "Home",
+  event: "Calendar",
+  conversation: "Chats & notes",
+  device: "Devices",
+  person: "People",
+  finance: "Finance",
+  work: "Items",
+};
+
+/** Empty query: your most recent chats and items (the palette shows them the moment it opens). */
+function recent(user: CurrentUser & Capable): SearchResult[] {
+  const out: SearchResult[] = [];
+  const items = can(user, "work.use") ? listWorkItems(user.id) : [];
+  if (can(user, "hermes.chat"))
+    for (const c of chatEntries(user, items)
+      .filter((c) => !c.archived)
+      .slice(0, 5))
+      out.push({
+        id: `conversation:${c.sessionId}`,
+        kind: "conversation",
+        module: "hermes",
+        group: "Recent",
+        title: c.title,
+        subtitle: c.path,
+        href: `/chat/${encodeURIComponent(c.sessionId)}`,
+      });
+  const p = pathIndex(items);
+  for (const i of items
+    .filter((i) => !i.builtIn && i.kind !== "conversation" && i.parentId !== null)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, 5))
+    out.push({
+      id: `work:${i.id}`,
+      kind: "work",
+      module: "work",
+      group: "Recent",
+      title: i.title,
+      subtitle: p.path(i.id),
+      href: `/areas?item=${encodeURIComponent(i.id)}`,
+    });
+  return out;
+}
+
+const SLOW_LOG_MS = 250;
 
 export async function search(user: CurrentUser & Capable, query: string): Promise<SearchResponse> {
+  const t0 = performance.now();
   const q = query.trim().slice(0, 100);
-  if (!q) return { query: q, results: [], partial: [] };
+  if (!q) return { query: q, results: recent(user), partial: [], tookMs: Math.round(performance.now() - t0) };
   const active = providers.filter((p) => p.visible(user));
   const settled = await Promise.allSettled(active.map((p) => bounded(Promise.resolve().then(() => p.search(q, user)))));
   const partial: string[] = [];
@@ -270,17 +334,20 @@ export async function search(user: CurrentUser & Capable, query: string): Promis
       partial.push(active[i]!.label);
       return;
     }
-    const hits = (r.value as Scored[]).filter((x) => x._s > 0).sort((a, b) => b._s - a._s);
+    const hits = (r.value as Scored[]).filter((x) => x._s > 0).sort((a, b) => b._s - a._s || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
     results.push(...hits.slice(0, PER_PROVIDER));
   });
   const seen = new Set<string>();
+  const tookMs = Math.round(performance.now() - t0);
+  if (tookMs >= SLOW_LOG_MS) console.info(`[search] slow query: ${tookMs} ms (${q.length} chars, partial=${partial.join("|") || "none"})`);
   return {
     query: q,
     results: results
-      .sort((a, b) => b._s - a._s)
+      .sort((a, b) => b._s - a._s || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
       .filter((r) => !seen.has(r.id) && seen.add(r.id))
       .slice(0, 40)
-      .map(({ _s, ...r }) => r),
+      .map(({ _s, updatedAt, ...r }) => ({ ...r, group: r.group ?? GROUP_BY_KIND[r.kind] })),
     partial,
+    tookMs,
   };
 }

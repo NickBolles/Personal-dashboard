@@ -10,9 +10,12 @@ export type SearchResult = {
   /** never an amount or account detail */
   subtitle?: string;
   href: string;
+  /** palette section ("Areas", "Projects", "Items", "Chats & notes", "People"…); results arrive grouped by best match */
+  group?: string;
 };
 
-export type SearchResponse = { query: string; results: SearchResult[]; partial: string[] };
+/** `tookMs`: server-side time (palette latency budget: <100 ms p95). */
+export type SearchResponse = { query: string; results: SearchResult[]; partial: string[]; tookMs?: number };
 
 /** All query words must appear; earlier and word-start matches rank higher. 0 = no match. */
 export function matchScore(query: string, ...fields: (string | undefined)[]) {
