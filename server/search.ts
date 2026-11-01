@@ -15,7 +15,7 @@ import { getDb, schema } from "@/server/db";
 import { monthName } from "@/server/finance/common";
 import { listItems as listWorkItems } from "@/server/work/store";
 import { STATUS_LABELS } from "@/lib/work";
-import { chatEntries, memo, pathIndex } from "@/server/search-index";
+import { chatEntries, itemsFor, memo, pathIndex } from "@/server/search-index";
 
 /**
  * One search across every module the person can see. Each provider is gated
@@ -122,7 +122,7 @@ const providers: SearchProvider[] = [
     visible: (u) => can(u, "hermes.chat"),
     // The cached conversation index + filed conversation nodes: never a live Hermes call per keystroke.
     search: (q, user) =>
-      chatEntries(user).map((c) => ({
+      chatEntries(user, can(user, "work.use") ? itemsFor(user.id) : []).map((c) => ({
         id: `conversation:${c.sessionId}`,
         kind: "conversation" as const,
         module: "hermes",
@@ -223,7 +223,7 @@ const providers: SearchProvider[] = [
     label: "Work",
     visible: (u) => can(u, "work.use"),
     search: (q, user) => {
-      const items = listWorkItems(user.id, { includeArchived: true });
+      const items = itemsFor(user.id);
       const p = pathIndex(items);
       return (
         items

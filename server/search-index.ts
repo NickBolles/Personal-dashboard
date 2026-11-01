@@ -72,7 +72,7 @@ export function isFinanceItem(items: WorkItem[], id: string) {
  */
 export function chatEntries(user: Viewer, items: WorkItem[] | null = null): ChatEntry[] {
   if (!can(user, "hermes.chat")) return [];
-  const work = items ?? (can(user, "work.use") ? listItems(user.id, { includeArchived: true }) : []);
+  const work = items ?? (can(user, "work.use") ? itemsFor(user.id) : []);
   const p = pathIndex(work);
   const filed = new Map<string, WorkItem>();
   for (const i of work) if (i.kind === "conversation" && i.sessionId && !filed.has(i.sessionId)) filed.set(i.sessionId, i);
@@ -108,6 +108,20 @@ export function chatEntries(user: Viewer, items: WorkItem[] | null = null): Chat
     });
   }
   return out.sort((a, b) => (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? ""));
+}
+
+const burst = new Map<string, { at: number; items: WorkItem[] }>();
+/**
+ * listItems shared by the providers of one search (they run in the same tick):
+ * cached for 50 ms only, so it never serves a tree older than a keystroke.
+ */
+export function itemsFor(userId: string): WorkItem[] {
+  const hit = burst.get(userId);
+  if (hit && Date.now() - hit.at < 50) return hit.items;
+  const items = listItems(userId, { includeArchived: true });
+  burst.set(userId, { at: Date.now(), items });
+  if (burst.size > 50) burst.delete(burst.keys().next().value!);
+  return items;
 }
 
 type Memo = { at: number; value: unknown; pending?: Promise<unknown> };
@@ -146,4 +160,5 @@ export function memo<T>(key: string, ttlMs: number, load: () => Promise<T> | T):
 /** Tests. */
 export function __resetSearchMemo() {
   memos.clear();
+  burst.clear();
 }
