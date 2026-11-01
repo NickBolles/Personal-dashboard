@@ -444,8 +444,7 @@ async function handleFailure(id: string, e: unknown, kind: AiJobKind, title: str
         title: `${AI_KIND_LABEL[kind]} failed: ${title}`.slice(0, 140),
         body: errorText(code),
         source: "work",
-        deepLink:
-          row.subjectType === "work_item" ? `/areas?item=${encodeURIComponent(row.subjectId)}` : `/inbox?entry=${encodeURIComponent(row.subjectId)}`,
+        deepLink: row.subjectType === "work_item" ? `/areas?item=${encodeURIComponent(row.subjectId)}` : `/inbox?entry=${encodeURIComponent(row.subjectId)}`,
         dedupeKey: `ai:failed:${id}`,
       },
       row.userId,
