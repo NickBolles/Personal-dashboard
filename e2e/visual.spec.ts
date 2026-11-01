@@ -492,3 +492,60 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page).toHaveScreenshot(`chat-files-panel-${theme}.png`, { fullPage: false, mask });
   });
 }
+
+// Inbox as its own view (/inbox): fixed entries (one with a suggestion) so other specs' captures never leak in.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: inbox page (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.clock.setFixedTime(new Date(visualNow));
+    const capture = (suggested: boolean) => ({
+      channel: null,
+      triageState: "done",
+      triageSkipReason: null,
+      suggestedTitle: null,
+      suggestedKind: null,
+      suggestion: suggested ? { parentId: "wk_mb", title: "Momentum Bets", path: "Momentum Bets", confidence: 0.82, reason: "Mentions the bet review" } : null,
+      sensitivity: "none",
+      report: null,
+      attachments: [],
+      investigating: false,
+    });
+    const items = [
+      {
+        id: "inb_v1",
+        source: "capture",
+        title: "Review the momentum bet notes",
+        note: "",
+        url: null,
+        repo: null,
+        number: null,
+        reason: "Quick capture",
+        createdAt: visualNow,
+        capture: capture(true),
+      },
+      {
+        id: "inb_v2",
+        source: "capture",
+        title: "Call the plumber about the garage sink",
+        note: "",
+        url: null,
+        repo: null,
+        number: null,
+        reason: "Quick capture",
+        createdAt: visualNow,
+        capture: capture(false),
+      },
+    ];
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { items, conversations: [], conversationsTotal: 0, unavailable: [], count: items.length } }),
+    );
+    await page.goto("/inbox");
+    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByText(items[0].title).first()).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page).toHaveScreenshot(`inbox-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+  });
+}

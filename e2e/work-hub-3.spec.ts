@@ -63,10 +63,10 @@ test("work opens on Today; capture to the inbox, file it, no sideways scrolling"
   const nonce = Date.now().toString(36);
   await page
     .getByRole("navigation", { name: "Areas sections" })
-    .getByRole("button", { name: /^Inbox/ })
+    .getByRole("link", { name: /^Inbox/ })
     .click();
   await expect(page).toHaveURL(/\/inbox/);
-  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
   await page.getByLabel("Capture to inbox").fill(`Call the HVAC company ${nonce}\nAsk about filters`);
   await page.getByRole("button", { name: "Capture", exact: true }).last().click();
   const row = page.locator("[data-inbox-entry]", { hasText: `Call the HVAC company ${nonce}` });
@@ -236,7 +236,7 @@ test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-s
   await expect(page.locator('[data-command="work.inbox"]')).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/inbox/);
-  await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
 
   // Hold → radial map; slide onto "Go to", pause for its sub-menu, slide to "Timeline", release.
   const start = await centre(o);
@@ -321,7 +321,7 @@ test.describe("phone, 320 px", () => {
     await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.goto("/inbox");
-    await expect(page.getByRole("heading", { level: 2, name: "Inbox" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     const r = await appPost(page, "/api/work/items", { kind: "thread", title: "Phone packet check" });
     const { item } = (await r.json()) as { item: { id: string } };

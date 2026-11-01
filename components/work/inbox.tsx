@@ -188,10 +188,17 @@ export function InboxView({
   useEffect(() => {
     keys.current = (ev) => {
       const t = ev.target as HTMLElement;
-      if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey || (!twoPane && !focus) || !sel) return;
+      if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey || (!twoPane && !focus)) return;
       if (t !== document.body && !sectionRef.current?.contains(t)) return;
       if (t.closest("input, textarea, select, [contenteditable], [role=menu], [role=dialog]")) return;
       const k = ev.key.toLowerCase();
+      // Esc leaves focus mode even on the "Done" card (no entry left).
+      if (k === "escape" && focus && !sel) {
+        setFocus(null);
+        ev.preventDefault();
+        return;
+      }
+      if (!sel) return;
       if (!focus && (k === "j" || k === "arrowdown")) move(1);
       else if (!focus && (k === "k" || k === "arrowup")) move(-1);
       else if (k === "enter" && (t.dataset.inboxPick || t.dataset.inboxFocus != null || t === document.body)) primary(sel);
@@ -213,9 +220,9 @@ export function InboxView({
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="wk-eyebrow">Triage</p>
-          <h2 id="inbox-title" className="text-xl leading-tight font-semibold tracking-tight">
+          <h1 id="inbox-title" className="text-xl leading-tight font-semibold tracking-tight">
             Inbox
-          </h2>
+          </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {q.data ? <span className="text-[13px] text-muted tabular-nums">{q.data.count} waiting</span> : null}
