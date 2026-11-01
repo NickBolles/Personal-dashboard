@@ -17,6 +17,11 @@ import { listItems as listWorkItems } from "@/server/work/store";
 import { STATUS_LABELS } from "@/lib/work";
 import { chatEntries, itemsFor, memo, pathIndex } from "@/server/search-index";
 
+/** Cache-key fingerprint of the person's effective capabilities: a revoked grant must never be served from a cached card list. */
+function capsKey(user: CurrentUser): string {
+  return [...user.capabilities].sort().join(",");
+}
+
 /**
  * One search across every module the person can see. Each provider is gated
  * by a capability and bounded in time: a slow upstream drops out of the
@@ -76,7 +81,7 @@ const providers: SearchProvider[] = [
     search: async (q, user) => {
       // The whole ranked list, not just Home's budgeted preview: backlog items stay findable.
       // Cached per person (stale-while-revalidate): ranking every card on each keystroke was the palette's other cost.
-      const all = await memo(`home:${user.id}`, 20_000, async () => {
+      const all = await memo(`home:${user.id}:${capsKey(user)}`, 20_000, async () => {
         const { attention: h } = await homeSelection(user, { live: false });
         return [...h.now, ...h.today, ...h.upcoming, ...h.backlog, ...h.waiting];
       });
@@ -139,7 +144,7 @@ const providers: SearchProvider[] = [
     label: "Home devices",
     visible: (u) => (can(u, "home_assistant.view") || can(u, "home_assistant.cameras")) && isConfigured("home_assistant"),
     search: async (q, user) => {
-      const d = await memo(`devices:${user.id}`, 30_000, () =>
+      const d = await memo(`devices:${user.id}:${capsKey(user)}`, 30_000, () =>
         listDevices({
           doors: can(user, "home_assistant.view"),
           lights: can(user, "home_assistant.view"),
