@@ -590,3 +590,63 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page).toHaveScreenshot(`inbox-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
   });
 }
+
+/** Raycast palette (PR #102): stub every list the palette loads so other specs' data never leaks in. */
+async function openPaletteVisual(page: Page) {
+  await freezeMiddayCT(page);
+  await page.route(/\/api\/search(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        query: "",
+        partial: [],
+        results: [
+          {
+            id: "r1",
+            kind: "work",
+            module: "jarvis",
+            title: "V5 evaluator contract",
+            subtitle: "Momentum Bets › Criteria evaluator",
+            href: "/areas?item=wk_v5",
+            group: "Recent",
+          },
+          { id: "r2", kind: "work", module: "jarvis", title: "Criteria evaluator", subtitle: "Momentum Bets", href: "/areas?item=wk_ce", group: "Recent" },
+        ],
+      },
+    }),
+  );
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
+  await page.addInitScript(() => localStorage.removeItem("jarvis.palette.recent"));
+  await page.goto("/more");
+  await page.locator("h1").first().waitFor();
+  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  await expect(async () => {
+    await page.keyboard.press("Control+k");
+    await expect(box).toBeFocused({ timeout: 1000 });
+  }).toPass();
+  await expect(page.getByRole("option", { name: /Browse areas/ })).toBeVisible();
+  return box;
+}
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: raycast palette (${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    const box = await openPaletteVisual(page);
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    await page.waitForTimeout(250);
+    await expect(page).toHaveScreenshot(`palette-root-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    // typed action with an argument chip
+    await box.fill("new item in momentum bets");
+    await expect(page.locator('[data-command="action.new-item"]')).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(page.getByTestId("palette-chips")).toContainText("Momentum Bets");
+    await box.fill("Gutter sweep");
+    await page.waitForTimeout(250);
+    await expect(page).toHaveScreenshot(`palette-typed-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("palette-confirm")).toBeVisible();
+    await page.waitForTimeout(150);
+    await expect(page).toHaveScreenshot(`palette-confirm-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await page.keyboard.press("Escape");
+  });
+}
