@@ -24,6 +24,9 @@ describe("time helpers", () => {
     expect(localTimeToInstant("2026-11-01", "00:30", "America/Chicago").toISOString()).toBe("2026-11-01T05:30:00.000Z");
     expect(localTimeToInstant("2026-03-08", "17:30", "America/Chicago").toISOString()).toBe("2026-03-08T22:30:00.000Z");
     expect(localTimeToInstant("2026-03-08", "01:30", "America/Chicago").toISOString()).toBe("2026-03-08T07:30:00.000Z");
+    // Inside the skipped hour: forward (03:30 CDT), so windows keep end > start.
+    expect(localTimeToInstant("2026-03-08", "02:30", "America/Chicago").toISOString()).toBe("2026-03-08T08:30:00.000Z");
+    expect(localTimeToInstant("2026-11-01", "01:30", "America/Chicago").toISOString()).toBe("2026-11-01T06:30:00.000Z");
   });
   it("calendar-date arithmetic ignores DST and month lengths", () => {
     expect(addDays("2026-10-31", 1)).toBe("2026-11-01");
