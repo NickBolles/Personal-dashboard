@@ -197,3 +197,15 @@ const detailOf = (id: string, breadcrumb: { id: string; title: string }[]) => ({
 });
 export const areaDetailVisual = detailOf("wk_mb", []);
 export const projectDetailVisual = detailOf("wk_ce", [{ id: "wk_mb", title: "Momentum Bets" }]);
+/** A work item (inline edits visual): summary, next action and a due date to edit in place. */
+const garage = detailOf("wk_garage", [{ id: "wk_home", title: "Home" }]);
+export const itemDetailVisual = {
+  ...garage,
+  item: {
+    ...garage.item,
+    status: "ready" as const,
+    summary: "Clear the left wall so the shelving fits.",
+    nextAction: "Measure the left wall",
+    targetDate: "2026-11-21",
+  },
+};

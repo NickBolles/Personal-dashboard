@@ -173,6 +173,7 @@ export function InlineDate({ value, onSave, className }: { value: string | null;
   const [error, setError] = useState<string | null>(null);
   return (
     <span className={cx("jv-inline jv-inline-date", className)}>
+      <span aria-hidden="true">Due</span>
       <input
         type="date"
         aria-label="Due date"

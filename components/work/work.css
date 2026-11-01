@@ -1136,12 +1136,25 @@ button.wk-kpi:hover {
   margin-top: 4px;
   max-width: 78ch;
 }
+.work-ui .jv-inline-date {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding: 0 4px 0 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
 .work-ui .jv-inline-date .jv-inline-input {
   width: auto;
   min-height: 44px;
-  padding: 2px 6px;
+  border-color: transparent;
+  background: transparent;
+  padding: 0 4px;
   font-size: 12.5px;
-  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
 }
 @media (min-width: 640px) {
   .work-ui .jv-inline-read,
@@ -1155,9 +1168,11 @@ button.wk-kpi:hover {
   .work-ui .jv-inline-read {
     min-height: 0;
   }
-  .work-ui .jv-inline-input,
-  .work-ui .jv-inline-date .jv-inline-input {
+  .work-ui .jv-inline-input {
     min-height: 30px;
+  }
+  .work-ui .jv-inline-date .jv-inline-input {
+    min-height: 26px;
   }
   .work-ui .jv-inline-row > .jv-inline-edit {
     min-height: 28px;

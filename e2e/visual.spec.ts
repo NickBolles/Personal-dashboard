@@ -1,7 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mock, openChatContext, setHa, startConversation } from "./helpers";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
-import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
+import {
+  alertsVisual,
+  areaDetailVisual,
+  areasVisual,
+  chatVisual,
+  chatWorkVisual,
+  inboxVisual,
+  itemDetailVisual,
+  projectDetailVisual,
+  visualNow,
+} from "./fixtures/chat-alerts";
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
@@ -647,6 +657,30 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByTestId("palette-confirm")).toBeVisible();
     await page.waitForTimeout(150);
     await expect(page).toHaveScreenshot(`palette-confirm-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await page.keyboard.press("Escape");
+  });
+}
+
+// Inline edits: the item detail header read view and the title editor, light + dark.
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: inline edits (${theme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: theme });
+    const d = itemDetailVisual;
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(new RegExp(`/api/work/items/${d.item.id}$`), (route) => route.fulfill({ json: d }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.goto(`/areas?item=${d.item.id}`);
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
+    await expect(page.locator("#work-item-title")).toHaveText(d.item.title);
+    await page.waitForTimeout(500);
+    await expect(header).toHaveScreenshot(`inline-read-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await page.locator("#work-item-title").getByRole("button").click();
+    await expect(page.getByRole("textbox", { name: "Edit title" })).toBeFocused();
+    await page.waitForTimeout(150);
+    await expect(header).toHaveScreenshot(`inline-title-edit-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
     await page.keyboard.press("Escape");
   });
 }
