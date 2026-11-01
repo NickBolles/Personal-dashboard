@@ -37,7 +37,7 @@ export function ShareLanding({ staged, error }: { staged?: string; error?: strin
     }
     // Launched by a share: go back to the app that shared; otherwise to the Inbox.
     if (staged && window.history.length > 2) window.history.back();
-    else router.push("/areas?view=inbox");
+    else router.push("/inbox");
   };
   return (
     <div className="mx-auto max-w-xl p-3 sm:p-6">

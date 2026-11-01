@@ -72,7 +72,7 @@ test("keyboard-only inbox triage: j/k move, Enter files, M chooses, E dismisses 
     const r = await page.request.post("/api/work/inbox", { data: { text }, headers: { "x-jarvis-csrf": "1" } });
     expect(r.ok()).toBeTruthy();
   }
-  await page.goto("/areas?view=inbox");
+  await page.goto("/inbox");
   const preview = page.getByTestId("inbox-preview");
   const pick = (t: string) => page.locator(`[data-inbox-pick]`, { hasText: t });
   await expect(pick(titles[0])).toBeVisible();
@@ -97,4 +97,96 @@ test("keyboard-only inbox triage: j/k move, Enter files, M chooses, E dismisses 
     await page.keyboard.press("e");
     await expect(pick(t)).toHaveCount(0);
   }
+});
+
+/** Stateful stub of the Inbox list + triage routes so focus/bulk tests don't depend on other specs' captures. */
+async function stubInbox(page: import("@playwright/test").Page, nonce: string, withSuggestion: boolean[]) {
+  const entry = (n: number, suggested: boolean) => ({
+    id: `inb_${nonce}_${n}`,
+    source: "capture" as const,
+    title: `Focus key ${nonce} ${n}`,
+    note: "",
+    url: null,
+    repo: null,
+    number: null,
+    reason: "Quick capture",
+    createdAt: "2026-10-30T12:00:00.000Z",
+    capture: {
+      channel: null,
+      triageState: "done" as const,
+      triageSkipReason: null,
+      suggestedTitle: null,
+      suggestedKind: null,
+      suggestion: suggested ? { parentId: "wk_misc", title: "Errands", path: "Home / Errands", confidence: 0.9, reason: null } : null,
+      sensitivity: "none" as const,
+      report: null,
+      attachments: [],
+      investigating: false,
+    },
+  });
+  const all = withSuggestion.map((s, i) => entry(i + 1, s));
+  const gone = new Set<string>();
+  const calls: string[] = [];
+  const list = () => all.filter((e) => !gone.has(e.id));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { items: list(), conversations: [], conversationsTotal: 0, unavailable: [], count: list().length } })
+      : route.continue(),
+  );
+  await page.route(/\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept)$/, (route) => {
+    const m = /\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept)$/.exec(route.request().url())!;
+    const id = decodeURIComponent(m[1]);
+    calls.push(`${m[2]}:${id}`);
+    if (m[2] === "unaccept") gone.delete(id);
+    else gone.add(id);
+    const item = { id: `wk_${id}`, title: id, parentId: "wk_misc" };
+    return route.fulfill({ json: m[2] === "accept" ? { item } : { ok: true } });
+  });
+  return { all, calls };
+}
+
+test("keyboard-only focus mode on /inbox: n of N, S skips, E dismisses, Enter files, Esc exits", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 640, "two-pane list is >=640px");
+  const nonce = Date.now().toString(36);
+  const { all, calls } = await stubInbox(page, nonce, [true, false, true]);
+  await page.goto("/inbox");
+  await expect(page.locator("[data-inbox-pick]", { hasText: all[0].title }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Triage one at a time" }).click();
+  const focus = page.getByTestId("inbox-focus");
+  const progress = page.getByTestId("inbox-focus-progress");
+  await expect(progress).toHaveText("1 of 3");
+  await expect(focus.getByRole("heading", { name: all[0].title })).toBeVisible();
+  await page.keyboard.press("s");
+  await expect(focus.getByRole("heading", { name: all[1].title })).toBeVisible();
+  await page.keyboard.press("e");
+  await expect(focus.getByRole("heading", { name: all[2].title })).toBeVisible();
+  // n counts entries handled so far (skipped + dismissed) + 1.
+  await expect(progress).toHaveText("3 of 3");
+  await focus.getByRole("button", { name: /File here/ }).focus();
+  await page.keyboard.press("Enter");
+  await expect(progress).toHaveText(/Done/);
+  expect(calls).toEqual([`dismiss:${all[1].id}`, `accept:${all[2].id}`]);
+  await page.keyboard.press("Escape");
+  await expect(focus).toHaveCount(0);
+  // The skipped entry is still waiting in the list.
+  await expect(page.locator("[data-inbox-pick]", { hasText: all[0].title }).first()).toBeVisible();
+});
+
+test("/inbox?mode=focus starts focus mode; bulk accept files every suggestion and one Undo restores them", async ({ page }) => {
+  test.skip((page.viewportSize()?.width ?? 0) < 640, "two-pane list is >=640px");
+  const nonce = Date.now().toString(36);
+  const { all, calls } = await stubInbox(page, nonce, [true, true, false]);
+  await page.goto("/inbox?mode=focus");
+  await expect(page.getByTestId("inbox-focus-progress")).toHaveText("1 of 3");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("inbox-focus")).toHaveCount(0);
+  await page.getByRole("button", { name: "Accept 2 suggestions" }).click();
+  const undo = page.getByTestId("inbox-bulk-undo");
+  await expect(undo).toContainText("Filed 2 under their suggestions.");
+  await expect(page.locator("[data-inbox-pick]", { hasText: all[0].title })).toHaveCount(0);
+  await expect(page.locator("[data-inbox-pick]", { hasText: all[2].title }).first()).toBeVisible();
+  await undo.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(undo).toHaveCount(0);
+  await expect(page.locator("[data-inbox-pick]", { hasText: all[0].title }).first()).toBeVisible();
+  expect(calls.filter((c) => c.startsWith("unaccept:")).sort()).toEqual([`unaccept:${all[0].id}`, `unaccept:${all[1].id}`].sort());
 });

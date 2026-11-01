@@ -23,7 +23,7 @@ test("capture sheet with an image lands in the inbox with a thumbnail", async ({
   await expect(page.getByRole("img", { name: "shot.png" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Capture", exact: true }).click();
-  await expect(page).toHaveURL(/view=inbox/);
+  await expect(page).toHaveURL(/\/inbox/);
   const row = page.locator("[data-inbox-entry]", { hasText: `Porch light ${nonce}` });
   await expect(row).toBeVisible();
   await expect(row.getByRole("img", { name: "Captured image" })).toBeVisible();
@@ -56,7 +56,7 @@ test("with AI on, a capture is triaged and investigated: Report ready opens the 
   await api(page, "put", "/api/settings/ai", { enabled: true });
   try {
     const nonce = Date.now().toString(36);
-    await page.goto("/areas?view=inbox");
+    await page.goto("/inbox");
     await page
       .getByRole("button", { name: /Capture/ })
       .first()
@@ -82,7 +82,7 @@ test("finance-looking captures are not sent to AI and say so", async ({ page }) 
   try {
     const r = await api<{ entry: { id: string }; triage: string; reason: string }>(page, "post", "/api/capture", { text: "Chase checking balance $4,210" });
     expect(r).toMatchObject({ triage: "skipped", reason: "finance_detected" });
-    await page.goto("/areas?view=inbox");
+    await page.goto("/inbox");
     await expect(page.locator(`[data-inbox-entry="${r.entry.id}"]`).getByText("Not sent to AI: looks like finance. File it yourself.")).toBeVisible();
     await api(page, "post", `/api/work/inbox/${r.entry.id}/dismiss`);
   } finally {
@@ -142,7 +142,7 @@ test("File it from a Report ready push files under the suggestion once; falls ba
   const nonce = Date.now().toString(36);
   const made: string[] = [];
   try {
-    await page.goto("/areas?view=inbox");
+    await page.goto("/inbox");
     const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker"));
     const area = (await api<{ item: { id: string } }>(page, "post", "/api/work/items", { kind: "area", title: `Porch-${nonce}` })).item;
     const triaged = async (text: string) => {
@@ -165,7 +165,7 @@ test("File it from a Report ready push files under the suggestion once; falls ba
             { url },
             "e2e",
           ),
-        `/areas?view=inbox&entry=${id}`,
+        `/inbox?entry=${id}`,
       ) as Promise<{ filed?: { itemId: string; already: boolean; parentTitle: string }; opened?: string }>;
 
     const a = await triaged(`Fix the porch light FORCE_DEST=Porch-${nonce}`);
@@ -181,7 +181,7 @@ test("File it from a Report ready push files under the suggestion once; falls ba
     const b = await triaged(`Random thought ${nonce}`);
     const fallback = await tap(b.id);
     expect(fallback.filed).toBeUndefined();
-    expect(fallback.opened).toContain(`view=inbox&entry=${b.id}&do=file`);
+    expect(fallback.opened).toContain(`inbox?entry=${b.id}&do=file`);
     await api(page, "post", `/api/work/inbox/${b.id}/dismiss`);
   } finally {
     await api(page, "put", "/api/settings/ai", { enabled: false });

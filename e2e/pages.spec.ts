@@ -63,7 +63,7 @@ test("settings: connections show verified state; notifications categories toggle
 
 test("share target opens the Inbox capture sheet, with Ask Hermes as the alternative", async ({ page }) => {
   await page.goto("/share?title=Recipe&text=Try%20this&url=https%3A%2F%2Fexample.com");
-  await expect(page).toHaveURL(/\/areas\?view=inbox&capture=/);
+  await expect(page).toHaveURL(/\/inbox\?capture=/);
   const sheet = page.getByRole("dialog", { name: "Capture" });
   await expect(sheet.getByLabel("Capture to inbox")).toHaveValue(/Recipe\nTry this\nhttps:\/\/example.com/);
   await expect(sheet.getByRole("button", { name: "Ask Hermes instead" })).toBeVisible();
@@ -78,7 +78,7 @@ test("manifest is installable-grade", async ({ request }) => {
   expect(m.start_url).toMatch(/^\/home/);
   expect(m.icons.some((i: { sizes: string; purpose?: string }) => i.sizes === "512x512" && i.purpose === "maskable")).toBe(true);
   expect(m.share_target).toMatchObject({ action: "/share-target", method: "POST", enctype: "multipart/form-data" });
-  expect(m.shortcuts.map((s: { url: string }) => s.url)).toEqual(["/capture", "/areas?view=inbox", "/chat?new=1", "/alerts"]);
+  expect(m.shortcuts.map((s: { url: string }) => s.url)).toEqual(["/capture", "/inbox", "/chat?new=1", "/alerts"]);
   const sw = await request.get("/sw.js");
   expect(sw.ok()).toBe(true);
 });

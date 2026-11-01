@@ -66,7 +66,7 @@ export function useCommands(): Command[] {
       chat && { id: "go.chat", label: work ? "Go to Conversations" : "Go to Hermes", group: "Go to", keywords: "chat conversations hermes", run: go("/chat") },
       { id: "go.alerts", label: "Go to Alerts", group: "Go to", keywords: "notifications alerts", run: go("/alerts") },
       work && { id: "work.today", label: "Go to Today", group: "Go to", keywords: "areas work today continue", run: go("/areas") },
-      work && { id: "work.inbox", label: "Go to Inbox", group: "Go to", keywords: "work inbox triage unfiled issues", run: go("/areas?view=inbox") },
+      work && { id: "work.inbox", label: "Go to Inbox", group: "Go to", keywords: "work inbox triage unfiled issues", run: go("/inbox") },
       work && { id: "work.timeline", label: "Go to Timeline", group: "Go to", keywords: "work timeline gantt dates", run: go("/areas/timeline") },
       work && { id: "work.dashboard", label: "Go to Dashboard", group: "Go to", keywords: "work dashboard widgets lanes", run: go("/areas/dashboard") },
       work && { id: "work.map", label: "Go to Map", group: "Go to", keywords: "work map graph", run: go("/areas/map") },

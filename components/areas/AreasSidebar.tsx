@@ -49,7 +49,7 @@ export function AreasSidebar() {
             </Link>
           </li>
           <li>
-            <Link href="/areas?view=inbox" className="wk-side-nav">
+            <Link href="/inbox" className="wk-side-nav">
               <span aria-hidden="true" className="w-4 text-center text-muted">
                 ↓
               </span>

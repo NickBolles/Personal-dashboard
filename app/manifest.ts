@@ -22,7 +22,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       { name: "Capture", url: "/capture", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Inbox", url: "/areas?view=inbox", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Inbox", url: "/inbox", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Ask Hermes", short_name: "Hermes", url: "/chat?new=1", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: "Alerts", url: "/alerts", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],

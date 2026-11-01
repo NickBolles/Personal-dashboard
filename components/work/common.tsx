@@ -13,13 +13,13 @@ export type AreasSection = "today" | "inbox" | "tree" | "timeline" | "dashboard"
 
 const SECTIONS: { key: AreasSection; href: string; label: string; icon?: ComponentType<{ className?: string }> }[] = [
   { key: "today", href: "/areas", label: "Today", icon: SunIcon },
-  { key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: InboxIcon },
+  { key: "inbox", href: "/inbox", label: "Inbox", icon: InboxIcon },
   { key: "tree", href: "/areas?view=tree", label: "Areas", icon: AreasIcon },
   { key: "timeline", href: "/areas/timeline", label: "Timeline" },
   { key: "dashboard", href: "/areas/dashboard", label: "Dashboard" },
   { key: "map", href: "/areas/map", label: "Map" },
 ];
-const IN_PAGE = new Set<AreasSection>(["today", "inbox", "tree"]);
+const IN_PAGE = new Set<AreasSection>(["today", "tree"]);
 
 /**
  * Areas section wrapper. `.work-ui` scopes the hub's density rules

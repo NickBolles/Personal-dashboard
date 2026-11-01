@@ -121,7 +121,7 @@ export function Sidebar({
 
   const entries: Entry[] = [
     { key: "home", href: "/home", label: "Today", icon: SunIcon, active: path === "/home" || path === "/" },
-    ...(canWork ? [{ key: "inbox", href: "/areas?view=inbox", label: "Inbox", icon: InboxIcon, active: view === "inbox", badge: inbox.data?.count ?? 0 }] : []),
+    ...(canWork ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: InboxIcon, active: path.startsWith("/inbox"), badge: inbox.data?.count ?? 0 }] : []),
     ...(canChat ? [{ key: "chat", href: "/chat", label: "Chat", icon: ChatIcon, active: path === "/chat" }] : []),
     { key: "alerts", href: "/alerts", label: "Alerts", icon: BellIcon, active: path.startsWith("/alerts"), badge: unread },
   ];

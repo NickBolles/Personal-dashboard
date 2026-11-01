@@ -214,7 +214,7 @@ self.addEventListener("push", (event) => {
 async function fileFromNotification(url) {
   const u = new URL(url, self.location.origin);
   const entry = u.searchParams.get("entry");
-  if (u.origin !== self.location.origin || u.searchParams.get("view") !== "inbox" || !entry) return null;
+  if (u.origin !== self.location.origin || (u.pathname !== "/inbox" && u.searchParams.get("view") !== "inbox") || !entry) return null;
   try {
     const res = await fetch(`/api/work/inbox/${encodeURIComponent(entry)}/file-suggestion`, {
       method: "POST",
@@ -244,7 +244,7 @@ async function openOrFocus(target) {
 /** Notification tap (exported as a SW global so e2e can drive it). Resolves with what it did. */
 async function handleNotificationClick(action, data, tag) {
   const url = (data && data.url) || "/alerts";
-  if (action === "file" && url.includes("view=inbox")) {
+  if (action === "file" && (url.startsWith("/inbox?") || url.includes("view=inbox"))) {
     const filed = await fileFromNotification(url);
     if (filed) {
       // Confirm in place (no window opens); tapping the confirmation opens the new item.

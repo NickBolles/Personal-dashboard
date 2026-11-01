@@ -50,7 +50,7 @@ export function purgeDismissedCaptures(now = new Date(), limit = 100) {
       .where(
         inArray(
           schema.notifications.deepLink,
-          ids.map((id) => `/areas?view=inbox&entry=${encodeURIComponent(id)}`),
+          ids.flatMap((id) => [`/inbox?entry=${encodeURIComponent(id)}`, `/areas?view=inbox&entry=${encodeURIComponent(id)}`]),
         ),
       )
       .run().changes;

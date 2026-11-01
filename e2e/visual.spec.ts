@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mock, setHa, startConversation } from "./helpers";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
@@ -16,6 +16,17 @@ test.beforeEach(async ({ request }) => {
 });
 
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
+
+/**
+ * Freeze the browser clock at 12:00 America/Chicago on today's frame date. The server and the mock
+ * upstreams date their seeds in the same timezone (mock-upstreams/util.mjs isoDate), so "Due today",
+ * "N days overdue" and similar relative labels agree at any wall-clock time (no evening drift).
+ */
+async function freezeMiddayCT(page: Page) {
+  const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  // 17:00 UTC is 12:00 CDT / 11:00 CST: midday either way, far from both date boundaries.
+  await page.clock.setFixedTime(new Date(`${ymd}T17:00:00.000Z`));
+}
 
 for (const [name, path] of [
   ["home", "/home"],
@@ -71,6 +82,7 @@ for (const [name, path] of [
 
 test("visual: home suggestions and the backlog", async ({ page, request }) => {
   await mock(request, "/google/tasks", { tasks: Array.from({ length: 8 }, (_, i) => ({ title: `Overdue errand ${i + 1}`, dueDays: -(3 + i) })) });
+  await freezeMiddayCT(page);
   await page.goto("/home");
   expect((await page.request.delete("/api/home/tuning", { data: { scope: "all" }, headers: { "x-jarvis-csrf": "1" } })).ok()).toBe(true);
   await page.reload();
@@ -230,6 +242,7 @@ for (const scheme of ["light", "dark"] as const) {
       return res.json();
     };
     await put("/api/smart/settings", { enabled: true });
+    await freezeMiddayCT(page);
     try {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto("/todos");
@@ -267,6 +280,7 @@ for (const [name, path] of [
   for (const scheme of ["light", "dark"] as const) {
     test(`visual: ${name} page (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
+      if (name === "todos" || name === "house") await freezeMiddayCT(page);
       if (name === "people") {
         // Other specs add people to the shared DB: show only the owner, with a fixed join date.
         await page.route(/\/api\/people$/, async (route) => {
@@ -490,5 +504,85 @@ for (const theme of ["light", "dark"] as const) {
     await expect(panel.getByText("shelf-measurements.txt")).toBeVisible();
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-files-panel-${theme}.png`, { fullPage: false, mask });
+  });
+}
+
+// Inbox as its own view (/inbox): fixed entries (one with a suggestion) so other specs' captures never leak in.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: inbox page (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.clock.setFixedTime(new Date(visualNow));
+    const capture = (suggested: boolean) => ({
+      channel: null,
+      triageState: "done",
+      triageSkipReason: null,
+      suggestedTitle: null,
+      suggestedKind: null,
+      suggestion: suggested ? { parentId: "wk_mb", title: "Momentum Bets", path: "Momentum Bets", confidence: 0.82, reason: "Mentions the bet review" } : null,
+      sensitivity: "none",
+      report: null,
+      attachments: [],
+      investigating: false,
+    });
+    const items = [
+      {
+        id: "inb_v1",
+        source: "capture",
+        title: "Review the momentum bet notes",
+        note: "",
+        url: null,
+        repo: null,
+        number: null,
+        reason: "Quick capture",
+        createdAt: visualNow,
+        capture: capture(true),
+      },
+      {
+        id: "inb_v2",
+        source: "capture",
+        title: "Call the plumber about the garage sink",
+        note: "",
+        url: null,
+        repo: null,
+        number: null,
+        reason: "Quick capture",
+        createdAt: visualNow,
+        capture: capture(false),
+      },
+    ];
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { items, conversations: [], conversationsTotal: 0, unavailable: [], count: items.length } }),
+    );
+    // "Unfiled conversations" (components/work/conversations.tsx UnfiledPanel) reads its own list: stub it too,
+    // or chats created by other specs in the shared DB leak into the snapshot.
+    const unfiled = {
+      conversations: [
+        {
+          id: "sess_inbox_v1",
+          title: "Garage sink quotes",
+          preview: "Two plumbers can come next week",
+          lastActiveAt: visualNow,
+          backend: "hermes",
+          readOnly: false,
+          linkedItems: [],
+          placement: null,
+          shared: false,
+          suggestions: [],
+        },
+      ],
+      total: 1,
+      unavailable: [],
+      updating: false,
+      cachedAt: visualNow,
+    };
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: unfiled }));
+    await page.goto("/inbox");
+    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByText(items[0].title).first()).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page).toHaveScreenshot(`inbox-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
   });
 }

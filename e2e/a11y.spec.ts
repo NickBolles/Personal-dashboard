@@ -31,7 +31,7 @@ const PAGES = [
   "/finance/plan",
   "/finance/checkin?all=1",
   "/areas",
-  "/areas?view=inbox",
+  "/inbox",
   "/areas?view=tree",
   "/areas/timeline",
   "/areas/dashboard",

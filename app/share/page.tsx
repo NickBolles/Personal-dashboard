@@ -21,6 +21,6 @@ export default async function SharePage({
     redirect(`/capture?${q}`);
   }
   const draft = [title, text, url].filter(Boolean).join("\n").slice(0, 2000);
-  if (user.capabilities.has("work.use")) redirect(`/areas?view=inbox&capture=${encodeURIComponent(draft)}`);
+  if (user.capabilities.has("work.use")) redirect(`/inbox?capture=${encodeURIComponent(draft)}`);
   redirect(`/chat?new=1&draft=${encodeURIComponent(draft)}`);
 }

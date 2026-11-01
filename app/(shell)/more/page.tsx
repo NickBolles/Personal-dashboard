@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { allowed, DESTINATIONS } from "@/components/navigation/destinations";
 import { requirePage } from "@/server/auth/page";
-import { GearIcon } from "@/components/icons";
+import { GearIcon, TodoIcon } from "@/components/icons";
 import { Page, PageHeader } from "@/components/ui";
 
 export const metadata = { title: "More" };
@@ -9,7 +9,10 @@ export const metadata = { title: "More" };
 export default async function MorePage() {
   const user = await requirePage();
   const caps = [...user.capabilities];
-  const items = [...DESTINATIONS.filter((d) => allowed(d, caps)), { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
+  const dests = DESTINATIONS.filter((d) => allowed(d, caps));
+  // Inbox has no bottom-bar slot on phones (orb "Go to" petal + here); it needs the Areas destination.
+  const inbox = dests.some((d) => d.key === "areas") ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon }] : [];
+  const items = [...dests.flatMap((d) => (d.key === "areas" ? [d, ...inbox] : [d])), { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
   return (
     <Page width="medium">
       <PageHeader title="More" subtitle="Every space you can open." />
