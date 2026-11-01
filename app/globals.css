@@ -839,6 +839,95 @@
   }
 }
 
+/* Chat on phones: the composer docks above the bottom bar; while the keyboard is open (or the text field has
+   focus on a touch screen) the bar + orb hide and the composer sits directly above the keyboard. */
+.chat-dock {
+  bottom: 76px;
+}
+.chat-page {
+  min-height: calc(100dvh - 76px);
+}
+@media (min-width: 640px) {
+  .chat-dock {
+    bottom: 0;
+  }
+  .chat-page {
+    min-height: calc(100dvh - 44px);
+  }
+}
+@media (max-width: 639.98px) {
+  html[data-kb="open"] nav[aria-label="Primary"].fixed {
+    display: none;
+  }
+  html[data-kb="open"] main.pb-nav {
+    padding-bottom: 0;
+  }
+  html[data-kb="open"] .chat-page {
+    min-height: 100dvh;
+  }
+  html[data-kb="open"] .chat-dock {
+    bottom: var(--kb-inset, 0px);
+    padding-bottom: 0.375rem;
+  }
+}
+@media (max-width: 639.98px) and (pointer: coarse) {
+  html:has(.chat-dock textarea:focus) nav[aria-label="Primary"].fixed {
+    display: none;
+  }
+  html:has(.chat-dock textarea:focus) main.pb-nav {
+    padding-bottom: 0;
+  }
+  html:has(.chat-dock textarea:focus) .chat-page {
+    min-height: 100dvh;
+  }
+  html:has(.chat-dock textarea:focus) .chat-dock {
+    bottom: var(--kb-inset, 0px);
+  }
+}
+
+/* Chat timeline density: 15px text on phones, 14px from tablet up, tighter markdown rhythm. */
+.chat-tl {
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+.chat-tl .md {
+  line-height: 1.45;
+}
+@media (min-width: 640px) {
+  .chat-tl {
+    font-size: 0.875rem;
+  }
+}
+.chat-time-divider {
+  text-align: center;
+  font-size: 11px;
+  line-height: 1rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Per-message time + actions: hidden until the message is tapped (or focused); on mouse screens they fade in on hover. */
+.chat-msg {
+  position: relative;
+}
+@media (hover: none), (pointer: coarse) {
+  .chat-msg:not([data-meta]):not(:focus-within) > .msg-meta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .chat-msg:not([data-meta]):not(:hover):not(:focus-within) > .msg-meta {
+    opacity: 0;
+  }
+  .msg-meta {
+    transition: opacity 120ms ease;
+  }
+}
+
 /* Desktop Arc-style sidebar (D1): everything beside it shifts by its width. */
 .jv-shell {
   --sidebar-w: 0px;

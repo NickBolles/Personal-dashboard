@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mock, setHa, startConversation } from "./helpers";
+import { mock, openChatContext, setHa, startConversation } from "./helpers";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
@@ -61,7 +61,8 @@ for (const [name, path] of [
     if (name === "chat") {
       await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
       await expect(page.locator('header a[href^="/initiatives"]')).toHaveCount(0);
-      await expect(page.getByText("8:15 AM", { exact: true })).toHaveCount(2);
+      // First-message time divider + the two (tap-to-reveal) message meta times.
+      await expect(page.getByText("8:15 AM", { exact: true })).toHaveCount(3);
     }
     if (name === "alerts") {
       await expect(page.locator("li[data-id] h2")).toHaveText(alertsVisual.notifications.map((n) => n.title));
@@ -463,7 +464,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-links-${theme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     if (!wide) await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Attach context" }).click();
+    await openChatContext(page);
     const sheet = page.getByRole("dialog", { name: "Add context" });
     await expect(sheet.getByRole("combobox", { name: "Search context" })).toBeFocused();
     await page.waitForTimeout(600);

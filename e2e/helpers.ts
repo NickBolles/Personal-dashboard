@@ -61,3 +61,25 @@ export async function startConversation(page: Page, text: string) {
   await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
 }
+
+/** Opens the chat "Add context" sheet: the "+" button on tablets/desktop, the "+" menu → Context on phones. */
+export async function openChatContext(page: Page) {
+  const direct = page.getByRole("button", { name: "Attach context", exact: true });
+  if (await direct.isVisible()) return direct.click();
+  await page.getByRole("button", { name: "Add to message" }).click();
+  await page.getByRole("menuitem", { name: /^Context/ }).click();
+}
+
+/** Reveals a chat message's time + actions (hidden until tapped on touch screens). */
+export async function revealMessageMeta(page: Page, who: "user" | "assistant", index = 0) {
+  const bubble = page.locator(`[data-testid="msg-bubble"][data-who="${who}"]`).nth(index);
+  const meta = bubble.locator("xpath=..").getByTestId("msg-meta");
+  await expect(bubble.locator("xpath=..")).toHaveCount(1);
+  if (!(await isRevealed(meta))) await bubble.click({ position: { x: 4, y: 4 } });
+  await expect.poll(() => isRevealed(meta)).toBe(true);
+  return meta;
+}
+
+async function isRevealed(meta: import("@playwright/test").Locator) {
+  return meta.evaluate((el) => el.closest("[data-meta]") !== null || (getComputedStyle(el).position !== "absolute" && getComputedStyle(el).opacity !== "0"));
+}

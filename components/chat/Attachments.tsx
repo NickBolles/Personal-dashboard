@@ -130,8 +130,17 @@ export function pastedFiles(e: React.ClipboardEvent): File[] {
   return out;
 }
 
-export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => void; disabled?: boolean }) {
-  const ref = useRef<HTMLInputElement>(null);
+type PickerButtonProps = {
+  onFiles: (f: File[]) => void;
+  disabled?: boolean;
+  /** extra classes for the visible button (the hidden input always stays mounted) */
+  buttonClassName?: string;
+  /** lets another control (the phone "+" menu) open the same picker */
+  inputRef?: { current: HTMLInputElement | null };
+};
+
+export function AttachButton({ onFiles, disabled, buttonClassName, inputRef }: PickerButtonProps) {
+  const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
       <Button
@@ -140,12 +149,15 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
         onClick={() => ref.current?.click()}
         aria-label="Attach files or pictures"
         disabled={disabled}
-        className="shrink-0 px-3"
+        className={cx("shrink-0 px-3", buttonClassName)}
       >
         <PaperclipIcon />
       </Button>
       <input
-        ref={ref}
+        ref={(el) => {
+          ref.current = el;
+          if (inputRef) inputRef.current = el;
+        }}
         type="file"
         multiple
         accept={CHAT_FILE_ACCEPT}
@@ -163,8 +175,8 @@ export function AttachButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
 }
 
 /** Phones: camera straight away (`capture`), separate from the picker so the library stays reachable. */
-export function CameraButton({ onFiles, disabled }: { onFiles: (f: File[]) => void; disabled?: boolean }) {
-  const ref = useRef<HTMLInputElement>(null);
+export function CameraButton({ onFiles, disabled, buttonClassName, inputRef }: PickerButtonProps) {
+  const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
       <Button
@@ -173,12 +185,15 @@ export function CameraButton({ onFiles, disabled }: { onFiles: (f: File[]) => vo
         onClick={() => ref.current?.click()}
         aria-label="Take a photo"
         disabled={disabled}
-        className="shrink-0 px-3 [@media(pointer:fine)]:hidden"
+        className={cx("shrink-0 px-3 [@media(pointer:fine)]:hidden", buttonClassName)}
       >
         <CameraIcon />
       </Button>
       <input
-        ref={ref}
+        ref={(el) => {
+          ref.current = el;
+          if (inputRef) inputRef.current = el;
+        }}
         type="file"
         accept="image/*"
         capture="environment"
