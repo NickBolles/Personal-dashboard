@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 
 describe("unwrapBrokenLines", () => {
+  it("keeps code and fenced blocks untouched", () => {
+    const py = 'print(\n  "hello"\n)\nprint("world")';
+    expect(unwrapBrokenLines(py)).toBe(py);
+    const fenced = "```\nfoo(\n)\n```";
+    expect(unwrapBrokenLines(fenced)).toBe(fenced);
+  });
   it("joins hard breaks from a pasted sentence", () => {
     expect(unwrapBrokenLines("Forgiveness is about the\nPAST\n; trust is about the\nFUTURE\n.")).toBe(
       "Forgiveness is about the PAST; trust is about the FUTURE.",

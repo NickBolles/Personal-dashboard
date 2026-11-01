@@ -14,6 +14,8 @@ const LEADING_PUNCT = /^[.,;:!?)\]”’]/;
 export function unwrapBrokenLines(text: string): string {
   if (!text.includes("\n")) return text;
   const lines = text.split("\n");
+  // Code or deliberately formatted text (fences, indentation, open brackets at line end): never reflow.
+  if (text.includes("```") || lines.some((l) => /^(\t| {2,})\S/.test(l) || /[([{]\s*$/.test(l))) return text;
   if (!lines.slice(1).some((l) => LEADING_PUNCT.test(l.trim()))) return text;
   const out: string[] = [lines[0]!];
   for (let i = 1; i < lines.length; i++) {
