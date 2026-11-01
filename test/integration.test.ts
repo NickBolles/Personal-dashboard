@@ -422,4 +422,22 @@ describe("backup drill", () => {
     expect(out).toMatch(/Backup written/);
     __setTestDatabase();
   });
+
+  it("includes chat attachments (chat-files/) alongside captures", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-bk-"));
+    __setTestDatabase(path.join(dir, "jarvis.db"));
+    fs.mkdirSync(path.join(dir, "chat-files", "ab"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "chat-files", "ab", "pic.jpg"), "picture-bytes");
+    fs.mkdirSync(path.join(dir, "captures"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "captures", "note.txt"), "capture-bytes");
+    const outDir = path.join(dir, "out");
+    execFileSync(process.execPath, ["scripts/backup.mjs", "--out", outDir], {
+      env: { ...process.env, JARVIS_DATA_DIR: dir, JARVIS_DB_PATH: path.join(dir, "jarvis.db") },
+      encoding: "utf8",
+    });
+    const [stamp] = fs.readdirSync(outDir);
+    expect(fs.readFileSync(path.join(outDir, stamp, "chat-files", "ab", "pic.jpg"), "utf8")).toBe("picture-bytes");
+    expect(fs.readFileSync(path.join(outDir, stamp, "captures", "note.txt"), "utf8")).toBe("capture-bytes");
+    __setTestDatabase();
+  });
 });
