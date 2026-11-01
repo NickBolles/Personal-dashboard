@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mock, setHa, startConversation } from "./helpers";
+import { mock, openChatContext, setHa, startConversation } from "./helpers";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import { alertsVisual, areaDetailVisual, areasVisual, chatVisual, chatWorkVisual, inboxVisual, projectDetailVisual, visualNow } from "./fixtures/chat-alerts";
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
@@ -460,7 +460,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-links-${theme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     if (!wide) await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Attach context" }).click();
+    await openChatContext(page);
     const sheet = page.getByRole("dialog", { name: "Add context" });
     await expect(sheet.getByRole("combobox", { name: "Search context" })).toBeFocused();
     await page.waitForTimeout(600);

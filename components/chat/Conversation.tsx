@@ -13,7 +13,9 @@ import type { EntityLink } from "@/lib/contracts";
 import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
 import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
-import { ChevronIcon, ForkIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
+import { ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
+import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
+import { useKeyboardInset } from "@/lib/client/keyboard";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -327,6 +329,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  // Keyboard open (phones): the bottom bar hides and the composer sits right above the keyboard; jump to the latest message.
+  const toLatest = useCallback(() => {
+    setTimeout(() => window.scrollTo({ top: document.documentElement.scrollHeight }), 60);
+  }, []);
+  const onKeyboard = useCallback((open: boolean) => (open ? toLatest() : undefined), [toLatest]);
+  useKeyboardInset(onKeyboard);
   const contentSize = (detail?.timeline.length ?? 0) + run.state.text.length + run.state.activity.length;
   useLayoutEffect(() => {
     if (!detached) bottomRef.current?.scrollIntoView({ block: "end" });
@@ -363,6 +371,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
   const readOnly = Boolean(session!.readOnly);
+  // Time dividers: shown before the first message and after gaps over 5 minutes (per-message times are on tap).
+  const dividerIds = timeDividerIds(detail.timeline);
   const fork = { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online };
   const menu = readOnly
     ? [fork]
@@ -371,6 +381,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         fork,
         { label: "Model…", onSelect: () => setDialog("model") },
         ...(canAreas ? [{ label: "File under…", onSelect: () => setDialog("file") }] : []),
+        ...(areaCtx?.node ? [{ label: "Properties", onSelect: () => router.push(`/areas?item=${encodeURIComponent(areaCtx.node!.id)}`) }] : []),
         ...(can("paperclip.track") ? [{ label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online }] : []),
         {
           label: session!.pinned ? "Unpin" : "Pin",
@@ -410,8 +421,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               {...drop.props}
             >
               <DropOverlay show={drop.over} />
-              <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-4 py-2.5 backdrop-blur sm:px-6">
-                <div className="flex items-start gap-2">
+              <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
+                <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
                   <Link
                     href="/chat"
                     className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
@@ -420,9 +431,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                     <ChevronIcon className="h-5 w-5 rotate-180" />
                   </Link>
                   <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[1.0625rem] leading-6 font-semibold tracking-[-0.01em]">{session!.title}</h1>
+                    <h1 className="truncate text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] sm:text-[1.0625rem] sm:leading-6">{session!.title}</h1>
                     {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-                    <div data-scroll-x className="scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap">
+                    <div
+                      data-scroll-x
+                      className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
+                    >
                       {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
                       {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
                       {readOnly ? (
@@ -464,7 +478,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                             </button>
                           ))}
                           {areaCtx.node ? (
-                            <Link className="chip hover:border-line-strong" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
+                            <Link className="chip hover:border-line-strong max-sm:hidden" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
                               Properties
                             </Link>
                           ) : null}
@@ -521,7 +535,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 </div>
               </header>
 
-              <div className="flex-1 space-y-3 px-4 py-4 sm:px-6" aria-label="Conversation timeline">
+              <div className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
                 {detail.timeline.length === 0 && !showLive && !pendingInput ? (
                   <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
                     <p className="text-[0.9375rem] font-semibold">
@@ -541,7 +555,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                     </ul>
                   </div>
                 ) : null}
-                <ol className="space-y-3">
+                <ol className="space-y-2.5">
                   {groupTimeline(detail.timeline).map((g) => {
                     const row = (item: TimelineItem, stepSec?: number) => (
                       <TimelineRow
@@ -554,7 +568,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                         }}
                       />
                     );
-                    if (!("tools" in g)) return row(g);
+                    if (!("tools" in g)) {
+                      if (g.kind !== "user" && g.kind !== "assistant") return row(g);
+                      return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
+                    }
                     return (
                       <li key={`work-${g.tools[0].id}`}>
                         <WorkSummary
@@ -570,8 +587,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   })}
                   {showPendingUser ? (
                     <li className="flex justify-end">
-                      <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
-                        <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{pendingInput}</p>
+                      <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
+                        <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
                       </div>
                     </li>
                   ) : null}
@@ -581,7 +598,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               </div>
 
               {detached ? (
-                <div className="pointer-events-none sticky bottom-[140px] z-10 flex justify-center">
+                <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
                   <Button
                     size="sm"
                     className="pointer-events-auto shadow"
@@ -617,6 +634,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   repo={areaCtx?.settings?.defaultRepo ?? null}
                   modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
                   onModel={() => setDialog("model")}
+                  onFocus={toLatest}
                   agent={
                     areaCtx?.agent ??
                     (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
@@ -750,29 +768,67 @@ function liveSeconds(activity: Activity[]): number | undefined {
   return (last - first) / 1000;
 }
 
+/** Message ids that get a centred time divider (first timed message, then gaps over 5 minutes). */
+function timeDividerIds(items: TimelineItem[]): Set<string> {
+  const ids = new Set<string>();
+  let prev: string | undefined;
+  for (const t of items) {
+    if (t.kind !== "user" && t.kind !== "assistant") continue;
+    if (needsTimeDivider(prev, t.at)) ids.add(t.id);
+    if (t.at) prev = t.at;
+  }
+  return ids;
+}
+
+function TimeDivider({ at }: { at: string }) {
+  return (
+    <li className="chat-time-divider" data-dynamic>
+      <time dateTime={at}>{formatTime(at)}</time>
+    </li>
+  );
+}
+
+/** Tapping a message shows its time and actions; links, buttons, disclosures and text selection keep working. */
+function useMetaToggle() {
+  const [meta, setMeta] = useState(false);
+  const onClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a,button,summary,input,textarea,select,[role=button],[role=menuitem]")) return;
+    if (window.getSelection()?.toString()) return;
+    setMeta((m) => !m);
+  };
+  return { meta, setMeta, onClick };
+}
+
 function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: () => void; stepSec?: number }) {
   const who = useContext(AssistantName);
   const [open, setOpen] = useState(false);
+  const { meta, setMeta, onClick } = useMetaToggle();
   const time = item.at ? formatTime(item.at) : undefined;
   if (item.kind === "user") {
     return (
-      <li className="group flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-2">
+      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined}>
+        <div
+          className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2"
+          data-testid="msg-bubble"
+          data-who="user"
+          onClick={onClick}
+          onContextMenu={() => setMeta(true)}
+        >
           <span className="sr-only">You said: </span>
           <UserText text={item.text} />
         </div>
-        <MessageMeta time={time} onFork={onFork} who="your message" />
+        <MessageMeta time={time} onFork={onFork} who="your message" text={item.text} />
       </li>
     );
   }
   if (item.kind === "assistant") {
     return (
-      <li className="flex flex-col gap-1">
-        <div className="min-w-0 max-w-full">
+      <li className="chat-msg flex flex-col" data-meta={meta || undefined}>
+        <div className="min-w-0 max-w-full" data-testid="msg-bubble" data-who="assistant" onClick={onClick} onContextMenu={() => setMeta(true)}>
           <span className="sr-only">{who} said: </span>
           <AssistantText text={item.text} />
         </div>
-        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} />
+        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} />
       </li>
     );
   }
@@ -823,7 +879,7 @@ function UserText({ text }: { text: string }) {
   return (
     <>
       <p className="[overflow-wrap:anywhere] whitespace-pre-wrap select-text">
-        {splitReferences(body).map((p, i) =>
+        {splitReferences(unwrapBrokenLines(body)).map((p, i) =>
           "ref" in p ? (
             <span key={i} className="chip mx-0.5" data-tone="accent" data-ref={`${p.ref.type}:${p.ref.id}`}>
               {displayRef(p.ref)}
@@ -844,15 +900,30 @@ function UserText({ text }: { text: string }) {
   );
 }
 
-function MessageMeta({ time, onFork, who }: { time?: string; onFork: () => void; who: string }) {
+function MessageMeta({ time, onFork, who, text }: { time?: string; onFork: () => void; who: string; text: string }) {
   const isHermes = useContext(AssistantName) === "Hermes";
+  const { toast } = useToast();
+  const at = text.indexOf(CONTEXT_MARK);
+  const body = at >= 0 ? text.slice(0, at).trim() : text;
   return (
-    <div className="flex items-center gap-1 text-xs text-muted">
-      {time ? <span>{time}</span> : null}
+    <div className="msg-meta flex items-center gap-0.5 text-xs text-muted" data-testid="msg-meta">
+      {time ? (
+        <span className="px-1" data-dynamic>
+          {time}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => navigator.clipboard?.writeText(body).then(() => toast("Copied", "ok"))}
+        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 sm:min-h-8 dense:min-h-7"
+        aria-label={`Copy ${who}`}
+      >
+        Copy
+      </button>
       <button
         type="button"
         onClick={onFork}
-        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 dense:min-h-7"
+        className="inline-flex min-h-11 items-center gap-1 rounded-[6px] px-2 hover:bg-surface-2 sm:min-h-8 dense:min-h-7"
         aria-label={`${isHermes ? "Restart with text through" : "Fork from"} ${who}${time ? ` at ${time}` : ""}`}
       >
         <ForkIcon className="h-3.5 w-3.5" /> {isHermes ? "Restart with text" : "Fork from here"}
@@ -966,6 +1037,7 @@ function Composer({
   repo: areaRepo,
   modelLabel,
   onModel,
+  onFocus,
   agent,
   restore,
 }: {
@@ -985,6 +1057,8 @@ function Composer({
   repo: string | null;
   modelLabel: string;
   onModel: () => void;
+  /** composer focused: scroll the conversation to the latest message */
+  onFocus?: () => void;
   /** who answers (Settings → Agents); shown when an agent is involved */
   agent?: AgentResolution | null;
 }) {
@@ -995,6 +1069,8 @@ function Composer({
   const [loaded, setLoaded] = useState(false);
   const pendingKey = useRef<string | undefined>(undefined);
   const ta = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
   const running = phase !== undefined && !isTerminal(phase);
   const canSteer = phase === "running";
   // @ / # / picker state: the trigger at the caret, the highlighted row, picked references.
@@ -1141,18 +1217,12 @@ function Composer({
         : `Message ${who}…`;
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
+  const chips = Boolean(agent && (agent.routed || agent.requested)) || context.length > 0;
+
   return (
-    <div className="safe-bottom sticky bottom-[76px] z-20 border-t border-line bg-bg/95 px-3 py-2 backdrop-blur sm:bottom-0 sm:px-6">
-      <div className="mx-auto mb-1.5 flex max-w-[760px] flex-wrap items-center gap-1">
-        <button
-          type="button"
-          className="chip cursor-pointer hover:border-line-strong"
-          onClick={onModel}
-          aria-label={`Model: ${modelLabel}. Change`}
-          data-testid="model-chip"
-        >
-          <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
-        </button>
+    <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg/95 px-2 py-1.5 backdrop-blur sm:px-6 sm:py-2">
+      {/* Chips row only when there is something to show (agent / picked context); the model lives in the composer. */}
+      <div className={cx("mx-auto mb-1.5 max-w-[760px] flex-wrap items-center gap-1", chips ? "flex" : "hidden lg:flex")}>
         {agent && (agent.routed || agent.requested) ? <AgentChip agent={agent} /> : null}
         {context.map((c) => (
           <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
@@ -1189,13 +1259,24 @@ function Composer({
             listId={listId}
           />
         ) : null}
-        <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3">
+        {/* Phones: one "+" sheet (context, files, camera, photos, model) so the text field gets the width. */}
+        <ComposerAddMenu
+          online={online}
+          files={!awaitingApproval}
+          modelLabel={modelLabel}
+          onContext={onAttach}
+          onModel={onModel}
+          onFile={() => fileInput.current?.click()}
+          onCamera={() => cameraInput.current?.click()}
+          onLibrary={attachments.add}
+        />
+        <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3 max-sm:hidden">
           +
         </Button>
         {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
             so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
-        {!awaitingApproval ? <AttachButton onFiles={attachments.add} disabled={!online} /> : null}
-        {!awaitingApproval ? <CameraButton onFiles={attachments.add} disabled={!online} /> : null}
+        {!awaitingApproval ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
+        {!awaitingApproval ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
         <label htmlFor="composer" className="sr-only">
           {running ? "Guidance for the current run" : `Message ${who}`}
         </label>
@@ -1217,6 +1298,7 @@ function Composer({
             if (trigger) syncTrigger(el.value, el.selectionStart ?? el.value.length);
           }}
           onBlur={() => setTimeout(() => setTrigger(null), 150)}
+          onFocus={onFocus}
           onPaste={(e) => {
             const files = pastedFiles(e);
             if (!files.length) return;
@@ -1254,8 +1336,17 @@ function Composer({
               onStop();
             }
           }}
-          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${awaitingApproval ? "" : "max-[400px]:order-first max-[400px]:basis-full"} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
+          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !awaitingApproval ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
         />
+        <button
+          type="button"
+          className="chip mb-1.5 shrink-0 cursor-pointer self-end hover:border-line-strong max-sm:hidden"
+          onClick={onModel}
+          aria-label={`Model: ${modelLabel}. Change`}
+          data-testid="model-chip"
+        >
+          <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
+        </button>
         {running ? (
           <Button
             type="button"
@@ -1282,6 +1373,127 @@ function Composer({
         </Button>
       </form>
       {!online && text ? <p className="mt-1 text-xs text-warn">Draft saved on this device. It has not been sent.</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Phone-only "+" menu of the composer: context, files, camera, photo library and the model.
+ * Files and camera reuse the composer's own hidden inputs; the photo library has its own picker.
+ */
+function ComposerAddMenu({
+  online,
+  files,
+  modelLabel,
+  onContext,
+  onModel,
+  onFile,
+  onCamera,
+  onLibrary,
+}: {
+  online: boolean;
+  files: boolean;
+  modelLabel: string;
+  onContext: () => void;
+  onModel: () => void;
+  onFile: () => void;
+  onCamera: () => void;
+  onLibrary: (f: File[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btn = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const library = useRef<HTMLInputElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!open) return;
+    list.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+    const onDoc = (e: PointerEvent) => {
+      if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
+  }, [open]);
+  const items: { label: string; hint?: string; onSelect: () => void; disabled?: boolean; library?: boolean }[] = [
+    { label: "Context", hint: "areas, items, people", onSelect: onContext },
+    ...(files
+      ? [
+          { label: "Attach file", onSelect: onFile, disabled: !online },
+          { label: "Camera", onSelect: onCamera, disabled: !online },
+          { label: "Photo library", onSelect: () => undefined, disabled: !online, library: true },
+        ]
+      : []),
+    { label: "Model", hint: modelLabel, onSelect: onModel },
+  ];
+  const onKey = (e: React.KeyboardEvent) => {
+    const buttons = Array.from(list.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+    const idx = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      buttons[(idx + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+    } else if (e.key === "Escape" || e.key === "Tab") {
+      setOpen(false);
+      if (e.key === "Escape") btn.current?.focus();
+    }
+  };
+  return (
+    <div className="relative shrink-0 sm:hidden">
+      <button
+        ref={btn}
+        type="button"
+        aria-label="Add to message"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
+        data-testid="composer-add"
+      >
+        <PlusIcon className="h-5 w-5" />
+      </button>
+      {open ? (
+        <ul
+          ref={list}
+          id={id}
+          role="menu"
+          aria-label="Add to message"
+          onKeyDown={onKey}
+          className="absolute bottom-full left-0 z-40 mb-2 w-60 max-w-[calc(100vw-2rem)] overflow-hidden rounded-[12px] border border-line bg-surface p-1 shadow-[var(--shadow-pop)]"
+        >
+          {items.map((it) => (
+            <li key={it.label} role="none">
+              <button
+                role="menuitem"
+                type="button"
+                disabled={it.disabled}
+                onClick={() => {
+                  setOpen(false);
+                  if (it.library) library.current?.click();
+                  else it.onSelect();
+                }}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50"
+              >
+                <span>{it.label}</span>
+                {it.hint ? <span className="min-w-0 truncate text-xs text-muted">{it.hint}</span> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <input
+        ref={library}
+        type="file"
+        multiple
+        accept="image/*"
+        aria-label="Choose pictures from the photo library"
+        data-testid="chat-library-input"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(e) => {
+          onLibrary([...(e.target.files ?? [])]);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }

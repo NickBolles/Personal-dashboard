@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mock, startConversation } from "./helpers";
+import { mock, startConversation, revealMessageMeta } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -94,10 +94,9 @@ test("fork latest state leaves the original unchanged and links both ways", asyn
 
 test("fork from an earlier message needs a first prompt and starts a run", async ({ page }) => {
   await page.goto("/chat/sess_morning");
-  await page
-    .getByRole("button", { name: /Restart with text through your message/ })
-    .first()
-    .click();
+  // Per-message actions are hidden until the message is tapped.
+  const meta = await revealMessageMeta(page, "user");
+  await meta.getByRole("button", { name: /Restart with text through your message/ }).click();
   const dialog = page.getByRole("dialog", { name: "Restart with text through this message" });
   await expect(dialog.getByRole("button", { name: "Restart with text" })).toBeDisabled();
   await dialog.getByLabel("First prompt").fill("Instead, plan a rainy day");

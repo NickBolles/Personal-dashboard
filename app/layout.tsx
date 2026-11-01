@@ -29,6 +29,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Android Chrome: the on-screen keyboard shrinks the layout viewport, so the sticky chat composer stays above it.
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f2f3f5" },
     { media: "(prefers-color-scheme: dark)", color: "#0c0d0f" },

@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
+import { expectNoHorizontalOverflow, mock, openChatContext, startConversation } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -9,7 +9,7 @@ test.beforeEach(async ({ request }) => {
 test("Add context sheet: search, keyboard multi-select, chips, Esc", async ({ page }) => {
   await startConversation(page, "quokka context sheet check");
   await expect(page.getByText(/Got it: "quokka/)).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Attach context" }).click();
+  await openChatContext(page);
   const sheet = page.getByRole("dialog", { name: "Add context" });
   await expect(sheet).toBeVisible();
   const search = sheet.getByRole("combobox", { name: "Search context" });
@@ -32,7 +32,7 @@ test("Add context sheet: search, keyboard multi-select, chips, Esc", async ({ pa
   await expect(sheet).toBeHidden();
   await expect(page.getByRole("button", { name: `Remove context ${first}` }).first()).toBeVisible();
   // Finance is never offered.
-  await page.getByRole("button", { name: "Attach context" }).click();
+  await openChatContext(page);
   await page.getByRole("combobox", { name: "Search context" }).fill("finance");
   await expect(page.getByRole("dialog", { name: "Add context" }).getByRole("option", { name: /finance/i })).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -70,7 +70,7 @@ test("context sheet and Links: axe clean and no overflow at 200% text zoom", asy
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Attach context" }).click();
+  await openChatContext(page);
   await expect(page.getByRole("dialog", { name: "Add context" }).getByRole("option").first()).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });

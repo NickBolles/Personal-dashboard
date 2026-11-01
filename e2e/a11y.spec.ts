@@ -171,7 +171,7 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
   await expectNoHorizontalOverflow(page, { soft: true });
   // Every composer control stays a 44 px target and inside the viewport.
   const vw = page.viewportSize()!.width;
-  for (const name of ["Attach context", "Attach files or pictures", "Take a photo"]) {
+  for (const name of ["Add to message", "Attach context", "Attach files or pictures", "Take a photo"]) {
     const button = page.getByRole("button", { name, exact: true });
     if (!(await button.count())) continue; // camera is hidden on pointer:fine
     const box = await button.boundingBox();
