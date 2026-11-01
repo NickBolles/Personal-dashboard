@@ -122,4 +122,4 @@ export function steerRun(user: CurrentUser, runId: string, input: string, correl
   return hermes.steerRun(user, runId, input, correlationId);
 }
 
-export { sessionAccess } from "@/integrations/hermes/service";
+export { sessionAccess, visibleSessions } from "@/integrations/hermes/service";

@@ -59,6 +59,14 @@ export function sessionAccess(user: CurrentUser, id: string) {
   return access(user, metaFor([id]).get(id));
 }
 
+/** The rows of `list` this person may see (one meta query for the whole list). */
+export function visibleSessions<T extends { id: string }>(user: CurrentUser, list: T[]): T[] {
+  if (!list.length) return list;
+  const meta = metaFor(list.map((s) => s.id));
+  const ownerId = getOwner()?.id;
+  return list.filter((s) => access(user, meta.get(s.id), ownerId));
+}
+
 function assertAccess(user: CurrentUser, id: string, need: "read" | "write") {
   const a = sessionAccess(user, id);
   if (!a) throw new HttpError(404, "session_not_found", "Conversation not found");

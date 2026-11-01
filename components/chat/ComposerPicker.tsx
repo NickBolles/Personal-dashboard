@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, Spinner } from "@/components/ui";
 import {
@@ -36,13 +36,15 @@ export type PickerRow =
  * leaves the composer: ↑/↓ move, Enter/Tab pick, Esc closes.
  */
 export function useTriggerRows(trigger: Trigger | null, repo: string | null) {
-  const query = useDebounced(trigger?.query ?? "", 150);
+  // 80 ms debounce; a stale request is aborted (signal) and the previous list stays up while the next one loads.
+  const query = useDebounced(trigger?.query ?? "", 80);
   const sigil = trigger?.sigil;
   const refs = useQuery({
     queryKey: ["composer", "refs", query],
-    queryFn: () => api.get<RefOptionsResponse>(`/api/references?q=${encodeURIComponent(query)}`),
+    queryFn: ({ signal }) => api.get<RefOptionsResponse>(`/api/references?q=${encodeURIComponent(query)}`, signal),
     enabled: sigil === "@",
     staleTime: 15_000,
+    placeholderData: keepPreviousData,
   });
   const gh = useQuery({
     queryKey: ["composer", "gh", repo, query],

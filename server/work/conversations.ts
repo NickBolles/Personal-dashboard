@@ -4,7 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { requireCap } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
-import { getSessionSummary, listLocalConversations, listSessions, sessionAccess } from "@/server/assistant";
+import { getSessionSummary, listLocalConversations, listSessions, sessionAccess, visibleSessions } from "@/server/assistant";
 import { userById } from "@/server/auth";
 import { indexMutationSeq, noteIndexFailure, readIndex, recentIndexUsers, touchIndex, writeIndex, type IndexEntry } from "./conversation-index";
 import { isLocalSession } from "@/lib/assistant";
@@ -217,6 +217,30 @@ async function sessionsFor(user: CurrentUser, opts: { revalidate?: boolean } = {
   const ok = await refresh(user);
   const latest = readIndex(user.id) ?? hit;
   return fromIndex(user, latest, ok ? [] : ["Hermes"]);
+}
+
+/**
+ * Conversations for search (palette, composer `@`): never waits on Hermes.
+ * Returns the persisted index (access re-checked per row) plus local
+ * Claude-direct ones; a missing or stale index refreshes in the background
+ * through the same single-flight path as the views (with its failure backoff).
+ */
+export function cachedSessions(user: CurrentUser): SessionSummary[] {
+  const hit = readIndex(user.id);
+  if (!hit?.refreshedAt || Date.now() - hit.refreshedAt >= FRESH_MS) void sessionsFor(user).catch(() => undefined);
+  const remote = hit
+    ? visibleSessions(
+        user,
+        hit.sessions.filter((s) => !isLocalSession(s.id)),
+      )
+    : [];
+  let local: SessionSummary[] = [];
+  try {
+    local = listLocalConversations(user);
+  } catch {
+    // local conversations are optional here
+  }
+  return sortRecent([...remote, ...local]);
 }
 
 /**

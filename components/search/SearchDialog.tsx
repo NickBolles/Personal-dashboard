@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { SearchResponse, SearchResult } from "@/lib/search";
 import { moduleFor } from "@/lib/modules";
@@ -54,14 +54,25 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const input = useRef<HTMLInputElement>(null);
   const restore = useRef<HTMLElement | null>(null);
   const listId = useId();
-  const debounced = useDebounced(q.trim(), 150);
+  // 80 ms: one request per typing pause; react-query aborts the stale one (signal) and keeps the last list on screen.
+  const debounced = useDebounced(q.trim(), 80);
   const res = useQuery({
     queryKey: ["search", debounced],
-    queryFn: () => api.get<SearchResponse>(`/api/search?q=${encodeURIComponent(debounced)}`),
-    enabled: open && debounced.length > 0,
-    staleTime: 15_000,
+    queryFn: ({ signal }) => api.get<SearchResponse>(`/api/search?q=${encodeURIComponent(debounced)}`, signal),
+    // The empty query (recent chats and items) is prefetched on load, so the palette opens with them at once.
+    enabled: open || !debounced,
+    staleTime: debounced ? 15_000 : 60_000,
+    placeholderData: keepPreviousData,
   });
-  const results = useMemo(() => (debounced ? (res.data?.results ?? []) : []), [res.data, debounced]);
+  // Grouped (Areas, Projects, Items, Chats & notes, People…): groups in order of their best match, rank kept inside each.
+  const results = useMemo(() => {
+    const list = res.data?.results ?? [];
+    // Recent (empty query) and matches never mix: typing hides Recent, clearing hides the last matches.
+    if (Boolean(q.trim()) !== Boolean(res.data?.query)) return [];
+    const order: string[] = [];
+    for (const r of list) if (!order.includes(r.group ?? "")) order.push(r.group ?? "");
+    return [...list].sort((a, b) => order.indexOf(a.group ?? "") - order.indexOf(b.group ?? ""));
+  }, [res.data, q]);
   const allCommands = useCommands();
   const commands = useMemo(() => matchCommands(allCommands, q.trim()).filter((c) => c.id !== "search"), [allCommands, q]);
   const { can } = useAccess();
@@ -90,6 +101,11 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   }, [open]);
 
   if (!open) return null;
+  const newGroup = (i: number) => {
+    const r = rows[i];
+    const p = rows[i - 1];
+    return r?.kind === "result" && (p?.kind !== "result" || p.r.group !== r.r.group);
+  };
   const go = (row: Row | undefined) => {
     if (!row) return;
     onClose();
@@ -142,7 +158,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
               }
             }}
           />
-          {res.isFetching ? <Spinner label="Searching" /> : null}
+          {res.isFetching && q.trim() ? <Spinner label="Searching" /> : null}
           {canAsk ? <ComposerTargetChip target={target} /> : null}
           <button
             type="button"
@@ -169,6 +185,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                 i === active && "bg-accent-soft",
                 // a hairline between command groups, so the group label only needs saying once
                 i > 0 && row.kind === "command" && rows[i - 1]?.kind === "command" && (rows[i - 1] as { c: Command }).c.group !== row.c.group && "mt-1.5",
+                i > 0 && row.kind === "result" && newGroup(i) && "mt-1.5",
               )}
             >
               {row.kind === "ask" ? (
@@ -204,7 +221,8 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     <span className="block truncate font-medium">{row.r.title}</span>
                     {row.r.subtitle ? <span className="block truncate text-sm text-muted">{row.r.subtitle}</span> : null}
                   </span>
-                  <span className="shrink-0 text-xs text-muted">
+                  {row.r.group && newGroup(i) ? <span className="eyebrow shrink-0">{row.r.group}</span> : null}
+                  <span className={cx("shrink-0 text-xs text-muted", row.r.group && "sr-only")}>
                     {KIND_LABEL[row.r.kind]}
                     {row.r.module !== "jarvis" && moduleFor(row.r.module) ? ` · ${moduleFor(row.r.module)!.label}` : ""}
                   </span>
@@ -214,7 +232,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
           ))}
         </ul>
         <div className="border-t border-line bg-surface-2 px-4 py-2 text-xs text-muted" role="status">
-          {!debounced ? (
+          {!q.trim() ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>
                 <kbd className="kbd">↑</kbd> <kbd className="kbd">↓</kbd> move
@@ -229,7 +247,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
             </span>
           ) : res.isError ? (
             `Search failed: ${(res.error as Error).message}`
-          ) : res.data && !results.length ? (
+          ) : res.data && res.data.query === debounced && debounced === q.trim() && !res.isFetching && !results.length ? (
             `Nothing found for “${debounced}”.`
           ) : res.data?.partial.length ? (
             `${results.length} results. ${res.data.partial.join(", ")} didn't answer in time.`

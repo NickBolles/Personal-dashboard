@@ -4,7 +4,8 @@ import { getDb, schema } from "@/server/db";
 import { can, type Capable } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
-import { listSessions } from "@/server/assistant";
+import { sessionAccess } from "@/server/assistant";
+import { chatEntries, memo, pathIndex } from "@/server/search-index";
 import { isConfigured } from "@/integrations/store";
 import { listDevices } from "@/integrations/home-assistant/devices";
 import { listPeople } from "@/server/people";
@@ -30,15 +31,6 @@ function bounded<T>(p: Promise<T>): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS).unref?.())]);
 }
 
-function pathFor(items: WorkItem[]) {
-  const byId = new Map(items.map((i) => [i.id, i]));
-  return (id: string) => {
-    const parts: string[] = [];
-    for (let c = byId.get(byId.get(id)?.parentId ?? ""); c && parts.length < 6; c = c.parentId ? byId.get(c.parentId) : undefined) parts.unshift(c.title);
-    return parts.join(" › ");
-  };
-}
-
 function rank<T extends { _s: number; label: string }>(rows: T[], q: string) {
   return (q ? rows.filter((r) => r._s > 0).sort((a, b) => b._s - a._s) : rows).slice(0, PER_SECTION).map(({ _s, ...r }) => r as Omit<T, "_s">);
 }
@@ -49,8 +41,11 @@ export async function referenceOptions(user: Viewer, raw: string): Promise<RefOp
   const want = (t: RefType) => !type || type === t;
   const sections: RefSection[] = [];
   const partial: string[] = [];
-  const work = can(user, "work.use") ? listItems(user.id) : [];
-  const path = pathFor(work);
+  const all = can(user, "work.use") ? listItems(user.id) : [];
+  const idx = pathIndex(all);
+  const path = idx.path;
+  // Finance never reaches AI context: nodes under a Finance area aren't offered.
+  const work = all.filter((i) => !idx.finance(i.id));
 
   if (want("area") && work.length) {
     const options = rank(
@@ -77,26 +72,20 @@ export async function referenceOptions(user: Viewer, raw: string): Promise<RefOp
   }
   const tasks: Promise<void>[] = [];
   if (want("chat") && can(user, "hermes.chat")) {
-    tasks.push(
-      bounded(listSessions(user, {}))
-        .then((r) => {
-          if (r.unavailable.length) partial.push(...r.unavailable);
-          const options = rank(
-            r.sessions
-              .filter((s) => !s.archived)
-              .map((s) => ({
-                type: "chat" as const,
-                id: s.id,
-                label: s.title || "Untitled conversation",
-                detail: s.readOnly ? "Shared with you" : (s.preview ?? undefined)?.slice(0, 80),
-                _s: q ? matchScore(q, s.title, s.preview) : 1,
-              })),
-            q,
-          );
-          if (options.length) sections.push({ type: "chat", label: REF_TYPE_LABELS.chat, options });
-        })
-        .catch(() => void partial.push("Conversations")),
+    // Cached index + filed conversation nodes (never a live Hermes list per keystroke); Finance-filed chats are never offered.
+    const options = rank(
+      chatEntries(user, all)
+        .filter((c) => !c.archived && !c.finance)
+        .map((c) => ({
+          type: "chat" as const,
+          id: c.sessionId,
+          label: c.title,
+          detail: c.readOnly ? "Shared with you" : (c.path || c.preview)?.slice(0, 80),
+          _s: q ? matchScore(q, c.title, c.preview, c.path) : 1,
+        })),
+      q,
     );
+    if (options.length) sections.push({ type: "chat", label: REF_TYPE_LABELS.chat, options });
   }
   if (want("person")) {
     const options = rank(
@@ -109,7 +98,9 @@ export async function referenceOptions(user: Viewer, raw: string): Promise<RefOp
   }
   if (want("device") && can(user, "home_assistant.view") && isConfigured("home_assistant")) {
     tasks.push(
-      bounded(listDevices({ doors: true, lights: true, cameras: false, doorControls: false, lightControls: false }))
+      bounded(
+        memo(`refdevices:${user.id}`, 30_000, () => listDevices({ doors: true, lights: true, cameras: false, doorControls: false, lightControls: false })),
+      )
         .then((d) => {
           const options = rank(
             [...d.doors, ...d.lights].map((x) => ({
@@ -178,6 +169,7 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
     case "area":
     case "item": {
       if (!can(user, "work.use")) return null;
+      if (pathIndex(listItems(user.id, { includeArchived: true })).finance(r.id)) return null;
       try {
         const d = getDetail(user.id, r.id);
         const p = d.packets[0];
@@ -209,8 +201,13 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
     }
     case "chat": {
       if (!can(user, "hermes.chat")) return null;
-      // Hermes owns the content; pass the reference (the agent can open its own sessions).
-      return `Conversation “${r.label}” (session id ${r.id})`;
+      // Hermes owns the content; pass the reference (the agent can open its own sessions) plus where it's filed and its latest snippet.
+      const c = chatEntries(user).find((x) => x.sessionId === r.id);
+      if (c?.finance || (!c && !sessionAccess(user, r.id))) return null;
+      const title = c?.title ?? r.label;
+      return [`Conversation “${title}” (session id ${r.id})`, c?.path ? `Filed under: ${c.path}` : "", c?.preview ? `Latest: ${c.preview.slice(0, 300)}` : ""]
+        .filter(Boolean)
+        .join("\n");
     }
     case "person": {
       const p = listPeople().find((x) => x.id === r.id && !x.disabled);
