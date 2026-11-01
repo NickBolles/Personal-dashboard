@@ -3,6 +3,8 @@ import type { CurrentUser } from "@/server/auth";
 import { can, type Capable } from "@/server/access";
 import { cachedSessions } from "@/server/work/conversations";
 import { listItems } from "@/server/work/store";
+import { getDb, schema } from "@/server/db";
+import { inArray } from "drizzle-orm";
 import type { WorkItem } from "@/lib/work";
 
 /**
@@ -94,13 +96,17 @@ export function chatEntries(user: Viewer, items: WorkItem[] | null = null): Chat
     });
   }
   // Filed nodes the cached list doesn't have yet (index cold, or a brand-new chat): your own tree, so visible.
-  for (const [sid, node] of filed) {
-    if (seen.has(sid)) continue;
+  // Archiving a chat only updates session_meta (both backends) and drops it from those lists, so the
+  // node's own flag isn't enough: take the session's archive state too, or archived chats come back.
+  const missing = [...filed.keys()].filter((sid) => !seen.has(sid));
+  const archivedSessions = archivedIds(missing);
+  for (const sid of missing) {
+    const node = filed.get(sid)!;
     out.push({
       sessionId: sid,
       title: node.title || "Untitled conversation",
       preview: node.summary || undefined,
-      archived: node.archived,
+      archived: node.archived || archivedSessions.has(sid),
       itemId: node.id,
       path: p.path(node.id),
       lastActiveAt: node.updatedAt,
@@ -108,6 +114,19 @@ export function chatEntries(user: Viewer, items: WorkItem[] | null = null): Chat
     });
   }
   return out.sort((a, b) => (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? ""));
+}
+
+/** Session ids among `ids` archived in session_meta (where Jarvis records archive for Hermes and Claude-direct chats). */
+function archivedIds(ids: string[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 500)
+    for (const r of getDb()
+      .select({ id: schema.sessionMeta.sessionId, archived: schema.sessionMeta.archived })
+      .from(schema.sessionMeta)
+      .where(inArray(schema.sessionMeta.sessionId, ids.slice(i, i + 500)))
+      .all())
+      if (r.archived) out.add(r.id);
+  return out;
 }
 
 const burst = new Map<string, { at: number; items: WorkItem[] }>();
