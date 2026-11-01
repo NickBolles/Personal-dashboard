@@ -61,7 +61,8 @@ for (const [name, path] of [
     if (name === "chat") {
       await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
       await expect(page.locator('header a[href^="/initiatives"]')).toHaveCount(0);
-      await expect(page.getByText("8:15 AM", { exact: true })).toHaveCount(2);
+      // First-message time divider + the two (tap-to-reveal) message meta times.
+      await expect(page.getByText("8:15 AM", { exact: true })).toHaveCount(3);
     }
     if (name === "alerts") {
       await expect(page.locator("li[data-id] h2")).toHaveText(alertsVisual.notifications.map((n) => n.title));
