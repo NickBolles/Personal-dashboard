@@ -106,6 +106,10 @@ export function Sidebar({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate from localStorage after mount
     setPins(readPins());
+    // the palette's "Pin to sidebar" writes the same key and announces it
+    const onPins = () => setPins(readPins());
+    window.addEventListener("jarvis:pins", onPins);
+    return () => window.removeEventListener("jarvis:pins", onPins);
   }, []);
   const updatePins = (next: string[]) => {
     setPins(next);
