@@ -152,6 +152,28 @@ describe("composer @ references", () => {
   });
 });
 
+describe("archived conversations (#100)", () => {
+  it("a filed chat archived in session_meta stays out of @ and Recent even when the index lacks it", async () => {
+    const misc = ensureMiscellaneous(owner);
+    const db = getDb();
+    db.insert(schema.workItems)
+      .values({ id: "wi_arch", userId: owner, parentId: misc.id, kind: "conversation", title: "Gutter quotes archived", sessionId: "s_arch" })
+      .run();
+    // archived through updateSession/updateLocalSession: only session_meta changes, the node stays unarchived
+    db.insert(schema.sessionMeta).values({ sessionId: "s_arch", userId: owner, archived: true }).run();
+    db.insert(schema.conversationIndex).values({ userId: owner, attemptedAt: new Date().toISOString(), lastError: "error" }).run();
+    expect(chatEntries(me()).find((c) => c.sessionId === "s_arch")?.archived).toBe(true);
+    const at = (await referenceOptions(me(), "gutter")).sections.flatMap((s) => s.options);
+    expect(at.some((o) => o.id === "s_arch")).toBe(false);
+    expect((await search(me(), "")).results.map((x) => x.title)).not.toContain("Gutter quotes archived");
+    // unarchiving brings it back
+    db.update(schema.sessionMeta).set({ archived: false }).run();
+    __resetSearchMemo();
+    expect((await referenceOptions(me(), "gutter")).sections.flatMap((s) => s.options).map((o) => o.id)).toContain("s_arch");
+    expect((await search(me(), "")).results.map((x) => x.title)).toContain("Gutter quotes archived");
+  });
+});
+
 describe("performance on ~2k seeded rows", () => {
   const p95 = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.ceil(xs.length * 0.95) - 1]!;
   it("palette and @ answer in < 100 ms p95", async () => {
