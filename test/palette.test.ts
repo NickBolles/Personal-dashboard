@@ -9,6 +9,7 @@ import {
   fillChip,
   isComplete,
   matchActions,
+  prUrlFor,
   pushRecent,
   rankSuggestions,
   splitArgs,
@@ -116,5 +117,20 @@ describe("palette: suggestions", () => {
     l = pushRecent(l, { id: "y", title: "Y", at: 2 });
     l = pushRecent(l, { id: "x", title: "X", at: 3 }, 2);
     expect(l.map((e) => e.id)).toEqual(["x", "y"]);
+  });
+});
+
+describe("prUrlFor", () => {
+  it("prefers the PR linked to your work, then any PR, then search", () => {
+    const opts = [
+      { id: "a/b#12", detail: "Issue · open" },
+      { id: "x/y#12", detail: "PR · merged" },
+      { id: "NickBolles/Personal-dashboard#12", detail: "PR · open · linked" },
+      { id: "x/y#120", detail: "PR · open · linked" },
+    ];
+    expect(prUrlFor("12", opts)).toBe("https://github.com/NickBolles/Personal-dashboard/pull/12");
+    expect(prUrlFor("12", opts.slice(0, 2))).toBe("https://github.com/x/y/pull/12");
+    expect(prUrlFor("12", opts.slice(0, 1))).toBe("https://github.com/a/b/issues/12");
+    expect(prUrlFor("7", opts)).toBe("https://github.com/search?q=%237&type=pullrequests");
   });
 });

@@ -53,7 +53,11 @@ export function PaletteActionPanel({
             className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-[8px] px-2.5 py-1.5 sm:min-h-10 dense:min-h-8 ${i === active ? "bg-accent-soft" : ""}`}
           >
             <span className="min-w-0 flex-1 truncate font-medium">{e.label}</span>
-            {e.hint ? <span className="shrink-0 text-xs text-muted">{e.hint}</span> : null}
+            {e.hint ? (
+              <span aria-hidden="true" className="shrink-0 text-xs text-muted">
+                {e.hint}
+              </span>
+            ) : null}
           </li>
         ))}
       </ul>

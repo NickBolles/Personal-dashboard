@@ -180,3 +180,43 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
     expect.soft(box.height, name).toBeGreaterThanOrEqual(44);
   }
 });
+
+test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed, actions, confirm)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const made = await page.request.post("/api/work/items", { data: { kind: "area", title: `Zoom aviary ${nonce}` }, headers: { "x-jarvis-csrf": "1" } });
+  expect(made.ok()).toBeTruthy();
+  await page.getByRole("heading", { name: "Now" }).waitFor();
+  const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  await expect(async () => {
+    await page.keyboard.press("Control+k");
+    await expect(box).toBeFocused({ timeout: 1000 });
+  }).toPass();
+  await expect(page.getByRole("option", { name: /Browse areas/ })).toBeVisible();
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        label,
+      )
+      .toEqual([]);
+  };
+  await axe("root");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await box.fill(`new item in zoom aviary ${nonce}`);
+  await expect(page.locator('[data-command="action.new-item"]')).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("palette-chips")).toContainText(`Zoom aviary ${nonce}`);
+  await box.fill("Zoom check sparrow");
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("typed");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("palette-confirm")).toBeVisible();
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await axe("confirm");
+  await page.getByTestId("palette-confirm").getByRole("button", { name: "Cancel" }).click();
+  await page.keyboard.press("Escape");
+});

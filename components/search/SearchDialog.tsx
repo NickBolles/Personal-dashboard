@@ -24,6 +24,8 @@ import {
   fillChip,
   isComplete,
   matchActions,
+  prSearchUrl,
+  prUrlFor,
   pushRecent,
   rankSuggestions,
   RECENT_KEY,
@@ -281,7 +283,22 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         return async () => void asker.ask(v(1).label, { areaId: v(0).id });
       case "open-pr":
         return async () => {
-          window.open(`https://github.com/search?q=${encodeURIComponent(`#${v(0).id}`)}&type=pullrequests`, "_blank", "noopener");
+          const n = v(0).id;
+          // open synchronously (keeps the user gesture), then point it at the linked PR or GitHub search
+          const w = window.open("about:blank", "_blank");
+          if (w) w.opener = null;
+          let url = prSearchUrl(n);
+          try {
+            const r = await api.get<{ sections: { options: { id: string; detail?: string }[] }[] }>(`/api/references/github?q=${encodeURIComponent(n)}`);
+            url = prUrlFor(
+              n,
+              r.sections.flatMap((s) => s.options),
+            );
+          } catch {
+            /* fall back to GitHub search */
+          }
+          if (w) w.location.href = url;
+          else window.open(url, "_blank", "noopener");
         };
       case "chat-agent":
         return async () => {

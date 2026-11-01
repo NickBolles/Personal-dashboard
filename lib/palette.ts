@@ -312,3 +312,25 @@ export type RecentEntry = { id: string; title: string; href?: string; action?: A
 export function pushRecent(list: RecentEntry[], e: RecentEntry, cap = 8): RecentEntry[] {
   return [e, ...list.filter((x) => x.id !== e.id)].slice(0, cap);
 }
+
+/* ---------------- open PR ---------------- */
+
+/** GitHub search for a PR number (fallback when no linked/known PR matches). */
+export function prSearchUrl(n: string): string {
+  return `https://github.com/search?q=${encodeURIComponent(`#${n}`)}&type=pullrequests`;
+}
+
+/**
+ * URL for "Open PR #n" from the `#` picker options (`id` = "owner/repo#n", detail
+ * "PR · open · linked"): a PR linked to your work wins, then any PR, then an issue
+ * with that number; otherwise GitHub search.
+ */
+export function prUrlFor(n: string, options: { id: string; detail?: string }[]): string {
+  const hits = options
+    .map((o) => ({ o, m: /^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)#(\d+)$/.exec(o.id) }))
+    .filter((x): x is { o: { id: string; detail?: string }; m: RegExpExecArray } => !!x.m && x.m[2] === n);
+  const score = (d = "") => (d.startsWith("PR") ? 2 : 0) + (d.includes("linked") ? 4 : 0);
+  const best = hits.sort((a, b) => score(b.o.detail) - score(a.o.detail))[0];
+  if (!best) return prSearchUrl(n);
+  return `https://github.com/${best.m[1]}/${best.o.detail?.startsWith("Issue") ? "issues" : "pull"}/${n}`;
+}

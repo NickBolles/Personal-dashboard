@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { appPost } from "./helpers";
 
 /**
  * Raycast-style palette: typed actions with argument chips, a confirm step for
@@ -8,6 +9,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 const box = (page: Page) => page.getByRole("combobox", { name: "Search Jarvis" });
 
+/** The shared e2e DB has no "Home" area: make a uniquely named one per test. */
+async function makeArea(page: Page, title: string) {
+  const r = await appPost(page, "/api/work/items", { kind: "area", title });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  return ((await r.json()) as { item: { id: string } }).item.id;
+}
+
 async function openWithKeys(page: Page) {
   await expect(async () => {
     await page.keyboard.press("Control+k");
@@ -15,36 +23,40 @@ async function openWithKeys(page: Page) {
   }).toPass();
 }
 
-test("typed action: New item in Home → confirm → created", async ({ page }) => {
+test("typed action: New item in ‹area› → confirm → created", async ({ page }) => {
   const nonce = Date.now().toString(36);
+  const area = `Raycast hearth ${nonce}`;
   await page.goto("/home");
+  await makeArea(page, area);
   await page.getByRole("heading", { name: "Now" }).waitFor();
   await openWithKeys(page);
-  await box(page).fill("new item in home");
+  await box(page).fill(`new item in raycast hearth ${nonce}`);
   const action = page.locator('[data-command="action.new-item"]');
   await expect(action).toBeVisible();
   await page.keyboard.press("Tab");
-  await expect(page.getByTestId("palette-chips")).toContainText("Home");
+  await expect(page.getByTestId("palette-chips")).toContainText(area);
   await box(page).fill(`Raycast gutter ${nonce}`);
   await page.keyboard.press("Enter");
   // never on the first Enter: a confirm step with one primary button
   const confirm = page.getByTestId("palette-confirm");
-  await expect(confirm).toContainText(`Create “Raycast gutter ${nonce}” in Home?`);
+  await expect(confirm).toContainText(`Create “Raycast gutter ${nonce}” in ${area}?`);
   await expect(confirm.getByRole("button", { name: "Confirm" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/areas\?item=/);
-  await expect(page.getByText(`Raycast gutter ${nonce}`).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Raycast gutter ${nonce}` })).toBeVisible();
 });
 
 test("action panel and breadcrumb Backspace", async ({ page }) => {
+  const nonce = Date.now().toString(36);
   await page.goto("/home");
+  await makeArea(page, `Raycast lantern ${nonce}`);
   await page.getByRole("heading", { name: "Now" }).waitFor();
   await openWithKeys(page);
   const browse = page.getByRole("option", { name: /Browse areas/ });
   await expect(browse).toBeVisible();
   await browse.click();
   await expect(page.getByTestId("palette-breadcrumb")).toContainText("Areas");
-  const home = page.getByRole("option", { name: /^Home/ }).first();
+  const home = page.getByRole("option", { name: new RegExp(`^Raycast lantern ${nonce}`) }).first();
   await expect(home).toBeVisible();
   await home.hover();
   // ⌘K / Ctrl+K inside the palette: actions for the active row
