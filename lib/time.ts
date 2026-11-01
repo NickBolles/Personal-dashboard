@@ -89,9 +89,23 @@ export function startOfLocalDay(date: string, timeZone: string) {
   return offset2 === offset ? result : new Date(guess.getTime() - offset2);
 }
 
-/** UTC instant for HH:MM local time on `date` in timeZone. */
+/**
+ * UTC instant for HH:MM wall-clock time on `date` in timeZone. Resolved from
+ * the offset in force at that wall time (not midnight's), so it stays right on
+ * DST-change days (e.g. 17:30 on 2026-11-01 Chicago is 23:30Z, not 22:30Z);
+ * a time inside a spring-forward gap moves forward (02:30 → 03:30).
+ */
 export function localTimeToInstant(date: string, hhmm: string, timeZone: string) {
-  return new Date(startOfLocalDay(date, timeZone).getTime() + parseHHMM(hhmm) * MINUTE);
+  const [y, m, d] = date.split("-").map(Number);
+  const guess = new Date(Date.UTC(y!, m! - 1, d!) + parseHHMM(hhmm) * MINUTE);
+  const offset = tzOffset(guess, timeZone);
+  const result = new Date(guess.getTime() - offset);
+  const offset2 = tzOffset(result, timeZone);
+  if (offset2 === offset) return result;
+  const second = new Date(guess.getTime() - offset2);
+  if (tzOffset(second, timeZone) === offset2) return second;
+  // Inside a spring-forward gap (e.g. 02:30): normalise forward, like the clock does.
+  return result.getTime() > second.getTime() ? result : second;
 }
 
 export function relativeTime(target: string | number | Date, now = Date.now()) {
