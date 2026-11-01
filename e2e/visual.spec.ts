@@ -90,6 +90,9 @@ test("visual: home suggestions and the backlog", async ({ page, request }) => {
   const assists = page.locator("section[aria-labelledby=assist-h]");
   await assists.waitFor();
   await page.waitForTimeout(500);
+  // The seasonal card is calendar-windowed on the server (Christmas: Nov 1 – Dec 20),
+  // so it would flip this baseline twice a year; it has its own unit tests.
+  await assists.locator("article", { hasText: "Seasonal idea" }).evaluateAll((els) => els.forEach((e) => ((e as HTMLElement).style.display = "none")));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   // Seeded counts and relative dates are deterministic here; keep the grounding
   // copy and controls visible rather than masking every muted paragraph.
