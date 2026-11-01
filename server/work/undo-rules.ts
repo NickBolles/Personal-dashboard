@@ -6,7 +6,7 @@
 /** The toast offers Undo for ~10 s; the server accepts it a little longer (slow networks, retries). */
 export const UNDO_WINDOW_MS = 10 * 60_000;
 
-export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create"] as const;
+export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit"] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
 export const UNDO_LABELS: Record<UndoKind, string> = {
@@ -20,7 +20,12 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   settle: "Settled automatically",
   /** "Create N child items" from an AI plan report (undo deletes untouched children, archives the rest) */
   ai_plan_create: "Created plan children",
+  /** an inline field edit (title, next action, summary, status, due date); undo restores the previous values */
+  edit: "Saved",
 };
+
+/** Fields an "edit" op can restore. */
+export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status"] as const;
 
 export type OpLike = { id: string; createdAt: string; undoneAt: string | null };
 

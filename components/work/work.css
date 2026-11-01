@@ -1063,3 +1063,103 @@ button.wk-kpi:hover {
 .wk-kv > dd {
   min-width: 0;
 }
+
+/* Inline (tap-to-edit) fields: the read view and the editor share one box so nothing jumps. */
+.work-ui .jv-inline {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  vertical-align: baseline;
+}
+.work-ui .jv-inline-read {
+  margin: -2px -4px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  min-height: 44px; /* touch */
+  justify-content: center;
+}
+.work-ui .jv-inline-read:hover {
+  background: var(--surface-2);
+}
+.work-ui .jv-inline-read:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.work-ui h2 > .jv-inline,
+.work-ui h2 > .jv-inline .jv-inline-input {
+  width: 100%;
+}
+.work-ui .jv-inline-input {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 4px 8px;
+  font: inherit;
+  color: var(--text);
+}
+.work-ui textarea.jv-inline-input {
+  min-height: 88px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.work-ui .jv-inline-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.work-ui .jv-inline-err {
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--danger);
+}
+.work-ui .jv-inline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  max-width: 78ch;
+}
+.work-ui .jv-inline-row > .jv-inline-edit {
+  min-height: 44px;
+}
+.work-ui .wk-summary-inline[data-editing] {
+  display: flex;
+  margin-top: 4px;
+  max-width: 78ch;
+}
+.work-ui .jv-inline-date .jv-inline-input {
+  width: auto;
+  min-height: 44px;
+  padding: 2px 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+@media (min-width: 640px) {
+  .work-ui .jv-inline-read,
+  .work-ui .jv-inline-input,
+  .work-ui .jv-inline-row > .jv-inline-edit,
+  .work-ui .jv-inline-date .jv-inline-input {
+    min-height: 40px;
+  }
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .work-ui .jv-inline-read {
+    min-height: 0;
+  }
+  .work-ui .jv-inline-input,
+  .work-ui .jv-inline-date .jv-inline-input {
+    min-height: 30px;
+  }
+  .work-ui .jv-inline-row > .jv-inline-edit {
+    min-height: 28px;
+  }
+}
