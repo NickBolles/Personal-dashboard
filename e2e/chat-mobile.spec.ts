@@ -26,9 +26,16 @@ test("keyboard open: composer sits above it, bottom bar + orb hide, list jumps t
   const box = await composer.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.y + box!.height).toBeLessThanOrEqual(kb);
-  expect(box!.y).toBeGreaterThan(kb * 0.5);
+  // Docked directly above the keyboard (no gap where the bottom bar was).
+  expect(box!.y + box!.height).toBeGreaterThan(kb - 40);
   // The latest message is visible above the composer.
   await expect(page.locator('[data-testid="msg-bubble"]').last()).toBeInViewport();
+  // Tapping + while typing keeps the keyboard up (focus stays in the text field) and opens the sheet in place.
+  await page.getByRole("button", { name: "Add to message" }).click();
+  await expect(page.getByRole("menu", { name: "Add to message" })).toBeVisible();
+  await expect(composer).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Add to message" })).toBeHidden();
   // Keyboard closes: the bar comes back.
   await composer.blur();
   await page.setViewportSize({ width, height });
@@ -40,15 +47,15 @@ test("message time + actions are hidden until the message is tapped", async ({ p
   await page.goto("/chat/sess_morning");
   const bubble = page.locator('[data-testid="msg-bubble"][data-who="user"]').first();
   await expect(bubble).toBeVisible();
-  const restart = page.getByRole("button", { name: /Restart with text through your message/ }).first();
-  await expect(restart).toHaveCSS("position", "absolute");
+  const firstMeta = bubble.locator("xpath=..").getByTestId("msg-meta");
+  await expect(firstMeta).toHaveCSS("position", "absolute");
   // A centred time divider shows the first message's time instead of a meta row under every message.
   await expect(page.locator(".chat-time-divider").first()).toBeVisible();
   const meta = await revealMessageMeta(page, "user");
   await expect(meta.getByRole("button", { name: /^Copy / })).toBeVisible();
   await expect(meta.getByRole("button", { name: /Restart with text through your message/ })).toBeVisible();
   await bubble.click({ position: { x: 4, y: 4 } });
-  await expect(restart).toHaveCSS("position", "absolute");
+  await expect(firstMeta).toHaveCSS("position", "absolute");
 });
 
 test("composer: one + sheet on phones gives the text field the width", async ({ page }) => {

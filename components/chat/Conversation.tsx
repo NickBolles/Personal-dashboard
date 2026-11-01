@@ -416,7 +416,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
           <div className="min-[1100px]:flex min-[1100px]:justify-center">
             <div
-              className="relative mx-auto flex min-h-[calc(100dvh-76px)] max-w-[880px] min-w-0 flex-col sm:min-h-[calc(100dvh-44px)] min-[1100px]:mx-0 min-[1100px]:flex-1"
+              className="chat-page relative mx-auto flex max-w-[880px] min-w-0 flex-col min-[1100px]:mx-0 min-[1100px]:flex-1"
               data-testid="conversation-drop"
               {...drop.props}
             >
@@ -1238,6 +1238,11 @@ function Composer({
       </div>
       <form
         className="chat-comp relative flex flex-wrap items-end gap-1"
+        onMouseDown={(e) => {
+          // While typing, tapping a composer button (send, +, menu items) keeps the focus in the text field: the
+          // keyboard stays up and the layout doesn't jump under the finger (which can swallow the tap).
+          if (document.activeElement === ta.current && (e.target as HTMLElement).closest("button")) e.preventDefault();
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -1405,15 +1410,28 @@ function ComposerAddMenu({
   const list = useRef<HTMLUListElement>(null);
   const library = useRef<HTMLInputElement>(null);
   const id = useId();
+  // Opened from the keyboard: focus the first item (WAI-ARIA menu). Opened by a tap: leave focus where it was,
+  // so the on-screen keyboard stays up and nothing shifts under the finger.
+  const [byKeyboard, setByKeyboard] = useState(false);
   useEffect(() => {
     if (!open) return;
-    list.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
+    if (byKeyboard) list.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus();
     const onDoc = (e: PointerEvent) => {
       if (!list.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false);
     };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+      if (list.current?.contains(document.activeElement)) btn.current?.focus();
+    };
     document.addEventListener("pointerdown", onDoc);
-    return () => document.removeEventListener("pointerdown", onDoc);
-  }, [open]);
+    document.addEventListener("keydown", onEsc, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDoc);
+      document.removeEventListener("keydown", onEsc, true);
+    };
+  }, [open, byKeyboard]);
   const items: { label: string; hint?: string; onSelect: () => void; disabled?: boolean; library?: boolean }[] = [
     { label: "Context", hint: "areas, items, people", onSelect: onContext },
     ...(files
@@ -1431,9 +1449,8 @@ function ComposerAddMenu({
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       buttons[(idx + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
-    } else if (e.key === "Escape" || e.key === "Tab") {
+    } else if (e.key === "Tab") {
       setOpen(false);
-      if (e.key === "Escape") btn.current?.focus();
     }
   };
   return (
@@ -1445,7 +1462,10 @@ function ComposerAddMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          setByKeyboard(e.detail === 0);
+          setOpen((o) => !o);
+        }}
         className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
         data-testid="composer-add"
       >
