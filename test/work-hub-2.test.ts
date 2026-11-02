@@ -430,6 +430,23 @@ describe("undo for structural operations", () => {
     expect(back).toMatchObject({ status: "abandoned", completedAt: ended.completedAt, settledKind: ended.settledKind, settledReason: ended.settledReason });
   });
 
+  it("refuses to undo a next-action edit that would leave in-progress work without one (#113)", () => {
+    const { u, v5 } = flagship();
+    const out: store.OpOut = {};
+    store.updateItem(u, v5.id, { nextAction: "Call the vendor" }, cid, out);
+    expect(out.op).toMatchObject({ kind: "edit" });
+    // Start focused work moves it to in_progress without an edit op.
+    store.createPacket(u, v5.id, packetSchema.parse({ objective: "Ship V5", nextAction: "Call the vendor" }), cid);
+    expect(store.getDetail(owner, v5.id).item.status).toBe("in_progress");
+    expect(() => store.undoOp(u, out.op!.id, cid)).toThrow(/needs a next action/);
+    expect(store.getDetail(owner, v5.id).item).toMatchObject({ status: "in_progress", nextAction: "Call the vendor" });
+    // Without the status change the same undo is fine.
+    const out2: store.OpOut = {};
+    store.updateItem(u, v5.id, { nextAction: "Email the vendor" }, cid, out2);
+    store.undoOp(u, out2.op!.id, cid);
+    expect(store.getDetail(owner, v5.id).item.nextAction).toBe("Call the vendor");
+  });
+
   it("undoes move, reorder and archive, and refuses stale or repeated undo", () => {
     const { u, area, project, v2, v3, v4 } = flagship();
     const kids = (pid: string) =>

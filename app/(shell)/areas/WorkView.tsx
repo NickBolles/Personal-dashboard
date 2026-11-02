@@ -792,7 +792,10 @@ function shortDate(d: string) {
   return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-type DialogKind = null | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | LinkKind;
+type DialogKind = null | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | CloseStatus | LinkKind;
+
+/** Terminal statuses set from ⋯ with an optional reason (Settle keeps its own gated dialog). */
+type CloseStatus = "abandoned" | "superseded";
 
 type OnOp = (op: UndoOp | null | undefined) => void;
 
@@ -923,6 +926,8 @@ function ItemDetail({
       isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
       container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
       !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
+      isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
+      isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
       {
         label: item.archived ? "Unarchive" : "Archive",
         onSelect: () => patch.mutate({ archived: !item.archived }),
@@ -1229,6 +1234,7 @@ function ItemDetail({
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
       {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
+      {dialog === "abandoned" || dialog === "superseded" ? <CloseDialog to={dialog} onClose={close} item={item} onOp={onOp} /> : null}
       {aiSheet ? <ActionSheet itemId={item.id} areaId={d.area?.id ?? null} action={aiSheet} onClose={() => setAiSheet(null)} /> : null}
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
       {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
@@ -2653,6 +2659,41 @@ function SettleDialog({ open, onClose, d }: { open: boolean; onClose: () => void
     >
       <Field id="st-reason" label="Outcome (optional)">
         <textarea id="st-reason" data-autofocus className={textareaCls} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </Field>
+    </Dialog>
+  );
+}
+
+function CloseDialog({ to, onClose, item, onOp }: { to: CloseStatus; onClose: () => void; item: WorkItem; onOp: OnOp }) {
+  const [reason, setReason] = useState("");
+  const abandon = to === "abandoned";
+  const close = useWorkMutation(
+    () => api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}`, { status: to, reason: reason.trim() || undefined }),
+    {
+      ok: abandon ? "Abandoned" : "Marked superseded",
+      onSuccess: (r) => {
+        onOp(r.op);
+        onClose();
+      },
+    },
+  );
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${abandon ? "Abandon" : "Mark superseded:"} ${item.title}`}
+      description={abandon ? "Closes it without settling. You can reopen any time." : "Closes it because other work replaced it. You can reopen any time."}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" busy={close.isPending} onClick={() => close.mutate(undefined)}>
+            {abandon ? "Abandon" : "Mark superseded"}
+          </Button>
+        </>
+      }
+    >
+      <Field id="cl-reason" label={abandon ? "Why stop? (optional)" : "Replaced by what? (optional)"}>
+        <textarea id="cl-reason" data-autofocus className={textareaCls} value={reason} onChange={(e) => setReason(e.target.value)} />
       </Field>
     </Dialog>
   );
