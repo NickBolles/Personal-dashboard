@@ -160,21 +160,14 @@ test("unknown home state is labelled, not rendered as 'no exceptions'", async ({
   await mock(request, "/fail", { restore: ["home_assistant"] });
 });
 
-test("Home capture: Enter goes to the Inbox; Ask Hermes starts a conversation and streams a reply", async ({ page }) => {
+test("Today has no inline capture (orb, dock and palette cover it); Ask Hermes starts a conversation and streams a reply", async ({ page }) => {
   await page.goto("/home");
-  const box = page.getByLabel("Capture or ask Hermes");
-  const nonce = Date.now().toString(36);
-  await box.fill(`Renew the car registration ${nonce}`);
-  await box.press("Enter");
-  await expect(page.getByText("Captured to your Inbox")).toBeVisible();
-  await expect(box).toHaveValue("");
-  const inbox = (await (await page.request.get("/api/work/inbox")).json()) as { items: { title: string; id: string }[] };
-  const captured = inbox.items.find((i) => i.title === `Renew the car registration ${nonce}`);
-  expect(captured).toBeTruthy();
-  await page.request.post(`/api/work/inbox/${captured!.id}/dismiss`, { headers: { "x-jarvis-csrf": "1" } });
+  await expect(page.getByLabel("Today at a glance")).toBeVisible();
+  await expect(page.locator("#quick-capture")).toHaveCount(0);
 
-  await box.fill("What is the weather?");
-  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
+  await page.goto("/chat");
+  await page.locator("#quick-capture").fill("What is the weather?");
+  await page.getByRole("button", { name: "Send to Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
   // A fast run can finish before the live step renders; then it is folded into the "searched 1 source" summary.
   await expect(page.getByText(/Searched the web|searched 1 source/).first()).toBeVisible();

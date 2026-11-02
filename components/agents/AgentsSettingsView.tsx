@@ -62,10 +62,10 @@ export function AgentsSettingsView() {
       <PageHeader title="Agents" subtitle="Which Hermes profile answers in each area. Set an area's agent in its Area settings." />
       <Card>
         <div className="space-y-2">
-          <label className="tap flex items-start gap-2 text-[14px]">
+          <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
             <input
               type="checkbox"
-              className="mt-1"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
               checked={pending.routing ?? s.routing}
               disabled={busy}
               onChange={(e) => void save({ routing: e.target.checked })}
@@ -78,10 +78,10 @@ export function AgentsSettingsView() {
               </span>
             </span>
           </label>
-          <label className="tap flex items-start gap-2 text-[14px]">
+          <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
             <input
               type="checkbox"
-              className="mt-1"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
               checked={pending.aguiStream ?? s.aguiStream}
               disabled={busy}
               onChange={(e) => void save({ aguiStream: e.target.checked })}

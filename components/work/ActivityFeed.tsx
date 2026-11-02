@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Empty, ErrorNote, Spinner, inputCls, useToast } from "@/components/ui";
+import { ChipSelect } from "@/components/ui/kit";
 import {
   ACTIVITY_TYPES,
   ACTIVITY_TYPE_LABELS,
@@ -34,7 +35,6 @@ const GLYPH: Record<ActivityType, string> = {
 
 const POLL_MS = 30_000;
 /** Filter controls sit in one wrapping row, so drop the shared input's full width. */
-const selCls = `${inputCls.replace(/\bblock w-full\b/, "")} jv-activity-sel`;
 
 export type ActivityScope = { item?: string; descendants?: boolean };
 
@@ -152,38 +152,39 @@ export function ActivityFeed({
         <label htmlFor={`${filtersId}-type`} className="sr-only">
           Type
         </label>
-        <select id={`${filtersId}-type`} className={selCls} value={type} onChange={(e) => setType(e.target.value as ActivityType | "")}>
+        <ChipSelect id={`${filtersId}-type`} active={!!type} value={type} onChange={(e) => setType(e.target.value as ActivityType | "")}>
           <option value="">All types</option>
           {ACTIVITY_TYPES.map((t) => (
             <option key={t} value={t}>
               {ACTIVITY_TYPE_LABELS[t]}
             </option>
           ))}
-        </select>
+        </ChipSelect>
         <label htmlFor={`${filtersId}-actor`} className="sr-only">
           Who
         </label>
-        <select id={`${filtersId}-actor`} className={selCls} value={actor} onChange={(e) => setActor(e.target.value as ActorKind | "")}>
+        <ChipSelect id={`${filtersId}-actor`} active={!!actor} value={actor} onChange={(e) => setActor(e.target.value as ActorKind | "")}>
           <option value="">Anyone</option>
           {(Object.keys(ACTOR_LABELS) as ActorKind[]).map((a) => (
             <option key={a} value={a}>
               {ACTOR_LABELS[a]}
             </option>
           ))}
-        </select>
+        </ChipSelect>
         {areas ? (
           <>
             <label htmlFor={`${filtersId}-area`} className="sr-only">
               Area
             </label>
-            <select id={`${filtersId}-area`} className={selCls} value={area} onChange={(e) => setArea(e.target.value)}>
+            {/* Fixed width: a native select sizes to its longest option, so long area names would widen the chip and wrap the filter row. */}
+            <ChipSelect id={`${filtersId}-area`} className="w-36 [&>select]:w-full" active={!!area} value={area} onChange={(e) => setArea(e.target.value)}>
               <option value="">All areas</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.title}
                 </option>
               ))}
-            </select>
+            </ChipSelect>
           </>
         ) : null}
       </form>

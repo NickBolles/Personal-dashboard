@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Card, ErrorNote, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { Card, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
+import { ChipButton, ChipInput, ChipSelect } from "@/components/ui/kit";
 import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor, type WorkTag } from "@/lib/item-tags";
 import { TagChip, useTagDirectory } from "./ItemMeta";
 
@@ -49,13 +50,17 @@ export function TagsSettingsView() {
                     <label htmlFor={`tag-rename-${t.name}`} className="sr-only">
                       New name for {t.name}
                     </label>
-                    <input id={`tag-rename-${t.name}`} className={inputCls} value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus />
-                    <Button type="submit" size="sm" variant="primary">
+                    <ChipInput
+                      id={`tag-rename-${t.name}`}
+                      className="min-w-0 flex-1 basis-32"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      autoFocus
+                    />
+                    <ChipButton type="submit" active>
                       Save
-                    </Button>
-                    <Button type="button" size="sm" onClick={() => setEditing(null)}>
-                      Cancel
-                    </Button>
+                    </ChipButton>
+                    <ChipButton onClick={() => setEditing(null)}>Cancel</ChipButton>
                   </form>
                 ) : (
                   <>
@@ -66,9 +71,9 @@ export function TagsSettingsView() {
                     <label htmlFor={`tag-color-${t.name}`} className="sr-only">
                       Colour for {t.name}
                     </label>
-                    <select
+                    <ChipSelect
                       id={`tag-color-${t.name}`}
-                      className={`${inputCls} jv-meta-select w-auto`}
+                      className="jv-meta-select"
                       value={t.color}
                       onChange={(e) => void patch({ name: t.name, color: e.target.value as TagColor })}
                     >
@@ -77,10 +82,8 @@ export function TagsSettingsView() {
                           {TAG_COLOR_LABELS[c]}
                         </option>
                       ))}
-                    </select>
-                    <Button
-                      type="button"
-                      size="sm"
+                    </ChipSelect>
+                    <ChipButton
                       aria-label={`Rename or merge ${t.name}`}
                       onClick={() => {
                         setDraft(t.name);
@@ -88,7 +91,7 @@ export function TagsSettingsView() {
                       }}
                     >
                       Rename
-                    </Button>
+                    </ChipButton>
                   </>
                 )}
               </li>

@@ -5,12 +5,12 @@ import type { ActionDef, Chip } from "@/lib/palette";
 /** The typed action's name + filled argument chips, shown inside the input before the caret (Raycast-style). */
 export function PaletteChips({ def, chips }: { def: ActionDef; chips: Chip[] }) {
   return (
-    <span className="flex shrink-0 flex-wrap items-center gap-1" data-testid="palette-chips">
+    <span className="flex max-w-full min-w-0 flex-wrap items-center gap-1" data-testid="palette-chips">
       <span className="text-sm font-medium text-accent">{def.label}</span>
       {chips.map((c, i) => (
         <span
           key={`${c.arg.name}:${i}`}
-          className="inline-flex max-w-[12rem] items-center gap-1 truncate rounded-[6px] border border-line bg-accent-soft px-1.5 py-0.5 text-sm"
+          className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[12.5px] sm:max-w-[14rem]"
           aria-label={`${c.arg.name}: ${c.value.label}`}
         >
           <span className="text-xs text-muted">{c.arg.name}</span>

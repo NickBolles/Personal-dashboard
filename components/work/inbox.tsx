@@ -294,7 +294,7 @@ export function InboxView({
                 {entries.map((e) => (
                   <li
                     key={e.id}
-                    className={cx("wk-row-hover flex items-start gap-x-2.5 px-3 py-2", sel?.id === e.id && "sm:bg-surface-2")}
+                    className={cx("wk-row-hover flex items-start gap-x-2.5 px-3 py-2 max-[359px]:flex-wrap", sel?.id === e.id && "sm:bg-surface-2")}
                     data-inbox-entry={e.id}
                     data-selected={sel?.id === e.id ? "" : undefined}
                   >
@@ -307,8 +307,8 @@ export function InboxView({
                     >
                       {e.source === "github_issue" ? "GH" : "CA"}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[14px] leading-snug font-semibold break-words">
+                    <div className="min-w-0 flex-1 max-[359px]:basis-[calc(100%-32px)]">
+                      <p className="line-clamp-2 text-[14px] leading-snug font-semibold break-words sm:line-clamp-none">
                         {twoPane ? (
                           <button
                             type="button"
@@ -345,7 +345,7 @@ export function InboxView({
                     </div>
                     {/* Phones: one visible action (File/Accept) + ⋯ (Dismiss). >=640 the preview pane holds the actions. */}
                     {twoPane ? null : (
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="flex shrink-0 items-center gap-0.5 max-[359px]:ml-[32px] max-[359px]:w-[calc(100%-32px)] max-[359px]:justify-end">
                         {e.url ? (
                           <a
                             href={e.url}

@@ -933,6 +933,12 @@ button.wk-kpi:hover {
 .wk-suggest:disabled {
   opacity: 0.6;
 }
+@media (max-width: 359px) {
+  /* 320: the chip sits on its own line under the title (#94), so it can show the whole area name */
+  .wk-suggest {
+    max-width: calc(100vw - 112px);
+  }
+}
 @media (min-width: 640px) {
   .wk-suggest {
     min-height: 36px;
@@ -966,7 +972,23 @@ button.wk-kpi:hover {
   .wk-cpage {
     grid-template-columns: minmax(0, 1fr) 300px;
     align-items: start;
+    /* P1: rows stop at ~960px of content on wide screens instead of stretching to the edge. */
+    max-width: 1272px;
   }
+}
+.wk-pmini {
+  display: inline-block;
+  width: 48px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+.wk-pmini > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ok, var(--accent));
 }
 .wk-cpage .k-sh {
   padding: 4px 0 6px;

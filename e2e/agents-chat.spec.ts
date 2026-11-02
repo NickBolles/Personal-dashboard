@@ -102,9 +102,9 @@ test("a chat started under a routed area runs on its profile, streamed as AG-UI"
 
 test("a dropped AG-UI stream never shows a false completion; it reconciles", async ({ page }) => {
   await putAgents(page, { aguiStream: true });
-  await page.goto("/home");
-  await page.getByLabel("Capture or ask Hermes").fill("drop the connection midway");
-  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
+  await page.goto("/chat");
+  await page.locator("#quick-capture").fill("drop the connection midway");
+  await page.getByRole("button", { name: "Send to Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
   // Default profile: no agent chip without an area agent.
   await expect(page.getByTestId("agent-chip")).toHaveCount(0);

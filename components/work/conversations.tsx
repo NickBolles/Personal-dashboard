@@ -259,8 +259,8 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
         {shown.map((c) => {
           const top = c.suggestions[0];
           return (
-            <li key={c.id} className="flex items-center gap-2 py-1.5" data-unfiled={c.id}>
-              <span className="min-w-0 flex-1">
+            <li key={c.id} className="flex items-center gap-2 py-1.5 max-[359px]:flex-wrap max-[359px]:justify-end max-[359px]:gap-y-0" data-unfiled={c.id}>
+              <span className="min-w-0 flex-1 max-[359px]:basis-full">
                 <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-[13.5px] font-medium hover:underline">
                   {c.title}
                 </Link>

@@ -43,10 +43,10 @@ export function TodosView() {
             return (
               <section key={g.title} className="mt-4" aria-labelledby={`g-${g.title}`}>
                 <SectionHeader id={`g-${g.title}`} label={g.title} count={items.length} />
-                <ul className="space-y-2">
+                <ul className="jv-feed">
                   {items.map((a) => (
                     <li key={a.id} id={`todo-${a.sourceId}`}>
-                      <ActionCard action={a} compact={a.status === "completed"} quiet />
+                      <ActionCard action={a} compact={a.status === "completed"} quiet row />
                     </li>
                   ))}
                 </ul>

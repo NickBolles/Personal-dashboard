@@ -7,7 +7,22 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { addDays, daysBetween } from "@/lib/time";
 import { SectionHeader } from "@/components/ui/kit";
-import { Badge, Button, ButtonLink, Card, Dialog, Empty, ErrorNote, Field, OverflowMenu, Spinner, inputCls, useToast, type MenuItem } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  Dialog,
+  Empty,
+  ErrorNote,
+  Field,
+  OverflowMenu,
+  Spinner,
+  cx,
+  inputCls,
+  useToast,
+  type MenuItem,
+} from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { Markdown } from "@/components/markdown/Markdown";
 import { WorkTree } from "@/components/work/WorkTree";
@@ -542,65 +557,6 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
     .slice(0, 6);
   return (
     <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail">
-      {prs.length ? (
-        <Block label="Pull requests">
-          <ul className="space-y-2">
-            {prs.map((l) => {
-              const ref = prRef(l);
-              // Auto titles ("owner/repo#123") repeat the reference: show "#123 repo" instead.
-              const named =
-                l.title && l.title !== l.targetId && !/^[\w.-]+\/[\w.-]+#\d+$/.test(l.title) ? l.title.replace(/^#\d+\s*[:·-]?\s*/, "") || null : null;
-              return (
-                <li key={l.id} className="text-[13px]">
-                  <div className="flex items-start justify-between gap-2">
-                    <a
-                      href={l.url ?? "#"}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="min-w-0 break-words hover:underline"
-                      aria-label={`${l.kind === "github_pr" ? "Pull request" : "Issue"} ${ref ? `${ref.repo} number ${ref.number}` : ""}${named ? `, ${named}` : ""} (opens in a new tab)`}
-                    >
-                      <span className="font-mono text-xs font-semibold">#{ref?.number ?? "?"}</span> {named ?? ref?.repo ?? ""}
-                    </a>
-                    {l.externalState ? (
-                      <span
-                        className="status-pill shrink-0 text-[11px]"
-                        data-s={l.externalState === "merged" ? "settled" : l.externalState === "open" ? "in_review" : "on_hold"}
-                      >
-                        {l.externalState}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-muted">
-                    {ref && named ? `${ref.repo} · ` : ""}
-                    {l.role}
-                    {l.checkedAt ? ` · ${l.checkError ? "check failed" : "checked"} ${fmtWhen(l.checkedAt)}` : ""}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-        </Block>
-      ) : null}
-      {lineage.length ? (
-        <Block label="Lineage">
-          <ul className="space-y-1 text-[13px]">
-            {lineage.map((l) => (
-              <li key={l.id}>
-                <span className="text-muted">{l.text}</span>{" "}
-                <button
-                  type="button"
-                  className="text-left text-accent underline-offset-2 hover:underline"
-                  aria-label={`${l.text.replace(/^[↖↘] /, "")} ${l.otherTitle}`}
-                  onClick={() => onSelect(l.otherId)}
-                >
-                  {l.otherTitle}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      ) : null}
       <Block label="Properties">
         <dl className="wk-kv">
           <dt>Status</dt>
@@ -645,6 +601,85 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
           ) : null}
         </dl>
       </Block>
+      {prs.length ? (
+        <Block label="Pull requests">
+          <ul className="space-y-2">
+            {prs.map((l) => {
+              const ref = prRef(l);
+              // Auto titles ("owner/repo#123") repeat the reference: show "#123 repo" instead.
+              const named =
+                l.title && l.title !== l.targetId && !/^[\w.-]+\/[\w.-]+#\d+$/.test(l.title) ? l.title.replace(/^#\d+\s*[:·-]?\s*/, "") || null : null;
+              return (
+                <li key={l.id} className="text-[13px]">
+                  <div className="flex items-start justify-between gap-2">
+                    <a
+                      href={l.url ?? "#"}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="min-w-0 break-words hover:underline"
+                      aria-label={`${l.kind === "github_pr" ? "Pull request" : "Issue"} ${ref ? `${ref.repo} number ${ref.number}` : ""}${named ? `, ${named}` : ""} (opens in a new tab)`}
+                    >
+                      <span className="font-mono text-xs font-semibold">#{ref?.number ?? "?"}</span> {named ?? ref?.repo ?? ""}
+                    </a>
+                    {l.externalState ? (
+                      <span
+                        className="status-pill shrink-0 text-[11px]"
+                        data-s={l.externalState === "merged" ? "settled" : l.externalState === "open" ? "in_review" : "on_hold"}
+                      >
+                        {l.externalState}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted">
+                    {ref && named ? `${ref.repo} · ` : ""}
+                    {l.role}
+                    {l.checkedAt ? ` · ${l.checkError ? "check failed" : "checked"} ${fmtWhen(l.checkedAt)}` : ""}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </Block>
+      ) : null}
+      {/* IT4: rail order Properties → Pull requests → Dependencies (what this waits on / what waits on it). */}
+      {d.blockedBy.length || d.blocking.length ? (
+        <Block label="Dependencies">
+          <ul className="space-y-1 text-[13px]">
+            {[...d.blockedBy.map((x) => ({ ...x, rel: "Waits on" })), ...d.blocking.map((x) => ({ ...x, rel: "Blocks" }))].slice(0, 8).map((x) => (
+              <li key={`${x.rel}-${x.dependencyId}`} className="flex min-w-0 items-baseline gap-1.5">
+                <span className="shrink-0 text-xs text-muted">{x.rel}</span>
+                <button
+                  type="button"
+                  className={cx("min-w-0 truncate text-left text-accent underline-offset-2 hover:underline", !x.open && "text-muted line-through")}
+                  aria-label={`${x.rel} ${x.title}${x.open ? "" : " (done)"}`}
+                  onClick={() => onSelect(x.id)}
+                >
+                  {x.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
+      {lineage.length ? (
+        <Block label="Lineage">
+          <ul className="space-y-1 text-[13px]">
+            {lineage.map((l) => (
+              <li key={l.id}>
+                <span className="text-muted">{l.text}</span>{" "}
+                <button
+                  type="button"
+                  className="text-left text-accent underline-offset-2 hover:underline"
+                  aria-label={`${l.text.replace(/^[↖↘] /, "")} ${l.otherTitle}`}
+                  onClick={() => onSelect(l.otherId)}
+                >
+                  {l.otherTitle}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
       {convs.length ? (
         <Block label="Conversations">
           <ul className="space-y-1 text-[13px]">
@@ -1355,6 +1390,22 @@ function ContainerBody({
             empty="Break the project into items. Type “Sub-project / item” to nest."
           />
         )}
+        {usedAsWork ? (
+          <>
+            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
+            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
+          </>
+        ) : null}
+        <details className="wk-disclosure card">
+          <summary className="tap cursor-pointer font-semibold">Activity</summary>
+          <div className="mt-2 space-y-3">
+            <Activity d={d} onSelect={onSelect} />
+          </div>
+        </details>
+      </div>
+      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
+      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
+        {/* A3: the side column leads with what moved; settings and details follow. */}
         {recent.length ? (
           <section aria-labelledby="recent-h">
             <SectionHeader id="recent-h" label="Recent activity" count={recent.length} />
@@ -1372,21 +1423,6 @@ function ContainerBody({
             </ul>
           </section>
         ) : null}
-        {usedAsWork ? (
-          <>
-            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
-            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
-          </>
-        ) : null}
-        <details className="wk-disclosure card">
-          <summary className="tap cursor-pointer font-semibold">Activity</summary>
-          <div className="mt-2 space-y-3">
-            <Activity d={d} onSelect={onSelect} />
-          </div>
-        </details>
-      </div>
-      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
-      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
         {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
         <EditItem
           key={item.updatedAt}
@@ -1412,6 +1448,17 @@ function ContainerBody({
         <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
       </aside>
     </div>
+  );
+}
+
+function ProgressMini({ items, id }: { items: WorkItem[]; id: string }) {
+  const r = rollup(items, id);
+  if (!r.total) return null;
+  const pct = Math.round((r.done / r.total) * 100);
+  return (
+    <span className="wk-pmini max-sm:hidden" role="img" aria-label={`${r.done} of ${r.total} done`} title={`${r.done} of ${r.total} done`}>
+      <span style={{ width: `${pct}%` }} />
+    </span>
   );
 }
 
@@ -1503,7 +1550,11 @@ function ChildrenCard({
                         {fmtWhen(c.updatedAt)}
                       </span>
                     ) : (
-                      <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                      <span className="inline-flex items-center gap-2">
+                        {/* A2: containers show a 4px progress mini-bar beside the right-aligned pill. */}
+                        {isContainer(c) ? <ProgressMini items={items} id={c.id} /> : null}
+                        <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                      </span>
                     )
                   }
                 />
@@ -1776,6 +1827,12 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
               {d.validations.filter((v) => v.status === "pass" || v.status === "waived").length}/{d.validations.length} met
             </span>
           ) : null}
+          {/* IT3: overdue is a compact header note + red due text on the row, not a banner. */}
+          {overdue ? (
+            <span className="text-xs font-normal text-danger" data-testid="validation-overdue">
+              · {overdue} validation{overdue === 1 ? " is" : "s are"} overdue
+            </span>
+          ) : null}
         </h3>
         <div className="flex flex-wrap items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
@@ -1803,11 +1860,6 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
             Reopen with failed evidence
           </Button>
         </div>
-      ) : null}
-      {overdue ? (
-        <p className="mb-2 rounded-lg bg-danger-soft p-2 text-sm text-danger" data-testid="validation-overdue">
-          {overdue} validation{overdue === 1 ? " is" : "s are"} overdue: the due date passed and it&apos;s still pending.
-        </p>
       ) : null}
       {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
       {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
@@ -2078,7 +2130,12 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
       <p className="text-xs text-muted" data-dynamic>
         {v.baseline !== null ? `Baseline ${v.baseline}${v.unit ? ` ${v.unit}` : ""} · ` : ""}
         {v.observed !== null ? `Observed ${v.observed}${v.unit ? ` ${v.unit}` : ""}` : "Not measured yet"}
-        {v.dueDate ? ` · due ${shortDate(v.dueDate)}` : ""}
+        {v.dueDate ? (
+          <span className={cx(v.overdue && "font-medium text-danger")}>
+            {" · "}
+            {v.overdue ? "overdue since" : "due"} {shortDate(v.dueDate)}
+          </span>
+        ) : null}
         {v.waiverReason ? ` · waived: ${v.waiverReason}` : ""}
       </p>
       {v.evidenceUrl ? (

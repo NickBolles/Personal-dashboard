@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Empty, ErrorNote, Spinner, inputCls } from "@/components/ui";
+import { Empty, ErrorNote, Spinner } from "@/components/ui";
+import { ChipButton, ChipSelect } from "@/components/ui/kit";
 import { EDGE_STYLE, MapCanvas, MapList } from "@/components/work/WorkMap";
 import { WorkPageHeader } from "@/components/work/common";
 import { isClosed, STATUS_LABELS, WORK_STATUSES, type WorkStatus } from "@/lib/work";
@@ -53,20 +54,20 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
               <label htmlFor="map-root" className="sr-only">
                 Area or project
               </label>
-              <select id="map-root" className={`${inputCls} min-w-44`} value={root} onChange={(e) => choose(e.target.value)}>
+              <ChipSelect id="map-root" active={!!root} value={root} onChange={(e) => choose(e.target.value)}>
                 <option value="">All areas</option>
                 {q.data?.roots.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.title}
                   </option>
                 ))}
-              </select>
+              </ChipSelect>
             </div>
             <div className="min-w-0">
               <label htmlFor="map-status" className="sr-only">
                 Status
               </label>
-              <select id="map-status" className={`${inputCls} min-w-40`} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+              <ChipSelect id="map-status" active={status !== "all"} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
                 <option value="all">All statuses</option>
                 <option value="open">Open work</option>
                 <option value="closed">Settled, superseded or abandoned</option>
@@ -75,11 +76,11 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
                     {STATUS_LABELS[s]}
                   </option>
                 ))}
-              </select>
+              </ChipSelect>
             </div>
-            <Button size="sm" aria-pressed={list} onClick={() => setList((l) => !l)}>
+            <ChipButton aria-pressed={list} active={list} onClick={() => setList((l) => !l)}>
               {list ? "Show map" : "Show as list"}
-            </Button>
+            </ChipButton>
           </>
         }
       />
