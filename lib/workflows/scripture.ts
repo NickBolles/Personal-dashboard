@@ -87,7 +87,10 @@ for (const b of BOOKS) {
 
 /** Book lookup: exact name/alias, else unique prefix of a full name; ambiguous prefixes return candidates. */
 export function findBook(raw: string): { book: Book } | { ambiguous: string[] } | null {
-  const k = norm(raw).replace(/^iii(?=[a-z])/, "3").replace(/^ii(?=[a-z])/, "2").replace(/^i(?=[a-z]{3,})(?!sa|s$)/, "1");
+  const k = norm(raw)
+    .replace(/^iii(?=[a-z])/, "3")
+    .replace(/^ii(?=[a-z])/, "2")
+    .replace(/^i(?=[a-z]{3,})(?!sa|s$)/, "1");
   const hit = EXACT.get(k) ?? EXACT.get(norm(raw));
   if (hit) return { book: hit };
   if (k.length < 2) return null;
@@ -98,7 +101,10 @@ export function findBook(raw: string): { book: Book } | { ambiguous: string[] } 
 }
 
 export type ScriptureRef = { book: string; chapter: number; verseStart?: number; verseEnd?: number; chapterEnd?: number; display: string };
-export type ScriptureParse = { ok: true; ref: ScriptureRef } | { ok: false; error: "unparsed" | "unknown_book" | "chapter_out_of_range" | "bad_range"; message: string } | { ok: false; error: "ambiguous"; message: string; candidates: string[] };
+export type ScriptureParse =
+  | { ok: true; ref: ScriptureRef }
+  | { ok: false; error: "unparsed" | "unknown_book" | "chapter_out_of_range" | "bad_range"; message: string }
+  | { ok: false; error: "ambiguous"; message: string; candidates: string[] };
 
 const EN = "\u2013";
 
@@ -114,7 +120,8 @@ export function formatRef(r: Omit<ScriptureRef, "display">): string {
 }
 
 // book part: optional leading 1/2/3/I/II/III, then letters/spaces/periods
-const RE = /^\s*((?:[1-3]|i{1,3})?\s*[a-z][a-z.\s]*?)\s*\.?\s*(\d{1,3})(?:\s*[:.\s]\s*(\d{1,3}))?(?:\s*(?:[-\u2013\u2014,]|to)\s*(\d{1,3})(?:\s*:\s*(\d{1,3}))?)?\s*$/i;
+const RE =
+  /^\s*((?:[1-3]|i{1,3})?\s*[a-z][a-z.\s]*?)\s*\.?\s*(\d{1,3})(?:\s*[:.\s]\s*(\d{1,3}))?(?:\s*(?:[-\u2013\u2014,]|to)\s*(\d{1,3})(?:\s*:\s*(\d{1,3}))?)?\s*$/i;
 
 /** Parse one reference: "John 15:5", "Jn 15 5", "jn15:5", "John 15:1-8", "John 15–16", "John 15:26–16:4", "Gal 5:22,23", "Ps 23". */
 export function parseScriptureRef(input: string): ScriptureParse {
@@ -124,7 +131,8 @@ export function parseScriptureRef(input: string): ScriptureParse {
   const [, bookRaw, cRaw, vRaw, xRaw, yRaw] = m;
   const found = findBook(bookRaw);
   if (!found) return { ok: false, error: "unknown_book", message: `Unknown book "${bookRaw.trim()}"` };
-  if ("ambiguous" in found) return { ok: false, error: "ambiguous", message: `"${bookRaw.trim()}" could be ${found.ambiguous.join(", ")}`, candidates: found.ambiguous };
+  if ("ambiguous" in found)
+    return { ok: false, error: "ambiguous", message: `"${bookRaw.trim()}" could be ${found.ambiguous.join(", ")}`, candidates: found.ambiguous };
   const book = found.book;
   const chapter = Number(cRaw);
   const chapterWord = book.chapters === 1 ? "chapter" : "chapters";
@@ -150,7 +158,8 @@ export function parseScriptureRef(input: string): ScriptureParse {
       if (x < verseStart) return { ok: false, error: "bad_range", message: "That range doesn't work" };
     }
   }
-  if ((verseStart != null && verseStart < 1) || (verseEnd != null && verseEnd < 1)) return { ok: false, error: "bad_range", message: "That range doesn't work" };
+  if ((verseStart != null && verseStart < 1) || (verseEnd != null && verseEnd < 1))
+    return { ok: false, error: "bad_range", message: "That range doesn't work" };
   return ok({ book: book.name, chapter, verseStart, verseEnd, chapterEnd });
 }
 

@@ -23,16 +23,56 @@
       "title": "New session",
       "submit": "Start session",
       "fields": [
-        { "id": "speaker", "bind": "session.speaker", "type": "person", "label": "Speaker", "default": { "source": "last" }, "suggest": ["recentRuns", "people"], "required": true, "rememberLast": true },
-        { "id": "place", "bind": "session.place", "type": "place", "label": "Place", "default": { "source": "workflowPlace" }, "suggest": ["saved", "recent"], "geolocate": "matchSaved", "required": true, "rememberLast": true },
-        { "id": "when", "bind": "session.when", "type": "datetime", "label": "Date & time", "default": { "source": "$serviceTime", "fallback": "$now" }, "quick": ["today", "nextSunday", "serviceTime"], "required": true },
-        { "id": "series", "bind": "session.series", "type": "select", "label": "Series", "options": { "source": "recentValues", "limit": 6 }, "allowNew": true, "default": { "source": "last" }, "rememberLast": true, "help": "Leave empty for a one-off message." },
+        {
+          "id": "speaker",
+          "bind": "session.speaker",
+          "type": "person",
+          "label": "Speaker",
+          "default": { "source": "last" },
+          "suggest": ["recentRuns", "people"],
+          "required": true,
+          "rememberLast": true
+        },
+        {
+          "id": "place",
+          "bind": "session.place",
+          "type": "place",
+          "label": "Place",
+          "default": { "source": "workflowPlace" },
+          "suggest": ["saved", "recent"],
+          "geolocate": "matchSaved",
+          "required": true,
+          "rememberLast": true
+        },
+        {
+          "id": "when",
+          "bind": "session.when",
+          "type": "datetime",
+          "label": "Date & time",
+          "default": { "source": "$serviceTime", "fallback": "$now" },
+          "quick": ["today", "nextSunday", "serviceTime"],
+          "required": true
+        },
+        {
+          "id": "series",
+          "bind": "session.series",
+          "type": "select",
+          "label": "Series",
+          "options": { "source": "recentValues", "limit": 6 },
+          "allowNew": true,
+          "default": { "source": "last" },
+          "rememberLast": true,
+          "help": "Leave empty for a one-off message."
+        },
         { "id": "ref", "bind": "scripture/-", "type": "scripture", "label": "Main passage", "allowRange": true, "mustParse": true },
         { "id": "tags", "bind": "session.tags", "type": "tags", "label": "Tags", "options": { "source": "recentValues" }, "max": 8 }
       ]
     },
     "mid": { "title": "Edit session", "fields": ["speaker", "place", "when", "series"] },
-    "end": { "title": "Before you go", "fields": [{ "id": "apply", "bind": "reflections/-", "type": "longtext", "label": "One thing to apply this week", "maxLength": 1000 }] }
+    "end": {
+      "title": "Before you go",
+      "fields": [{ "id": "apply", "bind": "reflections/-", "type": "longtext", "label": "One thing to apply this week", "maxLength": 1000 }]
+    }
   },
   "quickAdd": [
     { "label": "Scripture", "field": "scripture" },

@@ -64,7 +64,10 @@ export function mapPaletteArgs(def: WorkflowDefinition, rest: string, opts: { no
       const at = lower.indexOf(label.toLowerCase());
       if (at >= 0 && label) {
         values[placeField.id] = { label, kind: "saved" };
-        text = (text.slice(0, at) + " " + text.slice(at + label.length)).replace(/\s+/g, " ").replace(/^[-–,\s]+|[-–,\s]+$/g, "").trim();
+        text = (text.slice(0, at) + " " + text.slice(at + label.length))
+          .replace(/\s+/g, " ")
+          .replace(/^[-–,\s]+|[-–,\s]+$/g, "")
+          .trim();
         break;
       }
     }

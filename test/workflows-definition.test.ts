@@ -6,7 +6,7 @@ import { mapPaletteArgs, parseSlashCommand } from "@/lib/workflows/palette-args"
 import teaching from "@/lib/workflows/fixtures/teaching-notes.json";
 
 const TZ = "America/Chicago";
-const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 
 describe("parseScriptureRef", () => {
   const d = (s: string) => {

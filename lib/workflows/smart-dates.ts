@@ -11,7 +11,16 @@ type Wall = { date: string; time: string; weekday: number; minutes: number };
 /** Wall-clock parts of `now` in `tz`. */
 export function wallClock(now: Date, tz: string): Wall {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "short" })
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      weekday: "short",
+    })
       .formatToParts(now)
       .map((p) => [p.type, p.value]),
   );
