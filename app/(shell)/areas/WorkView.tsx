@@ -973,8 +973,8 @@ function ItemDetail({
   const settlePrompt = item.status === "ready_to_settle" && !container;
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
-    <span className="inline-flex items-center gap-1" data-status={item.status}>
-      <span className="status-pill wk-status-pick" data-s={item.status}>
+    <span className="inline-flex min-w-0 items-center gap-1" data-status={item.status}>
+      <span className="status-pill wk-status-pick shrink-0" data-s={item.status}>
         <span aria-hidden="true">{STATUS_LABELS[item.status]}</span>
         <ChevronIcon className="h-3 w-3 rotate-90 opacity-70" />
         <label htmlFor="work-status" className="sr-only">
@@ -1002,6 +1002,9 @@ function ItemDetail({
       {container ? null : <InlineDate value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
     </span>
   );
+
+  // Extra badges (or container actions) may wrap; a plain item keeps status · due · ⋯ on one line.
+  const pinActions = !container && !(item.archived || d.validations.some((v) => v.overdue) || d.blockedBy.some((b) => b.open));
 
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
@@ -1036,23 +1039,27 @@ function ItemDetail({
               onSave={(title) => inline.mutate({ title })}
             />
           </h2>
-          {statusSelect}
-          {item.archived ? <Badge>Archived</Badge> : null}
-          {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
-          {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-          <div className="ml-auto flex items-center gap-1">
-            {container ? <ViewSwitch id={item.id} /> : null}
-            {container && canChat ? (
-              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-                Chat here
-              </Button>
-            ) : null}
-            {container ? (
-              <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
-                + {childLabel}
-              </Button>
-            ) : null}
-            <OverflowMenu label="More item actions" items={menu} />
+          {/* A plain item keeps status · due · ⋯ on one line (the due chip truncates) so ⋯ never drops to its own row;
+              containers and badge rows keep the old wrapping layout (the wrapper is display: contents). */}
+          <div className={pinActions ? "flex min-w-0 flex-auto items-center gap-x-2.5" : "contents"}>
+            {statusSelect}
+            {item.archived ? <Badge>Archived</Badge> : null}
+            {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
+            {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
+            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : ""}`}>
+              {container ? <ViewSwitch id={item.id} /> : null}
+              {container && canChat ? (
+                <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                  Chat here
+                </Button>
+              ) : null}
+              {container ? (
+                <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
+                  + {childLabel}
+                </Button>
+              ) : null}
+              <OverflowMenu label="More item actions" items={menu} />
+            </div>
           </div>
         </div>
         {container ? (

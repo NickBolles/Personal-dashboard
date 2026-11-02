@@ -168,18 +168,41 @@ export function InlineText({
   );
 }
 
-/** Inline due date: a compact native date input, saved on change (cleared = no due date). */
+/** "Due Nov 21" (year only when it isn't this year); short so the chip never pushes the header actions off the line. */
+export function dueLabel(value: string | null, now = new Date()): string {
+  if (!value) return "Set due date";
+  const [y, m, d] = value.split("-").map(Number);
+  if (!y || !m || !d) return `Due ${value}`;
+  const dt = new Date(y, m - 1, d);
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (y !== now.getFullYear()) opts.year = "numeric";
+  return `Due ${dt.toLocaleDateString("en-US", opts)}`;
+}
+
+/**
+ * Inline due date: a short text chip ("Due Nov 21", truncates with an ellipsis) over a transparent
+ * native date input, saved on change (cleared = no due date). Tapping the chip opens the picker.
+ */
 export function InlineDate({ value, onSave, className }: { value: string | null; onSave: (v: string | null) => void; className?: string }) {
   const [error, setError] = useState<string | null>(null);
   return (
-    <span className={cx("jv-inline jv-inline-date", className)}>
-      <span aria-hidden="true">Due</span>
+    <span className={cx("jv-inline jv-inline-date", className)} data-empty={value ? undefined : ""}>
+      <span aria-hidden="true" className="jv-inline-date-text">
+        {dueLabel(value)}
+      </span>
       <input
         type="date"
         aria-label="Due date"
-        className="jv-inline-input"
+        className="jv-inline-date-input"
         value={value ?? ""}
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          try {
+            e.currentTarget.showPicker?.();
+          } catch {
+            /* picker needs a user gesture / unsupported: native behaviour still applies */
+          }
+        }}
         onKeyDown={(e) => e.stopPropagation()}
         onChange={(e) => {
           const r = validateInline("targetDate", e.target.value);

@@ -82,12 +82,13 @@ test("detail: status select excludes Settle; due date and summary save in place"
     const d = await (await page.request.get(`/api/work/items/${id}`)).json();
     expect(d.item.targetDate).toBe("2026-12-04");
   }).toPass();
+  await expect(page.locator(".jv-inline-date-text")).toHaveText(/^Due Dec 4/);
 
   await page.getByRole("button", { name: "Edit summary" }).click();
   const box = page.getByRole("textbox", { name: "Edit summary" });
   await box.fill(`Inkwell summary ${nonce}`);
   await box.blur(); // blur saves
-  await expect(page.getByText(`Inkwell summary ${nonce}`)).toBeVisible();
+  await expect(page.getByText(`Inkwell summary ${nonce}`, { exact: true })).toBeVisible();
 });
 
 test("Today row: F2 renames the focused row title in place", async ({ page }) => {

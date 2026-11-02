@@ -1137,30 +1137,47 @@ button.wk-kpi:hover {
   max-width: 78ch;
 }
 .work-ui .jv-inline-date {
+  position: relative;
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  min-width: 4.5em;
+  max-width: 100%;
+  min-height: 44px;
   border-radius: 999px;
   background: var(--surface-2);
-  padding: 0 4px 0 10px;
+  padding: 0 10px;
   font-size: 12.5px;
+  color: var(--text);
+}
+.work-ui .jv-inline-date[data-empty] {
   color: var(--muted);
 }
-.work-ui .jv-inline-date .jv-inline-input {
-  width: auto;
-  min-height: 44px;
-  border-color: transparent;
-  background: transparent;
-  padding: 0 4px;
-  font-size: 12.5px;
+.work-ui .jv-inline-date:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.work-ui .jv-inline-date-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: var(--text);
+}
+.work-ui .jv-inline-date-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
 }
 @media (min-width: 640px) {
   .work-ui .jv-inline-read,
   .work-ui .jv-inline-input,
   .work-ui .jv-inline-row > .jv-inline-edit,
-  .work-ui .jv-inline-date .jv-inline-input {
+  .work-ui .jv-inline-date {
     min-height: 40px;
   }
 }
@@ -1171,7 +1188,7 @@ button.wk-kpi:hover {
   .work-ui .jv-inline-input {
     min-height: 30px;
   }
-  .work-ui .jv-inline-date .jv-inline-input {
+  .work-ui .jv-inline-date {
     min-height: 26px;
   }
   .work-ui .jv-inline-row > .jv-inline-edit {
