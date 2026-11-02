@@ -164,3 +164,30 @@ changes the model would make are shown, validated against the draft's capture sc
 API: `POST /api/workflows/validate` (dry run) · `POST /api/workflows/draft` `{kind:"chat",sessionId}|{kind:"describe",description}`
 (proposal only) · `POST /api/workflows/test-turn` `{definition,message}` (sandbox) · `GET /api/workflows/:id/versions/:v` ·
 `POST /api/workflows/:id/versions/:v/restore`.
+
+## Outputs, history and triggers (W4)
+
+- **Edit session (#132):** run header → _Edit session_ shows the mid form's scalar fields only (speaker, place, when,
+  series). Changes are REPLACE ops (`source: form:mid`, undoable); list items (scripture, points…) are edited in the
+  outline. `PATCH /api/workflows/runs/:id/session` `{values}`.
+- **End session:** if the definition has `forms.end`, _Before you go_ shows first; values file as `form:end` ops, then
+  the run ends (`POST …/end` `{values?}`). Ending never settles or changes any item.
+- **Summary:** _Draft a summary_ runs one structured Hermes turn (`workflow_summary`, subscription model) and stores
+  it as `summary_state: proposed` (dashed). Nothing counts until _Accept summary_ (`PUT …/summary` `{summary}`;
+  `null` discards). Only an accepted summary goes into exports.
+- **Exports:** _Download Markdown_ / _Copy_ (`GET …/export` → `{fileName, markdown}`; local). **Save to Drive is not
+  available**: Jarvis has no Drive scope (follow-up #141).
+- **Actions → items:** tick actions → _Create N items_ → confirm sheet with the exact titles, destination area and
+  optional due → `POST …/promote` `{indices, parentId, due?, titles}`. The server re-derives titles and returns 409
+  `stale_plan` if they differ from what was confirmed; items are created through the normal work-item path (audited,
+  ≤ 20 per confirm). Created rows show _Item created_.
+- **Prompt me (D10):** only when `reflectionPrompts` isn't `off`; one question from the run's own notes
+  (`POST …/reflection`), answered into `reflections` or dismissed.
+- **Scripture:** reference only; passage text needs the offline WEB pack (follow-up #142).
+- **Workflow page** `/workflows/<slug>`: session history (filters speaker/place/series/book; `GET /api/workflows/:id/history`),
+  stats (sessions per month, top books, top speakers — plain counts, no streaks or goals) and the reminder.
+- **Reminder (D6):** opt-in per workflow (`GET|PUT /api/workflows/:id/reminder` `{enabled, day, time}`; defaults to
+  the definition's `schedule` trigger, else Sunday 09:45). A dispatcher task sends one notification per local day
+  linking to `/workflows?start=<slug>`, which opens the start form. It never starts a run or calls a model.
+- **Share target:** the capture sheet for shared text offers _Start workflow…_; the text prefills the start form
+  (same tokenizer as the palette) and becomes the first note. URLs are kept as text, never fetched.

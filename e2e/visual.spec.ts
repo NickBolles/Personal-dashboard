@@ -273,6 +273,91 @@ for (const scheme of ["light", "dark"] as const) {
   }
 }
 
+// Workflows W4: workflow page (session history + stats + reminder) with fixed history (every list stubbed).
+const historyVisual = {
+  total: 3,
+  rows: [
+    {
+      id: "r3",
+      title: "a",
+      status: "ended",
+      date: "2026-10-25",
+      place: "Heartland Sun Prairie",
+      speaker: "Jake Fry",
+      series: "Abide",
+      scripture: "John 15:1–8",
+      books: ["John"],
+      counts: { points: 4, quotes: 2 },
+      conversationId: null,
+    },
+    {
+      id: "r2",
+      title: "b",
+      status: "ended",
+      date: "2026-10-18",
+      place: "Heartland Sun Prairie",
+      speaker: "Ann Lyle",
+      series: "Abide",
+      scripture: "Psalms 23",
+      books: ["Psalms"],
+      counts: { points: 3, quotes: 1 },
+      conversationId: null,
+    },
+    {
+      id: "r1",
+      title: "c",
+      status: "ended",
+      date: "2026-09-27",
+      place: "Heartland Madison",
+      speaker: "Jake Fry",
+      series: "",
+      scripture: "John 1:1–5",
+      books: ["John"],
+      counts: { points: 5, quotes: 0 },
+      conversationId: null,
+    },
+  ],
+  options: { speaker: ["Jake Fry", "Ann Lyle"], place: ["Heartland Sun Prairie", "Heartland Madison"], series: ["Abide"], book: ["John", "Psalms"] },
+  stats: {
+    total: 3,
+    perMonth: ["2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"].map(
+      (month) => ({
+        month,
+        count: month === "2026-10" ? 2 : month === "2026-09" ? 1 : 0,
+      }),
+    ),
+    topBooks: [
+      { label: "John", count: 2 },
+      { label: "Psalms", count: 1 },
+    ],
+    topSpeakers: [
+      { label: "Jake Fry", count: 2 },
+      { label: "Ann Lyle", count: 1 },
+    ],
+  },
+};
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: workflow page history and stats (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/workflows(?:\?.*)?$/, (route) => route.fulfill({ json: workflowsVisual }));
+    await page.route(/\/api\/workflows\/wf_v1\/history(?:\?.*)?$/, (route) => route.fulfill({ json: historyVisual }));
+    await page.route(/\/api\/workflows\/wf_v1\/reminder$/, (route) => route.fulfill({ json: { enabled: true, day: 0, time: "09:45", declared: true } }));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
+    await page.goto("/workflows/teaching");
+    await expect(page.getByTestId("workflow-history")).toContainText("John 15:1–8");
+    await expect(page.getByTestId("workflow-reminder").getByRole("switch")).toBeChecked();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"].fixed, .chat-dock { visibility: hidden !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page).toHaveScreenshot(`workflow-history-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+}
+
 // Workflows W2: start form (with the Place field) and the live Run panel. Real server data from a fixed
 // definition; every list the pages fetch is stubbed and smart-default dates/times are masked.
 const visNotes = { ...teaching, slug: "visnotes", name: "Visual notebook", triggers: [{ kind: "palette", command: "/visnotes" }] };

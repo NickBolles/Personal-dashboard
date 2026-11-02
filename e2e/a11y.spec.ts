@@ -310,6 +310,7 @@ test("workflow builder, edit and save-chat review: axe clean and no overflow at 
   };
   await check("/workflows/new", "New workflow");
   await check("/workflows/zoombuild/edit", "Edit Zoom builder");
+  await check("/workflows/zoombuild", "Session history"); // W4 workflow page: history, stats, reminder
   await check("/workflows/new?fromChat=sess_morning", "Review the proposed workflow");
 });
 
