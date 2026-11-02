@@ -106,11 +106,27 @@
   min-height: 44px;
   padding: 6px 12px;
   cursor: pointer;
-  list-style-position: inside;
+  list-style: none;
   min-width: 0;
 }
 .mp-sum > span:first-child {
   flex: 1 1 auto;
+}
+.mp-sum::-webkit-details-marker {
+  display: none;
+}
+.mp-sum::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s var(--ease, ease);
+}
+details[open] > .mp-sum::before {
+  transform: rotate(45deg);
 }
 .mp-proj {
   border-top: 1px solid var(--line);

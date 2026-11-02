@@ -168,7 +168,9 @@ export function MapView() {
                 <details key={r.id} className="mp-area" open>
                   <summary className="mp-sum">
                     <span className="font-semibold">{r.title}</span>
-                    <span className="text-xs text-muted">{r.total} items</span>
+                    <span className="text-xs text-muted">
+                      {r.total} {r.total === 1 ? "item" : "items"}
+                    </span>
                   </summary>
                   <Branch parent={r.id} kids={kids} visible={visible} open={filtering} depth={1} links={q.data!.links} onOp={setOp} />
                 </details>
