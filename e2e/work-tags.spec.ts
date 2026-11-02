@@ -145,3 +145,27 @@ test("filters: area list and activity timeline by tag and assignee", async ({ pa
   await expect(feed.getByRole("link", { name: `Tinsmith gate ${nonce}` }).first()).toBeVisible();
   await expect(feed.getByRole("link", { name: `Tinsmith trellis ${nonce}` })).toHaveCount(0);
 });
+
+test("settings: rename a tag, Undo restores it (#154)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const { one } = await makeTree(page, nonce);
+  const from = `quince-hedge-${nonce}`;
+  const to = `quince-row-${nonce}`;
+  const r = await page.request.patch(`/api/work/items/${one}`, { data: { tags: [from] }, headers: csrf });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  await page.goto("/settings/tags");
+  const list = page.getByTestId("tags-list");
+  await expect(list.locator(`[data-tag="${from}"]`)).toBeVisible();
+  await page.getByRole("button", { name: `Rename or merge ${from}` }).click();
+  await page.getByLabel(`New name for ${from}`).fill(to);
+  await page.getByRole("button", { name: "Save" }).click();
+  const bar = page.getByRole("status").filter({ hasText: `Renamed #${from}` });
+  await expect(bar).toBeVisible();
+  await expect(list.locator(`[data-tag="${to}"]`)).toBeVisible();
+  await bar.getByRole("button", { name: "Undo" }).click();
+  await expect(list.locator(`[data-tag="${from}"]`)).toBeVisible();
+  await expect(list.locator(`[data-tag="${to}"]`)).toHaveCount(0);
+  const d = await page.request.get(`/api/work/items/${one}`);
+  expect(JSON.stringify(await d.json())).toContain(from);
+});

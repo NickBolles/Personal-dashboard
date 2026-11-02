@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
-import { listActivity } from "@/server/work/activity";
+import { __setActivitySourceCap, listActivity } from "@/server/work/activity";
 import * as activityRoute from "@/app/api/work/activity/route";
 import {
   actorFor,
@@ -275,5 +275,37 @@ describe("listActivity (server)", () => {
     const body = (await res.json()) as ActivityResponse;
     expect(body.items.length).toBeGreaterThan(0);
     expect(body.items.every((i) => i.type === "created")).toBe(true);
+  });
+
+  it("pages past the per-source window with filters (#130)", () => {
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Bandsaw fence" }, cid);
+    for (let i = 0; i < 12; i++) store.updateItem(u, item.id, { summary: `Fence note ${i}` }, cid);
+    __setActivitySourceCap(5);
+    try {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let guard = 0; guard < 20; guard++) {
+        const page: ActivityResponse = listActivity(u, { item: item.id, limit: 4, cursor });
+        seen.push(...page.items.map((i) => i.id));
+        cursor = page.nextCursor;
+        if (!cursor) break;
+      }
+      expect(new Set(seen).size).toBe(seen.length);
+      // 12 edits + created, all reachable though each window reads only 5 rows per source
+      expect(seen.length).toBe(13);
+      const created = listActivity(u, { item: item.id, types: ["created"], limit: 4 });
+      expect(created.items).toHaveLength(1);
+    } finally {
+      __setActivitySourceCap(2000);
+    }
+  });
+
+  it("offers Undo on due-date edits (#131)", () => {
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Router table" }, cid);
+    store.updateItem(u, item.id, { targetDate: "2026-12-01" }, cid);
+    const rows = listActivity(u, { item: item.id }).items;
+    expect(rows.some((r) => r.undoOpId)).toBe(true);
   });
 });

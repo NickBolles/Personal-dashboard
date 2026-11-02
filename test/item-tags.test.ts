@@ -4,7 +4,7 @@ import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
-import { listTags, renameTag } from "@/server/work/tags";
+import { listTags, renameTag, setTagColor } from "@/server/work/tags";
 import { itemContext, triageDestinations } from "@/server/ai/context";
 import { normalizeWorkEvent } from "@/lib/activity";
 import { candidatesFor, confirmText, matchActions, actionById } from "@/lib/palette";
@@ -144,10 +144,37 @@ describe("store: tags + assignee edits", () => {
     store.updateItem(u, a.id, { tags: ["homelab"] }, cid);
     store.updateItem(u, b.id, { tags: ["home-lab", "homelab"] }, cid);
     const r = renameTag(owner, "homelab", "home-lab");
-    expect(r).toEqual({ touched: 2, merged: true });
+    expect(r).toMatchObject({ touched: 2, merged: true, op: { kind: "tag_rename", label: "Merged #homelab into #home-lab" } });
     expect(store.getDetail(owner, a.id).item.tags).toEqual(["home-lab"]);
     expect(store.getDetail(owner, b.id).item.tags).toEqual(["home-lab"]);
     expect(listTags(owner).map((t) => [t.name, t.count])).toEqual([["home-lab", 2]]);
+    // #154: Undo restores every item's tags and both tag rows
+    const undone = store.undoOp(u, r.op!.id, cid);
+    expect(undone).toMatchObject({ kind: "tag_rename", outcome: "restored", item: null });
+    expect(store.getDetail(owner, a.id).item.tags).toEqual(["homelab"]);
+    expect(store.getDetail(owner, b.id).item.tags).toEqual(["home-lab", "homelab"]);
+    expect(listTags(owner).map((t) => [t.name, t.count])).toEqual([
+      ["home-lab", 1],
+      ["homelab", 2],
+    ]);
+    expect(() => store.undoOp(u, r.op!.id, cid)).toThrow(/Already undone/);
+  });
+
+  it("undoes a plain rename with the colour, and refuses once tags changed since", () => {
+    const u = userOf(owner);
+    const a = store.createItem(u, { kind: "thread", title: "Gamma" }, cid);
+    store.updateItem(u, a.id, { tags: ["garden"] }, cid);
+    setTagColor(owner, "garden", "ok");
+    const r = renameTag(owner, "garden", "yard");
+    expect(r.op!.label).toBe("Renamed #garden → #yard");
+    expect(listTags(owner).find((t) => t.name === "yard")!.color).toBe("ok");
+    store.undoOp(u, r.op!.id, cid);
+    expect(store.getDetail(owner, a.id).item.tags).toEqual(["garden"]);
+    expect(listTags(owner).map((t) => [t.name, t.color])).toEqual([["garden", "ok"]]);
+
+    const r2 = renameTag(owner, "garden", "yard");
+    store.updateItem(u, a.id, { tags: ["yard", "extra"] }, cid);
+    expect(() => store.undoOp(u, r2.op!.id, cid)).toThrow(/changed since/);
   });
 });
 
