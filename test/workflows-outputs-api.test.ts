@@ -136,6 +136,83 @@ describe("workflow outputs API (W4)", () => {
     await json(call(promoteRoute.POST, { as: other, body: { indices: [0], parentId, titles: ["Call Sam"] }, params: { runId: id } }), 404);
   });
 
+  it("#145 a second confirm of the same actions creates nothing (idempotent per run + action)", async () => {
+    const { id } = await startTeaching();
+    await addActions(id, ["Call Sam", "Read John 16"]);
+    const area = await json<{ item: { id: string } }>(
+      call(workItemsRoute.POST, { body: { kind: "area", title: "Faith", parentId: null }, url: "http://jarvis.test/api/work/items" }),
+    );
+    const parentId = area.item.id;
+    const body = { indices: [0], parentId, titles: ["Call Sam"] };
+    const first = await json<{ created: unknown[]; already: unknown[] }>(call(promoteRoute.POST, { body, params: { runId: id } }));
+    expect(first.created).toHaveLength(1);
+    const again = await json<{ run: Run; created: unknown[]; already: { title: string }[] }>(call(promoteRoute.POST, { body, params: { runId: id } }));
+    expect(again.created).toHaveLength(0);
+    expect(again.already.map((a) => a.title)).toEqual(["Call Sam"]);
+    expect(again.run.promoted).toHaveLength(1);
+    // a mixed confirm creates only the new one
+    const mixed = await json<{ created: { title: string }[]; already: unknown[] }>(
+      call(promoteRoute.POST, { body: { indices: [0, 1], parentId, titles: ["Call Sam", "Read John 16"] }, params: { runId: id } }),
+    );
+    expect(mixed.created.map((c) => c.title)).toEqual(["Read John 16"]);
+    expect(mixed.already).toHaveLength(1);
+    const items = getDb().select().from(schema.workItems).where(eq(schema.workItems.parentId, parentId)).all();
+    expect(items.map((i) => i.title).sort()).toEqual(["Call Sam", "Read John 16"]);
+  });
+
+  it("#147/#148 end form and Edit session keep number/toggle/tags values; invalid answers keep the run live", async () => {
+    const typed = {
+      ...teaching,
+      slug: "teachtyped",
+      name: "Typed notes",
+      triggers: [{ kind: "palette", command: "/teachtyped" }],
+      capture: {
+        ...teaching.capture,
+        session: { ...teaching.capture.session, fields: { ...teaching.capture.session.fields, rating: "number?", again: "bool?" } },
+      },
+      forms: {
+        ...teaching.forms,
+        mid: {
+          ...teaching.forms.mid,
+          fields: [...teaching.forms.mid.fields, "tags", { id: "rating", bind: "session.rating", type: "number", label: "Rating", min: 1, max: 5 }],
+        },
+        end: {
+          ...teaching.forms.end,
+          fields: [...teaching.forms.end.fields, "rating", { id: "again", bind: "session.again", type: "toggle", label: "Come back next week" }],
+        },
+      },
+    };
+    const { results } = await json<{ results: { id: string; ok: boolean }[] }>(call(importRoute.POST, { body: { data: typed } }));
+    expect(results[0].ok, JSON.stringify(results)).toBe(true);
+    const wf = results[0].id;
+    await json(call(itemRoute.PATCH, { method: "PATCH", body: { status: "active" }, params: { id: wf } }));
+    const form = await json<{ values: Record<string, { value: unknown }> }>(call(formRoute.POST, { body: { command: "/teachtyped Jake Fry John 15" } }));
+    const values = Object.fromEntries(Object.entries(form.values).map(([k, v]) => [k, v.value]));
+    const id = (await json<{ run: Run }>(call(runsRoute.POST, { body: { workflowId: wf, values } }))).run.id;
+
+    // Edit session: typed values (and string forms from older clients) are filed with their type
+    const e = await json<{ run: Run; applied: string[] }>(
+      call(sessionRoute.PATCH, { method: "PATCH", body: { values: { tags: ["vine", "fruit"], rating: "4" } }, params: { runId: id } }),
+    );
+    expect(e.applied).toHaveLength(2);
+    expect(e.run.capture.session).toMatchObject({ tags: ["vine", "fruit"], rating: 4 });
+    // a value that can't be filed is rejected, never reported as "No changes"
+    await json(call(sessionRoute.PATCH, { method: "PATCH", body: { values: { rating: "lots" } }, params: { runId: id } }), 422);
+
+    // End form: invalid number blocks ending (run stays live, nothing filed)
+    await json(call(endRoute.POST, { body: { values: { apply: "Call my brother", rating: "lots" } }, params: { runId: id } }), 422);
+    let row = getDb().select().from(schema.workflowRuns).where(eq(schema.workflowRuns.id, id)).get()!;
+    expect(row.status).toBe("live");
+    expect(JSON.parse(row.captureJson).reflections).toEqual([]);
+
+    const ended = await json<Run>(call(endRoute.POST, { body: { values: { apply: "Call my brother", rating: 5, again: true } }, params: { runId: id } }));
+    expect(ended.status).toBe("ended");
+    expect(ended.capture.reflections).toEqual(["Call my brother"]);
+    expect(ended.capture.session).toMatchObject({ rating: 5, again: true, tags: ["vine", "fruit"] });
+    row = getDb().select().from(schema.workflowRuns).where(eq(schema.workflowRuns.id, id)).get()!;
+    expect(row.status).toBe("ended");
+  });
+
   it("history + stats + filters, and the reminder only notifies (never starts a run)", async () => {
     const { wf } = await startTeaching();
     const h = await json<{ rows: { speaker: string; books: string[] }[]; stats: { total: number; perMonth: unknown[]; topSpeakers: { label: string }[] } }>(

@@ -290,6 +290,12 @@ export function Dialog({
   const titleId = useId();
   const descId = useId();
   const restore = useRef<HTMLElement | null>(null);
+  // Parents usually pass an inline onClose; keying the focus effect on it re-ran it on every parent
+  // render (e.g. a run refetch) and yanked focus back to the first field mid-typing.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -306,7 +312,7 @@ export function Dialog({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        closeRef.current();
       }
       if (e.key === "Tab") {
         const list = focusables();
@@ -330,7 +336,7 @@ export function Dialog({
       document.body.style.overflow = prevOverflow;
       restore.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
