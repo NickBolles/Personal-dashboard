@@ -15,7 +15,15 @@ export const DECISIONS_KEY = ["work", "decisions"] as const;
 
 /** The "Needs you" list (sidebar badge, /decisions, Map and Today). */
 export function useDecisions(enabled = true) {
-  return useQuery({ queryKey: DECISIONS_KEY, queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"), enabled, staleTime: 30_000 });
+  // Approvals and workflow proposals change outside work mutations (Hermes
+  // events, the chat approval handler), so poll while the app is visible.
+  return useQuery({
+    queryKey: DECISIONS_KEY,
+    queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"),
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
 }
 
 const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", approval: "Approval", workflow: "Workflow" };
@@ -30,25 +38,26 @@ const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", ap
 export function DecisionsList({ entries, compact, emptyText }: { entries: DecisionEntry[]; compact?: boolean; emptyText?: string }) {
   const [op, setOp] = useState<UndoOp | null>(null);
   const [posted, setPosted] = useState<{ key: string; sessionId: string; text: string } | null>(null);
-  if (!entries.length && !posted)
-    return (
-      <p className="text-sm text-muted" data-testid="decisions-empty">
-        {emptyText ?? "Nothing needs you right now."}
-      </p>
-    );
+  // Undo and "post to conversation" stay mounted after the last entry is answered.
   return (
     <>
       {posted ? <PostConfirm key={posted.key} sessionId={posted.sessionId} text={posted.text} onDone={() => setPosted(null)} /> : null}
-      <ul className="dc-list" data-testid="decisions-list">
-        {entries.map((e) => (
-          <DecisionRow
-            key={e.key}
-            entry={e}
-            compact={compact}
-            onAnswered={(o, text) => (setOp(o), e.sessionId ? setPosted({ key: e.key, sessionId: e.sessionId, text }) : null)}
-          />
-        ))}
-      </ul>
+      {entries.length ? (
+        <ul className="dc-list" data-testid="decisions-list">
+          {entries.map((e) => (
+            <DecisionRow
+              key={e.key}
+              entry={e}
+              compact={compact}
+              onAnswered={(o, text) => (setOp(o), e.sessionId ? setPosted({ key: e.key, sessionId: e.sessionId, text }) : null)}
+            />
+          ))}
+        </ul>
+      ) : posted ? null : (
+        <p className="text-sm text-muted" data-testid="decisions-empty">
+          {emptyText ?? "Nothing needs you right now."}
+        </p>
+      )}
       {op ? <UndoBar key={op.id} op={op} onDone={() => setOp(null)} /> : null}
     </>
   );
@@ -153,12 +162,15 @@ function PostConfirm({ sessionId, text, onDone }: { sessionId: string; text: str
   );
 }
 
-/** "Needs you" section for Today and Map; renders nothing when the list is empty. */
+/** "Needs you" section for Today and Map; renders nothing until there is something to show. */
 export function NeedsYouSection({ entries, id = "needs-you-h", limit }: { entries?: DecisionEntry[]; id?: string; limit?: number }) {
   const access = useAccess();
   const q = useDecisions(entries === undefined && (access.can("work.use") || access.can("hermes.chat")));
   const list = entries ?? q.data?.entries ?? [];
-  if (!list.length) return null;
+  // Once shown, stay mounted so answering the last entry keeps its Undo / post controls.
+  const [shownOnce, setShownOnce] = useState(false);
+  if (list.length && !shownOnce) setShownOnce(true);
+  if (!list.length && !shownOnce) return null;
   const shown = limit ? list.slice(0, limit) : list;
   return (
     <section aria-labelledby={id} className="mb-5" data-testid="needs-you">
