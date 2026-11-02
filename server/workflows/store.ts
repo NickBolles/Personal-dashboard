@@ -6,6 +6,7 @@ import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
 import { listItems } from "@/server/work/store";
 import { BUILT_IN_SURFACE_KINDS } from "@/lib/jarvis-ui/types";
+import { diffDefinitions, restoreDefinition, restoreNote, summarizeDiff } from "@/lib/workflows/versions";
 import { canonicalDefinition, validateDefinition, WORKFLOW_FORMAT, type DefinitionIssue, type WorkflowDefinition } from "@/lib/workflows/definition";
 
 export type WorkflowStatus = "draft" | "active" | "archived";
@@ -296,4 +297,29 @@ export function importWorkflows(ctx: Ctx, raw: unknown) {
       throw e;
     }
   });
+}
+
+/** One immutable version with a diff against the version before it (builder history). */
+export function getVersion(userId: string, id: string, version: number) {
+  const row = own(userId, id);
+  const definition = currentDefinition(row.id, version);
+  if (!definition) throw new HttpError(404, "not_found", `Version ${version} isn't here`);
+  const previous = version > 1 ? currentDefinition(row.id, version - 1) : null;
+  const changes = diffDefinitions(previous, definition);
+  return { version, current: row.currentVersion, definition, changes, summary: summarizeDiff(changes) };
+}
+
+/** Restore = save the old definition as a NEW version (history is never rewritten). */
+export function restoreVersion(ctx: Ctx, id: string, version: number) {
+  const row = own(ctx.userId, id);
+  const old = currentDefinition(row.id, version);
+  const current = currentDefinition(row.id, row.currentVersion);
+  if (!old || !current) throw new HttpError(404, "not_found", `Version ${version} isn't here`);
+  return saveVersion(ctx, id, restoreDefinition(old, current), restoreNote(version));
+}
+
+/** Dry-run validation for the builder's inline errors (includes the area/Finance check). No writes. */
+export function validateDraft(userId: string, raw: unknown) {
+  const r = validateFor(userId, raw);
+  return r.ok ? { ok: true as const, areaFound: r.areaFound, issues: [] } : { ok: false as const, issues: r.issues };
 }
