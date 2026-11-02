@@ -11,6 +11,9 @@ import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type T
  * item header. Assigning to an agent is a label only; it never starts a run.
  */
 
+/** Meta controls sit in one wrapping row: drop the shared input's full width (phone height stays). */
+const metaCls = inputCls.replace(/\bblock w-full\b/, "inline-block w-auto");
+
 export type AssigneeOption = { ref: string; label: string; id: string };
 export type TagsResponse = { tags: WorkTag[]; assignees: { agents: AssigneeOption[]; people: (AssigneeOption & { name: string })[] } };
 
@@ -89,7 +92,7 @@ export function ItemMetaEditor({
       </label>
       <select
         id="work-assignee"
-        className={cx(inputCls, "jv-meta-select w-auto max-w-full")}
+        className={cx(metaCls, "jv-meta-select max-w-full")}
         value={assignee ?? ""}
         disabled={disabled}
         onChange={(e) => onSave({ assignee: e.target.value || null })}
@@ -120,7 +123,7 @@ export function ItemMetaEditor({
       ))}
       <input
         aria-label="Add tag"
-        className={cx(inputCls, "jv-meta-tag-input min-w-0")}
+        className={cx(metaCls, "jv-meta-tag-input w-32 min-w-0")}
         placeholder="+ tag"
         value={draft}
         disabled={disabled}
@@ -185,7 +188,7 @@ export function ItemFilterBar({
       </label>
       <select
         id={`${idPrefix}-tag`}
-        className={cx(inputCls, "jv-meta-select w-auto max-w-full")}
+        className={cx(metaCls, "jv-meta-select max-w-full")}
         value={value.tag ?? ""}
         onChange={(e) => onChange({ ...value, tag: e.target.value || null })}
       >
@@ -201,7 +204,7 @@ export function ItemFilterBar({
       </label>
       <select
         id={`${idPrefix}-assignee`}
-        className={cx(inputCls, "jv-meta-select w-auto max-w-full")}
+        className={cx(metaCls, "jv-meta-select max-w-full")}
         value={value.assignee ?? ""}
         onChange={(e) => onChange({ ...value, assignee: e.target.value || null })}
       >

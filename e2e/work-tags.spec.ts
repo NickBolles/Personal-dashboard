@@ -80,7 +80,7 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await page.keyboard.press("Tab");
   await expect(page.getByTestId("palette-chips")).toContainText("Assign to");
   await box.fill("momentumchief");
-  await expect(page.getByRole("option", { name: /@momentumchief/ }).first()).toBeVisible();
+  await expect(page.locator('[role="option"]', { hasText: "momentumchief" }).first()).toBeVisible();
   await page.keyboard.press("Enter");
   const confirm = page.getByTestId("palette-confirm");
   await expect(confirm).toContainText(`Assign “Tinsmith trellis ${nonce}” to @momentumchief?`);
@@ -94,7 +94,7 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await page.keyboard.press("Tab");
   await expect(page.getByTestId("palette-chips")).toContainText("Tag");
   await box.fill(`tinsnip-${nonce}`);
-  await expect(page.getByRole("option", { name: new RegExp(`tinsnip-${nonce}`) }).first()).toBeVisible();
+  await expect(page.locator('[role="option"]', { hasText: `tinsnip-${nonce}` }).first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("palette-confirm")).toContainText(`#tinsnip-${nonce}`);
   await page.keyboard.press("Enter");
