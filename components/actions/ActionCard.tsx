@@ -215,8 +215,15 @@ export function ActionCard({
               </Link>
             )}
           </h3>
-          {action.detail || stale || action.pinned ? (
+          {action.detail || stale || action.pinned || due ? (
             <p data-dynamic className="truncate text-xs text-muted">
+              {/* Phones: due leads the meta line (no right column to squeeze the title at 320 / 200% text). */}
+              {due ? (
+                <span className="sm:hidden">
+                  {due}
+                  {action.detail || stale || action.pinned ? " · " : null}
+                </span>
+              ) : null}
               {action.pinned ? "Pinned · " : null}
               {action.detail}
               {stale ? <span className="text-warn"> · Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
@@ -224,7 +231,7 @@ export function ActionCard({
           ) : null}
         </div>
         {due ? (
-          <span data-dynamic className="shrink-0 text-xs whitespace-nowrap text-muted tabular-nums">
+          <span data-dynamic className="hidden shrink-0 text-xs whitespace-nowrap text-muted tabular-nums sm:inline">
             {due}
           </span>
         ) : null}
