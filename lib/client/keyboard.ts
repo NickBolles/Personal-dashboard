@@ -4,6 +4,8 @@ import { useEffect } from "react";
 
 /** Minimum height difference (px) between the layout and the visual viewport that counts as an on-screen keyboard. */
 const KEYBOARD_MIN_PX = 120;
+/** How many surfaces track the keyboard (a conversation page + the palette over it): the last one out clears <html>. */
+let mounted = 0;
 
 /**
  * Keeps two things on <html> in sync with the on-screen keyboard while a page that has a composer is mounted:
@@ -13,8 +15,15 @@ const KEYBOARD_MIN_PX = 120;
  *    `interactive-widget=resizes-content` (Android Chrome) the layout viewport already shrinks and this
  *    stays 0; on browsers that only shrink the visual viewport (iOS Safari) it lifts the sticky composer.
  */
+/** Render-only wrapper for surfaces that mount conditionally (the command palette, #106). */
+export function KeyboardInset() {
+  useKeyboardInset();
+  return null;
+}
+
 export function useKeyboardInset(onChange?: (open: boolean) => void) {
   useEffect(() => {
+    mounted++;
     const root = document.documentElement;
     const vv = window.visualViewport;
     let baseline = window.innerHeight;
@@ -61,6 +70,7 @@ export function useKeyboardInset(onChange?: (open: boolean) => void) {
       window.removeEventListener("resize", update);
       document.removeEventListener("focusin", update);
       document.removeEventListener("focusout", onOut);
+      if (--mounted > 0) return void setTimeout(() => document.dispatchEvent(new FocusEvent("focusin")), 0);
       root.style.removeProperty("--kb-inset");
       delete root.dataset.kb;
     };
