@@ -606,6 +606,17 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+// CH-R1 live state (#65): the streaming "Working" summary with its shimmer, from the kit gallery (deterministic).
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat work summary live (${theme})`, async ({ page }) => {
+    await page.goto("/dev/kit");
+    const live = page.getByTestId(`kit-work-live-${theme}`).locator(".chat-work[data-live]");
+    await expect(live.getByRole("button", { name: /^Working/ })).toBeVisible();
+    await live.scrollIntoViewIfNeeded();
+    await expect(live).toHaveScreenshot(`chat-work-live-${theme}.png`, { animations: "disabled" });
+  });
+}
+
 // Tide orb (v0 "Tide with Lagoon text", Playful): phone bar orb + open radial at 390, desktop dock orb at 1440.
 async function orbClip(page: import("@playwright/test").Page, pad = 28) {
   const b = (await page.locator('[data-testid="dock-orb"]:visible').boundingBox())!;
@@ -966,13 +977,34 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/areas?item=wk_garage");
     if (scheme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     await expect(page.locator('.jv-meta [data-tag="shelving"]')).toBeVisible();
-    await expect(page.getByLabel("Assignee")).toHaveValue("agent:devchief");
+    await expect(page.getByTestId("assignee-picker").getByRole("button")).toHaveAttribute("data-value", "agent:devchief");
     const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t2 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(header).toHaveScreenshot(`tags-item-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
     await t2.evaluate((el) => (el as Element).remove());
+
+    // the GitHub-label-style pickers: popover on desktop/tablet, bottom sheet on phones
+    for (const [btn, name, file] of [
+      ["Edit tags", "Tags", "tags-picker"],
+      [/^Assignee/, "Assignee", "assignee-picker"],
+    ] as const) {
+      await page.getByRole("button", { name: btn }).click();
+      const pop = page.getByRole("dialog", { name });
+      await expect(pop.getByRole("option").first()).toBeVisible();
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t3 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+      await expect(pop).toHaveScreenshot(`${file}-${scheme}.png`, { animations: "disabled" });
+      await t3.evaluate((el) => (el as Element).remove());
+      await page.keyboard.press("Escape");
+      if (await pop.isVisible())
+        await page
+          .locator(".jv-pick-scrim")
+          .click({ force: true })
+          .catch(() => {});
+      await expect(pop).toBeHidden();
+    }
   });
 }
 

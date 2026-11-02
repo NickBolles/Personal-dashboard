@@ -159,15 +159,27 @@ function layout(center: Pt, n: number, phone = false) {
   };
 }
 
-function subLayout(center: Pt, R: number, petal: { x: number }, count: number) {
+/** Sub-entry width budget when a submenu has to lay out sideways (#62). */
+const SUB_STEP_X = 132;
+
+export function subLayout(center: Pt, R: number, petal: { x: number }, count: number) {
   const narrow = window.innerWidth < 600;
+  const top = -center.y + 64;
+  // Default: stack upward above the petal. When the orb sits high (desktop top row) the stack
+  // doesn't fit and every entry would clamp onto the same spot (#62): lay them out in rows instead.
+  if (-(R + 70) - (count - 1) * 46 >= top)
+    return Array.from({ length: count }, (_, k) => {
+      const x = narrow ? 0 : petal.x;
+      return { x: Math.max(-center.x + 70, Math.min(window.innerWidth - center.x - 70, x)), y: -(R + 70) - k * 46 };
+    });
+  const perRow = Math.max(1, Math.min(count, Math.floor((window.innerWidth - 40) / SUB_STEP_X)));
+  const y0 = Math.max(top, -(R + 70));
   return Array.from({ length: count }, (_, k) => {
-    const x = narrow ? 0 : petal.x;
-    const y = -(R + 70) - k * 46;
-    return {
-      x: Math.max(-center.x + 70, Math.min(window.innerWidth - center.x - 70, x)),
-      y: Math.max(-center.y + 64, y),
-    };
+    const row = Math.floor(k / perRow);
+    const inRow = Math.min(perRow, count - row * perRow);
+    const half = ((inRow - 1) * SUB_STEP_X) / 2;
+    const mid = Math.max(-center.x + 70 + half, Math.min(window.innerWidth - center.x - 70 - half, narrow ? 0 : petal.x));
+    return { x: mid + ((k % perRow) - (inRow - 1) / 2) * SUB_STEP_X, y: y0 + row * 46 };
   });
 }
 

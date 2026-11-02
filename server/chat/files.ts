@@ -13,7 +13,15 @@ import { sessionAccess } from "@/integrations/hermes/service";
 import { localSessionDetail } from "@/server/assistant/local";
 import { getAiSettings } from "@/server/ai/settings";
 import { isFinanceContext } from "@/lib/chat-context";
-import { CHAT_FILE_LIMITS, classifyChatFile, fencedAttachment, FILE_MARK, type ChatFileKind, type ChatFileView } from "@/lib/chat-files";
+import {
+  CHAT_FILE_LIMITS,
+  classifyChatFile,
+  fencedAttachment,
+  FILE_MARK,
+  looksLikeFinanceDocument,
+  type ChatFileKind,
+  type ChatFileView,
+} from "@/lib/chat-files";
 import { imageSize, sniffMime } from "@/server/capture/sniff";
 import { stripLocation } from "@/server/capture/exif";
 import { extractPdfText } from "./pdf-text";
@@ -58,16 +66,53 @@ function view(r: typeof T.$inferSelect): ChatFileView {
   };
 }
 
+/**
+ * The conversation plus the ones it was forked from, each with the time the fork was taken (#86):
+ * a fork copies its parent's messages (and their `jarvis-file:` markers), so files the parent had
+ * sent by then stay readable from the fork.
+ */
+function lineage(sessionId: string): { id: string; before: string | null }[] {
+  const out: { id: string; before: string | null }[] = [{ id: sessionId, before: null }];
+  let cur = sessionId;
+  let cutoff = null as string | null;
+  for (let i = 0; i < 8; i++) {
+    const m = db()
+      .select({ parent: schema.sessionMeta.forkedFromSessionId, at: schema.sessionMeta.createdAt })
+      .from(schema.sessionMeta)
+      .where(eq(schema.sessionMeta.sessionId, cur))
+      .get();
+    if (!m?.parent || out.some((o) => o.id === m.parent)) break;
+    cutoff = cutoff && cutoff < m.at ? cutoff : m.at;
+    out.push({ id: m.parent, before: cutoff });
+    cur = m.parent;
+  }
+  return out;
+}
+
+/** Can this row be seen from `sessionId`: its own files (drafts only by their uploader), or an ancestor's file sent before the fork. */
+function visibleFrom(r: typeof T.$inferSelect, user: CurrentUser, chain: { id: string; before: string | null }[]) {
+  const link = chain.find((c) => c.id === r.sessionId);
+  if (!link) return false;
+  if (!link.before) return !!r.sentAt || r.userId === user.id;
+  return !!r.sentAt && r.sentAt <= link.before;
+}
+
 /** Files that went out with a message in this conversation (Links panel → Files), newest first. */
 export function listChatFiles(user: CurrentUser, sessionId: string): ChatFileView[] {
   conversationAccess(user, sessionId);
+  const chain = lineage(sessionId);
   return db()
     .select()
     .from(T)
-    .where(eq(T.sessionId, sessionId))
+    .where(
+      inArray(
+        T.sessionId,
+        chain.map((c) => c.id),
+      ),
+    )
     .orderBy(desc(T.createdAt))
     .all()
-    .filter((r) => r.sentAt || r.userId === user.id)
+    .filter((r) => visibleFrom(r, user, chain))
     .map(view);
 }
 
@@ -107,6 +152,8 @@ export function checkUpload(f: Upload): {
     if (Buffer.from(bytes.subarray(0, 5)).toString("latin1") !== "%PDF-") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't a PDF`);
     const text = extractPdfText(bytes, CHAT_FILE_LIMITS.textChars + 1);
     const status = !text ? "none" : text.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
+    if (text && looksLikeFinanceDocument(text))
+      throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
     return {
       kind: "pdf",
       mime: "application/pdf",
@@ -120,6 +167,8 @@ export function checkUpload(f: Upload): {
   }
   if (sniffMime(bytes) !== "text/plain") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't plain UTF-8 text`);
   const full = new TextDecoder().decode(bytes);
+  if (looksLikeFinanceDocument(full))
+    throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
   const status = full.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
   return {
     kind: "text",
@@ -181,13 +230,10 @@ export function saveChatFile(user: CurrentUser, sessionId: string, f: Upload, co
 
 function rowFor(user: CurrentUser, sessionId: string, id: string) {
   conversationAccess(user, sessionId);
-  const r = db()
-    .select()
-    .from(T)
-    .where(and(eq(T.id, id), eq(T.sessionId, sessionId)))
-    .get();
-  // Drafts are private to the person composing; sent files follow the conversation.
-  if (!r || (!r.sentAt && r.userId !== user.id)) throw new HttpError(404, "not_found", "File not found");
+  const r = db().select().from(T).where(eq(T.id, id)).get();
+  // Drafts are private to the person composing; sent files follow the conversation (and its forks, #86).
+  if (!r || !visibleFrom(r, user, r.sessionId === sessionId ? [{ id: sessionId, before: null }] : lineage(sessionId)))
+    throw new HttpError(404, "not_found", "File not found");
   return r;
 }
 
@@ -216,6 +262,7 @@ export async function chatFileThumbnail(user: CurrentUser, sessionId: string, id
 
 export function deleteChatFile(user: CurrentUser, sessionId: string, id: string, correlationId: string) {
   const row = rowFor(user, sessionId, id);
+  if (row.sessionId !== sessionId) throw new HttpError(403, "forbidden", "This file belongs to the conversation it was forked from");
   if (row.userId !== user.id && conversationAccess(user, sessionId) !== "write") throw new HttpError(403, "forbidden", "You can't remove this file");
   db().delete(T).where(eq(T.id, id)).run();
   removeStored([row]);
@@ -288,11 +335,18 @@ export async function prepareRunFiles(user: CurrentUser, sessionId: string, ids:
   const textBlocks: string[] = [];
   for (const r of ordered) {
     if (isFinanceContext({ id: r.name })) throw new HttpError(403, "finance_blocked", "Finance files aren't sent to AI");
+    // #81: a renamed statement/tax form is caught by its extracted text, not just the filename.
+    if (r.extractedText && looksLikeFinanceDocument(r.extractedText))
+      throw new HttpError(403, "finance_blocked", `${r.name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
     if (r.kind === "image") imageUrls.push(await modelImageUrl(r, fs.readFileSync(path.join(chatFilesDir(), r.storageKey))));
     else if (r.extractedText)
       textBlocks.push(fencedAttachment(r.name, r.extractedText, r.textStatus === "truncated" ? `first ${CHAT_FILE_LIMITS.textChars} characters` : undefined));
     else textBlocks.push(`Attached file: ${r.name.replace(/[\r\n`]/g, " ")} (PDF attached — text not extracted; it may be a scan)`);
   }
+  // #87: Hermes refuses requests over 10 MB; budget the whole encoded batch (prompt + JSON need headroom).
+  const bytes = imageUrls.reduce((n, u) => n + u.length, 0) + textBlocks.reduce((n, t) => n + Buffer.byteLength(t), 0);
+  if (bytes > CHAT_FILE_LIMITS.encodedBudget)
+    throw new HttpError(413, "attachments_too_large", "These attachments are too large to send together — send fewer pictures in this message");
   const marker = `Attachments: ${ordered.map((r) => `${FILE_MARK}${r.id}`).join(" ")}`;
   return { imageUrls, textBlocks, marker, ids: unique };
 }

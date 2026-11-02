@@ -36,6 +36,18 @@ export function groupMemberIds(members: SkylightMember[], prefs: Pick<SkylightAs
   return prefs.groups ?? autoGroupMembers(members);
 }
 
+/**
+ * #74: the Test connection line for up-for-grabs groups: the saved (effective) list when one is
+ * configured, with auto-detected groups that aren't in use marked as such.
+ */
+export function describeGroups(members: SkylightMember[], prefs: Pick<SkylightAssignmentPrefs, "groups">): string {
+  const name = (id: string) => members.find((m) => m.id === id)?.name ?? id;
+  const auto = autoGroupMembers(members);
+  if (!prefs.groups) return `Up-for-grabs groups (auto): ${auto.map(name).join(", ") || "none"}`;
+  const unused = auto.filter((id) => !prefs.groups!.includes(id));
+  return `Up-for-grabs groups (saved): ${prefs.groups.map(name).join(", ") || "none"}${unused.length ? `; auto-detected, not in use: ${unused.map(name).join(", ")}` : ""}`;
+}
+
 /** Parse the stored comma-separated member ids + toggles (integration config strings). */
 export function skylightPrefs(config: Record<string, string | undefined>): SkylightAssignmentPrefs {
   const flag = (v: string | undefined, dflt: boolean) => (v == null || v === "" ? dflt : v === "true" || v === "1" || v === "on");

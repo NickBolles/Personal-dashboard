@@ -178,7 +178,8 @@ export function undoTagRename(tx: Tx, userId: string, p: TagRenamePayload) {
       .values({ userId, name: p.from, color: defaultTagColor(p.from) })
       .onConflictDoNothing()
       .run();
-  if (p.toRow) put(p.toRow);
+  // A merge never touches the target row, so undo leaves it (and any recolour made since) alone (#163).
+  if (p.toRow) tx.insert(G).values({ userId, name: p.toRow.name, color: p.toRow.color, createdAt: p.toRow.createdAt }).onConflictDoNothing().run();
   else
     tx.delete(G)
       .where(and(eq(G.userId, userId), eq(G.name, p.to)))

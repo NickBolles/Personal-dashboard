@@ -12,7 +12,29 @@ export const CHAT_FILE_LIMITS = {
   perMessage: 6,
   /** extracted text per file that goes to the model */
   textChars: 40_000,
+  /** #87: encoded images + text blocks of one message (Hermes caps a request at 10,000,000 bytes) */
+  encodedBudget: 9_000_000,
 } as const;
+
+/**
+ * #81: content heuristic for financial documents (bank/card statements, tax forms) whose filename
+ * doesn't say so. Two or more distinct signals → treat as finance (never sent to AI).
+ */
+const FINANCE_DOC_SIGNALS = [
+  /\bstatement (period|date)\b/i,
+  /\b(beginning|opening|ending|closing|available|new) balance\b/i,
+  /\b(account|acct)\.? (number|no\.?|#)/i,
+  /\brouting (number|no\.?)\b/i,
+  /\bminimum payment due\b/i,
+  /\b(form )?(1040|1099(-[a-z]+)?|w-2|1098)\b/i,
+  /\b(taxable income|adjusted gross income|federal income tax withheld)\b/i,
+  /\biban\b|\bswift\b/i,
+  /\b(deposits and (other )?credits|withdrawals and (other )?debits)\b/i,
+];
+export function looksLikeFinanceDocument(text: string): boolean {
+  const head = text.slice(0, 20_000);
+  return FINANCE_DOC_SIGNALS.filter((re) => re.test(head)).length >= 2;
+}
 
 /** `accept` for the composer file input (phones offer camera + photo library for image/*). */
 export const CHAT_FILE_ACCEPT = "image/*,application/pdf,text/*,.md,.csv,.json";

@@ -12,7 +12,7 @@ import { SKYLIGHT_DEFAULT_PROMPT } from "@/integrations/registry";
 import { baseAction, classifyInstant } from "@/integrations/actions";
 import { cachedStructured, runStructured, saveSnapshot } from "@/integrations/hermes/structured";
 import type { AdapterContext, SourceAdapter, SourceData } from "@/integrations/types";
-import { autoGroupMembers, autoMatchMembers, classifySkylightChore, groupMemberIds, keepAssigned, skylightPrefs, type SkylightMember } from "@/lib/task-source";
+import { autoMatchMembers, describeGroups, classifySkylightChore, groupMemberIds, keepAssigned, skylightPrefs, type SkylightMember } from "@/lib/task-source";
 
 /**
  * Skylight has no official API. Two modes:
@@ -451,8 +451,7 @@ export const skylightAdapter: SourceAdapter = {
             members = await listMembers().catch(() => []);
             if (!members.length) return "No members found (all chores shown)";
             // Groups stay a free-text list (several ids allowed), so list names + ids here instead of a single-choice picker.
-            const auto = autoGroupMembers(members).map((id) => members.find((m) => m.id === id)?.name);
-            return `${members.length} members: pick yours under “Whose tasks to show”. Up-for-grabs groups (auto): ${auto.join(", ") || "none"}. Ids: ${members.map((m) => `${m.name}=${m.id}`).join(", ")}`;
+            return `${members.length} members: pick yours under “Whose tasks to show”. ${describeGroups(members, cfg().prefs)}. Ids: ${members.map((m) => `${m.name}=${m.id}`).join(", ")}`;
           },
         },
       ],

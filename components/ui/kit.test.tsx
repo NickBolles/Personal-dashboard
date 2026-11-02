@@ -118,3 +118,8 @@ it("PermissionLock names the missing capability", () => {
   expect(note.textContent).toContain("Needs Chat access");
   expect(note.textContent).toContain("hermes.chat");
 });
+
+it("Menu: autoFocus={false} leaves focus alone (static gallery examples, #36)", () => {
+  render(<Menu label="Static" autoFocus={false} items={[{ label: "One" }]} />);
+  expect(document.activeElement).toBe(document.body);
+});

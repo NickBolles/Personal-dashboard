@@ -50,7 +50,7 @@ export function useAskHermes() {
         context: opts.context,
         capabilities: [SMART_CAPABILITY],
       });
-      setFirstRun(session.id, { input: text, key, run });
+      setFirstRun(session.id, { input: text, key, run, context: opts.context });
       // e.g. link a workflow run to its conversation; never blocks opening the chat
       if (opts.onSession) void Promise.resolve(opts.onSession(session.id)).catch(() => undefined);
       open(session);

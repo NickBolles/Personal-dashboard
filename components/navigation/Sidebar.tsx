@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
@@ -10,6 +10,12 @@ import { BellIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIco
 import { useShowArchived } from "@/lib/client/show-archived";
 import { WorkTree, type RowActions } from "@/components/work/WorkTree";
 import { MoveToDialog } from "@/components/work/structure";
+import { INLINE_OP_EVENT } from "@/components/work/InlineEdit";
+import type { UndoOp } from "@/components/work/UndoBar";
+
+const shareOp = (op: UndoOp | null | undefined) => {
+  if (op) window.dispatchEvent(new CustomEvent(INLINE_OP_EVENT, { detail: op }));
+};
 import "@/components/work/work.css";
 import { useWorkMutation } from "@/components/work/common";
 import { useInbox } from "@/components/work/today";
@@ -69,6 +75,20 @@ type Entry = { key: string; href: string; label: string; icon: (p: { className?:
  * drag pins to reorder), the live Areas tree, Settings. Collapses to an icon rail.
  * Tablet/phone keep the top row / bottom bar.
  */
+/** The sidebar is only shown from 1024px (`lg:flex`): below that, don't mount its Areas tree or run its queries (#78). */
+const WIDE = "(min-width: 1024px)";
+function useWideViewport() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(WIDE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => false,
+  );
+}
+
 export function Sidebar({
   collapsed,
   onToggle,
@@ -87,14 +107,18 @@ export function Sidebar({
   const router = useRouter();
   const mod = useModKey();
   const [archived, setArchived] = useShowArchived();
+  const wide = useWideViewport();
   const items = useQuery({
     queryKey: ["work", "items", archived],
     queryFn: () => api.get<ItemsResponse>(`/api/work/items${archived ? "?archived=1" : ""}`),
-    enabled: canWork,
+    enabled: canWork && wide,
   });
   const inbox = useInbox();
-  const place = useWorkMutation((v: { id: string; parentId: string | null; index: number }) =>
-    api.post(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+  const place = useWorkMutation(
+    (v: { id: string; parentId: string | null; index: number }) =>
+      api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+    // #77: hand the op to the page's Undo bar (WorkView listens on /areas).
+    { onSuccess: (r) => shareOp(r.op) },
   );
   const rename = useWorkMutation((v: { id: string; title: string }) => api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }), {
     ok: "Renamed",
@@ -306,7 +330,7 @@ export function Sidebar({
               </div>
             </div>
             {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
-            {items.isPending ? (
+            {!wide ? null : items.isPending ? (
               <Spinner label="Loading areas…" />
             ) : (
               <WorkTree
@@ -342,7 +366,17 @@ export function Sidebar({
           </section>
         ) : null}
       </nav>
-      {moving ? <MoveToDialog ids={moving} items={list} onClose={() => setMoving(null)} onDone={() => setMoving(null)} /> : null}
+      {moving ? (
+        <MoveToDialog
+          ids={moving}
+          items={list}
+          onClose={() => setMoving(null)}
+          onDone={(op) => {
+            setMoving(null);
+            shareOp(op);
+          }}
+        />
+      ) : null}
       <div className="border-t border-line p-2">
         <Link href="/more" aria-current={path === "/more" ? "page" : undefined} className={rowCls(path === "/more")}>
           <MoreIcon className="h-[18px] w-[18px] shrink-0" />

@@ -41,6 +41,9 @@ function upload(sessionId: string, file: File, onProgress: (p: number) => void):
   });
 }
 
+/** Only object URLs we created are revoked (restored drafts preview through the thumbnail route). */
+const revoke = (d: DraftFile) => d.previewUrl?.startsWith("blob:") && URL.revokeObjectURL(d.previewUrl);
+
 /** Draft attachments for the next message: validate → upload with progress → ids for the run. */
 export function useChatAttachments(sessionId: string) {
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
@@ -51,9 +54,41 @@ export function useChatAttachments(sessionId: string) {
     live.current = drafts;
   }, [drafts]);
 
+  // #85: drafts uploaded before a reload come back into the composer (else they'd hold the
+  // per-conversation draft quota with nothing visible to send or remove).
+  useEffect(() => {
+    let off = false;
+    api
+      .get<{ files: ChatFileView[] }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/files`)
+      .then(({ files }) => {
+        const unsent = files.filter((f) => !f.sentAt).reverse();
+        if (off || !unsent.length) return;
+        setDrafts((ds) => {
+          const have = new Set(ds.map((d) => d.file?.id));
+          const back: DraftFile[] = unsent
+            .filter((f) => !have.has(f.id))
+            .map((f) => ({
+              localId: `r-${f.id}`,
+              name: f.name,
+              size: f.bytes,
+              kind: f.kind,
+              progress: 100,
+              status: "ready",
+              file: f,
+              previewUrl: f.kind === "image" ? fileUrl(sessionId, f.id, true) : undefined,
+            }));
+          return back.length ? [...back, ...ds] : ds;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      off = true;
+    };
+  }, [sessionId]);
+
   useEffect(
     () => () => {
-      for (const d of live.current) if (d.previewUrl) URL.revokeObjectURL(d.previewUrl);
+      for (const d of live.current) revoke(d);
     },
     [],
   );
@@ -94,7 +129,7 @@ export function useChatAttachments(sessionId: string) {
     (localId: string) => {
       const d = live.current.find((x) => x.localId === localId);
       if (!d) return;
-      if (d.previewUrl) URL.revokeObjectURL(d.previewUrl);
+      revoke(d);
       setDrafts((ds) => ds.filter((x) => x.localId !== localId));
       if (d.file && !d.file.sentAt) void api.del(fileUrl(sessionId, d.file.id)).catch(() => undefined);
     },
@@ -103,7 +138,7 @@ export function useChatAttachments(sessionId: string) {
 
   /** After a successful send: the files now belong to the message. */
   const clear = useCallback(() => {
-    for (const d of live.current) if (d.previewUrl) URL.revokeObjectURL(d.previewUrl);
+    for (const d of live.current) revoke(d);
     setDrafts([]);
   }, []);
 

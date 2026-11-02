@@ -3,6 +3,7 @@ import {
   autoGroupMembers as autoAll,
   autoMatchMembers,
   classifySkylightChore,
+  describeGroups,
   groupMemberIds,
   isOwnersTask,
   keepAssigned,
@@ -99,5 +100,22 @@ describe("source labels", () => {
         { source: "skylight", sourceLabel: "Skylight · Chores" },
       ]),
     ).toEqual(["Jarvis", "Skylight · Chores"]);
+  });
+});
+
+describe("skylight groups pinned (#74)", () => {
+  const fam = [
+    { id: "1", name: "Nick" },
+    { id: "11748675", name: "Family (skylight)" },
+    { id: "77", name: "Family: #ff8800" },
+  ];
+  it("Family: #hex chores are not up-for-grabs once groups are pinned", () => {
+    const groups = groupMemberIds(fam, { groups: ["11748675"] });
+    expect(classifySkylightChore({ categoryId: "77" }, fam, ["1"], groups).kind).toBe("other");
+    expect(classifySkylightChore({ categoryId: "11748675" }, fam, ["1"], groups).kind).toBe("up_for_grabs");
+  });
+  it("Test connection shows the saved groups and marks unused auto ones", () => {
+    expect(describeGroups(fam, { groups: ["11748675"] })).toBe("Up-for-grabs groups (saved): Family (skylight); auto-detected, not in use: Family: #ff8800");
+    expect(describeGroups(fam, { groups: null })).toBe("Up-for-grabs groups (auto): Family (skylight), Family: #ff8800");
   });
 });

@@ -21,6 +21,8 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
   });
   const seen = useMemo(() => extractLinks(timeline), [timeline]);
   const sent = useRef(new Set<string>());
+  // #75: the server resolves 6 GitHub titles per call; keep syncing (bounded) while that makes progress.
+  const resolveMore = useRef<{ last: number; tries: number }>({ last: Infinity, tries: 0 });
   useEffect(() => {
     if (readOnly) return;
     // The route caps URLs at 2048 chars; one oversized URL would reject the whole batch.
@@ -28,11 +30,25 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
     if (!fresh.length) return;
     const t = setTimeout(() => {
       for (const l of fresh) sent.current.add(l.url);
+      resolveMore.current = { last: Infinity, tries: 0 };
       api
-        .post<{ links: PanelLink[] }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/links-panel`, {
+        .post<{ links: PanelLink[]; pending?: number }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/links-panel`, {
           links: fresh.map(({ url, kind, domain, source, firstSeenAt }) => ({ url, kind, domain, source, firstSeenAt })),
         })
-        .then((r) => qc.setQueryData(["chat-links", sessionId], r))
+        .then(function onSynced(r: { links: PanelLink[]; pending?: number }): void {
+          qc.setQueryData(["chat-links", sessionId], { links: r.links });
+          const more = resolveMore.current;
+          const pending = r.pending ?? 0;
+          if (!pending || pending >= more.last || more.tries >= 20) return;
+          more.last = pending;
+          more.tries++;
+          setTimeout(() => {
+            void api
+              .post<{ links: PanelLink[]; pending?: number }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/links-panel`, { links: [] })
+              .then(onSynced)
+              .catch(() => undefined);
+          }, 500);
+        })
         .catch(() => {
           for (const l of fresh) sent.current.delete(l.url);
         });

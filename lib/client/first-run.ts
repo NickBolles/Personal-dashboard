@@ -8,7 +8,8 @@ import type { RunView } from "@/lib/hermes";
  * page picks the in-flight send up here (shows the message at once, then streams).
  */
 /** `key`: the run's idempotency key, reused if the owner retries after a lost response. */
-export type FirstRun = { input: string; key: string; run: Promise<RunView> };
+/** `context`: the run context the first send carried (e.g. the area `@ctx:node:<id>`), kept for a retry (#44). */
+export type FirstRun = { input: string; key: string; run: Promise<RunView>; context?: string };
 
 const pending = new Map<string, FirstRun>();
 

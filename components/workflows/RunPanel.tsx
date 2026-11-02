@@ -55,34 +55,72 @@ export function useWorkflowRun(sessionId: string) {
   return q.data ?? null;
 }
 
+/** Backoff between capture retries (#162): a failed PATCH is retried on a timer, not on the next render. */
+export const CAPTURE_RETRY_MS = [1_000, 4_000, 15_000] as const;
+
+export type AgentCaptureState = { unsaved: number; retry: () => void };
+
 /**
  * Read each finished assistant turn once: fenced `jarvis-capture` ops are
- * validated server-side and applied instantly with Undo (D2).
+ * validated server-side and applied instantly with Undo (D2). A failed report
+ * is retried with backoff (the server dedupes by messageId); once the retries
+ * run out the turn counts as unsaved and the panel offers Retry (#135, #162).
  */
-export function useAgentCapture(sessionId: string, run: RunPanelView | null, timeline: TimelineItem[], onApplied: (r: PatchResult) => void) {
+export function useAgentCapture(sessionId: string, run: RunPanelView | null, timeline: TimelineItem[], onApplied: (r: PatchResult) => void): AgentCaptureState {
   const qc = useQueryClient();
   const seen = useRef(new Set<string>());
-  // failed reports are retried on a later render (the server dedupes by messageId), at most 3 tries (#135)
-  const tries = useRef(new Map<string, number>());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const [failed, setFailed] = useState<Map<string, { runId: string; text: string }>>(() => new Map());
+  const latest = useRef({ onApplied, sessionId });
+  useEffect(() => {
+    latest.current = { onApplied, sessionId };
+  });
+  const send = useRef((runId: string, id: string, text: string, attempt: number) => {
+    timers.current.delete(id);
+    void api
+      .patch<PatchResult>(`/api/workflows/runs/${encodeURIComponent(runId)}`, { by: "agent", text, messageId: id })
+      .then((r) => {
+        qc.setQueryData(key(latest.current.sessionId), r.run);
+        setFailed((m) => {
+          if (!m.has(id)) return m;
+          const n = new Map(m);
+          n.delete(id);
+          return n;
+        });
+        if (r.applied.length || r.dropped || r.proposed) latest.current.onApplied(r);
+      })
+      .catch(() => {
+        const wait = CAPTURE_RETRY_MS[attempt];
+        if (wait === undefined) setFailed((m) => new Map(m).set(id, { runId, text }));
+        else
+          timers.current.set(
+            id,
+            setTimeout(() => send.current(runId, id, text, attempt + 1), wait),
+          );
+      });
+  });
+  useEffect(() => {
+    const t = timers.current;
+    return () => {
+      for (const h of t.values()) clearTimeout(h);
+      t.clear();
+    };
+  }, []);
   useEffect(() => {
     if (!run || run.status !== "live") return;
     for (const t of timeline) {
       if (t.kind !== "assistant" || seen.current.has(t.id)) continue;
       seen.current.add(t.id);
       if (!t.text.includes("```jarvis-capture")) continue;
-      void api
-        .patch<PatchResult>(`/api/workflows/runs/${encodeURIComponent(run.id)}`, { by: "agent", text: t.text, messageId: t.id })
-        .then((r) => {
-          qc.setQueryData(key(sessionId), r.run);
-          if (r.applied.length || r.dropped || r.proposed) onApplied(r);
-        })
-        .catch(() => {
-          const n = (tries.current.get(t.id) ?? 0) + 1;
-          tries.current.set(t.id, n);
-          if (n < 3) seen.current.delete(t.id);
-        });
+      send.current(run.id, t.id, t.text, 0);
     }
-  }, [run, timeline, qc, sessionId, onApplied]);
+  }, [run, timeline]);
+  const retry = () => {
+    const pending = [...failed];
+    setFailed(new Map());
+    for (const [id, f] of pending) send.current(f.runId, id, f.text, 0);
+  };
+  return { unsaved: run?.status === "live" ? failed.size : 0, retry };
 }
 
 function firstField(of: unknown) {
@@ -111,11 +149,14 @@ export function RunPanel({
   run,
   target,
   onTarget,
+  capture,
 }: {
   sessionId: string;
   run: RunPanelView;
   target: string | null;
   onTarget: (f: string | null) => void;
+  /** Agent-capture state from useAgentCapture: unsaved turns get a visible Retry (#162). */
+  capture?: AgentCaptureState;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -188,6 +229,16 @@ export function RunPanel({
           <span className="text-xs text-muted">Ended</span>
         )}
       </div>
+      {capture?.unsaved ? (
+        <p className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-warn" role="status" data-testid="workflow-capture-unsaved">
+          <span className="min-w-0">
+            {capture.unsaved === 1 ? "Notes from 1 reply weren’t saved." : `Notes from ${capture.unsaved} replies weren’t saved.`}
+          </span>
+          <Button size="sm" variant="ghost" type="button" onClick={capture.retry}>
+            Retry
+          </Button>
+        </p>
+      ) : null}
       {/* strip: counts + last 2 entries (shown while the keyboard is open on phones) */}
       <p className="wf-run-strip truncate text-xs text-muted" data-dynamic>
         {sections.map((s) => `${s.title} ${count(s.bind)}`).join(" · ")}

@@ -180,6 +180,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   // "Ask" opened this conversation before its first message was sent: show it now, stream when the run starts.
   const firstRun = useRef<string | null>(null);
+  const retryContext = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (firstRun.current === sessionId) return;
     firstRun.current = sessionId;
@@ -198,6 +199,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       (err) => {
         setPendingInput(undefined);
         void kvSet(`draft:${sessionId}`, first.input);
+        // #44: the retry keeps the context the global composer attached (e.g. the area).
+        retryContext.current = first.context;
         setRestore({ text: first.input, key: first.key, at: Date.now() });
         toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
       },
@@ -220,7 +223,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     },
     [toast, announce],
   );
-  useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
+  const capture = useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
 
   const send = async (input: string, key: string) => {
     let text = input;
@@ -242,6 +245,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         .map((c) => `- ${c.label} [${c.ref}]`)
         .join("\n"),
       wfRun?.status === "live" ? (wfRun.context ?? "") : "",
+      retryContext.current ?? "",
     ]
       .filter(Boolean)
       .join("\n\n")
@@ -261,6 +265,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         ...model,
       });
       await kvDel(`pending:${sessionId}`);
+      retryContext.current = undefined;
       setContext([]);
       if (attachments.drafts.length) {
         attachments.clear();
@@ -651,7 +656,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
               {wfRun && !sideRun ? (
                 <div className="wf-run-dock">
-                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} />
+                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} capture={capture} />
                 </div>
               ) : null}
 
@@ -736,6 +741,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 onClose={() => setDialog(null)}
                 sessionId={sessionId}
                 areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
+                repo={areaCtx?.settings?.defaultRepo ?? null}
                 selected={context}
                 onToggle={(chip) => setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))}
               />
@@ -756,7 +762,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 className="wf-run-side sticky top-0 h-dvh w-[360px] shrink-0 overflow-y-auto border-l border-line px-3 py-3"
                 data-testid="workflow-run-side"
               >
-                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} />
+                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} capture={capture} />
               </aside>
             ) : null}
             <aside
