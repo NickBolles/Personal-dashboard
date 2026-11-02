@@ -391,6 +391,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
             {fmtMinutes(b.minutes)}
             {applied ? " · ✓ moved" : staged ? " · staged" : proposed && due ? ` · due ${fmtDay(due)}` : ""}
             {calStaged ? " · +calendar" : calApplied ? " · ✓ calendar" : ""}
+            {s.errors.get(b.ref) || s.errors.get(`cal:${b.ref}`) ? " · failed" : ""}
           </span>
         </span>
         {items.length ? <OverflowMenu label={`Plan options for ${name}`} items={items} /> : null}
@@ -426,6 +427,22 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
           </Button>
         ) : null}
       </header>
+      {(() => {
+        // #30: per-block failures (date change or calendar write, incl. "check your calendar before retrying")
+        const failed = p.blocks.flatMap((b) => {
+          const who = hyd(s.refs[b.ref], ["todo", "item"])?.title ?? "A block";
+          return [s.errors.get(b.ref), s.errors.get(`cal:${b.ref}`)].filter((m): m is string => !!m).map((m) => ({ key: `${b.ref}:${m}`, who, m }));
+        });
+        return failed.length ? (
+          <ul role="alert" className="space-y-0.5 border-b border-line px-3 py-1.5 text-xs text-danger" data-testid="week-plan-errors">
+            {failed.map((f) => (
+              <li key={f.key} className="min-w-0 break-words">
+                <span className="font-medium">{f.who}:</span> {f.m}
+              </li>
+            ))}
+          </ul>
+        ) : null;
+      })()}
       <div
         role="meter"
         aria-label="Planned hours this week"

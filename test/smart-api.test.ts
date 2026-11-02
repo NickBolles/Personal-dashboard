@@ -208,6 +208,25 @@ describe("smart UI API", () => {
     expect(todosAdapter.act).not.toHaveBeenCalled();
   });
 
+  it("a date applied earlier can be applied again after a later move superseded it (#29)", async () => {
+    const { todosAdapter } = await import("@/integrations/todos/adapter");
+    vi.mocked(todosAdapter.act!).mockResolvedValue({ ok: true, message: "ok" });
+    const { surfaceId } = await setup();
+    const thu = { kind: "todo.snooze", ref: "todo:gt-1", date: "2026-10-29" };
+    const fri = { kind: "todo.snooze", ref: "todo:gt-1", date: "2026-10-30" };
+    const go = async (intent: object, key: string) =>
+      (await (await call(applyRoute.POST, { body: { surfaceId, intents: [intent], idempotencyKey: key } })).json()).results[0];
+    await go(thu, "supersede-1");
+    await go(fri, "supersede-2");
+    vi.mocked(todosAdapter.act!).mockClear();
+    const back = await go(thu, "supersede-3");
+    expect(back).toMatchObject({ ok: true });
+    expect(back.message).not.toBe("Already applied");
+    expect(todosAdapter.act).toHaveBeenCalledTimes(1);
+    // the same date again right away is still a no-op
+    expect(await go(thu, "supersede-4")).toMatchObject({ ok: true, message: "Already applied" });
+  });
+
   it("a conversation shared with someone renders read-only for them: no surface, no writes", async () => {
     const { item } = await setup();
     const { getDb, schema } = await import("@/server/db");

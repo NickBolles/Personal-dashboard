@@ -144,6 +144,12 @@ export function undoIntent(user: CurrentUser, body: { surfaceId: string; intentH
   return withSurfaceLock(body.surfaceId, () => undoLocked(user, body, correlationId));
 }
 
+/** What a write changes: same kind on the same ref (a todo's date, a block's calendar event). */
+function intentTarget(i: unknown): string {
+  const o = (i ?? {}) as { kind?: string; ref?: string };
+  return `${o.kind ?? ""}|${o.ref ?? ""}`;
+}
+
 async function applyLocked(
   user: CurrentUser,
   body: { surfaceId: string; intents: unknown[]; idempotencyKey: string; external?: true },
@@ -165,7 +171,12 @@ async function applyLocked(
   const at = new Date().toISOString();
   let touchedTodos = false;
   for (const c of checked) {
-    const live = applied.find((e) => e.intentHash === c.hash && e.ok && !e.undone && !e.noop);
+    // "Already applied" only while that write is still the latest for its target: a later move of the
+    // same ref (Thu → Fri) supersedes it, so moving back to Thu is a new write (#29).
+    const at0 = applied.findLastIndex((e) => e.intentHash === c.hash && e.ok && !e.undone && !e.noop);
+    const live =
+      at0 >= 0 &&
+      !applied.slice(at0 + 1).some((e) => e.ok && !e.undone && !e.noop && e.intentHash !== c.hash && intentTarget(e.intent) === intentTarget(c.intent));
     if (live) {
       // Recorded (as a no-op) so a replay of this key returns the full response.
       applied.push({ intentHash: c.hash, intent: c.intent, ok: true, noop: true, message: "Already applied", at, key: body.idempotencyKey });
@@ -207,7 +218,7 @@ async function applyLocked(
 async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHash: string }, correlationId: string) {
   const row = ownedSurface(user.id, body.surfaceId);
   const applied = JSON.parse(row.appliedJson) as AppliedEntry[];
-  const entry = applied.find((e) => e.intentHash === body.intentHash && e.ok && !e.undone && !e.noop);
+  const entry = applied.findLast((e) => e.intentHash === body.intentHash && e.ok && !e.undone && !e.noop);
   if (!entry) throw new HttpError(404, "not_found", "Nothing to undo");
   const u = entry.undo ?? { type: "none" };
   const intent = intentSchema.parse(entry.intent);
