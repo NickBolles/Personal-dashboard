@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ensureWorkflowActive, mock, openChatContext, setHa, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, setHa, startConversation } from "./helpers";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import {
@@ -775,5 +775,89 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(150);
     await expect(header).toHaveScreenshot(`inline-title-edit-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
     await page.keyboard.press("Escape");
+  });
+}
+
+/** Activity timeline (/areas/activity): stub the feed and every list the shell loads. */
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: activity timeline (${scheme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const at = (dayOffset: number, hourUtc: number) =>
+      new Date(Date.parse(`${ymd}T${String(hourUtc).padStart(2, "0")}:00:00.000Z`) + dayOffset * 86_400_000).toISOString();
+    const obj = (id: string, title: string) => ({ id, title });
+    const items = [
+      {
+        id: "a1",
+        at: at(0, 16),
+        type: "edit",
+        actor: { kind: "you", name: "You" },
+        verb: "edited summary",
+        object: obj("wk_v5", "V5 evaluator contract"),
+        detail: null,
+        undoOpId: "op1",
+      },
+      {
+        id: "a2",
+        at: at(0, 15),
+        type: "chat",
+        actor: { kind: "agent", name: "Hermes" },
+        verb: "replied in",
+        object: obj("wk_c1", "Gutter quotes"),
+        detail: null,
+        undoOpId: null,
+      },
+      {
+        id: "a3",
+        at: at(0, 14),
+        type: "status",
+        actor: { kind: "you", name: "You" },
+        verb: "moved to In review",
+        object: obj("wk_v5", "V5 evaluator contract"),
+        detail: "In progress → In review",
+        undoOpId: null,
+      },
+      {
+        id: "a4",
+        at: at(-1, 20),
+        type: "github",
+        actor: { kind: "github", name: "GitHub" },
+        verb: "PR merged on",
+        object: obj("wk_ce", "Criteria evaluator"),
+        detail: "#412",
+        undoOpId: null,
+      },
+      {
+        id: "a5",
+        at: at(-1, 18),
+        type: "capture",
+        actor: { kind: "you", name: "You" },
+        verb: "filed a capture into",
+        object: obj("wk_home", "Home"),
+        detail: "Replace furnace filter",
+        undoOpId: null,
+      },
+      {
+        id: "a6",
+        at: at(-3, 17),
+        type: "created",
+        actor: { kind: "you", name: "You" },
+        verb: "created",
+        object: obj("wk_ce", "Criteria evaluator"),
+        detail: null,
+        undoOpId: null,
+      },
+    ];
+    await page.route(/\/api\/work\/activity(?:\?.*)?$/, (route) => route.fulfill({ json: { items, nextCursor: "c1", latestAt: items[0].at } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.goto("/areas/activity");
+    await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
+    await expect(page.getByText("Replace furnace filter")).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.waitForTimeout(500);
+    await expectNoHorizontalOverflow(page);
+    await expect(page).toHaveScreenshot(`activity-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
   });
 }

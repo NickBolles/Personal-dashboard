@@ -20,6 +20,7 @@ import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { ActivityFeed } from "@/components/work/ActivityFeed";
 import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -187,7 +188,7 @@ export function WorkView({
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="wk-hub-top min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
-        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+        <header className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
           <h1 className="wk-hub-title text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
           {/* Desktop: the sidebar owns the tree, so bulk select is a page mode (multi-select list in the page body). */}
           <Button
@@ -1051,7 +1052,7 @@ function ItemDetail({
             {item.archived ? <Badge>Archived</Badge> : null}
             {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
             {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : ""}`}>
+            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : "flex-wrap"}`}>
               {container ? <ViewSwitch id={item.id} /> : null}
               {container && canChat ? (
                 <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
@@ -1439,6 +1440,9 @@ function ViewSwitch({ id }: { id: string }) {
       </Link>
       <Link href={`/areas/map${q}`} className="wk-view">
         Map
+      </Link>
+      <Link href={`/areas/activity${q}`} className="wk-view">
+        Activity
       </Link>
     </nav>
   );
@@ -2799,23 +2803,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
       </Card>
       <Card>
         <h3 className="mb-2 font-semibold">Activity</h3>
-        <ol className="space-y-2 text-sm">
-          {d.events.map((e) => (
-            <li key={e.id} className="flex flex-wrap gap-x-2">
-              <time dateTime={e.at} className="text-muted">
-                {new Date(e.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-              </time>
-              <span className="break-words">
-                {e.kind === "status" && e.toStatus
-                  ? `${e.fromStatus ? STATUS_LABELS[e.fromStatus as WorkStatus] : "—"} → ${STATUS_LABELS[e.toStatus as WorkStatus]}${e.reason ? `: ${e.reason}` : ""}`
-                  : e.kind === "created"
-                    ? `Created${e.reason ? `: ${e.reason}` : ""}`
-                    : (e.reason ?? e.kind)}
-              </span>
-              {e.source === "github" ? <Badge>GitHub</Badge> : null}
-            </li>
-          ))}
-        </ol>
+        <ActivityFeed scope={{ item: item.id, descendants: isContainer(item) && item.kind !== "conversation" }} onSelect={onSelect} compact />
       </Card>
     </>
   );

@@ -57,6 +57,7 @@ export const MODULES: ModuleDef[] = [
       { href: "/areas/timeline", label: "Timeline" },
       { href: "/areas/dashboard", label: "Dashboard" },
       { href: "/areas/map", label: "Map" },
+      { href: "/areas/activity", label: "Activity" },
     ],
     capabilities: [
       {
