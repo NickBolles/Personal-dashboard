@@ -180,9 +180,8 @@ function Panel({ theme }: { theme: "dark" | "light" }) {
       </AgentCard>
       {/* CH-R1 live work summary (shimmer before it auto-collapses), shot by visual.spec (#65) */}
       <div data-testid={`kit-work-live-${theme}`}>
-        <WorkSummary id={`kit-live-${theme}`} live defaultOpen steps={[{ tool: "web_search", done: true }, { tool: "terminal" }]}>
-          <div className="chat-tool">Searched the web · 2s</div>
-          <div className="chat-tool">Running a command…</div>
+        <WorkSummary id={`kit-live-${theme}`} live steps={[{ tool: "web_search", done: true }, { tool: "terminal" }]}>
+          {null}
         </WorkSummary>
       </div>
     </section>
