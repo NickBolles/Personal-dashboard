@@ -1686,6 +1686,107 @@ button:active > .dock-orb {
     background: inherit;
     animation: k-ping 2.4s var(--ease) infinite;
   }
+  /* Chip controls (ChipSelect / ChipInput / ChipButton): the inline-edit pill.
+     Phone keeps a 44px hit area; tablet 36; desktop pointer 26 (dense). */
+  .k-pick {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: var(--s2);
+    color: var(--t1);
+    font: 500 12.5px/1.2 var(--sans);
+    vertical-align: middle;
+    transition: background-color var(--d1, 0.12s) var(--ease, ease);
+  }
+  .k-pick:hover {
+    background: var(--s3);
+  }
+  .k-pick:focus-within,
+  .k-pick:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: 1px;
+  }
+  .k-pick-on,
+  .k-pick-on:hover {
+    background: var(--acs);
+    color: var(--ac);
+  }
+  .k-pick-off {
+    opacity: 0.55;
+  }
+  .k-pick-sel {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 0;
+    max-width: 100%;
+    min-height: inherit;
+    padding: 0 24px 0 10px;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+  }
+  .k-pick-sel:disabled {
+    cursor: not-allowed;
+  }
+  .k-pick-sel option,
+  .k-pick-sel optgroup {
+    background: var(--s1);
+    color: var(--t1);
+  }
+  .k-pick-caret {
+    position: absolute;
+    right: 9px;
+    pointer-events: none;
+    opacity: 0.65;
+  }
+  .k-pick-input {
+    width: 6.5rem;
+    padding: 0 10px;
+    border: 1px dashed var(--bd2);
+    background: transparent;
+    outline: none;
+  }
+  .k-pick-input::placeholder {
+    color: var(--t3, var(--t2));
+  }
+  .k-pick-input:focus {
+    border-style: solid;
+    border-color: var(--ac);
+    background: var(--s1);
+    outline: none;
+  }
+  .k-pick-btn {
+    justify-content: center;
+    gap: 4px;
+    padding: 0 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .k-pick-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  @media (min-width: 640px) {
+    .k-pick {
+      min-height: 36px;
+    }
+  }
+  @media (min-width: 1024px) and (pointer: fine) {
+    .k-pick {
+      min-height: 26px;
+    }
+  }
   .k-chip {
     display: inline-flex;
     align-items: center;

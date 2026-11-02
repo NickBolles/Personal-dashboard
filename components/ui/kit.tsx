@@ -18,6 +18,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   type Ref,
+  type SelectHTMLAttributes,
 } from "react";
 
 export function cx(...c: (string | false | null | undefined)[]) {
@@ -202,6 +203,36 @@ function Caret() {
       <path d="M3 4.5 6 7.5 9 4.5" />
     </svg>
   );
+}
+
+// --- Compact chip controls (inline-edit pattern): filters, pickers, settings rows ---
+
+/**
+ * Native `<select>` styled as an inline-edit chip (pill, token surface, small caret).
+ * Keeps the native picker (a11y, phone wheels, `selectOption` in e2e) with no browser
+ * chrome. `active` tints it when a non-default value is chosen (filters).
+ */
+export function ChipSelect({ active, className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { active?: boolean }) {
+  return (
+    <span className={cx("k-pick", active && "k-pick-on", rest.disabled && "k-pick-off", className)}>
+      <select {...rest} className="k-pick-sel">
+        {children}
+      </select>
+      <svg className="k-pick-caret" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden>
+        <path d="M3 4.5 6 7.5 9 4.5" />
+      </svg>
+    </span>
+  );
+}
+
+/** Text field styled as a dashed "+ add" chip (tag entry). */
+export function ChipInput({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input {...rest} className={cx("k-pick k-pick-input", className)} />;
+}
+
+/** Small chip-shaped action (Clear, Rename …) — never the view's primary. */
+export function ChipButton({ className, active, ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+  return <button type="button" {...rest} className={cx("k-pick k-pick-btn", active && "k-pick-on", className)} />;
 }
 
 // --- Small status atoms ---

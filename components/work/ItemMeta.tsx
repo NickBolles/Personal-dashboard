@@ -3,16 +3,14 @@
 import { useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx, inputCls } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { ChipButton, ChipInput, ChipSelect } from "@/components/ui/kit";
 import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
 
 /**
  * Tags + assignee (#111): compact chips for rows and the inline editor for the
  * item header. Assigning to an agent is a label only; it never starts a run.
  */
-
-/** Meta controls sit in one wrapping row: drop the shared input's full width (phone height stays). */
-const metaCls = inputCls.replace(/\bblock w-full\b/, "inline-block w-auto");
 
 export type AssigneeOption = { ref: string; label: string; id: string };
 export type TagsResponse = { tags: WorkTag[]; assignees: { agents: AssigneeOption[]; people: (AssigneeOption & { name: string })[] } };
@@ -90,9 +88,10 @@ export function ItemMetaEditor({
       <label htmlFor="work-assignee" className="sr-only">
         Assignee
       </label>
-      <select
+      <ChipSelect
         id="work-assignee"
-        className={cx(metaCls, "jv-meta-select max-w-full")}
+        className="jv-meta-select"
+        active={!!assignee}
         value={assignee ?? ""}
         disabled={disabled}
         onChange={(e) => onSave({ assignee: e.target.value || null })}
@@ -117,13 +116,13 @@ export function ItemMetaEditor({
             ))}
           </optgroup>
         ) : null}
-      </select>
+      </ChipSelect>
       {tags.map((t) => (
         <TagChip key={t} name={t} color={colorOf(t, dir.data?.tags)} onRemove={disabled ? undefined : () => onSave({ tags: tags.filter((x) => x !== t) })} />
       ))}
-      <input
+      <ChipInput
         aria-label="Add tag"
-        className={cx(metaCls, "jv-meta-tag-input w-32 min-w-0")}
+        className="jv-meta-tag-input"
         placeholder="+ tag"
         value={draft}
         disabled={disabled}
@@ -186,9 +185,10 @@ export function ItemFilterBar({
       <label htmlFor={`${idPrefix}-tag`} className="sr-only">
         Filter by tag
       </label>
-      <select
+      <ChipSelect
         id={`${idPrefix}-tag`}
-        className={cx(metaCls, "jv-meta-select max-w-full")}
+        className="jv-meta-select"
+        active={!!value.tag}
         value={value.tag ?? ""}
         onChange={(e) => onChange({ ...value, tag: e.target.value || null })}
       >
@@ -198,13 +198,14 @@ export function ItemFilterBar({
             #{t}
           </option>
         ))}
-      </select>
+      </ChipSelect>
       <label htmlFor={`${idPrefix}-assignee`} className="sr-only">
         Filter by assignee
       </label>
-      <select
+      <ChipSelect
         id={`${idPrefix}-assignee`}
-        className={cx(metaCls, "jv-meta-select max-w-full")}
+        className="jv-meta-select"
+        active={!!value.assignee}
         value={value.assignee ?? ""}
         onChange={(e) => onChange({ ...value, assignee: e.target.value || null })}
       >
@@ -215,12 +216,8 @@ export function ItemFilterBar({
             {assigneeLabel(r, people)}
           </option>
         ))}
-      </select>
-      {value.tag || value.assignee ? (
-        <button type="button" className="tap text-[13px] text-accent underline" onClick={() => onChange(NO_FILTER)}>
-          Clear filter
-        </button>
-      ) : null}
+      </ChipSelect>
+      {value.tag || value.assignee ? <ChipButton onClick={() => onChange(NO_FILTER)}>Clear filter</ChipButton> : null}
     </div>
   );
 }

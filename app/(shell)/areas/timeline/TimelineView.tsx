@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Dialog, Empty, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
+import { ChipSelect } from "@/components/ui/kit";
 import { Gantt, TimelineTable, type Zoom } from "@/components/work/Gantt";
 import { WorkPageHeader, fmtDate, useWorkMutation } from "@/components/work/common";
 import type { TimelineResponse, TimelineRow } from "@/lib/work";
@@ -41,14 +42,14 @@ export function TimelineView({ initialRoot }: { initialRoot?: string }) {
               <label htmlFor="tl-root" className="sr-only">
                 Area or project
               </label>
-              <select id="tl-root" className={`${inputCls} min-w-44`} value={root} onChange={(e) => choose(e.target.value)}>
+              <ChipSelect id="tl-root" active={!!root} value={root} onChange={(e) => choose(e.target.value)}>
                 <option value="">All areas</option>
                 {q.data?.roots.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.title}
                   </option>
                 ))}
-              </select>
+              </ChipSelect>
             </div>
             <div role="group" aria-label="Zoom" className="flex gap-1">
               {(["week", "month"] as const).map((z) => (
