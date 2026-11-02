@@ -27,7 +27,8 @@ import {
   type LogEntry,
 } from "@/lib/workflows/runs";
 import { compileForm, compileRunPanel } from "@/lib/workflows/run-catalog";
-import { currentDefinition, getWorkflowBySlug } from "./store";
+import { currentDefinition, getWorkflowBySlug, refreshRoutingArea } from "./store";
+import { actionsExport } from "@/lib/workflows/outputs";
 
 const db = () => getDb();
 const TZ = () => process.env.TZ || "America/Chicago";
@@ -174,7 +175,9 @@ function activeBySlugOrId(userId: string, ref: { slug?: string; workflowId?: str
   if (row.status !== "active") throw new HttpError(409, "not_active", `${row.name} is a draft. Activate it in Workflows first.`);
   const def = currentDefinition(row.id, row.currentVersion);
   if (!def) throw new HttpError(409, "invalid_definition", "That workflow's definition is missing");
-  return { row, def };
+  // the area may have been created after import (#123)
+  const areaId = refreshRoutingArea(userId, row, def, { strict: false });
+  return { row: { ...row, areaId }, def };
 }
 
 /**
@@ -275,6 +278,8 @@ export function runView(row: RunRow, def: WorkflowDefinition) {
       mid: formFields(def, "mid"),
       end: formFields(def, "end"),
       reflectionPrompts: def.reflectionPrompts ?? "off",
+      // the list the action checklist promotes from (`outputs.exports[].from`, same as promotePlan; #146)
+      itemsFrom: actionsExport(def)?.from ?? null,
     },
     summary: row.summary ?? null,
     summaryState: row.summaryState as "none" | "proposed" | "accepted",

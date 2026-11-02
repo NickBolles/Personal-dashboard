@@ -23,7 +23,7 @@ export type RunOutputsView = RunPanelView & {
   summary?: string | null;
   summaryState?: "none" | "proposed" | "accepted";
   promoted?: Promoted[];
-  definition: RunPanelView["definition"] & { mid?: Field[]; end?: Field[]; reflectionPrompts?: string; name?: string };
+  definition: RunPanelView["definition"] & { mid?: Field[]; end?: Field[]; reflectionPrompts?: string; name?: string; itemsFrom?: string | null };
 };
 
 const runUrl = (id: string, rest = "") => `/api/workflows/runs/${encodeURIComponent(id)}${rest}`;
@@ -421,7 +421,12 @@ export function ExportBar({ run }: { run: RunOutputsView }) {
 
 /** Action checklist → "Create N items?" confirm sheet → existing work-item create (confirmed). */
 export function ActionChecklist({ sessionId, run }: { sessionId: string; run: RunOutputsView }) {
-  const rows = Array.isArray(run.capture.actions) ? (run.capture.actions as unknown[]) : [];
+  // the configured items export (`outputs.exports[].from`), same list the server's promotePlan reads (#146)
+  // older run views (no itemsFrom) fall back to the conventional `actions` list
+  const from = run.definition.itemsFrom === undefined ? (run.definition.capture.actions ? "actions" : null) : run.definition.itemsFrom;
+  const ex = from ? { from } : null;
+  const list = ex ? run.capture[ex.from] : undefined;
+  const rows = Array.isArray(list) ? (list as unknown[]) : [];
   const done = new Map((run.promoted ?? []).map((p) => [p.index, p]));
   const [picked, setPicked] = useState<number[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -437,7 +442,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
     enabled: confirming,
     select: (r) => r.items.filter((i) => i.kind === "area" && !i.archived),
   });
-  if (!run.definition.capture.actions || !rows.length) return null;
+  if (!ex || !rows.length) return null;
   const plan = picked
     .filter((i) => !done.has(i))
     .map((i) => ({ index: i, title: displayValue(rows[i]).trim().slice(0, 200) }))
