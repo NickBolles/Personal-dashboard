@@ -344,6 +344,21 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
+  await page.addStyleTag({ content: "html { font-size: 100% !important; }" });
+  // W4: Edit session (#132) and the end form, then the outputs (summary, actions, export).
+  await panel.getByTestId("workflow-edit-session").click();
+  await expect(page.getByRole("dialog", { name: "Edit session" })).toBeVisible();
+  await axe("edit session");
+  await page.getByRole("dialog", { name: "Edit session" }).getByRole("button", { name: "Cancel" }).click();
   await panel.getByRole("button", { name: "End session" }).click();
+  const endForm = page.getByRole("dialog", { name: "Before you go" });
+  await expect(endForm).toBeVisible();
+  await axe("end form");
+  await endForm.getByTestId("workflow-end-submit").click();
   await expect(panel).toContainText("Ended");
+  await expect(panel.getByTestId("workflow-outputs")).toBeVisible();
+  await axe("run outputs");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
 });

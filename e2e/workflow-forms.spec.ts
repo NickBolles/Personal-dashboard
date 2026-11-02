@@ -77,6 +77,8 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await expect(panel.getByTestId("workflow-outline")).toContainText("Fruit comes from staying connected");
 
   await panel.getByRole("button", { name: "End session" }).click();
+  // W4: the definition's end form shows first (optional fields), then the run ends.
+  await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
   await expect(panel).toContainText("Ended");
 });
 

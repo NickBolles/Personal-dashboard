@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Dialog, cx, inputCls, useToast } from "@/components/ui";
 import { displayValue } from "@/lib/workflows/runs";
@@ -309,20 +309,28 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
   const [confirming, setConfirming] = useState(false);
   const [due, setDue] = useState("");
   const [busy, setBusy] = useState(false);
+  const [parent, setParent] = useState<string>(run.areaId ?? "");
   const set = useSetRun(sessionId);
   const { toast } = useToast();
+  // Destination: the run's area by default; any area can be picked in the confirm sheet.
+  const areas = useQuery({
+    queryKey: ["work-items"],
+    queryFn: ({ signal }) => api.get<{ items: { id: string; title: string; kind: string; archived?: boolean }[] }>("/api/work/items", signal),
+    enabled: confirming,
+    select: (r) => r.items.filter((i) => i.kind === "area" && !i.archived),
+  });
   if (!run.definition.capture.actions || !rows.length) return null;
   const plan = picked
     .filter((i) => !done.has(i))
     .map((i) => ({ index: i, title: displayValue(rows[i]).trim().slice(0, 200) }))
     .filter((p) => p.title);
   const create = async () => {
-    if (!run.areaId) return;
+    if (!parent) return;
     setBusy(true);
     try {
       const r = await api.post<{ run: RunOutputsView; created: Promoted[] }>(runUrl(run.id, "/promote"), {
         indices: plan.map((p) => p.index),
-        parentId: run.areaId,
+        parentId: parent,
         due: due || null,
         titles: plan.map((p) => p.title),
       });
@@ -362,13 +370,9 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
           );
         })}
       </ul>
-      {run.areaId ? (
-        <Button size="sm" className="mt-2" disabled={!plan.length} onClick={() => setConfirming(true)} data-testid="workflow-actions-create">
-          {plan.length === 1 ? "Create 1 item" : `Create ${plan.length} items`}
-        </Button>
-      ) : (
-        <p className="mt-2 text-xs text-muted">File this chat in an area to turn actions into items.</p>
-      )}
+      <Button size="sm" className="mt-2" disabled={!plan.length} onClick={() => setConfirming(true)} data-testid="workflow-actions-create">
+        {plan.length === 1 ? "Create 1 item" : `Create ${plan.length} items`}
+      </Button>
       {confirming ? (
         <Dialog
           open
@@ -379,7 +383,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
               <Button type="button" variant="ghost" onClick={() => setConfirming(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" busy={busy} onClick={() => void create()} data-testid="workflow-actions-confirm">
+              <Button variant="primary" busy={busy} disabled={!parent} onClick={() => void create()} data-testid="workflow-actions-confirm">
                 Create
               </Button>
             </>
@@ -393,9 +397,18 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
                 </li>
               ))}
             </ul>
-            <p>
-              Destination: <strong>{run.areaTitle ?? "This area"}</strong>
-            </p>
+            <label className="block">
+              <span className="mb-1 block">Destination</span>
+              <select className={cx(inputCls, "w-full")} value={parent} onChange={(e) => setParent(e.target.value)} data-testid="workflow-actions-parent">
+                {!parent ? <option value="">Pick an area</option> : null}
+                {run.areaId && !(areas.data ?? []).some((a) => a.id === run.areaId) ? <option value={run.areaId}>{run.areaTitle ?? "This area"}</option> : null}
+                {(areas.data ?? []).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block">
               <span className="mb-1 block">Due (optional)</span>
               <input type="date" className={cx(inputCls, "w-full")} value={due} onChange={(e) => setDue(e.target.value)} />

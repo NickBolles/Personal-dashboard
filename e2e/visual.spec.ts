@@ -320,6 +320,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
     await hideOverlays.evaluate((el) => (el as Element).remove());
     await panel.getByRole("button", { name: "End session" }).click();
+    await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
     await expect(panel).toContainText("Ended");
   });
 }
