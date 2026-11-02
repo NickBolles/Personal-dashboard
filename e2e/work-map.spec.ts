@@ -58,6 +58,10 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
     .click();
   await expect(heronRow).toBeVisible();
   await expect(heronRow).toContainText("Next: Count the crates");
+  // Inline status edit from a row (one Saved · Undo bar).
+  await page.getByLabel(`Status of Heron ledger ${nonce}`).selectOption("in_progress");
+  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await expect(card).toContainText("1 In flight");
 
   // Search narrows (and opens the groups on the way).
   await page.getByLabel("Search the map").fill(`Osprey beacon ${nonce}`);
@@ -73,14 +77,10 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
 
   // Tag chip.
   await page.getByLabel("Filter by status").selectOption("");
-  await page.getByLabel("Filter by tag").selectOption("pelicanlight");
+  await page.locator("#map-tag").selectOption("pelicanlight");
   await expect(page.getByTestId("map-row")).toHaveCount(1);
   await expect(page.getByTestId("map-row")).toContainText(`Osprey beacon ${nonce}`);
-  await page.getByLabel("Filter by tag").selectOption("");
-
-  // Inline status edit from a row.
-  await page.getByLabel(`Status of Heron ledger ${nonce}`).selectOption("in_progress");
-  await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await page.locator("#map-tag").selectOption("");
 
   // Clean up the open decision so Today/other specs don't see it.
   const clear = await page.request.patch(`/api/work/items/${ids.gannet}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });
