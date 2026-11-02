@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, inputCls } from "@/components/ui";
-import { assigneeLabel, defaultTagColor, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
+import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
 
 /**
  * Tags + assignee (#111): compact chips for rows and the inline editor for the
@@ -136,6 +136,81 @@ export function ItemMetaEditor({
             <option key={t.name} value={t.name} />
           ))}
       </datalist>
+    </div>
+  );
+}
+
+export type ItemFilter = { tag: string | null; assignee: string | null };
+export const NO_FILTER: ItemFilter = { tag: null, assignee: null };
+
+/** Applies a tag/assignee filter to any list of rows carrying tags/assignee. */
+export function filterItems<T extends { tags?: string[]; assignee?: string | null }>(rows: T[], f: ItemFilter): T[] {
+  if (!f.tag && !f.assignee) return rows;
+  return rows.filter((r) => matchesItemFilter({ tags: r.tags ?? [], assignee: r.assignee ?? null }, f));
+}
+
+/**
+ * Tag / assignee filter for lists (Today, Areas lists, Inbox filed, Activity).
+ * Renders nothing until some row has a tag or an assignee, so untagged
+ * workspaces look exactly as before.
+ */
+export function ItemFilterBar({
+  rows,
+  value,
+  onChange,
+  idPrefix,
+}: {
+  rows: { tags?: string[]; assignee?: string | null }[];
+  value: ItemFilter;
+  onChange: (f: ItemFilter) => void;
+  idPrefix: string;
+}) {
+  const used = rows.some((r) => r.tags?.length || r.assignee);
+  const dir = useTagDirectory(used);
+  if (!used && !value.tag && !value.assignee) return null;
+  const tags = [...new Set(rows.flatMap((r) => r.tags ?? []))].sort();
+  const refs = [...new Set(rows.map((r) => r.assignee).filter((a): a is string => !!a))];
+  const people = dir.data?.assignees.people ?? [];
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag or assignee" data-testid={`${idPrefix}-filter`}>
+      <label htmlFor={`${idPrefix}-tag`} className="sr-only">
+        Filter by tag
+      </label>
+      <select
+        id={`${idPrefix}-tag`}
+        className={cx(inputCls, "jv-meta-select w-auto max-w-full")}
+        value={value.tag ?? ""}
+        onChange={(e) => onChange({ ...value, tag: e.target.value || null })}
+      >
+        <option value="">All tags</option>
+        {tags.map((t) => (
+          <option key={t} value={t}>
+            #{t}
+          </option>
+        ))}
+      </select>
+      <label htmlFor={`${idPrefix}-assignee`} className="sr-only">
+        Filter by assignee
+      </label>
+      <select
+        id={`${idPrefix}-assignee`}
+        className={cx(inputCls, "jv-meta-select w-auto max-w-full")}
+        value={value.assignee ?? ""}
+        onChange={(e) => onChange({ ...value, assignee: e.target.value || null })}
+      >
+        <option value="">Anyone</option>
+        <option value="none">Unassigned</option>
+        {refs.map((r) => (
+          <option key={r} value={r}>
+            {assigneeLabel(r, people)}
+          </option>
+        ))}
+      </select>
+      {value.tag || value.assignee ? (
+        <button type="button" className="tap text-[13px] text-accent underline" onClick={() => onChange(NO_FILTER)}>
+          Clear filter
+        </button>
+      ) : null}
     </div>
   );
 }
