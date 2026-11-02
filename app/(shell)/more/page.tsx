@@ -10,9 +10,10 @@ export default async function MorePage() {
   const user = await requirePage();
   const caps = [...user.capabilities];
   const dests = DESTINATIONS.filter((d) => allowed(d, caps));
-  // Inbox has no bottom-bar slot on phones (orb "Go to" petal + here); it needs the Areas destination.
-  const inbox = dests.some((d) => d.key === "areas") ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon }] : [];
-  const items = [...dests.flatMap((d) => (d.key === "areas" ? [d, ...inbox] : [d])), { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
+  // Inbox has no bottom-bar slot on phones (orb "Go to" petal + here). Areas lives in PRIMARY, not
+  // DESTINATIONS, so gate on the capability itself (#95).
+  const inbox = caps.includes("work.use") ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon }] : [];
+  const items = [...inbox, ...dests, { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
   return (
     <Page width="medium">
       <PageHeader title="More" subtitle="Every space you can open." />

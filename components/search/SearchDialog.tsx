@@ -7,7 +7,7 @@ import { api } from "@/lib/client/api";
 import type { SearchResponse, SearchResult } from "@/lib/search";
 import { moduleFor } from "@/lib/modules";
 import { cx, Spinner, useToast } from "@/components/ui";
-import { SearchIcon } from "@/components/icons";
+import { BoltIcon, ChevronIcon, SearchIcon } from "@/components/icons";
 import { matchCommands, NEW_CHAT_EVENT, useCommands, type Command } from "@/components/navigation/commands";
 import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
@@ -659,8 +659,8 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
           </button>
         </div>
         {confirm ? (
-          <div className="flex flex-col gap-3 p-4" data-testid="palette-confirm">
-            <p className="text-base font-medium">{confirm.text}</p>
+          <div className="flex min-w-0 flex-col gap-3 p-4" data-testid="palette-confirm">
+            <p className="text-base font-medium break-words">{confirm.text}</p>
             <div className="flex flex-wrap gap-2">
               <button
                 ref={confirmBtn}
@@ -674,7 +674,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     requestAnimationFrame(() => input.current?.focus());
                   }
                 }}
-                className="tap min-h-11 rounded-[8px] bg-accent px-4 font-medium text-white sm:min-h-10"
+                className="tap min-h-11 rounded-[9px] bg-acb px-4 font-medium text-white sm:min-h-9 dense:min-h-[30px] dense:px-3 dense:text-[0.875rem]"
               >
                 {busy ? "Working…" : "Confirm"}
               </button>
@@ -684,7 +684,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                   setConfirm(null);
                   requestAnimationFrame(() => input.current?.focus());
                 }}
-                className="tap min-h-11 rounded-[8px] px-4 hover:bg-surface-2 sm:min-h-10"
+                className="tap min-h-11 rounded-[9px] px-4 hover:bg-surface-2 sm:min-h-9 dense:min-h-[30px] dense:px-3 dense:text-[0.875rem]"
               >
                 Cancel
               </button>
@@ -785,8 +785,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     </>
                   ) : (
                     <>
-                      <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono text-xs text-accent">
-                        {row.kind === "action" || row.kind === "sugg" ? "⌁" : row.kind === "node" || row.kind === "browse" ? "▸" : "·"}
+                      <span aria-hidden="true" className="inline-flex w-4 shrink-0 items-center justify-center text-xs text-accent">
+                        {row.kind === "action" || row.kind === "sugg" ? (
+                          <BoltIcon className="h-4 w-4" />
+                        ) : row.kind === "node" || row.kind === "browse" ? (
+                          <ChevronIcon className="h-3.5 w-3.5" />
+                        ) : (
+                          "·"
+                        )}
                       </span>
                       <span className="min-w-0 flex-1 truncate font-medium">
                         {row.kind === "action"

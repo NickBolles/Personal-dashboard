@@ -933,6 +933,12 @@ button.wk-kpi:hover {
 .wk-suggest:disabled {
   opacity: 0.6;
 }
+@media (max-width: 359px) {
+  /* 320: the chip sits on its own line under the title (#94), so it can show the whole area name */
+  .wk-suggest {
+    max-width: calc(100vw - 112px);
+  }
+}
 @media (min-width: 640px) {
   .wk-suggest {
     min-height: 36px;

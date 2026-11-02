@@ -259,3 +259,12 @@ export const InboxIcon = ({ className }: P) =>
     </>,
     className,
   );
+
+/** Command / action (palette rows). */
+export const BoltIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M13 3 5 13.5h6L10 21l8-10.5h-6z" />
+    </>,
+    className,
+  );

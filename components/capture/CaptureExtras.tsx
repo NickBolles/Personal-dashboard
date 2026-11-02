@@ -98,7 +98,9 @@ export function CaptureExtras({ entry, onAccepted, onChoose }: { entry: InboxEnt
           >
             <span aria-hidden="true">→</span>
             <span className="min-w-0 truncate">{c.suggestion.title}</span>
-            {c.suggestion.confidence != null ? <span className="tabular-nums opacity-70">{Math.round(c.suggestion.confidence * 100)}%</span> : null}
+            {c.suggestion.confidence != null ? (
+              <span className="tabular-nums opacity-70 max-[359px]:hidden">{Math.round(c.suggestion.confidence * 100)}%</span>
+            ) : null}
           </button>
         ) : null}
         {c.report ? (
