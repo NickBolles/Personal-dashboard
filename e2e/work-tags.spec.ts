@@ -36,24 +36,55 @@ test("item detail: assign and tag inline, Undo restores", async ({ page }) => {
   await page.goto(`/areas?item=${one}`);
   await expect(page.locator("#work-item-title")).toHaveText(`Tinsmith gate ${nonce}`);
 
-  const assignee = page.getByLabel("Assignee");
-  await expect(assignee.locator("option", { hasText: "@devchief" })).toBeAttached();
-  await assignee.selectOption("agent:devchief");
-  await expect(assignee).toHaveValue("agent:devchief");
+  // Assignee: compact button → popover/sheet with search, Agents/People sections and Unassigned
+  const assignee = page.getByTestId("assignee-picker").getByRole("button");
+  await expect(assignee).toHaveAttribute("data-value", "");
+  await assignee.click();
+  const who = page.getByRole("dialog", { name: "Assignee" });
+  await expect(who.getByRole("option", { name: "Unassigned" })).toHaveAttribute("aria-selected", "true");
+  await who.getByRole("combobox").fill("devchief");
+  await who.getByRole("option", { name: "@devchief", exact: true }).click();
+  await expect(who).toBeHidden();
+  await expect(assignee).toHaveAttribute("data-value", "agent:devchief");
   await expect(undoBar(page)).toHaveCount(1);
 
-  const add = page.getByRole("textbox", { name: "Add tag" }).or(page.getByRole("combobox", { name: "Add tag" }));
-  await add.fill(`Bramble Patch ${nonce}`);
-  await add.press("Enter");
+  // Tags: icon button → filter box; Enter on "Create …" adds a new tag at once, Esc closes
+  const tagsBtn = page.getByRole("button", { name: "Edit tags" });
+  await tagsBtn.click();
+  const tagsBox = page.getByRole("dialog", { name: "Tags" });
+  const search = tagsBox.getByRole("combobox", { name: "Search tags" });
+  await expect(search).toBeFocused();
+  await search.fill(`Bramble Patch ${nonce}`);
   const tag = `bramble-patch-${nonce}`;
+  await expect(tagsBox.getByRole("option", { name: `Create “${tag}”` })).toBeVisible();
+  await search.press("Enter");
   await expect(page.locator(`.jv-meta [data-tag="${tag}"]`)).toBeVisible();
+  // the new tag is listed and checked; Enter on it again toggles it off and back on
+  await search.fill(tag);
+  await expect(tagsBox.getByRole("option", { name: tag, exact: true })).toHaveAttribute("aria-selected", "true");
+  await search.press("Escape");
+  await expect(tagsBox).toBeHidden();
+  await expect(tagsBtn).toBeFocused();
 
   // Undo the tag; the assignee stays
   await undoBar(page).getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(`.jv-meta [data-tag="${tag}"]`)).toHaveCount(0);
-  await expect(assignee).toHaveValue("agent:devchief");
+  await expect(assignee).toHaveAttribute("data-value", "agent:devchief");
   await page.reload();
-  await expect(page.getByLabel("Assignee")).toHaveValue("agent:devchief");
+  await expect(page.getByTestId("assignee-picker").getByRole("button")).toHaveAttribute("data-value", "agent:devchief");
+
+  // keyboard: ↓/↑ move, Enter toggles an existing tag, outside click closes
+  await page.getByRole("button", { name: "Edit tags" }).click();
+  const box2 = page.getByRole("dialog", { name: "Tags" });
+  await box2.getByRole("combobox").fill(tag);
+  await expect(box2.getByRole("option", { name: tag, exact: true })).toHaveAttribute("aria-selected", "false");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(`.jv-meta [data-tag="${tag}"]`)).toBeVisible();
+  await expect(box2.getByRole("option", { name: tag, exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.mouse.click(4, 4);
+  await expect(box2).toBeHidden();
 
   // the change shows in the item's activity in plain words
   const r = await page.request.get(`/api/work/activity?item=${one}`);
@@ -90,7 +121,7 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await expect(confirm.getByRole("button", { name: "Confirm" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(box).toBeHidden();
-  await expect(page.getByLabel("Assignee")).toHaveValue("agent:momentumchief");
+  await expect(page.getByTestId("assignee-picker").getByRole("button")).toHaveAttribute("data-value", "agent:momentumchief");
 
   await open();
   await box.fill(`tag tinsnip-${nonce}`);

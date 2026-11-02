@@ -1323,15 +1323,275 @@ button.wk-kpi:hover {
     line-height: 1.125rem;
     color: var(--t2);
   }
-  .jv-meta-select,
-  .jv-meta-tag-input {
+  .jv-meta-select {
     height: 32px;
     min-height: 32px;
     padding-top: 0;
     padding-bottom: 0;
     font-size: 13px;
   }
-  .jv-meta-tag-input {
-    width: 7rem;
+  /* Item header pickers (tags, assignee): icon button → GitHub-label-style popover; bottom sheet on phones.
+     Hit area 44 phone / 36 tablet / 26 desktop pointer, like .k-pick. */
+  .jv-pick-wrap {
+    position: relative;
+    display: inline-flex;
+    min-width: 0;
+  }
+  .jv-pick-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--t2);
+    font: 500 12.5px/1.2 var(--sans);
+    cursor: pointer;
+    transition: background-color var(--d1, 0.12s) var(--ease, ease);
+  }
+  .jv-pick-btn:hover,
+  .jv-pick-btn[aria-expanded="true"] {
+    background: var(--s2);
+    color: var(--t1);
+  }
+  .jv-pick-btn:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: 1px;
+  }
+  .jv-pick-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .jv-pick-btn-text {
+    padding: 0 10px 0 4px;
+    background: var(--s2);
+    color: var(--t1);
+  }
+  .jv-pick-btn-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 10rem;
+  }
+  .jv-pick-av {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--acs);
+    color: var(--ac);
+    font: 600 11px/1 var(--sans);
+  }
+  .jv-pick-scrim {
+    display: none;
+  }
+  .jv-pick-pop {
+    position: fixed;
+    top: var(--pick-top, 64px);
+    left: var(--pick-left, 12px);
+    z-index: 61;
+    display: flex;
+    flex-direction: column;
+    width: 17rem;
+    max-width: calc(100vw - 24px);
+    max-height: min(60vh, 340px, calc(100dvh - var(--pick-top, 64px) - 12px));
+    border-radius: 12px;
+    border: 1px solid var(--bd2);
+    background: var(--s1);
+    color: var(--t1);
+    box-shadow: var(--sh2);
+    overflow: hidden;
+  }
+  .jv-pick-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px 4px 12px;
+  }
+  .jv-pick-title {
+    font: 600 12px/1.2 var(--sans);
+    color: var(--t2);
+  }
+  .jv-pick-done {
+    display: none;
+    min-height: 44px;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--ac);
+    font: 600 14px/1 var(--sans);
+    cursor: pointer;
+  }
+  .jv-pick-search {
+    margin: 2px 8px 6px;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--bd2);
+    background: var(--s2);
+    color: var(--t1);
+    font: 400 13.5px/1.2 var(--sans);
+    outline: none;
+    appearance: none;
+  }
+  .jv-pick-search::placeholder {
+    color: var(--t3, var(--t2));
+  }
+  .jv-pick-search:focus {
+    border-color: var(--ac);
+    background: var(--s1);
+  }
+  .jv-pick-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0 4px 4px;
+    list-style: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .jv-pick-sec {
+    padding: 6px 8px 2px;
+    font: 600 11px/1.2 var(--sans);
+    color: var(--t2);
+  }
+  .jv-pick-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 8px;
+    border-radius: 8px;
+    font: 400 13.5px/1.25 var(--sans);
+    cursor: pointer;
+  }
+  .jv-pick-opt[data-active] {
+    background: var(--s2);
+  }
+  .jv-pick-opt[aria-selected="true"] {
+    font-weight: 500;
+  }
+  .jv-pick-create {
+    color: var(--ac);
+  }
+  .jv-pick-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    color: var(--ac);
+    font-weight: 600;
+  }
+  .jv-pick-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border-radius: 999px;
+    background: var(--t3, var(--t2));
+  }
+  .jv-pick-dot.jv-tag-ac,
+  .jv-pick-dot.jv-tag-ai,
+  .jv-pick-dot.jv-tag-ok,
+  .jv-pick-dot.jv-tag-wn,
+  .jv-pick-dot.jv-tag-bad,
+  .jv-pick-dot.jv-tag-inf {
+    background: currentColor;
+  }
+  .jv-pick-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .jv-pick-empty {
+    padding: 6px 12px 10px;
+    font-size: 13px;
+    color: var(--t2);
+  }
+  @media (min-width: 640px) {
+    .jv-pick-btn {
+      min-width: 36px;
+      min-height: 36px;
+    }
+    .jv-pick-opt {
+      min-height: 36px;
+    }
+  }
+  @media (min-width: 1024px) and (pointer: fine) {
+    .jv-pick-btn {
+      min-width: 26px;
+      min-height: 26px;
+    }
+    .jv-pick-btn-text {
+      padding: 0 8px 0 3px;
+    }
+    .jv-pick-av {
+      width: 18px;
+      height: 18px;
+      font-size: 10px;
+    }
+    .jv-pick-opt {
+      min-height: 30px;
+      font-size: 13px;
+    }
+    .jv-pick-search {
+      min-height: 30px;
+      font-size: 13px;
+    }
+  }
+  /* Phones: bottom sheet over a scrim, lifted above the on-screen keyboard (--kb-inset, lib/client/keyboard.ts). */
+  @media (max-width: 639px) {
+    .jv-pick-scrim {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(0, 0, 0, 0.32);
+    }
+    .jv-pick-pop {
+      position: fixed;
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: var(--kb-inset, 0px);
+      z-index: 61;
+      width: auto;
+      max-width: none;
+      max-height: min(70dvh, calc(100dvh - var(--kb-inset, 0px) - 48px));
+      border-radius: 16px 16px 0 0;
+      border-width: 1px 0 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .jv-pick-head {
+      padding: 6px 8px 0 16px;
+    }
+    .jv-pick-title {
+      font-size: 14px;
+      color: var(--t1);
+    }
+    .jv-pick-done {
+      display: inline-flex;
+      align-items: center;
+    }
+    .jv-pick-search {
+      min-height: 44px;
+      margin: 2px 12px 8px;
+      font-size: 16px;
+    }
+    .jv-pick-list {
+      padding: 0 8px 8px;
+    }
   }
 }

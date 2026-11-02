@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx } from "@/components/ui";
-import { ChipButton, ChipInput, ChipSelect } from "@/components/ui/kit";
+import { ChipButton, ChipSelect } from "@/components/ui/kit";
+import { MetaPicker, PersonIcon, TagIcon, type PickerOption } from "@/components/work/MetaPicker";
 import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
 
 /**
@@ -55,7 +55,10 @@ export function ItemChips({ tags, assignee, max = 3, className }: { tags?: strin
   );
 }
 
-/** Item header editor: assignee select + tag chips with an add field (Enter adds, creates on the fly). */
+/**
+ * Item header editor: assignee + tag pickers (compact buttons opening a
+ * GitHub-label-style popover / phone sheet) and the item's tag chips.
+ */
 export function ItemMetaEditor({
   tags,
   assignee,
@@ -68,76 +71,92 @@ export function ItemMetaEditor({
   disabled?: boolean;
 }) {
   const dir = useTagDirectory();
-  const [draft, setDraft] = useState("");
-  const add = () => {
-    const t = normaliseTag(draft);
-    setDraft("");
-    if (t && !tags.includes(t)) onSave({ tags: [...tags, t].sort() });
-  };
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      add();
-    } else if (e.key === "Escape") setDraft("");
-  };
   const agents = dir.data?.assignees.agents ?? [];
   const people = dir.data?.assignees.people ?? [];
   const known = [...agents, ...people].some((o) => o.ref === assignee);
+  const who = assigneeLabel(assignee, people);
+  const assigneeOptions: PickerOption[] = [
+    { value: "", label: "Unassigned", checked: !assignee },
+    ...(assignee && !known ? [{ value: assignee, label: who ?? assignee, checked: true }] : []),
+    ...agents.map((a) => ({
+      value: a.ref,
+      label: a.label,
+      section: "Agents",
+      checked: a.ref === assignee,
+      lead: (
+        <span className="jv-pick-av" aria-hidden="true">
+          @
+        </span>
+      ),
+    })),
+    ...people.map((p) => ({
+      value: p.ref,
+      label: p.label,
+      section: "People",
+      checked: p.ref === assignee,
+      lead: (
+        <span className="jv-pick-av" aria-hidden="true">
+          {(p.name || p.label).slice(0, 1).toUpperCase()}
+        </span>
+      ),
+    })),
+  ];
+  const all = dir.data?.tags ?? [];
+  const names = new Set([...all.map((t) => t.name), ...tags]);
+  const tagOptions: PickerOption[] = [...names]
+    .sort((a, b) => Number(tags.includes(b)) - Number(tags.includes(a)) || a.localeCompare(b))
+    .map((name) => ({
+      value: name,
+      label: name,
+      checked: tags.includes(name),
+      dot: <span className={cx("jv-pick-dot", `jv-tag-${colorOf(name, all)}`)} aria-hidden="true" />,
+    }));
+  const toggleTag = (name: string) => onSave({ tags: tags.includes(name) ? tags.filter((x) => x !== name) : [...tags, name].sort() });
   return (
     <div className="jv-meta flex min-w-0 flex-wrap items-center gap-1.5">
-      <label htmlFor="work-assignee" className="sr-only">
-        Assignee
-      </label>
-      <ChipSelect
-        id="work-assignee"
-        className="jv-meta-select"
-        active={!!assignee}
+      <MetaPicker
+        label="Assignee"
+        testId="assignee-picker"
+        buttonLabel={who ? `Assignee: ${who}` : "Assignee: unassigned"}
+        buttonClassName={cx(who && "jv-pick-btn-text")}
         value={assignee ?? ""}
+        button={
+          who ? (
+            <>
+              <span className="jv-pick-av" aria-hidden="true">
+                {who.startsWith("@") ? "@" : who.slice(0, 1).toUpperCase()}
+              </span>
+              <span className="jv-pick-btn-label">{who}</span>
+            </>
+          ) : (
+            <PersonIcon />
+          )
+        }
+        options={assigneeOptions}
+        onToggle={(v) => v !== (assignee ?? "") && onSave({ assignee: v || null })}
+        placeholder="Assign to…"
         disabled={disabled}
-        onChange={(e) => onSave({ assignee: e.target.value || null })}
-      >
-        <option value="">Unassigned</option>
-        {assignee && !known ? <option value={assignee}>{assigneeLabel(assignee, people)}</option> : null}
-        {agents.length ? (
-          <optgroup label="Agents">
-            {agents.map((a) => (
-              <option key={a.ref} value={a.ref}>
-                {a.label}
-              </option>
-            ))}
-          </optgroup>
-        ) : null}
-        {people.length ? (
-          <optgroup label="People">
-            {people.map((p) => (
-              <option key={p.ref} value={p.ref}>
-                {p.label}
-              </option>
-            ))}
-          </optgroup>
-        ) : null}
-      </ChipSelect>
-      {tags.map((t) => (
-        <TagChip key={t} name={t} color={colorOf(t, dir.data?.tags)} onRemove={disabled ? undefined : () => onSave({ tags: tags.filter((x) => x !== t) })} />
-      ))}
-      <ChipInput
-        aria-label="Add tag"
-        className="jv-meta-tag-input"
-        placeholder="+ tag"
-        value={draft}
-        disabled={disabled}
-        list="work-tag-options"
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={onKey}
-        onBlur={() => draft.trim() && add()}
       />
-      <datalist id="work-tag-options">
-        {(dir.data?.tags ?? [])
-          .filter((t) => !tags.includes(t.name))
-          .map((t) => (
-            <option key={t.name} value={t.name} />
-          ))}
-      </datalist>
+      {tags.map((t) => (
+        <TagChip key={t} name={t} color={colorOf(t, all)} onRemove={disabled ? undefined : () => onSave({ tags: tags.filter((x) => x !== t) })} />
+      ))}
+      <MetaPicker
+        label="Tags"
+        testId="tag-picker"
+        buttonLabel="Edit tags"
+        value={tags.join(",")}
+        button={<TagIcon />}
+        options={tagOptions}
+        multi
+        onToggle={toggleTag}
+        onCreate={(text) => {
+          const t = normaliseTag(text);
+          if (t && !tags.includes(t)) onSave({ tags: [...tags, t].sort() });
+        }}
+        createLabel={(text) => `Create “${normaliseTag(text) || text}”`}
+        placeholder="Filter or create tags"
+        disabled={disabled}
+      />
     </div>
   );
 }
