@@ -147,6 +147,19 @@ const toValidation = (r: typeof schema.workValidations.$inferSelect): WorkValida
   overdue: isValidationOverdue(r, today()),
 });
 
+/**
+ * #152: one timestamp per transaction, so a mutation's work_event and its work_op never straddle a
+ * millisecond (listActivity pairs them by closest time; a split stamp gave Undo to the wrong edit).
+ * Transactions are synchronous (better-sqlite3), so the tx object identifies one mutation.
+ */
+const txStamps = new WeakMap<object, string>();
+function stampOf(db: Db): string {
+  if (db === getDb()) return nowIso();
+  let at = txStamps.get(db);
+  if (!at) txStamps.set(db, (at = nowIso()));
+  return at;
+}
+
 function event(
   db: Db,
   itemId: string,
@@ -163,7 +176,7 @@ function event(
       toStatus: e.to ?? null,
       reason: e.reason ?? null,
       source: e.source ?? null,
-      at: nowIso(),
+      at: stampOf(db),
     })
     .run();
 }
@@ -180,7 +193,7 @@ export type OpOut = { op?: { id: string; kind: UndoKind; label: string } };
 function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
   const id = newId("op");
   db.insert(schema.workOps)
-    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: nowIso() })
+    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: stampOf(db) })
     .run();
   if (out) out.op = { id, kind, label: UNDO_LABELS[kind] };
   return id;

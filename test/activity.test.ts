@@ -1,7 +1,8 @@
 /** Activity timeline: normalisation, day grouping, cursor paging (lib/activity.ts) + server scoping/undo (server/work/activity.ts). */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
+import { eq } from "drizzle-orm";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
@@ -192,6 +193,49 @@ describe("listActivity (server)", () => {
     const after = store.getDetail(u.id, item.id).item;
     expect(after.title).toBe("Lathe chuck key");
     expect(after.summary ?? "").not.toBe("Find the spare key");
+  });
+
+  it("pairs each edit with its own op even when every timestamp read moves the clock (#152)", () => {
+    // Worst case for the old per-row stamps: each toISOString() is 1 ms later than the last.
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Bandsaw fence" }, cid);
+    const real = Date.prototype.toISOString;
+    let t = Date.now() + 1000;
+    const spy = vi.spyOn(Date.prototype, "toISOString").mockImplementation(function () {
+      return real.call(new Date(Date.UTC(1970, 0, 1, 0, 0, 0, t++)));
+    });
+    try {
+      store.updateItem(u, item.id, { title: "Bandsaw fence rail" }, cid);
+      store.updateItem(u, item.id, { summary: "Square it to the blade" }, cid);
+      spy.mockRestore();
+      // one stamp per mutation: every edit op shares its event's timestamp
+      const db = getDb();
+      const evAt = db
+        .select()
+        .from(schema.workEvents)
+        .where(eq(schema.workEvents.itemId, item.id))
+        .all()
+        .filter((e) => e.kind === "edit")
+        .map((e) => e.at);
+      const opAt = db
+        .select()
+        .from(schema.workOps)
+        .where(eq(schema.workOps.itemId, item.id))
+        .all()
+        .filter((o) => o.kind === "edit")
+        .map((o) => o.createdAt);
+      expect(opAt.sort()).toEqual(evAt.sort());
+      const edits = listActivity(u, { item: item.id }).items.filter((i) => i.type === "edit");
+      const withUndo = edits.filter((i) => i.undoOpId);
+      expect(withUndo).toHaveLength(1);
+      expect(withUndo[0].id).toBe(edits[0].id);
+      store.undoOp(u, withUndo[0].undoOpId!, cid);
+      const after = store.getDetail(u.id, item.id).item;
+      expect(after.title).toBe("Bandsaw fence rail");
+      expect(after.summary ?? "").not.toBe("Square it to the blade");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("orders same-millisecond edits by insertion, not by their random ids", () => {
