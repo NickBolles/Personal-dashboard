@@ -133,6 +133,30 @@ export function createHermes({ apiKey }) {
       const completedAt = state.compassDone.get(date) ?? null;
       return JSON.stringify({ date, completed: Boolean(completedAt), completedAt, summary: completedAt ? "Checked in" : "Not checked in yet" });
     }
+    if (source === "workflow_draft") {
+      // Save chat as workflow / Describe it: a proposal with one invalid-free set of parts.
+      return JSON.stringify({
+        basics: { name: "Lantern study notes", slug: "lantern", icon: "book-open", description: "Notes from the lantern study group", area: null },
+        instructions: "Keep each passage, the questions we asked, and my own takeaways separate. Use my words.",
+        capture: { session: { type: "object", fields: { leader: "text?", passage: "scripture_ref?" } }, takeaways: { type: "list", of: "text" } },
+        startForm: {
+          title: "Start lantern study",
+          fields: [
+            { id: "leader", bind: "session.leader", type: "person", label: "Leader" },
+            { id: "passage", bind: "session.passage", type: "scripture", label: "Passage" },
+          ],
+        },
+        rationale: "You repeat the same three-part structure every week.",
+      });
+    }
+    if (source === "workflow_test_turn") {
+      // Test a turn (sandbox): reply + proposed capture changes, nothing persisted.
+      const said = input.match(/<message>\n([\s\S]*?)\n<\/message>/)?.[1]?.trim() ?? "";
+      return JSON.stringify({
+        reply: `Noted: ${said.slice(0, 80)}`,
+        capture: [{ op: "add", path: "/takeaways/-", value: said.slice(0, 120) || "(empty)" }],
+      });
+    }
     return JSON.stringify({ error: `No tool for ${source}` });
   }
 

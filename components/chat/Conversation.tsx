@@ -409,6 +409,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         { label: "Model…", onSelect: () => setDialog("model") },
         ...(canAreas ? [{ label: "File under…", onSelect: () => setDialog("file") }] : []),
         ...(areaCtx?.node ? [{ label: "Properties", onSelect: () => router.push(`/areas?item=${encodeURIComponent(areaCtx.node!.id)}`) }] : []),
+        ...(canAreas && can("work.ai")
+          ? [{ label: "Save chat as workflow", onSelect: () => router.push(`/workflows/new?fromChat=${encodeURIComponent(sessionId)}`), disabled: !online }]
+          : []),
         ...(can("paperclip.track") ? [{ label: "Track in Paperclip", onSelect: () => setDialog("track"), disabled: !online }] : []),
         {
           label: session!.pinned ? "Unpin" : "Pin",

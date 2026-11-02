@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Page, PageHeader, useToast } from "@/components/ui";
+import { Button, ButtonLink, Page, PageHeader, useToast } from "@/components/ui";
 
 type Summary = {
   id: string;
@@ -84,6 +84,9 @@ export function WorkflowsGallery() {
         subtitle="Reusable chats with their own instructions."
         actions={
           <div className="flex flex-wrap gap-2">
+            <ButtonLink href="/workflows/new" variant="primary">
+              New workflow
+            </ButtonLink>
             <Button onClick={() => file.current?.click()}>Import JSON</Button>
             <Button onClick={() => void exportAll()} disabled={!mine.length}>
               Export all
@@ -153,6 +156,9 @@ export function WorkflowsGallery() {
                     Turn on {w.name}
                   </Button>
                 ) : null}
+                <ButtonLink size="sm" href={`/workflows/${w.slug}/edit`} aria-label={`Edit ${w.name}`}>
+                  Edit
+                </ButtonLink>
                 <Button size="sm" onClick={() => void exportAll(w.id)} aria-label={`Export ${w.name}`}>
                   Export
                 </Button>

@@ -290,6 +290,29 @@ test("inline edits: axe clean and no overflow at 200% text zoom (read, title edi
   await page.keyboard.press("Escape");
 });
 
+test("workflow builder, edit and save-chat review: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  test.setTimeout(120_000);
+  const data = { ...teaching, slug: "zoombuild", name: "Zoom builder", triggers: [{ kind: "palette", command: "/zoombuild" }] };
+  await ensureWorkflowActive(page, data);
+  const check = async (path: string, ready: string) => {
+    await page.goto(path);
+    await page.getByRole("heading", { name: ready }).first().waitFor();
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        path,
+      )
+      .toEqual([]);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+  };
+  await check("/workflows/new", "New workflow");
+  await check("/workflows/zoombuild/edit", "Edit Zoom builder");
+  await check("/workflows/new?fromChat=sess_morning", "Review the proposed workflow");
+});
+
 test("workflow start form + run panel: axe clean and no overflow at 200% text zoom", async ({ page }) => {
   const data = { ...teaching, slug: "zoomnotes", name: "Zoom notebook", triggers: [{ kind: "palette", command: "/zoomnotes" }] };
   await ensureWorkflowActive(page, data);
