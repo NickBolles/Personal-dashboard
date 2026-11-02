@@ -67,9 +67,12 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await page.goto(`/areas?item=${two}`);
   await expect(page.locator("#work-item-title")).toHaveText(`Tinsmith trellis ${nonce}`);
   const box = page.getByRole("combobox", { name: "Search Jarvis" });
+  // Ctrl K inside an open palette opens the action panel instead, so a retry must not press it again
+  // while the palette is already up (a late re-render can take focus right after it opens).
   const open = async () =>
     expect(async () => {
-      await page.keyboard.press("Control+k");
+      if (await box.isVisible()) await box.click();
+      else await page.keyboard.press("Control+k");
       await expect(box).toBeFocused({ timeout: 1000 });
     }).toPass();
 
@@ -86,6 +89,7 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await expect(confirm).toContainText(`Assign “Tinsmith trellis ${nonce}” to @momentumchief?`);
   await expect(confirm.getByRole("button", { name: "Confirm" })).toBeFocused();
   await page.keyboard.press("Enter");
+  await expect(box).toBeHidden();
   await expect(page.getByLabel("Assignee")).toHaveValue("agent:momentumchief");
 
   await open();
