@@ -237,6 +237,42 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+// Workflows W3: builder (new, empty) and the Save-chat-as-workflow review with a fixed proposal.
+const draftVisual = {
+  proposal: {
+    basics: { name: "Lantern study notes", slug: "lantern", icon: "book-open", description: "Notes from the lantern study group", area: null },
+    instructions: "Keep each passage, the questions we asked, and my own takeaways separate. Use my words.",
+    capture: { session: { type: "object", fields: { leader: "text?" } }, takeaways: { type: "list", of: "text" } },
+    startForm: { title: "Start lantern study", fields: [{ id: "leader", bind: "session.leader", type: "person", label: "Leader" }] },
+    rationale: "You repeat the same three-part structure every week.",
+  },
+};
+for (const scheme of ["light", "dark"] as const) {
+  for (const [name, path, ready] of [
+    ["workflow-builder", "/workflows/new", "Builder sections"],
+    ["workflow-review", "/workflows/new?fromChat=sess_visual", "Review the proposed workflow"],
+  ] as const) {
+    test(`visual: ${name} (${scheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await freezeMiddayCT(page);
+      await page.route(/\/api\/workflows(?:\?.*)?$/, (route) => route.fulfill({ json: workflowsVisual }));
+      await page.route(/\/api\/workflows\/draft$/, (route) => route.fulfill({ json: draftVisual }));
+      await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+      await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+      await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+      await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
+      await page.goto(path);
+      if (name === "workflow-builder") await page.getByRole("navigation", { name: ready }).waitFor();
+      else await page.getByRole("heading", { name: ready }).waitFor();
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"].fixed, .chat-dock { visibility: hidden !important; }' });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+      await t.evaluate((el) => (el as Element).remove());
+    });
+  }
+}
+
 // Workflows W2: start form (with the Place field) and the live Run panel. Real server data from a fixed
 // definition; every list the pages fetch is stubbed and smart-default dates/times are masked.
 const visNotes = { ...teaching, slug: "visnotes", name: "Visual notebook", triggers: [{ kind: "palette", command: "/visnotes" }] };

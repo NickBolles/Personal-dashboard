@@ -138,3 +138,29 @@ API (all owner-scoped, audited): `POST /api/workflows/form` · `GET|POST /api/wo
 · `DELETE /api/workflows/places/:id` · `GET|DELETE /api/workflows/:id/remembered[?field=]` (forget remembered values).
 
 Instructions still ride as run context (≤ 4000 chars) rather than a session system prompt (#119).
+
+## Builder (W3)
+
+**Gallery → New workflow** (`/workflows/new`) or a card's **Edit** (`/workflows/<slug>/edit`). Three panes on desktop
+(sections · editor · live preview), stacked on phones. Sections: Basics (name, `/command` slug kept in sync with the palette
+trigger, icon, area — Finance is refused inline), Instructions (token count, ≤ 4000 chars), Capture fields, Forms
+(Start / Mid-run / End tabs; add a field from the 13-type palette, which also creates its `session.<id>` capture slot; reorder,
+remove, inspector for label/help/default/required/remember-last/palette arg), Layout and Outputs (catalog-only; W4). The
+preview shows the start form with Defaults / Empty / Errors. Validator issues show inline per section and block Save.
+Every Save is a new immutable version (optional change note); **Version history** shows each version's changes and
+**Restore** creates a new version ("Restored vN") — nothing is rewritten. New workflows save as **draft**; turning one on is
+always a separate tap in the gallery.
+
+**Save chat as workflow** (conversation ⋯ menu) and **Describe it** (on `/workflows/new`) ask the Hermes subscription model
+(structured run, throwaway session, no provider keys) for a proposal: basics, instructions, capture fields and a start form,
+each shown in its own dashed card with **Keep / Edit / Drop**. The assembled draft is validated live (issues are flagged on
+the part that caused them) and **Save as draft** creates it as a draft — never active. Finance chats (filed under Finance,
+or carrying Finance context) are refused before any transcript leaves Jarvis (`403 finance_blocked`).
+
+**Test a turn** (builder side panel) sends one message against the unsaved draft as a sandbox: the reply and the capture
+changes the model would make are shown, validated against the draft's capture schema, then discarded — no
+`workflow_runs` row, no capture, no conversation kept, nothing written.
+
+API: `POST /api/workflows/validate` (dry run) · `POST /api/workflows/draft` `{kind:"chat",sessionId}|{kind:"describe",description}`
+(proposal only) · `POST /api/workflows/test-turn` `{definition,message}` (sandbox) · `GET /api/workflows/:id/versions/:v` ·
+`POST /api/workflows/:id/versions/:v/restore`.
