@@ -156,12 +156,12 @@ test("new chat budget: Ask opens the conversation before Hermes answers the run 
     if (route.request().method() === "GET") await new Promise((r) => setTimeout(r, 4_000));
     await route.continue();
   });
-  await page.goto("/home");
+  await page.goto("/chat");
   const question = `budget check ${Date.now().toString(36)}`;
-  await page.getByLabel("Capture or ask Hermes").fill(question);
+  await page.locator("#quick-capture").fill(question);
   const created = page.waitForResponse((r) => r.url().endsWith("/api/hermes/sessions") && r.request().method() === "POST");
   const runRequested = page.waitForRequest((r) => /\/runs$/.test(r.url()) && r.method() === "POST");
-  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
+  await page.getByRole("button", { name: "Send to Hermes", exact: true }).click();
   await created;
   const t0 = Date.now();
   await runRequested; // kicked off right away, in the background

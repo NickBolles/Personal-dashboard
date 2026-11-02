@@ -56,9 +56,10 @@ export async function expectNoHorizontalOverflow(page: Page, opts: { soft?: bool
 }
 
 export async function startConversation(page: Page, text: string) {
-  await page.goto("/home");
-  await page.getByLabel("Capture or ask Hermes").fill(text);
-  await page.getByRole("button", { name: "Ask Hermes", exact: true }).click();
+  // Today has no inline capture (T6): the chat index composer starts a conversation.
+  await page.goto("/chat");
+  await page.locator("#quick-capture").fill(text);
+  await page.getByRole("button", { name: "Send to Hermes", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
 }
 

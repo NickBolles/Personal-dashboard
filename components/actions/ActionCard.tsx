@@ -56,12 +56,15 @@ export function ActionCard({
   compact,
   explain,
   quiet,
+  row,
 }: {
   action: NextAction;
   compact?: boolean;
   explain?: boolean;
   /** Lists of many cards (Todos): the per-row action is neutral so the page keeps one primary. */
   quiet?: boolean;
+  /** TK2: a dense row inside one list card (`ul.jv-feed`); "Done" becomes a round checkbox. */
+  row?: boolean;
 }) {
   const router = useRouter();
   const online = useOnline();
@@ -100,8 +103,30 @@ export function ActionCard({
     },
   ];
 
+  const checkbox =
+    row && primary?.kind === "complete" ? (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={done || compact ? true : false}
+        aria-label={`Done: ${action.title}`}
+        disabled={!online || done || compact || m.isPending}
+        title={!online ? "Unavailable offline" : undefined}
+        onClick={() => run("complete")}
+        className="jv-check-btn"
+      >
+        <span aria-hidden="true" className="jv-check-dot">
+          {done || compact ? (
+            <svg className="jv-check h-3 w-3" viewBox="0 0 24 24">
+              <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : null}
+        </span>
+      </button>
+    ) : null;
+
   const primaryButton =
-    primary && !compact ? (
+    primary && !compact && !checkbox ? (
       primary.kind === "open" ? (
         <ButtonLink href={action.href} external={action.external} variant={rank || quiet ? "secondary" : "primary"} size="sm" aria-describedby={titleId}>
           {primary.label}
@@ -174,6 +199,39 @@ export function ActionCard({
       {titleText}
     </>
   );
+  if (row)
+    return (
+      <article aria-labelledby={titleId} className={cx("jv-trow", done && "jv-done")}>
+        {checkbox ?? <span aria-hidden="true" className="jv-check-btn" />}
+        <div className="min-w-0 flex-1">
+          <h3 id={titleId} className="truncate text-[0.875rem] leading-snug font-medium">
+            {action.external ? (
+              <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
+                {titleNode}
+              </a>
+            ) : (
+              <Link href={action.href} className="hover:underline">
+                {titleNode}
+              </Link>
+            )}
+          </h3>
+          {action.detail || stale || action.pinned ? (
+            <p data-dynamic className="truncate text-xs text-muted">
+              {action.pinned ? "Pinned · " : null}
+              {action.detail}
+              {stale ? <span className="text-warn"> · Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
+            </p>
+          ) : null}
+        </div>
+        {due ? (
+          <span data-dynamic className="shrink-0 text-xs whitespace-nowrap text-muted tabular-nums">
+            {due}
+          </span>
+        ) : null}
+        {primaryButton}
+        <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
+      </article>
+    );
   return (
     <article
       aria-labelledby={titleId}
@@ -198,7 +256,13 @@ export function ActionCard({
             </Link>
           )}
         </h3>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div
+          className={cx(
+            "flex flex-wrap items-center gap-x-2 gap-y-1",
+            // T5: feed rows keep one meta line from tablet up; the detail truncates, and an opened "Why this?" wraps below.
+            rank && "sm:flex-nowrap sm:overflow-hidden sm:has-[details[open]]:flex-wrap sm:has-[details[open]]:overflow-visible",
+          )}
+        >
           <SourceBadge source={action.source} label={action.sourceLabel} />
           {action.assignee?.kind === "up_for_grabs" ? null : <AssigneeChip assignee={action.assignee} />}
           <Badge tone={REASON_TONE[action.priorityReason]} dot>
@@ -207,12 +271,12 @@ export function ActionCard({
           {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
           {rank?.tier === "compass" ? <Badge tone="violet">Compass focus</Badge> : null}
           {!compact && action.detail ? (
-            <span data-dynamic className="min-w-0 text-xs text-muted">
+            <span data-dynamic className={cx("min-w-0 text-xs text-muted", rank && "sm:truncate")}>
               {action.detail}
             </span>
           ) : null}
           {due || stale ? (
-            <span data-dynamic className="text-xs text-muted">
+            <span data-dynamic className={cx("text-xs text-muted", rank && "sm:shrink-0 sm:whitespace-nowrap")}>
               {due ? <span>{due}</span> : null}
               {due && stale ? " · " : null}
               {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}

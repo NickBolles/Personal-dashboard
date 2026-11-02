@@ -12,11 +12,9 @@ import { formatWhen } from "@/components/actions/format";
 import { AssistCard } from "@/components/home/AssistCard";
 import { TriageDialog } from "@/components/home/TriageDialog";
 import type { AssistCard as Assist } from "@/lib/contracts";
-import { QuickCapture } from "@/components/chat/QuickCapture";
 import { Badge, Empty, ErrorNote, OverflowMenu, Page, SectionLabel, Spinner, cx, useOnline } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
-import { useAccess } from "@/components/access";
 import { Skeleton } from "@/components/ui/kit";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
 
@@ -251,7 +249,6 @@ export function HomeView() {
   // leave the suggestion (and the whole card may disappear) before Close.
   const [triage, setTriage] = useState<Assist | null>(null);
   const online = useOnline();
-  const { can } = useAccess();
   const [snapshot, setSnapshot] = useState<HomePayload>();
 
   useEffect(() => {
@@ -429,15 +426,6 @@ export function HomeView() {
 
           {triage?.triage ? (
             <TriageDialog open onClose={() => setTriage(null)} items={triage.triage.items} chat={triage.chat} timezone={prefs.data?.timezone} />
-          ) : null}
-
-          {can("hermes.chat") || can("work.use") ? (
-            <section aria-labelledby="capture-h" className="mb-5">
-              <h2 id="capture-h" className="sr-only">
-                Quick capture
-              </h2>
-              <QuickCapture />
-            </section>
           ) : null}
 
           {data

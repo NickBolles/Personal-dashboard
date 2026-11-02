@@ -86,6 +86,7 @@ export function InlineText({
 }) {
   const [own, setOwn] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
   const draft = own ?? (editingProp ? value : null);
   const set = (v: string | null) => {
     setOwn(v);
@@ -97,7 +98,10 @@ export function InlineText({
     if (draft === null) return;
     const r = validateInline(field, draft, { status });
     if (!r.ok) return setError(r.error);
-    if (r.value !== value) onSave(r.value ?? "");
+    if (r.value !== value) {
+      onSave(r.value ?? "");
+      setFlash(true); // G7: the saved field tints once
+    }
     set(null);
   };
   if (draft !== null) {
@@ -151,7 +155,8 @@ export function InlineText({
   return (
     <button
       type="button"
-      className={cx("jv-inline jv-inline-read", className)}
+      className={cx("jv-inline jv-inline-read", flash && "jv-flash", className)}
+      onAnimationEnd={() => setFlash(false)}
       data-inline-field={field}
       // The name stays the content (headings keep their text); the hint is a description.
       title={`Edit ${label.toLowerCase()} (F2)`}

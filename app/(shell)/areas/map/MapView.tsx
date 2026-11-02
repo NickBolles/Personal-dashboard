@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Empty, ErrorNote, Spinner } from "@/components/ui";
-import { ChipSelect } from "@/components/ui/kit";
+import { Empty, ErrorNote, Spinner } from "@/components/ui";
+import { ChipButton, ChipSelect } from "@/components/ui/kit";
 import { EDGE_STYLE, MapCanvas, MapList } from "@/components/work/WorkMap";
 import { WorkPageHeader } from "@/components/work/common";
 import { isClosed, STATUS_LABELS, WORK_STATUSES, type WorkStatus } from "@/lib/work";
@@ -78,9 +78,9 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
                 ))}
               </ChipSelect>
             </div>
-            <Button size="sm" aria-pressed={list} onClick={() => setList((l) => !l)}>
+            <ChipButton aria-pressed={list} active={list} onClick={() => setList((l) => !l)}>
               {list ? "Show map" : "Show as list"}
-            </Button>
+            </ChipButton>
           </>
         }
       />
