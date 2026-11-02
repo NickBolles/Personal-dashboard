@@ -64,8 +64,9 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await composer.fill("Quote this: remain in me");
   await composer.press("Enter");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Remain in me, as I also remain in you", { timeout: 20_000 });
-  // The raw capture block stays in the stored reply but never renders.
-  await expect(page.getByText("jarvis-capture")).toHaveCount(0);
+  // The raw capture block stays in the stored reply but never renders (the collapsed
+  // "Context Jarvis attached" instructions mention the fence name, so count visible text only).
+  await expect(page.getByText("jarvis-capture").filter({ visible: true })).toHaveCount(0);
   await panel.getByTestId("workflow-undo").click();
   await expect(panel.getByTestId("workflow-outline")).not.toContainText("Remain in me, as I also remain in you");
 

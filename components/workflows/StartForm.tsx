@@ -380,9 +380,14 @@ export function StartFormDialog({
       onClose={onClose}
       title={spec.props.title as string}
       footer={
-        <Button variant="primary" type="submit" form={formId} busy={busy} data-testid="workflow-start-submit">
-          {spec.props.submit as string}
-        </Button>
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" type="submit" form={formId} busy={busy} data-testid="workflow-start-submit">
+            {spec.props.submit as string}
+          </Button>
+        </>
       }
     >
       <form
