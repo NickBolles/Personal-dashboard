@@ -10,6 +10,12 @@ import { BellIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIco
 import { useShowArchived } from "@/lib/client/show-archived";
 import { WorkTree, type RowActions } from "@/components/work/WorkTree";
 import { MoveToDialog } from "@/components/work/structure";
+import { INLINE_OP_EVENT } from "@/components/work/InlineEdit";
+import type { UndoOp } from "@/components/work/UndoBar";
+
+const shareOp = (op: UndoOp | null | undefined) => {
+  if (op) window.dispatchEvent(new CustomEvent(INLINE_OP_EVENT, { detail: op }));
+};
 import "@/components/work/work.css";
 import { useWorkMutation } from "@/components/work/common";
 import { useInbox } from "@/components/work/today";
@@ -93,8 +99,11 @@ export function Sidebar({
     enabled: canWork,
   });
   const inbox = useInbox();
-  const place = useWorkMutation((v: { id: string; parentId: string | null; index: number }) =>
-    api.post(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+  const place = useWorkMutation(
+    (v: { id: string; parentId: string | null; index: number }) =>
+      api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
+    // #77: hand the op to the page's Undo bar (WorkView listens on /areas).
+    { onSuccess: (r) => shareOp(r.op) },
   );
   const rename = useWorkMutation((v: { id: string; title: string }) => api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }), {
     ok: "Renamed",
@@ -342,7 +351,17 @@ export function Sidebar({
           </section>
         ) : null}
       </nav>
-      {moving ? <MoveToDialog ids={moving} items={list} onClose={() => setMoving(null)} onDone={() => setMoving(null)} /> : null}
+      {moving ? (
+        <MoveToDialog
+          ids={moving}
+          items={list}
+          onClose={() => setMoving(null)}
+          onDone={(op) => {
+            setMoving(null);
+            shareOp(op);
+          }}
+        />
+      ) : null}
       <div className="border-t border-line p-2">
         <Link href="/more" aria-current={path === "/more" ? "page" : undefined} className={rowCls(path === "/more")}>
           <MoreIcon className="h-[18px] w-[18px] shrink-0" />
