@@ -102,11 +102,24 @@ export type KMenuItem = {
 };
 
 /** A menu list with roving focus (arrows/Home/End), Esc to close. */
-export function Menu({ items, onClose, label, className }: { items: KMenuItem[]; onClose?: () => void; label?: string; className?: string }) {
+export function Menu({
+  items,
+  onClose,
+  label,
+  className,
+  autoFocus = true,
+}: {
+  items: KMenuItem[];
+  onClose?: () => void;
+  label?: string;
+  className?: string;
+  /** Focus the first item on mount (interactive menus). Static examples pass false so they don't steal focus (#36). */
+  autoFocus?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not([disabled])")?.focus();
-  }, []);
+    if (autoFocus) ref.current?.querySelector<HTMLButtonElement>("[role=menuitem]:not([disabled])")?.focus();
+  }, [autoFocus]);
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
     const btns = [...(ref.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]:not([disabled])") ?? [])];
     const i = btns.indexOf(document.activeElement as HTMLButtonElement);

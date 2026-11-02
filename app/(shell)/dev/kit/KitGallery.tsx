@@ -134,6 +134,7 @@ function Panel({ theme }: { theme: "dark" | "light" }) {
       <ProgressBar value={35} tone="orb" label="Agent progress" />
       <Skeleton h={14} />
       <Menu
+        autoFocus={false}
         label={`Actions (${t})`}
         items={[
           { label: "Group", heading: true },
