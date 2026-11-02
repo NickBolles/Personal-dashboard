@@ -52,7 +52,7 @@ test("workflow outputs: edit session → end form → summary accept → markdow
   // Two actions via the quick-add chip (no model needed).
   const composer = page.getByRole("textbox", { name: /message/i });
   for (const t of ["Prune the orchard rows", "Call the orchard group"]) {
-    await panel.getByRole("button", { name: "Action" }).click();
+    await panel.getByRole("button", { name: "Action", exact: true }).click();
     await composer.fill(t);
     await composer.press("Enter");
     await expect(panel.getByTestId("workflow-outline")).toContainText(t);
@@ -115,8 +115,10 @@ test("workflow page: history, stats (plain counts) and reminder toggle", async (
   const reminder = page.getByTestId("workflow-reminder");
   const toggle = reminder.getByRole("switch");
   await expect(toggle).not.toBeChecked();
+  const saved = page.waitForResponse((res) => res.url().includes("/reminder") && res.request().method() === "PUT");
   await toggle.check();
   await expect(toggle).toBeChecked();
+  await saved;
   await expect(reminder).toContainText("Nothing starts until you tap Start");
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();

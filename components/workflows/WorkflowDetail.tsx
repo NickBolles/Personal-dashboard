@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, PageHeader, cx, useToast } from "@/components/ui";
@@ -185,8 +185,11 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
     queryFn: ({ signal }) => api.get<Reminder>(`/api/workflows/${workflowId}/reminder`, signal),
   });
   const r = q.data;
+  // Latest tap wins: an older PUT answering after a newer tap must not flip the switch back.
+  const seq = useRef(0);
   const save = async (patch: Partial<Reminder>) => {
     if (!r) return;
+    const n = ++seq.current;
     const k = ["workflow-reminder", workflowId];
     qc.setQueryData(k, { ...r, ...patch }); // optimistic, so the switch flips on tap; reverted on error
     try {
@@ -195,9 +198,11 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
         day: patch.day ?? r.day,
         time: patch.time ?? r.time,
       });
+      if (n !== seq.current) return;
       qc.setQueryData(["workflow-reminder", workflowId], next);
       toast(next.enabled ? `Reminder on: ${DAYS[next.day]} ${next.time}` : "Reminder off", "ok");
     } catch (e) {
+      if (n !== seq.current) return;
       qc.setQueryData(k, r);
       toast((e as Error).message, "danger");
     }
