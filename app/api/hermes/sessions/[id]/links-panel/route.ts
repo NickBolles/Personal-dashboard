@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { listPanelLinks, patchPanelLink, syncPanelLinks } from "@/server/chat/links";
+import { listPanelLinks, patchPanelLink, syncPanelLinks, unresolvedGithubCount } from "@/server/chat/links";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,8 @@ const seen = z.object({
 });
 /** Record links seen in the transcript (idempotent) and resolve titles; returns the panel. */
 export const POST = api<z.infer<typeof seen>, { id: string }>(
-  async ({ params, user, body }) => ({ links: await syncPanelLinks(user, params.id, body.links) }),
+  // `pending`: GitHub links still unresolved (#75) — the client syncs again while that number drops.
+  async ({ params, user, body }) => ({ links: await syncPanelLinks(user, params.id, body.links), pending: unresolvedGithubCount(params.id) }),
   { cap: "hermes.chat", body: seen },
 );
 

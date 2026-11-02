@@ -123,6 +123,11 @@ export async function syncPanelLinks(user: CurrentUser & Parameters<typeof resol
   return sorted(rows(sessionId));
 }
 
+/** #75: GitHub links still waiting for a title/state (a later sync resolves the next batch). */
+export function unresolvedGithubCount(sessionId: string): number {
+  return rows(sessionId).filter((r) => r.kind === "github" && !r.resolvedAt && !r.removed).length;
+}
+
 export function patchPanelLink(user: CurrentUser, sessionId: string, url: string, patch: { pinned?: boolean; removed?: boolean }) {
   if (access(user, sessionId) !== "write") throw new HttpError(403, "read_only", "This conversation is read-only.");
   const c = classifyUrl(url);
