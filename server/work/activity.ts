@@ -21,6 +21,16 @@ import {
 
 type SortKey = { at: string; id: string; seq?: number };
 
+/**
+ * Rows of a seq-less source strictly after the cursor in feed order (compareActivity): older, or
+ * the same instant with a smaller prefixed id; an event cursor (seq set) sorts before all of them.
+ */
+function tieBound(table: string, at: string, id: string, prefix: string, cur: SortKey) {
+  const t = sql.raw(`"${table}"."${at}"`);
+  const k = sql.raw(`"${table}"."${id}"`);
+  return cur.seq !== undefined ? sql`${t} <= ${cur.at}` : sql`(${t} < ${cur.at} or (${t} = ${cur.at} and (${prefix} || ${k}) < ${cur.id}))`;
+}
+
 /** Rows per source per window (#130: windows continue past it, so this is no longer a history cap). */
 let SOURCE_CAP = 2000;
 /** Tests: shrink the window to exercise paging past it. */
@@ -122,6 +132,9 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
   const windowAt = (cur: SortKey | null) => {
     const out: ActivityItem[] = [];
     let horizon: SortKey | null = null;
+    // Ops matched in this window; only events that survive the horizon keep theirs (else a deferred
+    // event re-fetched in the next window couldn't reclaim its op and would lose Undo).
+    const windowOps = new Map<string, string>();
     const capped = (key: SortKey) => {
       if (!horizon || compareActivity(key, horizon) < 0) horizon = key;
     };
@@ -157,7 +170,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
         let op: (typeof itemOps)[number] | undefined;
         let best = Infinity;
         for (const o of itemOps) {
-          if (usedOps.has(o.id) || !kinds.includes(o.kind) || (auto && o.kind !== "settle")) continue;
+          if (usedOps.has(o.id) || [...windowOps.values()].includes(o.id) || !kinds.includes(o.kind) || (auto && o.kind !== "settle")) continue;
           const d = Math.abs(Date.parse(o.createdAt) - t);
           if (d > OP_MATCH_MS) continue;
           if (d < best || (d === best && op && (o.createdAt > op.createdAt || (o.createdAt === op.createdAt && o.seq > op.seq)))) {
@@ -166,7 +179,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           }
         }
         if (op) {
-          usedOps.add(op.id);
+          windowOps.set(item.id, op.id);
           const stack = itemOps.filter((o) => (o.kind === "edit") === (op.kind === "edit"));
           const check = undoCheck(op, latestOp(stack)?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
           if (check.ok) item.undoOpId = op.id;
@@ -191,10 +204,10 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           and(
             eq(schema.workInbox.userId, user.id),
             inArray(schema.workInbox.acceptedItemId, c),
-            cur ? sql`"work_inbox"."accepted_at" <= ${cur.at}` : sql`"work_inbox"."accepted_at" is not null`,
+            cur ? tieBound("work_inbox", "accepted_at", "id", "in:", cur) : sql`"work_inbox"."accepted_at" is not null`,
           ),
         )
-        .orderBy(desc(schema.workInbox.acceptedAt))
+        .orderBy(desc(schema.workInbox.acceptedAt), desc(schema.workInbox.id))
         .limit(SOURCE_CAP)
         .all();
       const last = rows[rows.length - 1];
@@ -228,9 +241,13 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
         })
         .from(schema.runs)
         .where(
-          and(eq(schema.runs.userId, user.id), inArray(schema.runs.sessionId, sids.slice(i, i + 500)), cur ? sql`"runs"."started_at" <= ${cur.at}` : undefined),
+          and(
+            eq(schema.runs.userId, user.id),
+            inArray(schema.runs.sessionId, sids.slice(i, i + 500)),
+            cur ? tieBound("runs", "started_at", "run_id", "run:", cur) : undefined,
+          ),
         )
-        .orderBy(desc(schema.runs.startedAt))
+        .orderBy(desc(schema.runs.startedAt), desc(schema.runs.runId))
         .limit(SOURCE_CAP)
         .all();
       const last = runs[runs.length - 1];
@@ -264,6 +281,9 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
 
     const h = horizon as SortKey | null;
     const complete = (cur ? out.filter((i) => isBefore(i, cur)) : out).filter((i) => !h || compareActivity(i, h) <= 0);
+    const kept = new Set(complete.map((i) => i.id));
+    for (const [itemId, opId] of windowOps) if (kept.has(itemId)) usedOps.add(opId);
+    for (const i of out) if (!kept.has(i.id)) i.undoOpId = null;
     return { items: complete, horizon: h };
   };
 
