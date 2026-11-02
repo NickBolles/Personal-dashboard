@@ -193,7 +193,7 @@ test("#144 reminder opened from Alerts (client navigation) opens the start form"
   };
   await page.route("**/api/notifications?filter=*", (route) => route.fulfill({ json: { notifications: [reminder], unread: 0 } }));
   await page.goto("/alerts");
-  await page.getByRole("button", { name: "Orchard notebook — start?" }).click();
+  await page.getByRole("button", { name: "Orchard notebook — start?", exact: true }).click();
   await expect(page).toHaveURL(/\/workflows(?!.*start=)/);
   const form = page.getByRole("dialog", { name: "New session" });
   await expect(form).toBeVisible();
