@@ -187,7 +187,18 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
         at: r.startedAt,
         type: "chat",
         actor: { kind: "agent", name: r.profile || "Hermes" },
-        verb: waiting ? "asked for approval in" : r.status === "failed" ? "run failed in" : r.status === "running" ? "is working in" : "replied in",
+        verb: waiting
+          ? "asked for approval in"
+          : r.status === "failed"
+            ? "run failed in"
+            : r.status === "running"
+              ? "is working in"
+              : // #131: a stopped/interrupted run didn't reply
+                r.status === "cancelled"
+                ? "was stopped in"
+                : r.status === "interrupted"
+                  ? "was interrupted in"
+                  : "replied in",
         object: node,
         detail: null,
         undoOpId: null,

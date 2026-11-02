@@ -46,7 +46,7 @@ export function useInlinePatch(id: string, onOp?: (op: UndoOp | null | undefined
       if (onOp) onOp(r.op);
       else if (r.op) window.dispatchEvent(new CustomEvent(INLINE_OP_EVENT, { detail: r.op }));
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: ["work"] }),
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ["work"] }), qc.invalidateQueries({ queryKey: ["activity"] })]),
   });
 }
 
