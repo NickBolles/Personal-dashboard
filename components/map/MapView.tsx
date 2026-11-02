@@ -13,7 +13,7 @@ import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { areaRollups, bucketOf, MAP_BUCKET_LABELS, MAP_BUCKETS, matchesFilter, type AreaRollup, type MapBucket } from "@/lib/map-rollup";
 import { isContainer, STATUS_LABELS, WORK_STATUSES, type WorkItem, type WorkStatus } from "@/lib/work";
 import type { DecisionsResponse } from "@/lib/decisions";
-import { NeedsYouSection } from "./Decisions";
+import { NeedsYouSection, useDecisions } from "./Decisions";
 
 type MapLink = { kind: string; url: string; title: string | null };
 export type MapResponse = { items: WorkItem[]; links: Record<string, MapLink[]>; decisions: DecisionsResponse };
@@ -41,7 +41,21 @@ export function MapView() {
   const [meta, setMeta] = useState<ItemFilter>(NO_FILTER);
   const [search, setSearch] = useState("");
   const [op, setOp] = useState<UndoOp | null>(null);
-  const items = useMemo(() => (q.data?.items ?? []).filter((i) => !i.archived && i.kind !== "conversation"), [q.data]);
+  // The polling decisions query wins over the overview snapshot (approvals change outside work edits).
+  const dq = useDecisions();
+  // Conversations are hidden, but work split beneath one is re-parented to the nearest kept ancestor.
+  const items = useMemo(() => {
+    const all = (q.data?.items ?? []).filter((i) => !i.archived);
+    const byId = new Map(all.map((i) => [i.id, i]));
+    const keptParent = (id: string | null) => {
+      let c = id ? byId.get(id) : undefined;
+      for (let n = 0; c && c.kind === "conversation" && n < 100; n++) c = c.parentId ? byId.get(c.parentId) : undefined;
+      return c ? c.id : id && !byId.has(id) ? id : null;
+    };
+    return all
+      .filter((i) => i.kind !== "conversation")
+      .map((i) => (i.parentId && byId.get(i.parentId)?.kind === "conversation" ? { ...i, parentId: keptParent(i.parentId) } : i));
+  }, [q.data]);
   const rolls = useMemo(() => areaRollups(items), [items]);
   const filter = { bucket: bucket || undefined, tag: meta.tag ?? undefined, assignee: meta.assignee ?? undefined, q: search };
   const filtering = !!(bucket || meta.tag || meta.assignee || search.trim());
@@ -93,7 +107,7 @@ export function MapView() {
         </p>
       ) : null}
 
-      {q.data ? <NeedsYouSection entries={q.data.decisions.entries} id="map-needs-you-h" limit={5} /> : null}
+      {q.data ? <NeedsYouSection entries={dq.data?.entries ?? q.data.decisions.entries} id="map-needs-you-h" limit={5} /> : null}
 
       {q.data ? (
         <section aria-labelledby="map-areas-h" className="mb-5">
@@ -167,8 +181,8 @@ export function MapView() {
               {areas.map((r) => (
                 <details key={r.id} className="mp-area" open>
                   <summary className="mp-sum">
-                    <span className="font-semibold">{r.title}</span>
-                    <span className="text-xs text-muted">
+                    <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{r.title}</span>
+                    <span className="shrink-0 text-xs text-muted">
                       {r.total} {r.total === 1 ? "item" : "items"}
                     </span>
                   </summary>
@@ -252,7 +266,8 @@ function Branch({
           <details key={g.id} className="mp-proj" open={open || undefined}>
             <summary className="mp-sum">
               <span className="min-w-0 truncate font-medium">{g.title}</span>
-              <span className="shrink-0 text-xs text-muted">
+              {/* Capped so large text wraps the summary instead of widening the page (chevron + gaps = 22px). */}
+              <span className="max-w-[calc(100%-1.5rem)] shrink-0 text-right text-xs text-muted">
                 {MAP_BUCKETS.filter((b) => counts[b])
                   .map((b) => `${counts[b]} ${MAP_BUCKET_LABELS[b].toLowerCase()}`)
                   .join(" · ") || "empty"}
