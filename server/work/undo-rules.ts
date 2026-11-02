@@ -20,12 +20,12 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   settle: "Settled automatically",
   /** "Create N child items" from an AI plan report (undo deletes untouched children, archives the rest) */
   ai_plan_create: "Created plan children",
-  /** an inline field edit (title, next action, summary, status, due date); undo restores the previous values */
+  /** an inline field edit (title, next action, summary, status, due date, tags, assignee); undo restores the previous values */
   edit: "Saved",
 };
 
 /** Fields an "edit" op can restore. */
-export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status"] as const;
+export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status", "tags", "assignee"] as const;
 
 /** `seq` = SQLite rowid (insertion order) when the caller loaded it: breaks same-millisecond ties. */
 export type OpLike = { id: string; createdAt: string; undoneAt: string | null; seq?: number };

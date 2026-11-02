@@ -815,6 +815,10 @@ export const workItems = sqliteTable(
     sessionId: text("session_id"),
     /** areas only: JSON AreaSettings (lib/work.ts parseAreaSettings); null = defaults */
     settings: text("settings"),
+    /** JSON array of normalised tag names (lib/item-tags.ts); colours live in work_tags */
+    tags: text("tags").notNull().default("[]"),
+    /** "agent:<profile>" | "person:<userId>" | null (lib/item-tags.ts); assigning never starts a run */
+    assignee: text("assignee"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -823,6 +827,21 @@ export const workItems = sqliteTable(
     uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey),
     uniqueIndex("work_items_session_idx").on(t.userId, t.sessionId),
   ],
+);
+
+/** Per-owner tag registry (#111): colour from the token palette; created on the fly by item edits. */
+export const workTags = sqliteTable(
+  "work_tags",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** lib/item-tags.ts TAG_COLORS */
+    color: text("color").notNull().default("ac"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.name] })],
 );
 
 export const workLinks = sqliteTable(

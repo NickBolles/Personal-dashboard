@@ -133,6 +133,8 @@ export function WorkTree({
         validationDefault: null,
         sessionId: l.sessionId,
         settings: null,
+        tags: [],
+        assignee: null,
         createdAt: "",
         updatedAt: "",
       });

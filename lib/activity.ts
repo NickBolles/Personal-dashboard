@@ -110,7 +110,7 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
   } else if (e.kind === "edit") {
     type = "edit";
     verb = e.reason ? e.reason.charAt(0).toLowerCase() + e.reason.slice(1) : "edited";
-    if (!/^(edited|validation default|area settings)/.test(verb)) verb = `edited · ${verb}`;
+    if (!/^(edited|validation default|area settings|assigned|unassigned|tagged|untagged)/.test(verb)) verb = `edited · ${verb}`;
   }
   if (e.source === "github" && type !== "github") type = "github";
   return { id: `ev:${e.id}`, at: e.at, type, actor, verb, object, detail, undoOpId: null };
