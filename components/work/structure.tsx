@@ -12,6 +12,7 @@ import { FilingActions, fmtWhen, pollWhileUpdating, UpdatingNote } from "@/compo
 import { SuggestWithAi, useAiFiling } from "@/components/work/ai/SuggestFiling";
 import type { UndoOp } from "@/components/work/UndoBar";
 import { ProjectIcon } from "@/components/work/WorkTree";
+import { ItemChips } from "@/components/work/ItemMeta";
 import { rollup, type CreatableKind, type UnfiledConversation, type UnfiledResponse, type WorkItem } from "@/lib/work";
 
 /**
@@ -329,6 +330,11 @@ export function NodeRow({ i, items, onSelect, status }: { i: WorkItem; items: Wo
       <span className="min-w-0 flex-1">
         <span className="block truncate">{i.title}</span>
         {i.nextAction ? <span className="block truncate text-xs text-muted">Next: {i.nextAction}</span> : null}
+        {i.tags?.length || i.assignee ? (
+          <span className="mt-0.5 block min-w-0">
+            <ItemChips tags={i.tags} assignee={i.assignee} max={2} />
+          </span>
+        ) : null}
       </span>
       {/* Projects: their (manual) status, plus progress once they hold work. */}
       {status}

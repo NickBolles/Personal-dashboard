@@ -251,6 +251,38 @@ test("200% text zoom: item, area and activity pages (Areas nav, New menu, Undo r
   }
 });
 
+test("tags + assignee (#111): axe clean and no overflow at 200% text zoom (item editor, area list chips + filter, activity filter)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const post = async (data: unknown) => {
+    const r = await page.request.post("/api/work/items", { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const areaId = await post({ kind: "area", title: `Zoom thimble ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom bobbin ${nonce}` });
+  const p = await page.request.patch(`/api/work/items/${id}`, {
+    data: { tags: [`zoom-spool-with-a-long-tag-${nonce}`, "zoom-hem"], assignee: "agent:momentumchief" },
+    headers: { "x-jarvis-csrf": "1" },
+  });
+  expect(p.ok(), await p.text()).toBeTruthy();
+  for (const path of [`/areas?item=${id}`, `/areas?item=${areaId}`, "/areas/activity"]) {
+    await page.goto(path);
+    await expect(page.locator('[data-tag="zoom-hem"], [data-testid$="-filter"]').first()).toBeVisible();
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+        path,
+      )
+      .toEqual([]);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
+});
+
 test("inline edits: axe clean and no overflow at 200% text zoom (read, title editor, summary editor)", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");

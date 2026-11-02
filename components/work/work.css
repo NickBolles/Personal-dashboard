@@ -1221,6 +1221,20 @@ button.wk-kpi:hover {
     align-items: center;
     gap: 4px;
   }
+  /* tree rows: one chip, never wraps or pushes the count off the row */
+  .jv-chips-tree {
+    flex: 0 1 auto;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    max-width: 45%;
+  }
+  .jv-chips-tree .jv-tag,
+  .jv-chips-tree .jv-assignee {
+    font-size: 10.5px;
+  }
+  .jv-chips-tree > :not(:first-child) {
+    display: none;
+  }
   .jv-tag {
     display: inline-flex;
     align-items: center;

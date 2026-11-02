@@ -6,6 +6,7 @@ import { KIND_LABELS, STATUS_LABELS, isContainer, rollup, type LinkedConversatio
 import { ChatIcon } from "@/components/icons";
 import { StatusDot } from "./common";
 import { InlineAdd } from "./QuickAdd";
+import { ItemChips } from "./ItemMeta";
 
 type DropPos = "before" | "after" | "inside";
 type Drag = { id: string; x: number; y: number; active: boolean; target: { id: string; pos: DropPos } | null };
@@ -663,6 +664,7 @@ export function WorkTree({
                 {i.title}
               </span>
             )}
+            {i.tags?.length || i.assignee ? <ItemChips tags={i.tags} assignee={i.assignee} max={1} className="jv-chips-tree" /> : null}
             {count(i)}
             {rowMenu && !virtual.has(i.id) ? rowMenu(i, rowActions(i)) : null}
           </div>

@@ -35,12 +35,12 @@ export function TagChip({ name, color, onRemove }: { name: string; color: TagCol
 }
 
 /** Row chips: assignee then tags, truncated to keep rows one line. */
-export function ItemChips({ tags, assignee, max = 3 }: { tags?: string[]; assignee?: string | null; max?: number }) {
+export function ItemChips({ tags, assignee, max = 3, className }: { tags?: string[]; assignee?: string | null; max?: number; className?: string }) {
   const dir = useTagDirectory(!!(tags?.length || assignee));
   if (!tags?.length && !assignee) return null;
   const people = dir.data?.assignees.people ?? [];
   return (
-    <span className="jv-chips" aria-label="Tags and assignee">
+    <span className={cx("jv-chips", className)}>
       {assignee ? (
         <span className="jv-assignee" data-assignee={assignee}>
           {assigneeLabel(assignee, people)}
@@ -159,11 +159,13 @@ export function ItemFilterBar({
   value,
   onChange,
   idPrefix,
+  className,
 }: {
   rows: { tags?: string[]; assignee?: string | null }[];
   value: ItemFilter;
   onChange: (f: ItemFilter) => void;
   idPrefix: string;
+  className?: string;
 }) {
   const used = rows.some((r) => r.tags?.length || r.assignee);
   const dir = useTagDirectory(used);
@@ -172,7 +174,12 @@ export function ItemFilterBar({
   const refs = [...new Set(rows.map((r) => r.assignee).filter((a): a is string => !!a))];
   const people = dir.data?.assignees.people ?? [];
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Filter by tag or assignee" data-testid={`${idPrefix}-filter`}>
+    <div
+      className={cx("flex min-w-0 flex-wrap items-center gap-1.5", className)}
+      role="group"
+      aria-label="Filter by tag or assignee"
+      data-testid={`${idPrefix}-filter`}
+    >
       <label htmlFor={`${idPrefix}-tag`} className="sr-only">
         Filter by tag
       </label>

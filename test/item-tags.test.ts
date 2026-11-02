@@ -5,6 +5,7 @@ import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
 import { listTags, renameTag } from "@/server/work/tags";
+import { itemContext, triageDestinations } from "@/server/ai/context";
 import { normalizeWorkEvent } from "@/lib/activity";
 import { candidatesFor, confirmText, matchActions, actionById } from "@/lib/palette";
 import {
@@ -179,5 +180,27 @@ describe("palette: Assign to / Tag", () => {
     expect(confirmText(def, [{ arg: def.args[0]!, value: ctx.assignees[0]! }], { title: "Fence" })).toBe("Assign “Fence” to @devchief?");
     const tag = actionById("tag");
     expect(confirmText(tag, [{ arg: tag.args[0]!, value: ctx.tags[0]! }], { title: "Fence" })).toBe("Tag “Fence” #garden?");
+  });
+});
+
+describe("AI context never carries tags or assignee (#111)", () => {
+  let owner: string;
+  beforeEach(() => {
+    __setTestDatabase();
+    owner = claimInstance({ setupCode: "TESTCODE", name: "Owner", passcode: "synthetic-pass" });
+  });
+  const userOf = (id: string) => resolveUser(new Headers(), createSession(id).token)!;
+
+  it("item context for a finance item omits its tags and assignee", async () => {
+    const u = userOf(owner);
+    const area = store.createItem(u, { kind: "area", title: "Money matters" }, "t");
+    const item = store.createItem(u, { kind: "thread", title: "Quarterly tax estimate", parentId: area.id }, "t");
+    store.updateItem(u, item.id, { tags: ["finance-ledger-zq", "brokerage-acct-zq"], assignee: "agent:momentumchief" }, "t");
+    const { text, detail } = await itemContext(u, item.id, {});
+    expect(detail.item.tags).toEqual(["brokerage-acct-zq", "finance-ledger-zq"]);
+    expect(text).toContain("Quarterly tax estimate");
+    expect(text).not.toMatch(/ledger-zq|acct-zq|momentumchief|Tags?:|Assign/i);
+    const dest = JSON.stringify(triageDestinations(owner, () => false));
+    expect(dest).not.toMatch(/ledger-zq|acct-zq|momentumchief/);
   });
 });
