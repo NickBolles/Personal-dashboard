@@ -175,6 +175,11 @@ describe("builder follow-ups (#138, #139, #140)", () => {
     s = builderReducer(s, { type: "fieldDefault", slot: "start", id: "number", source: { kind: "literal", value: "4" } });
     s = builderReducer(s, { type: "fieldDefault", slot: "start", id: "toggle", source: { kind: "literal", value: "false" } });
     expect(field(s.draft, "start", "number").default).toEqual({ value: 4 });
+    // intermediate text survives typing (Codex P2 on #159)
+    for (const typing of ["-", "1.", "0.50"]) {
+      const t = builderReducer(s, { type: "fieldDefault", slot: "start", id: "number", source: { kind: "literal", value: typing } });
+      expect(field(t.draft, "start", "number").default).toEqual({ value: typing });
+    }
     expect(field(s.draft, "start", "toggle").default).toEqual({ value: false });
     expect(sourceOfDefault(field(s.draft, "start", "toggle").default)).toEqual({ kind: "literal", value: "false" });
     expect(validateDefinition(s.draft).ok).toBe(true);

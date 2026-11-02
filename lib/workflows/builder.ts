@@ -163,6 +163,9 @@ function mapField(def: WorkflowDefinition, slot: FormSlot, id: string, fn: (f: W
 export function typedLiteral(f: Pick<WorkflowField, "type"> & Partial<WorkflowField>, value: unknown): string | number | boolean {
   if (f.type !== "number" && f.type !== "toggle") return typeof value === "string" ? value : String(value ?? "");
   const v = normaliseFieldValue(f as WorkflowField, value);
+  // keep intermediate text ("1.", "-", "0.50") while the owner is typing; only a canonical
+  // number becomes a number (strings are still normalised when the defaults are read)
+  if (typeof v === "number" && typeof value === "string" && String(v) !== value.trim()) return value;
   return typeof v === "number" || typeof v === "boolean" ? v : typeof value === "string" ? value : String(value ?? "");
 }
 
