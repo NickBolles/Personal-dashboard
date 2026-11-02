@@ -2825,6 +2825,7 @@ button:active > .dock-orb {
   }
   .jv-activity-row {
     display: flex;
+    flex-wrap: wrap; /* at 200% text, time + Undo drop under the sentence instead of widening the page */
     align-items: center;
     gap: 0.5rem;
     min-height: 44px;
@@ -2851,7 +2852,7 @@ button:active > .dock-orb {
     color: var(--ai, var(--accent));
   }
   .jv-activity-text {
-    flex: 1 1 auto;
+    flex: 1 1 6rem;
     min-width: 0;
     overflow-wrap: anywhere;
   }
