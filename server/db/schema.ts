@@ -1475,3 +1475,84 @@ export const chatFiles = sqliteTable(
   },
   (t) => [index("chat_files_session_idx").on(t.sessionId), index("chat_files_user_idx").on(t.userId)],
 );
+
+/**
+ * Workflows (docs/workflows.md, spec W1): a saved, versioned recipe for a kind
+ * of conversation. `workflows` is the head; `workflow_versions` are immutable
+ * `jarvis-workflow@1` definitions (validated, ≤ 32 KB). Per owner. Built-in
+ * surfaces (brief/week/pr) are listed from code, not stored here.
+ */
+export const workflows = sqliteTable(
+  "workflows",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    icon: text("icon").notNull(),
+    hue: text("hue"),
+    /** default filing area (work item id); null = resolve `routing.area` by path at start */
+    areaId: text("area_id"),
+    /** draft | active | archived (imports always arrive as draft) */
+    status: text("status").notNull().default("draft"),
+    currentVersion: integer("current_version").notNull().default(1),
+    /** sha256 of the canonical current definition (import dedupe) */
+    definitionHash: text("definition_hash").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("workflows_owner_slug_idx").on(t.ownerId, t.slug), index("workflows_owner_status_idx").on(t.ownerId, t.status)],
+);
+
+export const workflowVersions = sqliteTable(
+  "workflow_versions",
+  {
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    /** user id, or "import" / "agent:<profile>" */
+    createdBy: text("created_by").notNull(),
+    changeNote: text("change_note"),
+    definitionJson: text("definition_json").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.workflowId, t.version] })],
+);
+
+/** Owner-managed places for the Place smart field (§12.7). lat/lng null when location stripping was on; never sent to AI. */
+export const savedPlaces = sqliteTable(
+  "saved_places",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    addressText: text("address_text"),
+    lat: real("lat"),
+    lng: real("lng"),
+    radiusM: integer("radius_m").notNull().default(300),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("saved_places_owner_idx").on(t.ownerId)],
+);
+
+/** Remembered form values per workflow field (`last` / `recentValues`, keep 20 per field; §12.9 field_memory). */
+export const rememberedFieldValues = sqliteTable(
+  "remembered_field_values",
+  {
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    fieldId: text("field_id").notNull(),
+    /** sha256 of the canonical value JSON */
+    valueKey: text("value_key").notNull(),
+    valueJson: text("value_json").notNull(),
+    count: integer("count").notNull().default(1),
+    usedAt: text("used_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.workflowId, t.fieldId, t.valueKey] }), index("remembered_field_values_recent_idx").on(t.workflowId, t.fieldId, t.usedAt)],
+);

@@ -11,6 +11,7 @@ import {
   HomeIcon,
   HouseIcon,
   TodoIcon,
+  ToolIcon,
   WalletIcon,
 } from "@/components/icons";
 
@@ -58,6 +59,7 @@ export const DESTINATIONS: Dest[] = [
   },
   { key: "finance", href: "/finance", label: "Finance", icon: WalletIcon, match: (p) => p.startsWith("/finance"), caps: ["finance.view"] },
   { key: "initiatives", href: "/initiatives", label: "Initiatives", icon: FlagIcon, match: (p) => p.startsWith("/initiatives"), caps: ["paperclip.view"] },
+  { key: "workflows", href: "/workflows", label: "Workflows", icon: ToolIcon, match: (p) => p.startsWith("/workflows"), caps: ["work.use"] },
   { key: "todos", href: "/todos", label: "Todos", icon: TodoIcon, match: (p) => p.startsWith("/todos"), caps: ["todos.view"] },
   { key: "skylight", href: "/skylight", label: "Skylight", icon: CalendarIcon, match: (p) => p.startsWith("/skylight"), caps: ["skylight.view"] },
   {
