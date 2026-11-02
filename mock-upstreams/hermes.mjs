@@ -143,7 +143,7 @@ export function createHermes({ apiKey }) {
           title: "Start lantern study",
           fields: [
             { id: "leader", bind: "session.leader", type: "person", label: "Leader" },
-            { id: "passage", bind: "session.passage", type: "scripture_ref", label: "Passage" },
+            { id: "passage", bind: "session.passage", type: "scripture", label: "Passage" },
           ],
         },
         rationale: "You repeat the same three-part structure every week.",

@@ -10,6 +10,23 @@ const proposal: WorkflowProposal = {
 const all = { basics: "accept", instructions: "accept", capture: "accept", startForm: "accept" } as const;
 
 describe("save chat as workflow review", () => {
+  it("the mock Hermes proposal is valid as-is", () => {
+    const mock: WorkflowProposal = {
+      basics: { name: "Lantern study notes x1", slug: "desx1", icon: "book-open", description: "Notes from the lantern study group", area: null },
+      instructions: "Keep each passage, the questions we asked, and my own takeaways separate. Use my words.",
+      capture: { session: { type: "object", fields: { leader: "text?", passage: "scripture_ref?" } }, takeaways: { type: "list", of: "text" } },
+      startForm: {
+        title: "Start lantern study",
+        fields: [
+          { id: "leader", bind: "session.leader", type: "person", label: "Leader" },
+          { id: "passage", bind: "session.passage", type: "scripture", label: "Passage" },
+        ],
+      },
+      rationale: "You repeat the same three-part structure every week.",
+    };
+    const r = validateProposal(mock, all);
+    expect(r.ok ? [] : r.issues).toEqual([]);
+  });
   it("keeping every part yields a valid draft", () => {
     const r = validateProposal(proposal, all);
     expect(r.ok).toBe(true);
