@@ -138,17 +138,21 @@ export function ConversationsView({
                       <ChatIcon className={cx("h-3.5 w-3.5 shrink-0", c.backend === "claude" ? "text-violet" : "text-muted")} />
                       <span className="min-w-0 truncate">{c.title}</span>
                     </Link>
-                    <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                      <span>{c.backend === "claude" ? "Claude" : "Hermes"}</span>
+                    {/* C4: one meta line — agent · path (plain, truncating) · time. */}
+                    <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted sm:flex-nowrap">
+                      <span className="shrink-0">{c.backend === "claude" ? "Claude" : "Hermes"}</span>
                       <span aria-hidden="true">·</span>
-                      <span data-dynamic>{c.lastActiveAt ? relativeTime(c.lastActiveAt) : "—"}</span>
                       {c.placement && !c.placement.inMisc ? (
-                        <span className="chip" title={c.placement.path}>
+                        <span className="min-w-0 truncate" title={c.placement.path}>
                           {c.placement.path}
                         </span>
                       ) : (
-                        <span className="chip">{c.placement ? "Miscellaneous" : "Not in Areas"}</span>
+                        <span className="min-w-0 truncate">{c.placement ? "Miscellaneous" : "Not in Areas"}</span>
                       )}
+                      <span aria-hidden="true">·</span>
+                      <span data-dynamic className="shrink-0 tabular-nums">
+                        {c.lastActiveAt ? relativeTime(c.lastActiveAt) : "—"}
+                      </span>
                       {c.shared ? <Badge tone="accent">Shared</Badge> : null}
                       {c.readOnly ? <Badge>Shared with you</Badge> : null}
                     </p>

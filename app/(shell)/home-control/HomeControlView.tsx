@@ -139,16 +139,16 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
             {controls.data && !controls.data.controls.length ? (
               <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
             ) : null}
-            <ul className="grid gap-2 sm:grid-cols-2">
+            {/* H1: compact two-line tiles, three across on desktops. */}
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(controls.data?.controls ?? []).map((c) => (
                 <li key={c.entityId}>
                   <Card className={cx(focusEntity === c.entityId && "border-accent")}>
-                    <p className="font-medium">{c.name}</p>
-                    <p className="text-sm text-muted">
-                      Now: <strong className="text-text">{c.state}</strong>
-                      <span className="block text-xs">Checked {new Date(c.observedAt).toLocaleTimeString()}</span>
+                    <p className="leading-snug font-medium">{c.name}</p>
+                    <p className="text-xs text-muted">
+                      Now: <strong className="text-text">{c.state}</strong> · checked {new Date(c.observedAt).toLocaleTimeString()}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap gap-2">
                       {c.services.map((s) => (
                         <Button
                           key={s.service}
@@ -215,7 +215,7 @@ function CalendarSection({ events }: { events: CalendarEvent[] }) {
       <SectionHeader id="cal-h" label="Household calendar" />
       <ul className="card divide-y divide-line">
         {events.slice(0, 10).map((e) => (
-          <li key={e.id} className="flex flex-wrap justify-between gap-2 p-3 text-sm">
+          <li key={e.id} className="flex flex-wrap justify-between gap-2 px-3 py-2 text-sm">
             <span className="font-medium">{e.title}</span>
             <span className="text-muted" data-dynamic>
               {e.allDay
@@ -272,7 +272,10 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
           <SectionHeader id="doors-h" label="Doors, locks and garage" />
           <ul className="card divide-y divide-line">
             {d.doors.map((x) => (
-              <li key={x.entityId} className={cx("flex flex-wrap items-center justify-between gap-2 p-3", focusEntity === x.entityId && "bg-accent-soft")}>
+              <li
+                key={x.entityId}
+                className={cx("flex flex-wrap items-center justify-between gap-2 px-3 py-2", focusEntity === x.entityId && "bg-accent-soft")}
+              >
                 <span>
                   <span className="font-medium">{x.name}</span> <span className="text-xs text-muted">{KIND_LABEL[x.kind]}</span>
                 </span>
@@ -288,7 +291,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
         <section aria-labelledby="lights-h" className="mt-6">
           <SectionHeader id="lights-h" label="Lights" />
           {!online ? <p className="mb-2 text-sm text-warn">Light switches are off while offline.</p> : null}
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {d.lights.map((x) => {
               const on = x.state === "on";
               const canSwitch = can("home_assistant.control_lights") && x.services.length > 0;
@@ -296,10 +299,10 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
               return (
                 <li
                   key={x.entityId}
-                  className={cx("card flex flex-wrap items-center justify-between gap-3 p-3", focusEntity === x.entityId && "border-accent")}
+                  className={cx("card flex flex-wrap items-center justify-between gap-2 px-3 py-2", focusEntity === x.entityId && "border-accent")}
                 >
                   <span className="flex min-w-0 items-center gap-2">
-                    <LightIcon className={cx("h-6 w-6 shrink-0", on ? "text-warn" : "text-muted")} />
+                    <LightIcon className={cx("h-5 w-5 shrink-0", on ? "text-warn" : "text-muted")} />
                     <span>
                       <span className="block font-medium">{x.name}</span>
                       <span className="text-xs text-muted">
@@ -329,7 +332,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       {d.cameras.length ? (
         <section aria-labelledby="cams-h" className="mt-6">
           <SectionHeader id="cams-h" label="Cameras" />
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {d.cameras.map((c) => (
               <CameraCard key={c.entityId} camera={c} online={online} />
             ))}

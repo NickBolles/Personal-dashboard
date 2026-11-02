@@ -491,14 +491,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                       ) : null}
                       {areaCtx ? (
                         <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
+                          {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
                           <button
                             type="button"
-                            className="chip cursor-pointer hover:border-line-strong"
+                            className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
                             title={areaCtx.placement?.path ?? "Not in Areas yet"}
                             onClick={() => setDialog("file")}
                             aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
                           >
-                            <span aria-hidden="true">▸</span> {areaCtx.placement?.path || "Not in Areas"}
+                            <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
+                            <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
                           </button>
                           {areaCtx.suggestions.slice(0, 2).map((sg) => (
                             <button
@@ -512,11 +514,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                               File under {sg.title}
                             </button>
                           ))}
-                          {areaCtx.node ? (
-                            <Link className="chip hover:border-line-strong max-sm:hidden" href={`/areas?item=${encodeURIComponent(areaCtx.node.id)}`}>
-                              Properties
-                            </Link>
-                          ) : null}
+                          {/* Properties lives in the header ⋯ menu. */}
                         </span>
                       ) : null}
                       {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}

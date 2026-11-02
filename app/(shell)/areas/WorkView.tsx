@@ -1811,6 +1811,12 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
               {d.validations.filter((v) => v.status === "pass" || v.status === "waived").length}/{d.validations.length} met
             </span>
           ) : null}
+          {/* IT3: overdue is a compact header note + red due text on the row, not a banner. */}
+          {overdue ? (
+            <span className="text-xs font-normal text-danger" data-testid="validation-overdue">
+              · {overdue} validation{overdue === 1 ? " is" : "s are"} overdue
+            </span>
+          ) : null}
         </h3>
         <div className="flex flex-wrap items-center gap-1">
           <Button size="sm" variant="ghost" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
@@ -1838,11 +1844,6 @@ function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; on
             Reopen with failed evidence
           </Button>
         </div>
-      ) : null}
-      {overdue ? (
-        <p className="mb-2 rounded-lg bg-danger-soft p-2 text-sm text-danger" data-testid="validation-overdue">
-          {overdue} validation{overdue === 1 ? " is" : "s are"} overdue: the due date passed and it&apos;s still pending.
-        </p>
       ) : null}
       {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
       {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
@@ -2113,7 +2114,12 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
       <p className="text-xs text-muted" data-dynamic>
         {v.baseline !== null ? `Baseline ${v.baseline}${v.unit ? ` ${v.unit}` : ""} · ` : ""}
         {v.observed !== null ? `Observed ${v.observed}${v.unit ? ` ${v.unit}` : ""}` : "Not measured yet"}
-        {v.dueDate ? ` · due ${shortDate(v.dueDate)}` : ""}
+        {v.dueDate ? (
+          <span className={cx(v.overdue && "font-medium text-danger")}>
+            {" · "}
+            {v.overdue ? "overdue since" : "due"} {shortDate(v.dueDate)}
+          </span>
+        ) : null}
         {v.waiverReason ? ` · waived: ${v.waiverReason}` : ""}
       </p>
       {v.evidenceUrl ? (
