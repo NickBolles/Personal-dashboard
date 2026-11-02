@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
@@ -78,11 +78,20 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
   const events = chunks
-    .flatMap((c) => db.select().from(schema.workEvents).where(inArray(schema.workEvents.itemId, c)).orderBy(desc(schema.workEvents.at)).limit(SOURCE_CAP).all())
-    .sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1));
+    .flatMap((c) =>
+      db
+        .select({ ...getTableColumns(schema.workEvents), seq: sql<number>`"work_events"."rowid"` })
+        .from(schema.workEvents)
+        .where(inArray(schema.workEvents.itemId, c))
+        .orderBy(desc(schema.workEvents.at), desc(sql`"work_events"."rowid"`))
+        .limit(SOURCE_CAP)
+        .all(),
+    )
+    // Newest first; same millisecond → insertion order (rowid), never the random id.
+    .sort((a, b) => (a.at === b.at ? b.seq - a.seq : a.at < b.at ? 1 : -1));
   const ops = chunks.flatMap((c) =>
     db
-      .select()
+      .select({ ...getTableColumns(schema.workOps), seq: sql<number>`"work_ops"."rowid"` })
       .from(schema.workOps)
       .where(and(eq(schema.workOps.userId, user.id), inArray(schema.workOps.itemId, c)))
       .all(),
@@ -91,19 +100,19 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
   for (const o of ops) opsByItem.set(o.itemId, [...(opsByItem.get(o.itemId) ?? []), o]);
   const usedOps = new Set<string>();
   for (const e of events) {
-    const item = normalizeWorkEvent(e, user.id, byId.get(e.itemId)?.title ?? null);
+    const item: ActivityItem = { ...normalizeWorkEvent(e, user.id, byId.get(e.itemId)?.title ?? null), seq: e.seq };
     const kinds = OP_FOR_EVENT[e.kind];
     if (kinds && e.actor === user.id) {
       const t = Date.parse(e.at);
       const itemOps = opsByItem.get(e.itemId) ?? [];
-      // Closest op in time wins (ties → newest, then id) so two quick edits never swap Undo targets.
+      // Closest op in time wins (ties → newest, then insertion order) so two quick edits never swap Undo targets.
       let op: (typeof itemOps)[number] | undefined;
       let best = Infinity;
       for (const o of itemOps) {
         if (usedOps.has(o.id) || !kinds.includes(o.kind)) continue;
         const d = Math.abs(Date.parse(o.createdAt) - t);
         if (d > OP_MATCH_MS) continue;
-        if (d < best || (d === best && op && (o.createdAt > op.createdAt || (o.createdAt === op.createdAt && o.id > op.id)))) {
+        if (d < best || (d === best && op && (o.createdAt > op.createdAt || (o.createdAt === op.createdAt && o.seq > op.seq)))) {
           op = o;
           best = d;
         }

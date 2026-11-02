@@ -1,5 +1,5 @@
 /** Activity timeline: normalisation, day grouping, cursor paging (lib/activity.ts) + server scoping/undo (server/work/activity.ts). */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { __setTestDatabase } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
@@ -107,6 +107,28 @@ describe("cursor paging", () => {
     expect(seen.slice(0, 4)).toEqual(["r3", "r2", "r1", "r0"]);
   });
 
+  it("breaks same-millisecond ties by insertion seq, across pages", () => {
+    const at = "2026-11-01T10:00:00.000Z";
+    // ids deliberately sort opposite to insertion order
+    const all = [
+      row("ev:z", at, { seq: 1 }),
+      row("ev:y", at, { seq: 2 }),
+      row("ev:x", at, { seq: 3 }),
+      row("run:q", at),
+      row("ev:w", "2026-11-01T09:00:00.000Z", { seq: 4 }),
+    ];
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const p: ActivityResponse = pageActivity(all, { cursor, limit: 2 });
+      seen.push(...p.items.map((i) => i.id));
+      expect(p.items.every((i) => !("seq" in i))).toBe(true);
+      cursor = p.nextCursor;
+    } while (cursor);
+    expect(seen).toEqual(["ev:x", "ev:y", "ev:z", "run:q", "ev:w"]);
+    expect(decodeCursor(encodeCursor({ at, id: "ev:y", seq: 2 }))).toEqual({ at, id: "ev:y", seq: 2 });
+  });
+
   it("filters by type, actor and search words", () => {
     const all = [
       row("a", "2026-11-01T10:00:00Z", { verb: "edited title" }),
@@ -149,6 +171,10 @@ describe("listActivity (server)", () => {
     expect(listActivity(u, { item: item.id }).items.find((i) => i.id === edit!.id)?.undoOpId).toBeNull();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("gives Undo to the newest of two quick edits, and it reverts that edit", () => {
     const u = userOf(owner);
     const item = store.createItem(u, { kind: "thread", title: "Lathe chuck" }, cid);
@@ -162,6 +188,28 @@ describe("listActivity (server)", () => {
     const after = store.getDetail(u.id, item.id).item;
     expect(after.title).toBe("Lathe chuck key");
     expect(after.summary ?? "").not.toBe("Find the spare key");
+  });
+
+  it("orders same-millisecond edits by insertion, not by their random ids", () => {
+    // Freeze the clock so both edits always share one timestamp (the case that used to flake).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T08:00:00.000Z"));
+    const u = userOf(owner);
+    for (let n = 0; n < 12; n++) {
+      const item = store.createItem(u, { kind: "thread", title: `Drill press ${n}` }, cid);
+      store.updateItem(u, item.id, { title: `Drill press ${n} table` }, cid);
+      store.updateItem(u, item.id, { summary: `Shim the table ${n}` }, cid);
+      const edits = listActivity(u, { item: item.id }).items.filter((i) => i.type === "edit");
+      expect(edits).toHaveLength(2);
+      expect(edits[0].at).toBe(edits[1].at);
+      expect(edits[0].verb).toContain("summary");
+      expect(edits.map((i) => Boolean(i.undoOpId))).toEqual([true, false]);
+      expect(edits.every((i) => !("seq" in i))).toBe(true);
+      store.undoOp(u, edits[0].undoOpId!, cid);
+      const after = store.getDetail(u.id, item.id).item;
+      expect(after.title).toBe(`Drill press ${n} table`);
+      expect(after.summary ?? "").not.toBe(`Shim the table ${n}`);
+    }
   });
 
   it("GET /api/work/activity requires a session and honours filters", async () => {

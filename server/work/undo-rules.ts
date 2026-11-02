@@ -27,7 +27,8 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
 /** Fields an "edit" op can restore. */
 export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status"] as const;
 
-export type OpLike = { id: string; createdAt: string; undoneAt: string | null };
+/** `seq` = SQLite rowid (insertion order) when the caller loaded it: breaks same-millisecond ties. */
+export type OpLike = { id: string; createdAt: string; undoneAt: string | null; seq?: number };
 
 export type UndoCheck = { ok: true } | { ok: false; code: "already_undone" | "superseded" | "expired"; message: string };
 
@@ -42,9 +43,12 @@ export function undoCheck(op: OpLike, latestOpId: string | null, now: Date, wind
   return { ok: true };
 }
 
-/** Latest operation first: newest createdAt, then id (ids are random, so this only breaks exact ties deterministically). */
+/**
+ * Latest operation first: newest createdAt, then the higher insertion seq (two quick edits often
+ * share a millisecond), then id (random, so only a last-resort deterministic tie-break).
+ */
 export function latestOp<T extends OpLike>(ops: T[]): T | null {
-  return [...ops].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0] ?? null;
+  return [...ops].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || (b.seq ?? -1) - (a.seq ?? -1) || b.id.localeCompare(a.id))[0] ?? null;
 }
 
 /**

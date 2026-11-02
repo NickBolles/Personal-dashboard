@@ -382,6 +382,14 @@ describe("undo for structural operations", () => {
         ?.id,
     ).toBe("c");
     expect(latestOp([])).toBeNull();
+    // Same millisecond: the later insertion (rowid seq) wins regardless of the random id.
+    const t = "2026-10-22T11:59:00.000Z";
+    expect(
+      latestOp([
+        { id: "z", createdAt: t, undoneAt: null, seq: 1 },
+        { id: "a", createdAt: t, undoneAt: null, seq: 2 },
+      ])?.id,
+    ).toBe("a");
     const base = { createdAt: "t", updatedAt: "t", eventKinds: ["created"], children: 0, packets: 0, validations: 0, links: 1, copiedLinks: 1 };
     expect(isUntouched(base)).toBe(true);
     expect(isUntouched({ ...base, updatedAt: "t2" })).toBe(false);
