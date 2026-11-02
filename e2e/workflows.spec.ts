@@ -42,5 +42,6 @@ test("workflows: import as draft, export, turn on, start from the palette", asyn
   await expect(row).toContainText("Start Sermon notebook");
   await row.click();
   await expect(page).toHaveURL(/\/chat\//);
-  await expect(page.getByText("Sermon notebook — Speaker: Jake Fry").first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sermon notebook — Speaker: Jake Fry", level: 1 })).toBeVisible();
+  await expect(page.getByText("Context Jarvis attached").first()).toBeAttached();
 });
