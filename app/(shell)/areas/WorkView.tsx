@@ -1390,6 +1390,22 @@ function ContainerBody({
             empty="Break the project into items. Type “Sub-project / item” to nest."
           />
         )}
+        {usedAsWork ? (
+          <>
+            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
+            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
+          </>
+        ) : null}
+        <details className="wk-disclosure card">
+          <summary className="tap cursor-pointer font-semibold">Activity</summary>
+          <div className="mt-2 space-y-3">
+            <Activity d={d} onSelect={onSelect} />
+          </div>
+        </details>
+      </div>
+      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
+      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
+        {/* A3: the side column leads with what moved; settings and details follow. */}
         {recent.length ? (
           <section aria-labelledby="recent-h">
             <SectionHeader id="recent-h" label="Recent activity" count={recent.length} />
@@ -1407,21 +1423,6 @@ function ContainerBody({
             </ul>
           </section>
         ) : null}
-        {usedAsWork ? (
-          <>
-            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
-            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
-          </>
-        ) : null}
-        <details className="wk-disclosure card">
-          <summary className="tap cursor-pointer font-semibold">Activity</summary>
-          <div className="mt-2 space-y-3">
-            <Activity d={d} onSelect={onSelect} />
-          </div>
-        </details>
-      </div>
-      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
-      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
         {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
         <EditItem
           key={item.updatedAt}
@@ -1447,6 +1448,17 @@ function ContainerBody({
         <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
       </aside>
     </div>
+  );
+}
+
+function ProgressMini({ items, id }: { items: WorkItem[]; id: string }) {
+  const r = rollup(items, id);
+  if (!r.total) return null;
+  const pct = Math.round((r.done / r.total) * 100);
+  return (
+    <span className="wk-pmini max-sm:hidden" role="img" aria-label={`${r.done} of ${r.total} done`} title={`${r.done} of ${r.total} done`}>
+      <span style={{ width: `${pct}%` }} />
+    </span>
   );
 }
 
@@ -1538,7 +1550,11 @@ function ChildrenCard({
                         {fmtWhen(c.updatedAt)}
                       </span>
                     ) : (
-                      <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                      <span className="inline-flex items-center gap-2">
+                        {/* A2: containers show a 4px progress mini-bar beside the right-aligned pill. */}
+                        {isContainer(c) ? <ProgressMini items={items} id={c.id} /> : null}
+                        <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
+                      </span>
                     )
                   }
                 />
