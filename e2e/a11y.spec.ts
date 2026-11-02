@@ -37,6 +37,7 @@ const PAGES = [
   "/areas/timeline",
   "/areas/dashboard",
   "/areas/map",
+  "/areas/activity",
   "/capture",
   "/settings/ai",
   "/settings/agents",
@@ -75,6 +76,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/finance",
     "/finance/plan",
     "/workflows",
+    "/areas/activity",
   ]) {
     await page.goto(path);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
@@ -221,6 +223,31 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
   await axe("confirm");
   await page.getByTestId("palette-confirm").getByRole("button", { name: "Cancel" }).click();
   await page.keyboard.press("Escape");
+});
+
+test("200% text zoom: item, area and activity pages (Areas nav, New menu, Undo rows) do not scroll the page sideways (#112)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const post = async (data: unknown) => {
+    const r = await page.request.post("/api/work/items", { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const areaId = await post({ kind: "area", title: `Zoom lantern ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom wick ${nonce}` });
+  // A fresh undoable edit: its activity row carries Undo + time, the widest row at 200% text.
+  const renamed = await page.request.patch(`/api/work/items/${id}`, { data: { title: `Zoom wick renamed ${nonce}` }, headers: { "x-jarvis-csrf": "1" } });
+  expect(renamed.ok()).toBeTruthy();
+  for (const path of [`/areas?item=${id}`, `/areas?item=${areaId}`, "/areas/activity"]) {
+    await page.goto(path);
+    await expect(page.locator(path.includes("item=") ? "#work-item-title" : "h1").first()).toBeVisible();
+    if (!path.includes("item=")) await expect(page.getByRole("button", { name: /^Undo/ }).first()).toBeVisible();
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    // The Areas sections row scrolls inside its own box; the page itself must not.
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
 });
 
 test("inline edits: axe clean and no overflow at 200% text zoom (read, title editor, summary editor)", async ({ page }) => {
