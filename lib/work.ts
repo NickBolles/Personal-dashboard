@@ -4,6 +4,8 @@
  */
 import { z } from "zod";
 import type { MapGraph } from "./work-map";
+import { decisionInputSchema, type ItemDecision } from "./decisions";
+export type { ItemDecision } from "./decisions";
 
 export const WORK_KINDS = ["area", "project", "thread", "investigation", "note", "conversation"] as const;
 export type WorkKind = (typeof WORK_KINDS)[number];
@@ -225,6 +227,8 @@ export type WorkItem = {
   tags: string[];
   /** "agent:<profile>" | "person:<userId>" | null */
   assignee: string | null;
+  /** set while the item needs an owner decision (Decisions inbox, lib/decisions.ts) */
+  decision: ItemDecision | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -583,6 +587,8 @@ export const updateItemSchema = z
     tags: z.array(z.string().max(64)).max(40).optional(),
     /** "agent:<profile>" | "person:<userId>" | null to clear; never starts a run */
     assignee: z.string().max(120).nullable().optional(),
+    /** flag the item as needing an owner decision (question + optional one-tap choices); null clears it */
+    decision: decisionInputSchema.nullable().optional(),
   })
   .strict();
 

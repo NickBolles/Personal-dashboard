@@ -10,6 +10,7 @@ import { createSession as createConversation, getSessionDetail, sessionAccess } 
 import { requireCap } from "@/server/access";
 import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
+import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision } from "@/lib/decisions";
 import {
   applyTemplate,
   areaValidationDefault,
@@ -116,6 +117,7 @@ export function toItem(r: ItemRow): WorkItem {
     settings: r.parentId === null && r.kind === "area" ? parseAreaSettings(r.settings) : null,
     tags: parseTags(r.tags),
     assignee: r.assignee ?? null,
+    decision: parseDecision(r.decision),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -505,8 +507,9 @@ export function createPath(user: CurrentUser, body: z.infer<typeof createPathSch
 }
 
 export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
-  const { status, reason, settings, tags: rawTags, assignee: rawAssignee, ...rest } = body;
-  const fields: typeof rest & { tags?: string; assignee?: string | null } = { ...rest };
+  const { status, reason, settings, tags: rawTags, assignee: rawAssignee, decision: rawDecision, ...rest } = body;
+  const fields: typeof rest & { tags?: string; assignee?: string | null; decision?: string | null } = { ...rest };
+  if (rawDecision !== undefined) fields.decision = rawDecision === null ? null : serialiseDecision(rawDecision, nowIso());
   if (rawTags !== undefined) {
     const t = normaliseTags(rawTags);
     if (!t.ok) throw new HttpError(400, "tags", t.error);
@@ -520,6 +523,11 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       if (!a.ok) throw new HttpError(400, "assignee", a.error);
       fields.assignee = a.value;
       if (a.value !== (row.assignee ?? null)) event(tx, id, user.id, { kind: "edit", reason: assigneeChangeText(row.assignee ?? null, a.value, people) });
+    }
+    if (fields.decision !== undefined && (fields.decision ?? null) !== (row.decision ?? null)) {
+      const d = parseDecision(fields.decision);
+      if (d && row.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask the decision on the work item, not the conversation");
+      event(tx, id, user.id, { kind: "edit", reason: d ? `Needs your decision: ${d.question}` : "Cleared the decision request" });
     }
     if (fields.tags !== undefined && fields.tags !== row.tags) {
       const next = parseTags(fields.tags);
@@ -581,7 +589,7 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
         prev[f] = (row as Record<string, unknown>)[f];
         next[f] = after[f];
       }
-      const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate" && f !== "tags" && f !== "assignee");
+      const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate" && f !== "tags" && f !== "assignee" && f !== "decision");
       if (text.length) event(tx, id, user.id, { kind: "edit", reason: `Edited ${text.map((f) => (f === "nextAction" ? "next action" : f)).join(", ")}` });
       // A status edit also moves the lifecycle fields (planTransition); keep them so undo restores
       // the settlement reason/kind and completedAt, not just the status.
@@ -618,6 +626,28 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       correlationId,
       detail: { fields: Object.keys(settings) },
     });
+  return toItem(ownedItem(user.id, id));
+}
+
+/**
+ * Answer an item's owner decision (Decisions inbox): clears the request, appends
+ * "Decision: Q → A" to the summary, logs a `decision` event and records one
+ * undoable edit op (undo restores the question and the old summary). Never
+ * changes status or settles; posting to a conversation is the client's
+ * separate, confirmed step.
+ */
+export function answerDecision(user: CurrentUser, id: string, answer: string, correlationId: string, out?: OpOut): WorkItem {
+  getDb().transaction((tx) => {
+    const row = ownedItem(user.id, id, tx);
+    const d = parseDecision(row.decision);
+    if (!d) throw new HttpError(409, "no_decision", "This item isn't waiting on a decision any more");
+    const at = nowIso();
+    const summary = appendDecisionToSummary(row.summary, d.question, answer, at);
+    event(tx, id, user.id, { kind: "decision", reason: decisionLogText(d.question, answer) });
+    recordOp(tx, user.id, id, "edit", { prev: { decision: row.decision, summary: row.summary }, next: { decision: null, summary } }, out);
+    tx.update(T).set({ decision: null, summary, updatedAt: at }).where(eq(T.id, id)).run();
+  });
+  audit({ actor: user.id, action: "work.decision", source: "work", sourceRecord: id, result: "ok", correlationId });
   return toItem(ownedItem(user.id, id));
 }
 

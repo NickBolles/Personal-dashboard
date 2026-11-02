@@ -819,6 +819,8 @@ export const workItems = sqliteTable(
     tags: text("tags").notNull().default("[]"),
     /** "agent:<profile>" | "person:<userId>" | null (lib/item-tags.ts); assigning never starts a run */
     assignee: text("assignee"),
+    /** Decisions inbox: JSON {question, choices[], askedAt} (lib/decisions.ts) while the item needs an owner decision; null otherwise */
+    decision: text("decision"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

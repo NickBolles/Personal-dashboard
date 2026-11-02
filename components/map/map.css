@@ -1,0 +1,203 @@
+/*
+ * /map + Decisions inbox: portfolio-board density (Command Center, Tide/Lagoon
+ * tokens from app/globals.css). Touch keeps 44px targets; fine pointers get
+ * the compact rows. Unlayered on purpose (same reason as work.css).
+ */
+.mp-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+@media (min-width: 640px) {
+  .mp-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .mp-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.mp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--surface);
+  color: var(--text);
+}
+.mp-card:hover {
+  border-color: var(--line-strong);
+}
+.mp-card-on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.mp-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.mp-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.mp-count b {
+  color: var(--text);
+  font-weight: 600;
+}
+.mp-count[data-tone="wn"] {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.mp-count[data-tone="ac"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.mp-bar {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.mp-bar i {
+  display: block;
+  min-width: 4px;
+  background: var(--line-strong);
+}
+.mp-bar i[data-tone="wn"] {
+  background: var(--warn);
+}
+.mp-bar i[data-tone="ac"] {
+  background: var(--accent);
+}
+.mp-bar i[data-tone="inf"] {
+  background: var(--info);
+}
+.mp-bar i[data-tone="ok"] {
+  background: var(--ok);
+}
+.mp-area {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--surface);
+}
+.mp-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.mp-sum > span:first-child {
+  flex: 1 1 auto;
+}
+.mp-sum::-webkit-details-marker {
+  display: none;
+}
+.mp-sum::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s var(--ease, ease);
+}
+details[open] > .mp-sum::before {
+  transform: rotate(45deg);
+}
+.mp-proj {
+  border-top: 1px solid var(--line);
+}
+.mp-proj > .mp-sum {
+  padding-left: 20px;
+}
+.mp-branch .mp-branch {
+  padding-left: 10px;
+}
+.mp-rows {
+  border-top: 1px solid var(--line);
+}
+.mp-row {
+  padding: 8px 12px 8px 20px;
+  min-width: 0;
+}
+.mp-row + .mp-row {
+  border-top: 1px solid var(--line);
+}
+.mp-flag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  white-space: nowrap;
+}
+.mp-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  font-size: 12px;
+  padding: 0 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--accent);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mp-link:hover {
+  text-decoration: underline;
+}
+.dc-list {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--surface);
+}
+.dc-row {
+  padding: 10px 12px;
+  min-width: 0;
+}
+.dc-row + .dc-row {
+  border-top: 1px solid var(--line);
+}
+.dc-confirm {
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-card, 12px);
+  background: var(--accent-soft);
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  .mp-sum {
+    min-height: 36px;
+  }
+  .mp-row {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}

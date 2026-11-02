@@ -30,7 +30,7 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
 export const TAG_OPS_ITEM = "tags";
 
 /** Fields an "edit" op can restore. */
-export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status", "tags", "assignee"] as const;
+export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status", "tags", "assignee", "decision"] as const;
 
 /** `seq` = SQLite rowid (insertion order) when the caller loaded it: breaks same-millisecond ties. */
 export type OpLike = { id: string; createdAt: string; undoneAt: string | null; seq?: number };

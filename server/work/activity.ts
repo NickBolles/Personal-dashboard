@@ -55,6 +55,8 @@ const OP_FOR_EVENT: Record<string, string[]> = {
   dates: ["edit"],
   created: ["split", "fork"],
   reordered: ["reorder", "move"],
+  // Decisions inbox: answering logs a "decision" event with an undoable edit op
+  decision: ["edit"],
 };
 
 export type ActivityQuery = ActivityFilter & {

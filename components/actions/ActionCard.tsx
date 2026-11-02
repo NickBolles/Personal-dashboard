@@ -158,7 +158,7 @@ export function ActionCard({
   const why =
     rank && action.why?.length ? (
       <details className="jv-why group min-w-0 open:basis-full">
-        <summary className="inline-flex min-h-6 items-center gap-0.5 rounded-[6px] px-1 text-xs font-medium text-muted hover:bg-surface-2 hover:text-text">
+        <summary className="relative inline-flex min-h-6 items-center gap-0.5 rounded-[6px] px-1 text-xs font-medium text-muted hover:bg-surface-2 hover:text-text">
           <span>Why this?</span>
           <span className="sr-only"> ({action.title})</span>
           <ChevronIcon className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
