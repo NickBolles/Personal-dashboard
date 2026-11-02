@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { audit } from "@/server/audit";
@@ -79,6 +79,8 @@ type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 type Db = ReturnType<typeof getDb> | Tx;
 
 const nowIso = () => new Date().toISOString();
+/** work_ops insertion order (rowid): the tie-break when two ops share a millisecond. */
+const opSeq = sql<number>`"work_ops"."rowid"`;
 const today = () => localDate(Date.now(), config.timezone);
 
 function lifecycle<T>(fn: () => T): T {
@@ -763,7 +765,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     if (!op) throw new HttpError(404, "not_found", "Nothing to undo");
     const latest = latestOp(
       tx
-        .select()
+        .select({ ...getTableColumns(schema.workOps), seq: opSeq })
         .from(schema.workOps)
         .where(and(eq(schema.workOps.userId, user.id), eq(schema.workOps.itemId, op.itemId)))
         .all()
@@ -1723,7 +1725,7 @@ export function recentAutoSettled(userId: string, now = new Date()) {
   return rows.map((r) => {
     const latest = latestOp(
       getDb()
-        .select()
+        .select({ ...getTableColumns(schema.workOps), seq: opSeq })
         .from(schema.workOps)
         .where(and(eq(schema.workOps.userId, userId), eq(schema.workOps.itemId, r.id)))
         .all(),

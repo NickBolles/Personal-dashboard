@@ -34,6 +34,11 @@ export type ActivityItem = {
   detail: string | null;
   /** a work_ops id the viewer can still undo (latest of its stack, inside the window) */
   undoOpId: string | null;
+  /**
+   * Server-only insertion order (SQLite rowid) for rows that share a millisecond: two quick edits
+   * often do, and their random ids would order them arbitrarily. Stripped from API responses.
+   */
+  seq?: number;
 };
 
 export type ActivityResponse = { items: ActivityItem[]; nextCursor: string | null; latestAt: string | null };
@@ -111,29 +116,46 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
   return { id: `ev:${e.id}`, at: e.at, type, actor, verb, object, detail, undoOpId: null };
 }
 
-/** Newest first, ties broken by id (stable for the cursor). */
+type SortKey = Pick<ActivityItem, "at" | "id" | "seq">;
+
+/**
+ * Feed order: newest first; equal timestamps → higher insertion seq first (rows without one count
+ * as -1), then id. Lexicographic on (at, seq, id), so it is a total order the cursor can follow.
+ */
+export function compareActivity(a: SortKey, b: SortKey): number {
+  if (a.at !== b.at) return a.at < b.at ? 1 : -1;
+  const sa = a.seq ?? -1;
+  const sb = b.seq ?? -1;
+  if (sa !== sb) return sb - sa;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+/** Newest first (see compareActivity; stable for the cursor). */
 export function sortActivity(items: ActivityItem[]): ActivityItem[] {
-  return [...items].sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0) : a.at < b.at ? 1 : -1));
+  return [...items].sort(compareActivity);
 }
 
-export function encodeCursor(item: Pick<ActivityItem, "at" | "id">): string {
-  return Buffer.from(JSON.stringify([item.at, item.id]), "utf8").toString("base64url");
+export function encodeCursor(item: SortKey): string {
+  const key = item.seq === undefined ? [item.at, item.id] : [item.at, item.id, item.seq];
+  return Buffer.from(JSON.stringify(key), "utf8").toString("base64url");
 }
 
-export function decodeCursor(cursor: string | null | undefined): { at: string; id: string } | null {
+export function decodeCursor(cursor: string | null | undefined): { at: string; id: string; seq?: number } | null {
   if (!cursor) return null;
   try {
     const v = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as unknown;
-    if (Array.isArray(v) && typeof v[0] === "string" && typeof v[1] === "string" && !Number.isNaN(Date.parse(v[0]))) return { at: v[0], id: v[1] };
+    if (Array.isArray(v) && typeof v[0] === "string" && typeof v[1] === "string" && !Number.isNaN(Date.parse(v[0]))) {
+      return typeof v[2] === "number" && Number.isInteger(v[2]) ? { at: v[0], id: v[1], seq: v[2] } : { at: v[0], id: v[1] };
+    }
   } catch {
     /* bad cursor → first page */
   }
   return null;
 }
 
-/** Strictly older than the cursor in (at desc, id desc) order. */
-export function isBefore(item: Pick<ActivityItem, "at" | "id">, c: { at: string; id: string }) {
-  return item.at < c.at || (item.at === c.at && item.id < c.id);
+/** Strictly after the cursor in feed order (compareActivity). */
+export function isBefore(item: SortKey, c: SortKey) {
+  return compareActivity(item, c) > 0;
 }
 
 export type ActivityFilter = { types?: ActivityType[]; actor?: ActorKind | null; q?: string | null };
@@ -155,8 +177,9 @@ export function pageActivity(all: ActivityItem[], f: ActivityFilter & { cursor?:
   const sorted = sortActivity(all).filter((i) => matchesFilter(i, f));
   const c = decodeCursor(f.cursor);
   const rest = c ? sorted.filter((i) => isBefore(i, c)) : sorted;
-  const items = rest.slice(0, limit);
-  const nextCursor = rest.length > limit ? encodeCursor(items[items.length - 1]) : null;
+  const page = rest.slice(0, limit);
+  const nextCursor = rest.length > limit ? encodeCursor(page[page.length - 1]) : null;
+  const items = page.map(({ seq: _seq, ...item }) => item);
   return { items, nextCursor, latestAt: sorted[0]?.at ?? null };
 }
 
