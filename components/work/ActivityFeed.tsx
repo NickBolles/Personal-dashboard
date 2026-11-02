@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Empty, ErrorNote, Spinner, inputCls, useToast } from "@/components/ui";
 import {
@@ -15,6 +15,9 @@ import {
   type ActivityType,
   type ActorKind,
 } from "@/lib/activity";
+import { matchesItemFilter } from "@/lib/item-tags";
+import type { ItemsResponse } from "@/lib/work";
+import { ItemFilterBar, NO_FILTER, type ItemFilter } from "./ItemMeta";
 
 /** Glyph per row type (text glyphs keep rows light; aria-hidden — the verb carries the meaning). */
 const GLYPH: Record<ActivityType, string> = {
@@ -85,10 +88,17 @@ export function ActivityFeed({
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     refetchInterval: POLL_MS,
   });
+  // #111: the global timeline filters by the tags/assignee of the item each row is about.
+  const [itemFilter, setItemFilter] = useState<ItemFilter>(NO_FILTER);
+  const workItems = useQuery({ queryKey: ["work", "items", false], queryFn: () => api.get<ItemsResponse>("/api/work/items"), enabled: !!areas });
+  const tagged = useMemo(() => workItems.data?.items ?? [], [workItems.data]);
   const items = useMemo(() => {
     const seen = new Set<string>();
-    return (feed.data?.pages.flatMap((p) => p.items) ?? []).filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
-  }, [feed.data]);
+    const rows = (feed.data?.pages.flatMap((p) => p.items) ?? []).filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true)));
+    if (!itemFilter.tag && !itemFilter.assignee) return rows;
+    const keep = new Set(tagged.filter((w) => matchesItemFilter({ tags: w.tags ?? [], assignee: w.assignee ?? null }, itemFilter)).map((w) => w.id));
+    return rows.filter((r) => !!r.object && keep.has(r.object.id));
+  }, [feed.data, itemFilter, tagged]);
   const groups = useMemo(() => groupByDay(items, tz), [items, tz]);
   const [undoing, setUndoing] = useState<string | null>(null);
 
@@ -107,6 +117,13 @@ export function ActivityFeed({
   };
 
   const filtersId = `act-${compact ? "c" : "g"}`;
+  const more = feed.hasNextPage ? (
+    <div className="jv-activity-more">
+      <Button size="sm" busy={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()}>
+        Load older
+      </Button>
+    </div>
+  ) : null;
   return (
     <section className="jv-activity" aria-label={label}>
       <form
@@ -170,12 +187,17 @@ export function ActivityFeed({
           </>
         ) : null}
       </form>
+      {areas ? <ItemFilterBar rows={tagged} value={itemFilter} onChange={setItemFilter} idPrefix={`${filtersId}-meta`} className="mb-2" /> : null}
       {feed.isPending ? (
         <Spinner label="Loading activity" />
       ) : feed.isError ? (
         <ErrorNote error={feed.error} retry={() => feed.refetch()} />
       ) : !items.length ? (
-        <Empty title={q || type || actor || area ? "Nothing matches these filters" : "No activity yet"} />
+        <>
+          <Empty title={q || type || actor || area || itemFilter.tag || itemFilter.assignee ? "Nothing matches these filters" : "No activity yet"} />
+          {/* tag/assignee filters run on loaded pages: keep older pages reachable when this one has no match */}
+          {more}
+        </>
       ) : (
         <div className="jv-activity-days">
           {groups.map((g) => (
@@ -224,13 +246,7 @@ export function ActivityFeed({
               </ol>
             </div>
           ))}
-          {feed.hasNextPage ? (
-            <div className="jv-activity-more">
-              <Button size="sm" busy={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()}>
-                Load older
-              </Button>
-            </div>
-          ) : null}
+          {more}
         </div>
       )}
     </section>

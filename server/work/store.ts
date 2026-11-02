@@ -63,6 +63,8 @@ import {
 import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
+import { assigneeChangeText, normaliseTags, parseTags, serialiseTags, tagsChangeText, validateAssignee } from "@/lib/item-tags";
+import { ensureTags, knownAgents, knownPeople } from "./tags";
 import { EDIT_UNDO_FIELDS, isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
@@ -112,6 +114,8 @@ export function toItem(r: ItemRow): WorkItem {
     validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
     sessionId: r.sessionId ?? null,
     settings: r.parentId === null && r.kind === "area" ? parseAreaSettings(r.settings) : null,
+    tags: parseTags(r.tags),
+    assignee: r.assignee ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -488,9 +492,27 @@ export function createPath(user: CurrentUser, body: z.infer<typeof createPathSch
 }
 
 export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
-  const { status, reason, settings, ...fields } = body;
+  const { status, reason, settings, tags: rawTags, assignee: rawAssignee, ...rest } = body;
+  const fields: typeof rest & { tags?: string; assignee?: string | null } = { ...rest };
+  if (rawTags !== undefined) {
+    const t = normaliseTags(rawTags);
+    if (!t.ok) throw new HttpError(400, "tags", t.error);
+    fields.tags = serialiseTags(t.value);
+  }
   const result = getDb().transaction((tx) => {
     const row = ownedItem(user.id, id, tx);
+    if (rawAssignee !== undefined) {
+      const people = knownPeople(tx);
+      const a = validateAssignee(rawAssignee, { agents: knownAgents(), people: people.map((p) => p.id) });
+      if (!a.ok) throw new HttpError(400, "assignee", a.error);
+      fields.assignee = a.value;
+      if (a.value !== (row.assignee ?? null)) event(tx, id, user.id, { kind: "edit", reason: assigneeChangeText(row.assignee ?? null, a.value, people) });
+    }
+    if (fields.tags !== undefined && fields.tags !== row.tags) {
+      const next = parseTags(fields.tags);
+      ensureTags(tx, user.id, next);
+      event(tx, id, user.id, { kind: "edit", reason: tagsChangeText(parseTags(row.tags), next) });
+    }
     if (row.systemKey && (fields.archived || (fields.kind && fields.kind !== "area"))) throw new HttpError(409, "built_in", "Miscellaneous is built in");
     if (fields.validationDefault !== undefined && row.parentId !== null)
       throw new HttpError(400, "not_area", "The validation default is an area setting; change it on the area");
@@ -546,7 +568,7 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
         prev[f] = (row as Record<string, unknown>)[f];
         next[f] = after[f];
       }
-      const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate");
+      const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate" && f !== "tags" && f !== "assignee");
       if (text.length) event(tx, id, user.id, { kind: "edit", reason: `Edited ${text.map((f) => (f === "nextAction" ? "next action" : f)).join(", ")}` });
       // A status edit also moves the lifecycle fields (planTransition); keep them so undo restores
       // the settlement reason/kind and completedAt, not just the status.

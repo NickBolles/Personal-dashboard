@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RowTitle } from "./InlineEdit";
+import { filterItems, ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "./ItemMeta";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
@@ -133,6 +134,7 @@ function CardList({
                 <p className="line-clamp-2 text-xs break-words text-muted">
                   {[c.path, c.detail, c.due ? `due ${fmtShort(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>
+                <ItemChips tags={c.tags} assignee={c.assignee} />
               </div>
               {/* Phones: the dot carries the status; the pill joins it from 640px. The action stays on the right. */}
               <span className="flex shrink-0 items-center gap-2 self-center">
@@ -181,10 +183,21 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const q = useToday();
   const inbox = useInbox();
   const smart = useSmartSettings();
+  const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
   useHashScroll(q.isSuccess);
   if (q.isPending) return <Spinner label="Loading today…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
-  const t = q.data;
+  const raw = q.data;
+  const f = (cards: TodayCard[]) => filterItems(cards, filter);
+  const t = {
+    ...raw,
+    continue: f(raw.continue),
+    proofDue: f(raw.proofDue),
+    readyToSettle: f(raw.readyToSettle),
+    overdue: f(raw.overdue),
+    settleSuggestions: raw.settleSuggestions ? f(raw.settleSuggestions) : raw.settleSuggestions,
+  };
+  const allCards = [...raw.continue, ...raw.proofDue, ...raw.readyToSettle, ...raw.overdue, ...(raw.settleSuggestions ?? [])];
   const inboxCount = inbox.data?.count ?? null;
   const first = t.continue[0];
   const [y, m, d] = t.today.split("-").map(Number);
@@ -211,6 +224,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
           </ButtonLink>
         </nav>
       ) : null}
+      <ItemFilterBar rows={allCards} value={filter} onChange={setFilter} idPrefix="today" />
       <KpiStrip
         kpis={[
           { key: "in_progress", label: "In progress", value: t.kpis.inProgress, tone: "accent" },

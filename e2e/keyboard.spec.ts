@@ -8,8 +8,9 @@ test("keyboard-only: reach the composer, send, and use a dialog with focus resto
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
   // Focus the composer by keyboard
-  // The desktop sidebar (nav + Areas tree) comes first in tab order.
-  for (let i = 0; i < 200; i++) {
+  // The desktop sidebar (nav + Areas tree) comes first in tab order; its stop count grows with the
+  // areas/chats other specs seed into the shared DB, so allow a generous budget.
+  for (let i = 0; i < 500; i++) {
     await page.keyboard.press("Tab");
     if (await page.getByLabel("Message Hermes").evaluate((el) => el === document.activeElement)) break;
   }

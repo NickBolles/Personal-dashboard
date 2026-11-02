@@ -63,6 +63,7 @@ export function SettingsView() {
     { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
     ...(isAdmin ? [{ href: "/settings/ai", label: "AI", desc: "Budget, models and capture triage for background AI actions" }] : []),
     ...(isAdmin ? [{ href: "/settings/agents", label: "Agents", desc: "Which Hermes profile answers in each area" }] : []),
+    ...(can("work.use") ? [{ href: "/settings/tags", label: "Tags", desc: "Rename, merge and colour item tags" }] : []),
     ...(isAdmin ? [{ href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" }] : []),
   ];
 

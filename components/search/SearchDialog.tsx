@@ -41,6 +41,9 @@ import {
   type TypedMatch,
 } from "@/lib/palette";
 import { PaletteActionPanel, PaletteChips, type PanelEntry } from "@/components/search/PaletteChips";
+import { useTagDirectory } from "@/components/work/ItemMeta";
+import { INLINE_OP_EVENT } from "@/components/work/InlineEdit";
+import type { UndoOp } from "@/components/work/UndoBar";
 
 /** Any page can open search: window.dispatchEvent(new Event(OPEN_SEARCH_EVENT)). */
 export const OPEN_SEARCH_EVENT = "jarvis:search";
@@ -140,14 +143,23 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   });
   const workItems = useMemo(() => (work.data?.items ?? []).filter((i) => !i.archived), [work.data]);
   const byId = useMemo(() => new Map(workItems.map((i) => [i.id, i])), [workItems]);
+  const tagDir = useTagDirectory(open && canWork);
   const ctx: PaletteContext = useMemo(() => {
     const areas = workItems.filter((i) => i.parentId === null).map((i) => ({ id: i.id, label: i.title }));
     const items = workItems
       .filter((i) => !isContainer(i) && i.kind !== "conversation")
       .map((i) => ({ id: i.id, label: i.title, detail: byId.get(i.parentId ?? "")?.title }));
     const modes = [...new Set(workItems.map((i) => i.settings?.agentMode).filter((m): m is string => Boolean(m)))];
-    return { areas, items, agents: [{ id: "jarvis", label: "Jarvis" }, ...modes.map((m) => ({ id: m, label: m }))] };
-  }, [workItems, byId]);
+    const dir = tagDir.data;
+    const assignees = dir
+      ? [
+          ...dir.assignees.agents.map((a) => ({ id: a.ref, label: a.label, detail: "Agent" })),
+          ...dir.assignees.people.map((p) => ({ id: p.ref, label: p.label, detail: "Person" })),
+        ]
+      : [];
+    const tags = (dir?.tags ?? []).map((t) => ({ id: t.name, label: `#${t.name}` }));
+    return { areas, items, agents: [{ id: "jarvis", label: "Jarvis" }, ...modes.map((m) => ({ id: m, label: m }))], assignees, tags };
+  }, [workItems, byId, tagDir.data]);
   // Grouped (Areas, Projects, Items, Chats & notes, People…): groups in order of their best match, rank kept inside each.
   const results = useMemo(() => {
     const list = res.data?.results ?? [];
@@ -300,6 +312,21 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
           await api.patch(`/api/work/items/${encodeURIComponent(hereItem!.id)}`, { status: v(0).id });
           toast(`Status: ${v(0).label}`, "ok");
         };
+      case "assign-item":
+        return async () => {
+          const r = await api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(hereItem!.id)}`, { assignee: v(0).id });
+          if (r.op) window.dispatchEvent(new CustomEvent(INLINE_OP_EVENT, { detail: r.op }));
+          toast(`Assigned to ${v(0).label}`, "ok");
+          void qc.invalidateQueries({ queryKey: ["work"] });
+        };
+      case "tag":
+        return async () => {
+          const cur = byId.get(hereItem!.id)?.tags ?? [];
+          const r = await api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(hereItem!.id)}`, { tags: [...new Set([...cur, v(0).id])] });
+          if (r.op) window.dispatchEvent(new CustomEvent(INLINE_OP_EVENT, { detail: r.op }));
+          toast(`Tagged ${v(0).label}`, "ok");
+          void qc.invalidateQueries({ queryKey: ["work"] });
+        };
       case "ask":
         return async () => void asker.ask(v(1).label, { areaId: v(0).id });
       case "open-pr":
@@ -334,7 +361,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     const run = runAction(def, chips);
     remember({ id: `action:${def.id}`, title: def.label, action: def.id });
     if (def.write) {
-      setConfirm({ def, chips, run, text: confirmText(def, chips, def.id === "status" ? hereItem : def.id === "assign" ? hereArea : null) });
+      setConfirm({
+        def,
+        chips,
+        run,
+        text: confirmText(def, chips, def.id === "status" || def.id === "assign-item" || def.id === "tag" ? hereItem : def.id === "assign" ? hereArea : null),
+      });
       requestAnimationFrame(() => confirmBtn.current?.focus());
     } else {
       close();

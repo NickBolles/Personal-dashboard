@@ -925,6 +925,57 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+// #111 tags + assignee: chips + filter on an area's list and the item header editor, light + dark.
+// Every list the pages fetch is stubbed (tagged copy of areasVisual) so other specs' data never leaks in.
+const taggedItems = {
+  ...areasVisual,
+  items: areasVisual.items.map((i) => (i.id === "wk_garage" ? { ...i, tags: ["shelving", "weekend"], assignee: "agent:devchief" } : i)),
+};
+const tagsVisual = {
+  tags: [
+    { name: "shelving", color: "ai", count: 1 },
+    { name: "weekend", color: "ok", count: 1 },
+  ],
+  assignees: { agents: [{ ref: "agent:devchief", label: "@devchief", id: "devchief" }], people: [] },
+};
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: item tags and chips (${scheme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    const garage = taggedItems.items.find((i) => i.id === "wk_garage")!;
+    const home = { ...areaDetailVisual, item: taggedItems.items.find((i) => i.id === "wk_home")!, children: [garage] };
+    const item = { ...itemDetailVisual, item: { ...itemDetailVisual.item, tags: garage.tags, assignee: garage.assignee } };
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: taggedItems }));
+    await page.route(/\/api\/work\/items\/wk_home$/, (route) => route.fulfill({ json: home }));
+    await page.route(/\/api\/work\/items\/wk_garage$/, (route) => route.fulfill({ json: item }));
+    await page.route(/\/api\/work\/tags(?:\?.*)?$/, (route) => route.fulfill({ json: tagsVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.goto("/areas?item=wk_home");
+    if (scheme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const row = page.locator('[data-node-row="wk_garage"]');
+    await expect(row.locator('[data-tag="weekend"]')).toBeVisible();
+    const list = page.locator("section").filter({ has: row }).last();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(list).toHaveScreenshot(`tags-list-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+
+    await page.goto("/areas?item=wk_garage");
+    if (scheme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    await expect(page.locator('.jv-meta [data-tag="shelving"]')).toBeVisible();
+    await expect(page.getByLabel("Assignee")).toHaveValue("agent:devchief");
+    const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t2 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(header).toHaveScreenshot(`tags-item-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
+    await t2.evaluate((el) => (el as Element).remove());
+  });
+}
+
 /** Activity timeline (/areas/activity): stub the feed and every list the shell loads. */
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: activity timeline (${scheme})`, async ({ page }) => {

@@ -8,7 +8,7 @@ import { INLINE_LABELS, validateInline, type InlineField } from "@/lib/inline-ed
 import type { WorkStatus } from "@/lib/work";
 import type { UndoOp } from "./UndoBar";
 
-type Patch = Partial<Record<InlineField, string | null>>;
+type Patch = Partial<Record<InlineField, string | null>> & { tags?: string[]; assignee?: string | null };
 
 /** Rows without their own undo plumbing announce the server's edit op on window; the Areas view shows it. */
 export const INLINE_OP_EVENT = "jarvis:inline-op";

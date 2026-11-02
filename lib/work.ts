@@ -221,6 +221,10 @@ export type WorkItem = {
   sessionId: string | null;
   /** areas only: agent mode, defaults and settle policy (null = defaults, see DEFAULT_AREA_SETTINGS) */
   settings: AreaSettings | null;
+  /** normalised tag names (lib/item-tags.ts) */
+  tags: string[];
+  /** "agent:<profile>" | "person:<userId>" | null */
+  assignee: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -575,6 +579,10 @@ export const updateItemSchema = z
     validationDefault: z.enum(VALIDATION_DEFAULTS).nullable().optional(),
     /** areas only: merged into the stored settings */
     settings: areaSettingsSchema.optional(),
+    /** replaces the item's tags (normalised server-side; unknown tags are created) */
+    tags: z.array(z.string().max(64)).max(40).optional(),
+    /** "agent:<profile>" | "person:<userId>" | null to clear; never starts a run */
+    assignee: z.string().max(120).nullable().optional(),
   })
   .strict();
 
@@ -1035,7 +1043,18 @@ export const dismissConversationSchema = z.object({ sessionId: z.string().trim()
 
 // --- Today (the /work front door) ---
 
-export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
+export type TodayCard = {
+  id: string;
+  title: string;
+  path: string;
+  status: WorkStatus;
+  nextAction: string;
+  detail?: string;
+  due?: string | null;
+  /** #111 */
+  tags?: string[];
+  assignee?: string | null;
+};
 export type TodayResponse = {
   today: string;
   kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number; reportsReady?: number };

@@ -22,6 +22,7 @@ import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ActivityFeed } from "@/components/work/ActivityFeed";
 import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { filterItems, ItemFilterBar, ItemMetaEditor, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
@@ -1074,6 +1075,11 @@ function ItemDetail({
             {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
           </div>
         ) : null}
+        {container || item.kind === "conversation" ? null : (
+          <div className="mt-2" data-testid="work-item-meta">
+            <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(patch) => inline.mutate(patch)} />
+          </div>
+        )}
         {item.summary || !container ? (
           <InlineText
             field="summary"
@@ -1472,13 +1478,16 @@ function ChildrenCard({
 }) {
   const [adding, setAdding] = useState(false);
   const [showDone, setShowDone] = useState(false);
-  const open = list.filter((i) => !isClosed(i.status) || i.kind === "project" || i.kind === "conversation");
-  const done = list.filter((i) => !open.includes(i));
+  const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
+  const shown = filterItems(list, filter);
+  const open = shown.filter((i) => !isClosed(i.status) || i.kind === "project" || i.kind === "conversation");
+  const done = shown.filter((i) => !open.includes(i));
   const rows = showDone ? [...open, ...done] : open;
   const slug = testId ?? label.toLowerCase().replace(/[^a-z]+/g, "-");
   return (
     <section aria-labelledby={`kids-${slug}`} data-testid={`children-${slug}`}>
       <SectionHeader id={`kids-${slug}`} label={label} count={list.length || undefined} />
+      <ItemFilterBar rows={list} value={filter} onChange={setFilter} idPrefix={`kids-${slug}`} className="mb-1.5" />
       <div className="k-card overflow-hidden">
         {rows.length ? (
           <ul className="wk-node-rows">
