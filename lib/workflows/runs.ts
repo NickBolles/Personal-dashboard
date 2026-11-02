@@ -80,7 +80,9 @@ export function resolveFormDefaults(def: WorkflowDefinition, slot: "start" | "mi
       continue;
     }
     if (d && "value" in d && !("source" in d)) {
-      out[f.id] = { value: d.value, provenance: "default", note: "Default for this workflow" };
+      // older builder saves stored number/toggle defaults as strings (#139): normalise on read
+      const value = f.type === "number" || f.type === "toggle" ? normaliseFieldValue(f, d.value) : d.value;
+      out[f.id] = { value: value ?? emptyValue(f), provenance: "default", note: "Default for this workflow" };
       continue;
     }
     if (d && "source" in d && d.source === "workflowPlace") {

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import fixture from "@/lib/workflows/fixtures/teaching-notes.json";
 import { validateDefinition, type WorkflowDefinition } from "@/lib/workflows/definition";
-import { blankDefinition, builderReducer, initBuilder, issuesBySection, sourceOfDefault, tokenCount } from "@/lib/workflows/builder";
+import { blankDefinition, builderReducer, definingSlot, initBuilder, issuesBySection, sourceOfDefault, tokenCount } from "@/lib/workflows/builder";
+import { remembers, resolveFormDefaults } from "@/lib/workflows/runs";
 import { diffDefinitions, restoreDefinition, summarizeDiff } from "@/lib/workflows/versions";
 import { applyProposal, refuseFinanceChat, validateProposal } from "@/lib/workflows/proposal";
 
@@ -146,5 +147,53 @@ describe("AI proposals", () => {
     expect(refuseFinanceChat({ areaPath: "Health › Private", excludedAreas: ["Health"] }).refused).toBe(true);
     expect(refuseFinanceChat({ areaPath: "Miscellaneous", refs: [{ type: "finance", id: "acct_1", label: "Checking" }] }).refused).toBe(true);
     expect(refuseFinanceChat({ areaPath: "Miscellaneous", title: "Teaching notes." }).refused).toBe(false);
+  });
+});
+
+describe("builder follow-ups (#138, #139, #140)", () => {
+  const field = (d: WorkflowDefinition, slot: "start" | "mid" | "end", id: string) => {
+    const f = d.forms?.[slot]?.fields.find((x) => typeof x !== "string" && x.id === id);
+    if (!f || typeof f === "string") throw new Error(`no ${id} in ${slot}`);
+    return f;
+  };
+
+  it("edits a referenced Mid-run field in the form that defines it (#138)", () => {
+    let s = initBuilder(JSON.parse(JSON.stringify(teaching)) as WorkflowDefinition, 1);
+    expect(definingSlot(s.draft, "mid", "speaker")).toBe("start");
+    s = builderReducer(s, { type: "fieldUpdate", slot: "mid", id: "speaker", patch: { label: "Preacher" } });
+    expect(field(s.draft, "start", "speaker").label).toBe("Preacher");
+    expect(s.draft.forms?.mid?.fields).toContain("speaker");
+    s = builderReducer(s, { type: "fieldDefault", slot: "mid", id: "speaker", source: { kind: "literal", value: "Jake" } });
+    expect(field(s.draft, "start", "speaker").default).toEqual({ value: "Jake" });
+    expect(validateDefinition(s.draft).ok).toBe(true);
+  });
+
+  it("stores fixed number/toggle defaults with the field's type and normalises old string defaults (#139)", () => {
+    let s = initBuilder();
+    s = builderReducer(s, { type: "fieldAdd", slot: "start", fieldType: "number" });
+    s = builderReducer(s, { type: "fieldAdd", slot: "start", fieldType: "toggle" });
+    s = builderReducer(s, { type: "fieldDefault", slot: "start", id: "number", source: { kind: "literal", value: "4" } });
+    s = builderReducer(s, { type: "fieldDefault", slot: "start", id: "toggle", source: { kind: "literal", value: "false" } });
+    expect(field(s.draft, "start", "number").default).toEqual({ value: 4 });
+    expect(field(s.draft, "start", "toggle").default).toEqual({ value: false });
+    expect(sourceOfDefault(field(s.draft, "start", "toggle").default)).toEqual({ kind: "literal", value: "false" });
+    expect(validateDefinition(s.draft).ok).toBe(true);
+    // a definition saved before the fix still resolves to typed values
+    const legacy = JSON.parse(JSON.stringify(s.draft)) as WorkflowDefinition;
+    field(legacy, "start", "number").default = { value: "4" };
+    field(legacy, "start", "toggle").default = { value: "false" };
+    const v = resolveFormDefaults(legacy, "start", { now: new Date("2026-11-02T18:00:00Z"), timezone: "America/Chicago" });
+    expect(v.number.value).toBe(4);
+    expect(v.toggle.value).toBe(false);
+  });
+
+  it("unchecking Remember last value stores false so person/place/select stop remembering (#140)", () => {
+    let s = initBuilder();
+    s = builderReducer(s, { type: "fieldAdd", slot: "start", fieldType: "person" });
+    expect(remembers(field(s.draft, "start", "person"))).toBe(true);
+    s = builderReducer(s, { type: "fieldUpdate", slot: "start", id: "person", patch: { rememberLast: false } });
+    expect(field(s.draft, "start", "person").rememberLast).toBe(false);
+    expect(remembers(field(s.draft, "start", "person"))).toBe(false);
+    expect(validateDefinition(s.draft).ok).toBe(true);
   });
 });
