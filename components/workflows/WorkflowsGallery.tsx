@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, Page, PageHeader, useToast } from "@/components/ui";
+import { ChipSelect } from "@/components/ui/kit";
 
 type Summary = {
   id: string;
@@ -18,7 +19,71 @@ type Summary = {
 };
 type BuiltIn = { kind: string; slug: string; name: string; description: string; href: string };
 type ImportResult =
-  { ok: true; slug: string; duplicate: boolean; areaFound: boolean } | { ok: false; code: string; issues: { path: string; message: string }[] };
+  { ok: true; id: string; slug: string; duplicate: boolean; areaFound: boolean } | { ok: false; code: string; issues: { path: string; message: string }[] };
+type AreaRow = { id: string; title: string; kind: string; parentId: string | null; archived?: boolean };
+
+/** Area paths as the workflow definition names them ("Faith", "Work/Jarvis"). */
+function areaPaths(items: AreaRow[]): string[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const path = (i: AreaRow): string => {
+    const p = i.parentId ? byId.get(i.parentId) : undefined;
+    return p ? `${path(p)}/${i.title}` : i.title;
+  };
+  return items
+    .filter((i) => i.kind === "area" && !i.archived && !/^finance$/i.test(i.title))
+    .map(path)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Remap an imported workflow whose `routing.area` wasn't found (#117): pick an
+ * existing area; it is saved as a new version so the choice sticks to the workflow.
+ */
+function AreaRemap({ id, slug, onDone }: { id: string; slug: string; onDone: () => void }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const items = useQuery({
+    queryKey: ["work-items"],
+    queryFn: ({ signal }) => api.get<{ items: AreaRow[] }>("/api/work/items", signal),
+    select: (r) => areaPaths(r.items),
+  });
+  const pick = async (path: string) => {
+    if (!path) return;
+    setBusy(true);
+    try {
+      const cur = await api.get<{ definition: { routing: Record<string, unknown> } & Record<string, unknown> }>(`/api/workflows/${encodeURIComponent(id)}`);
+      await api.put(`/api/workflows/${encodeURIComponent(id)}`, {
+        definition: { ...cur.definition, routing: { ...cur.definition.routing, area: path } },
+        changeNote: `Area set to ${path}`.slice(0, 200),
+      });
+      toast(`/${slug} files its chats in ${path}.`, "ok");
+      onDone();
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <label className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+      <span>Use area</span>
+      <ChipSelect
+        className="w-44 [&>select]:w-full"
+        aria-label={`Area for /${slug}`}
+        defaultValue=""
+        disabled={busy}
+        onChange={(e) => void pick(e.target.value)}
+      >
+        <option value="">Choose…</option>
+        {(items.data ?? []).map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+      </ChipSelect>
+    </label>
+  );
+}
 
 function download(name: string, data: unknown) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
@@ -35,6 +100,22 @@ export function WorkflowsGallery() {
   const { toast } = useToast();
   const file = useRef<HTMLInputElement>(null);
   const [report, setReport] = useState<ImportResult[] | null>(null);
+  const [remapped, setRemapped] = useState<string[]>([]);
+  const [undone, setUndone] = useState(false);
+  // only workflows this import created (a duplicate was already here: Undo leaves it alone)
+  const imported = (report ?? []).flatMap((r) => (r.ok && !r.duplicate ? [r] : []));
+  /** Spec §7: Undo archives the workflows this import created (versions are kept, as for any archive). */
+  const undoImport = async () => {
+    try {
+      for (const r of imported) await api.patch(`/api/workflows/${encodeURIComponent(r.id)}`, { status: "archived" });
+      setUndone(true);
+      toast(imported.length === 1 ? `Import undone: /${imported[0].slug} archived.` : `Import undone: ${imported.length} workflows archived.`, "ok");
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    } finally {
+      await refresh();
+    }
+  };
   const q = useQuery({ queryKey: ["workflows"], queryFn: ({ signal }) => api.get<{ workflows: Summary[]; builtIns: BuiltIn[] }>("/api/workflows", signal) });
   const refresh = () => qc.invalidateQueries({ queryKey: ["workflows"] });
 
@@ -51,6 +132,8 @@ export function WorkflowsGallery() {
       }
       const res = await api.post<{ results: ImportResult[] }>("/api/workflows/import", { data });
       setReport(res.results);
+      setRemapped([]);
+      setUndone(false);
       await refresh();
     } catch (err) {
       toast((err as Error).message, "danger");
@@ -110,7 +193,17 @@ export function WorkflowsGallery() {
               r.ok ? (
                 <li key={i}>
                   {r.duplicate ? `/${r.slug} is already here (same definition).` : `Imported /${r.slug} as a draft.`}
-                  {r.areaFound ? "" : " Its area wasn't found, so chats will land in Miscellaneous."}
+                  {r.areaFound || remapped.includes(r.id) ? "" : " Its area wasn't found, so chats will land in Miscellaneous."}
+                  {!r.areaFound && !r.duplicate && !remapped.includes(r.id) && !undone ? (
+                    <AreaRemap
+                      id={r.id}
+                      slug={r.slug}
+                      onDone={() => {
+                        setRemapped((x) => [...x, r.id]);
+                        void refresh();
+                      }}
+                    />
+                  ) : null}
                 </li>
               ) : (
                 <li key={i} className="text-danger">
@@ -119,9 +212,16 @@ export function WorkflowsGallery() {
               ),
             )}
           </ul>
-          <Button size="sm" className="mt-2" onClick={() => setReport(null)}>
-            Dismiss
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {imported.length && !undone ? (
+              <Button size="sm" onClick={() => void undoImport()}>
+                Undo import
+              </Button>
+            ) : null}
+            <Button size="sm" onClick={() => setReport(null)}>
+              Dismiss
+            </Button>
+          </div>
         </section>
       ) : null}
 
