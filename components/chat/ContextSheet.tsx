@@ -37,6 +37,7 @@ export function ContextSheet({
   onToggle,
   areaTitle,
   sessionId,
+  repo,
 }: {
   open: boolean;
   onClose: () => void;
@@ -44,9 +45,11 @@ export function ContextSheet({
   onToggle: (chip: ContextChip) => void;
   areaTitle?: string | null;
   sessionId: string;
+  /** #76: the area's default GitHub repo scopes the `#` search */
+  repo?: string | null;
 }) {
   if (!open) return null;
-  return <Sheet onClose={onClose} selected={selected} onToggle={onToggle} areaTitle={areaTitle} sessionId={sessionId} />;
+  return <Sheet onClose={onClose} selected={selected} onToggle={onToggle} areaTitle={areaTitle} sessionId={sessionId} repo={repo ?? null} />;
 }
 
 function Sheet({
@@ -55,12 +58,14 @@ function Sheet({
   onToggle,
   areaTitle,
   sessionId,
+  repo,
 }: {
   onClose: () => void;
   selected: ContextChip[];
   onToggle: (chip: ContextChip) => void;
   areaTitle?: string | null;
   sessionId: string;
+  repo: string | null;
 }) {
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
@@ -85,8 +90,9 @@ function Sheet({
     staleTime: 15_000,
   });
   const ghq = useQuery({
-    queryKey: ["composer", "gh", null, query.slice(1)],
-    queryFn: () => api.get<RefOptionsResponse>(`/api/references/github?q=${encodeURIComponent(query.slice(1))}`),
+    queryKey: ["composer", "gh", repo, query.slice(1)],
+    queryFn: () =>
+      api.get<RefOptionsResponse>(`/api/references/github?q=${encodeURIComponent(query.slice(1))}${repo ? `&repo=${encodeURIComponent(repo)}` : ""}`),
     enabled: gh,
     staleTime: 15_000,
   });

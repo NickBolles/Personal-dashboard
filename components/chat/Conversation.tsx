@@ -737,6 +737,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 onClose={() => setDialog(null)}
                 sessionId={sessionId}
                 areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
+                repo={areaCtx?.settings?.defaultRepo ?? null}
                 selected={context}
                 onToggle={(chip) => setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))}
               />
