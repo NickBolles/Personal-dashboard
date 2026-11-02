@@ -86,6 +86,19 @@ describe("workflow runs API", () => {
     expect(u.undone).toEqual(p.applied);
     expect(u.run.capture.quotes).toEqual([]);
 
+    // A turn reported again (reload/refetch) is read once, even after the user undid it.
+    const turn = '```jarvis-capture\n[{"op":"add","path":"/points/-","value":{"text":"Stay connected"}}]\n```';
+    const once = await json<{ run: Run; applied: string[] }>(
+      call(runRoute.PATCH, { method: "PATCH", body: { by: "agent", text: turn, messageId: "m-1" }, params: { runId: id } }),
+    );
+    expect(once.applied).toHaveLength(1);
+    await call(undoRoute.POST, { body: {}, params: { runId: id } });
+    const twice = await json<{ run: Run; applied: string[] }>(
+      call(runRoute.PATCH, { method: "PATCH", body: { by: "agent", text: turn, messageId: "m-1" }, params: { runId: id } }),
+    );
+    expect(twice.applied).toEqual([]);
+    expect(twice.run.capture.points).toEqual([]);
+
     // AI-proposed form values wait for a tap
     const prop = '```jarvis-capture\n{"propose":true,"ops":[{"op":"replace","path":"/session/series","value":"Abide"}]}\n```';
     const pr = await json<{ run: Run; proposed: number }>(call(runRoute.PATCH, { method: "PATCH", body: { by: "agent", text: prop }, params: { runId: id } }));

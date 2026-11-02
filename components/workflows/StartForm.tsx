@@ -362,8 +362,8 @@ export function StartFormDialog({
   const [values, setValues] = useState<Values>(init);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const spec = data.spec;
-  if (!spec) return null;
+  // Definitions may omit forms.start: still show a one-tap Start confirmation.
+  const spec: RunElement = data.spec ?? { type: "Form", props: { title: `Start ${data.workflow.name}`, submit: "Start" }, children: [] };
   const submit = async () => {
     setBusy(true);
     const r = await onSubmit(values);

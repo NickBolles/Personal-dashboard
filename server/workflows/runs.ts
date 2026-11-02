@@ -392,7 +392,7 @@ export function patchRun(ctx: Ctx, id: string, input: { by: "user"; ops: unknown
   try {
     applied = applyOps(def, capture, apply, {
       by: input.by,
-      source: input.by === "user" ? input.source : "agent",
+      source: input.by === "user" ? input.source : agentSource,
       at: new Date().toISOString(),
       id: () => `${row.id}-${n++}`,
     });
