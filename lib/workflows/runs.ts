@@ -548,5 +548,9 @@ export function displayValue(v: unknown): string {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   if (Array.isArray(v)) return v.map(displayValue).join(", ");
   const o = v as Record<string, unknown>;
-  return String(o.display ?? o.label ?? o.name ?? o.text ?? "");
+  const direct = o.display ?? o.label ?? o.name ?? o.text;
+  if (direct !== undefined) return String(direct);
+  // list rows like {ref: {display}}: show the first field
+  const first = Object.values(o)[0];
+  return first === undefined ? "" : displayValue(first);
 }

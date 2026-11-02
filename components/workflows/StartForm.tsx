@@ -131,7 +131,7 @@ function DateTimeField({ el, value, set, error, note, data }: FieldProps) {
       {quick.length ? (
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${p.label} shortcuts`}>
           {quick.map((q) => (
-            <Button key={q.id} size="sm" variant="ghost" aria-pressed={value === q.value} onClick={() => set(q.value)}>
+            <Button type="button" key={q.id} size="sm" variant="ghost" aria-pressed={value === q.value} onClick={() => set(q.value)}>
               {q.label}
             </Button>
           ))}
@@ -192,7 +192,7 @@ function PlaceField({ el, value, set, error, note, data }: FieldProps) {
       </datalist>
       {p.geolocate === "matchSaved" && !data.stripLocation && data.places.some((x) => x.lat !== null) ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={locate} aria-describedby={`${id}-geohelp`}>
+          <Button type="button" size="sm" variant="ghost" onClick={locate} aria-describedby={`${id}-geohelp`}>
             Use my location
           </Button>
           <span id={`${id}-geohelp`} className="sr-only">
@@ -265,7 +265,7 @@ function TagsField({ el, value, set, error, note }: FieldProps) {
       {tags.length ? (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((t) => (
-            <Button key={t} size="sm" variant="ghost" aria-label={`Remove tag ${t}`} onClick={() => set(tags.filter((x) => x !== t))}>
+            <Button type="button" key={t} size="sm" variant="ghost" aria-label={`Remove tag ${t}`} onClick={() => set(tags.filter((x) => x !== t))}>
               {t} ×
             </Button>
           ))}
