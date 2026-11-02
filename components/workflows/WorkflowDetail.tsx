@@ -187,10 +187,14 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
   const r = q.data;
   // Latest tap wins: an older PUT answering after a newer tap must not flip the switch back.
   const seq = useRef(0);
+  // React Query notifies observers on a later tick, so the controlled switch needs a synchronous
+  // local value or React snaps it back for a frame (and Playwright's check() sees no change).
+  const [pending, setPending] = useState<boolean | null>(null);
   const save = async (patch: Partial<Reminder>) => {
     if (!r) return;
     const n = ++seq.current;
     const k = ["workflow-reminder", workflowId];
+    if (patch.enabled !== undefined) setPending(patch.enabled);
     qc.setQueryData(k, { ...r, ...patch }); // optimistic, so the switch flips on tap; reverted on error
     try {
       const next = await api.put<Reminder>(`/api/workflows/${workflowId}/reminder`, {
@@ -200,10 +204,12 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
       });
       if (n !== seq.current) return;
       qc.setQueryData(["workflow-reminder", workflowId], next);
+      setPending(null);
       toast(next.enabled ? `Reminder on: ${DAYS[next.day]} ${next.time}` : "Reminder off", "ok");
     } catch (e) {
       if (n !== seq.current) return;
       qc.setQueryData(k, r);
+      setPending(null);
       toast((e as Error).message, "danger");
     }
   };
@@ -215,7 +221,13 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
       {r ? (
         <>
           <label className="mt-2 flex min-h-11 items-center gap-3 text-sm">
-            <input type="checkbox" role="switch" className="h-5 w-5" checked={r.enabled} onChange={(e) => void save({ enabled: e.target.checked })} />
+            <input
+              type="checkbox"
+              role="switch"
+              className="h-5 w-5"
+              checked={pending ?? r.enabled}
+              onChange={(e) => void save({ enabled: e.target.checked })}
+            />
             <span>
               Remind me {DAYS[r.day]} at {r.time}
             </span>
