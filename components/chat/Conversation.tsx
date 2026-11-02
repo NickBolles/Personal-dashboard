@@ -16,6 +16,7 @@ import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline,
 import { ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
+import { quickAdd, RunPanel, useAgentCapture, useWorkflowRun } from "@/components/workflows/RunPanel";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -208,13 +209,37 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   }, [run.state.phase, announce]);
 
   const session = detail?.session;
+  const wfRun = useWorkflowRun(sessionId);
+  const [wfTarget, setWfTarget] = useState<string | null>(null);
+  const onCaptured = useCallback(
+    (r: { applied: string[]; dropped: number; proposed: number }) => {
+      if (r.dropped) toast(r.dropped === 1 ? "1 note not filed" : `${r.dropped} notes not filed`, "warn");
+      else if (r.applied.length) announce(`Outline updated: ${r.applied.length} ${r.applied.length === 1 ? "change" : "changes"}. Undo is available.`);
+    },
+    [toast, announce],
+  );
+  useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
 
   const send = async (input: string, key: string) => {
     let text = input;
-    const ctx = context
-      .filter((c) => !c.token)
-      .map((c) => `- ${c.label} [${c.ref}]`)
-      .join("\n");
+    if (wfRun && wfRun.status === "live" && wfTarget) {
+      const target = wfTarget;
+      setWfTarget(null);
+      void quickAdd(wfRun, target, input)
+        .then((r) => qc.setQueryData(["workflow-run", sessionId], r.run))
+        .catch((e: Error) => toast(e.message, "danger"));
+      text = `[${target}] ${input}`;
+    }
+    const ctx = [
+      context
+        .filter((c) => !c.token)
+        .map((c) => `- ${c.label} [${c.ref}]`)
+        .join("\n"),
+      wfRun?.status === "live" ? (wfRun.context ?? "") : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 4000);
     // Sheet picks that are @/# references ride in the message as tokens: the server resolves them like typed ones.
     const tokens = context.filter((c) => c.token && !text.includes(c.token)).map((c) => c.token);
     if (tokens.length) text = `${text}\n\n${tokens.join(" ")}`;
@@ -606,6 +631,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   >
                     Jump to latest
                   </Button>
+                </div>
+              ) : null}
+
+              {wfRun ? (
+                <div className="wf-run-dock">
+                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} />
                 </div>
               ) : null}
 

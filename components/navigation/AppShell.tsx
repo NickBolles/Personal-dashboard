@@ -9,6 +9,7 @@ import { cx, useOnline } from "@/components/ui";
 import { ChatIcon, ChevronIcon, GearIcon, MoreIcon, PlusIcon, SearchIcon, TodoIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { OPEN_SEARCH_EVENT, SearchDialog } from "@/components/search/SearchDialog";
+import { WorkflowStartHost } from "@/components/workflows/WorkflowStartHost";
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
 import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
@@ -387,6 +388,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         <ComposerRouteWatcher />
       </Suspense>
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <WorkflowStartHost />
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}
 
       {/* Phone bottom bar (§5): Today · Areas · [orb] · Alerts · More. Chat and Inbox are reached from the orb / More. */}

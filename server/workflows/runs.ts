@@ -26,6 +26,7 @@ import {
   type CaptureOp,
   type LogEntry,
 } from "@/lib/workflows/runs";
+import { compileForm, compileRunPanel } from "@/lib/workflows/run-catalog";
 import { currentDefinition, getWorkflowBySlug } from "./store";
 
 const db = () => getDb();
@@ -207,6 +208,10 @@ export function startForm(userId: string, input: { command?: string; workflowId?
     : [];
   return {
     workflow: { id: row.id, slug: row.slug, name: row.name, icon: row.icon, version: row.currentVersion },
+    spec: compileForm(def, "start", {
+      stripLocation: stripLocationOn(),
+      recentOptions: Object.fromEntries(Object.entries(remembered).map(([k, v]) => [k, v.filter((x): x is string => typeof x === "string").slice(0, 6)])),
+    }),
     form: { title: def.forms?.start?.title ?? `Start ${def.name}`, submit: def.forms?.start?.submit ?? "Start", fields },
     values,
     unmatched: prefill.unmatched,
@@ -257,6 +262,8 @@ export function runView(row: RunRow, def: WorkflowDefinition) {
     capture: parse<Capture>(row.captureJson, {}),
     log: log.slice(-50).map((e) => ({ id: e.id, at: e.at, by: e.by, source: e.source, op: e.op, undone: !!e.undone })),
     proposals: parse<CaptureOp[]>(row.proposalsJson, []),
+    context: row.status === "live" ? runContext(def, row.version, parse<Capture>(row.captureJson, {})) : null,
+    panel: compileRunPanel(def, row.title),
     definition: { name: def.name, slug: def.slug, capture: def.capture, quickAdd: def.quickAdd ?? [], mid: formFields(def, "mid") },
   };
 }
@@ -360,9 +367,13 @@ export function linkConversation(ctx: Ctx, id: string, conversationId: string) {
  * the assistant's reply text — only fenced jarvis-capture ops on declared
  * paths are read; form-bound fields with `propose:true` wait for a tap.
  */
-export function patchRun(ctx: Ctx, id: string, input: { by: "user"; ops: unknown; source?: string } | { by: "agent"; text: string }) {
+export function patchRun(ctx: Ctx, id: string, input: { by: "user"; ops: unknown; source?: string } | { by: "agent"; text: string; messageId?: string }) {
   const { row, def } = ownRun(ctx.userId, id);
   if (row.status !== "live") throw new HttpError(409, "run_ended", "This session has ended");
+  // an assistant turn is read once (the client may report it again after a refetch)
+  const agentSource = input.by === "agent" && input.messageId ? `agent:${input.messageId}` : "agent";
+  if (agentSource !== "agent" && parse<LogEntry[]>(row.captureLogJson, []).some((e) => e.source === agentSource))
+    return { run: runView(row, def), applied: [] as string[], dropped: 0, proposed: 0 };
   const capture = parse<Capture>(row.captureJson, emptyCapture(def));
   let raw: unknown;
   let propose = false;
@@ -388,7 +399,9 @@ export function patchRun(ctx: Ctx, id: string, input: { by: "user"; ops: unknown
   } catch {
     throw new HttpError(413, "capture_too_large", "This session's notes are full");
   }
-  const proposals = [...parse<CaptureOp[]>(row.proposalsJson, []), ...proposed].slice(-20);
+  const prior = parse<CaptureOp[]>(row.proposalsJson, []);
+  const seen = new Set(prior.map((o) => JSON.stringify(o)));
+  const proposals = [...prior, ...proposed.filter((o) => !seen.has(JSON.stringify(o)))].slice(-20);
   save(row, {
     captureJson: JSON.stringify(applied.capture),
     captureLogJson: JSON.stringify([...log, ...applied.entries].slice(-1000)),

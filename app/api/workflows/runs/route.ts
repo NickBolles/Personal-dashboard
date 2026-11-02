@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { api } from "@/server/http/api";
-import { listRuns, startRun } from "@/server/workflows/runs";
+import { listRuns, runForConversation, startRun } from "@/server/workflows/runs";
 
 export const dynamic = "force-dynamic";
 
-export const GET = api(({ user, req }) => ({ runs: listRuns(user.id, req.nextUrl.searchParams.get("workflowId") ?? undefined) }), { cap: "work.use" });
+/** `?conversationId=` → that chat's run (Run panel); else recent runs (`?workflowId=`). */
+export const GET = api(
+  ({ user, req }) => {
+    const conv = req.nextUrl.searchParams.get("conversationId");
+    if (conv) return { run: runForConversation(user.id, conv) };
+    return { runs: listRuns(user.id, req.nextUrl.searchParams.get("workflowId") ?? undefined) };
+  },
+  { cap: "work.use" },
+);
 
 const body = z
   .object({

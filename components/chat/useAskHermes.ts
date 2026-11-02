@@ -29,7 +29,10 @@ export function useAskHermes() {
     // Lists (Hermes' session list is slow) refresh after navigation and never block it.
     void refreshSessionLists(qc).catch(() => toast("Conversation created, but the list could not refresh. Try Refresh conversations.", "warn"));
   };
-  const ask = async (input: string, opts: { backend?: AssistantBackend; context?: string; areaId?: string | null } = {}) => {
+  const ask = async (
+    input: string,
+    opts: { backend?: AssistantBackend; context?: string; areaId?: string | null; onSession?: (id: string) => Promise<unknown> | void } = {},
+  ) => {
     const text = input.trim();
     if (!text || busy) return false;
     setBusy(true);
@@ -48,6 +51,8 @@ export function useAskHermes() {
         capabilities: [SMART_CAPABILITY],
       });
       setFirstRun(session.id, { input: text, key, run });
+      // e.g. link a workflow run to its conversation; never blocks opening the chat
+      if (opts.onSession) void Promise.resolve(opts.onSession(session.id)).catch(() => undefined);
       open(session);
       setBusy(false);
       return true;

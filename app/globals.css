@@ -2778,3 +2778,23 @@ button:active > .dock-orb {
     background-position: -200% 0;
   }
 }
+
+/* Workflow Run panel (W2): outline scrolls inside a bounded box; on phones the
+   open keyboard collapses it to a one-line strip above the composer. */
+@layer components {
+  .wf-run [data-testid="workflow-outline"] {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .wf-run-strip {
+    display: none;
+  }
+}
+@media (max-width: 639.98px) {
+  html[data-kb="open"] .wf-run .wf-run-full {
+    display: none;
+  }
+  html[data-kb="open"] .wf-run .wf-run-strip {
+    display: block;
+  }
+}
