@@ -510,7 +510,14 @@ button.wk-kpi:hover {
 }
 
 /* ---- Areas structure: one nav row, node pages, inline add ---- */
+/* The row scrolls sideways inside its own box; it must never widen the page (200% text, 320 px). */
+.wk-nav {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
 .wk-nav > ul {
+  max-width: 100%;
   display: flex;
   gap: 2px;
   padding: 3px;

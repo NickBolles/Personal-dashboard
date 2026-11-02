@@ -188,7 +188,7 @@ export function WorkView({
   return (
     <div className="wk-hub flex min-w-0 flex-col lg:grid lg:grid-rows-[auto_1fr]">
       <div className="wk-hub-top min-w-0 px-3 pt-3 pb-2 lg:col-start-1 lg:row-start-1 lg:px-2.5 lg:pb-1">
-        <header className="mb-2 flex items-center justify-between gap-2 px-1">
+        <header className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
           <h1 className="wk-hub-title text-lg leading-tight font-semibold tracking-tight lg:text-[15px]">Areas</h1>
           {/* Desktop: the sidebar owns the tree, so bulk select is a page mode (multi-select list in the page body). */}
           <Button
@@ -1052,7 +1052,7 @@ function ItemDetail({
             {item.archived ? <Badge>Archived</Badge> : null}
             {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
             {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : ""}`}>
+            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : "flex-wrap"}`}>
               {container ? <ViewSwitch id={item.id} /> : null}
               {container && canChat ? (
                 <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">

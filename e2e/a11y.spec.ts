@@ -225,6 +225,27 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
   await page.keyboard.press("Escape");
 });
 
+test("200% text zoom: item page (Areas nav + New menu) does not scroll the page sideways (#112)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const post = async (data: unknown) => {
+    const r = await page.request.post("/api/work/items", { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const areaId = await post({ kind: "area", title: `Zoom lantern ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom wick ${nonce}` });
+  for (const path of [`/areas?item=${id}`, `/areas?item=${areaId}`]) {
+    await page.goto(path);
+    await expect(page.locator("#work-item-title")).toBeVisible();
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    // The Areas sections row scrolls inside its own box; the page itself must not.
+    await expectNoHorizontalOverflow(page, { soft: true });
+  }
+});
+
 test("inline edits: axe clean and no overflow at 200% text zoom (read, title editor, summary editor)", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");

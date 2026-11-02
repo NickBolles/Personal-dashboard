@@ -76,7 +76,8 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
   if (e.kind === "status") {
     type = "status";
     verb = `moved to ${label(e.toStatus)}`;
-    detail = `${label(e.fromStatus)} → ${label(e.toStatus)}${e.reason ? ` · ${e.reason}` : ""}`;
+    // The note reads as a sentence after the transition ("In progress → Awaiting validation: PR #12 merged").
+    detail = `${label(e.fromStatus)} → ${label(e.toStatus)}${e.reason ? `: ${e.reason}` : ""}`;
   } else if (e.kind === "created") {
     type = "created";
     verb = "created";
