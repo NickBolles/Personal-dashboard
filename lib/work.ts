@@ -1072,6 +1072,8 @@ export type TodayResponse = {
   settleSuggestions: TodayCard[];
   /** settled automatically by an area's `auto_after_quiet` policy in the last 7 days, with the undo op */
   autoSettled: (TodayCard & { opId: string | null })[];
+  /** #155: tags/assignee of every row the sections could show (untruncated), for the filter options */
+  facets?: { tags: string[]; assignee: string | null }[];
 };
 
 // --- validation templates and overdue ---

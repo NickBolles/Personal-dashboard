@@ -185,6 +185,8 @@ export function useWorkMutation<V, R = unknown>(fn: (v: V) => Promise<R>, opts: 
     onSuccess: (r, v) => {
       if (opts.ok) toast(opts.ok, "ok");
       qc.invalidateQueries({ queryKey: ["work"] });
+      // #131: new activity rows + Undo eligibility without waiting for the 30 s poll
+      qc.invalidateQueries({ queryKey: ["activity"] });
       opts.onSuccess?.(r, v);
     },
     onError: (e) => toast((e as Error).message, "danger"),

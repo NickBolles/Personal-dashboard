@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Card, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
 import { ChipButton, ChipInput, ChipSelect } from "@/components/ui/kit";
 import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor, type WorkTag } from "@/lib/item-tags";
 import { TagChip, useTagDirectory } from "./ItemMeta";
+import { UndoBar, type UndoOp } from "./UndoBar";
 
 /** Settings → Tags (#111): recolour from the token palette, rename, merge (rename onto an existing tag). */
 export function TagsSettingsView() {
@@ -15,10 +16,14 @@ export function TagsSettingsView() {
   const { toast } = useToast();
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  // #154: rename/merge is undoable (Renamed #a → #b · Undo)
+  const [undo, setUndo] = useState<UndoOp | null>(null);
+  const clearUndo = useCallback(() => setUndo(null), []);
   const patch = async (body: { name: string; to?: string; color?: TagColor }) => {
     try {
-      const r = await api.patch<{ touched: number; merged: boolean }>("/api/work/tags", body);
-      if (body.to) toast(r.merged ? `Merged into #${body.to} (${r.touched} items)` : `Renamed (${r.touched} items)`, "ok");
+      const r = await api.patch<{ touched: number; merged: boolean; op?: UndoOp }>("/api/work/tags", body);
+      if (body.to && r.op) setUndo({ ...r.op, label: `${r.op.label} (${r.touched} items)` });
+      else if (body.to) toast(r.merged ? `Merged into #${body.to} (${r.touched} items)` : `Renamed (${r.touched} items)`, "ok");
       setEditing(null);
       await qc.invalidateQueries({ queryKey: ["work"] });
     } catch (e) {
@@ -99,6 +104,7 @@ export function TagsSettingsView() {
           </ul>
         )}
       </Card>
+      {undo && <UndoBar key={undo.id} op={undo} onDone={clearUndo} />}
     </div>
   );
 }

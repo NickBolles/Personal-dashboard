@@ -55,7 +55,7 @@ export type RawWorkEvent = {
   at: string;
 };
 
-const STRUCTURE = new Set(["moved", "move", "reorder", "archived", "unarchived", "split", "fork", "forked", "handoff", "restored"]);
+const STRUCTURE = new Set(["moved", "move", "reorder", "reordered", "archived", "unarchived", "split", "fork", "forked", "handoff", "restored"]);
 
 /** Who did it: the signed-in viewer's id → "you"; GitHub refresh → github; agent/hermes ids → agent. */
 export function actorFor(actor: string, source: string | null, viewerId: string, agentName = "Hermes"): ActivityItem["actor"] {

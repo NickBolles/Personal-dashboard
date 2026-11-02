@@ -4,6 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { can, type Capable } from "@/server/access";
 import { isClosed } from "@/lib/work";
 import { addedVsCompleted, type HomePulse } from "@/lib/pulse";
+import { getPreferences } from "@/server/settings";
 
 const TZ = process.env.TZ || "America/Chicago";
 
@@ -24,13 +25,34 @@ export function homePulse(user: Capable & { id: string }, now = new Date()): Hom
     : null;
   if (!can(user, "work.use")) return { approvals, awaitingValidation: null, mergedNotSettled: null, trend: null };
   const T = schema.workItems;
-  const rows = db
-    .select({ id: T.id, kind: T.kind, status: T.status, archived: T.archived, createdAt: T.createdAt, completedAt: T.completedAt })
+  const everything = db
+    .select({ id: T.id, parentId: T.parentId, kind: T.kind, status: T.status, archived: T.archived, createdAt: T.createdAt, completedAt: T.completedAt })
     .from(T)
     .where(eq(T.userId, user.id))
-    .all()
-    .filter((r) => r.kind !== "area" && r.kind !== "conversation");
-  const open = rows.filter((r) => !r.archived && !isClosed(r.status));
+    .all();
+  // #82: an archived area/project hides its whole branch (descendants keep archived=false), as on Today
+  const byId = new Map(everything.map((r) => [r.id, r]));
+  const hiddenMemo = new Map<string, boolean>();
+  const hidden = (id: string): boolean => {
+    const seen: string[] = [];
+    let res = false;
+    for (let c = byId.get(id); c; c = c.parentId ? byId.get(c.parentId) : undefined) {
+      const known = hiddenMemo.get(c.id);
+      if (known !== undefined) {
+        res = known;
+        break;
+      }
+      if (c.archived || seen.length > 64) {
+        res = true;
+        break;
+      }
+      seen.push(c.id);
+    }
+    for (const s of seen) hiddenMemo.set(s, res);
+    return res;
+  };
+  const rows = everything.filter((r) => r.kind !== "area" && r.kind !== "conversation");
+  const open = rows.filter((r) => !hidden(r.id) && !isClosed(r.status));
   const ids = open.map((r) => r.id);
   const merged = new Set<string>();
   for (let i = 0; i < ids.length; i += 500) {
@@ -57,7 +79,8 @@ export function homePulse(user: Capable & { id: string }, now = new Date()): Hom
     trend: addedVsCompleted(
       rows.map((r) => ({ createdAt: r.createdAt, completedAt: r.status === "settled" ? r.completedAt : null })),
       now,
-      TZ,
+      // #83: the household time zone from Settings (same day boundaries as the rest of Home)
+      getPreferences().timezone || TZ,
     ),
   };
 }

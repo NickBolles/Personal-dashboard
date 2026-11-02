@@ -1,11 +1,12 @@
 /** Activity timeline: normalisation, day grouping, cursor paging (lib/activity.ts) + server scoping/undo (server/work/activity.ts). */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
+import { eq } from "drizzle-orm";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
-import { listActivity } from "@/server/work/activity";
+import { __setActivitySourceCap, listActivity } from "@/server/work/activity";
 import * as activityRoute from "@/app/api/work/activity/route";
 import {
   actorFor,
@@ -194,6 +195,49 @@ describe("listActivity (server)", () => {
     expect(after.summary ?? "").not.toBe("Find the spare key");
   });
 
+  it("pairs each edit with its own op even when every timestamp read moves the clock (#152)", () => {
+    // Worst case for the old per-row stamps: each toISOString() is 1 ms later than the last.
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Bandsaw fence" }, cid);
+    const real = Date.prototype.toISOString;
+    let t = Date.now() + 1000;
+    const spy = vi.spyOn(Date.prototype, "toISOString").mockImplementation(function () {
+      return real.call(new Date(Date.UTC(1970, 0, 1, 0, 0, 0, t++)));
+    });
+    try {
+      store.updateItem(u, item.id, { title: "Bandsaw fence rail" }, cid);
+      store.updateItem(u, item.id, { summary: "Square it to the blade" }, cid);
+      spy.mockRestore();
+      // one stamp per mutation: every edit op shares its event's timestamp
+      const db = getDb();
+      const evAt = db
+        .select()
+        .from(schema.workEvents)
+        .where(eq(schema.workEvents.itemId, item.id))
+        .all()
+        .filter((e) => e.kind === "edit")
+        .map((e) => e.at);
+      const opAt = db
+        .select()
+        .from(schema.workOps)
+        .where(eq(schema.workOps.itemId, item.id))
+        .all()
+        .filter((o) => o.kind === "edit")
+        .map((o) => o.createdAt);
+      expect(opAt.sort()).toEqual(evAt.sort());
+      const edits = listActivity(u, { item: item.id }).items.filter((i) => i.type === "edit");
+      const withUndo = edits.filter((i) => i.undoOpId);
+      expect(withUndo).toHaveLength(1);
+      expect(withUndo[0].id).toBe(edits[0].id);
+      store.undoOp(u, withUndo[0].undoOpId!, cid);
+      const after = store.getDetail(u.id, item.id).item;
+      expect(after.title).toBe("Bandsaw fence rail");
+      expect(after.summary ?? "").not.toBe("Square it to the blade");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("orders same-millisecond edits by insertion, not by their random ids", () => {
     // Freeze the clock so both edits always share one timestamp (the case that used to flake).
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -231,5 +275,37 @@ describe("listActivity (server)", () => {
     const body = (await res.json()) as ActivityResponse;
     expect(body.items.length).toBeGreaterThan(0);
     expect(body.items.every((i) => i.type === "created")).toBe(true);
+  });
+
+  it("pages past the per-source window with filters (#130)", () => {
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Bandsaw fence" }, cid);
+    for (let i = 0; i < 12; i++) store.updateItem(u, item.id, { summary: `Fence note ${i}` }, cid);
+    __setActivitySourceCap(5);
+    try {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let guard = 0; guard < 20; guard++) {
+        const page: ActivityResponse = listActivity(u, { item: item.id, limit: 4, cursor });
+        seen.push(...page.items.map((i) => i.id));
+        cursor = page.nextCursor;
+        if (!cursor) break;
+      }
+      expect(new Set(seen).size).toBe(seen.length);
+      // 12 edits + created, all reachable though each window reads only 5 rows per source
+      expect(seen.length).toBe(13);
+      const created = listActivity(u, { item: item.id, types: ["created"], limit: 4 });
+      expect(created.items).toHaveLength(1);
+    } finally {
+      __setActivitySourceCap(2000);
+    }
+  });
+
+  it("offers Undo on due-date edits (#131)", () => {
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Router table" }, cid);
+    store.updateItem(u, item.id, { targetDate: "2026-12-01" }, cid);
+    const rows = listActivity(u, { item: item.id }).items;
+    expect(rows.some((r) => r.undoOpId)).toBe(true);
   });
 });

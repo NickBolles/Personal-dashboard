@@ -204,7 +204,8 @@ export function ActionCard({
       <article aria-labelledby={titleId} className={cx("jv-trow", done && "jv-done")}>
         {checkbox ?? <span aria-hidden="true" className="jv-check-btn" />}
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="truncate text-[0.875rem] leading-snug font-medium">
+          {/* #157: phones wrap long titles to two lines (one truncated line hid most of them at 320) */}
+          <h3 id={titleId} className="text-[0.875rem] leading-snug font-medium max-sm:line-clamp-2 max-sm:[overflow-wrap:anywhere] sm:truncate">
             {action.external ? (
               <a href={action.href} target="_blank" rel="noreferrer noopener" className="hover:underline">
                 {titleNode}

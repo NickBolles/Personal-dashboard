@@ -4,4 +4,11 @@ import { today } from "@/server/work/today";
 export const dynamic = "force-dynamic";
 
 /** Today: KPIs, things to continue, proof due, ready to settle, overdue (local data only). */
-export const GET = api(({ user }) => today(user.id), { cap: "work.use" });
+// ?tag=&assignee= filter before the section limits (#155)
+export const GET = api(
+  ({ user, req }) => {
+    const sp = req.nextUrl.searchParams;
+    return today(user.id, new Date(), { tag: sp.get("tag")?.slice(0, 100) || null, assignee: sp.get("assignee")?.slice(0, 200) || null });
+  },
+  { cap: "work.use" },
+);
