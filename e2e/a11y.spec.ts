@@ -310,6 +310,7 @@ test("workflow builder, edit and save-chat review: axe clean and no overflow at 
   };
   await check("/workflows/new", "New workflow");
   await check("/workflows/zoombuild/edit", "Edit Zoom builder");
+  await check("/workflows/zoombuild", "Session history"); // W4 workflow page: history, stats, reminder
   await check("/workflows/new?fromChat=sess_morning", "Review the proposed workflow");
 });
 
@@ -321,7 +322,9 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id} ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
         label,
       )
       .toEqual([]);
@@ -344,6 +347,21 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
+  await page.addStyleTag({ content: "html { font-size: 100% !important; }" });
+  // W4: Edit session (#132) and the end form, then the outputs (summary, actions, export).
+  await panel.getByTestId("workflow-edit-session").click();
+  await expect(page.getByRole("dialog", { name: "Edit session" })).toBeVisible();
+  await axe("edit session");
+  await page.getByRole("dialog", { name: "Edit session" }).getByRole("button", { name: "Cancel" }).click();
   await panel.getByRole("button", { name: "End session" }).click();
+  const endForm = page.getByRole("dialog", { name: "Before you go" });
+  await expect(endForm).toBeVisible();
+  await axe("end form");
+  await endForm.getByTestId("workflow-end-submit").click();
   await expect(panel).toContainText("Ended");
+  await expect(panel.getByTestId("workflow-outputs")).toBeVisible();
+  await axe("run outputs");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
 });

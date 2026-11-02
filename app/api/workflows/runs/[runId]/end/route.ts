@@ -1,9 +1,16 @@
+import { z } from "zod";
 import { api } from "@/server/http/api";
-import { endRun } from "@/server/workflows/runs";
+import { endWithForm } from "@/server/workflows/outputs";
 
 export const dynamic = "force-dynamic";
 
-/** End session (summary/export: W4). Never settles anything. */
-export const POST = api<undefined, { runId: string }>(({ user, params, correlationId }) => endRun({ userId: user.id, correlationId }, params.runId), {
-  cap: "work.use",
-});
+const body = z
+  .object({ values: z.record(z.string().max(40), z.unknown()).optional() })
+  .strict()
+  .optional();
+
+/** End session, filing the optional end form first (local, undoable). Never settles anything. */
+export const POST = api<z.infer<typeof body>, { runId: string }>(
+  ({ user, params, body, correlationId }) => endWithForm({ userId: user.id, correlationId }, params.runId, body?.values),
+  { cap: "work.use", body },
+);

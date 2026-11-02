@@ -1590,6 +1590,12 @@ export const workflowRuns = sqliteTable(
     startedAt: text("started_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
     endedAt: text("ended_at"),
+    /** W4: end-of-session summary text; agent drafts are `proposed` until the owner accepts them */
+    summary: text("summary"),
+    /** none | proposed | accepted */
+    summaryState: text("summary_state").notNull().default("none"),
+    /** W4: work items created from the action checklist [{index, itemId, title}] (confirmed writes only) */
+    promotedJson: text("promoted_json").notNull().default("[]"),
   },
   (t) => [
     index("workflow_runs_owner_status_idx").on(t.ownerId, t.status),
@@ -1597,3 +1603,24 @@ export const workflowRuns = sqliteTable(
     index("workflow_runs_conversation_idx").on(t.conversationId),
   ],
 );
+
+/**
+ * W4 (D6): opt-in reminder per workflow. Remind-only: the dispatcher task
+ * sends a notification linking to the start form; it never starts a model run.
+ */
+export const workflowReminders = sqliteTable("workflow_reminders", {
+  workflowId: text("workflow_id")
+    .primaryKey()
+    .references(() => workflows.id, { onDelete: "cascade" }),
+  ownerId: text("owner_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  /** 0 = Sunday … 6 = Saturday, owner timezone */
+  day: integer("day").notNull().default(0),
+  /** HH:MM, owner timezone */
+  time: text("time").notNull().default("09:45"),
+  /** owner-local date of the last reminder sent (once per day) */
+  lastSentDate: text("last_sent_date"),
+  updatedAt: text("updated_at").notNull().default(now),
+});

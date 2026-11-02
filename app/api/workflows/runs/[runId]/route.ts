@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 export const GET = api<undefined, { runId: string }>(({ user, params }) => getRun(user.id, params.runId), { cap: "work.use" });
 
 const body = z.union([
-  z.object({ by: z.literal("user"), ops: z.array(z.unknown()).max(40), source: z.enum(["quickAdd", "edit", "form:mid", "outline"]).optional() }).strict(),
+  z
+    .object({ by: z.literal("user"), ops: z.array(z.unknown()).max(40), source: z.enum(["quickAdd", "edit", "form:mid", "form:end", "outline"]).optional() })
+    .strict(),
   z.object({ by: z.literal("agent"), text: z.string().max(64_000), messageId: z.string().max(120).optional() }).strict(),
   z.object({ conversationId: z.string().min(1).max(120) }).strict(),
 ]);

@@ -22,19 +22,31 @@ function empty(v: unknown) {
  */
 export function WorkflowStartHost() {
   const [data, setData] = useState<StartFormData | null>(null);
+  // where the start came from (palette / share / schedule) and shared text that becomes the first note
+  const [origin, setOrigin] = useState<{ triggeredBy: "palette" | "share" | "schedule"; shared?: string }>({ triggeredBy: "palette" });
   const { toast } = useToast();
   const asker = useAskHermes();
   const router = useRouter();
   const qc = useQueryClient();
   useEffect(() => {
     const on = (e: Event) => {
-      const { command, workflowId } = (e as CustomEvent<{ command?: string; workflowId?: string }>).detail ?? {};
+      const { command, workflowId, shared, triggeredBy } =
+        (e as CustomEvent<{ command?: string; workflowId?: string; shared?: string; triggeredBy?: "palette" | "share" | "schedule" }>).detail ?? {};
+      setOrigin({ triggeredBy: triggeredBy ?? "palette", shared: shared?.slice(0, 2000) });
       api
         .post<StartFormData>("/api/workflows/form", command ? { command } : { workflowId })
         .then(setData)
         .catch((err: Error) => toast(err.message, "danger"));
     };
     window.addEventListener(WORKFLOW_START_EVENT, on);
+    // Reminder notifications deep-link to ?start=<slug> (D6): open the start form, never start a run.
+    const url = new URL(window.location.href);
+    const slug = url.searchParams.get("start");
+    if (slug && /^[a-z][a-z0-9-]{1,39}$/.test(slug)) {
+      url.searchParams.delete("start");
+      window.history.replaceState(window.history.state, "", url.toString());
+      window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { command: `/${slug}`, triggeredBy: "schedule" } }));
+    }
     return () => window.removeEventListener(WORKFLOW_START_EVENT, on);
   }, [toast]);
   if (!data) return null;
@@ -46,9 +58,9 @@ export function WorkflowStartHost() {
         const missing = (data.spec?.children ?? []).filter((el) => el.props.required && empty(values[el.props.id as string]));
         if (missing.length) return { errors: missing.map((el) => ({ field: el.props.id as string, message: `Add ${String(el.props.label).toLowerCase()}` })) };
         try {
-          const s = await api.post<Started>("/api/workflows/runs", { workflowId: data.workflow.id, values, triggeredBy: "palette" });
+          const s = await api.post<Started>("/api/workflows/runs", { workflowId: data.workflow.id, values, triggeredBy: origin.triggeredBy });
           setData(null);
-          const ok = await asker.ask(s.input, {
+          const ok = await asker.ask(origin.shared ? `${s.input}\n\n${origin.shared}` : s.input, {
             areaId: s.areaId,
             context: s.context,
             onSession: async (id) =>

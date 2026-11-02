@@ -149,6 +149,13 @@ export function createHermes({ apiKey }) {
         rationale: "You repeat the same three-part structure every week.",
       });
     }
+    if (source === "workflow_summary") {
+      // End-of-session summary draft (W4): a proposal the owner accepts.
+      return JSON.stringify({ summary: "Mock summary: remain in the vine; fruit follows." });
+    }
+    if (source === "workflow_reflection") {
+      return JSON.stringify({ prompt: "Where will you stay connected this week?" });
+    }
     if (source === "workflow_test_turn") {
       // Test a turn (sandbox): reply + proposed capture changes, nothing persisted.
       const said = input.match(/<message>\n([\s\S]*?)\n<\/message>/)?.[1]?.trim() ?? "";
