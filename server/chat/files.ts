@@ -66,16 +66,53 @@ function view(r: typeof T.$inferSelect): ChatFileView {
   };
 }
 
+/**
+ * The conversation plus the ones it was forked from, each with the time the fork was taken (#86):
+ * a fork copies its parent's messages (and their `jarvis-file:` markers), so files the parent had
+ * sent by then stay readable from the fork.
+ */
+function lineage(sessionId: string): { id: string; before: string | null }[] {
+  const out: { id: string; before: string | null }[] = [{ id: sessionId, before: null }];
+  let cur = sessionId;
+  let cutoff = null as string | null;
+  for (let i = 0; i < 8; i++) {
+    const m = db()
+      .select({ parent: schema.sessionMeta.forkedFromSessionId, at: schema.sessionMeta.createdAt })
+      .from(schema.sessionMeta)
+      .where(eq(schema.sessionMeta.sessionId, cur))
+      .get();
+    if (!m?.parent || out.some((o) => o.id === m.parent)) break;
+    cutoff = cutoff && cutoff < m.at ? cutoff : m.at;
+    out.push({ id: m.parent, before: cutoff });
+    cur = m.parent;
+  }
+  return out;
+}
+
+/** Can this row be seen from `sessionId`: its own files (drafts only by their uploader), or an ancestor's file sent before the fork. */
+function visibleFrom(r: typeof T.$inferSelect, user: CurrentUser, chain: { id: string; before: string | null }[]) {
+  const link = chain.find((c) => c.id === r.sessionId);
+  if (!link) return false;
+  if (!link.before) return !!r.sentAt || r.userId === user.id;
+  return !!r.sentAt && r.sentAt <= link.before;
+}
+
 /** Files that went out with a message in this conversation (Links panel → Files), newest first. */
 export function listChatFiles(user: CurrentUser, sessionId: string): ChatFileView[] {
   conversationAccess(user, sessionId);
+  const chain = lineage(sessionId);
   return db()
     .select()
     .from(T)
-    .where(eq(T.sessionId, sessionId))
+    .where(
+      inArray(
+        T.sessionId,
+        chain.map((c) => c.id),
+      ),
+    )
     .orderBy(desc(T.createdAt))
     .all()
-    .filter((r) => r.sentAt || r.userId === user.id)
+    .filter((r) => visibleFrom(r, user, chain))
     .map(view);
 }
 
@@ -193,13 +230,10 @@ export function saveChatFile(user: CurrentUser, sessionId: string, f: Upload, co
 
 function rowFor(user: CurrentUser, sessionId: string, id: string) {
   conversationAccess(user, sessionId);
-  const r = db()
-    .select()
-    .from(T)
-    .where(and(eq(T.id, id), eq(T.sessionId, sessionId)))
-    .get();
-  // Drafts are private to the person composing; sent files follow the conversation.
-  if (!r || (!r.sentAt && r.userId !== user.id)) throw new HttpError(404, "not_found", "File not found");
+  const r = db().select().from(T).where(eq(T.id, id)).get();
+  // Drafts are private to the person composing; sent files follow the conversation (and its forks, #86).
+  if (!r || !visibleFrom(r, user, r.sessionId === sessionId ? [{ id: sessionId, before: null }] : lineage(sessionId)))
+    throw new HttpError(404, "not_found", "File not found");
   return r;
 }
 
@@ -228,6 +262,7 @@ export async function chatFileThumbnail(user: CurrentUser, sessionId: string, id
 
 export function deleteChatFile(user: CurrentUser, sessionId: string, id: string, correlationId: string) {
   const row = rowFor(user, sessionId, id);
+  if (row.sessionId !== sessionId) throw new HttpError(403, "forbidden", "This file belongs to the conversation it was forked from");
   if (row.userId !== user.id && conversationAccess(user, sessionId) !== "write") throw new HttpError(403, "forbidden", "You can't remove this file");
   db().delete(T).where(eq(T.id, id)).run();
   removeStored([row]);
