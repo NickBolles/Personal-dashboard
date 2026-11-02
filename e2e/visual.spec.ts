@@ -35,7 +35,12 @@ const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "he
 async function freezeMiddayCT(page: Page) {
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   // 17:00 UTC is 12:00 CDT / 11:00 CST: midday either way, far from both date boundaries.
-  await page.clock.setFixedTime(new Date(`${ymd}T17:00:00.000Z`));
+  // Never freeze AHEAD of the real clock: server data carries real fetchedAt/staleAfter (todos go
+  // stale after 5 min), so a browser clock hours in the future shows "Last updated N hours ago" on
+  // every card and rewraps rows (CI before ~noon CT). Same CT date either way, so relative day
+  // labels ("Due today", "N days ago") don't change.
+  const midday = Date.parse(`${ymd}T17:00:00.000Z`);
+  await page.clock.setFixedTime(new Date(Math.min(Date.now(), midday)));
 }
 
 for (const [name, path] of [
