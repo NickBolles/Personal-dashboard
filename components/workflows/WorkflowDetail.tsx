@@ -20,7 +20,7 @@ type History = {
     topSpeakers: { label: string; count: number }[];
   };
 };
-type Reminder = { enabled: boolean; day: number; time: string; declared: boolean };
+type Reminder = { enabled: boolean; day: number; time: string; declared: boolean; unsupported?: string | null };
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const FILTERS = [
@@ -233,6 +233,12 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
             </span>
           </label>
           <p className="text-xs text-muted">A notification asks “{name} — start?” and opens the start form. Nothing starts until you tap Start.</p>
+          {r.unsupported ? (
+            <p className="mt-1 text-xs text-muted" role="note" data-testid="reminder-unsupported">
+              This workflow’s schedule (<code>{r.unsupported}</code>) isn’t one weekly time, so reminders can’t follow it. The reminder above uses {DAYS[r.day]}{" "}
+              at {r.time} instead.
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="text-sm text-muted">Loading…</p>
