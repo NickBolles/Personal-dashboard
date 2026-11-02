@@ -861,6 +861,16 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       const restore: Record<string, unknown> = {};
       for (const f of EDIT_UNDO_FIELDS) if (f in prev) restore[f] = prev[f];
       if ("status" in restore && life) for (const f of ["completedAt", "settledKind", "settledReason"] as const) if (f in life) restore[f] = life[f];
+      // Same rule as updateItem/planTransition: ready and in-progress work keeps a next action. E.g. a
+      // next-action edit followed by Start focused work (→ in_progress, no edit op) can't be undone.
+      const status = String(restore.status ?? row.status);
+      const nextAction = String(restore.nextAction ?? row.nextAction ?? "");
+      if ((status === "ready" || status === "in_progress") && !nextAction.trim())
+        throw new HttpError(
+          409,
+          "next_action_required",
+          `Can't undo: ${status === "ready" ? "ready" : "in-progress"} work needs a next action. Edit the next action instead.`,
+        );
       tx.update(T)
         .set({ ...restore, updatedAt: nowIso() })
         .where(eq(T.id, row.id))

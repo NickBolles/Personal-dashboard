@@ -106,3 +106,52 @@ test("Today row: F2 renames the focused row title in place", async ({ page }) =>
   await expect(page.getByRole("button", { name: `Quillon row ${nonce}`, exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
 });
+
+test("detail ⋯: Abandon… and Mark superseded… close the item with an optional reason (#114)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const { id, title } = await makeItem(page, nonce);
+  await page.goto(`/areas?item=${id}`);
+  await expect(heading(page)).toHaveText(title);
+
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name: "Abandon…" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText(`Abandon ${title}`);
+  await dialog.getByLabel("Why stop? (optional)").fill("Quillon pen discontinued");
+  await dialog.getByRole("button", { name: "Abandon", exact: true }).click();
+  await expect(page.locator('[data-status="abandoned"]')).toBeVisible();
+  // the status edit is undoable like any other
+  const bar = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Undo" }) });
+  await bar.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator('[data-status="captured"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name: "Mark superseded…" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Mark superseded", exact: true }).click();
+  await expect(page.locator('[data-status="superseded"]')).toBeVisible();
+  // closed items offer Reopen, not Abandon/Superseded again
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Abandon…" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+});
+
+test("undoing a next-action edit after Start focused work is refused with a clear message (#113)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const { id } = await makeItem(page, nonce);
+  await page.goto(`/areas?item=${id}`);
+  await page.getByRole("button", { name: "Edit next action" }).click();
+  await page.getByRole("textbox", { name: "Edit next action" }).fill(`Ink the Quillon ${nonce}`);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const bar = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Undo" }) });
+  await expect(bar).toBeVisible();
+  // Start focused work (→ in progress) happens before the Undo tap.
+  const r = await appPost(page, `/api/work/items/${id}/packets`, { objective: "Quillon ship", nextAction: `Ink the Quillon ${nonce}` });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  await bar.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText(/Can't undo: in-progress work needs a next action/)).toBeVisible();
+  await page.reload();
+  await expect(page.locator('[data-status="in_progress"]')).toBeVisible();
+  await expect(page.getByText(`Ink the Quillon ${nonce}`).first()).toBeVisible();
+});
