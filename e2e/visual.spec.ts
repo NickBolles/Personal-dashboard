@@ -16,12 +16,15 @@ import {
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
+import { mapDemo, mapDemoDecisions } from "./fixtures/map-demo";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request, page }) => {
+  // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   await mock(request, "/reset");
   await setHa(request, "cover.garage_door", "open", 45);
 });
@@ -1090,4 +1093,33 @@ for (const scheme of ["light", "dark"] as const) {
     await expectNoHorizontalOverflow(page);
     await expect(page).toHaveScreenshot(`activity-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
   });
+}
+
+/** Work from Jarvis: /map overview + drill-down and the Decisions inbox, from the demo fixture. */
+for (const scheme of ["light", "dark"] as const) {
+  for (const [name, path, h1] of [
+    ["map", "/map", "Map"],
+    ["decisions", "/decisions", "Needs you"],
+  ] as const) {
+    test(`visual: ${name} (${scheme})`, async ({ page }) => {
+      await freezeMiddayCT(page);
+      await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
+      await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+      await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+      await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+      await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1, name: h1 })).toBeVisible();
+      await expect(page.getByText("Badge on the sidebar or the phone bar?").first()).toBeVisible();
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({
+        content: 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }',
+      });
+      await page.waitForTimeout(500);
+      await expectNoHorizontalOverflow(page);
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+      await t.evaluate((el) => (el as Element).remove());
+    });
+  }
 }

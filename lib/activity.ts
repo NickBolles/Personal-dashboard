@@ -103,6 +103,11 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
     type = "edit";
     verb = "updated the packet on";
     detail = e.reason;
+  } else if (e.kind === "decision") {
+    // Decisions inbox: "Decision: <question> → <answer>"
+    type = "edit";
+    verb = "decided on";
+    detail = e.reason;
   } else if (STRUCTURE.has(e.kind)) {
     type = "structure";
     verb = e.kind === "archived" ? "archived" : e.kind === "unarchived" ? "unarchived" : (e.reason ?? e.kind);
@@ -110,7 +115,8 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
   } else if (e.kind === "edit") {
     type = "edit";
     verb = e.reason ? e.reason.charAt(0).toLowerCase() + e.reason.slice(1) : "edited";
-    if (!/^(edited|validation default|area settings|assigned|unassigned|tagged|untagged)/.test(verb)) verb = `edited · ${verb}`;
+    if (!/^(edited|validation default|area settings|assigned|unassigned|tagged|untagged|needs your decision|cleared the decision)/.test(verb))
+      verb = `edited · ${verb}`;
   }
   if (e.source === "github" && type !== "github") type = "github";
   return { id: `ev:${e.id}`, at: e.at, type, actor, verb, object, detail, undoOpId: null };

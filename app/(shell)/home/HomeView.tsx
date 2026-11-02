@@ -15,6 +15,7 @@ import type { AssistCard as Assist } from "@/lib/contracts";
 import { Badge, Empty, ErrorNote, OverflowMenu, Page, SectionLabel, Spinner, cx, useOnline } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
+import { NeedsYouSection } from "@/components/map/Decisions";
 import { Skeleton } from "@/components/ui/kit";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
 
@@ -360,6 +361,7 @@ export function HomeView() {
 
       <div className="grid gap-x-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
+          <NeedsYouSection id="today-needs-you-h" limit={3} />
           {visible("now") ? (
             <section aria-labelledby="now-h" aria-busy={!data || undefined} className="mb-5">
               <SectionTitle id="now-h" count={att && data?.now.length ? `${data.now.length}` : undefined}>

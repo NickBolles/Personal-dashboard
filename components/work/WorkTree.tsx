@@ -136,6 +136,7 @@ export function WorkTree({
         settings: null,
         tags: [],
         assignee: null,
+        decision: null,
         createdAt: "",
         updatedAt: "",
       });
