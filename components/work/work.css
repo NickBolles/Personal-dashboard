@@ -1091,9 +1091,14 @@ button.wk-kpi:hover {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.work-ui h2 > .jv-inline,
+.work-ui h2 > .jv-inline:not(.jv-inline-read),
 .work-ui h2 > .jv-inline .jv-inline-input {
   width: 100%;
+}
+/* The read button bleeds 4px each side (negative margin): let it be that much wider than the
+   heading so the title wraps exactly like plain heading text. */
+.work-ui h2 > .jv-inline-read {
+  max-width: calc(100% + 8px);
 }
 .work-ui .jv-inline-input {
   min-width: 0;
