@@ -121,3 +121,53 @@ test("workflow page: history, stats (plain counts) and reminder toggle", async (
   await toggle.uncheck();
   await expect(toggle).not.toBeChecked();
 });
+
+test("share target: Start workflow… opens the start form prefilled from the shared text", async ({ page }) => {
+  await ensureWorkflowActive(page, fixture);
+  await page.goto("/capture");
+  const id = await page.evaluate(async () => {
+    const db: IDBDatabase = await new Promise((res, rej) => {
+      const r = indexedDB.open("jarvis-share", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("staged", { keyPath: "id" });
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+    const sid = "e2estagedorchard";
+    await new Promise((res, rej) => {
+      const q = db
+        .transaction("staged", "readwrite")
+        .objectStore("staged")
+        .put({ id: sid, title: "Wren Hale John 15", text: "Orchard talk notes", url: "", files: [], createdAt: new Date().toISOString() });
+      q.onsuccess = res;
+      q.onerror = () => rej(q.error);
+    });
+    return sid;
+  });
+  await page.goto(`/share?staged=${id}`);
+  await expect(page).toHaveURL(/\/capture\?staged=/);
+  await page.getByTestId("share-start-workflow").click();
+  const picker = page.getByRole("group", { name: "Start a workflow with this" });
+  await picker.getByRole("button", { name: "Orchard notebook" }).click();
+  const form = page.getByRole("dialog", { name: "New session" });
+  await expect(form).toBeVisible();
+  await expect(form.getByLabel("Speaker")).toHaveValue("Wren Hale");
+  // Nothing starts until the owner submits.
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await expect(form).toBeHidden();
+});
+
+test("reminder notification link (?start=<slug>) opens the start form, never starts a run", async ({ page }) => {
+  await ensureWorkflowActive(page, fixture);
+  const before = await page.request.get("/api/workflows/runs?limit=200", { headers: H });
+  await page.goto("/workflows?start=orchardnotes");
+  const form = page.getByRole("dialog", { name: "New session" });
+  await expect(form).toBeVisible();
+  await expect(page).not.toHaveURL(/start=/);
+  await expect(page).toHaveURL(/\/workflows/);
+  if (before.ok()) {
+    const after = await page.request.get("/api/workflows/runs?limit=200", { headers: H });
+    expect(await after.text()).toBe(await before.text());
+  }
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await expect(form).toBeHidden();
+});

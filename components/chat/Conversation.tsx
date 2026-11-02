@@ -467,7 +467,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                       data-scroll-x
                       className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
                     >
-                      {phase ? <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge> : null}
+                      {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
+                      {phase ? (
+                        <span className="inline-flex shrink-0 rounded-full bg-surface">
+                          <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge>
+                        </span>
+                      ) : null}
                       {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
                       {readOnly ? (
                         <Badge>Shared with you · read only</Badge>

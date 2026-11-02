@@ -322,7 +322,9 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id} ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
         label,
       )
       .toEqual([]);
