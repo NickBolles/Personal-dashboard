@@ -20,6 +20,7 @@ import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { ActivityFeed } from "@/components/work/ActivityFeed";
 import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -1440,6 +1441,9 @@ function ViewSwitch({ id }: { id: string }) {
       <Link href={`/areas/map${q}`} className="wk-view">
         Map
       </Link>
+      <Link href={`/areas/activity${q}`} className="wk-view">
+        Activity
+      </Link>
     </nav>
   );
 }
@@ -2799,23 +2803,7 @@ function Activity({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
       </Card>
       <Card>
         <h3 className="mb-2 font-semibold">Activity</h3>
-        <ol className="space-y-2 text-sm">
-          {d.events.map((e) => (
-            <li key={e.id} className="flex flex-wrap gap-x-2">
-              <time dateTime={e.at} className="text-muted">
-                {new Date(e.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-              </time>
-              <span className="break-words">
-                {e.kind === "status" && e.toStatus
-                  ? `${e.fromStatus ? STATUS_LABELS[e.fromStatus as WorkStatus] : "—"} → ${STATUS_LABELS[e.toStatus as WorkStatus]}${e.reason ? `: ${e.reason}` : ""}`
-                  : e.kind === "created"
-                    ? `Created${e.reason ? `: ${e.reason}` : ""}`
-                    : (e.reason ?? e.kind)}
-              </span>
-              {e.source === "github" ? <Badge>GitHub</Badge> : null}
-            </li>
-          ))}
-        </ol>
+        <ActivityFeed scope={{ item: item.id, descendants: isContainer(item) && item.kind !== "conversation" }} onSelect={onSelect} compact />
       </Card>
     </>
   );
