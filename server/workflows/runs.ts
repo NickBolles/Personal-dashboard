@@ -264,7 +264,18 @@ export function runView(row: RunRow, def: WorkflowDefinition) {
     proposals: parse<CaptureOp[]>(row.proposalsJson, []),
     context: row.status === "live" ? runContext(def, row.version, parse<Capture>(row.captureJson, {})) : null,
     panel: compileRunPanel(def, row.title),
-    definition: { name: def.name, slug: def.slug, capture: def.capture, quickAdd: def.quickAdd ?? [], mid: formFields(def, "mid") },
+    definition: {
+      name: def.name,
+      slug: def.slug,
+      capture: def.capture,
+      quickAdd: def.quickAdd ?? [],
+      mid: formFields(def, "mid"),
+      end: formFields(def, "end"),
+      reflectionPrompts: def.reflectionPrompts ?? "off",
+    },
+    summary: row.summary ?? null,
+    summaryState: row.summaryState as "none" | "proposed" | "accepted",
+    promoted: parse<{ index: number; itemId: string; title: string }[]>(row.promotedJson, []),
   };
 }
 
@@ -475,4 +486,5 @@ export function listRuns(userId: string, workflowId?: string) {
     .all();
 }
 
-export { getWorkflowBySlug };
+export { getWorkflowBySlug, ownRun, save as saveRun, parse as parseJson };
+export type { RunRow, Ctx as RunCtx };

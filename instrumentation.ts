@@ -34,6 +34,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] conversation warmer didn't start", (err as Error).message);
   }
+  // Workflow reminders (W4, D6): opt-in, remind-only notifications; never start a model run.
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { sendDueReminders } = await import("./server/workflows/outputs");
+    registerDispatcherTask("workflow_reminders", 60_000, (now) => sendDueReminders(now));
+  } catch (err) {
+    console.error("[jarvis] workflow reminders didn't start", (err as Error).message);
+  }
   // Integration failure alerts: the worker derives them in tick(), but production runs with it
   // disabled, so failing syncs (e.g. Skylight) were never surfaced. Read-only check of recorded streaks.
   try {
