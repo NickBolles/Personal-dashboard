@@ -8,6 +8,20 @@ import { conversationPlacement } from "@/server/work/conversations";
 import { runStructured } from "@/integrations/hermes/structured";
 import { builderPrompt, proposalSchema, refuseFinanceChat, type WorkflowProposal } from "@/lib/workflows/proposal";
 import { isFinanceContext } from "@/lib/chat-context";
+import { listItems } from "@/server/work/store";
+import { effectiveAreaPolicy } from "@/server/ai/rules";
+
+/** True when the item or any ancestor is Finance or has aiPolicy "excluded" (same rule as AI jobs). */
+function inExcludedArea(userId: string, itemId: string | null | undefined): boolean {
+  if (!itemId) return false;
+  const byId = new Map(listItems(userId).map((i) => [i.id, i]));
+  let cur = byId.get(itemId);
+  for (let n = 0; cur && n < 50; n++) {
+    if (effectiveAreaPolicy({ title: cur.title, aiPolicy: cur.settings?.aiPolicy ?? null }) === "excluded") return true;
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return false;
+}
 
 /**
  * AI drafts for the builder (W3): "Save chat as workflow" and "Describe it".
@@ -34,11 +48,13 @@ export async function draftWorkflow(user: CurrentUser, body: z.infer<typeof draf
     const detail = await getSessionDetail(user, body.sessionId);
     const title = detail.session.title ?? "";
     const placement = conversationPlacement(user, body.sessionId, title).placement;
-    const refusal = refuseFinanceChat({
-      title,
-      areaPath: placement?.path ?? null,
-      refs: (detail as { links?: { url?: string; label?: string }[] }).links ?? [],
-    });
+    const refusal = inExcludedArea(user.id, placement?.parentId)
+      ? ({ refused: true, reason: "Chats in an area AI can't use can't become workflows" } as const)
+      : refuseFinanceChat({
+          title,
+          areaPath: placement?.path ?? null,
+          refs: (detail as { links?: { url?: string; label?: string }[] }).links ?? [],
+        });
     if (refusal.refused) {
       audit({ actor: user.id, action: "workflow.draft", result: "rejected", correlationId, detail: { reason: "finance" } });
       throw new HttpError(403, "finance_blocked", refusal.reason);

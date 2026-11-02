@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Field, cx, inputCls, useToast } from "@/components/ui";
-import { PROPOSAL_PARTS, validateProposal, type PartDecision, type ProposalPart, type WorkflowProposal } from "@/lib/workflows/proposal";
+import { PROPOSAL_PARTS, proposalSchema, validateProposal, type PartDecision, type ProposalPart, type WorkflowProposal } from "@/lib/workflows/proposal";
 
 const PART_LABEL: Record<ProposalPart, string> = {
   basics: "Name & basics",
@@ -64,6 +64,12 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
     if (!editing) return;
     try {
       const value = editing === "instructions" ? text : JSON.parse(text);
+      // Shape-check the edited part before it reaches state, so the card never renders an invalid value.
+      const parsed = proposalSchema.shape[editing].safeParse(value);
+      if (!parsed.success) {
+        setEditError(`That doesn't look like a valid ${editing === "startForm" ? "start form" : editing}: ${parsed.error.issues[0]?.message ?? "wrong shape"}`);
+        return;
+      }
       setProposal((cur) => ({ ...cur, [editing]: value }));
       setDecisions((d) => ({ ...d, [editing]: "accept" }));
       setEditing(null);
@@ -220,7 +226,7 @@ function PartBody({ part, proposal }: { part: ProposalPart; proposal: WorkflowPr
       <div className="mt-2 text-sm">
         {proposal.startForm.title ? <p className="font-medium">{proposal.startForm.title}</p> : null}
         <ul className="space-y-1">
-          {proposal.startForm.fields.map((f, n) => {
+          {(Array.isArray(proposal.startForm.fields) ? proposal.startForm.fields : []).map((f, n) => {
             const field = f as { id?: string; label?: string; type?: string };
             return (
               <li key={field.id ?? n} className="min-w-0 break-words">
