@@ -41,6 +41,8 @@ export type WorkflowProposal = z.infer<typeof proposalSchema>;
 export type ChatSource = {
   title?: string;
   areaPath?: string | null;
+  /** area paths AI can't use (Finance, aiPolicy=excluded), " › "-joined like conversation placement */
+  excludedAreas?: string[];
   /** refs attached to the chat (context picks, links) */
   refs?: { type?: string; id?: string; label?: string; url?: string }[];
 };
@@ -48,7 +50,11 @@ export type ChatSource = {
 /** Finance chats (filed under Finance, or carrying finance refs) never go to the AI builder. */
 export function refuseFinanceChat(src: ChatSource): { refused: true; reason: string } | { refused: false } {
   const area = (src.areaPath ?? "").trim();
-  if (/^finance(\s*\/|$)/i.test(area)) return { refused: true, reason: "Finance chats can't become workflows" };
+  if (
+    /^finance(\s*[/›]|$)/i.test(area) ||
+    (src.excludedAreas ?? []).some((x) => area.toLowerCase() === x.toLowerCase() || area.toLowerCase().startsWith(`${x.toLowerCase()} ›`))
+  )
+    return { refused: true, reason: "Finance chats can't become workflows" };
   if (/\bfinance\b/i.test(src.title ?? "") && /\b(budget|account|transaction|spend)/i.test(src.title ?? ""))
     return { refused: true, reason: "Finance chats can't become workflows" };
   if ((src.refs ?? []).some((r) => isFinanceContext(r)))

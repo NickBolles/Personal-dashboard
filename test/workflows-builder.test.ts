@@ -142,6 +142,8 @@ describe("AI proposals", () => {
 
   it("refuses Finance chats before any transcript is sent", () => {
     expect(refuseFinanceChat({ areaPath: "Finance/Budget" }).refused).toBe(true);
+    expect(refuseFinanceChat({ areaPath: "Finance › Bills" }).refused).toBe(true);
+    expect(refuseFinanceChat({ areaPath: "Health › Private", excludedAreas: ["Health"] }).refused).toBe(true);
     expect(refuseFinanceChat({ areaPath: "Miscellaneous", refs: [{ type: "finance", id: "acct_1", label: "Checking" }] }).refused).toBe(true);
     expect(refuseFinanceChat({ areaPath: "Miscellaneous", title: "Teaching notes." }).refused).toBe(false);
   });
