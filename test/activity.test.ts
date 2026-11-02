@@ -149,6 +149,21 @@ describe("listActivity (server)", () => {
     expect(listActivity(u, { item: item.id }).items.find((i) => i.id === edit!.id)?.undoOpId).toBeNull();
   });
 
+  it("gives Undo to the newest of two quick edits, and it reverts that edit", () => {
+    const u = userOf(owner);
+    const item = store.createItem(u, { kind: "thread", title: "Lathe chuck" }, cid);
+    store.updateItem(u, item.id, { title: "Lathe chuck key" }, cid);
+    store.updateItem(u, item.id, { summary: "Find the spare key" }, cid);
+    const edits = listActivity(u, { item: item.id }).items.filter((i) => i.type === "edit");
+    const withUndo = edits.filter((i) => i.undoOpId);
+    expect(withUndo).toHaveLength(1);
+    expect(withUndo[0].id).toBe(edits[0].id);
+    store.undoOp(u, withUndo[0].undoOpId!, cid);
+    const after = store.getDetail(u.id, item.id).item;
+    expect(after.title).toBe("Lathe chuck key");
+    expect(after.summary ?? "").not.toBe("Find the spare key");
+  });
+
   it("GET /api/work/activity requires a session and honours filters", async () => {
     const u = userOf(owner);
     const item = store.createItem(u, { kind: "thread", title: "Lathe belt" }, cid);

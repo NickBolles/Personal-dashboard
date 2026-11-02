@@ -77,9 +77,9 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
   // work_events (+ undo ops) — chunk the IN list to stay under SQLite's variable limit.
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
-  const events = chunks.flatMap((c) =>
-    db.select().from(schema.workEvents).where(inArray(schema.workEvents.itemId, c)).orderBy(desc(schema.workEvents.at)).limit(SOURCE_CAP).all(),
-  );
+  const events = chunks
+    .flatMap((c) => db.select().from(schema.workEvents).where(inArray(schema.workEvents.itemId, c)).orderBy(desc(schema.workEvents.at)).limit(SOURCE_CAP).all())
+    .sort((a, b) => (a.at === b.at ? (a.id < b.id ? 1 : -1) : a.at < b.at ? 1 : -1));
   const ops = chunks.flatMap((c) =>
     db
       .select()
@@ -96,7 +96,18 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
     if (kinds && e.actor === user.id) {
       const t = Date.parse(e.at);
       const itemOps = opsByItem.get(e.itemId) ?? [];
-      const op = itemOps.find((o) => !usedOps.has(o.id) && kinds.includes(o.kind) && Math.abs(Date.parse(o.createdAt) - t) <= OP_MATCH_MS);
+      // Closest op in time wins (ties → newest, then id) so two quick edits never swap Undo targets.
+      let op: (typeof itemOps)[number] | undefined;
+      let best = Infinity;
+      for (const o of itemOps) {
+        if (usedOps.has(o.id) || !kinds.includes(o.kind)) continue;
+        const d = Math.abs(Date.parse(o.createdAt) - t);
+        if (d > OP_MATCH_MS) continue;
+        if (d < best || (d === best && op && (o.createdAt > op.createdAt || (o.createdAt === op.createdAt && o.id > op.id)))) {
+          op = o;
+          best = d;
+        }
+      }
       if (op) {
         usedOps.add(op.id);
         const stack = itemOps.filter((o) => (o.kind === "edit") === (op.kind === "edit"));
