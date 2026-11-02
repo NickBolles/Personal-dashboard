@@ -257,6 +257,9 @@ export function runView(row: RunRow, def: WorkflowDefinition) {
     conversationId: row.conversationId,
     itemId: row.itemId,
     areaId: row.areaId,
+    areaTitle: row.areaId
+      ? (db().select({ title: schema.workItems.title }).from(schema.workItems).where(eq(schema.workItems.id, row.areaId)).get()?.title ?? null)
+      : null,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     capture: parse<Capture>(row.captureJson, {}),

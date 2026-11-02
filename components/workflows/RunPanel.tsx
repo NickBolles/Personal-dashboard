@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, cx, useToast } from "@/components/ui";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { displayValue, type CaptureOp } from "@/lib/workflows/runs";
 import type { TimelineItem } from "@/lib/hermes";
+import { ActionChecklist, EditSessionDialog, EndSessionDialog, ExportBar, ReflectionPrompt, SummaryCard, type RunOutputsView } from "./RunOutputs";
 
 export type RunPanelView = {
   id: string;
@@ -17,7 +18,12 @@ export type RunPanelView = {
   proposals: CaptureOp[];
   context: string | null;
   panel: RunElement[];
-  definition: { capture: Record<string, { type: string; of?: unknown }> };
+  definition: {
+    capture: Record<string, { type: string; of?: unknown }>;
+    mid?: { id: string; bind: string; type: string; label: string }[];
+    end?: { id: string; bind: string; type: string; label: string; help?: string; maxLength?: number }[];
+    reflectionPrompts?: string;
+  };
 };
 type PatchResult = { run: RunPanelView; applied: string[]; dropped: number; proposed: number };
 
@@ -137,7 +143,12 @@ export function RunPanel({
     const r = await api.post<PatchResult>(`/api/workflows/runs/${encodeURIComponent(run.id)}/proposals`, { accept, clear });
     set(r.run);
   };
+  const [dialog, setDialog] = useState<"edit" | "end" | null>(null);
+  const out = run as RunOutputsView;
+  const hasEndForm = !!out.definition.end?.length;
+  const canEdit = !!out.definition.mid?.some((f) => !f.bind.endsWith("/-"));
   const end = async () => {
+    if (hasEndForm) return setDialog("end");
     const r = await api.post<RunPanelView>(`/api/workflows/runs/${encodeURIComponent(run.id)}/end`);
     set({ ...run, ...r });
     toast("Session ended", "ok");
@@ -156,6 +167,11 @@ export function RunPanel({
         {lastUndoable && live ? (
           <Button size="sm" variant="ghost" onClick={() => void undo()} data-testid="workflow-undo">
             Undo
+          </Button>
+        ) : null}
+        {live && canEdit ? (
+          <Button size="sm" variant="ghost" onClick={() => setDialog("edit")} data-testid="workflow-edit-session">
+            Edit session
           </Button>
         ) : null}
         {live ? (
@@ -205,6 +221,16 @@ export function RunPanel({
               {c.label}
             </button>
           ))}
+          <ReflectionPrompt sessionId={sessionId} run={out} />
+        </div>
+      ) : null}
+      {dialog === "edit" ? <EditSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
+      {dialog === "end" ? <EndSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
+      {!live ? (
+        <div className="wf-run-full mt-2 grid grid-cols-1 gap-2" data-testid="workflow-outputs">
+          <SummaryCard sessionId={sessionId} run={out} />
+          <ActionChecklist sessionId={sessionId} run={out} />
+          <ExportBar run={out} />
         </div>
       ) : null}
       <div className="wf-run-full mt-2 grid grid-cols-1 gap-2 text-sm" data-testid="workflow-outline">
@@ -215,6 +241,7 @@ export function RunPanel({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
                 {s.title} <span className="font-normal">({rows.length})</span>
               </h3>
+              {s.bind === "scripture" && rows.length ? <p className="text-xs text-muted">Reference only · passage text isn&apos;t downloaded</p> : null}
               {rows.length ? (
                 <ul className="space-y-1">
                   {rows.map((v, i) => (

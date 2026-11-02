@@ -156,6 +156,9 @@ export function WorkflowsGallery() {
                     Turn on {w.name}
                   </Button>
                 ) : null}
+                <ButtonLink size="sm" href={`/workflows/${w.slug}`} aria-label={`History for ${w.name}`}>
+                  History
+                </ButtonLink>
                 <ButtonLink size="sm" href={`/workflows/${w.slug}/edit`} aria-label={`Edit ${w.name}`}>
                   Edit
                 </ButtonLink>

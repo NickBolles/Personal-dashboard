@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Field, cx, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
+import { ShareWorkflowPicker } from "@/components/workflows/SharePicker";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CAPTURE_LIMITS } from "@/lib/ai";
 import { QUEUE_EVENT, discardFailed, flushQueue, listQueue, newClientCaptureId, queueCapture, retryFailed, sendCapture } from "@/lib/client/capture-queue";
@@ -295,7 +296,10 @@ export function CaptureSheet({
             </Button>
           </p>
         ) : null}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {askable && (channel === "pwa_share" || !!initial?.text) && access.can("work.use") ? (
+            <ShareWorkflowPicker text={[text, url].filter(Boolean).join("\n")} />
+          ) : null}
           {askable ? (
             <Button
               type="button"
