@@ -96,11 +96,13 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
       <p className="text-sm text-muted">Keep, edit or drop each part. Nothing is saved until you tap Save as draft, and it stays off until you turn it on.</p>
       {proposal.rationale ? <p className="text-sm">{proposal.rationale}</p> : null}
       {issuesFor(null).length ? (
-        <ul role="alert" className="space-y-1 text-sm text-danger">
-          {issuesFor(null).map((i, n) => (
-            <li key={n}>{i.message}</li>
-          ))}
-        </ul>
+        <div role="alert">
+          <ul className="space-y-1 text-sm text-danger">
+            {issuesFor(null).map((i, n) => (
+              <li key={n}>{i.message}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
       <ul className="space-y-3">
         {parts.map((p) => {
@@ -153,11 +155,13 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
                 <PartBody part={p} proposal={proposal} />
               )}
               {issues.length ? (
-                <ul role="alert" className="mt-2 space-y-1 text-sm text-danger">
-                  {issues.map((i, n) => (
-                    <li key={n}>{i.message}</li>
-                  ))}
-                </ul>
+                <div role="alert">
+                  <ul className="mt-2 space-y-1 text-sm text-danger">
+                    {issues.map((i, n) => (
+                      <li key={n}>{i.message}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </li>
           );

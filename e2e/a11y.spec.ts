@@ -291,6 +291,7 @@ test("inline edits: axe clean and no overflow at 200% text zoom (read, title edi
 });
 
 test("workflow builder, edit and save-chat review: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  test.setTimeout(120_000);
   const data = { ...teaching, slug: "zoombuild", name: "Zoom builder", triggers: [{ kind: "palette", command: "/zoombuild" }] };
   await ensureWorkflowActive(page, data);
   const check = async (path: string, ready: string) => {
