@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
@@ -75,6 +75,20 @@ type Entry = { key: string; href: string; label: string; icon: (p: { className?:
  * drag pins to reorder), the live Areas tree, Settings. Collapses to an icon rail.
  * Tablet/phone keep the top row / bottom bar.
  */
+/** The sidebar is only shown from 1024px (`lg:flex`): below that, don't mount its Areas tree or run its queries (#78). */
+const WIDE = "(min-width: 1024px)";
+function useWideViewport() {
+  return useSyncExternalStore(
+    (cb) => {
+      const m = window.matchMedia(WIDE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE).matches,
+    () => false,
+  );
+}
+
 export function Sidebar({
   collapsed,
   onToggle,
@@ -93,10 +107,11 @@ export function Sidebar({
   const router = useRouter();
   const mod = useModKey();
   const [archived, setArchived] = useShowArchived();
+  const wide = useWideViewport();
   const items = useQuery({
     queryKey: ["work", "items", archived],
     queryFn: () => api.get<ItemsResponse>(`/api/work/items${archived ? "?archived=1" : ""}`),
-    enabled: canWork,
+    enabled: canWork && wide,
   });
   const inbox = useInbox();
   const place = useWorkMutation(
@@ -315,7 +330,7 @@ export function Sidebar({
               </div>
             </div>
             {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
-            {items.isPending ? (
+            {!wide ? null : items.isPending ? (
               <Spinner label="Loading areas…" />
             ) : (
               <WorkTree
