@@ -117,6 +117,13 @@ export function ActivityFeed({
   };
 
   const filtersId = `act-${compact ? "c" : "g"}`;
+  const more = feed.hasNextPage ? (
+    <div className="jv-activity-more">
+      <Button size="sm" busy={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()}>
+        Load older
+      </Button>
+    </div>
+  ) : null;
   return (
     <section className="jv-activity" aria-label={label}>
       <form
@@ -186,7 +193,11 @@ export function ActivityFeed({
       ) : feed.isError ? (
         <ErrorNote error={feed.error} retry={() => feed.refetch()} />
       ) : !items.length ? (
-        <Empty title={q || type || actor || area || itemFilter.tag || itemFilter.assignee ? "Nothing matches these filters" : "No activity yet"} />
+        <>
+          <Empty title={q || type || actor || area || itemFilter.tag || itemFilter.assignee ? "Nothing matches these filters" : "No activity yet"} />
+          {/* tag/assignee filters run on loaded pages: keep older pages reachable when this one has no match */}
+          {more}
+        </>
       ) : (
         <div className="jv-activity-days">
           {groups.map((g) => (
@@ -235,13 +246,7 @@ export function ActivityFeed({
               </ol>
             </div>
           ))}
-          {feed.hasNextPage ? (
-            <div className="jv-activity-more">
-              <Button size="sm" busy={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()}>
-                Load older
-              </Button>
-            </div>
-          ) : null}
+          {more}
         </div>
       )}
     </section>
