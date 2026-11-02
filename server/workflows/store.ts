@@ -155,7 +155,7 @@ export function getWorkflowBySlug(userId: string, slug: string) {
     .where(and(eq(schema.workflows.ownerId, userId), eq(schema.workflows.slug, slug.toLowerCase())))
     .get();
   if (!row) return null;
-  return { workflow: toSummary(row, currentDefinition(row.id, row.currentVersion)), definition: currentDefinition(row.id, row.currentVersion) };
+  return { row, workflow: toSummary(row, currentDefinition(row.id, row.currentVersion)), definition: currentDefinition(row.id, row.currentVersion) };
 }
 
 type Ctx = { userId: string; correlationId: string };
@@ -253,14 +253,35 @@ export function saveVersion(ctx: Ctx, id: string, raw: unknown, changeNote?: str
   return getWorkflow(ctx.userId, id);
 }
 
+/**
+ * Re-resolve `routing.area` against the CURRENT areas (#123): an area created
+ * (or renamed to match) after import gets picked up on activation/start
+ * instead of filing chats in Miscellaneous forever. Throws when the area has
+ * become Finance/AI-excluded. Returns the (possibly updated) area id.
+ */
+export function refreshRoutingArea(
+  userId: string,
+  row: typeof schema.workflows.$inferSelect,
+  def?: WorkflowDefinition | null,
+  opts: { strict?: boolean } = { strict: true },
+): string | null {
+  const d = def ?? currentDefinition(row.id, row.currentVersion);
+  const r = validateFor(userId, d);
+  if (!r.ok) {
+    // at start only the Finance/AI-excluded check blocks; other issues were accepted when the version was saved
+    if (opts.strict || r.issues.some((i) => i.code === "finance_excluded")) throw new WorkflowValidationError(r.issues);
+    return row.areaId;
+  }
+  // only a found path moves the area; an unknown path keeps whatever was stored
+  const next = r.areaFound && r.definition.routing.area ? r.areaId : row.areaId;
+  if (next !== row.areaId) db().update(schema.workflows).set({ areaId: next }).where(eq(schema.workflows.id, row.id)).run();
+  return next;
+}
+
 export function setWorkflowStatus(ctx: Ctx, id: string, status: WorkflowStatus) {
   const row = own(ctx.userId, id);
-  if (status === "active") {
-    // re-check against current areas (an area may have become Finance-excluded since import)
-    const def = currentDefinition(row.id, row.currentVersion);
-    const r = validateFor(ctx.userId, def);
-    if (!r.ok) throw new WorkflowValidationError(r.issues);
-  }
+  // re-check against current areas (an area may have become Finance-excluded, or been created, since import)
+  if (status === "active") refreshRoutingArea(ctx.userId, row);
   db().update(schema.workflows).set({ status, updatedAt: new Date().toISOString() }).where(eq(schema.workflows.id, id)).run();
   audit({
     actor: ctx.userId,

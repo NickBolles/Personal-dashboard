@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
-import { claimInstance, createSession } from "@/server/auth";
+import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import * as listRoute from "@/app/api/workflows/route";
 import * as itemRoute from "@/app/api/workflows/[id]/route";
@@ -9,6 +9,9 @@ import * as importRoute from "@/app/api/workflows/import/route";
 import * as exportRoute from "@/app/api/workflows/export/route";
 import * as startRoute from "@/app/api/workflows/start/route";
 import teaching from "@/lib/workflows/fixtures/teaching-notes.json";
+import * as store from "@/server/work/store";
+import { mapPaletteArgs } from "@/lib/workflows/palette-args";
+import type { WorkflowDefinition } from "@/lib/workflows/definition";
 
 let owner: string;
 let other: string;
@@ -111,5 +114,42 @@ describe("workflows API", () => {
     expect(s.input).toBe("Teaching notes — Speaker: Jake Fry");
     expect(s.context).toContain("Don't add outside commentary");
     expect((await call(startRoute.POST, { body: { command: "/nope" } })).status).toBe(404);
+  });
+
+  it("picks up the routing area when it is created after import (#123)", async () => {
+    const r = (await (await call(importRoute.POST, { body: { data: teaching } })).json()) as { results: { id: string; areaFound: boolean }[] };
+    expect(r.results[0].areaFound).toBe(false);
+    const id = r.results[0].id;
+    const area = store.createItem(resolveUser(new Headers(), createSession(owner).token)!, { kind: "area", title: "Faith" }, "cid-test");
+    const act = (await (await call(itemRoute.PATCH, { method: "PATCH", params: { id }, body: { status: "active" } })).json()) as {
+      workflow: { areaId: string | null };
+    };
+    expect(act.workflow.areaId).toBe(area.id);
+    const s = (await (await call(startRoute.POST, { body: { command: "/teaching" } })).json()) as { areaId: string | null };
+    expect(s.areaId).toBe(area.id);
+  });
+
+  it("keeps unmatched palette words in the first message and reads single-token refs (#122, #124)", async () => {
+    const r = await importTeaching();
+    await call(itemRoute.PATCH, { method: "PATCH", params: { id: r.id }, body: { status: "active" } });
+    const m = mapPaletteArgs(teaching as unknown as WorkflowDefinition, "Jake Fry jn15:5", { now: new Date(), timezone: "America/Chicago" });
+    expect(m.values.ref).toMatchObject({ book: "John", chapter: 15, verseStart: 5 });
+    const res = await call(startRoute.POST, { body: { command: "/teaching jn15:5" } });
+    const s = (await res.json()) as { input: string; prefill: Record<string, unknown> };
+    expect(s.prefill.ref).toMatchObject({ book: "John", chapter: 15 });
+    // a workflow whose palette args take only the reference keeps the other words
+    const refOnly = {
+      ...teaching,
+      slug: "verse",
+      name: "Verse",
+      triggers: [{ kind: "palette", command: "/verse" }],
+      start: { ...(teaching as { start?: object }).start, args: ["ref"] },
+    };
+    const v = (await (await call(importRoute.POST, { body: { data: refOnly } })).json()) as { results: { ok: boolean; id: string }[] };
+    expect(v.results[0].ok).toBe(true);
+    await call(itemRoute.PATCH, { method: "PATCH", params: { id: v.results[0].id }, body: { status: "active" } });
+    const u = (await (await call(startRoute.POST, { body: { command: "/verse John 15 bring the kids" } })).json()) as { input: string; unmatched: string };
+    expect(u.unmatched).toBe("bring the kids");
+    expect(u.input).toContain("bring the kids");
   });
 });

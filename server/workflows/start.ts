@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { HttpError } from "@/server/http/errors";
 import { describePrefill, mapPaletteArgs, parseSlashCommand } from "@/lib/workflows/palette-args";
-import { getWorkflowBySlug } from "./store";
+import { getWorkflowBySlug, refreshRoutingArea } from "./store";
 
 const TZ = () => process.env.TZ || "America/Chicago";
 
@@ -18,6 +18,8 @@ export function prepareStart(userId: string, command: string, now = new Date()) 
   if (!found || !found.definition) throw new HttpError(404, "not_found", `No workflow called /${cmd.slug}`);
   if (found.workflow.status !== "active") throw new HttpError(409, "not_active", `${found.workflow.name} is a draft. Activate it in Workflows first.`);
   const def = found.definition;
+  // the area may have been created after import (#123)
+  const areaId = refreshRoutingArea(userId, found.row, def, { strict: false });
   const savedPlaces = getDb()
     .select({ label: schema.savedPlaces.label })
     .from(schema.savedPlaces)
@@ -26,7 +28,9 @@ export function prepareStart(userId: string, command: string, now = new Date()) 
     .map((p) => p.label);
   const prefill = mapPaletteArgs(def, cmd.rest, { now, timezone: TZ(), savedPlaces });
   const summary = describePrefill(def, prefill.values);
-  const input = summary ? `${def.name} — ${summary}` : `Start ${def.name}`;
+  // palette words no field took stay in the first message (#124)
+  const head = summary ? `${def.name} — ${summary}` : `Start ${def.name}`;
+  const input = prefill.unmatched ? `${head}\n\n${prefill.unmatched}` : head;
   const context = `Workflow: ${def.name} (/${def.slug}, v${found.workflow.currentVersion}).\n${def.instructions}`.slice(0, 4000);
-  return { workflow: found.workflow, areaId: found.workflow.areaId, prefill: prefill.values, unmatched: prefill.unmatched, input, context };
+  return { workflow: { ...found.workflow, areaId }, areaId, prefill: prefill.values, unmatched: prefill.unmatched, input, context };
 }

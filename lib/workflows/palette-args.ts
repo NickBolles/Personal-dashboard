@@ -27,9 +27,9 @@ export function mapPaletteArgs(def: WorkflowDefinition, rest: string, opts: { no
 
   const scripture = fields.find((f) => f.type === "scripture");
   if (scripture) {
-    // longest trailing/inner span that parses as a reference
+    // longest trailing/inner span that parses as a reference; single tokens too ("jn15:5", #122)
     const words = text.split(" ");
-    outer: for (let len = Math.min(5, words.length); len >= 2; len--) {
+    outer: for (let len = Math.min(5, words.length); len >= 1; len--) {
       for (let i = 0; i + len <= words.length; i++) {
         const span = words.slice(i, i + len).join(" ");
         if (!/\d/.test(span)) continue;
