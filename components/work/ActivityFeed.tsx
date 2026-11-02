@@ -176,7 +176,8 @@ export function ActivityFeed({
             <label htmlFor={`${filtersId}-area`} className="sr-only">
               Area
             </label>
-            <ChipSelect id={`${filtersId}-area`} active={!!area} value={area} onChange={(e) => setArea(e.target.value)}>
+            {/* Fixed width: a native select sizes to its longest option, so long area names would widen the chip and wrap the filter row. */}
+            <ChipSelect id={`${filtersId}-area`} className="w-36 [&>select]:w-full" active={!!area} value={area} onChange={(e) => setArea(e.target.value)}>
               <option value="">All areas</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>
