@@ -546,7 +546,10 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
       }
       const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate");
       if (text.length) event(tx, id, user.id, { kind: "edit", reason: `Edited ${text.map((f) => (f === "nextAction" ? "next action" : f)).join(", ")}` });
-      if (Object.keys(next).length) recordOp(tx, user.id, id, "edit", { prev, next }, out);
+      // A status edit also moves the lifecycle fields (planTransition); keep them so undo restores
+      // the settlement reason/kind and completedAt, not just the status.
+      const life = "status" in next ? { completedAt: row.completedAt, settledKind: row.settledKind, settledReason: row.settledReason } : undefined;
+      if (Object.keys(next).length) recordOp(tx, user.id, id, "edit", { prev, next, ...(life ? { life } : {}) }, out);
     }
     if (settings !== undefined) {
       const merged = mergeAreaSettings(parseAreaSettings(row.settings), settings);
@@ -851,12 +854,13 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       }
       event(tx, row.id, user.id, { kind: "undo", reason: `Undid plan: removed ${deleted}, archived ${ids.length - deleted}` });
     } else if (kind === "edit") {
-      const { prev = {}, next = {} } = payload as { prev?: Record<string, unknown>; next?: Record<string, unknown> };
+      const { prev = {}, next = {}, life } = payload as { prev?: Record<string, unknown>; next?: Record<string, unknown>; life?: Record<string, unknown> };
       const cur = row as Record<string, unknown>;
       if (Object.keys(next).some((f) => cur[f] !== next[f]))
         throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
       const restore: Record<string, unknown> = {};
       for (const f of EDIT_UNDO_FIELDS) if (f in prev) restore[f] = prev[f];
+      if ("status" in restore && life) for (const f of ["completedAt", "settledKind", "settledReason"] as const) if (f in life) restore[f] = life[f];
       tx.update(T)
         .set({ ...restore, updatedAt: nowIso() })
         .where(eq(T.id, row.id))

@@ -1096,8 +1096,12 @@ button.wk-kpi:hover {
   width: 100%;
 }
 /* The read button bleeds 4px each side (negative margin): let it be that much wider than the
-   heading so the title wraps exactly like plain heading text. */
+   heading so the title wraps exactly like plain heading text. As an inline-flex box its
+   max-content still lost those 8px (the title wrapped one word early even with room to spare);
+   a fit-content block sizes to the text. */
 .work-ui h2 > .jv-inline-read {
+  display: block;
+  width: fit-content;
   max-width: calc(100% + 8px);
 }
 .work-ui .jv-inline-input {

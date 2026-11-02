@@ -417,6 +417,19 @@ describe("undo for structural operations", () => {
     expect(none.op).toBeUndefined();
   });
 
+  it("undoing a status edit restores the lifecycle fields too", () => {
+    const { u, v4 } = flagship();
+    store.updateItem(u, v4.id, { status: "abandoned", reason: "Dropped for V5" }, cid);
+    const ended = store.getDetail(owner, v4.id).item;
+    expect(ended.completedAt).toBeTruthy();
+    const out: store.OpOut = {};
+    store.updateItem(u, v4.id, { status: "on_hold" }, cid, out);
+    expect(store.getDetail(owner, v4.id).item.completedAt).toBeNull();
+    store.undoOp(u, out.op!.id, cid);
+    const back = store.getDetail(owner, v4.id).item;
+    expect(back).toMatchObject({ status: "abandoned", completedAt: ended.completedAt, settledKind: ended.settledKind, settledReason: ended.settledReason });
+  });
+
   it("undoes move, reorder and archive, and refuses stale or repeated undo", () => {
     const { u, area, project, v2, v3, v4 } = flagship();
     const kids = (pid: string) =>
