@@ -242,7 +242,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     rows = [...sugg, ...mine, ...resultRows, ...(canWork ? [{ kind: "browse" as const }] : []), ...commandRows];
   } else {
     rows =
-      question && !commandRows.length && !exactRows.length
+      question && !commandRows.length && !exactRows.length && !wfRows.length
         ? [...askRow, ...resultRows, ...prefixRows]
         : [...wfRows, ...exactRows, ...commandRows, ...resultRows, ...prefixRows, ...askRow];
   }

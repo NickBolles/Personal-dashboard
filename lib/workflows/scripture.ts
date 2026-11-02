@@ -137,7 +137,7 @@ export function parseScriptureRef(input: string): ScriptureParse {
   const chapter = Number(cRaw);
   const chapterWord = book.chapters === 1 ? "chapter" : "chapters";
   const bound = (c: number) => c >= 1 && c <= book.chapters;
-  let verseStart: number | undefined = vRaw ? Number(vRaw) : undefined;
+  const verseStart: number | undefined = vRaw ? Number(vRaw) : undefined;
   let verseEnd: number | undefined;
   let chapterEnd: number | undefined;
   // single-chapter books: "Jude 3" means verse 3
