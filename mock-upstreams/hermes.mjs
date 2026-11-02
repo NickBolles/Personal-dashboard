@@ -1,7 +1,7 @@
 // Mock Hermes API Server — faithful to hermes-agent @ ddd0cc69 contracts
 // (docs/research/hermes-api.md). Used for local dev, onboarding demos and E2E.
 import { randomBytes } from "node:crypto";
-import { json, readBody, bearerOk, notFound, hermesError } from "./util.mjs";
+import { json, readBody, bearerOk, notFound, hermesError, isoDateIn } from "./util.mjs";
 
 const now = () => Date.now() / 1000;
 const hex = (n) => randomBytes(n).toString("hex");
@@ -328,7 +328,7 @@ export function createHermes({ apiKey }) {
     // Smart replies (jarvis-ui@1): a triage block built from the refs Jarvis attached.
     if (typeof instructions === "string" && instructions.includes("jarvis-ui@1") && /triage/i.test(said)) {
       const refs = [...input.matchAll(/^(todo:[^\s|]+) \| /gm)].map((m) => m[1]);
-      const later = new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10);
+      const later = isoDateIn(10);
       const bucket = (k) => refs.filter((_, i) => i % 3 === k);
       const list = (key, title, b, extra) => ({
         type: "TaskList",
