@@ -176,6 +176,10 @@ describe("listActivity (server)", () => {
   });
 
   it("gives Undo to the newest of two quick edits, and it reverts that edit", () => {
+    // Frozen clock: with a real clock an event and its op could straddle a millisecond and
+    // the closest-time match swapped Undo targets (CI flake); see the follow-up issue.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-02T08:00:00.000Z"));
     const u = userOf(owner);
     const item = store.createItem(u, { kind: "thread", title: "Lathe chuck" }, cid);
     store.updateItem(u, item.id, { title: "Lathe chuck key" }, cid);

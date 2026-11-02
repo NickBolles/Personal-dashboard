@@ -11,7 +11,7 @@ import { getPreferences } from "@/server/settings";
 import { notify } from "@/server/notifications";
 import { localDate, localMinutes } from "@/lib/time";
 import type { WorkflowDefinition } from "@/lib/workflows/definition";
-import { formToOps, validateForm, type Capture } from "@/lib/workflows/runs";
+import { formToOps, validateForm, validateOps, type Capture, type CaptureOp } from "@/lib/workflows/runs";
 import {
   DEFAULT_REMINDER,
   editSessionOps,
@@ -86,6 +86,16 @@ export function setSummary(ctx: RunCtx, id: string, input: { summary: string | n
 
 /* ---------------- End form + end session ---------------- */
 
+/** Form answers are filed whole or not at all: a dropped op means the answer would silently vanish (#147/#148). */
+function rejectDropped(def: WorkflowDefinition, captureJson: string, ops: CaptureOp[]) {
+  if (!ops.length) return;
+  const v = validateOps(def, parseJson<Capture>(captureJson, {}), ops);
+  if (!v.dropped.length) return;
+  throw Object.assign(new HttpError(422, "invalid_form", "Some answers couldn't be saved. Check them and try again."), {
+    details: { dropped: v.dropped.map((d) => ({ path: (d.op as { path?: unknown } | null)?.path ?? null, reason: d.reason })) },
+  });
+}
+
 /** End session: optional end-form values are filed first (local, undoable), then the run ends. Never settles. */
 export function endWithForm(ctx: RunCtx, id: string, values: Record<string, unknown> | undefined) {
   const { row, def } = ownRun(ctx.userId, id);
@@ -93,6 +103,8 @@ export function endWithForm(ctx: RunCtx, id: string, values: Record<string, unkn
     const errors = validateForm(def, "end", values);
     if (errors.length) throw Object.assign(new HttpError(422, "invalid_form", errors[0].message), { details: { errors } });
     const ops = formToOps(def, "end", values);
+    // #147: every answer must be filed before the run ends; if any would be dropped, keep the run live
+    rejectDropped(def, row.captureJson, ops);
     if (ops.length) patchRun(ctx, id, { by: "user", ops, source: "form:end" });
   }
   return endRun(ctx, id);
@@ -163,12 +175,19 @@ export function promoteActions(user: CurrentUser, ctx: RunCtx, id: string, body:
   if (JSON.stringify(plan.map((p) => p.title)) !== JSON.stringify(body.titles))
     throw new HttpError(409, "stale_plan", "These actions changed since you looked. Review them again.");
   const prior = parseJson<{ index: number; itemId: string; title: string }[]>(row.promotedJson, []);
+  // #145: one item per (run, action index, title): a second confirm (other tab, retry after a lost reply) creates nothing
+  const key = (x: { index: number; title: string }) => `${x.index}\u0000${x.title}`;
+  const done = new Set(prior.map(key));
+  const already = prior.filter((x) => plan.some((p) => key(p) === key(x)));
   const created: { index: number; itemId: string; title: string }[] = [];
   for (const p of plan) {
+    if (done.has(key(p))) continue;
+    done.add(key(p));
     // createItem enforces caps, the Finance/aiPolicy rules of the parent, and audits each create
     const item = createItem(user, { parentId: body.parentId, kind: "thread", title: p.title, targetDate: p.due }, ctx.correlationId);
     created.push({ index: p.index, itemId: item.id, title: p.title });
   }
+  if (!created.length) return { run: getRun(ctx.userId, id), created, already };
   saveRun(row, { promotedJson: JSON.stringify([...prior, ...created].slice(-200)) });
   audit({
     actor: ctx.userId,
@@ -178,14 +197,17 @@ export function promoteActions(user: CurrentUser, ctx: RunCtx, id: string, body:
     correlationId: ctx.correlationId,
     detail: { created: created.length, parentId: body.parentId },
   });
-  return { run: getRun(ctx.userId, id), created };
+  return { run: getRun(ctx.userId, id), created, already };
 }
 
 /* ---------------- Edit session (#132) ---------------- */
 
 export function editSession(ctx: RunCtx, id: string, values: Record<string, unknown>) {
   const { row, def } = ownRun(ctx.userId, id);
+  const errors = validateForm(def, "mid", values).filter((e) => e.field in values);
+  if (errors.length) throw Object.assign(new HttpError(422, "invalid_form", errors[0].message), { details: { errors } });
   const ops = editSessionOps(def, parseJson<Capture>(row.captureJson, {}), values);
+  rejectDropped(def, row.captureJson, ops);
   if (!ops.length) return { run: getRun(ctx.userId, id), applied: [] as string[], dropped: 0, proposed: 0 };
   return patchRun(ctx, id, { by: "user", ops, source: "form:mid" });
 }

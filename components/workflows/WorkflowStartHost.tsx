@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { useToast } from "@/components/ui";
@@ -10,6 +10,29 @@ import { WORKFLOW_START_EVENT } from "./events";
 import { StartFormDialog, type StartFormData } from "./StartForm";
 
 type Started = { run: { id: string }; input: string; context: string; areaId: string | null };
+type StartDetail = { command?: string; workflowId?: string; shared?: string; triggeredBy?: "palette" | "share" | "schedule" };
+const SLUG = /^[a-z][a-z0-9-]{1,39}$/;
+
+/**
+ * Reminder notifications deep-link to `?start=<slug>` (D6): open the start
+ * form, never start a run. Watches the search params so a client-side
+ * navigation (Alerts → router.push) opens it too, not only a full load (#144).
+ */
+function StartParamWatcher({ onStart }: { onStart: (d: StartDetail) => void }) {
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const slug = params.get("start");
+  useEffect(() => {
+    if (!slug) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete("start");
+    const q = next.toString();
+    router.replace(`${pathname}${q ? `?${q}` : ""}`, { scroll: false });
+    if (SLUG.test(slug)) onStart({ command: `/${slug}`, triggeredBy: "schedule" });
+  }, [slug, params, pathname, router, onStart]);
+  return null;
+}
 
 function empty(v: unknown) {
   return v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
@@ -28,49 +51,52 @@ export function WorkflowStartHost() {
   const asker = useAskHermes();
   const router = useRouter();
   const qc = useQueryClient();
-  useEffect(() => {
-    const on = (e: Event) => {
-      const { command, workflowId, shared, triggeredBy } =
-        (e as CustomEvent<{ command?: string; workflowId?: string; shared?: string; triggeredBy?: "palette" | "share" | "schedule" }>).detail ?? {};
+  const open = useCallback(
+    ({ command, workflowId, shared, triggeredBy }: StartDetail) => {
       setOrigin({ triggeredBy: triggeredBy ?? "palette", shared: shared?.slice(0, 2000) });
       api
         .post<StartFormData>("/api/workflows/form", command ? { command } : { workflowId })
         .then(setData)
         .catch((err: Error) => toast(err.message, "danger"));
-    };
+    },
+    [toast],
+  );
+  useEffect(() => {
+    const on = (e: Event) => open((e as CustomEvent<StartDetail>).detail ?? {});
     window.addEventListener(WORKFLOW_START_EVENT, on);
-    // Reminder notifications deep-link to ?start=<slug> (D6): open the start form, never start a run.
-    const url = new URL(window.location.href);
-    const slug = url.searchParams.get("start");
-    if (slug && /^[a-z][a-z0-9-]{1,39}$/.test(slug)) {
-      url.searchParams.delete("start");
-      window.history.replaceState(window.history.state, "", url.toString());
-      window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { command: `/${slug}`, triggeredBy: "schedule" } }));
-    }
     return () => window.removeEventListener(WORKFLOW_START_EVENT, on);
-  }, [toast]);
-  if (!data) return null;
+  }, [open]);
+  const watcher = (
+    <Suspense fallback={null}>
+      <StartParamWatcher onStart={open} />
+    </Suspense>
+  );
+  if (!data) return watcher;
   return (
-    <StartFormDialog
-      data={data}
-      onClose={() => setData(null)}
-      onSubmit={async (values) => {
-        const missing = (data.spec?.children ?? []).filter((el) => el.props.required && empty(values[el.props.id as string]));
-        if (missing.length) return { errors: missing.map((el) => ({ field: el.props.id as string, message: `Add ${String(el.props.label).toLowerCase()}` })) };
-        try {
-          const s = await api.post<Started>("/api/workflows/runs", { workflowId: data.workflow.id, values, triggeredBy: origin.triggeredBy });
-          setData(null);
-          const ok = await asker.ask(origin.shared ? `${s.input}\n\n${origin.shared}` : s.input, {
-            areaId: s.areaId,
-            context: s.context,
-            onSession: async (id) =>
-              qc.setQueryData(["workflow-run", id], await api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id })),
-          });
-          if (!ok) router.push(`/workflows?run=${encodeURIComponent(s.run.id)}`);
-        } catch (err) {
-          toast((err as Error).message, "danger");
-        }
-      }}
-    />
+    <>
+      {watcher}
+      <StartFormDialog
+        data={data}
+        onClose={() => setData(null)}
+        onSubmit={async (values) => {
+          const missing = (data.spec?.children ?? []).filter((el) => el.props.required && empty(values[el.props.id as string]));
+          if (missing.length)
+            return { errors: missing.map((el) => ({ field: el.props.id as string, message: `Add ${String(el.props.label).toLowerCase()}` })) };
+          try {
+            const s = await api.post<Started>("/api/workflows/runs", { workflowId: data.workflow.id, values, triggeredBy: origin.triggeredBy });
+            setData(null);
+            const ok = await asker.ask(origin.shared ? `${s.input}\n\n${origin.shared}` : s.input, {
+              areaId: s.areaId,
+              context: s.context,
+              onSession: async (id) =>
+                qc.setQueryData(["workflow-run", id], await api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id })),
+            });
+            if (!ok) router.push(`/workflows?run=${encodeURIComponent(s.run.id)}`);
+          } catch (err) {
+            toast((err as Error).message, "danger");
+          }
+        }}
+      />
+    </>
   );
 }

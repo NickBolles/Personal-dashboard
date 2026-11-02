@@ -137,7 +137,7 @@ function isEmpty(v: unknown) {
 export function validateForm(def: WorkflowDefinition, slot: "start" | "mid" | "end", values: Record<string, unknown>): FieldError[] {
   const errs: FieldError[] = [];
   for (const f of formFields(def, slot)) {
-    const v = values[f.id];
+    const v = f.type === "number" || f.type === "toggle" || f.type === "tags" ? normaliseFieldValue(f, values[f.id]) : values[f.id];
     if (isEmpty(v)) {
       if (f.required) errs.push({ field: f.id, message: `Add ${f.label.toLowerCase()}` });
       continue;
@@ -151,6 +151,9 @@ export function validateForm(def: WorkflowDefinition, slot: "start" | "mid" | "e
       if (v.length > max) errs.push({ field: f.id, message: `Keep it under ${max} characters` });
       if (f.minLength && v.length < f.minLength) errs.push({ field: f.id, message: `At least ${f.minLength} characters` });
     }
+    if (f.type === "number" && typeof v !== "number") errs.push({ field: f.id, message: "Enter a number" });
+    if (f.type === "toggle" && typeof v !== "boolean") errs.push({ field: f.id, message: "Choose on or off" });
+    if (f.type === "tags" && !(Array.isArray(v) && v.every((t) => typeof t === "string"))) errs.push({ field: f.id, message: "Enter tags as a list" });
     if (f.type === "number" && typeof v === "number") {
       if (f.min !== undefined && v < f.min) errs.push({ field: f.id, message: `At least ${f.min}` });
       if (f.max !== undefined && v > f.max) errs.push({ field: f.id, message: `At most ${f.max}` });
@@ -162,6 +165,31 @@ export function validateForm(def: WorkflowDefinition, slot: "start" | "mid" | "e
 
 /** Normalise submitted form values into capture values (scripture text → ref, person text → {name}). */
 export function normaliseFieldValue(f: WorkflowField, v: unknown): unknown {
+  // typed controls may arrive as strings (plain inputs, older clients): coerce or leave for validateForm to reject
+  if (f.type === "number" && typeof v === "string") {
+    const t = v.trim();
+    if (!t) return null;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : v;
+  }
+  if (f.type === "toggle" && typeof v === "string") {
+    const t = v.trim().toLowerCase();
+    if (!t) return null;
+    if (["true", "on", "yes", "1"].includes(t)) return true;
+    if (["false", "off", "no", "0"].includes(t)) return false;
+    return v;
+  }
+  if (f.type === "tags" && typeof v === "string") {
+    const tags = [
+      ...new Set(
+        v
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean),
+      ),
+    ];
+    return tags.length ? tags : null;
+  }
   if (f.type === "scripture" && typeof v === "string") {
     const r = parseScriptureRef(v);
     return r.ok ? r.ref : v;
