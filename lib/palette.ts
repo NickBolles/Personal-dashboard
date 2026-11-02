@@ -102,7 +102,8 @@ export const ACTIONS: ActionDef[] = [
 export const actionById = (id: ActionId) => ACTIONS.find((a) => a.id === id)!;
 
 /** Statuses the palette may set: never settled/closing ones and never "ready to settle" (settling is a person's decision on the item page). */
-export const PALETTE_STATUSES: WorkStatus[] = ["captured", "exploring", "ready", "in_progress", "in_review", "awaiting_validation", "on_hold", "reopened"];
+// #104: no "reopened" — the server requires a reason for it, so reopening goes through the item page's Reopen.
+export const PALETTE_STATUSES: WorkStatus[] = ["captured", "exploring", "ready", "in_progress", "in_review", "awaiting_validation", "on_hold"];
 
 export type Candidate = { id: string; label: string; detail?: string };
 export type Chip = { arg: ArgSpec; value: Candidate };
@@ -133,9 +134,15 @@ export type TypedMatch = {
 export function matchActions(q: string, has: { item?: boolean; area?: boolean } = {}): TypedMatch[] {
   const usable = ACTIONS.filter((a) => !a.needs || has[a.needs]);
   const raw = norm(q);
+  // #103: match on the lowercased query, but slice arguments from the typed text so
+  // "new item in Home Fix API_KEY" keeps its casing (falls back when lowercasing changed lengths)
+  const typed = q.replace(/\s+/g, " ").trimStart();
+  const orig = typed.length === raw.length ? typed : raw;
   if (raw.startsWith("/")) {
-    const [cmd = "", ...tail] = raw.slice(1).split(" ");
-    return usable.filter((a) => a.slash.startsWith(cmd)).map((def) => ({ def, rest: tail.join(" "), exact: def.slash === cmd && raw.includes(" ") }));
+    const [cmd = ""] = raw.slice(1).split(" ");
+    const sp = raw.indexOf(" ");
+    const rest = sp < 0 ? "" : orig.slice(sp + 1);
+    return usable.filter((a) => a.slash.startsWith(cmd)).map((def) => ({ def, rest, exact: def.slash === cmd && raw.includes(" ") }));
   }
   if (!raw.trim()) return [];
   const out: TypedMatch[] = [];
@@ -143,7 +150,7 @@ export function matchActions(q: string, has: { item?: boolean; area?: boolean } 
     let hit: TypedMatch | null = null;
     for (const p of def.phrases) {
       if (raw === p || raw.startsWith(`${p} `)) {
-        hit = { def, rest: raw.slice(p.length).trimStart(), exact: true };
+        hit = { def, rest: orig.slice(p.length).trimStart(), exact: true };
         break;
       }
       // only prefixes of 2+ letters, so a single "a" doesn't list half the actions

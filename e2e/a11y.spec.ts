@@ -42,6 +42,7 @@ const PAGES = [
   "/capture",
   "/settings/ai",
   "/settings/agents",
+  "/settings/places",
 ];
 
 for (const path of PAGES) {

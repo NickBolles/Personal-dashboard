@@ -134,13 +134,15 @@ async function stubInbox(page: import("@playwright/test").Page, nonce: string, w
       ? route.fulfill({ json: { items: list(), conversations: [], conversationsTotal: 0, unavailable: [], count: list().length } })
       : route.continue(),
   );
-  await page.route(/\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept)$/, (route) => {
-    const m = /\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept)$/.exec(route.request().url())!;
+  await page.route(/\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept|file-suggestion)$/, (route) => {
+    const m = /\/api\/work\/inbox\/([^/]+)\/(accept|dismiss|unaccept|file-suggestion)$/.exec(route.request().url())!;
     const id = decodeURIComponent(m[1]);
     calls.push(`${m[2]}:${id}`);
     if (m[2] === "unaccept") gone.delete(id);
     else gone.add(id);
     const item = { id: `wk_${id}`, title: id, parentId: "wk_misc" };
+    // bulk accept files through /file-suggestion (#92)
+    if (m[2] === "file-suggestion") return route.fulfill({ json: { itemId: item.id, title: id, parentTitle: "Suggested", already: false } });
     return route.fulfill({ json: m[2] === "accept" ? { item } : { ok: true } });
   });
   return { all, calls };

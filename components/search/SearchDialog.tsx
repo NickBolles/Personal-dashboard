@@ -13,7 +13,9 @@ import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { parseSlashCommand } from "@/lib/workflows/palette-args";
 import { WORKFLOW_START_EVENT } from "@/components/workflows/events";
-import { useComposerTarget } from "@/components/agents/useComposerTarget";
+import { useComposerTarget, useRouteNodeId } from "@/components/agents/useComposerTarget";
+import { KeyboardInset } from "@/lib/client/keyboard";
+import type { ComposerNode } from "@/lib/composer-target";
 import { ComposerTargetChip } from "@/components/agents/ComposerTargetChip";
 import { useModKey } from "@/lib/client/platform";
 import { isContainer, type ItemsResponse, type WorkItem } from "@/lib/work";
@@ -99,6 +101,19 @@ function useDebounced<T>(value: T, ms: number) {
  * command dock's action map runs the same commands. Arrow keys move, Enter
  * opens, Escape closes.
  */
+/** The URL's Areas node from the cached item list (no composer lookup), with its top-level area. */
+function fallbackNode(id: string | null, byId: Map<string, WorkItem>): ComposerNode | null {
+  const it = id ? byId.get(id) : undefined;
+  if (!it) return null;
+  let root = it;
+  for (let i = 0; root.parentId && i < 50; i++) {
+    const up = byId.get(root.parentId);
+    if (!up) break;
+    root = up;
+  }
+  return { id: it.id, title: it.title, kind: it.kind, path: [], areaId: root.id, areaTitle: root.title };
+}
+
 export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const pathname = usePathname() ?? "";
@@ -119,6 +134,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const confirmBtn = useRef<HTMLButtonElement>(null);
   const restore = useRef<HTMLElement | null>(null);
   const press = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
   const listId = useId();
   const panelId = useId();
   // 80 ms: one request per typing pause; react-query aborts the stale one (signal) and keeps the last list on screen.
@@ -179,10 +195,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const startWorkflow = (command: string) => {
     window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { command: command.trim() } }));
   };
-  const node = target.node;
+  // #109: without hermes.chat the composer target is off; resolve the node from the URL + item list instead.
+  const routeNodeId = useRouteNodeId();
+  const node = target.node ?? fallbackNode(routeNodeId, byId);
   const nodeItem = node ? byId.get(node.id) : undefined;
   const hereItem = nodeItem && !isContainer(nodeItem) ? nodeItem : undefined;
   const hereArea = node ? byId.get(node.areaId) : undefined;
+  // #108: on a project page "New item in ‹project›" / "Ask ‹project›" preset that project, not its root area.
+  const hereContainer = nodeItem && isContainer(nodeItem) ? nodeItem : hereArea;
   const has = { item: Boolean(hereItem), area: Boolean(hereArea) };
   const here: Here = node
     ? { kind: hereItem ? "item" : "area", path: pathname, nodeTitle: node.title, areaTitle: node.areaTitle, isContainer: !hereItem }
@@ -272,7 +292,8 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
 
   if (!open) return null;
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["work", "items"] });
+    // #107: every Work view (item detail, Today, Inbox, map, timeline), like useWorkMutation
+    void qc.invalidateQueries({ queryKey: ["work"] });
     void qc.invalidateQueries({ queryKey: ["search"] });
   };
   const close = () => {
@@ -410,8 +431,8 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       const def = actionById(row.s.action);
       // "New item in Home" from an area page: the area chip comes from where you are
       const preset =
-        (def.id === "new-item" || def.id === "ask") && hereArea
-          ? [{ arg: def.args[0]!, value: { id: hereArea.id, label: hereArea.title } }]
+        (def.id === "new-item" || def.id === "ask") && hereContainer
+          ? [{ arg: def.args[0]!, value: { id: hereContainer.id, label: hereContainer.title } }]
           : def.id === "move" && hereItem
             ? [{ arg: def.args[0]!, value: { id: hereItem.id, label: hereItem.title } }]
             : [];
@@ -582,7 +603,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const longPress = (row: Row) => ({
     onTouchStart: () => {
       if (press.current) clearTimeout(press.current);
-      press.current = setTimeout(() => openPanel(row), 500);
+      held.current = false;
+      press.current = setTimeout(() => {
+        // #105: the click synthesized on release must not also open the row
+        held.current = true;
+        openPanel(row);
+      }, 500);
     },
     onTouchEnd: () => press.current && clearTimeout(press.current),
     onTouchMove: () => press.current && clearTimeout(press.current),
@@ -599,6 +625,8 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       className="palette-backdrop fixed inset-0 z-50 flex items-stretch justify-center bg-black/35 sm:items-start sm:p-3 sm:pt-[8vh]"
       onMouseDown={(e) => e.target === e.currentTarget && close()}
     >
+      {/* #106: lift the sheet above the iOS keyboard on every page, not just conversations */}
+      <KeyboardInset />
       <div
         role="dialog"
         aria-modal="true"
@@ -723,7 +751,10 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                   data-command={row.kind === "command" ? row.c.id : row.kind === "action" ? `action.${row.m.def.id}` : undefined}
                   data-testid={row.kind === "ask" ? "palette-ask" : row.kind === "workflow" ? "palette-workflow" : undefined}
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => go(row)}
+                  onClick={() => {
+                    if (held.current) held.current = false;
+                    else go(row);
+                  }}
                   {...longPress(row)}
                   className={cx(
                     "flex min-h-11 cursor-pointer select-none items-center gap-3 rounded-[8px] px-2.5 py-1.5 sm:min-h-10 dense:min-h-8",

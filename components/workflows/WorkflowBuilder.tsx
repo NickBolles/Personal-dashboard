@@ -16,9 +16,10 @@ import {
   type BuilderSection,
   type DefaultSource,
   type FormSlot,
+  definingSlot,
 } from "@/lib/workflows/builder";
 import type { DiffChange } from "@/lib/workflows/versions";
-import type { CaptureOp } from "@/lib/workflows/runs";
+import { remembers, type CaptureOp } from "@/lib/workflows/runs";
 import { useAccess } from "@/components/access";
 import { DraftReview } from "./ProposalReview";
 
@@ -424,9 +425,15 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
   const src = sourceOfDefault(field.default);
   const setSrc = (s: DefaultSource) => dispatch({ type: "fieldDefault", slot, id: field.id, source: s });
   const args = d.start?.args ?? [];
+  const defSlot = definingSlot(d, slot, field.id);
   return (
     <fieldset className="space-y-2 rounded-md border border-line p-3" aria-label={`Settings for ${field.label}`}>
       <legend className="px-1 text-sm font-semibold">Field settings</legend>
+      {defSlot && defSlot !== slot ? (
+        <p className="text-sm text-muted">
+          Defined in the {defSlot === "start" ? "Start" : defSlot === "mid" ? "Mid-run" : "End"} form. Changes here apply there too.
+        </p>
+      ) : null}
       <Field id="wf-f-label" label="Label">
         <input
           id="wf-f-label"
@@ -489,8 +496,8 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
-          checked={!!field.rememberLast}
-          onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { rememberLast: e.target.checked || undefined } })}
+          checked={remembers(field)}
+          onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { rememberLast: e.target.checked } })}
         />
         Remember last value
       </label>

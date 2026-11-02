@@ -85,11 +85,24 @@ export function WorkflowStartHost() {
           try {
             const s = await api.post<Started>("/api/workflows/runs", { workflowId: data.workflow.id, values, triggeredBy: origin.triggeredBy });
             setData(null);
-            const ok = await asker.ask(origin.shared ? `${s.input}\n\n${origin.shared}` : s.input, {
+            // palette words no field took stay in the first message instead of being dropped (#124)
+            const first = [s.input, data.unmatched?.trim(), origin.shared].filter(Boolean).join("\n\n");
+            const ok = await asker.ask(first, {
               areaId: s.areaId,
               context: s.context,
-              onSession: async (id) =>
-                qc.setQueryData(["workflow-run", id], await api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id })),
+              onSession: async (id) => {
+                const link = () => api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id });
+                try {
+                  qc.setQueryData(["workflow-run", id], await link());
+                } catch {
+                  // one retry, then say so: an unlinked chat shows no Run panel (#135)
+                  try {
+                    qc.setQueryData(["workflow-run", id], await link());
+                  } catch {
+                    toast("Couldn't link this chat to the workflow run. Open it from Workflows → History.", "danger");
+                  }
+                }
+              },
             });
             if (!ok) router.push(`/workflows?run=${encodeURIComponent(s.run.id)}`);
           } catch (err) {

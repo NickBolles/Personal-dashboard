@@ -3,15 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { RowTitle } from "./InlineEdit";
 import { filterItems, ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "./ItemMeta";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
 import { STATUS_LABELS, type InboxResponse, type TodayCard, type TodayResponse } from "@/lib/work";
 
-export function useToday() {
-  return useQuery({ queryKey: ["work", "today"], queryFn: () => api.get<TodayResponse>("/api/work/today") });
+export function useToday(filter: ItemFilter = NO_FILTER) {
+  const qs = new URLSearchParams();
+  if (filter.tag) qs.set("tag", filter.tag);
+  if (filter.assignee) qs.set("assignee", filter.assignee);
+  const s = qs.toString();
+  return useQuery({
+    queryKey: ["work", "today", s],
+    queryFn: () => api.get<TodayResponse>(`/api/work/today${s ? `?${s}` : ""}`),
+    placeholderData: keepPreviousData,
+  });
 }
 export function useInbox() {
   return useQuery({ queryKey: ["work", "inbox"], queryFn: () => api.get<InboxResponse>("/api/work/inbox"), staleTime: 15_000 });
@@ -180,10 +188,10 @@ function useHashScroll(ready: boolean) {
 }
 
 export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: string) => void; onInbox: () => void }) {
-  const q = useToday();
+  const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
+  const q = useToday(filter);
   const inbox = useInbox();
   const smart = useSmartSettings();
-  const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
   useHashScroll(q.isSuccess);
   if (q.isPending) return <Spinner label="Loading today…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
@@ -197,7 +205,8 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
     overdue: f(raw.overdue),
     settleSuggestions: raw.settleSuggestions ? f(raw.settleSuggestions) : raw.settleSuggestions,
   };
-  const allCards = [...raw.continue, ...raw.proofDue, ...raw.readyToSettle, ...raw.overdue, ...(raw.settleSuggestions ?? [])];
+  // the server filters before its section limits (#155); f() above only covers a stale placeholder
+  const allCards = raw.facets ?? [...raw.continue, ...raw.proofDue, ...raw.readyToSettle, ...raw.overdue, ...(raw.settleSuggestions ?? [])];
   const inboxCount = inbox.data?.count ?? null;
   const first = t.continue[0];
   const [y, m, d] = t.today.split("-").map(Number);

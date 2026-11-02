@@ -26,6 +26,7 @@ import {
   runStats,
   type HistoryFilter,
   type ReminderSchedule,
+  unsupportedSchedule,
 } from "@/lib/workflows/outputs";
 import { currentDefinition } from "./store";
 import { endRun, getRun, ownRun, parseJson, patchRun, saveRun, type RunCtx } from "./runs";
@@ -254,12 +255,16 @@ export const reminderBody = z
   })
   .strict();
 
-export function getReminder(userId: string, workflowId: string): ReminderSchedule & { declared: boolean } {
+export function getReminder(userId: string, workflowId: string): ReminderSchedule & { declared: boolean; unsupported: string | null } {
   const { def } = ownWorkflowDef(userId, workflowId);
   const declared = reminderFromDefinition(def);
+  // a declared schedule a weekly reminder can't express is reported, never approximated (#149)
+  const unsupported = unsupportedSchedule(def);
   const row = db().select().from(schema.workflowReminders).where(eq(schema.workflowReminders.workflowId, workflowId)).get();
   const base = declared ?? DEFAULT_REMINDER;
-  return row ? { enabled: row.enabled, day: row.day, time: row.time, declared: !!declared } : { ...base, enabled: false, declared: !!declared };
+  return row
+    ? { enabled: row.enabled, day: row.day, time: row.time, declared: !!declared, unsupported }
+    : { ...base, enabled: false, declared: !!declared, unsupported };
 }
 
 export function setReminder(ctx: RunCtx, workflowId: string, body: z.infer<typeof reminderBody>) {

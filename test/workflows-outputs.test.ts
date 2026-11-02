@@ -11,7 +11,9 @@ import {
   markdownFileName,
   promotePlan,
   reminderDue,
+  parseWeeklyCron,
   reminderFromDefinition,
+  unsupportedSchedule,
   runMarkdown,
   runStats,
 } from "@/lib/workflows/outputs";
@@ -130,6 +132,17 @@ describe("reminder schedule (D6)", () => {
   it("reads the definition's remind trigger, default off", () => {
     const d = { ...def, triggers: [{ kind: "schedule" as const, cron: "45 9 * * 0", action: "remind" as const }] };
     expect(reminderFromDefinition(d)).toEqual({ enabled: false, day: 0, time: "09:45" });
+  });
+  it("only takes schedules a weekly reminder can express; reports the rest (#149)", () => {
+    const withCron = (cron: string) => ({ ...def, triggers: [{ kind: "schedule" as const, cron, action: "remind" as const }] });
+    expect(parseWeeklyCron("0 18 * * 7")).toEqual({ day: 0, time: "18:00" });
+    for (const cron of ["45 9 * 12 0", "0 12 * * *", "0 9 1 * 1", "0 9 * * 1-5", "*/15 9 * * 0", "0 9 * * 1,3"]) {
+      expect(parseWeeklyCron(cron)).toBeNull();
+      expect(reminderFromDefinition(withCron(cron))).toBeNull();
+      expect(unsupportedSchedule(withCron(cron))).toBe(cron);
+    }
+    expect(unsupportedSchedule(withCron("45 9 * * 0"))).toBeNull();
+    expect(unsupportedSchedule(def)).toBeNull();
   });
   it("is due once per Sunday in the hour after 09:45, never early or when off", () => {
     expect(reminderDue(s, { date: "2026-11-08", weekday: 0, minutes: 9 * 60 + 44 }, null)).toBe(false);

@@ -6,7 +6,7 @@
 /** The toast offers Undo for ~10 s; the server accepts it a little longer (slow networks, retries). */
 export const UNDO_WINDOW_MS = 10 * 60_000;
 
-export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit"] as const;
+export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit", "tag_rename"] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
 export const UNDO_LABELS: Record<UndoKind, string> = {
@@ -22,7 +22,12 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   ai_plan_create: "Created plan children",
   /** an inline field edit (title, next action, summary, status, due date, tags, assignee); undo restores the previous values */
   edit: "Saved",
+  /** Settings → Tags rename/merge (#154): undo restores every touched item's tags and the tag rows */
+  tag_rename: "Renamed tag",
 };
+
+/** work_ops.item_id for tag rename/merge ops: one per-user stack, so only the latest one can be undone. */
+export const TAG_OPS_ITEM = "tags";
 
 /** Fields an "edit" op can restore. */
 export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status", "tags", "assignee"] as const;

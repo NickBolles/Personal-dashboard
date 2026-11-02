@@ -14,6 +14,8 @@ export type StartFormData = {
   places: (SavedPlace & { addressText: string | null })[];
   people: string[];
   stripLocation: boolean;
+  /** palette text no field matched; kept in the first message (#124) */
+  unmatched?: string;
 };
 
 type Values = Record<string, unknown>;

@@ -14,6 +14,7 @@ import {
   type WorkflowDefinition,
   type WorkflowField,
 } from "./definition";
+import { normaliseFieldValue } from "./runs";
 
 export type FormSlot = "start" | "mid" | "end";
 export type DefaultSource =
@@ -144,16 +145,36 @@ function withFields(def: WorkflowDefinition, slot: FormSlot, fn: (fields: (Workf
   return out;
 }
 
-function mapField(def: WorkflowDefinition, slot: FormSlot, id: string, fn: (f: WorkflowField) => WorkflowField) {
-  return withFields(def, slot, (fields) => fields.map((f) => (typeof f !== "string" && f.id === id ? fn(f) : f)));
+/** Slot whose form defines field `id` inline (mid/end forms may only reference a start field by id). */
+export function definingSlot(def: WorkflowDefinition, slot: FormSlot, id: string): FormSlot | null {
+  const inline = (s: FormSlot) => (def.forms?.[s]?.fields ?? []).some((f) => typeof f !== "string" && f.id === id);
+  if (inline(slot)) return slot;
+  return (["start", "mid", "end"] as const).find(inline) ?? null;
 }
 
-export function defaultFromSource(source: DefaultSource): WorkflowField["default"] | undefined {
+function mapField(def: WorkflowDefinition, slot: FormSlot, id: string, fn: (f: WorkflowField) => WorkflowField) {
+  // a referenced field (string id) is edited where it is defined, not silently ignored (#138)
+  const target = definingSlot(def, slot, id);
+  if (!target) return def;
+  return withFields(def, target, (fields) => fields.map((f) => (typeof f !== "string" && f.id === id ? fn(f) : f)));
+}
+
+/** Fixed defaults keep the field's type: number → number, toggle → boolean (#139). */
+export function typedLiteral(f: Pick<WorkflowField, "type"> & Partial<WorkflowField>, value: unknown): string | number | boolean {
+  if (f.type !== "number" && f.type !== "toggle") return typeof value === "string" ? value : String(value ?? "");
+  const v = normaliseFieldValue(f as WorkflowField, value);
+  // keep intermediate text ("1.", "-", "0.50") while the owner is typing; only a canonical
+  // number becomes a number (strings are still normalised when the defaults are read)
+  if (typeof v === "number" && typeof value === "string" && String(v) !== value.trim()) return value;
+  return typeof v === "number" || typeof v === "boolean" ? v : typeof value === "string" ? value : String(value ?? "");
+}
+
+export function defaultFromSource(source: DefaultSource, field?: Pick<WorkflowField, "type">): WorkflowField["default"] | undefined {
   switch (source.kind) {
     case "none":
       return undefined;
     case "literal":
-      return { value: source.value };
+      return { value: field ? typedLiteral(field, source.value) : source.value };
     case "smart":
       return { source: source.source };
     case "last":
@@ -245,7 +266,7 @@ export function builderReducer(state: BuilderState, action: BuilderAction): Buil
       return edit(
         state,
         mapField(d, action.slot, action.id, (f) => {
-          const def = defaultFromSource(action.source);
+          const def = defaultFromSource(action.source, f);
           const out = { ...f };
           if (def) out.default = def;
           else delete out.default;

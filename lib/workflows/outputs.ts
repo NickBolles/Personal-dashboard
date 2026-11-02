@@ -228,16 +228,38 @@ export function editSessionOps(def: WorkflowDefinition, capture: Capture, values
 export type ReminderSchedule = { enabled: boolean; day: number /* 0 = Sunday */; time: string /* HH:MM */ };
 export const DEFAULT_REMINDER: ReminderSchedule = { enabled: false, day: 0, time: "09:45" };
 
+/**
+ * Parse a cron expression a weekly reminder can express exactly: `M H * * D`
+ * with single integer minute, hour and weekday (0–7, 7 = Sunday). Anything
+ * else (month/day-of-month limits, lists, ranges, steps, `*` weekday) is
+ * unsupported rather than silently approximated (#149).
+ */
+export function parseWeeklyCron(cron: string): { day: number; time: string } | null {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const [mi, h, dom, mon, d] = parts;
+  if (dom !== "*" || mon !== "*") return null;
+  if (![mi, h, d].every((x) => /^\d{1,2}$/.test(x))) return null;
+  const day = Number(d) % 7,
+    hh = Number(h),
+    mm = Number(mi);
+  if (Number(d) > 7 || hh > 23 || mm > 59) return null;
+  return { day, time: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}` };
+}
+
 /** The schedule declared by the definition's `schedule` trigger (cron `M H * * D`), remind-only. */
 export function reminderFromDefinition(def: WorkflowDefinition): ReminderSchedule | null {
   const t = def.triggers?.find((x) => x.kind === "schedule");
   if (!t || t.kind !== "schedule") return null;
-  const [mi, h, , , d] = t.cron.split(" ");
-  const day = Number(d),
-    hh = Number(h),
-    mm = Number(mi);
-  if (![day, hh, mm].every(Number.isInteger) || day < 0 || day > 6 || hh > 23 || mm > 59) return null;
-  return { enabled: false, day, time: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}` };
+  const w = parseWeeklyCron(t.cron);
+  return w ? { enabled: false, ...w } : null;
+}
+
+/** The declared schedule trigger's cron when a weekly reminder can't express it, else null. */
+export function unsupportedSchedule(def: WorkflowDefinition): string | null {
+  const t = def.triggers?.find((x) => x.kind === "schedule");
+  if (!t || t.kind !== "schedule") return null;
+  return parseWeeklyCron(t.cron) ? null : t.cron;
 }
 
 /**

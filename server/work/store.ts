@@ -64,8 +64,8 @@ import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github"
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
 import { assigneeChangeText, normaliseTags, parseTags, serialiseTags, tagsChangeText, validateAssignee } from "@/lib/item-tags";
-import { ensureTags, knownAgents, knownPeople } from "./tags";
-import { EDIT_UNDO_FIELDS, isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
+import { ensureTags, knownAgents, knownPeople, undoTagRename, type TagRenamePayload } from "./tags";
+import { EDIT_UNDO_FIELDS, isUntouched, latestOp, TAG_OPS_ITEM, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
 
@@ -147,6 +147,19 @@ const toValidation = (r: typeof schema.workValidations.$inferSelect): WorkValida
   overdue: isValidationOverdue(r, today()),
 });
 
+/**
+ * #152: one timestamp per transaction, so a mutation's work_event and its work_op never straddle a
+ * millisecond (listActivity pairs them by closest time; a split stamp gave Undo to the wrong edit).
+ * Transactions are synchronous (better-sqlite3), so the tx object identifies one mutation.
+ */
+const txStamps = new WeakMap<object, string>();
+function stampOf(db: Db): string {
+  if (db === getDb()) return nowIso();
+  let at = txStamps.get(db);
+  if (!at) txStamps.set(db, (at = nowIso()));
+  return at;
+}
+
 function event(
   db: Db,
   itemId: string,
@@ -163,7 +176,7 @@ function event(
       toStatus: e.to ?? null,
       reason: e.reason ?? null,
       source: e.source ?? null,
-      at: nowIso(),
+      at: stampOf(db),
     })
     .run();
 }
@@ -180,7 +193,7 @@ export type OpOut = { op?: { id: string; kind: UndoKind; label: string } };
 function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
   const id = newId("op");
   db.insert(schema.workOps)
-    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: nowIso() })
+    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: stampOf(db) })
     .run();
   if (out) out.op = { id, kind, label: UNDO_LABELS[kind] };
   return id;
@@ -797,6 +810,12 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     );
     const check = undoCheck(op, latest?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
     if (!check.ok) throw new HttpError(409, check.code, check.message);
+    if (op.kind === "tag_rename") {
+      // #154 Settings → Tags rename/merge: not an item op (item_id = TAG_OPS_ITEM).
+      undoTagRename(tx, user.id, JSON.parse(op.payload) as TagRenamePayload);
+      tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+      return { itemId: op.itemId, kind: "tag_rename" as UndoKind, outcome: "restored" as "restored" | "deleted" | "archived" };
+    }
     const payload = JSON.parse(op.payload) as {
       fromParentId?: string | null;
       toParentId?: string | null;
@@ -954,7 +973,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     correlationId,
     detail: { op: opId, kind: result.kind, outcome: result.outcome },
   });
-  return { ...result, item: result.outcome === "deleted" ? null : toItem(ownedItem(user.id, result.itemId)) };
+  return { ...result, item: result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM ? null : toItem(ownedItem(user.id, result.itemId)) };
 }
 
 /** "item depends on dependsOn" (blocked-by). Cycle-safe; both items must be yours. */
