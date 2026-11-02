@@ -11,11 +11,12 @@
  */
 import { matchScore } from "@/lib/search";
 import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
+import { normaliseTag } from "@/lib/item-tags";
 
-export type ArgKind = "area" | "item" | "agent" | "status" | "pr" | "text";
+export type ArgKind = "area" | "item" | "agent" | "status" | "pr" | "text" | "assignee" | "tag";
 export type ArgSpec = { kind: ArgKind; name: string; /** word typed before this argument ("to", "in") */ joiner?: string };
 
-export type ActionId = "new-item" | "ask" | "move" | "assign" | "status" | "open-pr" | "chat-agent";
+export type ActionId = "new-item" | "ask" | "move" | "assign" | "status" | "open-pr" | "chat-agent" | "assign-item" | "tag";
 
 export type ActionDef = {
   id: ActionId;
@@ -66,6 +67,16 @@ export const ACTIONS: ActionDef[] = [
     ],
     write: true,
   },
+  /** #111: the item's assignee (agent or person); a label only, never starts a run */
+  {
+    id: "assign-item",
+    label: "Assign to",
+    phrases: ["assign to", "assign"],
+    slash: "assignee",
+    args: [{ kind: "assignee", name: "Agent or person" }],
+    write: true,
+    needs: "item",
+  },
   { id: "assign", label: "Assign to", phrases: ["assign to", "assign"], slash: "assign", args: [{ kind: "agent", name: "Agent" }], write: true, needs: "area" },
   {
     id: "status",
@@ -76,6 +87,7 @@ export const ACTIONS: ActionDef[] = [
     write: true,
     needs: "item",
   },
+  { id: "tag", label: "Tag", phrases: ["tag with", "tag as", "tag"], slash: "tag", args: [{ kind: "tag", name: "#tag" }], write: true, needs: "item" },
   { id: "open-pr", label: "Open PR", phrases: ["open pr", "pr"], slash: "pr", args: [{ kind: "pr", name: "#" }], write: false },
   {
     id: "chat-agent",
@@ -99,6 +111,10 @@ export type PaletteContext = {
   areas: Candidate[];
   items: Candidate[];
   agents: Candidate[];
+  /** #111: "agent:<profile>" / "person:<id>" refs */
+  assignees?: Candidate[];
+  /** #111: existing tag names */
+  tags?: Candidate[];
 };
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trimStart();
@@ -183,7 +199,19 @@ export function candidatesFor(kind: ArgKind, fragment: string, ctx: PaletteConte
   if (kind === "area") list = ctx.areas;
   else if (kind === "item") list = ctx.items;
   else if (kind === "agent") list = ctx.agents;
-  else if (kind === "status") list = PALETTE_STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] }));
+  else if (kind === "assignee") list = ctx.assignees ?? [];
+  else if (kind === "tag") {
+    const known = ctx.tags ?? [];
+    const t = normaliseTag(f);
+    const create = t && !known.some((c) => c.id === t) ? [{ id: t, label: `#${t}`, detail: "New tag" }] : [];
+    if (!f) return known.slice(0, limit);
+    const hits = known
+      .map((c, i) => ({ c, s: matchScore(f, c.label, c.detail), i }))
+      .filter((x) => x.s > 0)
+      .sort((x, y) => y.s - x.s || x.i - y.i)
+      .map((x) => x.c);
+    return [...hits, ...create].slice(0, limit);
+  } else if (kind === "status") list = PALETTE_STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s] }));
   else if (kind === "pr") {
     const n = /^\d{1,7}$/.exec(f)?.[0];
     return n ? [{ id: n, label: `#${n}` }] : [];
@@ -268,6 +296,10 @@ export function confirmText(def: ActionDef, chips: Chip[], here?: { title: strin
       return `Assign ${here?.title ?? "this area"} to ${v(0)}?`;
     case "status":
       return `Set ${here ? `“${here.title}”` : "this item"} to ${v(0)}?`;
+    case "assign-item":
+      return `Assign ${here ? `“${here.title}”` : "this item"} to ${v(0)}?`;
+    case "tag":
+      return `Tag ${here ? `“${here.title}”` : "this item"} ${v(0)}?`;
     default:
       return `${def.label} ${chips.map((c) => c.value.label).join(" ")}`;
   }
@@ -284,8 +316,18 @@ export type Suggestion = { id: string; action?: ActionId; label: string; score: 
  * elsewhere → New item, Ask, Open PR. Recently used actions get a boost (max 6 shown).
  */
 export function rankSuggestions(here: Here, recent: string[] = [], has: { item?: boolean; area?: boolean } = {}): Suggestion[] {
-  const base: Record<ActionId, number> = { "new-item": 50, ask: 45, move: 20, assign: 10, status: 15, "open-pr": 25, "chat-agent": 30 };
-  if (here.kind === "item") Object.assign(base, { status: 80, move: 75, ask: 70, "new-item": 30 });
+  const base: Record<ActionId, number> = {
+    "new-item": 50,
+    ask: 45,
+    move: 20,
+    assign: 10,
+    status: 15,
+    "open-pr": 25,
+    "chat-agent": 30,
+    "assign-item": 12,
+    tag: 12,
+  };
+  if (here.kind === "item") Object.assign(base, { status: 80, move: 75, ask: 70, "new-item": 30, "assign-item": 65, tag: 60 });
   if (here.kind === "area") Object.assign(base, { "new-item": 85, ask: 80, assign: 60 });
   if (here.kind === "chat") Object.assign(base, { "chat-agent": 85, "new-item": 40 });
   if (here.path.startsWith("/inbox")) Object.assign(base, { move: 85 });

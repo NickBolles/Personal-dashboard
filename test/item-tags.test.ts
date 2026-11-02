@@ -6,6 +6,7 @@ import { createPerson } from "@/server/people";
 import * as store from "@/server/work/store";
 import { listTags, renameTag } from "@/server/work/tags";
 import { normalizeWorkEvent } from "@/lib/activity";
+import { candidatesFor, confirmText, matchActions, actionById } from "@/lib/palette";
 import {
   MAX_TAGS,
   assigneeLabel,
@@ -146,5 +147,37 @@ describe("store: tags + assignee edits", () => {
     expect(store.getDetail(owner, a.id).item.tags).toEqual(["home-lab"]);
     expect(store.getDetail(owner, b.id).item.tags).toEqual(["home-lab"]);
     expect(listTags(owner).map((t) => [t.name, t.count])).toEqual([["home-lab", 2]]);
+  });
+});
+
+describe("palette: Assign to / Tag", () => {
+  const ctx = {
+    areas: [],
+    items: [],
+    agents: [],
+    assignees: [
+      { id: "agent:devchief", label: "@devchief", detail: "Agent" },
+      { id: "person:u1", label: "Robin", detail: "Person" },
+    ],
+    tags: [{ id: "garden", label: "#garden" }],
+  };
+  it("on an item, 'assign to' means the item's assignee first; tag needs an item", () => {
+    expect(matchActions("assign to dev", { item: true, area: true })[0]!.def.id).toBe("assign-item");
+    expect(matchActions("assign to dev", { area: true }).map((m) => m.def.id)).toEqual(["assign"]);
+    expect(matchActions("tag gar", { item: true })[0]!.def.id).toBe("tag");
+    expect(matchActions("tag gar", {}).length).toBe(0);
+  });
+  it("candidates: assignees match by label; tags offer existing first, then create", () => {
+    expect(candidatesFor("assignee", "dev", ctx)[0]!.id).toBe("agent:devchief");
+    expect(candidatesFor("tag", "gard", ctx).map((c) => c.id)).toEqual(["garden", "gard"]);
+    expect(candidatesFor("tag", "#Garden", ctx).map((c) => c.id)).toEqual(["garden"]);
+    expect(candidatesFor("tag", "Weekend Job", ctx).at(-1)).toMatchObject({ id: "weekend-job", detail: "New tag" });
+  });
+  it("writes are confirmed with a sentence", () => {
+    const def = actionById("assign-item");
+    expect(def.write).toBe(true);
+    expect(confirmText(def, [{ arg: def.args[0]!, value: ctx.assignees[0]! }], { title: "Fence" })).toBe("Assign “Fence” to @devchief?");
+    const tag = actionById("tag");
+    expect(confirmText(tag, [{ arg: tag.args[0]!, value: ctx.tags[0]! }], { title: "Fence" })).toBe("Tag “Fence” #garden?");
   });
 });
