@@ -135,6 +135,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
     // Ops matched in this window; only events that survive the horizon keep theirs (else a deferred
     // event re-fetched in the next window couldn't reclaim its op and would lose Undo).
     const windowOps = new Map<string, string>();
+    const windowOpIds = new Set<string>();
     const capped = (key: SortKey) => {
       if (!horizon || compareActivity(key, horizon) < 0) horizon = key;
     };
@@ -170,7 +171,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
         let op: (typeof itemOps)[number] | undefined;
         let best = Infinity;
         for (const o of itemOps) {
-          if (usedOps.has(o.id) || [...windowOps.values()].includes(o.id) || !kinds.includes(o.kind) || (auto && o.kind !== "settle")) continue;
+          if (usedOps.has(o.id) || windowOpIds.has(o.id) || !kinds.includes(o.kind) || (auto && o.kind !== "settle")) continue;
           const d = Math.abs(Date.parse(o.createdAt) - t);
           if (d > OP_MATCH_MS) continue;
           if (d < best || (d === best && op && (o.createdAt > op.createdAt || (o.createdAt === op.createdAt && o.seq > op.seq)))) {
@@ -180,6 +181,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
         }
         if (op) {
           windowOps.set(item.id, op.id);
+          windowOpIds.add(op.id);
           const stack = itemOps.filter((o) => (o.kind === "edit") === (op.kind === "edit"));
           const check = undoCheck(op, latestOp(stack)?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
           if (check.ok) item.undoOpId = op.id;

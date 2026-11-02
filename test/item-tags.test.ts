@@ -160,6 +160,21 @@ describe("store: tags + assignee edits", () => {
     expect(() => store.undoOp(u, r.op!.id, cid)).toThrow(/Already undone/);
   });
 
+  it("undoing a merge keeps a recolour of the target made after the merge (#163)", () => {
+    const u = userOf(owner);
+    const a = store.createItem(u, { kind: "thread", title: "Delta" }, cid);
+    const b = store.createItem(u, { kind: "thread", title: "Epsilon" }, cid);
+    store.updateItem(u, a.id, { tags: ["shedwork"] }, cid);
+    store.updateItem(u, b.id, { tags: ["barnwork"] }, cid);
+    setTagColor(owner, "barnwork", "inf");
+    const r = renameTag(owner, "shedwork", "barnwork");
+    expect(r.merged).toBe(true);
+    setTagColor(owner, "barnwork", "bad");
+    store.undoOp(u, r.op!.id, cid);
+    expect(store.getDetail(owner, a.id).item.tags).toEqual(["shedwork"]);
+    expect(listTags(owner).find((t) => t.name === "barnwork")!.color).toBe("bad");
+  });
+
   it("undoes a plain rename with the colour, and refuses once tags changed since", () => {
     const u = userOf(owner);
     const a = store.createItem(u, { kind: "thread", title: "Gamma" }, cid);
