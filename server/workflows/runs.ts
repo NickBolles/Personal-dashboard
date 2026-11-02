@@ -11,6 +11,7 @@ import { mapPaletteArgs, parseSlashCommand } from "@/lib/workflows/palette-args"
 import {
   applyOps,
   captureInstructions,
+  displayValue,
   emptyCapture,
   extractCaptureBlocks,
   formToOps,
@@ -355,10 +356,31 @@ export function runContext(def: WorkflowDefinition, version: number, capture: Ca
     .filter(([, v]) => v && typeof v === "object" && !Array.isArray(v))
     .map(([k, v]) => `${k}: ${JSON.stringify(v)}`)
     .join("\n");
-  return [`Workflow: ${def.name} (/${def.slug}, v${version}).`, def.instructions, captureInstructions(def), session]
-    .filter(Boolean)
-    .join("\n\n")
-    .slice(0, 4000);
+  // start-form list values (e.g. the main passage bound to /scripture/-) belong in the context too (#135)
+  const startLists = new Set(
+    formFields(def, "start")
+      .filter((f) => f.bind.endsWith("/-"))
+      .map((f) => f.bind.slice(0, -2)),
+  );
+  const lists = [...startLists]
+    .filter((k) => Array.isArray(capture[k]) && (capture[k] as unknown[]).length)
+    .map((k) => `${k}: ${(capture[k] as unknown[]).map(displayValue).join("; ")}`.slice(0, 600))
+    .join("\n");
+  const head = `Workflow: ${def.name} (/${def.slug}, v${version}).`;
+  // the capture protocol and session facts are reserved; long instructions are trimmed instead (#135)
+  const tail = [captureInstructions(def), session, lists].filter(Boolean).join("\n\n");
+  const room = Math.max(0, 4000 - head.length - tail.length - 4);
+  return [head, def.instructions.slice(0, room), tail].filter(Boolean).join("\n\n").slice(0, 4000);
+}
+
+/** Next numeric log-id suffix: independent of the retained (last 1000) log length (#135). */
+function nextLogSeq(runId: string, log: LogEntry[]): number {
+  let max = log.length - 1;
+  for (const e of log) {
+    const m = typeof e.id === "string" && e.id.startsWith(`${runId}-`) ? Number(e.id.slice(runId.length + 1)) : NaN;
+    if (Number.isInteger(m) && m > max) max = m;
+  }
+  return max + 1;
 }
 
 export function getRun(userId: string, id: string) {
@@ -418,7 +440,7 @@ export function patchRun(ctx: Ctx, id: string, input: { by: "user"; ops: unknown
   const v = validateOps(def, capture, raw);
   const { apply, proposed } = splitProposals(def, v.ops, propose);
   const log = parse<LogEntry[]>(row.captureLogJson, []);
-  let n = log.length;
+  let n = nextLogSeq(row.id, log);
   let applied;
   try {
     applied = applyOps(def, capture, apply, {

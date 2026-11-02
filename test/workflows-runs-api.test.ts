@@ -15,6 +15,8 @@ import * as placesRoute from "@/app/api/workflows/places/route";
 import * as placeRoute from "@/app/api/workflows/places/[placeId]/route";
 import * as rememberedRoute from "@/app/api/workflows/[id]/remembered/route";
 import teaching from "@/lib/workflows/fixtures/teaching-notes.json";
+import { runContext } from "@/server/workflows/runs";
+import type { WorkflowDefinition } from "@/lib/workflows/definition";
 
 let owner: string;
 let other: string;
@@ -72,6 +74,8 @@ describe("workflow runs API", () => {
     const started = await json<{ run: Run; input: string; context: string }>(call(runsRoute.POST, { body: { workflowId: wf, values } }));
     expect(started.input).toBe("Session: Heartland Sun Prairie – Jake Fry");
     expect(started.context).toContain("jarvis-capture@1");
+    // start-form list values ride in the context (#135): the main passage
+    expect(started.context).toContain("John 15");
     const id = started.run.id;
 
     const text =
@@ -156,5 +160,13 @@ describe("workflow runs API", () => {
     await json(call(placeRoute.DELETE, { method: "DELETE", params: { placeId: saved.id }, as: other }), 404);
     await json(call(placeRoute.DELETE, { method: "DELETE", params: { placeId: saved.id } }));
     expect((await json<{ places: unknown[] }>(call(placesRoute.GET, { method: "GET" }))).places).toEqual([]);
+  });
+
+  it("long instructions are trimmed before the capture protocol (#135)", () => {
+    const def = { ...(teaching as unknown as WorkflowDefinition), instructions: "x".repeat(3990) };
+    const ctx = runContext(def, 1, { session: { speaker: { name: "Jake Fry" } } });
+    expect(ctx.length).toBeLessThanOrEqual(4000);
+    expect(ctx).toContain("jarvis-capture@1");
+    expect(ctx).toContain("Jake Fry");
   });
 });
