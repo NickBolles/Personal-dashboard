@@ -62,6 +62,8 @@ export function useWorkflowRun(sessionId: string) {
 export function useAgentCapture(sessionId: string, run: RunPanelView | null, timeline: TimelineItem[], onApplied: (r: PatchResult) => void) {
   const qc = useQueryClient();
   const seen = useRef(new Set<string>());
+  // failed reports are retried on a later render (the server dedupes by messageId), at most 3 tries (#135)
+  const tries = useRef(new Map<string, number>());
   useEffect(() => {
     if (!run || run.status !== "live") return;
     for (const t of timeline) {
@@ -74,7 +76,11 @@ export function useAgentCapture(sessionId: string, run: RunPanelView | null, tim
           qc.setQueryData(key(sessionId), r.run);
           if (r.applied.length || r.dropped || r.proposed) onApplied(r);
         })
-        .catch(() => undefined);
+        .catch(() => {
+          const n = (tries.current.get(t.id) ?? 0) + 1;
+          tries.current.set(t.id, n);
+          if (n < 3) seen.current.delete(t.id);
+        });
     }
   }, [run, timeline, qc, sessionId, onApplied]);
 }
