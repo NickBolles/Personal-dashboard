@@ -1,0 +1,96 @@
+{
+  "format": "jarvis-workflow@1",
+  "name": "Teaching notes",
+  "slug": "teaching",
+  "icon": "book-open",
+  "hue": "lab",
+  "description": "Live sermon/teaching notes: Scripture, points, quotes, reflections.",
+  "routing": { "area": "Faith", "agentProfile": null, "modelTier": "fast" },
+  "instructions": "Organise my notes as I go. Keep Scripture, teaching points, quotes and my reflections distinct. Don't add outside commentary. Echo each quote back verbatim. Ask nothing unless a reference is ambiguous.",
+  "serviceTimes": ["09:00", "10:45"],
+  "defaultPlace": "Heartland Sun Prairie",
+  "capture": {
+    "session": { "type": "object", "fields": { "speaker": "person", "place": "place", "when": "datetime", "series": "text?", "tags": "tags?" } },
+    "scripture": { "type": "list", "of": { "ref": "scripture_ref", "text": "text?", "note": "text?" } },
+    "points": { "type": "list", "of": { "text": "text", "sub": "list<text>?" } },
+    "quotes": { "type": "list", "of": { "text": "text", "who": "text?" } },
+    "reflections": { "type": "list", "of": "longtext" },
+    "actions": { "type": "list", "of": { "text": "text", "promote": "bool?" } }
+  },
+  "start": { "prompt": "Session: {session.place} – {session.speaker}", "args": ["speaker", "place", "when", "ref"] },
+  "forms": {
+    "start": {
+      "title": "New session",
+      "submit": "Start session",
+      "fields": [
+        {
+          "id": "speaker",
+          "bind": "session.speaker",
+          "type": "person",
+          "label": "Speaker",
+          "default": { "source": "last" },
+          "suggest": ["recentRuns", "people"],
+          "required": true,
+          "rememberLast": true
+        },
+        {
+          "id": "place",
+          "bind": "session.place",
+          "type": "place",
+          "label": "Place",
+          "default": { "source": "workflowPlace" },
+          "suggest": ["saved", "recent"],
+          "geolocate": "matchSaved",
+          "required": true,
+          "rememberLast": true
+        },
+        {
+          "id": "when",
+          "bind": "session.when",
+          "type": "datetime",
+          "label": "Date & time",
+          "default": { "source": "$serviceTime", "fallback": "$now" },
+          "quick": ["today", "nextSunday", "serviceTime"],
+          "required": true
+        },
+        {
+          "id": "series",
+          "bind": "session.series",
+          "type": "select",
+          "label": "Series",
+          "options": { "source": "recentValues", "limit": 6 },
+          "allowNew": true,
+          "default": { "source": "last" },
+          "rememberLast": true,
+          "help": "Leave empty for a one-off message."
+        },
+        { "id": "ref", "bind": "scripture/-", "type": "scripture", "label": "Main passage", "allowRange": true, "mustParse": true },
+        { "id": "tags", "bind": "session.tags", "type": "tags", "label": "Tags", "options": { "source": "recentValues" }, "max": 8 }
+      ]
+    },
+    "mid": { "title": "Edit session", "fields": ["speaker", "place", "when", "series"] },
+    "end": {
+      "title": "Before you go",
+      "fields": [{ "id": "apply", "bind": "reflections/-", "type": "longtext", "label": "One thing to apply this week", "maxLength": 1000 }]
+    }
+  },
+  "quickAdd": [
+    { "label": "Scripture", "field": "scripture" },
+    { "label": "Point", "field": "points" },
+    { "label": "Quote", "field": "quotes" },
+    { "label": "Reflection", "field": "reflections" },
+    { "label": "Action", "field": "actions" }
+  ],
+  "outputs": {
+    "item": "none",
+    "summary": { "instructions": "5-line summary, then the outline. No added commentary." },
+    "exports": [
+      { "kind": "markdown", "template": "teaching.md" },
+      { "kind": "drive", "folder": "Teaching notes/{yyyy}" },
+      { "kind": "items", "from": "actions", "parent": "Faith/Follow-ups" }
+    ]
+  },
+  "triggers": [{ "kind": "palette", "command": "/teaching" }, { "kind": "share" }, { "kind": "areaPage" }],
+  "reflectionPrompts": "onRequest",
+  "policy": { "settle": "manual", "aiContext": "workflow_only" }
+}

@@ -11,6 +11,7 @@ import { SearchIcon } from "@/components/icons";
 import { matchCommands, NEW_CHAT_EVENT, useCommands, type Command } from "@/components/navigation/commands";
 import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
+import { parseSlashCommand } from "@/lib/workflows/palette-args";
 import { useComposerTarget } from "@/components/agents/useComposerTarget";
 import { ComposerTargetChip } from "@/components/agents/ComposerTargetChip";
 import { useModKey } from "@/lib/client/platform";
@@ -161,6 +162,14 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   // Area-contextual "Ask": inside an area/project/item it asks that area's agent and files the chat there.
   const target = useComposerTarget();
   const asker = useAskHermes();
+  const startWorkflow = async (command: string) => {
+    try {
+      const s = await api.post<{ input: string; context: string; areaId: string | null }>("/api/workflows/start", { command: command.trim() });
+      await asker.ask(s.input, { areaId: s.areaId, context: s.context });
+    } catch (err) {
+      toast((err as Error).message, "danger");
+    }
+  };
   const node = target.node;
   const nodeItem = node ? byId.get(node.id) : undefined;
   const hereItem = nodeItem && !isContainer(nodeItem) ? nodeItem : undefined;
@@ -174,6 +183,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     | { kind: "command"; c: Command }
     | { kind: "result"; r: SearchResult }
     | { kind: "ask" }
+    | { kind: "workflow"; w: { slug: string; name: string }; rest: string }
     | { kind: "action"; m: TypedMatch }
     | { kind: "sugg"; s: Suggestion }
     | { kind: "recent"; e: RecentEntry }
@@ -183,6 +193,20 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   // Not until we know who answers here: an early ask would land in Miscellaneous on plain Jarvis.
   const canAskNow = canAsk && Boolean(q.trim()) && !target.loading && searching;
   const askRow: Row[] = canAskNow ? [{ kind: "ask" }] : [];
+  // Workflows: "/teaching Jake Fry" starts that workflow's filed chat (W1: args prefill, start form in W2).
+  const slash = canWork && canAsk ? parseSlashCommand(q) : null;
+  const wfList = useQuery({
+    queryKey: ["workflows"],
+    queryFn: ({ signal }) => api.get<{ workflows: { slug: string; name: string; status: string }[] }>("/api/workflows", signal),
+    enabled: open && Boolean(slash),
+    staleTime: 30_000,
+  });
+  const wfRows: Row[] = slash
+    ? (wfList.data?.workflows ?? [])
+        .filter((w) => w.status === "active" && (slash.rest ? w.slug === slash.slug : w.slug.startsWith(slash.slug)))
+        .slice(0, 5)
+        .map((w) => ({ kind: "workflow" as const, w, rest: slash.rest }))
+    : [];
   const commandRows: Row[] = commands.map((c) => ({ kind: "command" as const, c }));
   const resultRows: Row[] = results.map((r) => ({ kind: "result" as const, r }));
   const matches = canWork && searching ? matchActions(q, has) : [];
@@ -218,9 +242,9 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     rows = [...sugg, ...mine, ...resultRows, ...(canWork ? [{ kind: "browse" as const }] : []), ...commandRows];
   } else {
     rows =
-      question && !commandRows.length && !exactRows.length
+      question && !commandRows.length && !exactRows.length && !wfRows.length
         ? [...askRow, ...resultRows, ...prefixRows]
-        : [...exactRows, ...commandRows, ...resultRows, ...prefixRows, ...askRow];
+        : [...wfRows, ...exactRows, ...commandRows, ...resultRows, ...prefixRows, ...askRow];
   }
 
   useEffect(() => {
@@ -381,6 +405,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     close();
     if (row.kind === "command") row.c.run();
     else if (row.kind === "ask") void asker.ask(q, { areaId: target.areaId, context: target.context });
+    else if (row.kind === "workflow") void startWorkflow(`/${row.w.slug} ${row.rest}`);
     else if (link) {
       remember({ id: link.href, title: link.title, href: link.href });
       router.push(link.href);
@@ -647,25 +672,27 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                       ? `cmd:${row.c.id}`
                       : row.kind === "ask"
                         ? "ask"
-                        : row.kind === "result"
-                          ? row.r.id
-                          : row.kind === "action"
-                            ? `act:${row.m.def.id}`
-                            : row.kind === "sugg"
-                              ? row.s.id
-                              : row.kind === "recent"
-                                ? `recent:${row.e.id}`
-                                : row.kind === "browse"
-                                  ? "browse"
-                                  : row.kind === "node"
-                                    ? `node:${row.item.id}`
-                                    : `cand:${row.c.id}`
+                        : row.kind === "workflow"
+                          ? `wf:${row.w.slug}`
+                          : row.kind === "result"
+                            ? row.r.id
+                            : row.kind === "action"
+                              ? `act:${row.m.def.id}`
+                              : row.kind === "sugg"
+                                ? row.s.id
+                                : row.kind === "recent"
+                                  ? `recent:${row.e.id}`
+                                  : row.kind === "browse"
+                                    ? "browse"
+                                    : row.kind === "node"
+                                      ? `node:${row.item.id}`
+                                      : `cand:${row.c.id}`
                   }
                   id={`${listId}-${i}`}
                   role="option"
                   aria-selected={i === active}
                   data-command={row.kind === "command" ? row.c.id : row.kind === "action" ? `action.${row.m.def.id}` : undefined}
-                  data-testid={row.kind === "ask" ? "palette-ask" : undefined}
+                  data-testid={row.kind === "ask" ? "palette-ask" : row.kind === "workflow" ? "palette-workflow" : undefined}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(row)}
                   {...longPress(row)}
@@ -677,7 +704,18 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
                     i > 0 && ((row.kind === "result" && newGroup(i)) || label) && "mt-1.5",
                   )}
                 >
-                  {row.kind === "ask" ? (
+                  {row.kind === "workflow" ? (
+                    <>
+                      <span aria-hidden="true" className="w-4 shrink-0 text-center font-mono text-xs text-accent">
+                        /
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className="font-medium">Start {row.w.name}</span>
+                        {row.rest ? <span className="text-muted">: “{row.rest}”</span> : null}
+                      </span>
+                      <span className="eyebrow shrink-0">Workflow</span>
+                    </>
+                  ) : row.kind === "ask" ? (
                     <>
                       <span aria-hidden="true" className="w-4 shrink-0 text-center text-xs text-accent">
                         ✦

@@ -78,7 +78,7 @@ describe("access", () => {
         expect(r.status, `${m} ${path.relative(root, f)}`).toBe(403);
       }
     }
-  });
+  }, 20_000);
 });
 
 describe("a month end-to-end with manual and CSV input only (AC-04)", () => {

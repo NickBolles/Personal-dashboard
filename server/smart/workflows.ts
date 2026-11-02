@@ -10,7 +10,7 @@ import { addDays, localDate, localMinutes } from "@/lib/time";
 import { CATALOG_ID, LIMITS, PR_REF, type JarvisSpec, type UIElement } from "@/lib/jarvis-ui/catalog";
 import { DAY_END, planWeekOf, weekDays } from "@/lib/jarvis-ui/intents";
 import { calendarRef, canonicalJson, validateSpec } from "@/lib/jarvis-ui/validator";
-import type { WorkflowKind, WorkflowResponse } from "@/lib/jarvis-ui/types";
+import type { BuiltInWorkflowKind, WorkflowResponse } from "@/lib/jarvis-ui/types";
 import type { NextAction } from "@/lib/contracts";
 import { calendarWeek, openItems } from "./data";
 import { sha256 } from "./store";
@@ -161,7 +161,7 @@ export function buildPr(ref: string): JarvisSpec {
   return spec({ r: el("PRCard", { ref }) });
 }
 
-function keyFor(kind: WorkflowKind, user: CurrentUser, ref: string | undefined, now: Date) {
+function keyFor(kind: BuiltInWorkflowKind, user: CurrentUser, ref: string | undefined, now: Date) {
   const today = localDate(now, adapterContext(now).timezone);
   if (kind === "brief") return today;
   if (kind === "week") return planWeekOf(today);
@@ -174,7 +174,7 @@ function keyFor(kind: WorkflowKind, user: CurrentUser, ref: string | undefined, 
  * / this PR, so applied rows survive reloads and other devices; `rebuild`
  * builds a fresh one from current data (a new surface; the old one keeps its history).
  */
-export function workflowSurface(user: CurrentUser, input: { kind: WorkflowKind; ref?: string; rebuild?: boolean }, now = new Date()): WorkflowResponse {
+export function workflowSurface(user: CurrentUser, input: { kind: BuiltInWorkflowKind; ref?: string; rebuild?: boolean }, now = new Date()): WorkflowResponse {
   const sessionId = `workflow:${input.kind}:${keyFor(input.kind, user, input.ref, now)}`;
   const db = getDb();
   if (!input.rebuild) {

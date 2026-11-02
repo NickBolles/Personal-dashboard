@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/client/api";
-import type { WorkflowKind, WorkflowResponse } from "@/lib/jarvis-ui/types";
+import type { BuiltInWorkflowKind, WorkflowResponse } from "@/lib/jarvis-ui/types";
 import { Button, ButtonLink, ErrorNote, Spinner, useToast } from "@/components/ui";
 import { chatHref } from "@/components/home/chat";
 import { useSmartSettings } from "./AssistantText";
 import { SmartSurface } from "./SmartSurface";
 
-const ASK: Partial<Record<WorkflowKind, { context: string; draft: string; label: string }>> = {
+const ASK: Partial<Record<BuiltInWorkflowKind, { context: string; draft: string; label: string }>> = {
   brief: {
     context: "@ctx:morning_brief",
     draft: "Give me my morning brief: what's worth doing today, and anything I should snooze or skip.",
@@ -27,7 +27,7 @@ const ASK: Partial<Record<WorkflowKind, { context: string; draft: string; label:
  * POST /api/smart/workflows and rendered like any smart reply, with the
  * same tray, Apply and undo. "Rebuild" starts over from current data.
  */
-export function WorkflowSurface({ kind, prRef, compact = false }: { kind: WorkflowKind; prRef?: string; compact?: boolean }) {
+export function WorkflowSurface({ kind, prRef, compact = false }: { kind: BuiltInWorkflowKind; prRef?: string; compact?: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const settings = useSmartSettings();

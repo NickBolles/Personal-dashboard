@@ -101,9 +101,9 @@ export type SmartSettings = {
 };
 
 /** Jarvis-built workflow surfaces (no model): the brief, the week plan and PR cards. */
-export const WORKFLOW_KINDS = ["brief", "week", "pr"] as const;
-export type WorkflowKind = (typeof WORKFLOW_KINDS)[number];
-export type WorkflowResponse = { kind: WorkflowKind; sessionId: string; blockIndex: number; spec: import("./catalog").JarvisSpec; builtAt: string };
+export const BUILT_IN_SURFACE_KINDS = ["brief", "week", "pr"] as const;
+export type BuiltInWorkflowKind = (typeof BUILT_IN_SURFACE_KINDS)[number];
+export type WorkflowResponse = { kind: BuiltInWorkflowKind; sessionId: string; blockIndex: number; spec: import("./catalog").JarvisSpec; builtAt: string };
 
 export const SMART_CAPABILITY = "jarvis-ui@1";
 

@@ -52,6 +52,7 @@ export const MODULES: ModuleDef[] = [
     routes: [
       { href: "/areas", label: "Areas" },
       { href: "/inbox", label: "Inbox" },
+      { href: "/workflows", label: "Workflows" },
       { href: "/chat", label: "Conversations" },
       { href: "/areas/timeline", label: "Timeline" },
       { href: "/areas/dashboard", label: "Dashboard" },

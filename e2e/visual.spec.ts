@@ -169,6 +169,68 @@ test("visual: configuration transfer", async ({ page }) => {
   await expect(page).toHaveScreenshot("configuration-transfer.png", { fullPage: true });
 });
 
+// Workflows gallery (W1): one draft + one active user workflow and the built-ins, light and dark.
+const workflowsVisual = {
+  workflows: [
+    {
+      id: "wf_v1",
+      slug: "teaching",
+      name: "Teaching notes",
+      icon: "book-open",
+      hue: "lab",
+      status: "active",
+      currentVersion: 3,
+      area: "Faith",
+      areaId: null,
+      description: "Live sermon/teaching notes: Scripture, points, quotes, reflections.",
+      triggers: ["/teaching", "share", "areaPage"],
+      builtIn: false,
+      updatedAt: "2026-11-01T17:00:00.000Z",
+    },
+    {
+      id: "wf_v2",
+      slug: "bugtriage",
+      name: "Bug triage",
+      icon: "bug",
+      hue: null,
+      status: "draft",
+      currentVersion: 1,
+      area: "Work/Jarvis",
+      areaId: null,
+      description: "Reproduce, classify and file a bug.",
+      triggers: ["/bugtriage"],
+      builtIn: false,
+      updatedAt: "2026-11-01T16:00:00.000Z",
+    },
+  ],
+  builtIns: [
+    {
+      kind: "brief",
+      slug: "brief",
+      name: "Morning brief",
+      description: "Today's priorities, calendar and approvals in one card.",
+      href: "/home",
+      builtIn: true,
+    },
+    { kind: "week", slug: "week", name: "Week plan", description: "Plan the week and block time on the calendar (asks first).", href: "/home", builtIn: true },
+    { kind: "pr", slug: "pr", name: "PR review card", description: "A pull request's status, checks and review notes.", href: "/areas", builtIn: true },
+  ],
+};
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: workflows gallery (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/workflows(?:\?.*)?$/, (route) => route.fulfill({ json: workflowsVisual }));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto("/workflows");
+    await expect(page.getByTestId("workflow-card")).toHaveCount(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(page).toHaveScreenshot(`workflows-${scheme}.png`, { fullPage: true });
+  });
+}
+
 // Every Markdown element in one assistant message (fixture shared with test/markdown.test.tsx).
 test("visual: markdown in a chat message", async ({ page }) => {
   await page.clock.setFixedTime(new Date(visualNow));
@@ -626,7 +688,6 @@ async function openPaletteVisual(page: Page) {
   );
   await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
-  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
   await page.addInitScript(() => localStorage.removeItem("jarvis.palette.recent"));
   await page.goto("/more");
   await page.locator("h1").first().waitFor();
