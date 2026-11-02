@@ -37,7 +37,12 @@ describe("palette: action parsing", () => {
     const [m] = matchActions("New item in Ho");
     expect(m!.def.id).toBe("new-item");
     expect(m!.exact).toBe(true);
-    expect(m!.rest).toBe("ho");
+    expect(m!.rest).toBe("Ho");
+  });
+  it("keeps the typed casing of argument text (#103)", () => {
+    expect(matchActions("new item in Home Fix API_KEY")[0]!.rest).toBe("Home Fix API_KEY");
+    expect(matchActions("/new Home Explain MyClass")[0]!.rest).toBe("Home Explain MyClass");
+    expect(matchActions("NEW ITEM IN Home")[0]!.exact).toBe(true);
   });
   it("matches a phrase prefix (2+ letters) without arguments", () => {
     expect(matchActions("new it").map((m) => m.def.id)).toContain("new-item");
@@ -86,7 +91,7 @@ describe("palette: argument chips", () => {
     expect(candidatesFor("agent", "@mom", ctx)[0]!.id).toBe("momentumchief");
   });
   it("never offers settling (or any closing status) as a status", () => {
-    for (const s of ["settled", "ready_to_settle", "superseded", "abandoned"]) expect(PALETTE_STATUSES).not.toContain(s);
+    for (const s of ["settled", "ready_to_settle", "superseded", "abandoned", "reopened"]) expect(PALETTE_STATUSES).not.toContain(s);
     expect(candidatesFor("status", "sett", ctx)).toEqual([]);
   });
   it("every write action needs a confirm step", () => {

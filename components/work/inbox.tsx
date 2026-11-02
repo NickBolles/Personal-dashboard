@@ -127,20 +127,21 @@ export function InboxView({
   const twoPane = useTwoPane();
   const [picked, setPicked] = useState<string | null>(initialEntry ?? null);
   // "Triage one at a time": one entry full-width, auto-advance, progress n of N (N fixed when it starts).
-  const [focus, setFocus] = useState<{ total: number; done: number; skipped: string[] } | null>(null);
+  const [focus, setFocus] = useState<{ total: number; done: number; skipped: string[]; handled: string[] } | null>(null);
   const [focusRequested, setFocusRequested] = useState(!!initialFocus);
   if (focusRequested && q.data) {
     setFocusRequested(false);
-    if (entries.length) setFocus({ total: entries.length, done: 0, skipped: [] });
+    if (entries.length) setFocus({ total: entries.length, done: 0, skipped: [], handled: [] });
   }
-  const focusQueue = focus ? entries.filter((e) => !focus.skipped.includes(e.id)) : [];
+  // #91: handled entries leave the queue at once, even before the refetch drops them (no double filing)
+  const focusQueue = focus ? entries.filter((e) => !focus.skipped.includes(e.id) && !focus.handled.includes(e.id)) : [];
   const focusEntry = focus ? (focusQueue[0] ?? null) : null;
   const sel = focus ? focusEntry : (entries.find((e) => e.id === picked) ?? entries[0] ?? null);
   const listRef = useRef<HTMLUListElement>(null);
-  const advance = () => setFocus((f) => (f ? { ...f, done: f.done + 1 } : f));
+  const advance = (id: string) => setFocus((f) => (f && !f.handled.includes(id) ? { ...f, done: f.done + 1, handled: [...f.handled, id] } : f));
   const fileHere = useWorkMutation(
     (e: InboxEntry) => api.post<{ item: WorkItem }>(`/api/work/inbox/${encodeURIComponent(e.id)}/accept`, { parentId: null, useSuggestion: true }),
-    { ok: "Filed", onSuccess: (r) => (focus ? advance() : onOpenItem(r.item.id)) },
+    { ok: "Filed", onSuccess: (r, e) => (focus ? advance(e.id) : onOpenItem(r.item.id)) },
   );
   // Bulk "Accept N suggestions": files every capture under its suggestion; one Undo reverts the batch.
   const { toast } = useToast();
@@ -151,8 +152,9 @@ export function InboxView({
       const done: string[] = [];
       for (const e of list)
         try {
-          await api.post(`/api/work/inbox/${encodeURIComponent(e.id)}/accept`, { parentId: null, useSuggestion: true });
-          done.push(e.id);
+          // #92: file-suggestion checks the suggested destination is still live (no Miscellaneous fallback)
+          const r = await api.post<{ already: boolean }>(`/api/work/inbox/${encodeURIComponent(e.id)}/file-suggestion`);
+          if (!r.already) done.push(e.id);
         } catch {
           /* filed elsewhere meanwhile, or the suggestion is gone: leave it in the Inbox */
         }
@@ -165,11 +167,26 @@ export function InboxView({
       },
     },
   );
+  // #93: undo each entry on its own; never throws, so Work queries refresh even after a partial undo,
+  // and only the entries that are still filed stay in the Undo bar for a retry.
   const undoBulk = useWorkMutation(
     async (ids: string[]) => {
-      for (const id of ids) await api.post(`/api/work/inbox/${encodeURIComponent(id)}/unaccept`);
+      const left: string[] = [];
+      for (const id of ids)
+        try {
+          await api.post(`/api/work/inbox/${encodeURIComponent(id)}/unaccept`);
+        } catch {
+          left.push(id);
+        }
+      return { left, restored: ids.length - left.length };
     },
-    { ok: "Undone: back in the Inbox", onSuccess: () => setBulkUndo(null) },
+    {
+      onSuccess: ({ left, restored }) => {
+        if (!left.length) toast("Undone: back in the Inbox", "ok");
+        else toast(`${restored} back in the Inbox; ${left.length} couldn't be undone`, "warn");
+        setBulkUndo(left.length ? left : null);
+      },
+    },
   );
   const primary = (e: InboxEntry) => (e.capture?.suggestion ? fileHere.mutate(e) : setAccepting(e));
   const move = (d: number) => {
@@ -203,7 +220,7 @@ export function InboxView({
       else if (!focus && (k === "k" || k === "arrowup")) move(-1);
       else if (k === "enter" && (t.dataset.inboxPick || t.dataset.inboxFocus != null || t === document.body)) primary(sel);
       else if (k === "m") setAccepting(sel);
-      else if (k === "e") dismiss.mutate(sel.id, { onSuccess: () => advance() });
+      else if (k === "e") dismiss.mutate(sel.id, { onSuccess: () => advance(sel.id) });
       else if (k === "s" && focus) setFocus({ ...focus, skipped: [...focus.skipped, sel.id] });
       else if (k === "escape" && focus) setFocus(null);
       else return;
@@ -232,7 +249,11 @@ export function InboxView({
             </Button>
           ) : null}
           {!focus && entries.length ? (
-            <Button size="sm" variant={suggested.length > 1 ? "ghost" : undefined} onClick={() => setFocus({ total: entries.length, done: 0, skipped: [] })}>
+            <Button
+              size="sm"
+              variant={suggested.length > 1 ? "ghost" : undefined}
+              onClick={() => setFocus({ total: entries.length, done: 0, skipped: [], handled: [] })}
+            >
               Triage one at a time
             </Button>
           ) : null}
@@ -259,7 +280,7 @@ export function InboxView({
           busy={fileHere.isPending}
           onPrimary={() => focusEntry && primary(focusEntry)}
           onChoose={() => focusEntry && setAccepting(focusEntry)}
-          onDismiss={() => focusEntry && dismiss.mutate(focusEntry.id, { onSuccess: () => advance() })}
+          onDismiss={() => focusEntry && dismiss.mutate(focusEntry.id, { onSuccess: () => advance(focusEntry.id) })}
           onSkip={() => focusEntry && setFocus({ ...focus, skipped: [...focus.skipped, focusEntry.id] })}
           onExit={() => setFocus(null)}
           onOpenItem={onOpenItem}
@@ -398,7 +419,7 @@ export function InboxView({
           onClose={() => setAccepting(null)}
           onAccepted={(id) => {
             setAccepting(null);
-            if (focus) advance();
+            if (focus) advance(accepting.id);
             else onOpenItem(id);
           }}
         />

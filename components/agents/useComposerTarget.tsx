@@ -39,6 +39,11 @@ export function ComposerRouteWatcher() {
   return null;
 }
 
+/** #109: the Areas node in the URL, for surfaces that need it without hermes.chat (the palette's work actions). */
+export function useRouteNodeId(): string | null {
+  return useSyncExternalStore(subscribe, snapshot, snapshot).nodeId;
+}
+
 /** The owner's chip: switch this page's composer to plain Jarvis (or back to the area's agent). */
 export const setComposerJarvis = (jarvis: boolean) => set({ jarvis });
 
