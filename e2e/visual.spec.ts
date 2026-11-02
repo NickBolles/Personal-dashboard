@@ -606,6 +606,17 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+// CH-R1 live state (#65): the streaming "Working" summary with its shimmer, from the kit gallery (deterministic).
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat work summary live (${theme})`, async ({ page }) => {
+    await page.goto("/dev/kit");
+    const live = page.getByTestId(`kit-work-live-${theme}`).locator(".chat-work[data-live]");
+    await expect(live.getByRole("button", { name: /^Working/ })).toBeVisible();
+    await live.scrollIntoViewIfNeeded();
+    await expect(live).toHaveScreenshot(`chat-work-live-${theme}.png`, { animations: "disabled" });
+  });
+}
+
 // Tide orb (v0 "Tide with Lagoon text", Playful): phone bar orb + open radial at 390, desktop dock orb at 1440.
 async function orbClip(page: import("@playwright/test").Page, pad = 28) {
   const b = (await page.locator('[data-testid="dock-orb"]:visible').boundingBox())!;

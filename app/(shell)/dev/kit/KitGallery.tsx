@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { WorkSummary } from "@/components/chat/WorkSummary";
 import {
   AgentCard,
   AgentMark,
@@ -177,6 +178,13 @@ function Panel({ theme }: { theme: "dark" | "light" }) {
       <AgentCard agent="cos" title="Chief of staff" status="Working" live actions={<Button size="sm">Open</Button>}>
         Triaging 6 inbox items.
       </AgentCard>
+      {/* CH-R1 live work summary (shimmer before it auto-collapses), shot by visual.spec (#65) */}
+      <div data-testid={`kit-work-live-${theme}`}>
+        <WorkSummary id={`kit-live-${theme}`} live defaultOpen steps={[{ tool: "web_search", done: true }, { tool: "terminal" }]}>
+          <div className="chat-tool">Searched the web · 2s</div>
+          <div className="chat-tool">Running a command…</div>
+        </WorkSummary>
+      </div>
     </section>
   );
 }
