@@ -152,7 +152,6 @@ function PickerPanel({
       setPos({ top: Math.round(r.bottom + 4), left: Math.round(Math.max(12, Math.min(r.left, window.innerWidth - w - 12))) });
     };
     place();
-    input.current?.focus({ preventScroll: true });
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node;
       if (panel.current?.contains(t) || opener.current?.contains(t)) return;
@@ -175,6 +174,12 @@ function PickerPanel({
       window.removeEventListener("scroll", place, true);
     };
   }, [opener]);
+
+  // Focus the filter once the placed panel is visible (a hidden input ignores focus()).
+  const placed = pos !== null;
+  useEffect(() => {
+    if (placed) input.current?.focus({ preventScroll: true });
+  }, [placed]);
 
   const pick = (r: Row | undefined) => {
     if (!r) return;
