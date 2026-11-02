@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { RowTitle } from "./InlineEdit";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
@@ -123,13 +124,12 @@ function CardList({
             <li key={c.id} className={cx("wk-row-hover flex items-center gap-x-2.5 px-3 py-1.5", urgent && "border-l-[3px] border-l-warn pl-[9px]")}>
               <StatusDot status={c.status} />
               <div className="min-w-0 flex-1">
-                <button
-                  type="button"
+                <RowTitle
+                  id={c.id}
+                  title={c.title}
                   className="tap min-w-0 text-left text-[14px] leading-snug font-semibold break-words hover:underline"
-                  onClick={() => onOpen(c.id)}
-                >
-                  {c.title}
-                </button>
+                  onOpen={() => onOpen(c.id)}
+                />
                 <p className="line-clamp-2 text-xs break-words text-muted">
                   {[c.path, c.detail, c.due ? `due ${fmtShort(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>

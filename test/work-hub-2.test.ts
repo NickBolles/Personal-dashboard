@@ -394,6 +394,42 @@ describe("undo for structural operations", () => {
     expect(isUntouched({ ...base, derived: 1 })).toBe(false);
   });
 
+  it("records inline field edits as one undoable, audited edit op", () => {
+    const { u, v3 } = flagship();
+    const before = store.getDetail(owner, v3.id).item;
+    const out: store.OpOut = {};
+    store.updateItem(u, v3.id, { title: "V3 parity (inline)", targetDate: "2026-12-01" }, cid, out);
+    expect(out.op).toMatchObject({ kind: "edit", label: "Saved" });
+    expect(store.getDetail(owner, v3.id).events[0]).toMatchObject({ kind: "edit", reason: "Edited title" });
+    store.undoOp(u, out.op!.id, cid);
+    const after = store.getDetail(owner, v3.id);
+    expect(after.item).toMatchObject({ title: before.title, targetDate: before.targetDate });
+    expect(after.events[0]).toMatchObject({ kind: "undo", reason: "Undid edit" });
+    // A later edit of the same field supersedes the earlier undo.
+    const a: store.OpOut = {};
+    store.updateItem(u, v3.id, { summary: "first" }, cid, a);
+    const b: store.OpOut = {};
+    store.updateItem(u, v3.id, { summary: "second" }, cid, b);
+    expect(() => store.undoOp(u, a.op!.id, cid)).toThrow(/changed this item since/);
+    // No-op edits record nothing.
+    const none: store.OpOut = {};
+    store.updateItem(u, v3.id, { summary: "second" }, cid, none);
+    expect(none.op).toBeUndefined();
+  });
+
+  it("undoing a status edit restores the lifecycle fields too", () => {
+    const { u, v4 } = flagship();
+    store.updateItem(u, v4.id, { status: "abandoned", reason: "Dropped for V5" }, cid);
+    const ended = store.getDetail(owner, v4.id).item;
+    expect(ended.completedAt).toBeTruthy();
+    const out: store.OpOut = {};
+    store.updateItem(u, v4.id, { status: "on_hold" }, cid, out);
+    expect(store.getDetail(owner, v4.id).item.completedAt).toBeNull();
+    store.undoOp(u, out.op!.id, cid);
+    const back = store.getDetail(owner, v4.id).item;
+    expect(back).toMatchObject({ status: "abandoned", completedAt: ended.completedAt, settledKind: ended.settledKind, settledReason: ended.settledReason });
+  });
+
   it("undoes move, reorder and archive, and refuses stale or repeated undo", () => {
     const { u, area, project, v2, v3, v4 } = flagship();
     const kids = (pid: string) =>
@@ -435,10 +471,10 @@ describe("undo for structural operations", () => {
     const late: store.OpOut = {};
     store.updateItem(u, v2.id, { archived: true }, cid, late);
     expect(() => store.undoOp(u, late.op!.id, cid, new Date(Date.now() + UNDO_WINDOW_MS + 1000))).toThrow(/Too late/);
-    // Plain edits don't create undoable operations.
+    // Field edits get their own undoable "edit" op (inline edits' Saved · Undo).
     const edit: store.OpOut = {};
     store.updateItem(u, v3.id, { title: "V3 parity check" }, cid, edit);
-    expect(edit.op).toBeUndefined();
+    expect(edit.op?.kind).toBe("edit");
   });
 
   it("undoing a split/fork deletes the new item if untouched, otherwise archives it", async () => {

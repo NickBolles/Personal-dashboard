@@ -220,3 +220,42 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
   await page.getByTestId("palette-confirm").getByRole("button", { name: "Cancel" }).click();
   await page.keyboard.press("Escape");
 });
+
+test("inline edits: axe clean and no overflow at 200% text zoom (read, title editor, summary editor)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const post = async (data: unknown) => {
+    const r = await page.request.post("/api/work/items", { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const areaId = await post({ kind: "area", title: `Zoom inkpot ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom quill ${nonce}` });
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.locator("#work-item-title")).toHaveText(`Zoom quill ${nonce}`);
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        label,
+      )
+      .toEqual([]);
+  };
+  await axe("read");
+  await page.locator("#work-item-title").getByRole("button").click();
+  await expect(page.getByRole("textbox", { name: "Edit title" })).toBeFocused();
+  await axe("title editor");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  // The item header must reflow (the Areas nav row above it scrolls sideways by design at 200%).
+  const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
+  const fits = () => header.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+  expect.soft(await fits(), "title editor at 200%").toBe(true);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Edit summary" }).click();
+  await expect(page.getByRole("textbox", { name: "Edit summary" })).toBeFocused();
+  await axe("summary editor");
+  expect.soft(await fits(), "summary editor at 200%").toBe(true);
+  await page.keyboard.press("Escape");
+});

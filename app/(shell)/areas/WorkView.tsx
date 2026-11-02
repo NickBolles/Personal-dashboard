@@ -20,6 +20,8 @@ import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
 import { NEW_WORK_EVENT } from "@/components/navigation/commands";
@@ -40,7 +42,6 @@ import {
   rollup,
   todayIso,
   STATUS_LABELS,
-  WORK_STATUSES,
   type Comparator,
   type CreatableKind,
   type DependencyRef,
@@ -106,14 +107,24 @@ export function WorkView({
   const onOp = useCallback((op: UndoOp | null | undefined) => {
     if (op) setUndo(op);
   }, []);
+  // Inline edits in rows (Today) report their op here, so there is only ever one Undo bar.
+  useEffect(() => {
+    const on = (e: Event) => onOp((e as CustomEvent<UndoOp>).detail);
+    window.addEventListener(INLINE_OP_EVENT, on);
+    return () => window.removeEventListener(INLINE_OP_EVENT, on);
+  }, [onOp]);
   const place = useWorkMutation(
     (v: { id: string; parentId: string | null; index: number }) =>
       api.post<{ item: WorkItem; op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
     { onSuccess: (r) => onOp(r.op) },
   );
-  const rename = useWorkMutation((v: { id: string; title: string }) => api.patch(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }), {
-    ok: "Renamed",
-  });
+  const rename = useWorkMutation(
+    (v: { id: string; title: string }) => api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}`, { title: v.title }),
+    {
+      // The "Saved · Undo" bar confirms it (one toast).
+      onSuccess: (r) => onOp(r.op),
+    },
+  );
   const bulkArchive = useWorkMutation(
     async (ids: string[]) => {
       let n = 0;
@@ -745,6 +756,12 @@ function NextActionStrip({ value, busy, onSave }: { value: string; busy: boolean
           value={draft}
           placeholder="The very next concrete step"
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={(e) => {
+            // Blur saves, except when focus moves to this strip's own Save/Cancel.
+            if (e.currentTarget.form?.contains(e.relatedTarget as Node | null)) return;
+            if (draft.trim() !== value) onSave(draft.trim());
+            setDraft(null);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Escape") setDraft(null);
           }}
@@ -812,6 +829,8 @@ function ItemDetail({
     onSuccess: (r) => onOp(r.op),
     ok: "Saved",
   });
+  // Inline field edits (title, next action, summary, status, due date): optimistic, one Undo bar.
+  const inline = useInlinePatch(id, onOp);
   const reorder = useWorkMutation(
     (direction: "up" | "down") => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(id)}/reorder`, { direction }),
     { onSuccess: (r) => onOp(r.op) },
@@ -954,8 +973,8 @@ function ItemDetail({
   const settlePrompt = item.status === "ready_to_settle" && !container;
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
-    <span className="inline-flex items-center gap-1" data-status={item.status}>
-      <span className="status-pill wk-status-pick" data-s={item.status}>
+    <span className="inline-flex min-w-0 items-center gap-1" data-status={item.status}>
+      <span className="status-pill wk-status-pick shrink-0" data-s={item.status}>
         <span aria-hidden="true">{STATUS_LABELS[item.status]}</span>
         <ChevronIcon className="h-3 w-3 rotate-90 opacity-70" />
         <label htmlFor="work-status" className="sr-only">
@@ -967,21 +986,25 @@ function ItemDetail({
           value={item.status}
           onChange={(e) => {
             const to = e.target.value as WorkStatus;
-            if (to === "settled") setDialog("settle");
-            else if (to === "reopened") setDialog("reopen");
-            else patch.mutate({ status: to });
+            // Settling is never inline: it stays the Settle… dialog (primary action / ⋯).
+            if (to === "reopened") setDialog("reopen");
+            else inline.mutate({ status: to });
           }}
         >
-          {WORK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
+          {inlineStatusOptions(item.status).map((o) => (
+            <option key={o.value} value={o.value} disabled={o.disabled}>
+              {o.label}
             </option>
           ))}
         </select>
       </span>
       {item.settledKind === "auto" && item.status === "settled" ? <Badge tone="neutral">Auto-settled</Badge> : null}
+      {container ? null : <InlineDate value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
     </span>
   );
+
+  // Extra badges (or container actions) may wrap; a plain item keeps status · due · ⋯ on one line.
+  const pinActions = !container && !(item.archived || d.validations.some((v) => v.overdue) || d.blockedBy.some((b) => b.open));
 
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
@@ -1002,55 +1025,41 @@ function ItemDetail({
           </ol>
         </nav>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          {renaming !== null ? (
-            <form
-              className="flex min-w-0 flex-1 basis-60 items-center gap-1.5"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (renaming.trim() && renaming.trim() !== item.title) patch.mutate({ title: renaming.trim() });
-                setRenaming(null);
-              }}
-            >
-              <input
-                aria-label="Title"
-                className={`${inputCls} text-[16px] font-semibold`}
-                autoFocus
-                value={renaming}
-                onChange={(e) => setRenaming(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setRenaming(null);
-                }}
-              />
-              <Button type="submit" size="sm" variant="primary">
-                Save
-              </Button>
-            </form>
-          ) : (
-            <h2
-              id="work-item-title"
-              className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px]"
-              onDoubleClick={item.builtIn ? undefined : () => setRenaming(item.title)}
-            >
-              {item.title}
-            </h2>
-          )}
-          {statusSelect}
-          {item.archived ? <Badge>Archived</Badge> : null}
-          {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
-          {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-          <div className="ml-auto flex items-center gap-1">
-            {container ? <ViewSwitch id={item.id} /> : null}
-            {container && canChat ? (
-              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-                Chat here
-              </Button>
-            ) : null}
-            {container ? (
-              <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
-                + {childLabel}
-              </Button>
-            ) : null}
-            <OverflowMenu label="More item actions" items={menu} />
+          <h2
+            id="work-item-title"
+            className={`min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px] ${renaming !== null ? "flex-1 basis-60" : ""}`}
+          >
+            <InlineText
+              field="title"
+              value={item.title}
+              disabled={item.builtIn}
+              editing={renaming !== null}
+              onEditingChange={(on) => setRenaming(on ? item.title : null)}
+              inputClassName="text-[16px] font-semibold lg:text-[19px]"
+              onSave={(title) => inline.mutate({ title })}
+            />
+          </h2>
+          {/* A plain item keeps status · due · ⋯ on one line (the due chip truncates) so ⋯ never drops to its own row;
+              containers and badge rows keep the old wrapping layout (the wrapper is display: contents). */}
+          <div className={pinActions ? "flex min-w-0 flex-auto items-center gap-x-2.5" : "contents"}>
+            {statusSelect}
+            {item.archived ? <Badge>Archived</Badge> : null}
+            {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
+            {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
+            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : ""}`}>
+              {container ? <ViewSwitch id={item.id} /> : null}
+              {container && canChat ? (
+                <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
+                  Chat here
+                </Button>
+              ) : null}
+              {container ? (
+                <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
+                  + {childLabel}
+                </Button>
+              ) : null}
+              <OverflowMenu label="More item actions" items={menu} />
+            </div>
           </div>
         </div>
         {container ? (
@@ -1059,7 +1068,20 @@ function ItemDetail({
             {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
           </div>
         ) : null}
-        {item.summary ? <Summary key={item.id} text={item.summary} /> : null}
+        {item.summary || !container ? (
+          <InlineText
+            field="summary"
+            multiline
+            value={item.summary}
+            disabled={item.builtIn}
+            editButton
+            className="wk-summary-inline"
+            placeholder="Add a summary"
+            onSave={(summary) => inline.mutate({ summary })}
+          >
+            {item.summary ? <Summary key={item.id} text={item.summary} /> : undefined}
+          </InlineText>
+        ) : null}
         {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
         {settlePrompt ? (
           <div
@@ -1076,7 +1098,7 @@ function ItemDetail({
           </div>
         ) : null}
         {isArea && !item.nextAction ? null : (
-          <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={patch.isPending} onSave={(nextAction) => patch.mutate({ nextAction })} />
+          <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={inline.isPending} onSave={(nextAction) => inline.mutate({ nextAction })} />
         )}
         {container ? null : <JobChip itemId={item.id} />}
         {container ? null : (

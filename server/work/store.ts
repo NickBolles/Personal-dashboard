@@ -63,7 +63,7 @@ import {
 import { fetchIssueState, fetchPullState, githubRefreshEnabled } from "./github";
 import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules";
 import { planPlacement } from "./tree-rules";
-import { isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
+import { EDIT_UNDO_FIELDS, isUntouched, latestOp, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
 
@@ -534,6 +534,22 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
     if (fields.archived !== undefined && fields.archived !== row.archived) {
       event(tx, id, user.id, { kind: fields.archived ? "archived" : "unarchived" });
       recordOp(tx, user.id, id, fields.archived ? "archive" : "unarchive", { archived: row.archived }, out);
+    } else {
+      // Field edits are audited in work_events and undoable once (the "Saved · Undo" toast).
+      const prev: Record<string, unknown> = {};
+      const next: Record<string, unknown> = {};
+      const after = { ...fields, ...(status ? { status } : {}) } as Record<string, unknown>;
+      for (const f of EDIT_UNDO_FIELDS) {
+        if (after[f] === undefined || after[f] === (row as Record<string, unknown>)[f]) continue;
+        prev[f] = (row as Record<string, unknown>)[f];
+        next[f] = after[f];
+      }
+      const text = Object.keys(next).filter((f) => f !== "status" && f !== "targetDate");
+      if (text.length) event(tx, id, user.id, { kind: "edit", reason: `Edited ${text.map((f) => (f === "nextAction" ? "next action" : f)).join(", ")}` });
+      // A status edit also moves the lifecycle fields (planTransition); keep them so undo restores
+      // the settlement reason/kind and completedAt, not just the status.
+      const life = "status" in next ? { completedAt: row.completedAt, settledKind: row.settledKind, settledReason: row.settledReason } : undefined;
+      if (Object.keys(next).length) recordOp(tx, user.id, id, "edit", { prev, next, ...(life ? { life } : {}) }, out);
     }
     if (settings !== undefined) {
       const merged = mergeAreaSettings(parseAreaSettings(row.settings), settings);
@@ -750,7 +766,10 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         .select()
         .from(schema.workOps)
         .where(and(eq(schema.workOps.userId, user.id), eq(schema.workOps.itemId, op.itemId)))
-        .all(),
+        .all()
+        // Field edits and structural ops are separate undo stacks: an edit after a fork/move doesn't
+        // block undoing that (the split/fork rules still see the edit), and a move doesn't block an edit's undo.
+        .filter((o) => (o.kind === "edit") === (op.kind === "edit")),
     );
     const check = undoCheck(op, latest?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
     if (!check.ok) throw new HttpError(409, check.code, check.message);
@@ -834,6 +853,20 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         } else tx.update(T).set({ archived: true, updatedAt: nowIso() }).where(eq(T.id, c.id)).run();
       }
       event(tx, row.id, user.id, { kind: "undo", reason: `Undid plan: removed ${deleted}, archived ${ids.length - deleted}` });
+    } else if (kind === "edit") {
+      const { prev = {}, next = {}, life } = payload as { prev?: Record<string, unknown>; next?: Record<string, unknown>; life?: Record<string, unknown> };
+      const cur = row as Record<string, unknown>;
+      if (Object.keys(next).some((f) => cur[f] !== next[f]))
+        throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
+      const restore: Record<string, unknown> = {};
+      for (const f of EDIT_UNDO_FIELDS) if (f in prev) restore[f] = prev[f];
+      if ("status" in restore && life) for (const f of ["completedAt", "settledKind", "settledReason"] as const) if (f in life) restore[f] = life[f];
+      tx.update(T)
+        .set({ ...restore, updatedAt: nowIso() })
+        .where(eq(T.id, row.id))
+        .run();
+      if ("status" in restore) event(tx, row.id, user.id, { kind: "status", from: row.status, to: String(restore.status), reason: "Undid edit" });
+      event(tx, row.id, user.id, { kind: "undo", reason: "Undid edit" });
     } else if (kind === "archive" || kind === "unarchive") {
       tx.update(T).set({ archived: !!payload.archived, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "archive" ? "Undid archive" : "Undid unarchive" });
