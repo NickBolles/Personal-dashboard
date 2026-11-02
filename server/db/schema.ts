@@ -1556,3 +1556,44 @@ export const rememberedFieldValues = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.workflowId, t.fieldId, t.valueKey] }), index("remembered_field_values_recent_idx").on(t.workflowId, t.fieldId, t.usedAt)],
 );
+
+/**
+ * Workflow runs (W2, spec §2.3): one live notebook per started workflow, pinned
+ * to the definition version, linked to its Hermes conversation and optional
+ * work item. `capture` is the current state (≤ 256 KB); `capture_log` holds
+ * every change with its inverse op for Undo (D2) and audit; `proposals` are
+ * AI-proposed form values awaiting a tap (§12.8).
+ */
+export const workflowRuns = sqliteTable(
+  "workflow_runs",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    /** Hermes session id; null until the first run is posted */
+    conversationId: text("conversation_id"),
+    itemId: text("item_id"),
+    areaId: text("area_id"),
+    title: text("title").notNull(),
+    /** live | ended | abandoned */
+    status: text("status").notNull().default("live"),
+    captureJson: text("capture_json").notNull().default("{}"),
+    captureLogJson: text("capture_log_json").notNull().default("[]"),
+    proposalsJson: text("proposals_json").notNull().default("[]"),
+    /** palette | share | schedule | area | resume | gallery */
+    triggeredBy: text("triggered_by").notNull().default("palette"),
+    startedAt: text("started_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+    endedAt: text("ended_at"),
+  },
+  (t) => [
+    index("workflow_runs_owner_status_idx").on(t.ownerId, t.status),
+    index("workflow_runs_workflow_idx").on(t.workflowId, t.startedAt),
+    index("workflow_runs_conversation_idx").on(t.conversationId),
+  ],
+);

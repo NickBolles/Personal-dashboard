@@ -8,6 +8,7 @@ import { hasBlock, splitBlocks } from "@/lib/jarvis-ui/parser";
 import { validateBlock } from "@/lib/jarvis-ui/validator";
 import type { SmartSettings } from "@/lib/jarvis-ui/types";
 import { SmartSurface } from "./SmartSurface";
+import { hideCaptureBlocks } from "@/lib/workflows/runs";
 
 /** The Hermes session the assistant text belongs to (provided by the conversation view). */
 export const SmartSession = createContext<string | null>(null);
@@ -22,7 +23,8 @@ export function useSmartSettings() {
  * renders as a smart surface. Invalid/unknown blocks fall back to the text
  * with a short note; with smart replies off, the reply shows its summary.
  */
-export function AssistantText({ text, live = false }: { text: string; live?: boolean }) {
+export function AssistantText({ text: raw, live = false }: { text: string; live?: boolean }) {
+  const text = useMemo(() => hideCaptureBlocks(raw), [raw]);
   const sessionId = useContext(SmartSession);
   const block = hasBlock(text);
   const settings = useSmartSettings();

@@ -16,6 +16,7 @@ import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline,
 import { ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
+import { quickAdd, RunPanel, useAgentCapture, useWideRun, useWorkflowRun } from "@/components/workflows/RunPanel";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -208,13 +209,39 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   }, [run.state.phase, announce]);
 
   const session = detail?.session;
+  const wfRun = useWorkflowRun(sessionId);
+  const wide = useWideRun();
+  const sideRun = !!wfRun && wide;
+  const [wfTarget, setWfTarget] = useState<string | null>(null);
+  const onCaptured = useCallback(
+    (r: { applied: string[]; dropped: number; proposed: number }) => {
+      if (r.dropped) toast(r.dropped === 1 ? "1 note not filed" : `${r.dropped} notes not filed`, "warn");
+      else if (r.applied.length) announce(`Outline updated: ${r.applied.length} ${r.applied.length === 1 ? "change" : "changes"}. Undo is available.`);
+    },
+    [toast, announce],
+  );
+  useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
 
   const send = async (input: string, key: string) => {
     let text = input;
-    const ctx = context
-      .filter((c) => !c.token)
-      .map((c) => `- ${c.label} [${c.ref}]`)
-      .join("\n");
+    if (wfRun && wfRun.status === "live" && wfTarget) {
+      const target = wfTarget;
+      setWfTarget(null);
+      void quickAdd(wfRun, target, input)
+        .then((r) => qc.setQueryData(["workflow-run", sessionId], r.run))
+        .catch((e: Error) => toast(e.message, "danger"));
+      text = `[${target}] ${input}`;
+    }
+    const ctx = [
+      context
+        .filter((c) => !c.token)
+        .map((c) => `- ${c.label} [${c.ref}]`)
+        .join("\n"),
+      wfRun?.status === "live" ? (wfRun.context ?? "") : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 4000);
     // Sheet picks that are @/# references ride in the message as tokens: the server resolves them like typed ones.
     const tokens = context.filter((c) => c.token && !text.includes(c.token)).map((c) => c.token);
     if (tokens.length) text = `${text}\n\n${tokens.join(" ")}`;
@@ -414,9 +441,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     <AssistantName.Provider value={who}>
       <SmartSession.Provider value={sessionId}>
         <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
-          <div className="min-[1100px]:flex min-[1100px]:justify-center">
+          <div className={sideRun ? "flex justify-center" : "min-[1100px]:flex min-[1100px]:justify-center"}>
             <div
-              className="chat-page relative mx-auto flex max-w-[880px] min-w-0 flex-col min-[1100px]:mx-0 min-[1100px]:flex-1"
+              className={cx("chat-page relative mx-auto flex max-w-[880px] min-w-0 flex-col min-[1100px]:mx-0 min-[1100px]:flex-1", sideRun && "mx-0 flex-1")}
               data-testid="conversation-drop"
               {...drop.props}
             >
@@ -524,7 +551,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   </div>
                   <button
                     type="button"
-                    className="tap inline-flex shrink-0 items-center justify-center rounded-xl px-2 text-xs text-muted hover:text-text min-[1100px]:hidden"
+                    className={cx(
+                      "tap inline-flex shrink-0 items-center justify-center rounded-xl px-2 text-xs text-muted hover:text-text",
+                      !sideRun && "min-[1100px]:hidden",
+                    )}
                     onClick={() => setDialog("links")}
                     aria-label={`Context and links${panel.links.length ? ` (${panel.links.length})` : ""}`}
                     data-testid="links-button"
@@ -606,6 +636,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                   >
                     Jump to latest
                   </Button>
+                </div>
+              ) : null}
+
+              {wfRun && !sideRun ? (
+                <div className="wf-run-dock">
+                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} />
                 </div>
               ) : null}
 
@@ -704,9 +740,18 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 />
               </Dialog>
             </div>
+            {sideRun ? (
+              <aside
+                aria-label="Session outline"
+                className="wf-run-side sticky top-0 h-dvh w-[360px] shrink-0 overflow-y-auto border-l border-line px-3 py-3"
+                data-testid="workflow-run-side"
+              >
+                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} />
+              </aside>
+            ) : null}
             <aside
               aria-label="Context and links"
-              className="sticky top-0 hidden h-dvh w-[280px] shrink-0 overflow-y-auto border-l border-line px-4 py-4 min-[1100px]:block"
+              className={cx("sticky top-0 hidden h-dvh w-[280px] shrink-0 overflow-y-auto border-l border-line px-4 py-4", !sideRun && "min-[1100px]:block")}
             >
               <LinksPanel
                 sessionId={sessionId}

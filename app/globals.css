@@ -2779,6 +2779,30 @@ button:active > .dock-orb {
   }
 }
 
+/* Workflow Run panel (W2): outline scrolls inside a bounded box; on phones the
+   open keyboard collapses it to a one-line strip above the composer. */
+@layer components {
+  .wf-run [data-testid="workflow-outline"] {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .wf-run-strip {
+    display: none;
+  }
+  /* Desktop/unfolded split: the side panel scrolls as a whole. */
+  .wf-run-side .wf-run [data-testid="workflow-outline"] {
+    max-height: none;
+  }
+}
+@media (max-width: 639.98px) {
+  html[data-kb="open"] .wf-run .wf-run-full {
+    display: none;
+  }
+  html[data-kb="open"] .wf-run .wf-run-strip {
+    display: block;
+  }
+}
+
 /* Activity timeline (components/work/ActivityFeed.tsx): compact rows, sticky day headers. */
 @layer components {
   .jv-activity-filters {

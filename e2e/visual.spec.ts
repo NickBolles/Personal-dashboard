@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectNoHorizontalOverflow, mock, openChatContext, setHa, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, setHa, startConversation } from "./helpers";
+import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import {
   alertsVisual,
@@ -233,6 +234,57 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page.getByTestId("workflow-card")).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page).toHaveScreenshot(`workflows-${scheme}.png`, { fullPage: true });
+  });
+}
+
+// Workflows W2: start form (with the Place field) and the live Run panel. Real server data from a fixed
+// definition; every list the pages fetch is stubbed and smart-default dates/times are masked.
+const visNotes = { ...teaching, slug: "visnotes", name: "Visual notebook", triggers: [{ kind: "palette", command: "/visnotes" }] };
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: workflow start form and run panel (${scheme})`, async ({ page }) => {
+    await ensureWorkflowActive(page, visNotes);
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
+    await page.goto("/workflows");
+    const form = page.getByRole("dialog", { name: "New session" });
+    await expect(async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/visnotes Ann Lyle John 15" } })));
+      await expect(form).toBeVisible({ timeout: 2000 });
+    }).toPass();
+    await expect(form.getByLabel("Speaker")).toHaveValue("Ann Lyle");
+    const masks = [...MASK, 'input[type="date"]', 'input[type="time"]', 'input[type="datetime-local"]'].map((m) => form.locator(m));
+    await expect(form).toHaveScreenshot(`workflow-start-${scheme}.png`, { animations: "disabled", mask: masks });
+    await form.getByTestId("workflow-start-submit").click();
+    await expect(page).toHaveURL(/\/chat\//);
+    const panel = page.getByTestId("workflow-run");
+    await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
+    // The chat auto-scrolls after the first run lands; wait until the page scroll and the panel box settle,
+    // or the element shot catches the dock mid-scroll (mobile-320 light flaked with the composer over the panel).
+    let last = "";
+    await expect
+      .poll(
+        async () => {
+          const box = await panel.boundingBox();
+          const now = JSON.stringify([box, await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0)]);
+          const settled = now === last;
+          last = now;
+          return settled;
+        },
+        { intervals: [300], timeout: 10_000 },
+      )
+      .toBe(true);
+    // The fixed composer and phone bottom nav paint over a tall panel at 320 px (and which one shows depends on
+    // the keyboard/focus state), so hide them for the element shot: the baseline is the panel alone.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const hideOverlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+    await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
+    await hideOverlays.evaluate((el) => (el as Element).remove());
+    await panel.getByRole("button", { name: "End session" }).click();
+    await expect(panel).toContainText("Ended");
   });
 }
 

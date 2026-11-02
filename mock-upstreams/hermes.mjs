@@ -320,6 +320,11 @@ export function createHermes({ apiKey }) {
     if (/\[mock: (\d+) image\(s\)\]/.test(input)) reply = `I can see ${input.match(/\[mock: (\d+) image\(s\)\]/)[1]} picture(s).`;
     else if (/share the zephyr board/i.test(said))
       reply = "Published: https://artifacts.ai.nickbolles.com/v/zephyr-board-e2e/ (hero: https://artifacts.ai.nickbolles.com/a/zephyr-board-e2e/hero.png).";
+    // Workflow runs (jarvis-capture@1): file a quote into the live outline.
+    if (`${typeof instructions === "string" ? instructions : ""}\n${input}`.includes("jarvis-capture@1") && /quote this/i.test(said)) {
+      const ops = [{ op: "add", path: "/quotes/-", value: { text: "Remain in me, as I also remain in you", who: "Jake Fry" } }];
+      reply = `Filed the quote.\n\n\`\`\`jarvis-capture\n${JSON.stringify(ops)}\n\`\`\``;
+    }
     // Smart replies (jarvis-ui@1): a triage block built from the refs Jarvis attached.
     if (typeof instructions === "string" && instructions.includes("jarvis-ui@1") && /triage/i.test(said)) {
       const refs = [...input.matchAll(/^(todo:[^\s|]+) \| /gm)].map((m) => m[1]);

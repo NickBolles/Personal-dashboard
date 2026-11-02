@@ -12,6 +12,7 @@ import { matchCommands, NEW_CHAT_EVENT, useCommands, type Command } from "@/comp
 import { useAccess } from "@/components/access";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { parseSlashCommand } from "@/lib/workflows/palette-args";
+import { WORKFLOW_START_EVENT } from "@/components/workflows/events";
 import { useComposerTarget } from "@/components/agents/useComposerTarget";
 import { ComposerTargetChip } from "@/components/agents/ComposerTargetChip";
 import { useModKey } from "@/lib/client/platform";
@@ -162,13 +163,9 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   // Area-contextual "Ask": inside an area/project/item it asks that area's agent and files the chat there.
   const target = useComposerTarget();
   const asker = useAskHermes();
-  const startWorkflow = async (command: string) => {
-    try {
-      const s = await api.post<{ input: string; context: string; areaId: string | null }>("/api/workflows/start", { command: command.trim() });
-      await asker.ask(s.input, { areaId: s.areaId, context: s.context });
-    } catch (err) {
-      toast((err as Error).message, "danger");
-    }
+  // W2: the start form (D7) opens in WorkflowStartHost (AppShell) so it outlives the palette.
+  const startWorkflow = (command: string) => {
+    window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { command: command.trim() } }));
   };
   const node = target.node;
   const nodeItem = node ? byId.get(node.id) : undefined;
@@ -405,7 +402,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     close();
     if (row.kind === "command") row.c.run();
     else if (row.kind === "ask") void asker.ask(q, { areaId: target.areaId, context: target.context });
-    else if (row.kind === "workflow") void startWorkflow(`/${row.w.slug} ${row.rest}`);
+    else if (row.kind === "workflow") startWorkflow(`/${row.w.slug} ${row.rest}`);
     else if (link) {
       remember({ id: link.href, title: link.title, href: link.href });
       router.push(link.href);

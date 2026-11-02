@@ -95,7 +95,7 @@ function toSummary(row: typeof schema.workflows.$inferSelect, def: WorkflowDefin
   };
 }
 
-function currentDefinition(workflowId: string, version: number): WorkflowDefinition | null {
+export function currentDefinition(workflowId: string, version: number): WorkflowDefinition | null {
   const v = db()
     .select()
     .from(schema.workflowVersions)

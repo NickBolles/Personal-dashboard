@@ -99,5 +99,42 @@ palette (Ctrl K): Jarvis starts a chat titled "Standup – Platform" with the wo
 
 - Import has no Undo; archive the workflow instead (#116).
 - Area resolution is by exact path; there is no remap screen yet (#117).
-- `saved_places` and `remembered_field_values` have tables but no API until W2 (#118).
+- `saved_places` and `remembered_field_values` had tables but no API — added in W2 (#118, below).
 - Palette start sends the instructions as run context (≤ 4000 chars), not as a session system prompt (#119).
+
+## Runs (W2)
+
+Starting a workflow from the palette (`/slug args`) opens its **start form** (always shown, prefilled, one tap Start — D7).
+Defaults resolve server-side in the owner's timezone, in this order: palette arg ("From /slug") → remembered last value
+("Last used"; on by default for person/place/select fields — D11) → literal / smart date (`$today`, `$nextSunday`,
+`$serviceTime` = the workflow's `serviceTimes`, default Sunday 09:00 and 10:45 — D12) / workflow default place → empty.
+The form is compiled from the definition into the closed `jarvis-ui@1.1` form parts (`lib/workflows/run-catalog.ts`:
+Form, TextField, LongTextField, ChoiceField, DateTimeField, PlaceField, PersonField, ScriptureField, TagsField,
+NumberField, ToggleField) — never authored by the model.
+
+Submitting creates a `workflow_runs` row (migration 0027): pinned version, Hermes conversation id, optional work item,
+`capture` (current state, ≤ 256 KB), `capture_log` (every change + its inverse op) and `proposals`.
+
+**Place field (D9).** Options: workflow default place, saved places, recent places, typed text. _Use my location_ asks
+the browser only on that tap and compares the position with **saved** places on the device (haversine, per-place radius,
+default 300 m); the position is discarded and never sent to the server, the model, logs or analytics. No reverse
+geocoding, no third-party API. Hidden when Settings → AI → Captures _strip location_ is on (then saved places keep no
+coordinates either). Only the chosen label is stored.
+
+**Agent capture (`jarvis-capture@1`, D2).** The run context tells the agent which capture paths exist. Each reply may
+carry a fenced ` ```jarvis-capture ` block: a JSON list of `{op: add|replace|remove, path, value}`, or
+`{propose: true, ops}` for form fields. The server validates every op against the pinned schema (declared paths only,
+typed values, place values may not carry coordinates, ≤ 40 ops per turn) and applies them instantly with Undo; invalid
+ops are dropped ("1 note not filed"). Proposed form values wait for Accept. Each assistant turn is read once.
+Quick-add chips (Scripture · Point · Quote · Reflection …) file the next message straight into that section without the model.
+
+**Run panel.** Header (live dot, title, Undo, **End session**), quick-add chips and the live outline over the capture
+lists (remove = undoable). On phones the open keyboard collapses it to a one-line strip (section counts + last two
+entries) above the composer (`html[data-kb=open]`, `lib/client/keyboard.ts`). End session never settles anything;
+summary/exports are W4.
+
+API (all owner-scoped, audited): `POST /api/workflows/form` · `GET|POST /api/workflows/runs` (`?conversationId=`) ·
+`GET|PATCH /api/workflows/runs/:id` · `POST …/undo` · `POST …/proposals` · `POST …/end` · `GET|POST /api/workflows/places`
+· `DELETE /api/workflows/places/:id` · `GET|DELETE /api/workflows/:id/remembered[?field=]` (forget remembered values).
+
+Instructions still ride as run context (≤ 4000 chars) rather than a session system prompt (#119).
