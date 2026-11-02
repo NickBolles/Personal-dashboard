@@ -277,7 +277,14 @@ for (const scheme of ["light", "dark"] as const) {
         { intervals: [300], timeout: 10_000 },
       )
       .toBe(true);
-    await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
+    // The fixed composer and phone bottom nav paint over a tall panel at 320 px (and which one shows depends on
+    // the keyboard/focus state), so hide them for the element shot: the baseline is the panel alone.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, {
+      animations: "disabled",
+      mask: MASK.map((m) => panel.locator(m)),
+      style: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }',
+    });
     await panel.getByRole("button", { name: "End session" }).click();
     await expect(panel).toContainText("Ended");
   });
