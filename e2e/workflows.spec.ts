@@ -41,7 +41,9 @@ test("workflows: import as draft, export, turn on, start from the palette", asyn
   const row = page.getByTestId("palette-workflow");
   await expect(row).toContainText("Start Sermon notebook");
   await row.click();
+  // W2: the start form is always shown (D7), prefilled; one tap starts.
+  await page.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
-  await expect(page.getByRole("heading", { name: "Sermon notebook — Speaker: Jake Fry", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Session: Heartland Sun Prairie – Jake Fry", level: 1 })).toBeVisible();
   await expect(page.getByText("Context Jarvis attached").first()).toBeAttached();
 });

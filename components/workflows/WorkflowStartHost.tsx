@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { useToast } from "@/components/ui";
 import { useAskHermes } from "@/components/chat/useAskHermes";
@@ -24,6 +25,7 @@ export function WorkflowStartHost() {
   const { toast } = useToast();
   const asker = useAskHermes();
   const router = useRouter();
+  const qc = useQueryClient();
   useEffect(() => {
     const on = (e: Event) => {
       const { command, workflowId } = (e as CustomEvent<{ command?: string; workflowId?: string }>).detail ?? {};
@@ -49,7 +51,8 @@ export function WorkflowStartHost() {
           const ok = await asker.ask(s.input, {
             areaId: s.areaId,
             context: s.context,
-            onSession: (id) => api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id }),
+            onSession: async (id) =>
+              qc.setQueryData(["workflow-run", id], await api.patch(`/api/workflows/runs/${encodeURIComponent(s.run.id)}`, { conversationId: id })),
           });
           if (!ok) router.push(`/workflows?run=${encodeURIComponent(s.run.id)}`);
         } catch (err) {
