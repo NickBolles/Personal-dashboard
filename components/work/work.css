@@ -1211,3 +1211,86 @@ button.wk-kpi:hover {
     min-height: 28px;
   }
 }
+
+/* #111 tags + assignee chips (token palette only) */
+@layer components {
+  .jv-chips {
+    display: inline-flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .jv-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 9999px;
+    padding: 0 6px;
+    font-size: 11.5px;
+    line-height: 1.125rem;
+    background: var(--s3);
+    color: var(--t2);
+  }
+  .jv-tag-ac {
+    background: var(--acs);
+    color: var(--ac);
+  }
+  .jv-tag-ai {
+    background: var(--ais);
+    color: var(--ai);
+  }
+  .jv-tag-ok {
+    background: var(--oks);
+    color: var(--ok);
+  }
+  .jv-tag-wn {
+    background: var(--wns);
+    color: var(--wn);
+  }
+  .jv-tag-bad {
+    background: var(--bads);
+    color: var(--bad);
+  }
+  .jv-tag-inf {
+    background: var(--infs);
+    color: var(--inf);
+  }
+  .jv-tag-x {
+    margin-left: 2px;
+    min-width: 24px;
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+  }
+  .jv-assignee {
+    display: inline-flex;
+    max-width: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-radius: 9999px;
+    border: 1px solid var(--bd2);
+    padding: 0 6px;
+    font-size: 11.5px;
+    line-height: 1.125rem;
+    color: var(--t2);
+  }
+  .jv-meta-select,
+  .jv-meta-tag-input {
+    height: 32px;
+    min-height: 32px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 13px;
+  }
+  .jv-meta-tag-input {
+    width: 7rem;
+  }
+}

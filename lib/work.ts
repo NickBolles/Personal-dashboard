@@ -1043,7 +1043,18 @@ export const dismissConversationSchema = z.object({ sessionId: z.string().trim()
 
 // --- Today (the /work front door) ---
 
-export type TodayCard = { id: string; title: string; path: string; status: WorkStatus; nextAction: string; detail?: string; due?: string | null };
+export type TodayCard = {
+  id: string;
+  title: string;
+  path: string;
+  status: WorkStatus;
+  nextAction: string;
+  detail?: string;
+  due?: string | null;
+  /** #111 */
+  tags?: string[];
+  assignee?: string | null;
+};
 export type TodayResponse = {
   today: string;
   kpis: { inProgress: number; awaitingValidation: number; overdue: number; mergedNotSettled: number; reportsReady?: number };

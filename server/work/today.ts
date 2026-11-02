@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { isClosed, isValidationOverdue, type TodayCard, type TodayResponse, type WorkStatus } from "@/lib/work";
 import { itemsWithValidations, recentAutoSettled, settleReview } from "./store";
+import { parseTags } from "@/lib/item-tags";
 
 /**
  * Today, the /work front door (owner decision: /work opens on Today /
@@ -28,6 +29,8 @@ export function today(userId: string, now = new Date()): TodayResponse {
     path: path(r.id),
     status: r.status as WorkStatus,
     nextAction: r.nextAction,
+    tags: parseTags(r.tags),
+    assignee: r.assignee ?? null,
     ...extra,
   });
   const work = rows.filter((r) => r.kind !== "area");

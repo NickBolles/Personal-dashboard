@@ -22,6 +22,7 @@ import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ActivityFeed } from "@/components/work/ActivityFeed";
 import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { ItemMetaEditor } from "@/components/work/ItemMeta";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
@@ -1074,6 +1075,11 @@ function ItemDetail({
             {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
           </div>
         ) : null}
+        {container || item.kind === "conversation" ? null : (
+          <div className="mt-2" data-testid="work-item-meta">
+            <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(patch) => inline.mutate(patch)} />
+          </div>
+        )}
         {item.summary || !container ? (
           <InlineText
             field="summary"

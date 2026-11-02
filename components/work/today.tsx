@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { RowTitle } from "./InlineEdit";
+import { ItemChips } from "./ItemMeta";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
@@ -133,6 +134,7 @@ function CardList({
                 <p className="line-clamp-2 text-xs break-words text-muted">
                   {[c.path, c.detail, c.due ? `due ${fmtShort(c.due)}` : null, c.nextAction ? `Next: ${c.nextAction}` : null].filter(Boolean).join(" · ")}
                 </p>
+                <ItemChips tags={c.tags} assignee={c.assignee} />
               </div>
               {/* Phones: the dot carries the status; the pill joins it from 640px. The action stays on the right. */}
               <span className="flex shrink-0 items-center gap-2 self-center">
