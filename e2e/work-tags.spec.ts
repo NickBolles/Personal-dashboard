@@ -76,8 +76,11 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await open();
   await box.fill("assign to momentumchief");
   await expect(page.locator('[data-command="action.assign-item"]')).toBeVisible();
+  // Tab starts the action; the rest of the line becomes the argument query, Enter picks the candidate
   await page.keyboard.press("Tab");
-  await expect(page.getByTestId("palette-chips")).toContainText("momentumchief");
+  await expect(page.getByTestId("palette-chips")).toContainText("Assign to");
+  await box.fill("momentumchief");
+  await expect(page.getByRole("option", { name: /@momentumchief/ }).first()).toBeVisible();
   await page.keyboard.press("Enter");
   const confirm = page.getByTestId("palette-confirm");
   await expect(confirm).toContainText(`Assign “Tinsmith trellis ${nonce}” to @momentumchief?`);
@@ -89,7 +92,9 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await box.fill(`tag tinsnip-${nonce}`);
   await expect(page.locator('[data-command="action.tag"]')).toBeVisible();
   await page.keyboard.press("Tab");
-  await expect(page.getByTestId("palette-chips")).toContainText(`tinsnip-${nonce}`);
+  await expect(page.getByTestId("palette-chips")).toContainText("Tag");
+  await box.fill(`tinsnip-${nonce}`);
+  await expect(page.getByRole("option", { name: new RegExp(`tinsnip-${nonce}`) }).first()).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("palette-confirm")).toContainText(`#tinsnip-${nonce}`);
   await page.keyboard.press("Enter");

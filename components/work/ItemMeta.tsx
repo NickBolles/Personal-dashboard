@@ -24,7 +24,7 @@ const colorOf = (name: string, tags: WorkTag[] | undefined): TagColor => tags?.f
 export function TagChip({ name, color, onRemove }: { name: string; color: TagColor; onRemove?: () => void }) {
   return (
     <span className={cx("jv-tag", `jv-tag-${color}`)} data-tag={name}>
-      #{name}
+      <span className="jv-tag-name">#{name}</span>
       {onRemove ? (
         <button type="button" className="jv-tag-x" aria-label={`Remove tag ${name}`} onClick={onRemove}>
           ×

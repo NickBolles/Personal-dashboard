@@ -269,7 +269,7 @@ test("tags + assignee (#111): axe clean and no overflow at 200% text zoom (item 
   expect(p.ok(), await p.text()).toBeTruthy();
   for (const path of [`/areas?item=${id}`, `/areas?item=${areaId}`, "/areas/activity"]) {
     await page.goto(path);
-    await expect(page.locator('[data-tag="zoom-hem"], [data-testid$="-filter"]').first()).toBeVisible();
+    await expect(page.locator('[data-tag="zoom-hem"], [data-testid$="-filter"]').filter({ visible: true }).first()).toBeVisible();
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
