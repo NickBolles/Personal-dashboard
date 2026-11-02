@@ -173,3 +173,124 @@ test("reminder notification link (?start=<slug>) opens the start form, never sta
   await form.getByRole("button", { name: "Cancel" }).click();
   await expect(form).toBeHidden();
 });
+
+test("#144 reminder opened from Alerts (client navigation) opens the start form", async ({ page }) => {
+  await ensureWorkflowActive(page, fixture);
+  const now = new Date().toISOString();
+  const reminder = {
+    id: "e2e-orchard-reminder",
+    type: "workflow_reminder",
+    category: "info",
+    severity: "normal",
+    title: "Orchard notebook — start?",
+    body: "Tap to open the start form. Nothing starts until you do.",
+    createdAt: now,
+    updatedAt: now,
+    readAt: now,
+    occurrences: 1,
+    deepLink: "/workflows?start=orchardnotes",
+    source: "jarvis",
+  };
+  await page.route("**/api/notifications?filter=*", (route) => route.fulfill({ json: { notifications: [reminder], unread: 0 } }));
+  await page.goto("/alerts");
+  await page.getByRole("button", { name: "Orchard notebook — start?" }).click();
+  await expect(page).toHaveURL(/\/workflows(?!.*start=)/);
+  const form = page.getByRole("dialog", { name: "New session" });
+  await expect(form).toBeVisible();
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await expect(form).toBeHidden();
+});
+
+const typedFixture = {
+  ...teaching,
+  slug: "quincenotes",
+  name: "Quince notebook",
+  triggers: [{ kind: "palette", command: "/quincenotes" }],
+  capture: { ...teaching.capture, session: { ...teaching.capture.session, fields: { ...teaching.capture.session.fields, rating: "number?", again: "bool?" } } },
+  forms: {
+    ...teaching.forms,
+    mid: {
+      ...teaching.forms.mid,
+      fields: [...teaching.forms.mid.fields, "tags", { id: "rating", bind: "session.rating", type: "number", label: "Rating", min: 1, max: 5 }],
+    },
+    end: {
+      ...teaching.forms.end,
+      fields: [...teaching.forms.end.fields, "rating", { id: "again", bind: "session.again", type: "toggle", label: "Come back next week" }],
+    },
+  },
+};
+
+test("#147/#148/#145 typed Edit session + end form answers are kept; invalid answers block End; double confirm creates once", async ({ page }) => {
+  const area = await page.request.post("/api/work/items", { data: { kind: "area", title: "Quince follow-ups", parentId: null }, headers: H });
+  expect(area.ok()).toBe(true);
+  const parentId = ((await area.json()) as { item: { id: string } }).item.id;
+  await ensureWorkflowActive(page, typedFixture);
+  await page.goto("/workflows");
+  const form = page.getByRole("dialog", { name: "New session" });
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/quincenotes Quinn Ash John 15" } })));
+    await expect(form).toBeVisible({ timeout: 2000 });
+  }).toPass();
+  await form.getByTestId("workflow-start-submit").click();
+  await expect(page).toHaveURL(/\/chat\//);
+  const panel = page.getByTestId("workflow-run");
+  await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
+  const runId = await page.evaluate(async () => {
+    const id = decodeURIComponent(location.pathname.split("/").pop() ?? "");
+    const r = await fetch(`/api/workflows/runs?conversationId=${encodeURIComponent(id)}`);
+    const j = (await r.json()) as { run?: { id: string }; runs?: { id: string }[] };
+    return j.run?.id ?? j.runs?.[0]?.id ?? "";
+  });
+  expect(runId).not.toBe("");
+  const capture = async () =>
+    (await (await page.request.get(`/api/workflows/runs/${runId}`)).json()) as { capture: Record<string, Record<string, unknown>>; status: string };
+
+  // #148 Edit session: number + tags keep their type
+  await panel.getByTestId("workflow-edit-session").click();
+  const edit = page.getByRole("dialog", { name: "Edit session" });
+  await edit.getByLabel("Rating").fill("4");
+  await edit.getByLabel("Tags").fill("vine");
+  await edit.getByLabel("Tags").press("Enter");
+  await edit.getByTestId("workflow-edit-save").click();
+  await expect(edit).toBeHidden();
+  await expect.poll(async () => (await capture()).capture.session).toMatchObject({ rating: 4, tags: ["vine"] });
+
+  // #145: one action, confirm sheet open while another tab creates the same item
+  const composer = page.getByRole("textbox", { name: /message/i });
+  await panel.getByRole("button", { name: "Action", exact: true }).click();
+  await composer.fill("Prune the quince hedge");
+  await composer.press("Enter");
+  await expect(panel.getByTestId("workflow-outline")).toContainText("Prune the quince hedge");
+
+  // #147 End form: out-of-range number keeps the session live with the answers in place
+  await panel.getByRole("button", { name: "End session" }).click();
+  const end = page.getByRole("dialog", { name: "Before you go" });
+  await end.getByLabel("One thing to apply this week").fill("Water the quince");
+  await end.getByLabel("Rating").fill("9");
+  await end.getByLabel("Come back next week").check();
+  await end.getByTestId("workflow-end-submit").click();
+  await expect(end.getByTestId("workflow-form-error")).toContainText("At most 5");
+  await expect(end).toBeVisible();
+  expect((await capture()).status).toBe("live");
+  await end.getByLabel("Rating").fill("5");
+  await end.getByTestId("workflow-end-submit").click();
+  await expect(end).toBeHidden();
+  await expect(panel).toContainText("Ended");
+  const ended = await capture();
+  expect(ended.capture.session).toMatchObject({ rating: 5, again: true, tags: ["vine"] });
+
+  const actions = panel.getByTestId("workflow-actions");
+  await actions.getByLabel("Prune the quince hedge").check();
+  await actions.getByTestId("workflow-actions-create").click();
+  const confirm = page.getByRole("dialog", { name: "Create 1 item?" });
+  await confirm.getByTestId("workflow-actions-parent").selectOption({ label: "Quince follow-ups" });
+  const other = await page.request.post(`/api/workflows/runs/${runId}/promote`, {
+    data: { indices: [0], parentId, titles: ["Prune the quince hedge"] },
+    headers: H,
+  });
+  expect(other.ok()).toBe(true);
+  await confirm.getByTestId("workflow-actions-confirm").click();
+  await expect(page.getByText("Already created")).toBeVisible();
+  const items = (await (await page.request.get("/api/work/items")).json()) as { items: { title: string }[] };
+  expect(items.items.filter((i) => i.title === "Prune the quince hedge")).toHaveLength(1);
+});
