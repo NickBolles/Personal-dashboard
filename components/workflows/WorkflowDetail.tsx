@@ -187,6 +187,8 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
   const r = q.data;
   const save = async (patch: Partial<Reminder>) => {
     if (!r) return;
+    const k = ["workflow-reminder", workflowId];
+    qc.setQueryData(k, { ...r, ...patch }); // optimistic, so the switch flips on tap; reverted on error
     try {
       const next = await api.put<Reminder>(`/api/workflows/${workflowId}/reminder`, {
         enabled: patch.enabled ?? r.enabled,
@@ -196,6 +198,7 @@ function ReminderCard({ workflowId, name }: { workflowId: string; name: string }
       qc.setQueryData(["workflow-reminder", workflowId], next);
       toast(next.enabled ? `Reminder on: ${DAYS[next.day]} ${next.time}` : "Reminder off", "ok");
     } catch (e) {
+      qc.setQueryData(k, r);
       toast((e as Error).message, "danger");
     }
   };

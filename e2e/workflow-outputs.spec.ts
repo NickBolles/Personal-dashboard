@@ -22,8 +22,12 @@ const H = { "x-jarvis-csrf": "1" };
 async function startRun(page: Page) {
   await ensureWorkflowActive(page, fixture);
   await page.goto("/workflows");
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/orchardnotes Orla Pike John 15" } })));
   const form = page.getByRole("dialog", { name: "New session" });
+  // The start host mounts after hydration: retry the event until the form opens.
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/orchardnotes Orla Pike John 15" } })));
+    await expect(form).toBeVisible({ timeout: 2000 });
+  }).toPass();
   await expect(form.getByLabel("Speaker")).toHaveValue("Orla Pike");
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
