@@ -262,6 +262,21 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page).toHaveURL(/\/chat\//);
     const panel = page.getByTestId("workflow-run");
     await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
+    // The chat auto-scrolls after the first run lands; wait until the page scroll and the panel box settle,
+    // or the element shot catches the dock mid-scroll (mobile-320 light flaked with the composer over the panel).
+    let last = "";
+    await expect
+      .poll(
+        async () => {
+          const box = await panel.boundingBox();
+          const now = JSON.stringify([box, await page.evaluate(() => document.scrollingElement?.scrollTop ?? 0)]);
+          const settled = now === last;
+          last = now;
+          return settled;
+        },
+        { intervals: [300], timeout: 10_000 },
+      )
+      .toBe(true);
     await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
     await panel.getByRole("button", { name: "End session" }).click();
     await expect(panel).toContainText("Ended");
