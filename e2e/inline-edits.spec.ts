@@ -69,6 +69,7 @@ test("detail: status select excludes Settle; due date and summary save in place"
   const { id } = await makeItem(page, nonce);
   await page.goto(`/areas?item=${id}`);
   const status = page.locator("#work-status");
+  await expect(status).toBeAttached();
   const options = await status.locator("option").allTextContents();
   expect(options).not.toContain("Settled");
   expect(options).toContain("On hold");
