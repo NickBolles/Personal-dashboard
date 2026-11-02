@@ -80,3 +80,25 @@ test("workflows: import with an unknown area → pick one (#117), then Undo impo
   await expect(card).toHaveCount(0);
   await expect(status.getByRole("button", { name: "Undo import" })).toHaveCount(0);
 });
+
+test("settings: saved places list, rename and delete (#133)", async ({ page }) => {
+  const nonce = Date.now().toString(36);
+  const label = `Juniper hall ${nonce}`;
+  const made = await page.request.post("/api/workflows/places", { data: { label, lat: 43.1, lng: -89.2 }, headers: { "x-jarvis-csrf": "1" } });
+  expect(made.ok()).toBe(true);
+  await page.goto("/settings/places");
+  await expect(page.getByRole("heading", { name: "Saved places", level: 1 })).toBeVisible();
+  const row = page.getByTestId("places-list").getByRole("listitem").filter({ hasText: label });
+  await expect(row).toContainText("43.1000, -89.2000");
+  await row.getByRole("button", { name: `Rename ${label}` }).click();
+  await page.getByLabel(`New name for ${label}`).fill(`Juniper chapel ${nonce}`);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const renamed = page
+    .getByTestId("places-list")
+    .getByRole("listitem")
+    .filter({ hasText: `Juniper chapel ${nonce}` });
+  await expect(renamed).toBeVisible();
+  await renamed.getByRole("button", { name: `Delete Juniper chapel ${nonce}` }).click();
+  await renamed.getByRole("button", { name: `Confirm delete Juniper chapel ${nonce}` }).click();
+  await expect(renamed).toHaveCount(0);
+});

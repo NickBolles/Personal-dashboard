@@ -73,6 +73,18 @@ export function savePlace(ctx: Ctx, input: { label: string; addressText?: string
   return { id, label: input.label, coordinatesStored: coords };
 }
 
+/** Rename a saved place (Settings → Saved places, #133). Coordinates are never touched here. */
+export function renamePlace(ctx: Ctx, id: string, label: string) {
+  const r = db()
+    .update(schema.savedPlaces)
+    .set({ label })
+    .where(and(eq(schema.savedPlaces.id, id), eq(schema.savedPlaces.ownerId, ctx.userId)))
+    .run();
+  if (!r.changes) throw new HttpError(404, "not_found", "That place isn't saved");
+  audit({ actor: ctx.userId, action: "workflow.place.rename", sourceRecord: id, result: "ok", correlationId: ctx.correlationId });
+  return { id, label };
+}
+
 export function forgetPlace(ctx: Ctx, id: string) {
   const r = db()
     .delete(schema.savedPlaces)

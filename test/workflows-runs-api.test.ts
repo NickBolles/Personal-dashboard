@@ -146,6 +146,13 @@ describe("workflow runs API", () => {
     expect(list.places).toEqual([expect.objectContaining({ label: "Heartland Sun Prairie", lat: 43.18 })]);
     expect(JSON.stringify(getDb().select().from(schema.auditLog).all())).not.toContain("43.18");
     await json(call(placesRoute.POST, { body: { label: "https://evil.example" } }), 400);
+    // rename (#133): own places only, same label rules, coordinates untouched
+    await json(call(placeRoute.PATCH, { method: "PATCH", params: { placeId: saved.id }, body: { label: "Heartland church" }, as: other }), 404);
+    await json(call(placeRoute.PATCH, { method: "PATCH", params: { placeId: saved.id }, body: { label: "<b>x</b>" } }), 400);
+    await json(call(placeRoute.PATCH, { method: "PATCH", params: { placeId: saved.id }, body: { label: "Heartland church" } }));
+    expect((await json<{ places: { label: string; lat: number | null }[] }>(call(placesRoute.GET, { method: "GET" }))).places).toEqual([
+      expect.objectContaining({ label: "Heartland church", lat: 43.18 }),
+    ]);
     await json(call(placeRoute.DELETE, { method: "DELETE", params: { placeId: saved.id }, as: other }), 404);
     await json(call(placeRoute.DELETE, { method: "DELETE", params: { placeId: saved.id } }));
     expect((await json<{ places: unknown[] }>(call(placesRoute.GET, { method: "GET" }))).places).toEqual([]);
