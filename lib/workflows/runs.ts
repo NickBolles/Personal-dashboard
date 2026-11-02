@@ -481,6 +481,19 @@ function isList(def: WorkflowDefinition, path: string) {
   return def.capture[path.split("/")[1]]?.type === "list";
 }
 
+/**
+ * ```jarvis-capture blocks are machine ops for a workflow run's outline (applied
+ * by the Run panel); they're kept in the stored text for audit but never shown.
+ * An unclosed block (still streaming) is hidden up to the end.
+ */
+export function hideCaptureBlocks(text: string): string {
+  if (!text.includes("```jarvis-capture")) return text;
+  return text
+    .replace(/```jarvis-capture[^\n]*\n[\s\S]*?(?:```|$)/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Pull every ```jarvis-capture fenced block out of an assistant turn. */
 export function extractCaptureBlocks(text: string): { ops: unknown[]; propose: boolean; errors: number } {
   const ops: unknown[] = [];

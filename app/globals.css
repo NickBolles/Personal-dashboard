@@ -2789,6 +2789,10 @@ button:active > .dock-orb {
   .wf-run-strip {
     display: none;
   }
+  /* Desktop/unfolded split: the side panel scrolls as a whole. */
+  .wf-run-side .wf-run [data-testid="workflow-outline"] {
+    max-height: none;
+  }
 }
 @media (max-width: 639.98px) {
   html[data-kb="open"] .wf-run .wf-run-full {

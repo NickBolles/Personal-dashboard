@@ -6,6 +6,7 @@ import {
   applyOps,
   emptyCapture,
   extractCaptureBlocks,
+  hideCaptureBlocks,
   formToOps,
   matchSavedPlace,
   renderTemplate,
@@ -131,5 +132,14 @@ describe("undo", () => {
     const u2 = undoEntries(def, u.capture, u.log, [a.entries[0].id]);
     expect((u2.capture.session as Record<string, unknown>).series).toBeUndefined();
     expect(u2.log.every((e) => e.undone)).toBe(true);
+  });
+});
+
+describe("hideCaptureBlocks", () => {
+  it("removes closed and still-streaming capture fences, keeps other text and code", () => {
+    const op = '[{"op":"add","path":"/quotes/-","value":"x"}]';
+    expect(hideCaptureBlocks("Got it.\n\n```jarvis-capture\n" + op + "\n```\n")).toBe("Got it.");
+    expect(hideCaptureBlocks('Saved.\n```jarvis-capture\n[{"op"')).toBe("Saved.");
+    expect(hideCaptureBlocks("```ts\nconst a = 1;\n```")).toBe("```ts\nconst a = 1;\n```");
   });
 });

@@ -27,9 +27,28 @@ async function openPalette(page: Page, text: string) {
   await page.getByTestId("palette-workflow").click();
 }
 
+/** System Chromium has no geolocation provider: answer from a stub on the device. */
+async function stubGeolocation(page: Page, latitude: number, longitude: number) {
+  await page.addInitScript(
+    ([lat, lng]) => {
+      const pos = { coords: { latitude: lat, longitude: lng, accuracy: 20 }, timestamp: Date.now() } as unknown as GeolocationPosition;
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: {
+          getCurrentPosition: (ok: PositionCallback) => setTimeout(() => ok(pos), 10),
+          watchPosition: (ok: PositionCallback) => (setTimeout(() => ok(pos), 10), 1),
+          clearWatch: () => undefined,
+        },
+      });
+    },
+    [latitude, longitude] as const,
+  );
+}
+
 test("workflow run: prefilled start form → outline fills from the agent → undo", async ({ page }) => {
-  await page.goto("/workflows");
+  // Import first: the palette caches its workflows list on first open.
   await ensureActive(page);
+  await page.goto("/workflows");
   await openPalette(page, "/livenotes Ann Lyle John 15");
 
   const form = page.getByRole("dialog", { name: "New session" });
@@ -50,6 +69,8 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await composer.fill("Quote this: remain in me");
   await composer.press("Enter");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Remain in me, as I also remain in you", { timeout: 20_000 });
+  // The raw capture block stays in the stored reply but never renders.
+  await expect(page.getByText("jarvis-capture")).toHaveCount(0);
   await panel.getByTestId("workflow-undo").click();
   await expect(panel.getByTestId("workflow-outline")).not.toContainText("Remain in me, as I also remain in you");
 
@@ -63,14 +84,13 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await expect(panel).toContainText("Ended");
 });
 
-test("workflow start form: place field matches a saved place on the device", async ({ page, context }) => {
-  await page.goto("/workflows");
+test("workflow start form: place field matches a saved place on the device", async ({ page }) => {
   await ensureActive(page);
   const saved = await page.request.post("/api/workflows/places", { data: { label: "Livenotes Chapel", lat: 43.1836, lng: -89.2137 }, headers: H });
   expect(saved.ok()).toBe(true);
   const { id } = (await saved.json()) as { id: string };
-  await context.grantPermissions(["geolocation"]);
-  await context.setGeolocation({ latitude: 43.184, longitude: -89.2137 });
+  await stubGeolocation(page, 43.184, -89.2137);
+  await page.goto("/workflows");
 
   await openPalette(page, "/livenotes Ann Lyle");
   const form = page.getByRole("dialog", { name: "New session" });

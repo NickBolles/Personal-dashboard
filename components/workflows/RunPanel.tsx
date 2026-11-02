@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, cx, useToast } from "@/components/ui";
@@ -22,6 +22,21 @@ export type RunPanelView = {
 type PatchResult = { run: RunPanelView; applied: string[]; dropped: number; proposed: number };
 
 const key = (sessionId: string) => ["workflow-run", sessionId];
+
+const WIDE = "(min-width: 1024px)";
+const subscribeWide = (cb: () => void) => {
+  const m = window.matchMedia?.(WIDE);
+  m?.addEventListener("change", cb);
+  return () => m?.removeEventListener("change", cb);
+};
+/** ≥1024 px (desktop, unfolded foldables): the Run panel becomes a side panel beside the chat. */
+export function useWideRun() {
+  return useSyncExternalStore(
+    subscribeWide,
+    () => window.matchMedia?.(WIDE).matches ?? false,
+    () => false,
+  );
+}
 
 /** The conversation's live workflow run (null for ordinary chats). */
 export function useWorkflowRun(sessionId: string) {
