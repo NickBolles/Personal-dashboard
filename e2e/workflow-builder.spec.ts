@@ -13,7 +13,7 @@ test("workflow builder: create, preview, save a new version, restore v1", async 
     .getByRole("navigation", { name: "Builder sections" })
     .getByRole("button", { name: /^Forms/ })
     .click();
-  await page.getByRole("group", { name: "Add a field" }).getByRole("button", { name: "+ date" }).click();
+  await page.getByRole("group", { name: "Add a field" }).getByRole("button", { name: "+ date", exact: true }).click();
   await page.locator("#wf-f-label").fill("Rehearsal date");
   await page.locator("#wf-f-default").selectOption("$today");
   await page.getByRole("checkbox", { name: "Required" }).check();

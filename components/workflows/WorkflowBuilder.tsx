@@ -4,7 +4,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Field, Page, PageHeader, useToast } from "@/components/ui";
+import { Button, Field, Page, PageHeader, cx, inputCls, useToast } from "@/components/ui";
 import { FIELD_TYPES, MODEL_TIERS, WORKFLOW_ICONS, formFields, type WorkflowDefinition, type WorkflowField } from "@/lib/workflows/definition";
 import {
   BUILDER_SECTIONS,
@@ -149,7 +149,7 @@ function BuilderView({ detail }: { detail: Detail | null }) {
             <Field id="wf-instructions" label="Instructions" hint={`${tokenCount(d.instructions)} tokens · ${d.instructions.length}/4000 characters`}>
               <textarea
                 id="wf-instructions"
-                className="input min-h-48 w-full"
+                className={cx(inputCls, "min-h-48 w-full")}
                 value={d.instructions}
                 maxLength={4000}
                 onChange={(e) => dispatch({ type: "instructions", text: e.target.value })}
@@ -166,7 +166,7 @@ function BuilderView({ detail }: { detail: Detail | null }) {
           {state.section === "outputs" ? <p className="text-sm text-muted">Summary, exports and schedules arrive in the next update.</p> : null}
           <div className="mt-4 flex min-w-0 flex-wrap items-end gap-2 border-t border-line pt-3">
             <Field id="wf-note" label="Change note (optional)">
-              <input id="wf-note" className="input w-full" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
+              <input id="wf-note" className={cx(inputCls, "w-full")} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
             </Field>
           </div>
           {serverIssues.length ? (
@@ -195,7 +195,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-name" label="Name">
         <input
           id="wf-name"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.name}
           maxLength={60}
           onChange={(e) => dispatch({ type: "basics", patch: { name: e.target.value } })}
@@ -204,7 +204,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-slug" label="Command" hint={locked ? "The /command can't change after the first save" : "Lowercase letters, digits and dashes"}>
         <input
           id="wf-slug"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.slug}
           readOnly={locked}
           maxLength={40}
@@ -214,7 +214,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-icon" label="Icon">
         <select
           id="wf-icon"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.icon}
           onChange={(e) => dispatch({ type: "basics", patch: { icon: e.target.value as WorkflowDefinition["icon"] } })}
         >
@@ -226,7 +226,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-area" label="Area" hint="Path like Faith or Home/Chores; Finance isn't allowed">
         <input
           id="wf-area"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.routing.area ?? ""}
           onChange={(e) => dispatch({ type: "basics", patch: { area: e.target.value.trim() ? e.target.value : null } })}
         />
@@ -234,7 +234,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-tier" label="Model tier">
         <select
           id="wf-tier"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.routing.modelTier}
           onChange={(e) => dispatch({ type: "basics", patch: { modelTier: e.target.value as WorkflowDefinition["routing"]["modelTier"] } })}
         >
@@ -246,7 +246,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
       <Field id="wf-desc" label="Description">
         <input
           id="wf-desc"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={d.description ?? ""}
           maxLength={280}
           onChange={(e) => dispatch({ type: "basics", patch: { description: e.target.value } })}
@@ -282,7 +282,7 @@ function Capture({ d, dispatch }: { d: WorkflowDefinition; dispatch: Dispatch })
         }}
       >
         <Field id="wf-cap-key" label="New list (e.g. quotes)">
-          <input id="wf-cap-key" className="input" value={key} pattern="[a-z][A-Za-z0-9_]{0,39}" onChange={(e) => setKey(e.target.value)} />
+          <input id="wf-cap-key" className={inputCls} value={key} pattern="[a-z][A-Za-z0-9_]{0,39}" onChange={(e) => setKey(e.target.value)} />
         </Field>
         <Button type="submit">Add list</Button>
       </form>
@@ -357,7 +357,7 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
       <Field id="wf-f-label" label="Label">
         <input
           id="wf-f-label"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={field.label}
           maxLength={80}
           onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { label: e.target.value } })}
@@ -366,7 +366,7 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
       <Field id="wf-f-help" label="Help text">
         <input
           id="wf-f-help"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={field.help ?? ""}
           maxLength={200}
           onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { help: e.target.value || undefined } })}
@@ -375,7 +375,7 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
       <Field id="wf-f-default" label="Default">
         <select
           id="wf-f-default"
-          className="input w-full"
+          className={cx(inputCls, "w-full")}
           value={src.kind === "smart" ? src.source : src.kind}
           onChange={(e) => {
             const v = e.target.value;
@@ -398,7 +398,7 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
         <Field id="wf-f-literal" label="Fixed value">
           <input
             id="wf-f-literal"
-            className="input w-full"
+            className={cx(inputCls, "w-full")}
             value={src.value}
             maxLength={200}
             onChange={(e) => setSrc({ kind: "literal", value: e.target.value })}
