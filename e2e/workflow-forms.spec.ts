@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
+import { ensureWorkflowActive } from "./helpers";
 
 /**
  * Workflows W2: palette `/slug args` → prefilled start form (D7) → live run →
@@ -10,13 +11,7 @@ import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 const fixture = { ...teaching, slug: "livenotes", name: "Live notebook", triggers: [{ kind: "palette", command: "/livenotes" }] };
 const H = { "x-jarvis-csrf": "1" };
 
-async function ensureActive(page: Page) {
-  const imp = await page.request.post("/api/workflows/import", { data: { data: fixture }, headers: H });
-  expect(imp.ok()).toBe(true);
-  const { results } = (await imp.json()) as { results: { id: string }[] };
-  const r = await page.request.patch(`/api/workflows/${results[0].id}`, { data: { status: "active" }, headers: H });
-  expect(r.ok()).toBe(true);
-}
+const ensureActive = (page: Page) => ensureWorkflowActive(page, fixture);
 
 async function openPalette(page: Page, text: string) {
   await expect(async () => {

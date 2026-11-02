@@ -1,8 +1,9 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
+import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 
 const PAGES = [
   "/home",
@@ -260,4 +261,39 @@ test("inline edits: axe clean and no overflow at 200% text zoom (read, title edi
   await axe("summary editor");
   expect.soft(await fits(), "summary editor at 200%").toBe(true);
   await page.keyboard.press("Escape");
+});
+
+test("workflow start form + run panel: axe clean and no overflow at 200% text zoom", async ({ page }) => {
+  const data = { ...teaching, slug: "zoomnotes", name: "Zoom notebook", triggers: [{ kind: "palette", command: "/zoomnotes" }] };
+  await ensureWorkflowActive(page, data);
+  await page.goto("/workflows");
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        label,
+      )
+      .toEqual([]);
+  };
+  const form = page.getByRole("dialog", { name: "New session" });
+  await expect(async () => {
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/zoomnotes Zed Quill John 15" } })));
+    await expect(form).toBeVisible({ timeout: 2000 });
+  }).toPass();
+  await axe("start form");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await page.addStyleTag({ content: "html { font-size: 100% !important; }" });
+  await form.getByTestId("workflow-start-submit").click();
+  await expect(page).toHaveURL(/\/chat\//);
+  const panel = page.getByTestId("workflow-run");
+  await expect(panel).toContainText("Zed Quill");
+  await axe("run panel");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await panel.getByRole("button", { name: "End session" }).click();
+  await expect(panel).toContainText("Ended");
 });

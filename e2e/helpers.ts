@@ -83,3 +83,20 @@ export async function revealMessageMeta(page: Page, who: "user" | "assistant", i
 async function isRevealed(meta: import("@playwright/test").Locator) {
   return meta.evaluate((el) => el.closest("[data-meta]") !== null || (getComputedStyle(el).position !== "absolute" && getComputedStyle(el).opacity !== "0"));
 }
+
+/** Import a workflow definition (or reuse the one already imported by slug) and turn it on. */
+export async function ensureWorkflowActive(page: Page, def: { slug: string }) {
+  const H = { "x-jarvis-csrf": "1" };
+  const imp = await page.request.post("/api/workflows/import", { data: { data: def }, headers: H });
+  expect(imp.ok()).toBe(true);
+  const { results } = (await imp.json()) as { results: { ok: boolean; id?: string }[] };
+  let id = results[0]?.ok ? results[0].id : undefined;
+  if (!id) {
+    const list = (await (await page.request.get("/api/workflows")).json()) as { workflows: { id: string; slug: string }[] };
+    id = list.workflows.find((w) => w.slug === def.slug)?.id;
+  }
+  expect(id, `workflow /${def.slug}`).toBeTruthy();
+  const r = await page.request.patch(`/api/workflows/${id}`, { data: { status: "active" }, headers: H });
+  expect(r.ok()).toBe(true);
+  return id!;
+}
