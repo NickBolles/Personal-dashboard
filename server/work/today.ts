@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { isClosed, isValidationOverdue, type TodayCard, type TodayResponse, type WorkStatus } from "@/lib/work";
 import { itemsWithValidations, recentAutoSettled, settleReview } from "./store";
-import { parseTags } from "@/lib/item-tags";
+import { matchesItemFilter, parseTags } from "@/lib/item-tags";
 
 /**
  * Today, the /work front door (owner decision: /work opens on Today /
@@ -13,7 +13,9 @@ import { parseTags } from "@/lib/item-tags";
 
 const CONTINUE_STATUSES = new Set<WorkStatus>(["in_progress", "ready", "reopened", "in_review"]);
 
-export function today(userId: string, now = new Date()): TodayResponse {
+export type TodayFilter = { tag?: string | null; assignee?: string | null };
+
+export function today(userId: string, now = new Date(), filter: TodayFilter = {}): TodayResponse {
   // Area settle policies first (auto_after_quiet may settle something; suggest lists candidates).
   const review = settleReview(userId, now);
   const { rows, vals, today: t } = itemsWithValidations(userId);
@@ -34,6 +36,10 @@ export function today(userId: string, now = new Date()): TodayResponse {
     ...extra,
   });
   const work = rows.filter((r) => r.kind !== "area");
+  // #155: the tag/assignee filter applies BEFORE the section limits (a 4th/6th match still shows);
+  // KPIs stay unfiltered, and the filter options come from every row a section could show.
+  const filtering = !!(filter.tag || filter.assignee);
+  const keep = (r: (typeof rows)[number]) => !filtering || matchesItemFilter({ tags: parseTags(r.tags), assignee: r.assignee ?? null }, filter);
   const ids = work.map((r) => r.id);
   const merged = ids.length
     ? new Set(
@@ -56,7 +62,7 @@ export function today(userId: string, now = new Date()): TodayResponse {
   const overdueRows = work.filter((r) => !isClosed(r.status) && ((!!r.targetDate && r.targetDate < t) || overdueVal.has(r.id)));
 
   const proofDue = work
-    .filter((r) => r.status === "awaiting_validation")
+    .filter((r) => r.status === "awaiting_validation" && keep(r))
     .map((r) => {
       const pending = vals.filter((v) => v.itemId === r.id && (v.status === "pending" || v.status === "fail"));
       const due =
@@ -74,8 +80,14 @@ export function today(userId: string, now = new Date()): TodayResponse {
     })
     .sort((a, b) => (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.title.localeCompare(b.title));
 
-  const cont = work
-    .filter((r) => CONTINUE_STATUSES.has(r.status as WorkStatus))
+  const contAll = work.filter((r) => CONTINUE_STATUSES.has(r.status as WorkStatus));
+  const settleRows = review.suggest.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => !!r && r.status !== "ready_to_settle");
+  const facetRows = [...contAll, ...work.filter((r) => r.status === "awaiting_validation" || r.status === "ready_to_settle"), ...overdueRows, ...settleRows];
+  const facets = [...new Map(facetRows.map((r) => [r.id, { tags: parseTags(r.tags), assignee: r.assignee ?? null }])).values()].filter(
+    (x) => x.tags.length || x.assignee,
+  );
+  const cont = contAll
+    .filter(keep)
     .sort(
       (a, b) =>
         (a.status === "in_progress" ? 0 : 1) - (b.status === "in_progress" ? 0 : 1) || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
@@ -114,15 +126,18 @@ export function today(userId: string, now = new Date()): TodayResponse {
     continue: cont,
     proofDue: proofDue.slice(0, 5),
     readyToSettle: work
-      .filter((r) => r.status === "ready_to_settle")
+      .filter((r) => r.status === "ready_to_settle" && keep(r))
       .slice(0, 5)
       .map((r) => card(r, { detail: "PR merged — settle?" })),
-    overdue: overdueRows.slice(0, 5).map((r) => card(r, { due: r.targetDate, detail: overdueVal.has(r.id) ? "Validation overdue" : "Past its target date" })),
-    settleSuggestions: review.suggest
-      .map((id) => byId.get(id))
-      .filter((r): r is (typeof rows)[number] => !!r && r.status !== "ready_to_settle")
+    overdue: overdueRows
+      .filter(keep)
+      .slice(0, 5)
+      .map((r) => card(r, { due: r.targetDate, detail: overdueVal.has(r.id) ? "Validation overdue" : "Past its target date" })),
+    settleSuggestions: settleRows
+      .filter(keep)
       .slice(0, 5)
       .map((r) => card(r, { detail: "PR merged · validations pass · quiet — settle?" })),
+    facets,
     autoSettled: recentAutoSettled(userId, now)
       .slice(0, 5)
       .map(({ row, opId }) => ({ ...card(row), detail: row.settledReason ?? "Settled automatically", opId })),
