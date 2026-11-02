@@ -22,14 +22,16 @@ const GLYPH: Record<ActivityType, string> = {
   status: "◐",
   created: "+",
   structure: "↳",
-  link: "⛓",
-  github: "⑂",
+  link: "↗",
+  github: "#",
   capture: "⇣",
   chat: "✦",
   validation: "✓",
 };
 
 const POLL_MS = 30_000;
+/** Filter controls sit in one wrapping row, so drop the shared input's full width. */
+const selCls = `${inputCls.replace(/\bblock w-full\b/, "")} jv-activity-sel`;
 
 export type ActivityScope = { item?: string; descendants?: boolean };
 
@@ -122,7 +124,7 @@ export function ActivityFeed({
         <input
           id={`${filtersId}-q`}
           type="search"
-          className={`${inputCls} jv-activity-q`}
+          className={`${inputCls.replace(/\bblock w-full\b/, "")} jv-activity-q`}
           placeholder="Search activity"
           value={text}
           onChange={(e) => {
@@ -133,7 +135,7 @@ export function ActivityFeed({
         <label htmlFor={`${filtersId}-type`} className="sr-only">
           Type
         </label>
-        <select id={`${filtersId}-type`} className={inputCls} value={type} onChange={(e) => setType(e.target.value as ActivityType | "")}>
+        <select id={`${filtersId}-type`} className={selCls} value={type} onChange={(e) => setType(e.target.value as ActivityType | "")}>
           <option value="">All types</option>
           {ACTIVITY_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -144,7 +146,7 @@ export function ActivityFeed({
         <label htmlFor={`${filtersId}-actor`} className="sr-only">
           Who
         </label>
-        <select id={`${filtersId}-actor`} className={inputCls} value={actor} onChange={(e) => setActor(e.target.value as ActorKind | "")}>
+        <select id={`${filtersId}-actor`} className={selCls} value={actor} onChange={(e) => setActor(e.target.value as ActorKind | "")}>
           <option value="">Anyone</option>
           {(Object.keys(ACTOR_LABELS) as ActorKind[]).map((a) => (
             <option key={a} value={a}>
@@ -157,7 +159,7 @@ export function ActivityFeed({
             <label htmlFor={`${filtersId}-area`} className="sr-only">
               Area
             </label>
-            <select id={`${filtersId}-area`} className={inputCls} value={area} onChange={(e) => setArea(e.target.value)}>
+            <select id={`${filtersId}-area`} className={selCls} value={area} onChange={(e) => setArea(e.target.value)}>
               <option value="">All areas</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>
