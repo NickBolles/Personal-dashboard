@@ -64,6 +64,7 @@ export function SettingsView() {
     ...(isAdmin ? [{ href: "/settings/ai", label: "AI", desc: "Budget, models and capture triage for background AI actions" }] : []),
     ...(isAdmin ? [{ href: "/settings/agents", label: "Agents", desc: "Which Hermes profile answers in each area" }] : []),
     ...(can("work.use") ? [{ href: "/settings/tags", label: "Tags", desc: "Rename, merge and colour item tags" }] : []),
+    ...(can("work.use") ? [{ href: "/settings/places", label: "Saved places", desc: "Places workflows can pick or match by location" }] : []),
     ...(isAdmin ? [{ href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" }] : []),
   ];
 

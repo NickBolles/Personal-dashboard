@@ -228,7 +228,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       const target = wfTarget;
       setWfTarget(null);
       void quickAdd(wfRun, target, input)
-        .then((r) => qc.setQueryData(["workflow-run", sessionId], r.run))
+        .then((r) => {
+          qc.setQueryData(["workflow-run", sessionId], r.run);
+          // a rejected note (wrong shape, list full) was silently cleared before (#135)
+          if (r.dropped && !r.applied.length) toast(`That note didn't fit ${target}, so it wasn't added to the outline.`, "danger");
+        })
         .catch((e: Error) => toast(e.message, "danger"));
       text = `[${target}] ${input}`;
     }
