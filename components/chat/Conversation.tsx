@@ -223,7 +223,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     },
     [toast, announce],
   );
-  useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
+  const capture = useAgentCapture(sessionId, wfRun, detail?.timeline ?? NO_TIMELINE, onCaptured);
 
   const send = async (input: string, key: string) => {
     let text = input;
@@ -656,7 +656,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
               {wfRun && !sideRun ? (
                 <div className="wf-run-dock">
-                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} />
+                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} capture={capture} />
                 </div>
               ) : null}
 
@@ -762,7 +762,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 className="wf-run-side sticky top-0 h-dvh w-[360px] shrink-0 overflow-y-auto border-l border-line px-3 py-3"
                 data-testid="workflow-run-side"
               >
-                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} />
+                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} capture={capture} />
               </aside>
             ) : null}
             <aside
