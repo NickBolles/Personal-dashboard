@@ -18,6 +18,9 @@ import {
   type FormSlot,
 } from "@/lib/workflows/builder";
 import type { DiffChange } from "@/lib/workflows/versions";
+import type { CaptureOp } from "@/lib/workflows/runs";
+import { useAccess } from "@/components/access";
+import { DraftReview } from "./ProposalReview";
 
 type Detail = {
   workflow: { id: string; slug: string; name: string; currentVersion: number; status: string };
@@ -36,7 +39,7 @@ const SECTION_LABEL: Record<BuilderSection, string> = {
 const SMART = ["$today", "$now", "$tomorrow", "$nextSunday", "$serviceTime"] as const;
 
 /** Workflow builder (W3): sections · editor · live preview; Save = new immutable version. */
-export function WorkflowBuilder({ slug }: { slug?: string }) {
+export function WorkflowBuilder({ slug, fromChat }: { slug?: string; fromChat?: string }) {
   const list = useQuery({
     queryKey: ["workflows"],
     queryFn: ({ signal }) => api.get<{ workflows: { id: string; slug: string }[] }>("/api/workflows", signal),
@@ -51,13 +54,81 @@ export function WorkflowBuilder({ slug }: { slug?: string }) {
         <p className="text-sm text-danger">That workflow isn&apos;t here.</p>
       </Page>
     );
+  if (!slug) return <NewWorkflow fromChat={fromChat} />;
   return <BuilderView key={`${id ?? "new"}:${detail.data?.workflow.currentVersion ?? 0}`} detail={detail.data ?? null} />;
 }
 
-function BuilderView({ detail }: { detail: Detail | null }) {
+/** /workflows/new: build by hand, "Describe it" (AI draft), or the "Save chat as workflow" review. */
+function NewWorkflow({ fromChat }: { fromChat?: string }) {
+  const router = useRouter();
+  const { can } = useAccess();
+  const [describe, setDescribe] = useState<"closed" | "open" | string>("closed");
+  const [text, setText] = useState("");
+  if (fromChat)
+    return (
+      <Page width="wide">
+        <PageHeader title="Save chat as workflow" subtitle="A draft built from this conversation. Nothing is saved until you say so." />
+        <DraftReview source={{ kind: "chat", sessionId: fromChat }} onCancel={() => router.back()} />
+      </Page>
+    );
+  if (describe !== "closed" && describe !== "open")
+    return (
+      <Page width="wide">
+        <PageHeader title="New workflow" subtitle="Drafted from your description" />
+        <DraftReview source={{ kind: "describe", description: describe }} onCancel={() => setDescribe("open")} />
+      </Page>
+    );
+  return (
+    <BuilderView
+      detail={null}
+      intro={
+        can("work.ai") ? (
+          describe === "open" ? (
+            <form
+              className="mb-4 space-y-2 rounded-[12px] border border-line p-3"
+              aria-label="Describe it"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (text.trim().length >= 10) setDescribe(text.trim());
+              }}
+            >
+              <Field id="wf-describe" label="Describe the workflow" hint="What happens, what to capture, what to ask at the start.">
+                <textarea
+                  id="wf-describe"
+                  className={cx(inputCls, "min-h-24 w-full")}
+                  value={text}
+                  maxLength={2000}
+                  onChange={(e) => setText(e.target.value)}
+                />
+              </Field>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant="primary" disabled={text.trim().length < 10}>
+                  Draft it
+                </Button>
+                <Button type="button" onClick={() => setDescribe("closed")}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">Rather not build it by hand?</span>
+              <Button type="button" size="sm" onClick={() => setDescribe("open")}>
+                Describe it
+              </Button>
+            </div>
+          )
+        ) : null
+      }
+    />
+  );
+}
+
+function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.ReactNode }) {
   const router = useRouter();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { can } = useAccess();
   const [state, dispatch] = useReducer(builderReducer, undefined, () => initBuilder(detail?.definition, detail?.workflow.currentVersion ?? null));
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -116,6 +187,7 @@ function BuilderView({ detail }: { detail: Detail | null }) {
           </div>
         }
       />
+      {intro}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
         <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 lg:flex-col">
           {BUILDER_SECTIONS.map((s) => (
@@ -180,6 +252,7 @@ function BuilderView({ detail }: { detail: Detail | null }) {
 
         <div className="flex min-w-0 flex-col gap-4">
           <Preview d={d} mode={state.previewMode} onMode={(mode) => dispatch({ type: "preview", mode })} />
+          {can("work.ai") ? <TestTurn d={d} blocked={issueCount > 0} /> : null}
           {detail ? <History detail={detail} /> : null}
         </div>
       </div>
@@ -538,6 +611,83 @@ function History({ detail }: { detail: Detail }) {
           </li>
         ))}
       </ol>
+    </section>
+  );
+}
+
+/** "Test a turn": one sandbox turn against the unsaved draft. Discarded — no run, no capture, nothing saved. */
+function TestTurn({ d, blocked }: { d: WorkflowDefinition; blocked: boolean }) {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ reply: string; ops: CaptureOp[]; dropped: { reason: string }[] } | null>(null);
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await api.post("/api/workflows/test-turn", { definition: d, message }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section aria-labelledby="wf-test-h" className="min-w-0 rounded-[12px] border border-line p-3" data-testid="builder-test-turn">
+      <h2 id="wf-test-h" className="text-sm font-semibold">
+        Test a turn
+      </h2>
+      <p className="text-xs text-muted">Try one message against this draft. It&apos;s a sandbox: nothing is saved.</p>
+      <form
+        className="mt-2 space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (message.trim() && !blocked) void run();
+        }}
+      >
+        <Field id="wf-test-msg" label="Message">
+          <textarea
+            id="wf-test-msg"
+            className={cx(inputCls, "min-h-20 w-full")}
+            value={message}
+            maxLength={2000}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+        </Field>
+        <Button type="submit" size="sm" disabled={busy || blocked || !message.trim()}>
+          {busy ? "Testing…" : "Test a turn"}
+        </Button>
+        {blocked ? <p className="text-xs text-muted">Fix the problems above first.</p> : null}
+      </form>
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+      {result ? (
+        <div className="mt-3 space-y-2 text-sm" aria-live="polite">
+          <p className="font-medium">Reply</p>
+          <p className="whitespace-pre-wrap break-words">{result.reply}</p>
+          <p className="font-medium">Proposed capture changes</p>
+          {result.ops.length ? (
+            <ul className="space-y-1">
+              {result.ops.map((op, n) => (
+                <li key={n} className="min-w-0 break-words">
+                  {op.op} <span className="font-mono text-xs">{op.path}</span>
+                  {op.value !== undefined ? `: ${typeof op.value === "string" ? op.value : JSON.stringify(op.value)}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted">None</p>
+          )}
+          {result.dropped.length ? (
+            <p className="text-xs text-muted">{result.dropped.length} change(s) didn&apos;t fit the capture fields and were ignored.</p>
+          ) : null}
+          <p className="text-xs text-muted">Discarded: this test didn&apos;t start a run or save anything.</p>
+        </div>
+      ) : null}
     </section>
   );
 }
