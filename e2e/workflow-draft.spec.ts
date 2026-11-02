@@ -64,7 +64,7 @@ test("describe it drafts a proposal; test a turn is a discarded sandbox", async 
   await panel.locator("#wf-test-msg").fill("Grace means undeserved favour");
   await panel.getByRole("button", { name: "Test a turn" }).click();
   await expect(panel).toContainText("Noted: Grace means undeserved favour");
-  await expect(panel).toContainText("takeaways");
+  await expect(panel).toContainText("/takeaways/-");
   await expect(panel).toContainText("Discarded");
   expect(await (await page.request.get("/api/workflows/runs")).text()).toBe(runsBefore);
 });

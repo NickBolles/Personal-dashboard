@@ -154,7 +154,7 @@ export function createHermes({ apiKey }) {
       const said = input.match(/<message>\n([\s\S]*?)\n<\/message>/)?.[1]?.trim() ?? "";
       return JSON.stringify({
         reply: `Noted: ${said.slice(0, 80)}`,
-        capture: [{ op: "add", path: "takeaways", value: said.slice(0, 120) || "(empty)" }],
+        capture: [{ op: "add", path: "/takeaways/-", value: said.slice(0, 120) || "(empty)" }],
       });
     }
     return JSON.stringify({ error: `No tool for ${source}` });
