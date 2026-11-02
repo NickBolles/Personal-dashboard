@@ -1,0 +1,46 @@
+import { expect, test } from "@playwright/test";
+import teaching from "../lib/workflows/fixtures/teaching-notes.json";
+
+/** Workflows W1: gallery, JSON import (as draft) / export, and starting one from the palette with "/slug args". */
+
+const fixture = { ...teaching, slug: "sermonnotes", name: "Sermon notebook", triggers: [{ kind: "palette", command: "/sermonnotes" }] };
+
+test("workflows: import as draft, export, turn on, start from the palette", async ({ page }) => {
+  await page.goto("/workflows");
+  await expect(page.getByRole("heading", { name: "Workflows", level: 1 })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Built-in workflows" })).toContainText("Morning brief");
+
+  await page
+    .getByLabel("Workflow JSON file")
+    .setInputFiles({ name: "sermon.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fixture)) });
+  await expect(page.getByRole("status").filter({ hasText: "Imported /sermonnotes as a draft." })).toBeVisible();
+  const card = page.getByTestId("workflow-card").filter({ hasText: "Sermon notebook" });
+  await expect(card).toContainText("Draft");
+
+  // Re-import of the same file is a no-op; a Finance-targeted one is refused.
+  await page
+    .getByLabel("Workflow JSON file")
+    .setInputFiles({ name: "sermon.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fixture)) });
+  await expect(page.getByRole("status")).toContainText("already here");
+  const bad = { ...fixture, slug: "moneynotes", triggers: [], routing: { area: "Finance", modelTier: "fast" } };
+  await page.getByLabel("Workflow JSON file").setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(bad)) });
+  await expect(page.getByRole("status")).toContainText("Not imported");
+
+  const [download] = await Promise.all([page.waitForEvent("download"), card.getByRole("button", { name: "Export Sermon notebook" }).click()]);
+  const exported = JSON.parse(await (await download.createReadStream()).toArray().then((c) => Buffer.concat(c).toString("utf8")));
+  expect(exported.workflows[0].slug).toBe("sermonnotes");
+
+  await card.getByRole("button", { name: "Turn on Sermon notebook" }).click();
+  await expect(card).toContainText("On");
+
+  await expect(async () => {
+    await page.keyboard.press("Control+k");
+    await expect(page.getByRole("combobox")).toBeFocused({ timeout: 1000 });
+  }).toPass();
+  await page.getByRole("combobox").fill("/sermonnotes Jake Fry");
+  const row = page.getByTestId("palette-workflow");
+  await expect(row).toContainText("Start Sermon notebook");
+  await row.click();
+  await expect(page).toHaveURL(/\/chat\//);
+  await expect(page.getByText("Sermon notebook — Speaker: Jake Fry").first()).toBeVisible();
+});
