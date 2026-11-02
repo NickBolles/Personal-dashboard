@@ -8,6 +8,8 @@
  */
 import Link from "next/link";
 import {
+  cloneElement,
+  isValidElement,
   useEffect,
   useId,
   useRef,
@@ -478,9 +480,13 @@ export function Skeleton({ w = "100%", h = 12, className }: { w?: number | strin
 
 export function Tooltip({ content, kbd, children }: { content: string; kbd?: string; children: ReactNode }) {
   const id = useId();
+  // #37: descriptions aren't inherited, so the focusable trigger itself carries aria-describedby
+  // (keeping any ids it already has); a non-element child falls back to the wrapper.
+  const el = isValidElement<{ "aria-describedby"?: string }>(children) ? children : null;
+  const trigger = el ? cloneElement(el, { "aria-describedby": [el.props["aria-describedby"], id].filter(Boolean).join(" ") }) : children;
   return (
-    <span className="k-tip-w" aria-describedby={id}>
-      {children}
+    <span className="k-tip-w" aria-describedby={el ? undefined : id}>
+      {trigger}
       <span role="tooltip" id={id} className="k-tip">
         {content}
         {kbd ? <Kbd>{kbd}</Kbd> : null}

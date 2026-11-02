@@ -12,6 +12,7 @@ import {
 } from "@/lib/chat-files";
 import { extractPdfText, textFromContent } from "@/server/chat/pdf-text";
 import { checkUpload } from "@/server/chat/files";
+import { looksLikeFinanceDocument } from "@/lib/chat-files";
 import { saveAiSettings } from "@/server/ai/settings";
 import { contains32, jpegWithGps, LAT_MARK } from "./fixtures/exif";
 
@@ -100,6 +101,8 @@ describe("PDF text extraction", () => {
 
   it("decodes UTF-16 hex strings and returns empty for non-PDFs and scans", () => {
     expect(textFromContent("BT <FEFF00480069> Tj ET")).toBe("Hi");
+    // #88: balanced parentheses inside a literal string
+    expect(textFromContent("BT (Total \\(net\\) (including tax): $120) Tj ET")).toBe("Total (net) (including tax): $120");
     expect(extractPdfText(new TextEncoder().encode("not a pdf"))).toBe("");
     expect(extractPdfText(pdfWith("q 100 0 0 100 0 0 cm /Im1 Do Q"))).toBe("");
   });
@@ -125,5 +128,14 @@ describe("upload checks", () => {
     expect(t).toMatchObject({ kind: "text", text: "item,qty\nmilk,2", textStatus: "ok" });
     const p = checkUpload({ name: "scan.pdf", type: "application/pdf", bytes: pdfWith("q /Im1 Do Q") });
     expect(p).toMatchObject({ kind: "pdf", text: null, textStatus: "none" });
+  });
+});
+
+describe("finance documents by content (#81)", () => {
+  it("needs two signals; a renamed statement is blocked at upload", () => {
+    expect(looksLikeFinanceDocument("Statement period Oct 1 - Oct 31\nAccount number ****1234\nEnding balance $812.03")).toBe(true);
+    expect(looksLikeFinanceDocument("Gutter repair notes: the ending balance of the pool chemicals")).toBe(false);
+    const bytes = new TextEncoder().encode("Opening balance 100\nRouting number 0123\nDeposits and credits");
+    expect(() => checkUpload({ name: "notes.txt", type: "text/plain", bytes })).toThrow(/financial document/);
   });
 });

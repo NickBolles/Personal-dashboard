@@ -13,7 +13,15 @@ import { sessionAccess } from "@/integrations/hermes/service";
 import { localSessionDetail } from "@/server/assistant/local";
 import { getAiSettings } from "@/server/ai/settings";
 import { isFinanceContext } from "@/lib/chat-context";
-import { CHAT_FILE_LIMITS, classifyChatFile, fencedAttachment, FILE_MARK, type ChatFileKind, type ChatFileView } from "@/lib/chat-files";
+import {
+  CHAT_FILE_LIMITS,
+  classifyChatFile,
+  fencedAttachment,
+  FILE_MARK,
+  looksLikeFinanceDocument,
+  type ChatFileKind,
+  type ChatFileView,
+} from "@/lib/chat-files";
 import { imageSize, sniffMime } from "@/server/capture/sniff";
 import { stripLocation } from "@/server/capture/exif";
 import { extractPdfText } from "./pdf-text";
@@ -107,6 +115,8 @@ export function checkUpload(f: Upload): {
     if (Buffer.from(bytes.subarray(0, 5)).toString("latin1") !== "%PDF-") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't a PDF`);
     const text = extractPdfText(bytes, CHAT_FILE_LIMITS.textChars + 1);
     const status = !text ? "none" : text.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
+    if (text && looksLikeFinanceDocument(text))
+      throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
     return {
       kind: "pdf",
       mime: "application/pdf",
@@ -120,6 +130,8 @@ export function checkUpload(f: Upload): {
   }
   if (sniffMime(bytes) !== "text/plain") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't plain UTF-8 text`);
   const full = new TextDecoder().decode(bytes);
+  if (looksLikeFinanceDocument(full))
+    throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
   const status = full.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
   return {
     kind: "text",
@@ -288,11 +300,18 @@ export async function prepareRunFiles(user: CurrentUser, sessionId: string, ids:
   const textBlocks: string[] = [];
   for (const r of ordered) {
     if (isFinanceContext({ id: r.name })) throw new HttpError(403, "finance_blocked", "Finance files aren't sent to AI");
+    // #81: a renamed statement/tax form is caught by its extracted text, not just the filename.
+    if (r.extractedText && looksLikeFinanceDocument(r.extractedText))
+      throw new HttpError(403, "finance_blocked", `${r.name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
     if (r.kind === "image") imageUrls.push(await modelImageUrl(r, fs.readFileSync(path.join(chatFilesDir(), r.storageKey))));
     else if (r.extractedText)
       textBlocks.push(fencedAttachment(r.name, r.extractedText, r.textStatus === "truncated" ? `first ${CHAT_FILE_LIMITS.textChars} characters` : undefined));
     else textBlocks.push(`Attached file: ${r.name.replace(/[\r\n`]/g, " ")} (PDF attached — text not extracted; it may be a scan)`);
   }
+  // #87: Hermes refuses requests over 10 MB; budget the whole encoded batch (prompt + JSON need headroom).
+  const bytes = imageUrls.reduce((n, u) => n + u.length, 0) + textBlocks.reduce((n, t) => n + Buffer.byteLength(t), 0);
+  if (bytes > CHAT_FILE_LIMITS.encodedBudget)
+    throw new HttpError(413, "attachments_too_large", "These attachments are too large to send together — send fewer pictures in this message");
   const marker = `Attachments: ${ordered.map((r) => `${FILE_MARK}${r.id}`).join(" ")}`;
   return { imageUrls, textBlocks, marker, ids: unique };
 }

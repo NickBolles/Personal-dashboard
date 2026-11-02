@@ -50,7 +50,7 @@ export function textFromContent(content: string): string {
   if (!/\bBT\b/.test(content)) return "";
   const lines: string[] = [];
   let line = "";
-  const tokenRe = /\((?:\\[\s\S]|[^\\)])*\)|<[0-9A-Fa-f\s]*>|\[|\]|-?\d*\.?\d+|\/[^\s/<>[\]()]+|[A-Za-z'"*]+/g;
+  const tokenRe = /\(|<[0-9A-Fa-f\s]*>|\[|\]|-?\d*\.?\d+|\/[^\s/<>[\]()]+|[A-Za-z'"*]+/g;
   let inArray = false;
   let pending: string[] = [];
   let t: RegExpExecArray | null;
@@ -64,8 +64,11 @@ export function textFromContent(content: string): string {
       inArray = false;
       continue;
     }
-    if (tok.startsWith("(")) {
-      pending.push(unescapePdfString(tok.slice(1, -1)));
+    if (tok === "(") {
+      // #88: literal strings may hold balanced, unescaped parentheses: "(Total (incl. tax): $120)".
+      const end = literalEnd(content, tokenRe.lastIndex);
+      pending.push(unescapePdfString(content.slice(tokenRe.lastIndex, end)));
+      tokenRe.lastIndex = Math.min(end + 1, content.length);
       continue;
     }
     if (tok.startsWith("<") && tok !== "<<") {
@@ -95,6 +98,21 @@ export function textFromContent(content: string): string {
     .map((l) => l.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "").trimEnd())
     .filter((l) => l.trim())
     .join("\n");
+}
+
+/** Index of the `)` closing a literal string whose body starts at `i` (nesting + backslash escapes). */
+function literalEnd(s: string, i: number): number {
+  let depth = 0;
+  for (; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\\") i++;
+    else if (c === "(") depth++;
+    else if (c === ")") {
+      if (depth === 0) return i;
+      depth--;
+    }
+  }
+  return s.length;
 }
 
 function unescapePdfString(s: string): string {

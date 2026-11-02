@@ -180,6 +180,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   // "Ask" opened this conversation before its first message was sent: show it now, stream when the run starts.
   const firstRun = useRef<string | null>(null);
+  const retryContext = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (firstRun.current === sessionId) return;
     firstRun.current = sessionId;
@@ -198,6 +199,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       (err) => {
         setPendingInput(undefined);
         void kvSet(`draft:${sessionId}`, first.input);
+        // #44: the retry keeps the context the global composer attached (e.g. the area).
+        retryContext.current = first.context;
         setRestore({ text: first.input, key: first.key, at: Date.now() });
         toast(`Not sent: ${(err as Error).message} Your message is saved as a draft.`, "danger");
       },
@@ -238,6 +241,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         .map((c) => `- ${c.label} [${c.ref}]`)
         .join("\n"),
       wfRun?.status === "live" ? (wfRun.context ?? "") : "",
+      retryContext.current ?? "",
     ]
       .filter(Boolean)
       .join("\n\n")
@@ -257,6 +261,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         ...model,
       });
       await kvDel(`pending:${sessionId}`);
+      retryContext.current = undefined;
       setContext([]);
       if (attachments.drafts.length) {
         attachments.clear();
