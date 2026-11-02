@@ -29,6 +29,7 @@ import * as connections from "@/server/work/github-connections";
 import { pollTick, pollerConfigured } from "@/server/work/github-poller";
 import * as inbox from "@/server/work/inbox";
 import { today } from "@/server/work/today";
+import { homePulse } from "@/server/home/pulse";
 import { addWidget, getDashboard } from "@/server/work/dashboard";
 import * as githubRoute from "@/app/api/github/route";
 import * as connectionsRoute from "@/app/api/github/connections/route";
@@ -718,6 +719,18 @@ describe("Work inbox and Today", () => {
     expect((await unfiledConversations(u)).conversations.map((c) => c.id)).not.toContain(a.id);
     const row = getDb().select().from(schema.workInbox).where(eq(schema.workInbox.externalId, a.id)).get()!;
     expect(row).toMatchObject({ source: "conversation", title: "", note: "" }); // Hermes owns the content
+  });
+
+  it("Home pulse: archived branches drop out of active counts (#82)", async () => {
+    const u = me();
+    const area = store.createItem(u, { kind: "area", title: "Boathouse" }, cid);
+    const hull = store.createItem(u, { kind: "thread", title: "Hull sanding", parentId: area.id }, cid);
+    store.createPacket(u, hull.id, packetSchema.parse({ objective: "x", nextAction: "Sand" }), cid);
+    const pr = await store.addLink(u, hull.id, { kind: "github_pr", url: "https://github.com/o/r/pull/9" }, cid);
+    store.setLinkState(u, pr.id, "merged", cid);
+    const before = homePulse(u).mergedNotSettled ?? 0;
+    store.updateItem(u, area.id, { archived: true }, cid);
+    expect(homePulse(u).mergedNotSettled).toBe(before - 1);
   });
 
   it("Today: tag/assignee filter applies before the section limits (#155)", () => {
