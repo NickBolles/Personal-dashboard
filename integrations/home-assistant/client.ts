@@ -94,6 +94,29 @@ export const HomeAssistantClient = {
       throw err;
     }
   },
+  /**
+   * H1: area (room) names for entities, read-only via template rendering (HA has no REST area registry).
+   * Resolves undefined when the token can't render templates (non-admin) or HA is older.
+   */
+  areaNames: async (c: HaConn, entityIds: string[]): Promise<Map<string, string> | undefined> => {
+    const ids = entityIds.filter((e) => /^[a-z_]+\.[a-z0-9_]+$/.test(e));
+    if (!ids.length) return new Map();
+    const template = `{% for e in ${JSON.stringify(ids)} %}{{ e }}\t{{ area_name(e) or '' }}\n{% endfor %}`;
+    let text: string;
+    try {
+      text = String(await req<string>(c, "/api/template", { method: "POST", body: { template } }));
+    } catch (err) {
+      if (err instanceof UpstreamError && (err.kind === "unauthorized" || err.kind === "not_found" || err.status === 403 || err.status === 400))
+        return undefined;
+      throw err;
+    }
+    const out = new Map<string, string>();
+    for (const line of text.split("\n")) {
+      const [id, area] = line.split("\t");
+      if (id && area?.trim() && ids.includes(id.trim())) out.set(id.trim(), area.trim().slice(0, 80));
+    }
+    return out;
+  },
   calendarEvents: async (c: HaConn, entityId: string, start: string, end: string) =>
     z.array(haCalendarEventSchema).parse(await req(c, `/api/calendars/${encodeURIComponent(entityId)}`, { query: { start, end } })),
 };

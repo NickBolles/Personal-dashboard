@@ -48,6 +48,18 @@ export function createHomeAssistant({ token }) {
   }
   seed();
 
+  // H1: HA area registry as template rendering sees it (area_name). Unlisted entities have no area.
+  const AREAS = {
+    "light.kitchen": "Kitchen",
+    "light.living_room": "Living room",
+    "light.porch": "Front porch",
+    "lock.front_door_lock": "Front porch",
+    "binary_sensor.front_door_sensor": "Front porch",
+    "camera.front_door": "Front porch",
+    "cover.garage_door": "Garage",
+    "cover.garage_door_2": "Garage",
+  };
+
   const serviceEffects = {
     "lock.lock": "locked",
     "lock.unlock": "unlocked",
@@ -124,6 +136,16 @@ export function createHomeAssistant({ token }) {
             e.entity_id === decodeURIComponent(match[1]) && e.start.dateTime < url.searchParams.get("end") && e.end.dateTime > url.searchParams.get("start"),
         ),
       ]);
+    }
+    if (path === "/api/template" && m === "POST") {
+      // Only the Jarvis area template is understood: `{% for e in [ids] %}{{ e }}\t{{ area_name(e) … }}`.
+      const body = await readBody(req);
+      const ids =
+        String(body.template ?? "")
+          .match(/"([a-z_]+\.[a-z0-9_]+)"/g)
+          ?.map((x) => x.slice(1, -1)) ?? [];
+      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+      return res.end(ids.map((id) => `${id}\t${AREAS[id] ?? ""}\n`).join(""));
     }
     if ((match = path.match(/^\/api\/services\/([^/]+)\/([^/]+)$/)) && m === "POST") {
       const [, domain, service] = match;

@@ -5,6 +5,7 @@
 import { z } from "zod";
 import type { MapGraph } from "./work-map";
 import { decisionInputSchema, type ItemDecision } from "./decisions";
+import { TAG_COLORS, type TagColor } from "./item-tags";
 export type { ItemDecision } from "./decisions";
 
 export const WORK_KINDS = ["area", "project", "thread", "investigation", "note", "conversation"] as const;
@@ -280,6 +281,8 @@ export type AreaSettings = {
   quietDays: number;
   /** phase 5 AI actions: allowed (default) | triage_only | excluded. A Finance area is always excluded (server/ai/rules.ts). */
   aiPolicy: AiPolicy;
+  /** A3: area colour from the token palette (lib/item-tags TAG_COLORS); null = none */
+  color: TagColor | null;
 };
 
 export const AI_POLICIES = ["allowed", "triage_only", "excluded"] as const;
@@ -296,6 +299,7 @@ export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   settlePolicy: "suggest",
   quietDays: 3,
   aiPolicy: "allowed",
+  color: null,
 };
 
 const repoRe = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -318,6 +322,7 @@ export const areaSettingsSchema = z
     settlePolicy: z.enum(SETTLE_POLICIES),
     quietDays: z.number().int().min(1).max(90),
     aiPolicy: z.enum(AI_POLICIES),
+    color: z.enum(TAG_COLORS).nullable(),
   })
   .partial()
   .strict();
@@ -876,6 +881,12 @@ export type ConversationOption = {
   placement: ConversationPlacement | null;
   /** Shared with the household (read-only for others) */
   shared: boolean;
+  /** C1: Hermes profile (agent) that answers this conversation; absent = the default assistant */
+  agentProfile?: string | null;
+  /** C4: moved since you last read it (conversations view only) */
+  unread?: boolean;
+  /** exact number of new messages when known (else the row shows a dot) */
+  unreadCount?: number | null;
 };
 export type ConversationPlacement = {
   /** the conversation node (kind `conversation`), if it has one */
@@ -901,6 +912,8 @@ export type ConversationListResponse = {
   conversations: (ConversationOption & { suggestions: FilingSuggestion[] })[];
   /** unfiled = not in the tree, or only in Miscellaneous */
   unfiledCount: number;
+  /** C4: conversations in this view that moved since you read them */
+  unreadCount: number;
   unavailable: string[];
 } & ConversationIndexState;
 /** A conversation linked to a work item (work_links), shown as a child row of that item in the tree. */

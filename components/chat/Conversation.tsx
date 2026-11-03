@@ -114,7 +114,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const online = useOnline();
   const { toast, announce } = useToast();
   const { can } = useAccess();
-  const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
+  const { detail, error, refetch, fromCache, isLoading, isFetching } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
   const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
@@ -383,6 +383,24 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     }
   }, [detail]);
 
+  // C4: opening a conversation (and every new message while it's open) marks it read for you.
+  const lastItemId = detail?.timeline.at(-1)?.id ?? null;
+  const readCount = detail?.session.messageCount ?? null;
+  // Only the transcript actually shown and freshly fetched counts: a cached detail (or a failed refresh)
+  // may predate new messages, and marking it read would hide them.
+  const readKey = detail && !fromCache && !isFetching && !error ? `${sessionId}:${readCount}:${lastItemId}` : null;
+  const lastRead = useRef<string | null>(null);
+  useEffect(() => {
+    if (!readKey || !online || lastRead.current === readKey) return;
+    lastRead.current = readKey;
+    api
+      .post("/api/work/conversations/read", { sessionId, messageCount: readCount, lastMessageId: lastItemId })
+      .then(() => qc.invalidateQueries({ queryKey: ["work", "conversations", "view"] }))
+      .catch(() => {
+        lastRead.current = null;
+      });
+  }, [readKey, online, sessionId, readCount, lastItemId, qc]);
+
   if (!detail) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-6">
@@ -442,6 +460,24 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
           disabled: !online,
         },
       ];
+  // C1: a read-only summary + link for pasting elsewhere. Nothing is published or sent: it only goes to your clipboard.
+  menu.push({
+    label: "Share summary…",
+    onSelect: () => {
+      const text = shareSummary({
+        title: session!.title,
+        agent: areaCtx?.agent?.profile ?? session!.agentProfile ?? null,
+        assistant: who,
+        path: areaCtx?.placement?.path ?? null,
+        timeline: detail.timeline,
+        url: window.location.origin + `/chat/${encodeURIComponent(sessionId)}`,
+      });
+      (navigator.clipboard?.writeText(text) ?? Promise.reject(new Error("no clipboard"))).then(
+        () => toast("Summary copied", "ok"),
+        () => toast("Couldn't copy to the clipboard", "danger"),
+      );
+    },
+  });
   menu.push({
     label: "Copy link",
     onSelect: () => {
@@ -483,6 +519,17 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                         </span>
                       ) : null}
                       {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
+                      {/* C1: agent mark — which Hermes profile answers here. */}
+                      {areaCtx?.agent?.profile || session!.agentProfile ? (
+                        <span
+                          className="chip shrink-0 font-medium"
+                          data-tone="accent"
+                          data-testid="agent-badge"
+                          title="The agent that answers this conversation"
+                        >
+                          @{areaCtx?.agent?.profile ?? session!.agentProfile}
+                        </span>
+                      ) : null}
                       {readOnly ? (
                         <Badge>Shared with you · read only</Badge>
                       ) : session!.shared ? (
@@ -1577,4 +1624,20 @@ function ComposerAddMenu({
       />
     </div>
   );
+}
+
+/** C1 share text: title, agent, area path, the latest reply (trimmed) and the in-app link (sign-in required). */
+export function shareSummary(x: { title: string; agent: string | null; assistant: string; path: string | null; timeline: TimelineItem[]; url: string }) {
+  const last = [...x.timeline].reverse().find((t) => t.kind === "assistant");
+  const reply = last && "text" in last ? last.text.replace(/\s+/g, " ").trim() : "";
+  const excerpt = reply.length > 280 ? `${reply.slice(0, 279)}…` : reply;
+  const messages = x.timeline.filter((t) => t.kind === "user" || t.kind === "assistant").length;
+  return [
+    x.title,
+    `${x.agent ? `@${x.agent}` : x.assistant}${x.path ? ` · ${x.path}` : ""} · ${messages} ${messages === 1 ? "message" : "messages"}`,
+    excerpt ? `Latest: ${excerpt}` : null,
+    `${x.url} (opens in Jarvis; sign-in required, read-only for anyone it is shared with)`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

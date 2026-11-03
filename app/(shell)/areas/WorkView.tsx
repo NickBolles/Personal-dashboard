@@ -31,7 +31,7 @@ import { Markdown } from "@/components/markdown/Markdown";
 import { WorkTree } from "@/components/work/WorkTree";
 import { ChevronIcon } from "@/components/icons";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
-import { AreaSettingsCard } from "@/components/areas/AreaSettings";
+import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
@@ -888,6 +888,8 @@ function ItemDetail({
   const wide = useWide();
   const phone = usePhone();
   const [renaming, setRenaming] = useState<string | null>(null);
+  // A3: area settings and the archive confirmation open from the area header's ⋯.
+  const [areaSheet, setAreaSheet] = useState<"settings" | "archive" | null>(null);
   // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
   // remounts it) doesn't fold it; a section opens itself when something is added to it.
   const [sections, setSections] = useState<{ details?: boolean; deps?: boolean; links?: boolean }>({});
@@ -968,9 +970,11 @@ function ItemDetail({
       !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
       isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
       isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
+      isArea && !item.builtIn ? { label: "Area settings…", onSelect: () => setAreaSheet("settings") } : null,
       {
-        label: item.archived ? "Unarchive" : "Archive",
-        onSelect: () => patch.mutate({ archived: !item.archived }),
+        label: item.archived ? "Unarchive" : isArea ? "Archive area…" : "Archive",
+        // Archiving a whole area hides everything under it: confirm first.
+        onSelect: () => (isArea && !item.archived ? setAreaSheet("archive") : patch.mutate({ archived: !item.archived })),
         disabled: item.builtIn,
         danger: !item.archived,
       },
@@ -1064,7 +1068,10 @@ function ItemDetail({
                 <span aria-hidden="true">›</span>
               </li>
             ))}
-            <li aria-current="page" className="wk-kind px-1">
+            <li aria-current="page" className="wk-kind inline-flex items-center gap-1 px-1">
+              {isArea && item.settings?.color ? (
+                <span className={`jv-pick-dot jv-tag-${item.settings.color}`} aria-hidden="true" data-testid="area-color" />
+              ) : null}
               {isArea ? "Area" : item.kind === "thread" ? "Item" : KIND_LABEL[item.kind]}
             </li>
           </ol>
@@ -1174,6 +1181,25 @@ function ItemDetail({
         ) : null}
         {!container && item.kind !== "conversation" ? <ItemAgentPanel itemId={item.id} /> : null}
       </section>
+      {isArea && !item.builtIn && areaSheet === "settings" ? (
+        <AreaSettingsDialog key={`s-${item.updatedAt}`} area={item} open onClose={() => setAreaSheet(null)} />
+      ) : null}
+      <Dialog
+        open={areaSheet === "archive"}
+        onClose={() => setAreaSheet(null)}
+        title={`Archive ${item.title}?`}
+        description="The area and everything filed under it leave the tree and lists. Show archived brings them back; Unarchive restores the area."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAreaSheet(null)} data-autofocus>
+              Cancel
+            </Button>
+            <Button variant="danger" busy={patch.isPending} onClick={() => patch.mutate({ archived: true }, { onSuccess: () => setAreaSheet(null) })}>
+              Archive area
+            </Button>
+          </>
+        }
+      />
 
       {container ? (
         <ContainerBody d={d} items={items} onSelect={onSelect} phone={phone} sections={sections} toggle={toggle} canChat={canChat} onDialog={setDialog} />
@@ -1428,7 +1454,6 @@ function ContainerBody({
             </ul>
           </section>
         ) : null}
-        {isArea && !item.builtIn ? <AreaSettingsCard key={`s-${item.updatedAt}`} area={item} /> : null}
         <EditItem
           key={item.updatedAt}
           item={item}

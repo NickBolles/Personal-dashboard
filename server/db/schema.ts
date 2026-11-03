@@ -1414,6 +1414,27 @@ export const conversationIndex = sqliteTable("conversation_index", {
 });
 
 /**
+ * C4 read state: when this person last read a conversation (and how many
+ * messages it had then). `session_id = "*"` is the per-person baseline set by
+ * "Mark all read" (and on first use, so existing chats don't all show unread).
+ * Hermes owns the messages; this only keeps the read marker.
+ */
+export const conversationReads = sqliteTable(
+  "conversation_reads",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    readAt: text("read_at").notNull().default(now),
+    /** message count at read time, when Hermes reported one */
+    readCount: integer("read_count"),
+    lastMessageId: text("last_message_id"),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.sessionId] })],
+);
+
+/**
  * Smart-UI surfaces (phase 6, docs/smart-ui.md): one validated `jarvis-ui@1`
  * block from an assistant message. The canonical spec is stored on first
  * render so apply can check that every intent was really offered (and so the

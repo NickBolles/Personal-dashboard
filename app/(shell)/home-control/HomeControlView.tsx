@@ -6,11 +6,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { CalendarEvent, HomeHealth, SourceStatus } from "@/lib/contracts";
 import type { DeviceView } from "@/integrations/home-assistant/devices";
-import { CameraIcon, LightIcon } from "@/components/icons";
+import { CameraIcon, ChevronIcon, LightIcon } from "@/components/icons";
 import { useSource } from "@/components/useSource";
 import { Banner, SectionHeader } from "@/components/ui/kit";
 import { SourceState } from "@/components/SourceState";
 import { Badge, Button, ButtonLink, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
+import { groupByRoom, roomSlug } from "@/lib/house-rooms";
 
 type Control = {
   entityId: string;
@@ -230,7 +231,27 @@ function CalendarSection({ events }: { events: CalendarEvent[] }) {
   );
 }
 
-type Devices = { fetchedAt: string; lightControl: string; doors: DeviceView[]; lights: DeviceView[]; cameras: DeviceView[] };
+type Devices = { fetchedAt: string; lightControl: string; roomsKnown?: boolean; doors: DeviceView[]; lights: DeviceView[]; cameras: DeviceView[] };
+
+type HouseView = "rooms" | "all";
+const VIEW_KEY = "jarvis:house-view";
+const COLLAPSED_KEY = "jarvis:house-collapsed";
+const readLocal = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = window.localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writeLocal = (key: string, v: unknown) => {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    /* private mode: the choice just isn't remembered */
+  }
+};
 
 const KIND_LABEL: Record<DeviceView["kind"], string> = {
   lock: "Lock",
@@ -262,71 +283,95 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
     onError: (e) => toast((e as Error).message, "danger"),
     onSettled: () => qc.invalidateQueries({ queryKey: ["ha"] }),
   });
+  // H1: By room (default when Home Assistant shares rooms) or All (by kind); remembered on this device.
+  const [view, setView] = useState<HouseView | null>(() => readLocal<HouseView | null>(VIEW_KEY, null));
+  const [collapsed, setCollapsed] = useState<string[]>(() => readLocal<string[]>(COLLAPSED_KEY, []));
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   if (!q.data) return q.isLoading ? <Spinner label="Reading devices…" /> : null;
   const d = q.data;
-  return (
+  const all = [...d.doors, ...d.lights, ...d.cameras];
+  const hasRooms = all.some((x) => x.area);
+  const mode: HouseView = view ?? (hasRooms ? "rooms" : "all");
+  const choose = (v: HouseView) => {
+    setView(v);
+    writeLocal(VIEW_KEY, v);
+  };
+  const toggleRoom = (room: string) =>
+    setCollapsed((c) => {
+      const next = c.includes(room) ? c.filter((r) => r !== room) : [...c, room];
+      writeLocal(COLLAPSED_KEY, next);
+      return next;
+    });
+  const lightTile = (x: DeviceView) => (
+    <LightTile key={x.entityId} x={x} focus={focusEntity === x.entityId} online={online} light={light} canControl={can("home_assistant.control_lights")} />
+  );
+  const doorTile = (x: DeviceView) => <DoorTile key={x.entityId} x={x} focus={focusEntity === x.entityId} />;
+  const toggle = all.length ? (
+    <div className={cx("flex flex-wrap items-center justify-between gap-2", mode === "rooms" ? "" : "mt-6 dense:mt-0 dense:mb-2")}>
+      <div role="group" aria-label="Group devices" className="seg">
+        <button type="button" className="seg-item" aria-pressed={mode === "rooms"} onClick={() => choose("rooms")}>
+          By room
+        </button>
+        <button type="button" className="seg-item" aria-pressed={mode === "all"} onClick={() => choose("all")}>
+          All
+        </button>
+      </div>
+      {mode === "rooms" && d.roomsKnown === false ? (
+        <p className="text-xs text-muted">Home Assistant didn&apos;t share rooms with this token (needs an admin token), so everything is Unassigned.</p>
+      ) : null}
+    </div>
+  ) : null;
+  const offlineNote = !online && d.lights.length ? <p className="mt-2 mb-2 text-sm text-warn">Light switches are off while offline.</p> : null;
+  return mode === "rooms" ? (
+    // All rooms live in ONE section, so on desktop the page's two columns keep Health/Controls where they
+    // were instead of rooms spilling into the right column.
+    <section aria-label="Devices by room" className="mt-6 flex flex-col gap-4" data-rooms>
+      {toggle}
+      {offlineNote}
+      {groupByRoom(all).map(({ room, devices }) => {
+        const id = `room-${roomSlug(room)}`;
+        // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
+        const open = !collapsed.includes(room) || devices.some((x) => x.entityId === focusEntity);
+        return (
+          <section key={room} aria-labelledby={`${id}-h`} data-room={room}>
+            <h2 id={`${id}-h`} className="mb-1.5">
+              <button
+                type="button"
+                className="tap -mx-1 inline-flex items-center gap-1.5 rounded-lg px-1 text-[13px] font-semibold text-muted hover:text-text"
+                aria-expanded={open}
+                aria-controls={id}
+                onClick={() => toggleRoom(room)}
+              >
+                <ChevronIcon className={cx("h-3.5 w-3.5 transition-transform", open && "rotate-90")} />
+                {room}
+                <span className="tabular-nums font-normal">{devices.length}</span>
+              </button>
+            </h2>
+            {open ? (
+              <ul id={id} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {devices.map((x) =>
+                  x.kind === "light" ? lightTile(x) : x.kind === "camera" ? <CameraCard key={x.entityId} camera={x} online={online} /> : doorTile(x),
+                )}
+              </ul>
+            ) : null}
+          </section>
+        );
+      })}
+    </section>
+  ) : (
     <>
+      {toggle}
+      {offlineNote}
       {d.doors.length ? (
         <section aria-labelledby="doors-h" className="mt-6">
           <SectionHeader id="doors-h" label="Doors, locks and garage" />
-          <ul className="card divide-y divide-line">
-            {d.doors.map((x) => (
-              <li
-                key={x.entityId}
-                className={cx("flex flex-wrap items-center justify-between gap-2 px-3 py-2", focusEntity === x.entityId && "bg-accent-soft")}
-              >
-                <span>
-                  <span className="font-medium">{x.name}</span> <span className="text-xs text-muted">{KIND_LABEL[x.kind]}</span>
-                </span>
-                <Badge tone={["open", "unlocked", "on", "opening"].includes(x.state) ? "warn" : x.state === "unavailable" ? "neutral" : "ok"}>
-                  {x.kind === "door" || x.kind === "window" ? (x.state === "on" ? "open" : x.state === "off" ? "closed" : x.state) : x.state}
-                </Badge>
-              </li>
-            ))}
-          </ul>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.doors.map(doorTile)}</ul>
         </section>
       ) : null}
       {d.lights.length ? (
         <section aria-labelledby="lights-h" className="mt-6">
           <SectionHeader id="lights-h" label="Lights" />
-          {!online ? <p className="mb-2 text-sm text-warn">Light switches are off while offline.</p> : null}
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {d.lights.map((x) => {
-              const on = x.state === "on";
-              const canSwitch = can("home_assistant.control_lights") && x.services.length > 0;
-              const busy = light.isPending && light.variables?.entityId === x.entityId;
-              return (
-                <li
-                  key={x.entityId}
-                  className={cx("card flex flex-wrap items-center justify-between gap-2 px-3 py-2", focusEntity === x.entityId && "border-accent")}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <LightIcon className={cx("h-5 w-5 shrink-0", on ? "text-warn" : "text-muted")} />
-                    <span>
-                      <span className="block font-medium">{x.name}</span>
-                      <span className="text-xs text-muted">
-                        {x.state}
-                        {x.brightness !== undefined ? ` · ${x.brightness}%` : ""}
-                      </span>
-                    </span>
-                  </span>
-                  {canSwitch ? (
-                    <Button
-                      size="sm"
-                      aria-pressed={on}
-                      aria-label={`${x.name}: ${on ? "on, turn off" : "off, turn on"}`}
-                      disabled={!online || x.state === "unavailable" || busy}
-                      busy={busy}
-                      onClick={() => light.mutate({ entityId: x.entityId, on: !on })}
-                    >
-                      {on ? "Turn off" : "Turn on"}
-                    </Button>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.lights.map(lightTile)}</ul>
         </section>
       ) : null}
       {d.cameras.length ? (
@@ -340,6 +385,64 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
         </section>
       ) : null}
     </>
+  );
+}
+
+function DoorTile({ x, focus }: { x: DeviceView; focus: boolean }) {
+  return (
+    <li className={cx("card flex flex-wrap items-center justify-between gap-2 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
+      <span className="min-w-0">
+        <span className="block font-medium">{x.name}</span>
+        <span className="text-xs text-muted">{KIND_LABEL[x.kind]}</span>
+      </span>
+      <Badge tone={["open", "unlocked", "on", "opening"].includes(x.state) ? "warn" : x.state === "unavailable" ? "neutral" : "ok"}>
+        {x.kind === "door" || x.kind === "window" ? (x.state === "on" ? "open" : x.state === "off" ? "closed" : x.state) : x.state}
+      </Badge>
+    </li>
+  );
+}
+
+function LightTile({
+  x,
+  focus,
+  online,
+  canControl,
+  light,
+}: {
+  x: DeviceView;
+  focus: boolean;
+  online: boolean;
+  canControl: boolean;
+  light: { isPending: boolean; variables?: { entityId: string; on: boolean }; mutate: (v: { entityId: string; on: boolean }) => void };
+}) {
+  const on = x.state === "on";
+  const canSwitch = canControl && x.services.length > 0;
+  const busy = light.isPending && light.variables?.entityId === x.entityId;
+  return (
+    <li className={cx("card flex flex-wrap items-center justify-between gap-2 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
+      <span className="flex min-w-0 items-center gap-2">
+        <LightIcon className={cx("h-5 w-5 shrink-0", on ? "text-warn" : "text-muted")} />
+        <span>
+          <span className="block font-medium">{x.name}</span>
+          <span className="text-xs text-muted">
+            {x.state}
+            {x.brightness !== undefined ? ` · ${x.brightness}%` : ""}
+          </span>
+        </span>
+      </span>
+      {canSwitch ? (
+        <Button
+          size="sm"
+          aria-pressed={on}
+          aria-label={`${x.name}: ${on ? "on, turn off" : "off, turn on"}`}
+          disabled={!online || x.state === "unavailable" || busy}
+          busy={busy}
+          onClick={() => light.mutate({ entityId: x.entityId, on: !on })}
+        >
+          {on ? "Turn off" : "Turn on"}
+        </Button>
+      ) : null}
+    </li>
   );
 }
 
