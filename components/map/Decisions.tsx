@@ -9,7 +9,7 @@ import { Button, ChipButton, Pill } from "@/components/ui/kit";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { useAccess } from "@/components/access";
 import "./map.css";
-import { decisionLogText, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
+import { decisionLogText, withdrawPost, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
 
 export const DECISIONS_KEY = ["work", "decisions"] as const;
 
@@ -37,11 +37,13 @@ const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", ap
  */
 export function DecisionsList({ entries, compact, emptyText }: { entries: DecisionEntry[]; compact?: boolean; emptyText?: string }) {
   const [op, setOp] = useState<UndoOp | null>(null);
-  const [posted, setPosted] = useState<{ key: string; sessionId: string; text: string } | null>(null);
+  const [posted, setPosted] = useState<{ key: string; opId: string; sessionId: string; text: string; coordinator: boolean } | null>(null);
   // Undo and "post to conversation" stay mounted after the last entry is answered.
   return (
     <>
-      {posted ? <PostConfirm key={posted.key} sessionId={posted.sessionId} text={posted.text} onDone={() => setPosted(null)} /> : null}
+      {posted ? (
+        <PostConfirm key={posted.key} sessionId={posted.sessionId} text={posted.text} coordinator={posted.coordinator} onDone={() => setPosted(null)} />
+      ) : null}
       {entries.length ? (
         <ul className="dc-list" data-testid="decisions-list">
           {entries.map((e) => (
@@ -49,7 +51,11 @@ export function DecisionsList({ entries, compact, emptyText }: { entries: Decisi
               key={e.key}
               entry={e}
               compact={compact}
-              onAnswered={(o, text) => (setOp(o), e.sessionId ? setPosted({ key: e.key, sessionId: e.sessionId, text }) : null)}
+              onAnswered={(o, text) => {
+                setOp(o);
+                const sessionId = e.sessionId ?? e.coordinatorSessionId ?? null;
+                setPosted(sessionId ? { key: e.key, opId: o.id, sessionId, text, coordinator: !e.sessionId } : null);
+              }}
             />
           ))}
         </ul>
@@ -58,7 +64,15 @@ export function DecisionsList({ entries, compact, emptyText }: { entries: Decisi
           {emptyText ?? "Nothing needs you right now."}
         </p>
       )}
-      {op ? <UndoBar key={op.id} op={op} onDone={() => setOp(null)} /> : null}
+      {op ? (
+        <UndoBar
+          key={op.id}
+          op={op}
+          onDone={() => setOp(null)}
+          // #167: undoing the answer withdraws the pending "post to conversation" offer.
+          onUndone={() => setPosted((p) => withdrawPost(p, op.id))}
+        />
+      ) : null}
     </>
   );
 }
@@ -135,7 +149,7 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
 }
 
 /** Explicit confirm before an answer is posted to the item's Hermes conversation (writes confirmed). */
-function PostConfirm({ sessionId, text, onDone }: { sessionId: string; text: string; onDone: () => void }) {
+function PostConfirm({ sessionId, text, coordinator, onDone }: { sessionId: string; text: string; coordinator?: boolean; onDone: () => void }) {
   const { toast } = useToast();
   const post = useMutation({
     mutationFn: () =>
@@ -148,11 +162,13 @@ function PostConfirm({ sessionId, text, onDone }: { sessionId: string; text: str
   });
   return (
     <div role="group" aria-label="Post your answer to the conversation?" className={cx("dc-confirm mb-2")} data-testid="decision-post-confirm">
-      <p className="text-sm">This item has a Hermes conversation. Post your answer there too?</p>
+      <p className="text-sm">
+        {coordinator ? "Post your answer to the area's coordinator chat too?" : "This item has a Hermes conversation. Post your answer there too?"}
+      </p>
       <p className="mt-1 text-xs break-words text-muted">{text}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         <Button size="sm" variant="primary" loading={post.isPending} onClick={() => post.mutate()}>
-          Post to conversation
+          {coordinator ? "Post to coordinator" : "Post to conversation"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone}>
           Not now

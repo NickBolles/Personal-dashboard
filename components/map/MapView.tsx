@@ -14,6 +14,10 @@ import { areaRollups, bucketOf, MAP_BUCKET_LABELS, MAP_BUCKETS, matchesFilter, t
 import { isContainer, STATUS_LABELS, WORK_STATUSES, type WorkItem, type WorkStatus } from "@/lib/work";
 import type { DecisionsResponse } from "@/lib/decisions";
 import { NeedsYouSection, useDecisions } from "./Decisions";
+import { AgentLine, AgentsStrip, useAgentRuns } from "@/components/agents/AgentRuns";
+import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
+import { activeInArea } from "@/lib/agent-runs";
+import { isFinanceAreaLike } from "@/lib/catch-up";
 
 type MapLink = { kind: string; url: string; title: string | null };
 export type MapResponse = { items: WorkItem[]; links: Record<string, MapLink[]>; decisions: DecisionsResponse };
@@ -204,8 +208,9 @@ export function MapView() {
 
 function AreaCard({ roll: r, active, onPick }: { roll: AreaRollup; active: boolean; onPick: () => void }) {
   const open = r.total - r.counts.done;
+  const agents = activeInArea(useAgentRuns().data, r.id);
   return (
-    <li>
+    <li className="flex min-w-0 flex-col gap-1">
       <button type="button" className={cx("mp-card", active && "mp-card-on")} aria-pressed={active} onClick={onPick} data-testid="map-area-card">
         <span className="flex min-w-0 items-baseline justify-between gap-2">
           <span className="truncate font-semibold">{r.title}</span>
@@ -231,7 +236,14 @@ function AreaCard({ roll: r, active, onPick }: { roll: AreaRollup; active: boole
         <span className="text-xs text-muted" data-dynamic>
           {r.projects} {r.projects === 1 ? "project" : "projects"} · last activity {r.lastActivity ? fmtDate(r.lastActivity) : "—"}
         </span>
+        {agents.length ? (
+          <span className="block min-w-0" aria-label={`${agents.length} active ${agents.length === 1 ? "agent" : "agents"}`}>
+            <AgentsStrip entries={agents} max={2} />
+          </span>
+        ) : null}
       </button>
+      {/* Finance never goes to AI: no coordinator chat there. */}
+      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="self-end" />}
     </li>
   );
 }
@@ -265,12 +277,14 @@ function Branch({
         return (
           <details key={g.id} className="mp-proj" open={open || undefined}>
             <summary className="mp-sum">
-              <span className="min-w-0 truncate font-medium">{g.title}</span>
-              {/* Capped so large text wraps the summary instead of widening the page (chevron + gaps = 22px). */}
-              <span className="max-w-[calc(100%-1.5rem)] shrink-0 text-right text-xs text-muted">
-                {MAP_BUCKETS.filter((b) => counts[b])
-                  .map((b) => `${counts[b]} ${MAP_BUCKET_LABELS[b].toLowerCase()}`)
-                  .join(" · ") || "empty"}
+              {/* #166: the title gets priority; the rollup wraps under it on phones instead of squeezing it. */}
+              <span className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2" data-testid="map-proj-sum">
+                <span className="min-w-0 flex-[1_1_9rem] font-medium [overflow-wrap:anywhere]">{g.title}</span>
+                <span className="min-w-0 text-xs text-muted [overflow-wrap:anywhere]">
+                  {MAP_BUCKETS.filter((b) => counts[b])
+                    .map((b) => `${counts[b]} ${MAP_BUCKET_LABELS[b].toLowerCase()}`)
+                    .join(" · ") || "empty"}
+                </span>
               </span>
             </summary>
             <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} onOp={onOp} />
@@ -293,6 +307,7 @@ function Branch({
 function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: MapLink[]; onOp: (op: UndoOp) => void; children?: React.ReactNode }) {
   const patch = useInlinePatch(i.id, (op) => (op ? onOp(op) : undefined));
   const b = bucketOf(i);
+  const agent = useAgentRuns().data?.items[i.id];
   return (
     <li className="mp-row" data-testid="map-row" data-bucket={b}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -322,6 +337,11 @@ function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: Map
           {i.nextAction ? <span>Next: {i.nextAction}</span> : <span className="italic">No next action</span>}
         </InlineText>
       </div>
+      {agent && (agent.live !== "idle" || agent.who?.kind === "agent") ? (
+        <div className="mt-1 min-w-0 pl-4">
+          <AgentLine info={agent} />
+        </div>
+      ) : null}
       {i.tags.length || i.assignee || links.length ? (
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
           <ItemChips tags={i.tags} assignee={i.assignee} />
