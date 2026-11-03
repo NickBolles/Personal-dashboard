@@ -8,6 +8,8 @@ import { getSessionSummary, listLocalConversations, listSessions, sessionAccess,
 import { userById } from "@/server/auth";
 import { indexMutationSeq, noteIndexFailure, readIndex, recentIndexUsers, touchIndex, writeIndex, type IndexEntry } from "./conversation-index";
 import { isLocalSession } from "@/lib/assistant";
+import { unreadState, unreadTotal } from "@/lib/conversation-unread";
+import { readMarkers } from "@/server/chat/reads";
 import type { SessionSummary } from "@/lib/hermes";
 import {
   suggestFiling,
@@ -335,6 +337,7 @@ function toOption(s: SessionSummary, ctx: Ctx): ConversationOption {
     linkedItems: ctx.linked.get(s.id) ?? [],
     placement: placementOf(ctx, s.id),
     shared: !!s.shared,
+    agentProfile: s.agentProfile ?? null,
   };
 }
 
@@ -372,14 +375,20 @@ export async function conversationList(
   const ctx = context(user.id);
   const cands = candidates(ctx);
   const needle = q?.trim().toLowerCase();
-  const all = sessions.filter((s) => !s.archived).map((s) => toOption(s, ctx));
+  const { markers, baseline } = readMarkers(user.id);
+  const all = sessions
+    .filter((s) => !s.archived)
+    .map((s) => {
+      const o = toOption(s, ctx);
+      return { ...o, ...unreadState({ lastActiveAt: o.lastActiveAt, messageCount: s.messageCount }, markers.get(s.id), baseline) };
+    });
   const unfiledCount = all.filter(isUnfiled).length;
   const conversations = all
     .filter((c) => filter === "all" || isUnfiled(c))
     .filter((c) => !needle || `${c.title} ${c.preview ?? ""} ${c.placement?.path ?? ""}`.toLowerCase().includes(needle))
     .slice(0, LIST_LIMIT)
     .map((c) => ({ ...c, suggestions: isUnfiled(c) ? suggestFiling(c.title, cands) : [] }));
-  return { conversations, unfiledCount, unavailable, updating, cachedAt };
+  return { conversations, unfiledCount, unreadCount: unreadTotal(all), unavailable, updating, cachedAt };
 }
 
 /** Recent conversations of yours that aren't in the tree at all (not dismissed), with filing suggestions: the Inbox's list (+ Miscellaneous ones for the Areas list). */

@@ -26,6 +26,8 @@ export type DeviceView = {
   stateToken: string;
   /** allowlisted door/lock services, or light on/off */
   services: { service: string; label: string; wouldChange: boolean }[];
+  /** H1: Home Assistant area (room); absent = unassigned or unreadable */
+  area?: string;
 };
 
 const OPENING_CLASSES = ["door", "garage_door", "window", "opening"];
@@ -87,10 +89,21 @@ export function toDevice(s: HaState, opts: { doorControls: boolean; lightControl
 export async function listDevices(opts: { doors: boolean; lights: boolean; cameras: boolean; doorControls: boolean; lightControls: boolean }) {
   const states = await HomeAssistantClient.states(haConn());
   const all = states.map((s) => toDevice(s, opts)).filter((d): d is DeviceView => Boolean(d));
+  // H1: rooms are best-effort — a failed or forbidden area read leaves every device "Unassigned".
+  const areas = await HomeAssistantClient.areaNames(
+    haConn(),
+    all.map((d) => d.entityId),
+  ).catch(() => undefined);
+  for (const d of all) {
+    const a = areas?.get(d.entityId);
+    if (a) d.area = a;
+  }
   const byName = (a: DeviceView, b: DeviceView) => a.name.localeCompare(b.name);
   return {
     fetchedAt: new Date().toISOString(),
     lightControl: lightControlMode(),
+    /** false when Home Assistant wouldn't tell us the rooms (non-admin token) */
+    roomsKnown: areas !== undefined,
     doors: opts.doors ? all.filter((d) => d.kind !== "light" && d.kind !== "camera").sort(byName) : [],
     lights: opts.lights ? all.filter((d) => d.kind === "light").sort(byName) : [],
     cameras: opts.cameras ? all.filter((d) => d.kind === "camera").sort(byName) : [],

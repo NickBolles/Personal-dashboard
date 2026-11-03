@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { api } from "@/lib/client/api";
 import { useAccess } from "@/components/access";
-import { Button, Field, inputCls } from "@/components/ui";
+import { Button, Dialog, Field, inputCls } from "@/components/ui";
+import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor } from "@/lib/item-tags";
 import { useWorkMutation } from "@/components/work/common";
 import {
+  AI_POLICIES,
   CONTEXT_SOURCES,
   CONTEXT_SOURCE_LABELS,
   DEFAULT_AREA_SETTINGS,
@@ -16,43 +18,71 @@ import {
 } from "@/lib/work";
 import { ModelCombobox } from "./ModelPicker";
 
+const AI_POLICY_LABELS: Record<AreaSettings["aiPolicy"], string> = {
+  allowed: "Allowed",
+  triage_only: "Triage only",
+  excluded: "Excluded (AI-free)",
+};
+
 /**
- * Per-area settings (phase 4): agent mode (sent to Hermes as run
- * instructions), the default assistant and model, the repo the `#` picker
- * searches, context attached to every message, and the settle policy.
- * The validation default stays in the area's Details.
+ * A3: per-area settings, opened from the area header's ⋯ › Area settings…
+ * (no always-visible accordion). Agent (coordinator) mode, default assistant
+ * and model, the repo the `#` picker searches, context attached to every
+ * message, colour, AI policy and the settle policy. Saved with the existing
+ * item PATCH (partial settings merge).
  */
-export function AreaSettingsCard({ area }: { area: WorkItem }) {
+export function AreaSettingsDialog({ area, open, onClose }: { area: WorkItem; open: boolean; onClose: () => void }) {
   const canChat = useAccess().can("hermes.chat");
-  const [f, setF] = useState<AreaSettings>(area.settings ?? DEFAULT_AREA_SETTINGS);
-  const [open, setOpen] = useState(false);
+  const [f, setF] = useState<AreaSettings>({ ...DEFAULT_AREA_SETTINGS, ...(area.settings ?? {}) });
   const save = useWorkMutation(() => api.patch(`/api/work/items/${encodeURIComponent(area.id)}`, { settings: f }), { ok: "Area settings saved" });
   const set = <K extends keyof AreaSettings>(k: K, v: AreaSettings[K]) => setF((x) => ({ ...x, [k]: v }));
-  const s = area.settings ?? DEFAULT_AREA_SETTINGS;
-  const summary = [
-    s.agentMode ? `Mode ${s.agentMode}` : null,
-    s.defaultModel ? `Model ${s.defaultModel}` : null,
-    s.defaultRepo,
-    SETTLE_POLICY_LABELS[s.settlePolicy].split(" ")[0] + " settle",
-  ]
-    .filter(Boolean)
-    .join(" · ");
   return (
-    <section className="card" aria-label="Area settings">
-      <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)} data-testid="area-settings">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 dense:min-h-9">
-          <span className="shrink-0 whitespace-nowrap text-[13.5px] font-semibold">Area settings</span>
-          <span className="min-w-0 truncate text-xs text-muted" title={summary || undefined}>
-            {summary}
-          </span>
-        </summary>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`${area.title} settings`}
+      size="lg"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="area-settings-form" variant="primary" busy={save.isPending}>
+            Save area settings
+          </Button>
+        </>
+      }
+    >
+      <div data-testid="area-settings">
         <form
-          className="space-y-3 border-t border-line p-3"
+          id="area-settings-form"
+          className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            save.mutate(undefined);
+            save.mutate(undefined, { onSuccess: onClose });
           }}
         >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field id="as-color" label="Colour">
+              <select id="as-color" className={inputCls} value={f.color ?? ""} onChange={(e) => set("color", (e.target.value || null) as TagColor | null)}>
+                <option value="">None</option>
+                {TAG_COLORS.map((c) => (
+                  <option key={c} value={c}>
+                    {TAG_COLOR_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field id="as-ai" label="AI actions" hint="Excluded keeps this area out of AI actions. Finance is always excluded.">
+              <select id="as-ai" className={inputCls} value={f.aiPolicy} onChange={(e) => set("aiPolicy", e.target.value as AreaSettings["aiPolicy"])}>
+                {AI_POLICIES.map((p) => (
+                  <option key={p} value={p}>
+                    {AI_POLICY_LABELS[p]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
           {canChat ? (
             <fieldset className="space-y-3">
               <legend className="eyebrow mb-1">Agent</legend>
@@ -158,13 +188,8 @@ export function AreaSettingsCard({ area }: { area: WorkItem }) {
               />
             </Field>
           </div>
-          <div className="flex justify-end">
-            <Button type="submit" variant="primary" size="sm" busy={save.isPending}>
-              Save area settings
-            </Button>
-          </div>
         </form>
-      </details>
-    </section>
+      </div>
+    </Dialog>
   );
 }
