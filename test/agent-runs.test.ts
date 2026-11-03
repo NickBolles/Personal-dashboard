@@ -9,6 +9,7 @@ import { listDecisions } from "@/server/work/decisions";
 import { aggregateRunState, deployOf, liveOfJob, liveOfRun, whoIsOn, type RunSample } from "@/lib/agent-runs";
 import { buildCatchUpPrompt, isFinanceAreaLike } from "@/lib/catch-up";
 import { withdrawPost } from "@/lib/decisions";
+import { detectSensitivity } from "@/server/ai/rules";
 import { breadcrumbFor } from "@/components/navigation/AppShell";
 
 const cid = "test-wfj2";
@@ -84,6 +85,14 @@ describe("catch-me-up prompt (pure)", () => {
       activity: [{ at: "2026-11-02T10:00:00Z", verb: "edited", title: "Finance review", actor: "You" }],
     })!;
     expect(p).not.toMatch(/brokerage|monarch|finance review/i);
+    const guarded = buildCatchUpPrompt({
+      area: { id: "ar", title: "Home" },
+      items: [{ id: "m", title: "Pay mortgage $2000", status: "todo", decision: null, nextAction: null, kind: "task", archived: false }] as never,
+      decisions: [],
+      activity: [],
+      sensitive: (t) => detectSensitivity(t) !== "none",
+    })!;
+    expect(guarded).not.toMatch(/mortgage/i);
   });
 });
 

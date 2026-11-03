@@ -6,6 +6,7 @@ import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { resolveAgent } from "@/server/agents/routing";
 import { buildCatchUpPrompt, isFinanceAreaLike } from "@/lib/catch-up";
+import { detectSensitivity } from "@/server/ai/rules";
 import type { AgentResolution } from "@/lib/agents";
 import { areaIndex } from "@/lib/map-rollup";
 import type { WorkItem } from "@/lib/work";
@@ -74,7 +75,14 @@ export function coordinatorFor(user: CurrentUser, areaId: string): CoordinatorIn
   }
   const runs = agentRuns(user, items);
   const agents = runs.active.filter((a) => a.areaId === area.id);
-  const prompt = buildCatchUpPrompt({ area: { ...area, aiPolicy: area.settings?.aiPolicy ?? null }, items: inArea, decisions, activity, agents });
+  const prompt = buildCatchUpPrompt({
+    area: { ...area, aiPolicy: area.settings?.aiPolicy ?? null },
+    items: inArea,
+    decisions,
+    activity,
+    agents,
+    sensitive: (t) => detectSensitivity(t) !== "none",
+  });
   return { area: { id: area.id, title: area.title }, agent, sessionId: session?.sessionId ?? null, sessionTitle: session?.title ?? null, excluded, prompt };
 }
 

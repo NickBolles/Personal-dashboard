@@ -25,7 +25,7 @@ export type CoordinatorResponse = {
   lastRunAt: string | null;
 };
 
-type Detail = { session: SessionSummary; timeline: TimelineItem[]; activeRun?: { runId: string; status: string } };
+type Detail = { session: SessionSummary; timeline: TimelineItem[] };
 
 /** "Coordinator" button for an area (map card, area page). Opens the pane; sends nothing. */
 export function CoordinatorButton({ areaId, areaTitle, className }: { areaId: string; areaTitle: string; className?: string }) {
@@ -63,7 +63,7 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
     queryKey: ["session", sid],
     queryFn: () => api.get<Detail>(`/api/hermes/sessions/${encodeURIComponent(sid!)}`),
     enabled: !!sid,
-    refetchInterval: (q) => (q.state.data?.activeRun ? 3000 : false),
+    refetchInterval: (q) => (q.state.data?.session?.activeRun ? 3000 : false),
   });
 
   // Escape closes; focus moves into the pane and returns to the opener on close.
@@ -164,7 +164,7 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
           ) : sid && detail.isSuccess ? (
             <p className="text-sm text-muted">No messages yet.</p>
           ) : null}
-          {detail.data?.activeRun ? <p className="mt-2 text-xs text-muted">The coordinator is working…</p> : null}
+          {detail.data?.session?.activeRun ? <p className="mt-2 text-xs text-muted">The coordinator is working…</p> : null}
           {sid ? (
             <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
               Open full conversation

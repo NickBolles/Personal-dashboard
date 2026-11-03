@@ -29,17 +29,21 @@ export type CatchUpInput = {
   activity: CatchUpActivity[];
   agents?: Pick<ItemAgentInfo, "title" | "live" | "who">[];
   now?: Date;
+  /** extra guard (server passes server/ai/rules detectSensitivity): true = leave this line out */
+  sensitive?: (text: string) => boolean;
 };
 
 export const CATCH_UP_LIMITS = { items: 25, activity: 12, decisions: 10 } as const;
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const mentionsFinance = (...parts: (string | null | undefined)[]) => parts.some((p) => !!p && FINANCE_TEXT.test(p));
+const mentionsFinanceText = (...parts: (string | null | undefined)[]) => parts.some((p) => !!p && FINANCE_TEXT.test(p));
 
 /** null = this area must not go to AI (Finance / AI excluded). */
 export function buildCatchUpPrompt(input: CatchUpInput): string | null {
   const { area } = input;
   if (isFinanceAreaLike(area) || area.aiPolicy === "excluded") return null;
+  const guard = input.sensitive;
+  const mentionsFinance = (...parts: (string | null | undefined)[]) => mentionsFinanceText(...parts) || (!!guard && guard(parts.filter(Boolean).join(" ")));
   const open = input.items.filter((i) => !i.archived && i.kind !== "conversation" && bucketOf(i) !== "done" && !mentionsFinance(i.title, i.nextAction));
   const lines: string[] = [];
   lines.push(`Catch me up on the "${area.title}" area.`);
