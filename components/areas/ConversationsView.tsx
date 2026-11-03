@@ -127,7 +127,8 @@ export function ConversationsView({
         />
       </div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div role="group" aria-label="Show" className="seg">
+        {/* Wraps at 320 px / 200% text instead of pushing the page sideways. */}
+        <div role="group" aria-label="Show" className="seg max-w-full flex-wrap">
           <button type="button" className="seg-item" aria-pressed={chip === "all"} aria-label="All conversations" onClick={() => choose("all")}>
             All
           </button>
@@ -151,7 +152,7 @@ export function ConversationsView({
             ) : null}
           </button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex max-w-full flex-wrap items-center gap-1">
           {areas.length ? (
             <ChipSelect
               aria-label="Area"

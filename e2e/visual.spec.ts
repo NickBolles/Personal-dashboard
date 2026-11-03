@@ -1242,3 +1242,154 @@ for (const scheme of ["light", "dark"] as const) {
     await t.evaluate((el) => (el as Element).remove());
   });
 }
+
+/** Batch 5 (H1/C4/A3/C1): House by room, chat list chips + unread, area ⋯ settings dialog, @profile chat badge. */
+const HIDE_OVERLAYS = 'nav[aria-label="Primary"], .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }';
+const conversationsVisual = (() => {
+  const at = (min: number) => new Date(Date.parse(visualNow) - min * 60_000).toISOString();
+  const row = (id: string, title: string, min: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    title,
+    preview: null,
+    lastActiveAt: at(min),
+    backend: "hermes",
+    readOnly: false,
+    linkedItems: [],
+    placement: null,
+    shared: false,
+    suggestions: [],
+    ...extra,
+  });
+  return {
+    conversations: [
+      row("sess_rubric", "Lock the V5 rubric", 5, {
+        agentProfile: "devchief",
+        unread: true,
+        unreadCount: 3,
+        placement: { nodeId: "wk_cv", parentId: "wk_v5", path: "Momentum Bets › Criteria evaluator", inMisc: false },
+      }),
+      row("sess_garage", "Shelving options", 40, {
+        unread: true,
+        unreadCount: null,
+        placement: { nodeId: null, parentId: "wk_garage", path: "Home › Garage cleanup", inMisc: false },
+      }),
+      row("sess_morning", "Morning planning", 90),
+      row("sess_dinner", "Dinner ideas", 60 * 30, { placement: { nodeId: "wk_cm", parentId: "wk_misc", path: "Miscellaneous", inMisc: true } }),
+    ],
+    unfiledCount: 2,
+    unreadCount: 2,
+    unavailable: [],
+    updating: false,
+    cachedAt: visualNow,
+  };
+})();
+const settingsArea = {
+  ...areaDetailVisual,
+  item: { ...areaDetailVisual.item, settings: { ...areaDetailVisual.area.settings, color: "ai" } },
+  area: { ...areaDetailVisual.area, settings: { ...areaDetailVisual.area.settings, color: "ai" } },
+};
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: house by room (${scheme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.addInitScript(() => {
+      localStorage.removeItem("jarvis:house-view");
+      localStorage.setItem("jarvis:house-collapsed", JSON.stringify(["Living room"]));
+    });
+    // Real mock-HA devices (rooms from /api/template), minus cameras (live stills) and change times.
+    await page.route(/\/api\/home-assistant\/devices$/, async (route) => {
+      const res = await route.fetch();
+      const body = (await res.json()) as { cameras: unknown[]; doors: { lastChanged?: string }[]; lights: { lastChanged?: string }[] };
+      const fix = <T extends { lastChanged?: string }>(xs: T[]) => xs.map((x) => ({ ...x, lastChanged: undefined }));
+      await route.fulfill({ json: { ...body, cameras: [], doors: fix(body.doors), lights: fix(body.lights) } });
+    });
+    await page.goto("/home-control");
+    await expect(page.locator('section[data-room="Kitchen"]')).toContainText("Kitchen lights");
+    await expect(page.locator('section[data-room="Living room"] button[aria-expanded="false"]')).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(500);
+    await expectNoHorizontalOverflow(page);
+    // From the By room · All toggle to the last room (exceptions/calendar above and below vary with the mock clock).
+    const clip = await page.evaluate(() => {
+      const top = document.querySelector('[aria-label="Group devices"]')!.parentElement!.getBoundingClientRect();
+      const rooms = [...document.querySelectorAll("section[data-room]")].map((el) => el.getBoundingClientRect());
+      const bottom = Math.max(...rooms.map((r) => r.bottom));
+      const left = Math.min(top.left, ...rooms.map((r) => r.left));
+      const right = Math.max(top.right, ...rooms.map((r) => r.right));
+      return { x: Math.floor(left), y: Math.floor(top.top + window.scrollY), width: Math.ceil(right - left), height: Math.ceil(bottom - top.top) };
+    });
+    await expect(page).toHaveScreenshot(`house-rooms-${scheme}.png`, { fullPage: true, clip, animations: "disabled", mask: MASK.map((m) => page.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+
+  test(`visual: chat list chips and unread (${scheme})`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.route(/\/api\/work\/conversations\?view=all(?:&.*)?$/, (route) => route.fulfill({ json: conversationsVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.goto("/chat");
+    const rubric = page.locator('[data-conversation="sess_rubric"]');
+    await expect(rubric).toHaveAttribute("data-unread", "1");
+    await expect(rubric.getByTestId("agent-mark")).toHaveText("@devchief");
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(500);
+    await expectNoHorizontalOverflow(page);
+    // Innermost box holding both the chip row and the list.
+    const list = page
+      .locator("div")
+      .filter({ has: page.getByRole("group", { name: "Show" }) })
+      .filter({ has: rubric })
+      .last();
+    await expect(list).toHaveScreenshot(`chat-list-unread-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+
+  test(`visual: area settings dialog (${scheme})`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/items\/wk_mb$/, (route) => route.fulfill({ json: settingsArea }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.goto("/areas?item=wk_mb");
+    await expect(page.getByRole("heading", { level: 2, name: "Momentum Bets" })).toBeVisible();
+    await expect(page.getByTestId("area-color")).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.getByRole("button", { name: "More item actions" }).click();
+    await page.getByRole("menuitem", { name: "Area settings…" }).click();
+    const dialog = page.getByRole("dialog", { name: "Momentum Bets settings" });
+    await expect(dialog).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(500);
+    await expect(dialog).toHaveScreenshot(`area-settings-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => dialog.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+
+  test(`visual: chat header agent badge (${scheme})`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date(visualNow));
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) =>
+      route.fulfill({ json: { ...chatVisual, session: { ...chatVisual.session, agentProfile: "devchief" } } }),
+    );
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.goto("/chat/sess_morning");
+    const header = page.locator("header").filter({ has: page.getByRole("heading", { level: 1, name: "Morning planning" }) });
+    await expect(header.getByTestId("agent-badge")).toHaveText("@devchief");
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(500);
+    await expect(header).toHaveScreenshot(`chat-agent-badge-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+}
