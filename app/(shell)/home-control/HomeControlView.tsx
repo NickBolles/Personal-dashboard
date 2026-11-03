@@ -327,7 +327,8 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       {mode === "rooms" ? (
         groupByRoom(all).map(({ room, devices }) => {
           const id = `room-${roomSlug(room)}`;
-          const open = !collapsed.includes(room);
+          // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
+          const open = !collapsed.includes(room) || devices.some((x) => x.entityId === focusEntity);
           return (
             <section key={room} aria-labelledby={`${id}-h`} className="mt-4" data-room={room}>
               <h2 id={`${id}-h`} className="mb-1.5">

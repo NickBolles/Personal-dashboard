@@ -114,7 +114,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const online = useOnline();
   const { toast, announce } = useToast();
   const { can } = useAccess();
-  const { detail, error, refetch, fromCache, isLoading } = useSessionDetail(sessionId);
+  const { detail, error, refetch, fromCache, isLoading, isFetching } = useSessionDetail(sessionId);
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
   const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
@@ -386,7 +386,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   // C4: opening a conversation (and every new message while it's open) marks it read for you.
   const lastItemId = detail?.timeline.at(-1)?.id ?? null;
   const readCount = detail?.session.messageCount ?? null;
-  const readKey = detail && !fromCache ? `${sessionId}:${readCount}:${lastItemId}` : null;
+  // Only the transcript actually shown and freshly fetched counts: a cached detail (or a failed refresh)
+  // may predate new messages, and marking it read would hide them.
+  const readKey = detail && !fromCache && !isFetching && !error ? `${sessionId}:${readCount}:${lastItemId}` : null;
   const lastRead = useRef<string | null>(null);
   useEffect(() => {
     if (!readKey || !online || lastRead.current === readKey) return;
