@@ -122,7 +122,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await itemAction(page, "Link PR");
   await page.getByLabel("GitHub PR URL").fill("https://github.com/NickBolles/momentum-bets/pull/128");
   await page.getByRole("button", { name: "Add link" }).click();
-  await expect(page.getByText("NickBolles/momentum-bets#128", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("work-links").getByText("NickBolles/momentum-bets#128", { exact: true })).toBeVisible();
   await expect(page.getByText(/Add a GitHub token \(Settings → Connections → GitHub\)/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Mark merged" }).click();

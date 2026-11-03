@@ -65,6 +65,8 @@ export type DecisionEntry = {
   areaTitle?: string;
   /** the item's linked Hermes conversation, when it has one (answer can be posted there after confirm) */
   sessionId?: string | null;
+  /** the item's area coordinator conversation (answer can be posted there after confirm when the item has none) */
+  coordinatorSessionId?: string | null;
 };
 
 export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
@@ -72,4 +74,9 @@ export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
 /** Newest first, with owner item decisions grouped before approvals and workflow proposals at the same time. */
 export function sortDecisions(entries: DecisionEntry[]): DecisionEntry[] {
   return [...entries].sort((a, b) => (a.at === b.at ? a.key.localeCompare(b.key) : a.at < b.at ? 1 : -1));
+}
+
+/** Undo of an answer withdraws its pending conversation post (#167); other offers stay. */
+export function withdrawPost<T extends { opId: string }>(posted: T | null, undoneOpId: string): T | null {
+  return posted && posted.opId === undoneOpId ? null : posted;
 }

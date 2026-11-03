@@ -17,6 +17,7 @@ import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoDecisions } from "./fixtures/map-demo";
+import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -25,6 +26,8 @@ import { mapDemo, mapDemoDecisions } from "./fixtures/map-demo";
 test.beforeEach(async ({ request, page }) => {
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
+  // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
   await mock(request, "/reset");
   await setHa(request, "cover.garage_door", "open", 45);
 });
@@ -1105,6 +1108,7 @@ for (const scheme of ["light", "dark"] as const) {
       await freezeMiddayCT(page);
       await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
       await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+      await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: agentRunsDemo }));
       await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
       await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
       await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
@@ -1122,4 +1126,40 @@ for (const scheme of ["light", "dark"] as const) {
       await t.evaluate((el) => (el as Element).remove());
     });
   }
+}
+
+/** Work from Jarvis 2: the area coordinator pane (side pane on desktop, sheet on phones) after "Catch me up" (nothing sent). */
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: coordinator pane (${scheme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
+    await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+    await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: agentRunsDemo }));
+    await page.route(/\/api\/work\/items\/[^/]+\/coordinator(?:\?.*)?$/, (route) => route.fulfill({ json: coordinatorDemo }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    let sent = 0;
+    await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "POST" ? (sent++, route.abort()) : route.fallback()));
+    await page.goto("/map");
+    await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
+    const card = page.getByTestId("map-area-card").filter({ hasText: "Jarvis" });
+    await expect(card.getByTestId("agents-strip")).toBeVisible();
+    await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();
+    const pane = page.getByTestId("coordinator-pane");
+    await expect(pane.getByTestId("coordinator-agent")).toBeVisible();
+    await pane.getByTestId("coordinator-catch-up").click();
+    await expect(pane.getByTestId("coordinator-input")).toHaveValue(/Catch me up on the "Jarvis" area/);
+    expect(sent).toBe(0);
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({
+      content: 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }',
+    });
+    await page.waitForTimeout(500);
+    await expectNoHorizontalOverflow(page);
+    // Element shot + pane-scoped mask: page-level masks also paint boxes for the map BEHIND the pane over it.
+    await expect(pane).toHaveScreenshot(`coordinator-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => pane.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
 }

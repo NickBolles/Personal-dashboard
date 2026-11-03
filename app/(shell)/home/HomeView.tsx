@@ -16,6 +16,8 @@ import { Badge, Empty, ErrorNote, OverflowMenu, Page, SectionLabel, Spinner, cx,
 import { useRouter } from "next/navigation";
 import { ChevronIcon } from "@/components/icons";
 import { NeedsYouSection } from "@/components/map/Decisions";
+import { AgentsRail } from "@/components/agents/AgentRuns";
+import { useAccess } from "@/components/access";
 import { Skeleton } from "@/components/ui/kit";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
 
@@ -246,6 +248,7 @@ function HomeSkeleton() {
 }
 
 export function HomeView() {
+  const canWork = useAccess().can("work.use");
   // Keep the reviewed selection alive across Home refetches. Successful tasks
   // leave the suggestion (and the whole card may disappear) before Close.
   const [triage, setTriage] = useState<Assist | null>(null);
@@ -447,6 +450,7 @@ export function HomeView() {
 
         {/* Context rail: beside the feed on wide screens, after it on phones. */}
         <aside aria-label="At a glance" className="min-w-0 space-y-5">
+          {canWork ? <AgentsRail /> : null}
           {data && visible("glance") ? <Glance data={data} /> : null}
         </aside>
       </div>

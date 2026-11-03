@@ -7,6 +7,7 @@ import { sortDecisions, type DecisionEntry, type DecisionsResponse } from "@/lib
 import type { WorkItem } from "@/lib/work";
 import { areaIndex, type MapExport, type MapExportNode, areaRollups, bucketOf } from "@/lib/map-rollup";
 import { listItems } from "./store";
+import { coordinatorSessions } from "./coordinator";
 
 function approvalText(raw: string | null): string {
   if (!raw) return "A running task is waiting for your approval.";
@@ -38,6 +39,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
     const byId = new Map(items.map((i) => [i.id, i]));
     const areaOf = areaIndex(items);
     const links = linksByItem(open.map((i) => i.id));
+    const coord = coordinatorSessions(items);
     for (const i of open)
       entries.push({
         key: `item:${i.id}`,
@@ -50,6 +52,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         itemId: i.id,
         areaTitle: byId.get(areaOf.get(i.id) ?? "")?.title,
         sessionId: sessionFor(i, items, links),
+        coordinatorSessionId: coord.get(areaOf.get(i.id) ?? "") ?? null,
       });
   }
   if (can(user, "hermes.chat")) {
@@ -106,7 +109,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
   return { entries: sorted, count: sorted.length };
 }
 
-function linksByItem(ids: string[]) {
+export function linksByItem(ids: string[]) {
   const out = new Map<string, { kind: string; targetId: string | null; url: string | null; title: string }[]>();
   const db = getDb();
   for (let i = 0; i < ids.length; i += 500) {

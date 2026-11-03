@@ -1,0 +1,124 @@
+/* Agent runs on items + Agents strip (Work from Jarvis batch 2).
+   Agent gradient only on the glyph (AgentMark) and progress (ProgressBar tone="orb"). */
+.ar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ar-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.ar-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--surface);
+  min-width: 0;
+}
+.ar-pr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+.ar-report {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.ar-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ar-agent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ar-agent .k-prog {
+  margin-top: 4px;
+}
+.ar-agent-link {
+  min-height: 44px;
+}
+.ar-agent-link:hover {
+  border-color: var(--line-strong);
+}
+/* Coordinator pane: side pane on desktop, bottom sheet on phones. */
+.co-pane {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-pop);
+  inset: auto 0 0 0;
+  max-height: 88dvh;
+  border-radius: 16px 16px 0 0;
+}
+@media (min-width: 1024px) {
+  .co-pane {
+    inset: 0 0 0 auto;
+    width: min(420px, 100vw);
+    max-height: none;
+    border-radius: 0;
+  }
+}
+.co-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.co-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 10px 12px;
+  min-height: 0;
+}
+.co-msg {
+  padding: 6px 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.co-msg + .co-msg {
+  border-top: 1px solid var(--line);
+}
+.co-foot {
+  border-top: 1px solid var(--line);
+  padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+}
+.co-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: rgb(0 0 0 / 0.35);
+}
+@media (min-width: 1024px) {
+  .co-scrim {
+    background: transparent;
+    pointer-events: none;
+  }
+}
