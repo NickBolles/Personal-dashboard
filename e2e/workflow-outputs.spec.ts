@@ -87,7 +87,8 @@ test("workflow outputs: edit session → end form → summary accept → markdow
   expect(md).toContain("## Summary");
   expect(md).toContain("Orla Pike-Reyes");
   expect(md).toContain("Visit the orchard elders");
-  await expect(panel.getByTestId("workflow-export")).toContainText("no Drive connection");
+  // Drive is flagged ON in e2e but not connected here: the bar points to Settings (workflow-drive-bible.spec covers saving)
+  await expect(panel.getByTestId("workflow-export")).toContainText("Google Drive");
 
   // Action checklist → confirm sheet with exact titles + destination → items created.
   const actions = panel.getByTestId("workflow-actions");

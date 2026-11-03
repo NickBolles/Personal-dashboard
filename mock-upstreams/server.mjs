@@ -18,6 +18,7 @@ import { createFcm } from "./fcm.mjs";
 import { createMonarch } from "./monarch.mjs";
 import { createAnthropic } from "./anthropic.mjs";
 import { createGithub } from "./github.mjs";
+import { createGoogleDrive } from "./google-drive.mjs";
 import { json, readBody, bearerOk, isoDate } from "./util.mjs";
 
 export const MOCK_CREDENTIALS = {
@@ -46,6 +47,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
     monarch: createMonarch({ token: c.monarchToken }),
     anthropic: createAnthropic({ apiKey: c.anthropicKey }),
     github: createGithub(),
+    drive: createGoogleDrive({ clientId: "mock-drive-client.apps.googleusercontent.com", clientSecret: "mock-drive-secret" }),
   };
   const compass = { completed: new Map() };
 
@@ -87,6 +89,12 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
             failing: [...control.fail],
           });
         if (path === "/health") return json(res, 200, { ok: true });
+        if (path === "/drive")
+          return json(res, 200, {
+            files: services.drive.state.files.map(({ id, name, mimeType, parents, content }) => ({ id, name, mimeType, parents, bytes: content?.length ?? 0 })),
+            revoked: services.drive.state.revoked,
+            consents: services.drive.state.consents,
+          });
       }
       if (prefix === "hermes") return await services.hermes.handle(req, res, path, url, control);
       if (prefix === "paperclip") return await services.paperclip.handle(req, res, path, url, control);
@@ -99,6 +107,8 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
       if (prefix === "fcm") return await services.fcm.handle(req, res, path, url, control);
       if (prefix === "monarch") return await services.monarch.handle(req, res, path, url, control);
       if (prefix === "anthropic") return await services.anthropic.handle(req, res, path, url, control);
+      if (prefix === "gdrive") return await services.drive.handle(req, res, path, url, control);
+      if (prefix === "bible" && path === "/engwebp_vpl.zip") return services.drive.bible(req, res);
       if (prefix === "github") return await services.github.handle(req, res, path, url, control);
       if (prefix === "compass") {
         if (control.fail.has("daily_compass")) return json(res, 503, { error: "unavailable" });

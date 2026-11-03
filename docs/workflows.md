@@ -191,3 +191,18 @@ API: `POST /api/workflows/validate` (dry run) · `POST /api/workflows/draft` `{k
   linking to `/workflows?start=<slug>`, which opens the start form. It never starts a run or calls a model.
 - **Share target:** the capture sheet for shared text offers _Start workflow…_; the text prefills the start form
   (same tokenizer as the palette) and becomes the first note. URLs are kept as text, never fetched.
+
+## Google Drive and the offline Bible (#141, #142)
+
+**Save to Google Drive** (flag `JARVIS_ENABLE_DRIVE_EXPORT`, default off)
+
+- Scope: `https://www.googleapis.com/auth/drive.file` only. Jarvis sees only the files it creates. The scope is requested by **Settings → Connections → Google Drive → Connect Google Drive**, never at sign-in.
+- Every save opens a confirm sheet with the exact folder (`My Drive › Teaching notes › <year>`, taken from the definition's `drive` export `folder`; `{yyyy}`, `{mm}` and `{dd}` come from the run's local start date) and the file name. The server rejects a save whose path or name differs from what was confirmed. Missing folders are created. The file is a Google Doc; if Drive refuses the conversion, it is saved as `.md`. The link is stored on the run and in the audit log (`workflow.export.drive`).
+- OAuth client: the Google Tasks client (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or Connections → Todos). `JARVIS_DRIVE_CLIENT_ID`/`_SECRET` override it. The client needs the redirect URI `<origin>/api/integrations/drive/oauth/callback` and the Google Drive API enabled in its project.
+- Disconnect revokes the token at Google (best effort) and deletes it.
+
+**Offline Bible** (off until downloaded)
+
+- **Settings → Connections → Offline Bible → Download** fetches the pinned eBible.org `engwebp_vpl.zip` once and checks its SHA-256 against the pin before reading it. Jarvis converts it to `<data>/bible/web.json` and records that file's own SHA-256, which is checked again before each load. A republished file fails closed until the pin in `lib/bible/web.ts` is updated.
+- Verse text appears under the Scripture field in the start form and under Scripture rows in the outline. Lookups are local (`GET /api/bible/passage?ref=`) and make no network calls. The World English Bible is public domain; the attribution is shown with the text.
+- It is not included in backups: the file is public and can be downloaded again.
