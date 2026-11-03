@@ -402,3 +402,47 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
 });
+
+test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 200% text zoom (item agent panel, map strip, coordinator pane)", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const nonce = Date.now().toString(36);
+  await page.goto("/home");
+  const post = async (data: unknown) => {
+    const r = await page.request.post("/api/work/items", { data, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const areaId = await post({ kind: "area", title: `Zoom sandpiper ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom turnstone with a fairly long title ${nonce}` });
+  const p = await page.request.patch(`/api/work/items/${id}`, { data: { assignee: "agent:momentumchief" }, headers: { "x-jarvis-csrf": "1" } });
+  expect(p.ok(), await p.text()).toBeTruthy();
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+        label,
+      )
+      .toEqual([]);
+  };
+  await page.goto(`/areas?item=${id}`);
+  await expect(page.getByTestId("item-agent-panel")).toBeVisible();
+  await axe("item agent panel");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+
+  await page.goto("/map");
+  const card = page.getByTestId("map-area-card").filter({ hasText: `Zoom sandpiper ${nonce}` });
+  await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();
+  const pane = page.getByTestId("coordinator-pane");
+  await pane.getByTestId("coordinator-catch-up").click();
+  await expect(pane.getByTestId("coordinator-input")).toHaveValue(/Catch me up/);
+  await axe("coordinator pane");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+  await page.keyboard.press("Escape");
+});
