@@ -306,80 +306,84 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
     <LightTile key={x.entityId} x={x} focus={focusEntity === x.entityId} online={online} light={light} canControl={can("home_assistant.control_lights")} />
   );
   const doorTile = (x: DeviceView) => <DoorTile key={x.entityId} x={x} focus={focusEntity === x.entityId} />;
-  return (
-    <>
-      {all.length ? (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 dense:mt-0 dense:mb-2">
-          <div role="group" aria-label="Group devices" className="seg">
-            <button type="button" className="seg-item" aria-pressed={mode === "rooms"} onClick={() => choose("rooms")}>
-              By room
-            </button>
-            <button type="button" className="seg-item" aria-pressed={mode === "all"} onClick={() => choose("all")}>
-              All
-            </button>
-          </div>
-          {mode === "rooms" && d.roomsKnown === false ? (
-            <p className="text-xs text-muted">Home Assistant didn&apos;t share rooms with this token (needs an admin token), so everything is Unassigned.</p>
-          ) : null}
-        </div>
+  const toggle = all.length ? (
+    <div className={cx("flex flex-wrap items-center justify-between gap-2", mode === "rooms" ? "" : "mt-6 dense:mt-0 dense:mb-2")}>
+      <div role="group" aria-label="Group devices" className="seg">
+        <button type="button" className="seg-item" aria-pressed={mode === "rooms"} onClick={() => choose("rooms")}>
+          By room
+        </button>
+        <button type="button" className="seg-item" aria-pressed={mode === "all"} onClick={() => choose("all")}>
+          All
+        </button>
+      </div>
+      {mode === "rooms" && d.roomsKnown === false ? (
+        <p className="text-xs text-muted">Home Assistant didn&apos;t share rooms with this token (needs an admin token), so everything is Unassigned.</p>
       ) : null}
-      {!online && d.lights.length ? <p className="mt-2 mb-2 text-sm text-warn">Light switches are off while offline.</p> : null}
-      {mode === "rooms" ? (
-        groupByRoom(all).map(({ room, devices }) => {
-          const id = `room-${roomSlug(room)}`;
-          // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
-          const open = !collapsed.includes(room) || devices.some((x) => x.entityId === focusEntity);
-          return (
-            <section key={room} aria-labelledby={`${id}-h`} className="mt-4" data-room={room}>
-              <h2 id={`${id}-h`} className="mb-1.5">
-                <button
-                  type="button"
-                  className="tap -mx-1 inline-flex items-center gap-1.5 rounded-lg px-1 text-[13px] font-semibold text-muted hover:text-text"
-                  aria-expanded={open}
-                  aria-controls={id}
-                  onClick={() => toggleRoom(room)}
-                >
-                  <ChevronIcon className={cx("h-3.5 w-3.5 transition-transform", open && "rotate-90")} />
-                  {room}
-                  <span className="tabular-nums font-normal">{devices.length}</span>
-                </button>
-              </h2>
-              {open ? (
-                <ul id={id} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {devices.map((x) =>
-                    x.kind === "light" ? lightTile(x) : x.kind === "camera" ? <CameraCard key={x.entityId} camera={x} online={online} /> : doorTile(x),
-                  )}
-                </ul>
-              ) : null}
-            </section>
-          );
-        })
-      ) : (
-        <>
-          {d.doors.length ? (
-            <section aria-labelledby="doors-h" className="mt-6">
-              <SectionHeader id="doors-h" label="Doors, locks and garage" />
-              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.doors.map(doorTile)}</ul>
-            </section>
-          ) : null}
-          {d.lights.length ? (
-            <section aria-labelledby="lights-h" className="mt-6">
-              <SectionHeader id="lights-h" label="Lights" />
-              <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.lights.map(lightTile)}</ul>
-            </section>
-          ) : null}
-          {d.cameras.length ? (
-            <section aria-labelledby="cams-h" className="mt-6">
-              <SectionHeader id="cams-h" label="Cameras" />
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {d.cameras.map((c) => (
-                  <CameraCard key={c.entityId} camera={c} online={online} />
-                ))}
+    </div>
+  ) : null;
+  const offlineNote = !online && d.lights.length ? <p className="mt-2 mb-2 text-sm text-warn">Light switches are off while offline.</p> : null;
+  return mode === "rooms" ? (
+    // All rooms live in ONE section, so on desktop the page's two columns keep Health/Controls where they
+    // were instead of rooms spilling into the right column.
+    <section aria-label="Devices by room" className="mt-6 flex flex-col gap-4" data-rooms>
+      {toggle}
+      {offlineNote}
+      {groupByRoom(all).map(({ room, devices }) => {
+        const id = `room-${roomSlug(room)}`;
+        // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
+        const open = !collapsed.includes(room) || devices.some((x) => x.entityId === focusEntity);
+        return (
+          <section key={room} aria-labelledby={`${id}-h`} data-room={room}>
+            <h2 id={`${id}-h`} className="mb-1.5">
+              <button
+                type="button"
+                className="tap -mx-1 inline-flex items-center gap-1.5 rounded-lg px-1 text-[13px] font-semibold text-muted hover:text-text"
+                aria-expanded={open}
+                aria-controls={id}
+                onClick={() => toggleRoom(room)}
+              >
+                <ChevronIcon className={cx("h-3.5 w-3.5 transition-transform", open && "rotate-90")} />
+                {room}
+                <span className="tabular-nums font-normal">{devices.length}</span>
+              </button>
+            </h2>
+            {open ? (
+              <ul id={id} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {devices.map((x) =>
+                  x.kind === "light" ? lightTile(x) : x.kind === "camera" ? <CameraCard key={x.entityId} camera={x} online={online} /> : doorTile(x),
+                )}
               </ul>
-            </section>
-          ) : null}
-        </>
-      )}
+            ) : null}
+          </section>
+        );
+      })}
+    </section>
+  ) : (
+    <>
+      {toggle}
+      {offlineNote}
+      {d.doors.length ? (
+        <section aria-labelledby="doors-h" className="mt-6">
+          <SectionHeader id="doors-h" label="Doors, locks and garage" />
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.doors.map(doorTile)}</ul>
+        </section>
+      ) : null}
+      {d.lights.length ? (
+        <section aria-labelledby="lights-h" className="mt-6">
+          <SectionHeader id="lights-h" label="Lights" />
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.lights.map(lightTile)}</ul>
+        </section>
+      ) : null}
+      {d.cameras.length ? (
+        <section aria-labelledby="cams-h" className="mt-6">
+          <SectionHeader id="cams-h" label="Cameras" />
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {d.cameras.map((c) => (
+              <CameraCard key={c.entityId} camera={c} online={online} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </>
   );
 }
