@@ -1158,7 +1158,8 @@ for (const scheme of ["light", "dark"] as const) {
     });
     await page.waitForTimeout(500);
     await expectNoHorizontalOverflow(page);
-    await expect(page).toHaveScreenshot(`coordinator-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+    // Element shot + pane-scoped mask: page-level masks also paint boxes for the map BEHIND the pane over it.
+    await expect(pane).toHaveScreenshot(`coordinator-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => pane.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
   });
 }
