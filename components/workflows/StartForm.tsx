@@ -112,7 +112,12 @@ function ScriptureField(props: FieldProps) {
               : ""
           : ""}
       </p>
-      {parsed?.ok ? <PassageText reference={parsed.ref.display} compact /> : null}
+      {/* prefilled values are parsed refs ({display}); typed ones are strings */}
+      {parsed?.ok ? (
+        <PassageText reference={parsed.ref.display} compact />
+      ) : !parsed && show(props.value) ? (
+        <PassageText reference={show(props.value)} compact />
+      ) : null}
     </div>
   );
 }
