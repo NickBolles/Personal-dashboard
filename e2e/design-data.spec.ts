@@ -22,7 +22,8 @@ test("house: devices grouped by Home Assistant room, collapsible, with an All to
   await expect(room("Kitchen")).toContainText("Kitchen lights");
   await expect(room("Garage")).toContainText("Garage door 2");
   await expect(room("Unassigned")).toContainText("Driveway camera");
-  const toggle = room("Kitchen").getByRole("button", { name: /Kitchen/ });
+  // the room header (the room's light tiles are buttons named "Kitchen lights: …" too)
+  const toggle = room("Kitchen").locator("h2").getByRole("button");
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
