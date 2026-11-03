@@ -403,6 +403,68 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await expectNoHorizontalOverflow(page, { soft: true });
 });
 
+test("drive + offline bible (#141/#142): axe clean and no overflow at 200% text zoom (settings panels, verse text, drive confirm)", async ({ page }) => {
+  const H = { "x-jarvis-csrf": "1" };
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id} ${v.nodes.map((n) => `${n.target.join(" ")} ${n.failureSummary ?? ""}`).join(", ")}`),
+        label,
+      )
+      .toEqual([]);
+  };
+  const zoom = async () => {
+    const t = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+    await t.evaluate((el) => (el as Element).remove());
+  };
+  try {
+    expect((await page.request.post("/api/bible", { data: { confirm: true }, headers: H })).ok()).toBe(true);
+    // mock consent: start → mock authorize → callback → Settings
+    await page.goto("/api/integrations/drive/oauth/start");
+    await expect(page).toHaveURL(/\/settings\/connections\?drive=connected/);
+    await expect(page.getByTestId("drive-connected")).toBeVisible();
+    await axe("drive panel");
+    await zoom();
+    await page.getByRole("button", { name: /Offline Bible/ }).click();
+    await expect(page.getByTestId("bible-installed")).toBeVisible();
+    await axe("bible panel");
+    await zoom();
+
+    const data = { ...teaching, slug: "zoomdrive", name: "Zoom drive notebook", triggers: [{ kind: "palette", command: "/zoomdrive" }] };
+    await ensureWorkflowActive(page, data);
+    await page.goto("/workflows");
+    const form = page.getByRole("dialog", { name: "New session" });
+    await expect(async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/zoomdrive Zed Quill John 15" } })));
+      await expect(form).toBeVisible({ timeout: 2000 });
+    }).toPass();
+    await expect(form.getByTestId("scripture-passage")).toContainText("true vine");
+    await axe("start form with verse text");
+    await zoom();
+    await form.getByTestId("workflow-start-submit").click();
+    await expect(page).toHaveURL(/\/chat\//);
+    const panel = page.getByTestId("workflow-run");
+    await panel.getByRole("button", { name: "End session" }).click();
+    await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
+    await expect(panel).toContainText("Ended");
+    // the transient "Session ended" toast (translucent ok tone) would sit over the sheet's scrim and fail color-contrast (follow-up #173)
+    await expect(page.getByRole("status").filter({ hasText: "Session ended" })).toHaveCount(0, { timeout: 10_000 });
+    await panel.getByTestId("workflow-drive-open").click();
+    await expect(page.getByRole("dialog", { name: "Save to Google Drive?" })).toBeVisible();
+    await axe("drive confirm");
+    await zoom();
+    await page.getByRole("dialog", { name: "Save to Google Drive?" }).getByRole("button", { name: "Cancel" }).click();
+  } finally {
+    await page.request.delete("/api/integrations/drive", { headers: H });
+    await page.request.delete("/api/bible", { headers: H });
+  }
+});
+
 test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 200% text zoom (item agent panel, map strip, coordinator pane)", async ({
   page,
 }) => {

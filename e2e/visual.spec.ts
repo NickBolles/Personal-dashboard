@@ -416,6 +416,85 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+// #141/#142: Settings → Connections Google Drive + Offline Bible panels and inline verse text in the start form.
+// Status + passage endpoints are stubbed with fixed fixtures (no real pack, no mock Drive state).
+const visBible = { ...teaching, slug: "visbible", name: "Visual bible notebook", triggers: [{ kind: "palette", command: "/visbible" }] };
+const passageVisual = {
+  ref: "John 15:1–5",
+  translation: "WEB",
+  version: "2026-10-30",
+  truncated: false,
+  attribution: "World English Bible (WEB), public domain, from eBible.org.",
+  verses: [
+    { chapter: 15, verse: 1, text: "“I am the true vine, and my Father is the farmer." },
+    {
+      chapter: 15,
+      verse: 2,
+      text: "Every branch in me that doesn’t bear fruit, he takes away. Every branch that bears fruit, he prunes, that it may bear more fruit.",
+    },
+    { chapter: 15, verse: 3, text: "You are already pruned clean because of the word which I have spoken to you." },
+    { chapter: 15, verse: 4, text: "Remain in me, and I in you." },
+    { chapter: 15, verse: 5, text: "I am the vine. You are the branches." },
+  ],
+};
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: drive + offline bible settings and verse text (${scheme})`, async ({ page }) => {
+    await ensureWorkflowActive(page, visBible);
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/integrations\/drive$/, (route) =>
+      route.fulfill({
+        json: {
+          available: true,
+          configured: true,
+          connected: false,
+          connectedAt: null,
+          scope: "https://www.googleapis.com/auth/drive.file",
+          redirectPath: "/api/integrations/drive/oauth/callback",
+        },
+      }),
+    );
+    await page.route(/\/api\/bible$/, (route) =>
+      route.fulfill({
+        json: {
+          installed: true,
+          name: "World English Bible",
+          translation: "WEB",
+          version: "2026-10-30",
+          pinnedSha256: "0".repeat(64),
+          sourceUrl: "https://ebible.org/Scriptures/engwebp_vpl.zip",
+          downloadBytes: 4283563,
+          installedAt: "2026-11-01T12:00:00.000Z",
+          verses: 31098,
+        },
+      }),
+    );
+    await page.route(/\/api\/bible\/passage\?/, (route) => route.fulfill({ json: passageVisual }));
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [] } }));
+    await page.goto("/settings/connections#drive");
+    const drive = page.locator("li#drive");
+    await expect(drive.getByTestId("drive-connect")).toBeVisible();
+    await expect(drive).toHaveScreenshot(`connections-drive-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => drive.locator(m)) });
+    await page.getByRole("button", { name: /Offline Bible/ }).click();
+    const bible = page.locator("li#bible");
+    await expect(bible.getByTestId("bible-installed")).toBeVisible();
+    await expect(bible).toHaveScreenshot(`connections-bible-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => bible.locator(m)) });
+
+    await page.goto("/workflows");
+    const form = page.getByRole("dialog", { name: "New session" });
+    await expect(async () => {
+      await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:workflow-start", { detail: { command: "/visbible Ann Lyle John 15:1-5" } })));
+      await expect(form).toBeVisible({ timeout: 2000 });
+    }).toPass();
+    const passage = form.getByTestId("scripture-passage");
+    await expect(passage).toContainText("true vine");
+    await expect(passage).toHaveScreenshot(`scripture-passage-${scheme}.png`, { animations: "disabled" });
+  });
+}
+
 // Every Markdown element in one assistant message (fixture shared with test/markdown.test.tsx).
 test("visual: markdown in a chat message", async ({ page }) => {
   await page.clock.setFixedTime(new Date(visualNow));

@@ -297,6 +297,7 @@ export function runView(row: RunRow, def: WorkflowDefinition) {
     summary: row.summary ?? null,
     summaryState: row.summaryState as "none" | "proposed" | "accepted",
     promoted: parse<{ index: number; itemId: string; title: string }[]>(row.promotedJson, []),
+    driveExport: parse<{ url: string; path: string; name: string; kind: "doc" | "markdown"; savedAt: string } | null>(row.driveExportJson ?? "null", null),
   };
 }
 

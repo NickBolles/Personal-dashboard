@@ -7,6 +7,7 @@ import { Button, cx, useToast } from "@/components/ui";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { displayValue, type CaptureOp } from "@/lib/workflows/runs";
 import type { TimelineItem } from "@/lib/hermes";
+import { PassageText, useBibleStatus } from "./PassageText";
 import { ActionChecklist, EditSessionDialog, EndSessionDialog, ExportBar, ReflectionPrompt, SummaryCard, type RunOutputsView } from "./RunOutputs";
 
 export type RunPanelView = {
@@ -159,6 +160,7 @@ export function RunPanel({
   capture?: AgentCaptureState;
 }) {
   const qc = useQueryClient();
+  const bibleInstalled = useBibleStatus().data?.installed ?? false;
   const { toast } = useToast();
   const set = (r: RunPanelView) => qc.setQueryData(key(sessionId), r);
   const live = run.status === "live";
@@ -287,7 +289,7 @@ export function RunPanel({
         <div className="wf-run-full mt-2 grid grid-cols-1 gap-2" data-testid="workflow-outputs">
           <SummaryCard sessionId={sessionId} run={out} />
           <ActionChecklist sessionId={sessionId} run={out} />
-          <ExportBar run={out} />
+          <ExportBar sessionId={sessionId} run={out} />
         </div>
       ) : null}
       <div className="wf-run-full mt-2 grid grid-cols-1 gap-2 text-sm" data-testid="workflow-outline">
@@ -298,7 +300,9 @@ export function RunPanel({
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
                 {s.title} <span className="font-normal">({rows.length})</span>
               </h3>
-              {s.bind === "scripture" && rows.length ? <p className="text-xs text-muted">Reference only · passage text isn&apos;t downloaded</p> : null}
+              {s.bind === "scripture" && rows.length && !bibleInstalled ? (
+                <p className="text-xs text-muted">Reference only · passage text isn&apos;t downloaded</p>
+              ) : null}
               {rows.length ? (
                 <ul className="space-y-1">
                   {rows.map((v, i) => (
@@ -308,6 +312,11 @@ export function RunPanel({
                           <blockquote className="break-words">“{displayValue(v)}”</blockquote>
                           {(v as { who?: string }).who ? <figcaption className="text-xs text-muted">— {(v as { who?: string }).who}</figcaption> : null}
                         </figure>
+                      ) : s.bind === "scripture" ? (
+                        <div className="min-w-0 flex-1">
+                          <span className="break-words">{displayValue(v)}</span>
+                          <PassageText reference={displayValue(v)} />
+                        </div>
                       ) : (
                         <span className="min-w-0 flex-1 break-words">{displayValue(v)}</span>
                       )}

@@ -30,6 +30,7 @@ if (fs.existsSync(captures)) fs.cpSync(captures, path.join(dest, "captures"), { 
 // Chat attachments (sent files and pictures): the DB rows point at these bytes.
 const chatFiles = path.join(dataDir, "chat-files");
 if (fs.existsSync(chatFiles)) fs.cpSync(chatFiles, path.join(dest, "chat-files"), { recursive: true });
+// bible/ (offline WEB pack, #142) is skipped on purpose: public domain, pinned by checksum, re-downloadable from Settings.
 fs.chmodSync(dest, 0o700);
 
 // Verify the copy opens and has our tables.

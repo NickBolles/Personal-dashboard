@@ -29,6 +29,8 @@ import {
   unsupportedSchedule,
 } from "@/lib/workflows/outputs";
 import { currentDefinition } from "./store";
+import { resolveDriveFolder, driveFileName } from "@/lib/workflows/drive-path";
+import { ensureFolderPath, uploadMarkdown } from "@/server/drive/google-drive";
 import { endRun, getRun, ownRun, parseJson, patchRun, saveRun, type RunCtx } from "./runs";
 
 /**
@@ -150,6 +152,74 @@ export function exportMarkdown(userId: string, id: string) {
     summary: row.summaryState === "accepted" ? row.summary : null,
   });
   return { fileName: markdownFileName(def, row.startedAt), markdown };
+}
+
+/* ---------------- Google Drive export (#141, confirmed) ---------------- */
+
+export type DriveExport = { fileId: string; url: string; path: string; name: string; kind: "doc" | "markdown"; savedAt: string };
+
+/** Folder template: the definition's drive export, else `<workflow name>/{yyyy}`. */
+export function driveTemplate(def: WorkflowDefinition): string {
+  const e = def.outputs?.exports?.find((x) => x.kind === "drive");
+  return e && e.kind === "drive" ? e.folder : `${def.name.replace(/\//g, " ")}/{yyyy}`;
+}
+
+/** What the confirm sheet shows: exact folder path + file name (recomputed on save). */
+export function drivePlan(userId: string, id: string) {
+  const { row, def } = ownRun(userId, id);
+  const local = localDate(new Date(row.startedAt), TZ());
+  const folder = resolveDriveFolder(driveTemplate(def), local);
+  if (!folder.ok) throw new HttpError(422, "bad_drive_folder", folder.error);
+  const { markdown } = exportMarkdown(userId, id);
+  return {
+    folder: folder.segments,
+    path: `My Drive › ${folder.display}`,
+    fileName: driveFileName(row.title, local),
+    format: "Google Doc",
+    bytes: Buffer.byteLength(markdown, "utf8"),
+    last: parseJson<DriveExport | null>(row.driveExportJson ?? "null", null),
+  };
+}
+
+export const driveSaveBody = z
+  .object({
+    /** what the owner confirmed: must equal the server's plan */
+    path: z.string().min(1).max(600),
+    fileName: z.string().min(1).max(200),
+  })
+  .strict();
+
+export async function saveRunToDrive(ctx: RunCtx, id: string, body: z.infer<typeof driveSaveBody>) {
+  const plan = drivePlan(ctx.userId, id);
+  if (plan.path !== body.path || plan.fileName !== body.fileName)
+    throw new HttpError(409, "stale_plan", "The destination changed since you looked. Review it again.");
+  const { markdown } = exportMarkdown(ctx.userId, id);
+  try {
+    const parent = await ensureFolderPath(plan.folder);
+    const f = await uploadMarkdown(plan.fileName, markdown, parent);
+    const saved: DriveExport = { ...f, path: plan.path, savedAt: new Date().toISOString() };
+    const { row } = ownRun(ctx.userId, id);
+    saveRun(row, { driveExportJson: JSON.stringify(saved) });
+    audit({
+      actor: ctx.userId,
+      action: "workflow.export.drive",
+      sourceRecord: id,
+      result: "ok",
+      correlationId: ctx.correlationId,
+      detail: { path: plan.path, name: saved.name, kind: saved.kind, url: saved.url },
+    });
+    return { run: getRun(ctx.userId, id), saved };
+  } catch (err) {
+    audit({
+      actor: ctx.userId,
+      action: "workflow.export.drive",
+      sourceRecord: id,
+      result: "error",
+      correlationId: ctx.correlationId,
+      detail: { path: plan.path, error: (err as Error).message.slice(0, 200) },
+    });
+    throw err;
+  }
 }
 
 /* ---------------- Action checklist → work items (confirmed) ---------------- */
