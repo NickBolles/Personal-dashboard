@@ -237,7 +237,10 @@ function AreaCard({ roll: r, active, onPick }: { roll: AreaRollup; active: boole
           {r.projects} {r.projects === 1 ? "project" : "projects"} · last activity {r.lastActivity ? fmtDate(r.lastActivity) : "—"}
         </span>
         {agents.length ? (
-          <span className="block min-w-0" aria-label={`${agents.length} active ${agents.length === 1 ? "agent" : "agents"}`}>
+          <span className="relative block min-w-0">
+            <span className="sr-only">
+              {agents.length} active {agents.length === 1 ? "agent" : "agents"}:
+            </span>
             <AgentsStrip entries={agents} max={2} />
           </span>
         ) : null}
