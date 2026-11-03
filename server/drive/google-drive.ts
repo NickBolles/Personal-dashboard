@@ -160,12 +160,24 @@ export async function exchangeDriveCode(code: string, redirectUri: string) {
   cache.v = { token: t.access_token, expiresAt: Date.now() + t.expires_in * 1000 };
 }
 
-/** Forget the token (and revoke it at Google, best effort). */
-export async function disconnectDrive() {
+/**
+ * True when Drive shares its OAuth client with a connected Google Tasks account.
+ * With include_granted_scopes the two can be one combined Google grant, and revoking
+ * it would also cut off Tasks, so disconnect only forgets Drive's token then.
+ */
+function sharesGrantWithTasks() {
+  if (process.env.JARVIS_DRIVE_CLIENT_ID) return false;
+  const r = resolveIntegration("todos");
+  return Boolean(r.secrets.refreshToken) && (r.config.provider ?? "google_tasks") === "google_tasks";
+}
+
+/** Forget the token (and revoke it at Google, best effort, unless the grant is shared with Tasks). */
+export async function disconnectDrive(): Promise<{ revoked: boolean; keptSharedGrant?: boolean }> {
   const s = stored();
   setSetting(SETTING, null);
   cache.v = null;
   if (!s) return { revoked: false };
+  if (sharesGrantWithTasks()) return { revoked: false, keptSharedGrant: true };
   try {
     const res = await fetch(urls().revoke, {
       method: "POST",

@@ -20,9 +20,14 @@ export function DriveConnection() {
   const disconnect = async () => {
     setBusy(true);
     try {
-      const r = await api.del<DriveStatus>("/api/integrations/drive");
+      const r = await api.del<DriveStatus & { keptSharedGrant?: boolean }>("/api/integrations/drive");
       qc.setQueryData(["drive-status"], r);
-      toast("Google Drive disconnected", "ok");
+      toast(
+        r.keptSharedGrant
+          ? "Google Drive disconnected. Google access stays on because Google Tasks shares it; remove Jarvis in your Google account to revoke both."
+          : "Google Drive disconnected",
+        "ok",
+      );
     } catch (e) {
       toast((e as Error).message, "danger");
     } finally {

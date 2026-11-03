@@ -162,6 +162,38 @@ describe("Drive save (#141, confirmed)", () => {
   });
 });
 
+describe("Drive disconnect (#141)", () => {
+  it("keeps a Google grant shared with Tasks (forgets Drive only); revokes a Drive-only grant", async () => {
+    process.env.JARVIS_ENABLE_DRIVE_EXPORT = "1";
+    delete process.env.JARVIS_DRIVE_CLIENT_ID;
+    const { encrypt } = await import("@/server/crypto");
+    const { setSetting } = await import("@/server/settings");
+    const { saveIntegration } = await import("@/integrations/store");
+    const revokes: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL) => {
+        revokes.push(String(input));
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    saveIntegration("todos", {
+      enabled: true,
+      config: { provider: "google_tasks", clientId: "cid" },
+      secrets: { clientSecret: "cs", refreshToken: "tasks-rt" },
+    });
+    setSetting("drive.connection", { refreshToken: encrypt("rt"), connectedAt: "2026-11-01T00:00:00Z", scope: DRIVE_FILE_SCOPE });
+    const shared = await json<{ connected: boolean; revoked: boolean; keptSharedGrant?: boolean }>(call(driveRoute.DELETE, { method: "DELETE" }));
+    expect(shared).toMatchObject({ connected: false, revoked: false, keptSharedGrant: true });
+    expect(revokes).toHaveLength(0);
+    process.env.JARVIS_DRIVE_CLIENT_ID = "drive-only";
+    setSetting("drive.connection", { refreshToken: encrypt("rt2"), connectedAt: "2026-11-01T00:00:00Z", scope: DRIVE_FILE_SCOPE });
+    const own = await json<{ revoked: boolean }>(call(driveRoute.DELETE, { method: "DELETE" }));
+    expect(own.revoked).toBe(true);
+    expect(revokes.some((u) => u.includes("/revoke"))).toBe(true);
+  });
+});
+
 describe("Offline WEB pack (#142)", () => {
   it("pins eBible.org engwebp by SHA-256", () => {
     expect(WEB_PACK_PIN.url).toBe("https://ebible.org/Scriptures/engwebp_vpl.zip");
