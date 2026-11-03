@@ -415,7 +415,7 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
     return ((await r.json()) as { item: { id: string } }).item.id;
   };
   const areaId = await post({ kind: "area", title: `Zoom sandpiper ${nonce}` });
-  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom turnstone with a fairly long title ${nonce}` });
+  const id = await post({ kind: "thread", parentId: areaId, title: `Zoom turnstone with a fairly long name ${nonce}` });
   const p = await page.request.patch(`/api/work/items/${id}`, { data: { assignee: "agent:momentumchief" }, headers: { "x-jarvis-csrf": "1" } });
   expect(p.ok(), await p.text()).toBeTruthy();
   const axe = async (label: string) => {
