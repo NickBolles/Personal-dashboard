@@ -514,9 +514,9 @@ function DriveConfirm({ sessionId, run, plan, onClose }: { sessionId: string; ru
             {plan.fileName} <span className="text-muted">({plan.format})</span>
           </dd>
         </div>
-        {plan.last ? <p className="text-xs text-muted">Saved before to {plan.last.path}. Saving again creates a new file.</p> : null}
-        <p className="text-xs text-muted">Missing folders are created. Nothing in your Drive is changed or deleted.</p>
       </dl>
+      {plan.last ? <p className="mt-2 text-xs text-muted">Saved before to {plan.last.path}. Saving again creates a new file.</p> : null}
+      <p className="mt-2 text-xs text-muted">Missing folders are created. Nothing in your Drive is changed or deleted.</p>
       {error ? (
         <p role="alert" className="mt-2 text-sm text-danger">
           {error}
