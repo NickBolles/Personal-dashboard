@@ -1,0 +1,1 @@
+ALTER TABLE `workflow_runs` ADD `drive_export_json` text;

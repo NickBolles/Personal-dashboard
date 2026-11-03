@@ -5,6 +5,7 @@ import { Button, Dialog, inputCls, cx } from "@/components/ui";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { formatDistance, matchSavedPlace, type FormValue, type SavedPlace } from "@/lib/workflows/runs";
 import { parseScriptureRef } from "@/lib/workflows/scripture";
+import { PassageText } from "./PassageText";
 
 export type StartFormData = {
   workflow: { id: string; slug: string; name: string };
@@ -111,6 +112,7 @@ function ScriptureField(props: FieldProps) {
               : ""
           : ""}
       </p>
+      {parsed?.ok ? <PassageText reference={parsed.ref.display} compact /> : null}
     </div>
   );
 }

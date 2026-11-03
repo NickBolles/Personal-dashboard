@@ -6,6 +6,8 @@ import { api } from "@/lib/client/api";
 import { INTEGRATIONS, type PublicIntegration } from "@/integrations/registry";
 import { IntegrationForm } from "@/components/integrations/IntegrationForm";
 import { GithubConnections } from "@/components/integrations/GithubConnections";
+import { DriveConnection } from "@/components/integrations/DriveConnection";
+import { BiblePackSettings } from "@/components/integrations/BiblePackSettings";
 import { Badge, PageHeader, cx } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 
@@ -80,7 +82,61 @@ export function ConnectionsView() {
             </div>
           ) : null}
         </li>
+        <ExtraPanel id="drive" title="Google Drive" tagline="Save workflow notes as Google Docs: asks before every save" open={open} setOpen={setOpen}>
+          <DriveConnection />
+        </ExtraPanel>
+        <ExtraPanel
+          id="bible"
+          title="Offline Bible"
+          tagline="World English Bible verse text on this Jarvis: off until you download it"
+          open={open}
+          setOpen={setOpen}
+        >
+          <BiblePackSettings />
+        </ExtraPanel>
       </ul>
     </div>
+  );
+}
+
+function ExtraPanel({
+  id,
+  title,
+  tagline,
+  open,
+  setOpen,
+  children,
+}: {
+  id: string;
+  title: string;
+  tagline: string;
+  open: string | null;
+  setOpen: (v: string | null) => void;
+  children: React.ReactNode;
+}) {
+  const isOpen = open === id;
+  return (
+    <li id={id} className="card">
+      <h2>
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={`panel-${id}`}
+          onClick={() => setOpen(isOpen ? null : id)}
+          className="flex min-h-14 w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left dense:min-h-12"
+        >
+          <span className="min-w-0">
+            <span className="block font-semibold">{title}</span>
+            <span className="block truncate text-sm text-muted">{tagline}</span>
+          </span>
+          <ChevronIcon className={cx("h-5 w-5 shrink-0 transition-transform", isOpen && "rotate-90")} />
+        </button>
+      </h2>
+      {isOpen ? (
+        <div id={`panel-${id}`} className="border-t border-line p-3.5">
+          {children}
+        </div>
+      ) : null}
+    </li>
   );
 }

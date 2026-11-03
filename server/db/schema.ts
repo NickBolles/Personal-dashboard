@@ -1617,6 +1617,8 @@ export const workflowRuns = sqliteTable(
     summaryState: text("summary_state").notNull().default("none"),
     /** W4: work items created from the action checklist [{index, itemId, title}] (confirmed writes only) */
     promotedJson: text("promoted_json").notNull().default("[]"),
+    /** #141: last confirmed Google Drive save {fileId, url, path, name, kind, savedAt} (null = never saved) */
+    driveExportJson: text("drive_export_json"),
   },
   (t) => [
     index("workflow_runs_owner_status_idx").on(t.ownerId, t.status),

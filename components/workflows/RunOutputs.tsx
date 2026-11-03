@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
@@ -16,6 +17,9 @@ import type { RunPanelView } from "./RunPanel";
 
 type Field = { id: string; bind: string; type: string; label: string; help?: string; maxLength?: number; min?: number; max?: number; step?: number };
 type Promoted = { index: number; itemId: string; title: string };
+type DriveSaved = { url: string; path: string; name: string; kind: "doc" | "markdown"; savedAt: string };
+type DriveStatus = { available: boolean; configured: boolean; connected: boolean };
+type DrivePlan = { path: string; fileName: string; format: string; bytes: number; last: DriveSaved | null };
 export type RunOutputsView = RunPanelView & {
   areaId?: string | null;
   areaTitle?: string | null;
@@ -23,6 +27,7 @@ export type RunOutputsView = RunPanelView & {
   summary?: string | null;
   summaryState?: "none" | "proposed" | "accepted";
   promoted?: Promoted[];
+  driveExport?: DriveSaved | null;
   definition: RunPanelView["definition"] & { mid?: Field[]; end?: Field[]; reflectionPrompts?: string; name?: string; itemsFrom?: string | null };
 };
 
@@ -372,8 +377,26 @@ export function SummaryCard({ sessionId, run }: { sessionId: string; run: RunOut
   );
 }
 
-/** Export bar: Markdown download + copy are local. Drive needs a Drive connection (not set up yet). */
-export function ExportBar({ run }: { run: RunOutputsView }) {
+/**
+ * Export bar: Markdown download + copy are local. Save to Drive (#141) is a
+ * confirmed write: the sheet shows the exact destination path and file name,
+ * and the server refuses a save whose path differs from what was confirmed.
+ */
+export function ExportBar({ sessionId, run }: { sessionId: string; run: RunOutputsView }) {
+  const drive = useQuery({ queryKey: ["drive-status"], queryFn: () => api.get<DriveStatus>("/api/integrations/drive"), retry: false, staleTime: 60_000 });
+  const [plan, setPlan] = useState<DrivePlan | null>(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const openPlan = async () => {
+    setPlanBusy(true);
+    try {
+      setPlan(await api.get<DrivePlan>(runUrl(run.id, "/drive")));
+    } catch (e) {
+      toast((e as Error).message, "danger");
+    } finally {
+      setPlanBusy(false);
+    }
+  };
+  const driveOn = drive.data?.available && drive.data.configured;
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const get = () => api.get<{ fileName: string; markdown: string }>(runUrl(run.id, "/export"));
@@ -413,9 +436,93 @@ export function ExportBar({ run }: { run: RunOutputsView }) {
         <Button size="sm" onClick={() => void copy()}>
           Copy
         </Button>
+        {driveOn && drive.data?.connected ? (
+          <Button size="sm" busy={planBusy} onClick={() => void openPlan()} data-testid="workflow-drive-open">
+            Save to Drive · asks first
+          </Button>
+        ) : null}
       </div>
-      <p className="mt-1 text-xs text-muted">Save to Google Drive isn&apos;t available yet: Jarvis has no Drive connection.</p>
+      {driveOn && drive.data?.connected ? null : driveOn ? (
+        <p className="mt-1 text-xs text-muted">
+          To save to Google Drive,{" "}
+          <Link className="underline" href="/settings/connections#drive">
+            connect Drive in Settings
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="mt-1 text-xs text-muted">Save to Google Drive isn&apos;t available yet: Jarvis has no Drive connection.</p>
+      )}
+      {run.driveExport ? (
+        <p className="mt-1 text-xs text-muted" data-testid="workflow-drive-saved">
+          Saved to {run.driveExport.path} ·{" "}
+          <a className="underline" href={run.driveExport.url} target="_blank" rel="noreferrer noopener">
+            Open in Drive
+          </a>
+        </p>
+      ) : null}
+      {plan ? <DriveConfirm sessionId={sessionId} run={run} plan={plan} onClose={() => setPlan(null)} /> : null}
     </section>
+  );
+}
+
+/** Confirm sheet for the Drive write: destination path + file name, nothing saved until Save. */
+function DriveConfirm({ sessionId, run, plan, onClose }: { sessionId: string; run: RunOutputsView; plan: DrivePlan; onClose: () => void }) {
+  const { toast } = useToast();
+  const setRun = useSetRun(sessionId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.post<{ run: RunOutputsView; saved: DriveSaved }>(runUrl(run.id, "/drive"), { path: plan.path, fileName: plan.fileName });
+      setRun(r.run);
+      toast(`Saved to ${r.saved.kind === "doc" ? "Google Docs" : "Drive"}`, "ok");
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Save to Google Drive?"
+      description="Jarvis only sees files it creates in your Drive."
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="primary" busy={busy} onClick={() => void save()} data-testid="workflow-drive-save">
+            Save to Drive
+          </Button>
+        </>
+      }
+    >
+      <dl className="grid grid-cols-1 gap-2 text-sm" data-testid="workflow-drive-confirm">
+        <div className="min-w-0">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-muted">Folder</dt>
+          <dd className="break-words">{plan.path}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-xs font-semibold uppercase tracking-wide text-muted">File</dt>
+          <dd className="break-words">
+            {plan.fileName} <span className="text-muted">({plan.format})</span>
+          </dd>
+        </div>
+        {plan.last ? <p className="text-xs text-muted">Saved before to {plan.last.path}. Saving again creates a new file.</p> : null}
+        <p className="text-xs text-muted">Missing folders are created. Nothing in your Drive is changed or deleted.</p>
+      </dl>
+      {error ? (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
+    </Dialog>
   );
 }
 
