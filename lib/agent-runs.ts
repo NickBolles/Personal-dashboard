@@ -98,14 +98,17 @@ export type PrState = {
   state: string | null;
   /** success | failure | pending | null */
   checks: string | null;
-  /** merged PRs: "live" once the item is live/settled, else "waiting" (not deployed yet); null for unmerged */
+  /** merged PRs: "live" once the item is live/settled, else "waiting" (not deployed yet); null for unmerged PRs and abandoned/superseded items */
   deploy: "live" | "waiting" | null;
 };
 
 export function deployOf(prState: string | null, item: Pick<WorkItem, "status" | "decision">): PrState["deploy"] {
   if (prState !== "merged") return null;
+  // Only statuses that mean the work actually shipped count as live; an
+  // abandoned/superseded item's merged PR was never confirmed live (#170).
+  if (item.status === "abandoned" || item.status === "superseded") return null;
   const b = bucketOf(item);
-  return b === "live" || b === "done" ? "live" : "waiting";
+  return b === "live" || item.status === "settled" ? "live" : "waiting";
 }
 
 export const CHECKS_LABEL: Record<string, string> = { success: "CI passing", failure: "CI failing", pending: "CI running" };

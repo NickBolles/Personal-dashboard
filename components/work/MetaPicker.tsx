@@ -141,6 +141,10 @@ function PickerPanel({
     return out;
   }, [q, options, onCreate]);
   const cur = Math.min(active, Math.max(0, rows.length - 1));
+  // Keep the highlighted row visible while ↑/↓ walk past the list's capped height (#164).
+  useEffect(() => {
+    document.getElementById(`${listId}-${cur}`)?.scrollIntoView({ block: "nearest" });
+  }, [listId, cur]);
 
   // Desktop/tablet: a fixed popover anchored under the opener (portalled, so no header can clip it).
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);

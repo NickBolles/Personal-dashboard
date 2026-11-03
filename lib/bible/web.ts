@@ -6,13 +6,21 @@
  */
 import { BOOKS, type ScriptureRef } from "@/lib/workflows/scripture";
 
-/** Pinned source. If eBible.org republishes, the checksum fails closed until this pin is updated. */
+/**
+ * Pinned source. The zip is eBible.org's `engwebp_vpl.zip` of that version,
+ * mirrored as a release asset of this repo (tag `bible-web-<version>`), so an
+ * eBible.org republish can't break downloads (#172). The SHA-256 is still
+ * checked before anything is installed. To move to a newer upload: publish a
+ * new `bible-web-<version>` release with the file, then bump url/sha256/bytes.
+ */
 export const WEB_PACK_PIN = {
   id: "engwebp",
   translation: "WEB",
   name: "World English Bible",
   version: "2026-10-30",
-  url: "https://ebible.org/Scriptures/engwebp_vpl.zip",
+  url: "https://github.com/NickBolles/Personal-dashboard/releases/download/bible-web-2026-10-30/engwebp_vpl.zip",
+  /** where the mirrored file came from (attribution / provenance only; never fetched at runtime) */
+  upstream: "https://ebible.org/Scriptures/engwebp_vpl.zip",
   sha256: "37a8ccecfbc765a2305ae64f3b5e88d1d01bafceb9a33e8d191f6ee551a437b9",
   entry: "engwebp_vpl.txt",
   bytes: 4283563,

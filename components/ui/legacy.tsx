@@ -513,18 +513,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {announcement}
       </div>
       <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-24">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            role="status"
-            className={cx(
-              "pointer-events-auto max-w-md rounded-[10px] border px-3.5 py-2.5 text-sm font-medium shadow-[var(--shadow-pop)]",
-              t.tone === "neutral" ? "border-transparent bg-text text-bg" : TONES[t.tone],
-            )}
-          >
-            {t.text}
-          </div>
-        ))}
+        {/* Toasts sit above modal scrims (z-60 > z-50), so each needs an opaque base:
+            a tone tint is translucent and would composite over the scrim (#173).
+            They hold no controls, so they never take a tap meant for a sheet below. */}
+        {toasts.map((t) =>
+          t.tone === "neutral" ? (
+            <div
+              key={t.id}
+              role="status"
+              className="max-w-md rounded-[10px] border border-transparent bg-text px-3.5 py-2.5 text-sm font-medium text-bg shadow-[var(--shadow-pop)]"
+            >
+              {t.text}
+            </div>
+          ) : (
+            <div key={t.id} role="status" className="max-w-md rounded-[10px] bg-surface shadow-[var(--shadow-pop)]" data-tone={t.tone}>
+              <div className={cx("rounded-[10px] border px-3.5 py-2.5 text-sm font-medium", TONES[t.tone])}>{t.text}</div>
+            </div>
+          ),
+        )}
       </div>
     </ToastCtx.Provider>
   );

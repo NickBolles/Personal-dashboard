@@ -5,6 +5,7 @@ import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { resolveAgent } from "@/server/agents/routing";
+import { conversationAgent } from "@/server/areas";
 import { buildCatchUpPrompt, isFinanceAreaLike } from "@/lib/catch-up";
 import { detectSensitivity } from "@/server/ai/rules";
 import type { AgentResolution } from "@/lib/agents";
@@ -54,7 +55,11 @@ export function coordinatorFor(user: CurrentUser, areaId: string): CoordinatorIn
   if (!area) throw new HttpError(404, "not_found", "That area isn't here");
   const excluded = isFinanceAreaLike(area) || area.settings?.aiPolicy === "excluded";
   const session = coordinatorSession(items, area.id);
-  const agent = resolveAgent(area.settings?.agentMode ?? null, { id: area.id, title: area.title });
+  // An existing coordinator conversation answers on the profile it was created
+  // on (#169); the area's current mode only decides for a new conversation.
+  const agent =
+    (session?.sessionId ? conversationAgent(user, session.sessionId, session.id) : null) ??
+    resolveAgent(area.settings?.agentMode ?? null, { id: area.id, title: area.title });
   if (excluded) return { area: { id: area.id, title: area.title }, agent, sessionId: null, sessionTitle: null, excluded, prompt: null };
   const areaOf = areaIndex(items);
   const inArea = items.filter((i) => i.id !== area.id && areaOf.get(i.id) === area.id);
