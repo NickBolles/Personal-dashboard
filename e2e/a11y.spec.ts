@@ -452,11 +452,12 @@ test("drive + offline bible (#141/#142): axe clean and no overflow at 200% text 
     await panel.getByRole("button", { name: "End session" }).click();
     await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
     await expect(panel).toContainText("Ended");
-    // the transient "Session ended" toast (translucent ok tone) would sit over the sheet's scrim and fail color-contrast (follow-up #173)
-    await expect(page.getByRole("status").filter({ hasText: "Session ended" })).toHaveCount(0, { timeout: 10_000 });
+    // #173: the "Session ended" tone toast may still show above the sheet's scrim; its opaque base keeps it ≥4.5:1
+    const ended = page.getByRole("status").filter({ hasText: "Session ended" });
+    const toastUp = (await ended.count()) > 0;
     await panel.getByTestId("workflow-drive-open").click();
     await expect(page.getByRole("dialog", { name: "Save to Google Drive?" })).toBeVisible();
-    await axe("drive confirm");
+    await axe(toastUp ? "drive confirm (toast over scrim)" : "drive confirm");
     await zoom();
     await page.getByRole("dialog", { name: "Save to Google Drive?" }).getByRole("button", { name: "Cancel" }).click();
   } finally {

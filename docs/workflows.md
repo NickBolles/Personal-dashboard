@@ -203,6 +203,6 @@ API: `POST /api/workflows/validate` (dry run) · `POST /api/workflows/draft` `{k
 
 **Offline Bible** (off until downloaded)
 
-- **Settings → Connections → Offline Bible → Download** fetches the pinned eBible.org `engwebp_vpl.zip` once and checks its SHA-256 against the pin before reading it. Jarvis converts it to `<data>/bible/web.json` and records that file's own SHA-256, which is checked again before each load. A republished file fails closed until the pin in `lib/bible/web.ts` is updated.
+- **Settings → Connections → Offline Bible → Download** fetches the pinned `engwebp_vpl.zip` once from this repo's own GitHub release asset (tag `bible-web-<version>`, a byte-identical mirror of eBible.org's file) and checks its SHA-256 against the pin before reading it. Jarvis converts it to `<data>/bible/web.json` and records that file's own SHA-256, which is checked again before each load. eBible.org republishing no longer affects downloads. To move to a newer upload: download it from eBible.org, `gh release create bible-web-<version> -R NickBolles/Personal-dashboard --latest=false engwebp_vpl.zip` (never replace an existing asset), then bump `url`/`sha256`/`bytes`/`version` in `lib/bible/web.ts`.
 - Verse text appears under the Scripture field in the start form and under Scripture rows in the outline. Lookups are local (`GET /api/bible/passage?ref=`) and make no network calls. The World English Bible is public domain; the attribution is shown with the text.
 - It is not included in backups: the file is public and can be downloaded again.

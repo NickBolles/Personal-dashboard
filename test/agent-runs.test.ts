@@ -49,6 +49,8 @@ describe("run-state aggregation (pure)", () => {
     expect(deployOf("merged", { status: "in_review", decision: null })).toBe("waiting");
     expect(deployOf("merged", { status: "awaiting_validation", decision: null })).toBe("live");
     expect(deployOf("merged", { status: "settled", decision: null })).toBe("live");
+    expect(deployOf("merged", { status: "abandoned", decision: null })).toBeNull();
+    expect(deployOf("merged", { status: "superseded", decision: null })).toBeNull();
   });
 });
 
@@ -172,6 +174,17 @@ describe("agent runs + coordinator (server)", () => {
     const entry = listDecisions(u).entries.find((e) => e.itemId === t.id)!;
     expect(entry.sessionId).toBeNull();
     expect(entry.coordinatorSessionId).toBe("sess-coord");
+  });
+
+  it("#169: an existing coordinator conversation is labelled with the profile it runs on, not the area's current mode", () => {
+    const u = userOf(owner);
+    const area = store.createItem(u, { kind: "area", title: "Ops Desk" }, cid);
+    store.updateItem(u, area.id, { settings: { agentMode: "devchief" } }, cid);
+    // no conversation yet: the area's mode decides (routing is off → not routed)
+    expect(coordinatorFor(u, area.id).agent).toMatchObject({ requested: "devchief", profile: null, routed: false });
+    db_conv(owner, area.id, "sess-ops");
+    getDb().insert(schema.sessionMeta).values({ sessionId: "sess-ops", userId: owner, hermesProfile: "momentumchief" }).run();
+    expect(coordinatorFor(u, area.id).agent).toMatchObject({ profile: "momentumchief", routed: true });
   });
 });
 

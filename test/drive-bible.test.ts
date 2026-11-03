@@ -195,8 +195,10 @@ describe("Drive disconnect (#141)", () => {
 });
 
 describe("Offline WEB pack (#142)", () => {
-  it("pins eBible.org engwebp by SHA-256", () => {
-    expect(WEB_PACK_PIN.url).toBe("https://ebible.org/Scriptures/engwebp_vpl.zip");
+  it("pins engwebp by SHA-256 on this repo's own release asset (#172)", () => {
+    expect(WEB_PACK_PIN.url).toBe("https://github.com/NickBolles/Personal-dashboard/releases/download/bible-web-2026-10-30/engwebp_vpl.zip");
+    expect(new URL(WEB_PACK_PIN.url).pathname).toContain(`bible-web-${WEB_PACK_PIN.version}/`);
+    expect(WEB_PACK_PIN.upstream).toBe("https://ebible.org/Scriptures/engwebp_vpl.zip");
     expect(WEB_PACK_PIN.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
   it("verifies checksums", () => {

@@ -137,13 +137,13 @@ export async function installPack(fetchImpl: typeof fetch = fetch): Promise<Bibl
   try {
     res = await fetchImpl(src.url, { signal: AbortSignal.timeout(60_000), redirect: "follow" });
   } catch (err) {
-    throw new UpstreamError("eBible.org", "unreachable", `Couldn't download the Bible pack (${(err as Error).message})`);
+    throw new UpstreamError("Bible pack host", "unreachable", `Couldn't download the Bible pack (${(err as Error).message})`);
   }
-  if (!res.ok) throw new UpstreamError("eBible.org", "bad_response", `Couldn't download the Bible pack (HTTP ${res.status})`, res.status);
+  if (!res.ok) throw new UpstreamError("Bible pack host", "bad_response", `Couldn't download the Bible pack (HTTP ${res.status})`, res.status);
   const len = Number(res.headers.get("content-length") ?? 0);
-  if (len > MAX_DOWNLOAD) throw new UpstreamError("eBible.org", "bad_response", "The Bible pack download is unexpectedly large");
+  if (len > MAX_DOWNLOAD) throw new UpstreamError("Bible pack host", "bad_response", "The Bible pack download is unexpectedly large");
   const zip = Buffer.from(await res.arrayBuffer());
-  if (zip.length > MAX_DOWNLOAD) throw new UpstreamError("eBible.org", "bad_response", "The Bible pack download is unexpectedly large");
+  if (zip.length > MAX_DOWNLOAD) throw new UpstreamError("Bible pack host", "bad_response", "The Bible pack download is unexpectedly large");
   if (!verifySha256(zip, src.sha256))
     throw new HttpError(
       409,
