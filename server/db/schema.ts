@@ -841,6 +841,10 @@ export const workItems = sqliteTable(
     assignee: text("assignee"),
     /** Decisions inbox: JSON {question, choices[], askedAt} (lib/decisions.ts) while the item needs an owner decision; null otherwise */
     decision: text("decision"),
+    /** #180: "agent:<profile>" when an agent token created it (MCP); null = the person */
+    createdVia: text("created_via"),
+    /** #180: "agent:<profile>" when the latest field update came from an agent token; an owner edit clears it */
+    updatedVia: text("updated_via"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
@@ -985,6 +989,8 @@ export const workEvents = sqliteTable(
     actor: text("actor").notNull(),
     /** where a change came from: manual | github (read-only refresh); null for ordinary edits */
     source: text("source"),
+    /** #180: "agent:<profile>" when an agent token made the change on the owner's behalf; null = the person */
+    via: text("via"),
     at: text("at").notNull().default(now),
   },
   (t) => [index("work_events_item_idx").on(t.itemId, t.at)],
@@ -1047,6 +1053,8 @@ export const workOps = sqliteTable(
     kind: text("kind").notNull(),
     /** JSON: what undo needs (previous parent and sibling order, copied link count, …) */
     payload: text("payload").notNull().default("{}"),
+    /** "agent:<profile>" for ops an agent token made (longer undo window, docs/agent-tools.md) */
+    via: text("via"),
     createdAt: text("created_at").notNull().default(now),
     undoneAt: text("undone_at"),
   },
@@ -1688,3 +1696,58 @@ export const workflowReminders = sqliteTable("workflow_reminders", {
   lastSentDate: text("last_sent_date"),
   updatedAt: text("updated_at").notNull().default(now),
 });
+
+/**
+ * Scoped agent tokens (docs/agent-tools.md): a Hermes profile acting for the owner through
+ * /api/mcp only. Only the sha256 of the token is stored; it is shown once when minted.
+ * Scopes never include Finance (server/agent-access/scopes.ts).
+ */
+export const agentTokens = sqliteTable(
+  "agent_tokens",
+  {
+    id: text("id").primaryKey(),
+    /** sha256 hex of the full token */
+    tokenHash: text("token_hash").notNull(),
+    /** last 4 characters, for recognising it in the list */
+    hint: text("hint").notNull(),
+    name: text("name").notNull(),
+    /** Hermes profile the agent runs as (attribution: agent:<profile>) */
+    profile: text("profile").notNull(),
+    /** JSON array of scope ids */
+    scopes: text("scopes").notNull().default("[]"),
+    /** the owner it acts for */
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(now),
+    lastUsedAt: text("last_used_at"),
+    revokedAt: text("revoked_at"),
+  },
+  (t) => [uniqueIndex("agent_tokens_hash_idx").on(t.tokenHash), index("agent_tokens_user_idx").on(t.userId)],
+);
+
+/** Runs an agent registered on an item through MCP (jarvis_run_start/update); shown in the agent runs panel. */
+export const agentRuns = sqliteTable(
+  "agent_runs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    tokenId: text("token_id"),
+    profile: text("profile").notNull(),
+    title: text("title").notNull(),
+    /** running | waiting | done | failed */
+    state: text("state").notNull().default("running"),
+    summary: text("summary"),
+    prUrl: text("pr_url"),
+    hermesSessionId: text("hermes_session_id"),
+    startedAt: text("started_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [index("agent_runs_item_idx").on(t.userId, t.itemId)],
+);

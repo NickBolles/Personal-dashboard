@@ -3,6 +3,7 @@ import { and, asc, desc, eq, getTableColumns, inArray, isNull, lt, or, sql } fro
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { audit } from "@/server/audit";
+import { currentVia } from "@/server/work/actor";
 import { config } from "@/server/config";
 import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
@@ -66,7 +67,7 @@ import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules
 import { planPlacement } from "./tree-rules";
 import { assigneeChangeText, normaliseTags, parseTags, serialiseTags, tagsChangeText, validateAssignee } from "@/lib/item-tags";
 import { ensureTags, knownAgents, knownPeople, undoTagRename, type TagRenamePayload } from "./tags";
-import { EDIT_UNDO_FIELDS, isUntouched, latestOp, TAG_OPS_ITEM, UNDO_LABELS, undoCheck, type UndoKind } from "./undo-rules";
+import { EDIT_UNDO_FIELDS, isUntouched, latestOp, TAG_OPS_ITEM, UNDO_LABELS, undoCheck, undoWindowFor, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
 
@@ -118,6 +119,8 @@ export function toItem(r: ItemRow): WorkItem {
     tags: parseTags(r.tags),
     assignee: r.assignee ?? null,
     decision: parseDecision(r.decision),
+    createdVia: r.createdVia ?? null,
+    updatedVia: r.updatedVia ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -178,6 +181,7 @@ function event(
       toStatus: e.to ?? null,
       reason: e.reason ?? null,
       source: e.source ?? null,
+      via: currentVia(),
       at: stampOf(db),
     })
     .run();
@@ -195,7 +199,7 @@ export type OpOut = { op?: { id: string; kind: UndoKind; label: string } };
 function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
   const id = newId("op");
   db.insert(schema.workOps)
-    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), createdAt: stampOf(db) })
+    .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), via: currentVia(), createdAt: stampOf(db) })
     .run();
   if (out) out.op = { id, kind, label: UNDO_LABELS[kind] };
   return id;
@@ -424,6 +428,7 @@ function insertItem(
       kind: v.kind,
       title: v.title,
       sessionId: v.sessionId ?? null,
+      createdVia: currentVia(),
       ...(v.status ? { status: v.status } : {}),
       summary: v.summary ?? "",
       nextAction: v.nextAction ?? "",
@@ -441,7 +446,7 @@ function checkDates(start: string | null | undefined, target: string | null | un
   if (start && target && target < start) throw new HttpError(400, "dates", "Target date is before the start date");
 }
 
-export function createItem(user: CurrentUser, body: z.infer<typeof createItemSchema>, correlationId: string): WorkItem {
+export function createItem(user: CurrentUser, body: z.infer<typeof createItemSchema>, correlationId: string, out?: OpOut): WorkItem {
   checkDates(body.startDate, body.targetDate);
   const id = getDb().transaction((tx) => {
     let parentId = body.parentId ?? null;
@@ -450,6 +455,8 @@ export function createItem(user: CurrentUser, body: z.infer<typeof createItemSch
     else if (body.kind !== "area") parentId = ensureMiscellaneous(user.id, tx).id;
     const id = insertItem(tx, user.id, { ...body, parentId });
     event(tx, id, user.id, { kind: "created", to: "captured" });
+    // Agent-made items can be undone from Activity (removed if untouched, else archived).
+    if (currentVia()) recordOp(tx, user.id, id, "create", {}, out);
     return id;
   });
   audit({ actor: user.id, action: "work.create", source: "work", sourceRecord: id, result: "ok", correlationId, detail: { kind: body.kind } });
@@ -546,7 +553,8 @@ export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof u
     const nextAction = fields.nextAction ?? row.nextAction;
     if ((row.status === "ready" || row.status === "in_progress") && !status && !nextAction.trim())
       throw new HttpError(409, "next_action_required", "Ready and in-progress work needs a next action");
-    const patch: Partial<typeof T.$inferInsert> = { ...fields, updatedAt: nowIso() };
+    // #180: the latest update's actor (an owner edit clears an agent's chip).
+    const patch: Partial<typeof T.$inferInsert> = { ...fields, updatedAt: nowIso(), updatedVia: currentVia() };
     let transition: { from: string; to: string } | null = null;
     if (status && status !== row.status) {
       const plan = lifecycle(() =>
@@ -838,7 +846,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         // block undoing that (the split/fork rules still see the edit), and a move doesn't block an edit's undo.
         .filter((o) => (o.kind === "edit") === (op.kind === "edit")),
     );
-    const check = undoCheck(op, latest?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
+    const check = undoCheck(op, latest?.id ?? null, now, undoWindowFor(op, AUTO_SETTLE_UNDO_MS));
     if (!check.ok) throw new HttpError(409, check.code, check.message);
     if (op.kind === "tag_rename") {
       // #154 Settings → Tags rename/merge: not an item op (item_id = TAG_OPS_ITEM).

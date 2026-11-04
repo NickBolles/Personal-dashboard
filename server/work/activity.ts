@@ -4,7 +4,7 @@ import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { can } from "@/server/access";
-import { latestOp, undoCheck } from "@/server/work/undo-rules";
+import { latestOp, undoCheck, undoWindowFor } from "@/server/work/undo-rules";
 import { AUTO_SETTLE_UNDO_MS } from "@/server/work/settle-rules";
 import {
   compareActivity,
@@ -54,7 +54,7 @@ const OP_FOR_EVENT: Record<string, string[]> = {
   forked: ["fork"],
   // #131: due-date edits, the new item's creation (split/fork op lives on it), drag reorders
   dates: ["edit"],
-  created: ["split", "fork"],
+  created: ["split", "fork", "create"],
   reordered: ["reorder", "move"],
   // Decisions inbox: answering logs a "decision" event with an undoable edit op
   decision: ["edit"],
@@ -188,7 +188,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           windowOps.set(item.id, op.id);
           windowOpIds.add(op.id);
           const stack = itemOps.filter((o) => (o.kind === "edit") === (op.kind === "edit"));
-          const check = undoCheck(op, latestOp(stack)?.id ?? null, now, op.kind === "settle" ? AUTO_SETTLE_UNDO_MS : undefined);
+          const check = undoCheck(op, latestOp(stack)?.id ?? null, now, undoWindowFor(op, AUTO_SETTLE_UNDO_MS));
           if (check.ok) item.undoOpId = op.id;
         }
       }

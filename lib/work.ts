@@ -230,6 +230,9 @@ export type WorkItem = {
   assignee: string | null;
   /** set while the item needs an owner decision (Decisions inbox, lib/decisions.ts) */
   decision: ItemDecision | null;
+  /** #180: "agent:<profile>" when an agent token created it / made the latest update (null = the person) */
+  createdVia?: string | null;
+  updatedVia?: string | null;
   createdAt: string;
   updatedAt: string;
 };

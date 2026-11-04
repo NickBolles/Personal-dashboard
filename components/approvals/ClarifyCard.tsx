@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ClarifyRequest } from "@/lib/hermes";
 import { Button, inputCls } from "@/components/ui";
 import { AgentMark } from "@/components/brand/AgentMark";
@@ -26,6 +26,11 @@ export function ClarifyCard({
   const [picked, setPicked] = useState<string[]>([]);
   const failure = failed && failed.requestId === clarify.requestId ? failed : undefined;
   const headingId = `clarify-h-${clarify.requestId.replace(/\W+/g, "-")}`;
+  const ref = useRef<HTMLElement>(null);
+  // #185: bring the question clear of the sticky header and composer (scroll-margin in globals.css).
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: "nearest" });
+  }, [clarify.requestId]);
 
   const send = async (answer: string) => {
     const a = answer.trim();
@@ -43,7 +48,7 @@ export function ClarifyCard({
   };
 
   return (
-    <section role="group" aria-labelledby={headingId} className="clarify-card" data-testid="clarify-card">
+    <section ref={ref} role="group" aria-labelledby={headingId} className="clarify-card" data-testid="clarify-card">
       <div className="flex min-w-0 items-start gap-2">
         <AgentMark className="mt-0.5 h-5 w-5 shrink-0" />
         <div className="min-w-0 flex-1">

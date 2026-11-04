@@ -1,6 +1,7 @@
 "use client";
 
 import { ItemAgentPanel } from "@/components/agents/AgentRuns";
+import { itemAgentChip } from "@/components/work/AgentChip";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1136,6 +1137,7 @@ function ItemDetail({
         {isArea && !item.nextAction ? null : (
           <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={inline.isPending} onSave={(nextAction) => inline.mutate({ nextAction })} />
         )}
+        {item.createdVia || item.updatedVia ? <div className="mt-1.5 flex min-w-0 flex-wrap">{itemAgentChip(item)}</div> : null}
         {container ? null : <JobChip itemId={item.id} />}
         {container ? null : (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

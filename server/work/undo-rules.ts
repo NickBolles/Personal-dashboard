@@ -6,7 +6,7 @@
 /** The toast offers Undo for ~10 s; the server accepts it a little longer (slow networks, retries). */
 export const UNDO_WINDOW_MS = 10 * 60_000;
 
-export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit", "tag_rename"] as const;
+export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit", "tag_rename", "create"] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
 export const UNDO_LABELS: Record<UndoKind, string> = {
@@ -24,7 +24,22 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   edit: "Saved",
   /** Settings → Tags rename/merge (#154): undo restores every touched item's tags and the tag rows */
   tag_rename: "Renamed tag",
+  /** an item an agent created through MCP (docs/agent-tools.md): undo removes it if untouched, else archives it */
+  create: "Created",
 };
+
+/**
+ * Writes an agent token made (work_ops.via = "agent:<profile>") stay undoable for a week: the owner
+ * reviews agent work later, not within the 10-minute toast window.
+ */
+export const AGENT_UNDO_MS = 7 * 24 * 60 * 60_000;
+
+/** The undo window for an op (auto-settle and agent ops are longer). */
+export function undoWindowFor(op: { kind: string; via?: string | null }, autoSettleMs: number): number | undefined {
+  if (op.kind === "settle") return autoSettleMs;
+  if (op.via?.startsWith("agent:")) return AGENT_UNDO_MS;
+  return undefined;
+}
 
 /** work_ops.item_id for tag rename/merge ops: one per-user stack, so only the latest one can be undone. */
 export const TAG_OPS_ITEM = "tags";

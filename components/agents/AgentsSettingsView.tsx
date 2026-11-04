@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
 import { SectionHeader } from "@/components/ui/kit";
+import { AgentAccessCard } from "./AgentAccessCard";
 import { KEY_ENV_PREFIX, suggestedKeyEnv, type AgentRoute, type AgentSettings } from "@/lib/agents";
 
 type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean; sharedKey?: boolean };
@@ -186,6 +187,7 @@ export function AgentsSettingsView() {
           </div>
         </form>
       </Card>
+      <AgentAccessCard />
     </div>
   );
 }

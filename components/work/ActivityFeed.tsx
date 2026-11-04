@@ -19,6 +19,7 @@ import {
 import { matchesItemFilter } from "@/lib/item-tags";
 import type { ItemsResponse } from "@/lib/work";
 import { ItemFilterBar, NO_FILTER, type ItemFilter } from "./ItemMeta";
+import { AgentChip } from "./AgentChip";
 
 /** Glyph per row type (text glyphs keep rows light; aria-hidden — the verb carries the meaning). */
 const GLYPH: Record<ActivityType, string> = {
@@ -214,7 +215,7 @@ export function ActivityFeed({
                       {GLYPH[r.type]}
                     </span>
                     <span className="jv-activity-text">
-                      <span className="jv-activity-actor">{r.actor.name}</span> <span>{r.verb}</span>{" "}
+                      {r.via ? <AgentChip profile={r.via} /> : <span className="jv-activity-actor">{r.actor.name}</span>} <span>{r.verb}</span>{" "}
                       {r.object && !(scope.item === r.object.id && !scope.descendants) ? (
                         onSelect ? (
                           <button type="button" className="jv-activity-obj" onClick={() => onSelect(r.object!.id)}>

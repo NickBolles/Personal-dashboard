@@ -33,7 +33,7 @@ function policyFor(key: string): Policy {
   return { kind: "backoff", free: 5 };
 }
 
-export type ThrottleScope = "login" | "setup" | "join" | "pair" | "passcode";
+export type ThrottleScope = "login" | "setup" | "join" | "pair" | "passcode" | "agent";
 
 /** Keys for one attempt: the client, optionally the target account, and the scope's global budget. */
 export function throttleKeys(scope: ThrottleScope, client: string, accountId?: string) {
