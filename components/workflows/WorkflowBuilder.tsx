@@ -171,7 +171,7 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
   };
 
   return (
-    <Page width="full">
+    <Page width="full" className="@container">
       <PageHeader
         title={detail ? `Edit ${detail.workflow.name}` : "New workflow"}
         subtitle={
@@ -189,8 +189,8 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
         }
       />
       {intro}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
-        <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 lg:flex-col">
+      <div className="grid grid-cols-1 gap-4 @min-[872px]:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
+        <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 @min-[872px]:flex-col">
           {BUILDER_SECTIONS.map((s) => (
             <button
               key={s}

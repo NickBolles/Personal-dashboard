@@ -278,7 +278,7 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
         label,
       )
       .toEqual([]);
@@ -408,7 +408,7 @@ test("workflow builder, edit and save-chat review: axe clean and no overflow at 
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
         path,
       )
       .toEqual([]);
@@ -675,4 +675,116 @@ test("a11y + 200% text: item Agent panel with a delegation (children, copyable t
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
+});
+
+test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick actions", async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const at = new Date(Date.now() - 20 * 60_000).toISOString();
+  const quick = (id: string, label: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    userId: "owner",
+    label,
+    prompt: `${label} prompt`,
+    scope: "global",
+    pinned: false,
+    sortOrder: 0,
+    status: "active",
+    source: "owner",
+    createdAt: at,
+    updatedAt: at,
+    ...extra,
+  });
+  await page.route(/\/api\/work\/coordinator\/global(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        area: { id: "gc_a11y", title: "Portfolio" },
+        scope: "global",
+        agent: { requested: "chiefofstaff", profile: "chiefofstaff", routed: true, reason: "routed" },
+        sessionId: null,
+        sessionTitle: null,
+        excluded: false,
+        prompt: "Catch me up",
+        lastRunAt: null,
+      },
+    }),
+  );
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
+  await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        actions: [
+          quick("a11yq1", "Daily brief with a fairly long label", { pinned: true }),
+          quick("a11yq2", "Plan my week"),
+          quick("a11yq3", "Weekly review proposal", { status: "proposed", source: "agent:chiefofstaff" }),
+        ],
+      },
+    }),
+  );
+  await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "a11ya1",
+            at,
+            type: "created",
+            actor: { kind: "agent", name: "chiefofstaff" },
+            verb: "created",
+            object: { id: "a11yi1", title: "Book the furnace tune-up" },
+            detail: null,
+            via: "chiefofstaff",
+            undoOpId: "a11yop1",
+          },
+        ],
+        nextCursor: null,
+        latestAt: at,
+      },
+    }),
+  );
+  await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
+  const axe = async (label: string, include?: string) => {
+    let builder = new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]);
+    if (include) builder = builder.include(include);
+    const r = await builder.analyze();
+    expect
+      .soft(
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} ${n.failureSummary ?? ""}`).join(" | ")}`),
+        label,
+      )
+      .toEqual([]);
+  };
+  const zoom = async () => {
+    const t = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(250);
+    await expectNoHorizontalOverflow(page, { soft: true });
+    await t.evaluate((el) => (el as Element).remove());
+  };
+  await page.goto("/decisions"); // /more itself overflows at 200% text on phones (pre-existing, not the tray)
+  if (info.project.name === "desktop") {
+    const rail = page.getByRole("complementary", { name: "Chief of staff" });
+    await expect(rail.getByTestId("quick-action-proposal")).toBeVisible();
+    await axe("rail open", ".gc-rail");
+    await zoom();
+    await rail.getByRole("button", { name: "Collapse Chief of staff" }).click();
+    await expect(rail).toHaveAttribute("data-open", "false");
+    await axe("rail strip", ".gc-rail");
+    await zoom();
+    return;
+  }
+  const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+  await expect(page.getByTestId("quick-actions-tray")).toBeVisible();
+  await axe("tray");
+  await zoom();
+  await tray.click();
+  const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+  await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
+  await axe("sheet chat");
+  await zoom();
+  await sheet.getByRole("tab", { name: /^Changes/ }).click();
+  await axe("sheet changes");
+  await zoom();
+  await page.keyboard.press("Escape");
 });

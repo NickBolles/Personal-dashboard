@@ -15,6 +15,21 @@ import { listItems } from "./store";
 import { listDecisions } from "./decisions";
 import { listActivity } from "./activity";
 import { agentRuns } from "./agent-runs";
+import { getSetting } from "@/server/settings";
+
+/** Only live, AI-eligible top-level areas may host the portfolio coordinator. */
+export function globalCoordinatorArea(user: CurrentUser): WorkItem | null {
+  const areas = listItems(user.id).filter(
+    (i) => i.kind === "area" && i.parentId === null && !i.archived && !isFinanceAreaLike(i) && i.settings?.aiPolicy !== "excluded",
+  );
+  const configured = getSetting<unknown>("global_coordinator_area_id");
+  return (
+    areas.find((a) => a.id === configured) ??
+    areas.find((a) => a.settings?.agentMode === "chiefofstaff") ??
+    areas.find((a) => a.title.trim().toLowerCase() === "portfolio") ??
+    null
+  );
+}
 
 export type CoordinatorInfo = {
   area: { id: string; title: string };

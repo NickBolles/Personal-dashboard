@@ -1216,8 +1216,9 @@
     opacity: 1;
   }
 }
-/* Household glance: one card; hairlines between cells (side by side 640–1099px, stacked in the rail). */
-@media (min-width: 640px) and (max-width: 1099px) {
+/* Household glance: one card; hairlines between cells (side by side when Today is one column, stacked in
+   its side column). Container query on the Today <Page>: the Chief of staff rail narrows the page on desktop. */
+@container (min-width: 592px) and (max-width: 779px) {
   .jv-glance > li + li {
     border-top: 0;
     border-left: 1px solid var(--line);

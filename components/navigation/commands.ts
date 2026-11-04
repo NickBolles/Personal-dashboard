@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui";
 export type Command = {
   id: string;
   label: string;
-  group: "Go to" | "Work" | "Search";
+  group: "Go to" | "Work" | "Search" | "Quick actions";
   keywords: string;
   run: () => void;
 };
@@ -27,6 +27,8 @@ export const OPEN_CAPTURE_EVENT = "jarvis:work-capture";
 export const NEW_CHAT_EVENT = "jarvis:new-chat";
 /** Header "New" menu → Areas page: create an item/project/area where you are (detail: { kind }). */
 export const NEW_WORK_EVENT = "jarvis:new-work";
+/** Open the global Chief of staff rail/sheet without sending anything. */
+export const OPEN_COORDINATOR_EVENT = "jarvis:chief-of-staff";
 
 /** The Work item open in /work right now, if any. */
 function currentWorkItem() {
@@ -62,6 +64,13 @@ export function useCommands(): Command[] {
         run: () => window.dispatchEvent(new CustomEvent(NEW_CHAT_EVENT, { detail: { areaId: currentWorkItem() } })),
       },
       { id: "search", label: "Search everything", group: "Search", keywords: "find look up", run: () => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT)) },
+      work && {
+        id: "work.coordinator",
+        label: "Chief of staff",
+        group: "Work",
+        keywords: "global coordinator portfolio agent",
+        run: () => window.dispatchEvent(new Event(OPEN_COORDINATOR_EVENT)),
+      },
       { id: "go.home", label: "Go to Home", group: "Go to", keywords: "home start", run: go("/home") },
       chat && { id: "go.chat", label: work ? "Go to Conversations" : "Go to Hermes", group: "Go to", keywords: "chat conversations hermes", run: go("/chat") },
       { id: "go.alerts", label: "Go to Alerts", group: "Go to", keywords: "notifications alerts", run: go("/alerts") },

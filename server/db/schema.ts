@@ -74,6 +74,27 @@ export const authSessions = sqliteTable(
   (t) => [index("auth_sessions_user_idx").on(t.userId)],
 );
 
+/** Per-person saved coordinator prompts. Agent proposals require an owner acceptance. */
+export const quickActions = sqliteTable(
+  "quick_actions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    prompt: text("prompt").notNull(),
+    scope: text("scope").notNull().default("global"),
+    pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+    sortOrder: real("sort_order").notNull().default(0),
+    status: text("status").notNull().default("active"),
+    source: text("source").notNull(),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("quick_actions_owner_status_order_idx").on(t.userId, t.status, t.sortOrder)],
+);
+
 /** Key/value preferences. Values are JSON. */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),

@@ -260,6 +260,13 @@
       "when": 1793810850453,
       "tag": "0036_skylight_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1793822329317,
+      "tag": "0037_quick_actions",
+      "breakpoints": true
     }
   ]
 }

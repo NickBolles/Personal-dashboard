@@ -39,15 +39,24 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 
 ## Scopes
 
-| Scope                | Lets the agent                                                                       |
-| -------------------- | ------------------------------------------------------------------------------------ |
-| `work.read`          | `jarvis_tree`, `jarvis_search`, `jarvis_get_item`, `jarvis_list_decisions`           |
-| `work.write`         | `jarvis_create_item`, `jarvis_update_item`, `jarvis_add_note`, `jarvis_link`         |
-| `decisions.write`    | `jarvis_raise_decision`, `jarvis_request_change`                                     |
-| `runs.write`         | `jarvis_run_start`, `jarvis_run_update`                                              |
-| `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents) |
+| Scope                | Lets the agent                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------- |
+| `work.read`          | `jarvis_tree`, `jarvis_search`, `jarvis_get_item`, `jarvis_list_decisions`                              |
+| `work.write`         | `jarvis_create_item`, `jarvis_update_item`, `jarvis_add_note`, `jarvis_link`, `jarvis_add_quick_action` |
+| `decisions.write`    | `jarvis_raise_decision`, `jarvis_request_change`                                                        |
+| `runs.write`         | `jarvis_run_start`, `jarvis_run_update`                                                                 |
+| `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents)                    |
 
 `tools/list` returns only the tools the token's scopes allow.
+
+`jarvis_add_quick_action` (scope `work.write`) accepts `{label, prompt, scope?}`
+(label ≤60, prompt ≤2000; scope `global`, `area:<id>` or `page:<path>`). It only
+creates a `proposed` quick action attributed to `agent:<profile>` through
+`withVia` and the work-op Undo stack. It returns
+`{proposed:true, id, note:"The owner must tap Add"}`. Finance/AI-excluded area
+scopes and Finance page scopes are refused. Only the owner-facing API can
+accept (optionally with edits) or dismiss it. Accepting never sends a prompt;
+tapping a saved chip only fills the composer. The owner still taps Send.
 
 ## Tools
 
@@ -60,6 +69,7 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 | `jarvis_update_item`       | `id`, `title?`, `summary?`, `nextAction?`, `status?`, `reason?`, `assignee?`, `tags?`, `startDate?`, `targetDate?`        | partial; settle/abandon/supersede refused                                                                                                                    |
 | `jarvis_add_note`          | `itemId`, `title`, `body?`                                                                                                | a note child item                                                                                                                                            |
 | `jarvis_link`              | `itemId`, `url`, `title?`, `kind? pr\|issue\|url`                                                                         | GitHub PR/issue or https URL (e.g. an artifacts board)                                                                                                       |
+| `jarvis_add_quick_action`  | `label`, `prompt`, `scope?`                                                                                               | Proposed saved prompt only; the owner must tap Add. Never sends or activates.                                                                                |
 | `jarvis_raise_decision`    | `itemId`, `question`, `choices?` (≤6)                                                                                     | shows in Needs you; one open decision per item                                                                                                               |
 | `jarvis_request_change`    | `itemId`, `op settle\|archive\|move\|split\|merge\|delete\|abandon`, `reason`, `targetId?`                                | proposal only; nothing changes                                                                                                                               |
 | `jarvis_list_decisions`    | —                                                                                                                         | open item decisions                                                                                                                                          |

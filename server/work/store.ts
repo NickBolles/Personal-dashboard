@@ -196,7 +196,7 @@ function lineage(db: Db, userId: string, l: Omit<typeof schema.workLineage.$infe
 /** Filled in by structural mutations so routes can offer Undo (server/work/undo-rules.ts). */
 export type OpOut = { op?: { id: string; kind: UndoKind; label: string } };
 
-function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
+export function recordOp(db: Db, userId: string, itemId: string, kind: UndoKind, payload: Record<string, unknown>, out?: OpOut) {
   const id = newId("op");
   db.insert(schema.workOps)
     .values({ id, userId, itemId, kind, payload: JSON.stringify(payload), via: currentVia(), createdAt: stampOf(db) })
@@ -848,6 +848,18 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     );
     const check = undoCheck(op, latest?.id ?? null, now, undoWindowFor(op, AUTO_SETTLE_UNDO_MS));
     if (!check.ok) throw new HttpError(409, check.code, check.message);
+    if (op.kind === "quick_action") {
+      // A non-item undo stack, like tags. All writes record a snapshot in this transaction.
+      const payload = JSON.parse(op.payload) as { rows: (typeof schema.quickActions.$inferSelect)[] };
+      for (const row of payload.rows) {
+        tx.update(schema.quickActions)
+          .set({ ...row, updatedAt: now.toISOString() })
+          .where(and(eq(schema.quickActions.id, row.id), eq(schema.quickActions.userId, user.id)))
+          .run();
+      }
+      tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+      return { itemId: op.itemId, kind: "quick_action" as UndoKind, outcome: "restored" as "restored" | "deleted" | "archived" };
+    }
     if (op.kind === "tag_rename") {
       // #154 Settings → Tags rename/merge: not an item op (item_id = TAG_OPS_ITEM).
       undoTagRename(tx, user.id, JSON.parse(op.payload) as TagRenamePayload);
@@ -1011,7 +1023,10 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     correlationId,
     detail: { op: opId, kind: result.kind, outcome: result.outcome },
   });
-  return { ...result, item: result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM ? null : toItem(ownedItem(user.id, result.itemId)) };
+  return {
+    ...result,
+    item: result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM || result.kind === "quick_action" ? null : toItem(ownedItem(user.id, result.itemId)),
+  };
 }
 
 /** "item depends on dependsOn" (blocked-by). Cycle-safe; both items must be yours. */
