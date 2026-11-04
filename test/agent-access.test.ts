@@ -161,6 +161,17 @@ describe("Jarvis MCP", () => {
     expect(store.listItems(owner.id).find((i) => i.id === secret.id)!.title).toBe("Tax return");
   });
 
+  it("can't file a conversation out of Finance, and a rejected assignee leaves no item behind", async () => {
+    const chat = store.placeConversation(owner, { sessionId: "s-budget", parentId: finance.id, title: "Budget chat" }, cid);
+    const filer = mintAgentToken(owner, { name: "Filer", profile: "chiefofstaff", scopes: [...ALL, "conversations.file"] }, cid).token;
+    expect((await call(filer, "jarvis_file_conversation", { sessionId: "s-budget", itemId: area.id })).value.error).toBe("not_found");
+    expect(store.listItems(owner.id).find((i) => i.id === chat.id)!.parentId).toBe(finance.id);
+    const before = store.listItems(owner.id).length;
+    const bad = await call(token, "jarvis_create_item", { parentId: area.id, title: "Plane the door", assignee: "agent:nosuchagent" });
+    expect(bad.value.error).toBe("assignee");
+    expect(store.listItems(owner.id).length).toBe(before);
+  });
+
   it("create is attributed to the agent, shows in Activity with via, and the owner can undo it", async () => {
     const r = await call(token, "jarvis_create_item", { parentId: area.id, title: "Sharpen chisels", nextAction: "Find the stone" });
     expect(r.isError).toBe(false);

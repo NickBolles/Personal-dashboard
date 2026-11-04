@@ -6,7 +6,9 @@ import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
 import { audit } from "@/server/audit";
 import { effectiveAreaPolicy } from "@/server/ai/rules";
-import { addLink, createItem, listItems, updateItem, type OpOut } from "@/server/work/store";
+import { addLink, conversationNodes, createItem, listItems, updateItem, type OpOut } from "@/server/work/store";
+import { knownAgents, knownPeople } from "@/server/work/tags";
+import { validateAssignee } from "@/lib/item-tags";
 import { listActivity } from "@/server/work/activity";
 import { fileConversation } from "@/server/work/conversations";
 import { noteIndexedSession } from "@/server/work/conversation-index";
@@ -212,6 +214,11 @@ export const TOOLS: ToolDef[] = [
     run: ({ parentId, title, kind = "thread", summary, nextAction, assignee }, { agent, correlationId }) => {
       const parent = visible(agent.user.id, parentId);
       if (parent.kind === "note" || parent.kind === "conversation") throw new HttpError(400, "bad_parent", "Notes and conversations can't hold items");
+      // Validate the assignee first so a rejected one never leaves a committed item behind.
+      if (assignee) {
+        const a = validateAssignee(assignee, { agents: knownAgents(), people: knownPeople().map((p) => p.id) });
+        if (!a.ok) throw new HttpError(400, "assignee", a.error);
+      }
       const out: OpOut = {};
       let item = createItem(agent.user, { parentId, kind, title, summary, nextAction }, correlationId, out);
       if (assignee) item = updateItem(agent.user, item.id, { assignee }, correlationId);
@@ -346,6 +353,9 @@ export const TOOLS: ToolDef[] = [
     input: z.object({ sessionId: z.string().trim().min(1).max(200), itemId: id }).strict(),
     run: async ({ sessionId, itemId }, { agent, correlationId }) => {
       visible(agent.user.id, itemId);
+      // A conversation already filed somewhere agents can't see (Finance, AI-excluded) stays put.
+      const existing = conversationNodes(agent.user.id).get(sessionId);
+      if (existing) visible(agent.user.id, existing.id);
       const profile = agent.profile === "default" ? null : agent.profile;
       if (profile && !getAgentSettings().routes.some((r) => r.profile === profile))
         throw new HttpError(400, "unknown_profile", "This agent's profile has no route in Settings → Agents");
