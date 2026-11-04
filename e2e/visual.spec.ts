@@ -1642,9 +1642,13 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
 
+    // Fixed single-digit-hour wall time on today's CT date (14:05Z = 8:05 CST / 9:05 CDT): the
+    // row time is masked but its width still counts, and "11:06 AM" rewraps the last row at 320 px.
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const rowAt = `${ymd}T14:05:00.000Z`;
     const row = (id: string, verb: string, title: string, via: string | null, undo = false) => ({
       id,
-      at: ago(10),
+      at: rowAt,
       type: verb === "created" ? "created" : "edit",
       actor: via ? { kind: "agent", name: via } : { kind: "you", name: "You" },
       verb,
@@ -1663,7 +1667,7 @@ for (const scheme of ["light", "dark"] as const) {
             row("a3", "edited · title", "Workshop lighting", null),
           ],
           nextCursor: null,
-          latestAt: ago(10),
+          latestAt: rowAt,
         },
       }),
     );
