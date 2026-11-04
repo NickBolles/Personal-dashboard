@@ -3,7 +3,7 @@ import { mock } from "./helpers";
 
 /**
  * Skylight chores completed today stay visible (mock seed: "Wipe the kitchen counters" is done,
- * "Sort the mail pile" is skipped): Skylight page "Done today", Todos (Skylight source chip) and
+ * "Sort the mail pile" is skipped): Skylight page "Done this week", Todos (Skylight source chip) and
  * Today's "Recently completed". Read-only: nothing is written to Skylight.
  */
 test.beforeEach(async ({ request }) => {
@@ -12,9 +12,9 @@ test.beforeEach(async ({ request }) => {
 
 test("skylight page lists chores done today apart from the open ones", async ({ page }) => {
   await page.goto("/skylight");
-  const done = page.getByRole("region", { name: /Done today/ });
+  const done = page.getByRole("region", { name: /Done this week/ });
   await expect(done).toContainText("Wipe the kitchen counters", { timeout: 15_000 });
-  await expect(page.getByRole("region", { name: /Today’s chores/ })).not.toContainText("Wipe the kitchen counters");
+  await expect(page.getByRole("region", { name: /^Today/ })).not.toContainText("Wipe the kitchen counters");
   await expect(page.getByText(/Sort the mail pile/)).toHaveCount(0);
 });
 
