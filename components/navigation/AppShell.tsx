@@ -18,6 +18,7 @@ import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ComposerRouteWatcher, useComposerTarget } from "@/components/agents/useComposerTarget";
 import { shortcutLabel, useModKey } from "@/lib/client/platform";
+import { GlobalCoordinator } from "@/components/coordinator/GlobalCoordinator";
 
 const MORE: Dest = {
   key: "more",
@@ -271,7 +272,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             aria-label={`Search (${shortcutLabel(mod, "K")})`}
             title={`Search (${shortcutLabel(mod, "K")})`}
             className={cx(
-              "inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text",
+              "gc-shell-search inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text",
               !pathname.startsWith("/chat") && "lg:hidden",
             )}
           >
@@ -378,9 +379,14 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
         ) : null}
         {children}
       </main>
+      {canWork ? (
+        <Suspense fallback={null}>
+          <GlobalCoordinator />
+        </Suspense>
+      ) : null}
       {/* Tablet / desktop: bottom-centre command dock (§5). Chat has its own composer there. */}
       {!pathname.startsWith("/chat") ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-3 z-40 hidden justify-center px-4 sm:flex lg:hidden">
+        <div className="gc-tablet-dock pointer-events-none fixed inset-x-0 bottom-3 z-40 hidden justify-center px-4 sm:flex lg:hidden">
           <div className="pointer-events-auto w-full max-w-[520px]">
             <CommandDock variant="dock" />
           </div>
@@ -402,7 +408,7 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
             // The command dock is the centre item of the bar (never overlapping it).
             const dock =
               i === Math.floor(all.length / 2) ? (
-                <li key="dock" className="flex min-h-[60px] items-center justify-center">
+                <li key="dock" className="gc-phone-orb flex min-h-[60px] items-center justify-center">
                   <CommandDock variant="bar" />
                 </li>
               ) : null;

@@ -1,0 +1,445 @@
+/* Global Chief of staff. All colours inherit the light/dark semantic tokens. */
+.gc-host {
+  min-width: 0;
+}
+.gc-rail,
+.gc-sheet {
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+}
+.gc-rail {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 39;
+}
+.gc-sheet {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: 100%;
+  height: min(82dvh, 760px);
+  max-height: 90dvh;
+  margin: 0;
+  padding: 0 0 env(safe-area-inset-bottom);
+  border-radius: 12px 12px 0 0;
+  box-shadow: var(--sh2);
+}
+.gc-sheet::backdrop {
+  background: var(--scrim);
+}
+.gc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.gc-head h2 {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+.gc-head > .chip {
+  max-width: 100%;
+  flex-wrap: wrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.gc-icon,
+.gc-tabs button,
+.gc-action button,
+.gc-page button,
+.gc-context button,
+.gc-send {
+  min-height: 44px;
+  min-width: 44px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.gc-host button:focus-visible,
+.gc-resizer:focus-visible,
+.gc-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.gc-host button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.gc-host button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gc-priority {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.gc-rail > .gc-priority,
+.gc-sheet > .gc-priority {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.gc-host [data-tone="bad"] {
+  color: var(--bad);
+}
+.gc-host [data-tone="warn"] {
+  color: var(--warn);
+}
+.gc-host [data-tone="ai"] {
+  color: var(--ai);
+}
+.gc-host [data-tone="ok"] {
+  color: var(--ok);
+}
+.gc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.gc-tabs button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.gc-tabs button[aria-selected="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.gc-badge {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--ai);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+.gc-panel-content {
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.gc-panel-content[hidden] {
+  display: none;
+}
+.gc-chat {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.gc-thread-body {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+.gc-thread-body .md {
+  min-width: 0;
+}
+.gc-thread-body pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.gc-composer {
+  border-top: 1px solid var(--line);
+  padding: 6px 8px;
+  flex-shrink: 0;
+}
+.gc-compose-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+.gc-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  max-height: 160px;
+  padding: 10px 8px;
+  resize: none;
+  border: 1px solid var(--control-border, var(--line-strong));
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.4;
+  field-sizing: content;
+}
+.gc-send {
+  background: var(--acb);
+  font-size: 1.25rem;
+}
+.gc-host .gc-send:hover:not(:disabled) {
+  background: var(--acb);
+}
+.gc-context {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  padding-left: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+}
+.gc-context > span {
+  min-width: 0;
+  flex: 1;
+}
+.gc-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  margin: 4px 0 0;
+}
+.gc-empty,
+.gc-page,
+.gc-changes,
+.gc-error {
+  padding: 10px;
+}
+.gc-empty a,
+.gc-action a {
+  color: var(--accent);
+}
+.gc-error {
+  color: var(--bad);
+}
+.gc-list {
+  padding: 0 10px;
+}
+.gc-list > a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.gc-list > p {
+  padding: 10px 0;
+  color: var(--muted);
+}
+.gc-list strong {
+  font-weight: 500;
+}
+.gc-list span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.gc-action-list {
+  margin-top: 6px;
+  display: grid;
+  gap: 6px;
+}
+.gc-action {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.gc-action > div {
+  min-width: 0;
+  flex: 1;
+}
+.gc-action strong,
+.gc-action a {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.gc-action-icon {
+  color: var(--ai);
+}
+.gc-action button {
+  padding: 0 6px;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.gc-page button {
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  margin-top: 8px;
+}
+.gc-tray {
+  position: fixed;
+  right: 8px;
+  bottom: calc(86px + env(safe-area-inset-bottom));
+  z-index: 39;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(300px, calc(100vw - 16px));
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  box-shadow: var(--sh2);
+}
+.gc-tray > span:nth-child(2) {
+  min-width: 0;
+}
+.gc-tray strong,
+.gc-tray .gc-priority {
+  display: block;
+}
+.gc-tray strong {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.gc-orb {
+  display: inline-block;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--orb);
+}
+.gc-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.gc-dot[data-dot="red"] {
+  background: var(--bad);
+}
+.gc-strip {
+  align-items: center;
+  padding: 8px 2px;
+  gap: 6px;
+}
+.gc-strip .gc-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: 44px;
+}
+.gc-strip .gc-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+}
+.gc-strip .gc-badge {
+  font-size: 0.625rem;
+}
+.gc-resizer {
+  position: absolute;
+  inset: 0 auto 0 -4px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.gc-resizer:hover,
+.gc-resizer:focus-visible {
+  background: var(--accent-soft);
+}
+.gc-phone-orb {
+  position: relative;
+}
+.jv-shell[data-gc-dot] .gc-phone-orb::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  top: -12px;
+  left: calc(50% + 16px);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.jv-shell[data-gc-dot="red"] .gc-phone-orb::after {
+  background: var(--bad);
+}
+html[data-kb="open"] .gc-tray {
+  display: none;
+}
+@media (min-width: 640px) {
+  .gc-icon,
+  .gc-tabs button,
+  .gc-action button,
+  .gc-page button,
+  .gc-context button,
+  .gc-send {
+    min-height: 40px;
+    min-width: 40px;
+  }
+  .gc-tabs button {
+    min-width: 0;
+  }
+  .gc-input {
+    min-height: 40px;
+    font-size: 0.875rem;
+  }
+}
+@media (min-width: 900px) {
+  .jv-shell > main,
+  .jv-shell > header {
+    margin-right: var(--gc-w, 0px);
+  }
+  .gc-tablet-dock {
+    right: var(--gc-w, 0px);
+  }
+}
+/* Keep shell controls inside the reflowed content even at the 520px rail limit. */
+@media (min-width: 900px) and (max-width: 1279.98px) {
+  .jv-shell > header .jv-dock-inline {
+    display: none;
+  }
+  .jv-shell > header .gc-shell-search {
+    display: inline-flex;
+  }
+}
+@media (min-width: 900px) and (max-width: 1023.98px) {
+  .jv-shell > header > div {
+    height: auto;
+    flex-wrap: wrap;
+  }
+  .jv-shell > header nav[aria-label="Primary"] {
+    flex-basis: 100%;
+  }
+}
+@media (min-width: 1100px) and (pointer: fine) {
+  .gc-icon,
+  .gc-tabs button,
+  .gc-action button,
+  .gc-page button,
+  .gc-context button,
+  .gc-send {
+    min-height: 34px;
+    min-width: 34px;
+  }
+  .gc-tabs button {
+    min-width: 0;
+  }
+}
