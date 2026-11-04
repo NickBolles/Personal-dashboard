@@ -9,5 +9,10 @@ export const SOURCE_STATES = {
 export async function forceSourceState(page: Page, name: keyof typeof SOURCE_STATES) {
   const s = SOURCE_STATES[name];
   await page.route(new RegExp(`/api/sources/${s.source}(\\?.*)?$`), (route) => route.fulfill({ json: { status: s.status } }));
+  // Todos also lists Skylight chores: keep the mock's clock-dependent chores out of the state shots.
+  if (s.path === "/todos")
+    await page.route(/\/api\/sources\/skylight(\?.*)?$/, (route) =>
+      route.fulfill({ json: { status: { source: "skylight", label: "Skylight", state: "unconfigured" } } }),
+    );
   return s.path;
 }

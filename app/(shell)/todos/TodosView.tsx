@@ -55,7 +55,8 @@ export function TodosView() {
                 <ul className="jv-feed">
                   {items.map((a) => (
                     <li key={a.id} id={a.source === "todos" ? `todo-${a.sourceId}` : undefined}>
-                      <ActionCard action={a} compact={a.status === "completed"} quiet row />
+                      {/* Skylight rows are read-only: no inline "Open Skylight" button (⋯ → Open in source). */}
+                      <ActionCard action={a.source === "skylight" ? { ...a, primaryAction: undefined } : a} compact={a.status === "completed"} quiet row />
                     </li>
                   ))}
                 </ul>
