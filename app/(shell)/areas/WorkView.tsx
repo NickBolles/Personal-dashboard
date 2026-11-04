@@ -34,6 +34,7 @@ import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMut
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
+import { AreaCoordinator, AreaProjects } from "@/components/map/AreaPage";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
@@ -1079,7 +1080,7 @@ function ItemDetail({
                   Chat here
                 </Button>
               ) : null}
-              {isArea && canChat && !isFinanceAreaLike(item) ? <CoordinatorButton areaId={item.id} areaTitle={item.title} /> : null}
+              {isArea && canChat && !isFinanceAreaLike(item) ? <CoordinatorButton areaId={item.id} areaTitle={item.title} className="ap-hide-xl" /> : null}
               {container ? (
                 <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
                   + {childLabel}
@@ -1339,6 +1340,12 @@ function ContainerBody({
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 5);
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
+  const newChat = useAskHermes();
+  // Finance never goes to AI: no coordinator for finance(-like) areas.
+  const coord =
+    isArea && canChat && !isFinanceAreaLike(item)
+      ? { area: { id: item.id, title: item.title }, chats: itemChatRows(d), onNew: () => newChat.start({ areaId: item.id }), busy: newChat.busy }
+      : null;
   return (
     <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
       <div className="wk-cpage-main min-w-0 space-y-3">
@@ -1360,6 +1367,8 @@ function ContainerBody({
             <span>Proof due</span>
           </div>
         </div>
+        {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
+        {isArea ? <AreaProjects areaId={item.id} onOpen={onSelect} /> : null}
         {isArea ? (
           <>
             <ChildrenCard
@@ -1410,6 +1419,8 @@ function ContainerBody({
       </div>
       {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
       <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
+        {/* Map is Areas: the area coordinator leads the side column at ≥1280 (a sheet below that). */}
+        {coord ? <AreaCoordinator variant="column" {...coord} /> : null}
         {/* A3: the side column leads with what moved; settings and details follow. */}
         {recent.length ? (
           <section aria-labelledby="recent-h">

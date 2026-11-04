@@ -18,8 +18,15 @@ import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { activeInArea } from "@/lib/agent-runs";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 
-type MapLink = { kind: string; url: string; title: string | null };
-export type MapResponse = { items: WorkItem[]; links: Record<string, MapLink[]>; decisions: DecisionsResponse };
+export type MapLink = { kind: string; url: string; title: string | null };
+export type MapRelation = { kind: "depends" | "followup"; id: string; title: string; open: boolean };
+export type MapResponse = {
+  items: WorkItem[];
+  links: Record<string, MapLink[]>;
+  /** older servers/stubs omit it */
+  relations?: Record<string, MapRelation[]>;
+  decisions: DecisionsResponse;
+};
 export const MAP_KEY = ["work", "overview"] as const;
 
 const BUCKET_TONE: Record<MapBucket, string> = { owner: "wn", inflight: "ac", next: "inf", live: "ok", backlog: "neutral", done: "ok" };
@@ -198,7 +205,16 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
                       {r.total} {r.total === 1 ? "item" : "items"}
                     </span>
                   </summary>
-                  <Branch parent={r.id} kids={kids} visible={visible} open={filtering} depth={1} links={q.data!.links} onOp={setOp} />
+                  <Branch
+                    parent={r.id}
+                    kids={kids}
+                    visible={visible}
+                    open={filtering}
+                    depth={1}
+                    links={q.data!.links}
+                    relations={q.data!.relations}
+                    onOp={setOp}
+                  />
                 </details>
               ))}
             </div>
@@ -333,13 +349,14 @@ function ChiefOfStaffSlot({ items, onOpen }: { items: WorkItem[]; onOpen?: (id: 
   );
 }
 
-function Branch({
+export function Branch({
   parent,
   kids,
   visible,
   open,
   depth,
   links,
+  relations,
   onOp,
 }: {
   parent: string;
@@ -348,6 +365,7 @@ function Branch({
   open: boolean;
   depth: number;
   links: Record<string, MapLink[]>;
+  relations?: Record<string, MapRelation[]>;
   onOp: (op: UndoOp) => void;
 }) {
   const list = (kids.get(parent) ?? []).filter((i) => visible.has(i.id));
@@ -372,15 +390,15 @@ function Branch({
                 </span>
               </span>
             </summary>
-            <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} onOp={onOp} />
+            <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
           </details>
         );
       })}
       {rows.length ? (
         <ul className="mp-rows">
           {rows.map((i) => (
-            <MapRow key={i.id} item={i} links={links[i.id] ?? []} onOp={onOp}>
-              <Branch parent={i.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} onOp={onOp} />
+            <MapRow key={i.id} item={i} links={links[i.id] ?? []} relations={relations?.[i.id]} onOp={onOp}>
+              <Branch parent={i.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
             </MapRow>
           ))}
         </ul>
@@ -389,7 +407,19 @@ function Branch({
   );
 }
 
-function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: MapLink[]; onOp: (op: UndoOp) => void; children?: React.ReactNode }) {
+function MapRow({
+  item: i,
+  links,
+  relations = [],
+  onOp,
+  children,
+}: {
+  item: WorkItem;
+  links: MapLink[];
+  relations?: MapRelation[];
+  onOp: (op: UndoOp) => void;
+  children?: React.ReactNode;
+}) {
   const patch = useInlinePatch(i.id, (op) => (op ? onOp(op) : undefined));
   const b = bucketOf(i);
   const agent = useAgentRuns().data?.items[i.id];
@@ -425,6 +455,21 @@ function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: Map
       {agent && (agent.live !== "idle" || agent.who?.kind === "agent") ? (
         <div className="mt-1 min-w-0 pl-4">
           <AgentLine info={agent} />
+        </div>
+      ) : null}
+      {relations.length ? (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-4" data-testid="map-relations">
+          {relations.map((r) => (
+            <Link
+              key={`${r.kind}-${r.id}`}
+              href={`/areas?item=${encodeURIComponent(r.id)}`}
+              className="mp-rel"
+              data-kind={r.kind}
+              data-open={r.open ? "true" : undefined}
+            >
+              {r.kind === "depends" ? "depends on" : "follow-up of"} <b>{r.title}</b>
+            </Link>
+          ))}
         </div>
       ) : null}
       {i.tags.length || i.assignee || links.length ? (

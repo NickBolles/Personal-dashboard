@@ -16,7 +16,7 @@ import {
 import { chatFilesVisual, filesVisual, PHOTO_PNG } from "./fixtures/chat-files";
 import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
-import { mapDemo, mapDemoDecisions } from "./fixtures/map-demo";
+import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 
 /**
@@ -541,6 +541,12 @@ for (const [name, detail] of [
     await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
     await page.route(new RegExp(`/api/work/items/${detail.item.id}$`), (route) => route.fulfill({ json: detail }));
     await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    // The area page's project cards read the overview: stub it from the same items so other specs' data never leaks in.
+    await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { items: areasVisual.items, links: {}, relations: {}, decisions: { count: 0, entries: [] } } }),
+    );
+    await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
+    await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { count: 0, entries: [] } }));
     await page.goto(`/areas?item=${detail.item.id}`);
     await expect(page.getByRole("heading", { level: 2, name: detail.item.title })).toBeVisible();
     await page.waitForTimeout(800);
@@ -1391,5 +1397,49 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(500);
     await expect(header).toHaveScreenshot(`chat-agent-badge-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
+  });
+}
+
+/** Map is Areas PR 2: the area page (project cards → tree with relation chips, coordinator column ≥1280 / sheet below). */
+async function openDemoArea(page: Page) {
+  await freezeMiddayCT(page);
+  await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: agentRunsDemo }));
+  await page.route(/\/api\/work\/items\/ma_j$/, (route) => route.fulfill({ json: mapDemoAreaDetail }));
+  await page.route(/\/api\/work\/items\/[^/]+\/coordinator(?:\?.*)?$/, (route) => route.fulfill({ json: coordinatorDemo }));
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: { ...areasVisual, items: [...areasVisual.items, ...mapDemo.items] } }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+  await page.goto("/areas?item=ma_j");
+  await expect(page.getByRole("heading", { level: 2, name: "Jarvis" })).toBeVisible();
+  await expect(page.getByTestId("area-project-card")).toHaveCount(2);
+  await expect(page.getByTestId("map-relations").first()).toBeVisible();
+}
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: area map page (${scheme})`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await openDemoArea(page);
+    const wide = (page.viewportSize()?.width ?? 0) >= 1280;
+    if (wide) await expect(page.getByTestId("area-coordinator")).toBeVisible();
+    else await expect(page.getByTestId("area-coordinator-sheet-open")).toBeVisible();
+    const shoot = async (name: string) => {
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+      await page.waitForTimeout(500);
+      await expectNoHorizontalOverflow(page);
+      await expect(page).toHaveScreenshot(name, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+      await t.evaluate((el) => (el as Element).remove());
+    };
+    await shoot(`area-map-${scheme}.png`);
+    if (info.project.name === "desktop") {
+      // Foldable (unfolded, ~1000 px): no column, the coordinator is a sheet.
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await expect(page.getByTestId("area-coordinator-sheet-open")).toBeVisible();
+      await expect(page.getByTestId("area-coordinator")).toBeHidden();
+      await shoot(`area-map-fold-${scheme}.png`);
+    }
   });
 }

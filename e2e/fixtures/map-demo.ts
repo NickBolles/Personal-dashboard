@@ -103,5 +103,51 @@ export const mapDemo = {
     ],
     mi_ds7: [{ kind: "chat_session", url: "/chat/sess_demo", title: "Design chat" }],
   },
+  relations: {
+    mi_dec: [{ kind: "depends", id: "mi_map", title: "Map overview + rollups", open: true }],
+    mi_imp: [{ kind: "followup", id: "mi_ds6", title: "Design batch 6", open: false }],
+  },
   decisions: mapDemoDecisions,
+};
+
+/** Item detail for the "Jarvis" demo area page (project cards, tree, coordinator column/sheet). */
+const areaSettings = {
+  agentMode: null,
+  instructions: null,
+  defaultBackend: null,
+  defaultModel: null,
+  defaultProvider: null,
+  defaultRepo: null,
+  contextSources: [],
+  settlePolicy: "suggest",
+  quietDays: 14,
+  aiPolicy: "allowed",
+};
+export const mapDemoAreaDetail = {
+  item: mapDemoItems[0],
+  breadcrumb: [],
+  children: mapDemoItems.filter((i) => (i as { parentId?: string | null }).parentId === "ma_j"),
+  links: [
+    {
+      id: "ml_coord",
+      itemId: "ma_j",
+      kind: "chat_session",
+      role: "coordinator",
+      targetId: "sess_coord",
+      url: null,
+      title: "Jarvis coordinator",
+      createdAt: at,
+    },
+    { id: "ml_plan", itemId: "ma_j", kind: "chat_session", role: "context", targetId: "sess_plan", url: null, title: "Plan the areas merge", createdAt: at },
+  ],
+  packets: [],
+  validations: [],
+  events: [],
+  lineage: [],
+  settle: { allowed: false, reason: null },
+  validationDefault: { value: "required", explicit: false, areaId: "ma_j", areaTitle: "Jarvis" },
+  area: { id: "ma_j", title: "Jarvis", builtIn: false, settings: areaSettings },
+  githubRefresh: false,
+  blockedBy: [],
+  blocking: [],
 };
