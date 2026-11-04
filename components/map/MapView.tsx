@@ -438,7 +438,7 @@ function MapRow({
           id={`mp-st-${i.id}`}
           value={i.status}
           onChange={(e) => patch.mutate({ status: e.target.value as WorkStatus })}
-          className="w-32 [&>select]:w-full"
+          className="w-32 max-w-full [&>select]:w-full"
         >
           {WORK_STATUSES.map((s) => (
             <option key={s} value={s}>

@@ -3,7 +3,7 @@ import { appPost } from "./helpers";
 
 /**
  * #111 tags + assignee: inline assign/tag on the item detail (Saved · Undo), palette "Assign to" /
- * "Tag" with a confirm step, and the tag/assignee filters on an area's lists and the activity timeline.
+ * "Tag" with a confirm step, and the tag/assignee filters on a project's work list and the activity timeline.
  * Titles use "Brambleworth"/"Tinsmith" words no other spec uses (filing suggestions are word matches).
  */
 
@@ -139,15 +139,28 @@ test("palette: Assign to and Tag confirm before writing", async ({ page }) => {
   await expect(page.locator(`.jv-meta [data-tag="tinsnip-${nonce}"]`)).toHaveCount(0);
 });
 
-test("filters: area list and activity timeline by tag and assignee", async ({ page }) => {
+test("filters: project work list and activity timeline by tag and assignee", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");
-  const { areaId, one, two } = await makeTree(page, nonce);
+  // Area pages show project cards + a tree; the filterable row list lives on project pages, so build the tree under a project.
+  const a = await appPost(page, "/api/work/items", { kind: "area", title: `Brambleworth yard ${nonce}` });
+  expect(a.ok(), await a.text()).toBeTruthy();
+  const areaId = ((await a.json()) as { item: { id: string } }).item.id;
+  const pr = await appPost(page, "/api/work/items", { kind: "project", parentId: areaId, title: `Tinsmith works ${nonce}` });
+  expect(pr.ok(), await pr.text()).toBeTruthy();
+  const projectId = ((await pr.json()) as { item: { id: string } }).item.id;
+  const mk = async (title: string) => {
+    const r = await appPost(page, "/api/work/items", { kind: "thread", parentId: projectId, title });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    return ((await r.json()) as { item: { id: string } }).item.id;
+  };
+  const one = await mk(`Tinsmith gate ${nonce}`);
+  const two = await mk(`Tinsmith trellis ${nonce}`);
   const tag = `thornrow-${nonce}`;
   const p = await page.request.patch(`/api/work/items/${one}`, { data: { tags: [tag], assignee: "agent:homelabchief" }, headers: csrf });
   expect(p.ok(), await p.text()).toBeTruthy();
 
-  await page.goto(`/areas?item=${areaId}`);
+  await page.goto(`/areas?item=${projectId}`);
   const gate = page.locator(`[data-node-row="${one}"]`);
   const trellis = page.locator(`[data-node-row="${two}"]`);
   await expect(gate).toBeVisible();

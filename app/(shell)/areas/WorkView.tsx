@@ -1403,10 +1403,10 @@ function ContainerBody({
             <ul className="wk-recent">
               {recent.map((i) => (
                 <li key={i.id}>
-                  <button type="button" className="tap min-w-0 truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
+                  <button type="button" className="tap min-w-0 flex-[1_1_6rem] truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
                     {i.title}
                   </button>
-                  <span className="shrink-0 text-xs text-muted" data-dynamic>
+                  <span className="max-w-full shrink-0 truncate text-xs text-muted" data-dynamic>
                     {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
                   </span>
                 </li>

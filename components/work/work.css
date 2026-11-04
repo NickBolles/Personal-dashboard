@@ -1031,6 +1031,8 @@ button.wk-kpi:hover {
 }
 .wk-recent > li {
   display: flex;
+  /* 200% text in the 300px side column: the status · date meta wraps under the title instead of overflowing. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
