@@ -7,10 +7,12 @@ import { BackendSwitch } from "@/components/chat/backend";
 import { ConversationsView } from "@/components/areas/ConversationsView";
 import { useAccess } from "@/components/access";
 import { Kbd, Page, PageHeader } from "@/components/ui";
+import { useModKey } from "@/lib/client/platform";
 
 /** /chat: with Areas, the conversations view of the tree (All / Unfiled); otherwise the plain Hermes list. */
 export function ChatIndex({ startNew, context, draft, view }: { startNew?: boolean; context?: string; draft?: string; view?: string }) {
   const { can } = useAccess();
+  const mod = useModKey();
   if (can("work.use")) return <ConversationsView startNew={startNew} context={context} draft={draft} initialFilter={view === "unfiled" ? "unfiled" : "all"} />;
   return (
     <Page width="narrow">
@@ -29,7 +31,7 @@ export function ChatIndex({ startNew, context, draft, view }: { startNew?: boole
         <SessionList />
       </div>
       <p className="hidden text-sm text-muted lg:block">
-        Choose a conversation on the left, or start one above. <Kbd>Enter</Kbd> sends, <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> adds a line.
+        Choose a conversation on the left, or start one above. <Kbd>Enter</Kbd> adds a line, <Kbd>{mod}</Kbd>+<Kbd>Enter</Kbd> sends.
       </p>
     </Page>
   );
