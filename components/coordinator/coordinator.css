@@ -406,6 +406,16 @@
   box-shadow: var(--sh2);
   background: var(--surface);
 }
+/* The tray (and its pinned chips) float over the page bottom: give main the same gutter so the last rows can
+   always scroll clear of it (else controls at the end of short pages sit under the tray). */
+@media (max-width: 899.98px) {
+  html:not([data-kb="open"]) .jv-shell:has(.gc-tray) > main.pb-nav {
+    padding-bottom: calc(146px + env(safe-area-inset-bottom));
+  }
+  html:not([data-kb="open"]) .jv-shell:has(.gc-tray-qa .qa-chip) > main.pb-nav {
+    padding-bottom: calc(198px + env(safe-area-inset-bottom));
+  }
+}
 html[data-kb="open"] .gc-tray,
 html[data-kb="open"] .gc-tray-qa {
   display: none;
