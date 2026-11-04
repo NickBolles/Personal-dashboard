@@ -109,7 +109,7 @@ describe("Home Assistant Completed recently", () => {
     expect(recentHaItem({ status: "needs_action", due: "2025-12-01" }, now)).toBe(true);
     expect(recentHaItem({ status: "completed", completed: "2026-10-25T10:00:00Z" }, now)).toBe(true);
     expect(recentHaItem({ status: "completed", completed: "2026-10-15T10:00:00Z" }, now)).toBe(false);
-    expect(recentHaItem({ status: "completed", due: "2025-12-01" }, now)).toBe(false);
+    expect(recentHaItem({ status: "completed", due: "2025-12-01" }, now)).toBe(true);
     expect(recentHaItem({ status: "completed" }, now)).toBe(true);
   });
 });

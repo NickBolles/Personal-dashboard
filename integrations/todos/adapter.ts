@@ -94,12 +94,12 @@ async function googleListLabel(): Promise<string> {
 export const HA_COMPLETED_DAYS = 14;
 
 /**
- * Completed HA items older than the window are dropped (by completion time, else due date — some HA
- * lists don't stamp completion); open items and completions with no date at all stay.
+ * Completed HA items whose completion time is older than the window are dropped. A due date says
+ * nothing about when an item was completed, so completions without a `completed` stamp always stay.
  */
 export function recentHaItem(i: { status?: string; completed?: string | null; due?: string | null }, now: Date): boolean {
   if (i.status !== "completed") return true;
-  const when = i.completed || i.due;
+  const when = i.completed;
   if (!when) return true;
   const t = Date.parse(when);
   return Number.isNaN(t) || t >= now.getTime() - HA_COMPLETED_DAYS * DAY;
