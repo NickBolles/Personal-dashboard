@@ -75,8 +75,19 @@ export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id:
         }),
     [kids, areaId],
   );
+  // Cards view: the cards already cover each project, so the list below them holds only the area's loose items
+  // (one list per level, no duplicate project rows). Tree view: everything, with relation chips.
+  const treeKids = useMemo(() => {
+    if (view === "tree") return kids;
+    const m = new Map(kids);
+    m.set(
+      areaId,
+      (kids.get(areaId) ?? []).filter((k) => !isContainer(k)),
+    );
+    return m;
+  }, [kids, areaId, view]);
   if (!q.data) return q.error ? <p className="text-sm text-danger">Couldn&apos;t load projects: {(q.error as Error).message}</p> : null;
-  const visible = new Set(descendants(kids, areaId).map((i) => i.id));
+  const visible = new Set(descendants(treeKids, areaId).map((i) => i.id));
   const hasTree = visible.size > 0;
   return (
     <section aria-labelledby="ap-h" className="ap-root min-w-0" data-testid="area-projects">
@@ -154,10 +165,10 @@ export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id:
       ) : null}
       {hasTree ? (
         <div className="min-w-0" data-testid="area-tree">
-          {view === "cards" ? <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-wide text-muted">Items</h3> : null}
+          {view === "cards" ? <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-wide text-muted">Other items</h3> : null}
           <Branch
             parent={areaId}
-            kids={kids}
+            kids={treeKids}
             visible={visible}
             open={view === "tree"}
             depth={1}

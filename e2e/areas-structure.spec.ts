@@ -54,7 +54,12 @@ test("build structure: area page, inline path add, project page, decluttered ite
   const article = page.getByRole("article");
   await expect(article).toHaveAttribute("data-node-kind", "area");
   await expect(page.getByRole("heading", { level: 2, name: area })).toBeVisible();
-  await expect(page.getByTestId("children-projects")).toContainText("Scoring engine");
+  // One list per level: project cards (no duplicate "Projects" / "Filed in this area" lists); adding = "+ Project" or ⋯.
+  await expect(page.getByTestId("area-project-cards")).toContainText("Scoring engine");
+  await expect(page.getByTestId("children-projects")).toHaveCount(0);
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Add item to area" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(article.getByRole("button", { name: "+ Project" })).toBeVisible();
   await expect(article.getByRole("button", { name: "Add validation" })).toHaveCount(0);
   await expect(article.getByRole("button", { name: "Settle", exact: true })).toHaveCount(0);
@@ -64,8 +69,8 @@ test("build structure: area page, inline path add, project page, decluttered ite
 
   // Project page: children + "+ Item"; inline add below the list.
   await page
-    .getByTestId("children-projects")
-    .getByRole("button", { name: /Scoring engine/ })
+    .getByTestId("area-project-cards")
+    .getByRole("link", { name: /Scoring engine/ })
     .click();
   await expect(article).toHaveAttribute("data-node-kind", "project");
   await page.getByTestId("children-work").getByRole("button", { name: "Add item, sub-project or path" }).click();

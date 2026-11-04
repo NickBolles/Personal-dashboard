@@ -923,6 +923,8 @@ function ItemDetail({
   const menu: MenuItem[] = (
     [
       container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
+      isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1321,8 +1323,6 @@ function ContainerBody({
   const isArea = item.parentId === null;
   const r = rollup(items, item.id);
   const kids = items.filter((i) => i.parentId === item.id && !i.archived);
-  const projects = kids.filter((k) => k.kind === "project");
-  const rest = kids.filter((k) => k.kind !== "project");
   // Recently changed anywhere below this node.
   const below = new Set<string>([item.id]);
   for (let grew = true; grew;) {
@@ -1369,31 +1369,8 @@ function ContainerBody({
         </div>
         {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
         {isArea ? <AreaProjects areaId={item.id} onOpen={onSelect} /> : null}
-        {isArea ? (
-          <>
-            <ChildrenCard
-              label="Projects"
-              parent={item}
-              list={projects}
-              items={items}
-              onSelect={onSelect}
-              addLabel={projects.length ? "Add a project" : "Add your first project"}
-              addKind="project"
-              empty="Projects group related work. Add one, or type a path like “Launch / pricing page”."
-            />
-            <ChildrenCard
-              label="Filed in this area"
-              testId="items-chats-here"
-              parent={item}
-              list={rest}
-              items={items}
-              onSelect={onSelect}
-              addLabel="Add an item"
-              addKind="thread"
-              empty={canChat ? "Loose items and chats filed straight into this area show here." : "Loose items show here."}
-            />
-          </>
-        ) : (
+        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
+        {isArea ? null : (
           <ChildrenCard
             label="Work"
             parent={item}

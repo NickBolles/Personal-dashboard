@@ -1414,7 +1414,6 @@ async function openDemoArea(page: Page) {
   await page.goto("/areas?item=ma_j");
   await expect(page.getByRole("heading", { level: 2, name: "Jarvis" })).toBeVisible();
   await expect(page.getByTestId("area-project-card")).toHaveCount(2);
-  await expect(page.getByTestId("map-relations").first()).toBeVisible();
 }
 
 for (const scheme of ["light", "dark"] as const) {
@@ -1434,6 +1433,11 @@ for (const scheme of ["light", "dark"] as const) {
       await t.evaluate((el) => (el as Element).remove());
     };
     await shoot(`area-map-${scheme}.png`);
+    // Tree view: every item with its "depends on" / "follow-up of" chips.
+    await page.getByRole("group", { name: "Area view" }).getByRole("button", { name: "Tree" }).click();
+    await expect(page.getByTestId("map-relations").first()).toBeVisible();
+    await shoot(`area-map-tree-${scheme}.png`);
+    await page.getByRole("group", { name: "Area view" }).getByRole("button", { name: "Cards" }).click();
     if (info.project.name === "desktop") {
       // Foldable (unfolded, ~1000 px): no column, the coordinator is a sheet.
       await page.setViewportSize({ width: 1000, height: 800 });
