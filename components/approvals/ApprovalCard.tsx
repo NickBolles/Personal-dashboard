@@ -31,11 +31,17 @@ export function ApprovalCard({
   headingId?: string;
 }) {
   const [busy, setBusy] = useState<Choice>();
+  // A failed send keeps the card, says so in words, and offers Retry; the raw cause stays folded.
+  const [failed, setFailed] = useState<{ choice: Choice; detail: string; requestId: string }>();
   const [pending, setPending] = useState<{ choice: Choice; left: number; requestId?: string }>();
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const name = agent || "Hermes";
   // Identity of the prompt; falls back to its content when Hermes sends no id.
   const reqKey = approval.requestId ?? `${approval.command ?? ""}\u0000${approval.description ?? ""}`;
+  const latestKey = useRef(reqKey);
+  useEffect(() => {
+    latestKey.current = reqKey;
+  });
 
   const clear = () => {
     if (timer.current) clearInterval(timer.current);
@@ -48,14 +54,22 @@ export function ApprovalCard({
       clear();
       setPending(undefined);
       setBusy(c);
+      setFailed(undefined);
+      // The prompt this answer is for, captured before the await: a replacement prompt arriving
+      // while the request is in flight must never inherit this failure (or its Retry).
+      const answeredKey = latestKey.current;
       try {
         await onAnswer(c);
+      } catch (err) {
+        setFailed({ choice: c, detail: err instanceof Error ? err.message : String(err), requestId: answeredKey });
       } finally {
         setBusy(undefined);
       }
     },
     [onAnswer],
   );
+  // Only show a failure for the prompt it happened on.
+  const failure = failed && failed.requestId === reqKey ? failed : undefined;
 
   // A pending approval only applies to the request it was made for.
   const live = pending && pending.requestId === reqKey ? pending : undefined;
@@ -147,6 +161,27 @@ export function ApprovalCard({
           {primary ? <span className="hidden text-xs text-muted dense:inline">⌘⏎ approves</span> : null}
         </div>
       )}
+      {failure && !live ? (
+        <div className="mt-2.5 space-y-1.5" role="alert">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 text-sm font-medium text-danger">Couldn&apos;t send your {failure.choice === "deny" ? "denial" : "approval"}.</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              busy={busy === failure.choice}
+              disabled={Boolean(busy)}
+              onClick={() => void send(failure.choice)}
+            >
+              Retry
+            </Button>
+          </div>
+          <details className="text-xs text-muted">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="mt-1 break-words">{failure.detail}</p>
+          </details>
+        </div>
+      ) : null}
     </div>
   );
 }
