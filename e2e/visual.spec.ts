@@ -1050,15 +1050,17 @@ for (const scheme of ["light", "dark"] as const) {
     await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: taggedItems }));
     await page.route(/\/api\/work\/items\/wk_home$/, (route) => route.fulfill({ json: home }));
     await page.route(/\/api\/work\/items\/wk_garage$/, (route) => route.fulfill({ json: item }));
+    await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemo, items: taggedItems.items, links: {}, relations: {} } }));
     await page.route(/\/api\/work\/tags(?:\?.*)?$/, (route) => route.fulfill({ json: tagsVisual }));
     await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
     await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
     await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
     await page.goto("/areas?item=wk_home");
     if (scheme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-    const row = page.locator('[data-node-row="wk_garage"]');
+    // Area page: loose items sit under the project cards (one list per level).
+    const list = page.getByTestId("area-tree");
+    const row = list.getByTestId("map-row").filter({ hasText: "Garage cleanup" });
     await expect(row.locator('[data-tag="weekend"]')).toBeVisible();
-    const list = page.locator("section").filter({ has: row }).last();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

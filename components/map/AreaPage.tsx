@@ -47,7 +47,19 @@ export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id:
   const [op, setOp] = useState<UndoOp | null>(null);
   const kids = useMemo(() => {
     const m = new Map<string | null, WorkItem[]>();
-    for (const i of q.data?.items ?? []) if (!i.archived && i.kind !== "conversation") m.set(i.parentId, [...(m.get(i.parentId) ?? []), i]);
+    const all = q.data?.items ?? [];
+    const byId = new Map(all.map((i) => [i.id, i]));
+    // Conversations are hidden here: work split beneath one hangs off its nearest visible ancestor instead.
+    const parentOf = (i: WorkItem) => {
+      let p = i.parentId;
+      for (let n = 0; p && byId.get(p)?.kind === "conversation" && n < 40; n++) p = byId.get(p)!.parentId;
+      return p;
+    };
+    for (const i of all)
+      if (!i.archived && i.kind !== "conversation") {
+        const p = parentOf(i);
+        m.set(p, [...(m.get(p) ?? []), i]);
+      }
     return m;
   }, [q.data]);
   const cards: Card[] = useMemo(
