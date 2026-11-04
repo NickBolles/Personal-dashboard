@@ -50,8 +50,8 @@ export function TodosView() {
             if (g.title === "Completed recently") items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
             if (!items.length) return null;
             return (
-              <section key={g.title} className="mt-4" aria-labelledby={`g-${g.title}`}>
-                <SectionHeader id={`g-${g.title}`} label={g.title} count={items.length} />
+              <section key={g.title} className="mt-4" aria-labelledby={`g-${g.title.replace(/\W+/g, "-")}`}>
+                <SectionHeader id={`g-${g.title.replace(/\W+/g, "-")}`} label={g.title} count={items.length} />
                 <ul className="jv-feed">
                   {items.map((a) => (
                     <li key={a.id} id={a.source === "todos" ? `todo-${a.sourceId}` : undefined}>
