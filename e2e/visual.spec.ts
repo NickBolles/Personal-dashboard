@@ -890,7 +890,10 @@ for (const theme of ["light", "dark"] as const) {
     await notice.getByTestId("notice-task").first().locator("summary").click();
     await page.getByText("Earlier conversation summarized").click();
     await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+    // Sticky header / jump button / composer would paint over a timeline taller than the viewport.
+    const t = await page.addStyleTag({
+      content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; } .sticky { position: static !important; }',
+    });
     await page.waitForTimeout(600);
     const tl = page.getByLabel("Conversation timeline");
     await expect(tl).toHaveScreenshot(`chat-notices-${theme}.png`, { mask: MASK.map((m) => tl.locator(m)) });

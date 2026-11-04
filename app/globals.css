@@ -3165,33 +3165,26 @@ button:active > .dock-orb {
     user-select: all;
   }
   .chat-compaction {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
     font-size: 11.5px;
     color: var(--muted);
   }
-  .chat-compaction::before,
-  .chat-compaction::after {
+  .chat-compaction > details > summary {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    list-style: none;
+  }
+  .chat-compaction > details > summary::-webkit-details-marker {
+    display: none;
+  }
+  .chat-compaction > details > summary::before,
+  .chat-compaction > details > summary::after {
     content: "";
     height: 1px;
     flex: 1 1 0%;
     background: var(--line);
-  }
-  .chat-compaction > details {
-    min-width: 0;
-    max-width: 85%;
-  }
-  .chat-compaction > details > summary {
-    display: inline-flex;
-    min-height: 2.75rem;
-    align-items: center;
-    cursor: pointer;
-    list-style: none;
-    padding: 0 0.5rem;
-  }
-  .chat-compaction > details > summary::-webkit-details-marker {
-    display: none;
   }
   .clarify-card {
     border: 1px solid var(--line-strong, var(--line));

@@ -17,10 +17,10 @@ export function NoticeCard({ notice, time }: { notice: Extract<ChatNotice, { kin
   const duration = notice.kind === "delegation" ? notice.duration : undefined;
   return (
     <details className="chat-notice" data-testid="chat-notice" data-notice={notice.kind}>
-      <summary>
+      <summary className="flex-wrap py-1">
         <span aria-hidden="true" className={cx("h-2 w-2 shrink-0 rounded-full", tone === "ok" ? "bg-ok" : tone === "warn" ? "bg-warn" : "bg-danger")} />
-        <span className="min-w-0 flex-1 truncate font-medium">{notice.title}</span>
-        <span className={cx("shrink-0 text-xs tabular-nums", tone === "danger" ? "text-danger" : "text-muted")} data-dynamic>
+        <span className="min-w-0 flex-1 basis-[55%] font-medium break-words">{notice.title}</span>
+        <span className={cx("ml-auto shrink-0 text-xs tabular-nums", tone === "danger" ? "text-danger" : "text-muted")} data-dynamic>
           {[status, duration, time].filter(Boolean).join(" · ")}
         </span>
         <ChevronIcon className="notice-chev h-4 w-4 shrink-0 text-muted" />
@@ -54,15 +54,15 @@ export function NoticeCard({ notice, time }: { notice: Extract<ChatNotice, { kin
 function TaskRow({ task }: { task: NoticeTask }) {
   return (
     <details className="chat-notice-task" data-testid="notice-task">
-      <summary>
+      <summary className="flex-wrap py-1">
         <span aria-hidden="true" className={task.ok ? "text-ok" : "text-danger"}>
           {task.ok ? "✓" : "✗"}
         </span>
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 basis-[55%] break-words">
           {task.total && task.total > 1 ? `${task.index}/${task.total} · ` : ""}
           {task.goal || "Task"}
         </span>
-        <span className={cx("shrink-0 text-xs tabular-nums", task.ok ? "text-muted" : "text-danger")} data-dynamic>
+        <span className={cx("ml-auto shrink-0 text-xs tabular-nums", task.ok ? "text-muted" : "text-danger")} data-dynamic>
           {[task.status, task.duration].filter(Boolean).join(" · ")}
         </span>
       </summary>
@@ -82,24 +82,26 @@ function TaskRow({ task }: { task: NoticeTask }) {
 function TranscriptPath({ path }: { path: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted">
-      <span className="shrink-0">Full transcript</span>
-      <code className="chat-notice-path min-w-0 flex-1" data-testid="transcript-path">
-        {path}
-      </code>
-      <button
-        type="button"
-        className="inline-flex min-h-11 items-center rounded-[6px] px-2 hover:bg-surface sm:min-h-8 dense:min-h-7"
-        onClick={() =>
-          navigator.clipboard
-            ?.writeText(path)
-            .then(() => setCopied(true))
-            .catch(() => {})
-        }
-        aria-label="Copy transcript path"
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
+    <div className="text-xs text-muted">
+      <span className="block">Full transcript</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <code className="chat-notice-path min-w-0 flex-1" data-testid="transcript-path">
+          {path}
+        </code>
+        <button
+          type="button"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-[6px] px-2 hover:bg-surface sm:min-h-8 dense:min-h-7"
+          onClick={() =>
+            navigator.clipboard
+              ?.writeText(path)
+              .then(() => setCopied(true))
+              .catch(() => {})
+          }
+          aria-label="Copy transcript path"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 }
