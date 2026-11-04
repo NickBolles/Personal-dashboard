@@ -26,7 +26,7 @@ export function useDecisions(enabled = true) {
   });
 }
 
-const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", approval: "Approval", workflow: "Workflow" };
+const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", approval: "Approval", workflow: "Workflow", stalled: "Stalled" };
 
 /**
  * One row per open decision. Item decisions are answered in place (a choice
@@ -94,7 +94,7 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
   return (
     <li className="dc-row" data-testid="decision-row" aria-labelledby={qid}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <Pill tone={e.kind === "approval" ? "wn" : e.kind === "workflow" ? "ai" : "ac"}>{KIND_LABEL[e.kind]}</Pill>
+        <Pill tone={e.kind === "approval" || e.kind === "stalled" ? "wn" : e.kind === "workflow" ? "ai" : "ac"}>{KIND_LABEL[e.kind]}</Pill>
         {e.itemId ? (
           <Link href={e.href} className="min-w-0 truncate text-[13px] font-medium hover:underline">
             {e.title}
@@ -140,7 +140,7 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
       ) : (
         <div className="mt-2">
           <Link href={e.href} className="k-pick inline-flex items-center px-3 text-[13px]">
-            {e.kind === "approval" ? "Open the conversation to approve or deny" : "Review proposals"}
+            {e.kind === "approval" ? "Open the conversation to approve or deny" : e.kind === "stalled" ? "Open the item" : "Review proposals"}
           </Link>
         </div>
       )}

@@ -207,6 +207,19 @@ describe("routing chats, runs and AI jobs to the area's profile", () => {
     getDb().delete(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, "routed-down-1")).run();
   });
 
+  it("routed chats show their sub-agent count from their own profile (#187)", async () => {
+    const u = me();
+    getDb().insert(schema.sessionMeta).values({ sessionId: "sess_mc_notices", userId: owner, hermesProfile: "momentumchief" }).run();
+    try {
+      const list = await listSessions(u, { offset: 0 });
+      const parent = list.sessions.find((s) => s.id === "sess_mc_notices");
+      expect(parent?.subagentCount).toBe(1);
+      expect(list.sessions.some((s) => s.id === "sess_mc_sub")).toBe(false);
+    } finally {
+      getDb().delete(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, "sess_mc_notices")).run();
+    }
+  });
+
   it("with the AG-UI flag on, the same relay streams AG-UI events (only when asked)", async () => {
     saveAgentSettings({ aguiStream: true });
     const u = me();

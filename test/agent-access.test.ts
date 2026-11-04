@@ -1,5 +1,5 @@
 /** Scoped agent tokens + Jarvis MCP (docs/agent-tools.md): auth, scopes, Finance denial, never-settle, attribution, undo, runs. */
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
@@ -8,6 +8,8 @@ import { sha256 } from "@/server/crypto";
 import * as store from "@/server/work/store";
 import { listActivity } from "@/server/work/activity";
 import { agentRuns } from "@/server/work/agent-runs";
+import { listDecisions } from "@/server/work/decisions";
+import { STALL_AFTER_MIN, isStalled, liveLabel } from "@/lib/agent-runs";
 import {
   __resetAgentRate,
   agentFromToken,
@@ -253,5 +255,68 @@ describe("Jarvis MCP", () => {
     const other = mintAgentToken(owner, { name: "Dev", profile: "devchief", scopes: ALL }, cid).token;
     expect((await call(other, "jarvis_run_update", { runId: s.value.runId, state: "failed" })).value.error).toBe("not_found");
     expect(listActivity(owner, { item: item.id }).items.filter((a) => a.via === "chiefofstaff").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("links delegations, child summaries and transcript paths; flags stalled runs without changing them", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-04T15:00:00Z"));
+    const item = store.createItem(owner, { kind: "thread", title: "Bandsaw tune", parentId: area.id }, cid);
+    const args = {
+      itemId: item.id,
+      title: "Blade research",
+      delegationId: "deleg_42",
+      hermesSessionId: "20261104_150000_ab12cd",
+      transcriptPath: "/opt/data/logs/deleg_42.md",
+    };
+    const s = await call(token, "jarvis_run_start", args);
+    expect(s.isError).toBe(false);
+    // A retried start with the same delegation returns the same run.
+    const again = await call(token, "jarvis_run_start", args);
+    expect(again.value).toMatchObject({ runId: s.value.runId, existing: true });
+    const elsewhere = store.createItem(owner, { kind: "thread", title: "Planer knives", parentId: area.id }, cid);
+    expect((await call(token, "jarvis_run_start", { ...args, itemId: elsewhere.id })).value.error).toBe("delegation_taken");
+    expect((await call(token, "jarvis_run_start", { ...args, delegationId: "bad id with spaces" })).value.error).toBe("validation");
+    const u = await call(token, "jarvis_run_update", {
+      runId: s.value.runId,
+      state: "running",
+      children: [
+        { title: "Blade widths", state: "done", summary: "1/2 inch fits" },
+        { title: "TPI", state: "running" },
+      ],
+    });
+    expect(u.isError).toBe(false);
+    let run = agentRuns(owner).items[item.id]!.agentRuns![0]!;
+    expect(run).toMatchObject({ delegationId: "deleg_42", hermesSessionId: "20261104_150000_ab12cd", transcriptPath: "/opt/data/logs/deleg_42.md" });
+    expect(run.children).toEqual([
+      { title: "Blade widths", state: "done", summary: "1/2 inch fits" },
+      { title: "TPI", state: "running", summary: null },
+    ]);
+    expect(isStalled(run)).toBe(false);
+    expect(listDecisions(owner).entries.some((e) => e.kind === "stalled")).toBe(false);
+
+    vi.setSystemTime(new Date(Date.parse("2026-11-04T15:00:00Z") + (STALL_AFTER_MIN + 1) * 60_000));
+    run = agentRuns(owner).items[item.id]!.agentRuns![0]!;
+    expect(run.state).toBe("running"); // nothing auto-changes
+    expect(isStalled(run)).toBe(true);
+    const nudge = listDecisions(owner).entries.find((e) => e.key === `stalled:${s.value.runId}`)!;
+    expect(nudge).toMatchObject({ kind: "stalled", itemId: item.id, title: "Bandsaw tune", choices: [] });
+    expect(nudge.question).toContain("Blade research");
+    // A heartbeat clears it.
+    await call(token, "jarvis_run_update", { runId: s.value.runId, state: "running" });
+    expect(listDecisions(owner).entries.some((e) => e.kind === "stalled")).toBe(false);
+    const got = await call(token, "jarvis_get_item", { id: item.id });
+    expect(got.value.agentRuns[0]).toMatchObject({ delegationId: "deleg_42", stalled: false });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+});
+
+describe("run wording", () => {
+  it("says Waiting, and Waiting for approval only for a real pending approval", () => {
+    expect(liveLabel("waiting")).toBe("Waiting");
+    expect(liveLabel("waiting", true)).toBe("Waiting for approval");
+    expect(liveLabel("running", true)).toBe("Running");
   });
 });

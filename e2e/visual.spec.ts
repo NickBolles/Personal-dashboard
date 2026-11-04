@@ -1064,6 +1064,69 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+// PR 3 delegated runs: the item Agent panel with a registered delegation (child summaries, copyable
+// transcript path) and a Stalled run. Every list is stubbed; the clock is min(real, midday CT) and the
+// runs are dated relative to it so "Stalled" is deterministic at any hour.
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: agent delegation panel (${theme})`, async ({ page }) => {
+    await freezeMiddayCT(page);
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    const now = Math.min(Date.now(), Date.parse(`${ymd}T17:00:00.000Z`));
+    const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+    const d = itemDetailVisual;
+    const base = { profile: "chiefofstaff", summary: null, prUrl: null, hermesSessionId: null, delegationId: null, transcriptPath: null, children: [] };
+    const info = {
+      itemId: d.item.id,
+      areaId: "wk_home",
+      title: d.item.title,
+      who: { kind: "agent", name: "chiefofstaff" },
+      live: "running",
+      liveAt: ago(2),
+      sessionId: null,
+      runs: 2,
+      prs: [],
+      report: null,
+      progress: null,
+      agentRuns: [
+        {
+          ...base,
+          id: "arun_v1",
+          title: "Shelf bracket research",
+          state: "running",
+          summary: "Two of three sub-agents done.",
+          delegationId: "deleg_shelf_01",
+          transcriptPath: "/opt/data/delegations/deleg_shelf_01/transcript.md",
+          children: [
+            { title: "Bracket load ratings", state: "done", summary: "75 lb per pair on studs." },
+            { title: "Stud finder check", state: "running", summary: null },
+          ],
+          startedAt: ago(20),
+          updatedAt: ago(2),
+        },
+        { ...base, id: "arun_v2", title: "Paint colour options", state: "running", startedAt: ago(120), updatedAt: ago(90) },
+      ],
+    };
+    await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: { [d.item.id]: info }, active: [info] } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(new RegExp(`/api/work/items/${d.item.id}$`), (route) => route.fulfill({ json: d }));
+    await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemo, items: areasVisual.items, links: {}, relations: {} } }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    await page.goto(`/areas?item=${d.item.id}`);
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    const panel = page.getByTestId("item-agent-panel");
+    await expect(panel.getByTestId("agent-run")).toHaveCount(2);
+    await expect(panel.getByTestId("agent-run").nth(1).getByTestId("agent-stalled")).toHaveText("Stalled");
+    await expect(panel.getByTestId("agent-run").first().getByTestId("agent-stalled")).toHaveCount(0);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(400);
+    await expectNoHorizontalOverflow(page);
+    await expect(panel).toHaveScreenshot(`agent-delegation-${theme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+}
+
 // #111 tags + assignee: chips + filter on an area's list and the item header editor, light + dark.
 // Every list the pages fetch is stubbed (tagged copy of areasVisual) so other specs' data never leaks in.
 const taggedItems = {

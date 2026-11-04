@@ -5,7 +5,7 @@
  * gets no prompt, and items/activity that mention finance are left out.
  */
 import { bucketOf, MAP_BUCKET_LABELS } from "@/lib/map-rollup";
-import { RUN_LIVE_LABEL, type ItemAgentInfo } from "@/lib/agent-runs";
+import { liveLabel, type ItemAgentInfo } from "@/lib/agent-runs";
 import type { WorkItem } from "@/lib/work";
 
 const FINANCE_TEXT = /\b(financ(e|es|ial)|monarch|bank|brokerage|401k|ira)\b/i;
@@ -27,7 +27,7 @@ export type CatchUpInput = {
   items: Pick<WorkItem, "id" | "title" | "status" | "decision" | "nextAction" | "kind" | "archived">[];
   decisions: CatchUpDecision[];
   activity: CatchUpActivity[];
-  agents?: Pick<ItemAgentInfo, "title" | "live" | "who">[];
+  agents?: Pick<ItemAgentInfo, "title" | "live" | "who" | "approval">[];
   now?: Date;
   /** extra guard (server passes server/ai/rules detectSensitivity): true = leave this line out */
   sensitive?: (text: string) => boolean;
@@ -67,7 +67,8 @@ export function buildCatchUpPrompt(input: CatchUpInput): string | null {
   if (agents.length) {
     lines.push("");
     lines.push("Agent runs:");
-    for (const a of agents.slice(0, 10)) lines.push(`- ${clip(a.title, 100)}: ${RUN_LIVE_LABEL[a.live].toLowerCase()}${a.who ? ` (@${a.who.name})` : ""}`);
+    for (const a of agents.slice(0, 10))
+      lines.push(`- ${clip(a.title, 100)}: ${liveLabel(a.live, a.approval).toLowerCase()}${a.who ? ` (@${a.who.name})` : ""}`);
   }
   const act = input.activity.filter((a) => !mentionsFinance(a.title, a.verb));
   lines.push("");

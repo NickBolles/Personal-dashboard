@@ -49,10 +49,11 @@ export function appendDecisionToSummary(summary: string, question: string, answe
   return base ? `${base}\n\n${line}` : line;
 }
 
-export type DecisionKind = "item" | "approval" | "workflow";
+/** `stalled` = an agent run still "running" with no update for STALL_AFTER_MIN (a nudge: opening the item is the only action). */
+export type DecisionKind = "item" | "approval" | "workflow" | "stalled";
 
 export type DecisionEntry = {
-  /** stable key: `item:<id>` | `approval:<runId>` | `workflow:<runId>` */
+  /** stable key: `item:<id>` | `approval:<runId>` | `workflow:<runId>` | `stalled:<agentRunId>` */
   key: string;
   kind: DecisionKind;
   title: string;

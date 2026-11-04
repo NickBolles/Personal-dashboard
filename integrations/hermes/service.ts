@@ -187,12 +187,17 @@ async function routedSessions(user: CurrentUser, opts: { page: number; includeAr
     .all();
   const hasMore = rows.length > ROUTED_LIST_LIMIT;
   rows.length = Math.min(rows.length, ROUTED_LIST_LIMIT);
-  const got = await Promise.allSettled(
-    rows.map(async (r) => {
-      signal?.throwIfAborted();
-      return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
-    }),
-  );
+  const [got, children] = await Promise.all([
+    Promise.allSettled(
+      rows.map(async (r) => {
+        signal?.throwIfAborted();
+        return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
+      }),
+    ),
+    // #187: sub-agent children of routed chats live on their own profile, never in the default
+    // window, so fetch each listed profile's recent children once (cached) to count them.
+    Promise.all([...new Set(rows.map((r) => r.profile!))].map((p) => routedChildren(p, signal))).then((x) => x.flat()),
+  ]);
   // A deleted session (404) is simply gone; any other failure means that profile is
   // unreachable, so the caller reports a retryable partial list instead of a complete one.
   const unavailable = [
@@ -200,9 +205,37 @@ async function routedSessions(user: CurrentUser, opts: { page: number; includeAr
       got.flatMap((g, i) => (g.status === "rejected" && !(g.reason instanceof UpstreamError && g.reason.kind === "not_found") ? [rows[i]!.profile!] : [])),
     ),
   ];
-  return { sessions: got.flatMap((g) => (g.status === "fulfilled" && !g.value.hidden ? [g.value] : [])), unavailable, hasMore };
+  const sessions = got.flatMap((g) => (g.status === "fulfilled" && !g.value.hidden ? [g.value] : []));
+  const listed = new Set(sessions.map((s) => s.id));
+  // Only children of listed parents; foldSubagents drops them from the list and counts them on the parent.
+  return { sessions: [...sessions, ...children.filter((c) => c.parent_session_id && listed.has(c.parent_session_id))], unavailable, hasMore };
 }
 const ROUTED_LIST_LIMIT = 30;
+
+type RawSession = Awaited<ReturnType<typeof HermesSessionClient.list>>["data"][number];
+const CHILDREN_TTL_MS = 60_000;
+const childrenCache = new Map<string, { at: number; rows: RawSession[] }>();
+
+/** One recent-sessions list on a routed profile, keeping only sub-agent children (cached 60 s; failures count as none). */
+async function routedChildren(profile: string, signal?: AbortSignal): Promise<RawSession[]> {
+  const hit = childrenCache.get(profile);
+  if (hit && Date.now() - hit.at < CHILDREN_TTL_MS) return hit.rows;
+  try {
+    const res = await HermesSessionClient.list(connForProfile(profile), { limit: 100, offset: 0, includeChildren: true, signal });
+    const rows = res.data.filter((s) =>
+      isSubagentSession({ parentSessionId: s.parent_session_id ?? undefined, source: s.source ?? undefined, title: s.title ?? "" }),
+    );
+    childrenCache.set(profile, { at: Date.now(), rows });
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+/** Test hook: forget cached routed-profile children. */
+export function __resetRoutedChildrenCache() {
+  childrenCache.clear();
+}
 
 // Existing non-chat callers retain their bounded legacy window.
 export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {

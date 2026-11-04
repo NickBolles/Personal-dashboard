@@ -1,15 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { Dot, Pill, ProgressBar, type KTone } from "@/components/ui/kit";
+import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui/kit";
 import {
   CHECKS_LABEL,
   DEPLOY_LABEL,
-  RUN_LIVE_LABEL,
+  STALL_AFTER_MIN,
+  isStalled,
+  liveLabel,
   liveOfAgentRun,
+  stalledRuns,
+  type ExternalRun,
   progressPct,
   whoLabel,
   type AgentRunsResponse,
@@ -36,12 +41,12 @@ export function useAgentRuns(enabled = true) {
 
 const LIVE_TONE: Record<RunLive, KTone> = { running: "ai", waiting: "wn", failed: "bad", finished: "ok", idle: "neutral" };
 
-/** Live state dot + label ("Running", "Waiting for approval", …). */
-export function LiveState({ live, at, compact }: { live: RunLive; at?: string | null; compact?: boolean }) {
+/** Live state dot + label ("Running", "Waiting", "Waiting for approval" only on a real pending approval, …). */
+export function LiveState({ live, at, compact, approval }: { live: RunLive; at?: string | null; compact?: boolean; approval?: boolean }) {
   return (
     <span className="ar-live" data-live={live} data-testid="agent-live">
       <Dot tone={LIVE_TONE[live]} live={live === "running"} />
-      <span>{RUN_LIVE_LABEL[live]}</span>
+      <span>{liveLabel(live, approval)}</span>
       {at && !compact ? (
         <span className="text-muted" data-dynamic>
           · {relativeTime(at)}
@@ -57,7 +62,8 @@ export function AgentLine({ info }: { info: ItemAgentInfo }) {
     <span className="ar-line" data-testid="agent-line">
       {info.who ? <AgentMark name={info.who.kind === "person" ? null : info.who.name} busy={info.live === "running"} /> : null}
       <span className="min-w-0 truncate">{whoLabel(info.who)}</span>
-      {info.live !== "idle" ? <LiveState live={info.live} compact /> : null}
+      {info.live !== "idle" ? <LiveState live={info.live} approval={info.approval} compact /> : null}
+      {stalledRuns(info).length ? <StalledBadge /> : null}
     </span>
   );
 }
@@ -105,7 +111,7 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
         <span className="min-w-0 text-[13px] font-medium [overflow-wrap:anywhere]" data-testid="agent-who">
           {whoLabel(info.who)}
         </span>
-        <LiveState live={info.live} at={info.liveAt} />
+        <LiveState live={info.live} at={info.liveAt} approval={info.approval} />
         {info.sessionId ? (
           <Link href={`/chat/${encodeURIComponent(info.sessionId)}`} className="ml-auto text-xs text-accent hover:underline">
             Open conversation
@@ -125,21 +131,9 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
         </ul>
       ) : null}
       {info.agentRuns?.length ? (
-        <ul className="mt-2 space-y-1.5" aria-label="Agent runs" data-testid="agent-runs-list">
+        <ul className="mt-2 space-y-2" aria-label="Agent runs" data-testid="agent-runs-list">
           {info.agentRuns.map((r) => (
-            <li key={r.id} className="min-w-0 text-[13px]">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
-                <AgentChip profile={r.profile} />
-                <LiveState live={liveOfAgentRun(r.state)} at={r.updatedAt} compact />
-                {r.prUrl ? (
-                  <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
-                    PR
-                  </a>
-                ) : null}
-              </div>
-              {r.summary ? <p className="mt-0.5 text-[13px] text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
-            </li>
+            <AgentRunRow key={r.id} run={r} />
           ))}
         </ul>
       ) : null}
@@ -153,6 +147,82 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** "Stalled": a run still running with no update for STALL_AFTER_MIN. A nudge only; nothing is changed. */
+export function StalledBadge() {
+  return (
+    <span data-testid="agent-stalled" title={`No update for over ${STALL_AFTER_MIN} min`}>
+      <Pill tone="wn">Stalled</Pill>
+    </span>
+  );
+}
+
+/** Text shown for copying (transcript path, session/delegation ids): selectable, with a Copy button. */
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="ar-copy">
+      <span className="text-xs text-muted">{label}</span>
+      <code className="ar-code" data-testid="agent-run-copy">
+        {value}
+      </code>
+      <ChipButton
+        aria-label={`Copy ${label.toLowerCase()}`}
+        onClick={() => {
+          void navigator.clipboard?.writeText(value).then(
+            () => setCopied(true),
+            () => setCopied(false),
+          );
+        }}
+      >
+        {copied ? "Copied" : "Copy"}
+      </ChipButton>
+    </span>
+  );
+}
+
+const CHILD_LIVE = (c: { state: ExternalRun["state"] }) => liveOfAgentRun(c.state);
+
+/** One registered agent run: title, profile, state (+ Stalled), PR, summary, delegation ids, transcript path and child summaries. */
+function AgentRunRow({ run: r }: { run: ExternalRun }) {
+  const stalled = isStalled(r);
+  return (
+    <li className="min-w-0 text-[13px]" data-testid="agent-run" data-stalled={stalled || undefined}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
+        <AgentChip profile={r.profile} />
+        <LiveState live={liveOfAgentRun(r.state)} at={r.updatedAt} compact />
+        {stalled ? <StalledBadge /> : null}
+        {r.prUrl ? (
+          <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+            PR
+          </a>
+        ) : null}
+      </div>
+      {r.summary ? <p className="mt-0.5 text-[13px] text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
+      {r.children?.length ? (
+        <ul className="ar-children mt-1 space-y-0.5" aria-label={`Sub-agents of ${r.title}`} data-testid="agent-run-children">
+          {r.children.map((c, n) => (
+            <li key={n} className="min-w-0">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-2">
+                <span className="min-w-0 [overflow-wrap:anywhere]">{c.title}</span>
+                <LiveState live={CHILD_LIVE(c)} compact />
+              </span>
+              {c.summary ? <span className="block text-xs text-muted [overflow-wrap:anywhere]">{c.summary}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {r.delegationId || r.hermesSessionId || r.transcriptPath ? (
+        <div className="mt-1 flex min-w-0 flex-col gap-1">
+          {r.delegationId ? <CopyField label="Delegation" value={r.delegationId} /> : null}
+          {r.hermesSessionId ? <CopyField label="Hermes session" value={r.hermesSessionId} /> : null}
+          {r.transcriptPath ? <CopyField label="Transcript" value={r.transcriptPath} /> : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -174,7 +244,8 @@ export function AgentsStrip({ entries, linked, max = 3 }: { entries: ItemAgentIn
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-[13px] font-medium">{e.who ? whoLabel(e.who) : "Agent"}</span>
-                <LiveState live={e.live} compact />
+                <LiveState live={e.live} approval={e.approval} compact />
+                {stalledRuns(e).length ? <StalledBadge /> : null}
               </span>
               <span className="block truncate text-xs text-muted">{e.title}</span>
               {pct !== null ? <ProgressBar value={pct} tone="orb" label={`${e.title}: ${e.progress!.done} of ${e.progress!.total} done`} /> : null}
