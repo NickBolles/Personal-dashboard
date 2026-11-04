@@ -110,7 +110,7 @@ export function createSkylight({ refreshToken }) {
       { id: "55900814", summary: "Put away the board games", category: "13600772", start: day(-1), completed_on: day(-1), status: "complete" },
       { id: "55900815", summary: "Clean the coffee maker", category: "13600771", start: day(-2), completed_on: day(-2), status: "complete" },
       { id: "55900816", summary: "Check the smoke alarms", category: "13600771", start: day(3), status: "pending" },
-      { id: "55900817", summary: "Water the porch plants", emoji_icon: "🪴", category: "14463836", start: day(0), status: "pending", up_for_grabs: true },
+      { id: "55900817", summary: "Water the porch plants", emoji_icon: "🪴", category: "14463836", start: day(0), status: "pending" },
     ])
       state.chores.set(c.id, { start_time: null, ...c });
     for (const c of state.chores.values()) c.start ??= choreDay(c.start_time);
