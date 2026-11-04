@@ -1,7 +1,6 @@
 "use client";
 
 import { ItemAgentPanel } from "@/components/agents/AgentRuns";
-import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1082,7 +1081,6 @@ function ItemDetail({
                   Chat here
                 </Button>
               ) : null}
-              {isArea && canChat && !isFinanceAreaLike(item) ? <CoordinatorButton areaId={item.id} areaTitle={item.title} className="ap-hide-xl" /> : null}
               {container ? (
                 <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
                   + {childLabel}
