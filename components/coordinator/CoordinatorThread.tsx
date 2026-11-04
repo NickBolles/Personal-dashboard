@@ -11,7 +11,7 @@ import type { SessionSummary, TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/kit";
 import { cx, inputCls, useToast } from "@/components/ui";
-import { isSendShortcut } from "@/lib/coordinator/send-shortcut";
+import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import "@/components/agents/agents.css";
 
@@ -186,7 +186,7 @@ export function CoordinatorThread({
                 }
               }}
               onKeyDown={(e) => {
-                if (compact && isSendShortcut({ ...e, isComposing: e.nativeEvent.isComposing })) {
+                if (isSendShortcut(composerKey(e))) {
                   e.preventDefault();
                   submit();
                 }

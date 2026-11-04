@@ -62,7 +62,7 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   // Agent reply carries a jarvis-capture op → applied instantly, undoable.
   const composer = page.getByRole("textbox", { name: /message/i });
   await composer.fill("Quote this: remain in me");
-  await composer.press("Enter");
+  await composer.press("Control+Enter");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Remain in me, as I also remain in you", { timeout: 20_000 });
   // The raw capture block stays in the stored reply but never renders (the collapsed
   // "Context Jarvis attached" instructions mention the fence name, so count visible text only).
@@ -73,7 +73,7 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   // Quick-add chip files the next message straight into that section.
   await panel.getByRole("button", { name: "Point" }).click();
   await composer.fill("Fruit comes from staying connected");
-  await composer.press("Enter");
+  await composer.press("Control+Enter");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Fruit comes from staying connected");
 
   await panel.getByRole("button", { name: "End session" }).click();
