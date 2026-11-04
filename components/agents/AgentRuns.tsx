@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { AgentMark } from "@/components/brand/AgentMark";
@@ -39,6 +39,16 @@ export function useAgentRuns(enabled = true) {
   });
 }
 
+/** Re-render once a minute so a run crossing the stall threshold shows "Stalled" without new data. */
+function useMinuteTick() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
 const LIVE_TONE: Record<RunLive, KTone> = { running: "ai", waiting: "wn", failed: "bad", finished: "ok", idle: "neutral" };
 
 /** Live state dot + label ("Running", "Waiting", "Waiting for approval" only on a real pending approval, …). */
@@ -58,12 +68,13 @@ export function LiveState({ live, at, compact, approval }: { live: RunLive; at?:
 
 /** One-line "who + live state" for map rows. */
 export function AgentLine({ info }: { info: ItemAgentInfo }) {
+  const now = useMinuteTick();
   return (
     <span className="ar-line" data-testid="agent-line">
       {info.who ? <AgentMark name={info.who.kind === "person" ? null : info.who.name} busy={info.live === "running"} /> : null}
       <span className="min-w-0 truncate">{whoLabel(info.who)}</span>
       {info.live !== "idle" ? <LiveState live={info.live} approval={info.approval} compact /> : null}
-      {stalledRuns(info).length ? <StalledBadge /> : null}
+      {stalledRuns(info, now).length ? <StalledBadge /> : null}
     </span>
   );
 }
@@ -187,7 +198,7 @@ const CHILD_LIVE = (c: { state: ExternalRun["state"] }) => liveOfAgentRun(c.stat
 
 /** One registered agent run: title, profile, state (+ Stalled), PR, summary, delegation ids, transcript path and child summaries. */
 function AgentRunRow({ run: r }: { run: ExternalRun }) {
-  const stalled = isStalled(r);
+  const stalled = isStalled(r, useMinuteTick());
   return (
     <li className="min-w-0 text-[13px]" data-testid="agent-run" data-stalled={stalled || undefined}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="agent-run-head">
@@ -232,6 +243,7 @@ function AgentRunRow({ run: r }: { run: ExternalRun }) {
  * Today right rail (links to each item).
  */
 export function AgentsStrip({ entries, linked, max = 3 }: { entries: ItemAgentInfo[]; linked?: boolean; max?: number }) {
+  const now = useMinuteTick();
   if (!entries.length) return null;
   const shown = entries.slice(0, max);
   return (
@@ -245,7 +257,7 @@ export function AgentsStrip({ entries, linked, max = 3 }: { entries: ItemAgentIn
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate text-[13px] font-medium">{e.who ? whoLabel(e.who) : "Agent"}</span>
                 <LiveState live={e.live} approval={e.approval} compact />
-                {stalledRuns(e).length ? <StalledBadge /> : null}
+                {stalledRuns(e, now).length ? <StalledBadge /> : null}
               </span>
               <span className="block truncate text-xs text-muted">{e.title}</span>
               {pct !== null ? <ProgressBar value={pct} tone="orb" label={`${e.title}: ${e.progress!.done} of ${e.progress!.total} done`} /> : null}

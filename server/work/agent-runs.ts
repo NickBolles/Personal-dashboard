@@ -195,7 +195,8 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       prs,
       report,
       progress: kids.length ? { done: kids.filter((c) => bucketOf(c) === "done").length, total: kids.length } : null,
-      ...(ext.length ? { agentRuns: ext.slice(0, 5) } : {}),
+      // Running runs first (newest first within each group) so a stalled one is never cut by the cap.
+      ...(ext.length ? { agentRuns: [...ext.filter((r) => r.state === "running"), ...ext.filter((r) => r.state !== "running")].slice(0, 5) } : {}),
     };
   }
   const active = Object.values(out)
