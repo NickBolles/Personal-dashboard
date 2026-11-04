@@ -55,6 +55,21 @@ export function createSkylight({ refreshToken }) {
         },
       ],
       ["55900777", { id: "55900777", summary: "Practice piano scales", emoji_icon: "🎹", status: "pending", start_time: null, category: "13600772" }],
+      // Done today (frame-local date): kept as "completed" for Done today / Recently completed / Todos.
+      [
+        "55900812",
+        {
+          id: "55900812",
+          summary: "Wipe the kitchen counters",
+          emoji_icon: "🧽",
+          status: "complete",
+          completed_on: choreDay(null),
+          start_time: null,
+          category: "13600771",
+        },
+      ],
+      // Skipped and earlier-day completions are dropped by the adapter.
+      ["55900813", { id: "55900813", summary: "Sort the mail pile", emoji_icon: "✉️", status: "skipped", start_time: null, category: "13600771" }],
     ]);
   }
   seed();

@@ -31,6 +31,7 @@ const GLYPH: Record<ActivityType, string> = {
   capture: "⇣",
   chat: "✦",
   validation: "✓",
+  chore: "☑",
 };
 
 const POLL_MS = 30_000;

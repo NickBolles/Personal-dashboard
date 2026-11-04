@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { can, type Capable } from "@/server/access";
 import { isClosed } from "@/lib/work";
@@ -77,7 +77,23 @@ export function homePulse(user: Capable & { id: string }, now = new Date()): Hom
     // Only settled work counts as completed: abandoned/superseded also stamp
     // completedAt (lifecycle planTransition) but stay in the added series only.
     trend: addedVsCompleted(
-      rows.map((r) => ({ createdAt: r.createdAt, completedAt: r.status === "settled" ? r.completedAt : null })),
+      [
+        ...rows.map((r) => ({ createdAt: r.createdAt, completedAt: r.status === "settled" ? r.completedAt : null })),
+        // Skylight chores done (first seen completed by a sync) count as completed, never as added.
+        ...(can(user, "skylight.view")
+          ? db
+              .select({ completedAt: schema.sourceCompletions.completedAt })
+              .from(schema.sourceCompletions)
+              .where(
+                and(
+                  eq(schema.sourceCompletions.source, "skylight"),
+                  gte(schema.sourceCompletions.completedAt, new Date(now.getTime() - 15 * 86_400_000).toISOString()),
+                ),
+              )
+              .all()
+              .map((r) => ({ createdAt: null, completedAt: r.completedAt }))
+          : []),
+      ],
       now,
       // #83: the household time zone from Settings (same day boundaries as the rest of Home)
       getPreferences().timezone || TZ,

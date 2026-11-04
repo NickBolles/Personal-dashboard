@@ -9,7 +9,10 @@ import { ButtonLink, PageHeader, Spinner } from "@/components/ui";
 export function SkylightView() {
   const q = useSource("skylight");
   const events = [...(q.data?.data?.events ?? [])].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const chores = q.data?.data?.actions ?? [];
+  const all = q.data?.data?.actions ?? [];
+  const chores = all.filter((a) => a.status !== "completed");
+  // Done today: newest first (updatedAt = when Jarvis first saw it completed).
+  const done = all.filter((a) => a.status === "completed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -46,9 +49,23 @@ export function SkylightView() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">No open chores today.</p>
+              <p className="text-sm text-muted">{done.length ? "All done for today." : "No open chores today."}</p>
             )}
           </section>
+          {done.length ? (
+            <section aria-labelledby="sk-done" className="mt-6">
+              <h2 id="sk-done" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
+                Done today <span className="font-normal">· {done.length}</span>
+              </h2>
+              <ul className="space-y-2" data-testid="skylight-done">
+                {done.map((a) => (
+                  <li key={a.id}>
+                    <ActionCard action={a} compact quiet />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <section aria-labelledby="sk-events" className="mt-6">
             <h2 id="sk-events" className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
               Next 7 days

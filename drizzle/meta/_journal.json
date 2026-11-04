@@ -232,6 +232,13 @@
       "when": 1793733670099,
       "tag": "0032_conversation_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793770460311,
+      "tag": "0033_skylight_completions",
+      "breakpoints": true
     }
   ]
 }

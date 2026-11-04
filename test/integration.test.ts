@@ -228,7 +228,11 @@ describe("adapters against the mock upstreams", () => {
       expect(byTitle.get("Take out recycling")).toMatchObject({ sourceLabel: "Skylight · Chores", assignee: { kind: "mine", name: "Nick" } });
       expect(byTitle.get("Schedule vet appointment")).toMatchObject({ sourceLabel: "Skylight · Up for grabs", assignee: { kind: "up_for_grabs" } });
       expect(byTitle.has("Practice piano scales")).toBe(false);
-      expect(data.extra).toMatchObject({ counts: { mine: 1, upForGrabs: 1, others: 0, hidden: 1 }, needsMember: false });
+      expect(data.extra).toMatchObject({ counts: { mine: 1, upForGrabs: 1, others: 0, hidden: 1, completedToday: 1 }, needsMember: false });
+      // Done today is kept as completed (counts stay open-only); skipped chores are dropped.
+      expect(byTitle.get("Wipe the kitchen counters")).toMatchObject({ status: "completed", assignee: { kind: "mine" } });
+      expect(byTitle.get("Wipe the kitchen counters")!.primaryAction).toBeUndefined();
+      expect(byTitle.has("Sort the mail pile")).toBe(false);
       saveIntegration("skylight", { config: { showOthers: "true" } });
       const all = await ADAPTERS.skylight.fetch(adapterContext());
       expect(all.actions.find((a) => a.title.endsWith("Practice piano scales"))!.assignee).toEqual({ kind: "other", name: "Will" });
@@ -287,7 +291,12 @@ describe("sources owned by Hermes (structured requests)", () => {
     const cards = mapHermesAnswer(answer, ctx);
     expect(cards.events![0]!.startsAt).toBe(ctx.today);
     expect(cards.events![0]!.allDay).toBe(true);
-    expect(cards.actions.map((a) => a.title)).toEqual(["Task"]);
+    // Completed chores stay, as "completed" with no primary action (Done today / Recently completed).
+    expect(cards.actions.map((a) => [a.title, a.status])).toEqual([
+      ["Task", "open"],
+      ["Done", "completed"],
+    ]);
+    expect(cards.actions[1]!.primaryAction).toBeUndefined();
     expect(() => request.schema.parse({ events: [{ title: "Bad", start: "2026-02-30" }], chores: [] })).toThrow();
     expect(() => request.schema.parse({ events: [], chores: [{ title: "Bad", time: "25:99", completed: false }] })).toThrow();
   });
@@ -312,7 +321,14 @@ describe("sources owned by Hermes (structured requests)", () => {
     const soccer = data.events!.find((e) => e.title === "Soccer practice")!;
     // Offset-less times are wall-clock in the user's timezone (America/Chicago).
     expect(new Date(soccer.startsAt).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })).toBe("5:30 PM");
-    expect(data.actions.map((a) => a.title).sort()).toEqual(["Take out recycling", "Water plants"]);
+    // The completed chore stays as "completed" (Done today); the rest are open.
+    expect(
+      data.actions
+        .filter((a) => a.status === "open")
+        .map((a) => a.title)
+        .sort(),
+    ).toEqual(["Take out recycling", "Water plants"]);
+    expect(data.actions.filter((a) => a.status === "completed").map((a) => a.title)).toEqual(["Feed the dog"]);
     expect(data.actions.find((a) => a.title === "Take out recycling")!.sourceId).toBe("9002");
     const sessions = await hermesSessions();
     expect(sessions.some((s) => s.source === "jarvis-sync" || s.title?.startsWith("jarvis-sync"))).toBe(false);
