@@ -105,6 +105,10 @@ export const runStatusSchema = z
     pending_steer: z.string().nullish(),
     turn_exit_reason: z.string().nullish(),
     approval: approvalRequestSchema.nullish(),
+    // Session-authority runs: the generation that must be echoed when answering a prompt, and the
+    // prompts (approval/clarify) still waiting, each `{ kind, prompt_id, execution_generation, … }`.
+    execution_generation: z.number().int().nullish(),
+    pending_controls: z.array(z.record(z.string(), z.unknown())).nullish(),
   })
   .passthrough();
 export type HermesRunStatus = z.infer<typeof runStatusSchema>;

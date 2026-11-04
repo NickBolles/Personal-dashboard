@@ -301,7 +301,9 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       announce(choice === "deny" ? "Denied" : "Approved");
       qc.invalidateQueries({ queryKey: ["notifications"] });
     } catch (err) {
-      toast((err as Error).message, "danger");
+      // The approval card shows "Couldn't send your approval" + Retry, with this message folded under Details.
+      announce(choice === "deny" ? "Couldn't send your denial" : "Couldn't send your approval");
+      throw err;
     }
   };
 
@@ -1068,7 +1070,15 @@ function ActivityRow({ a }: { a: Activity }) {
   );
 }
 
-function LiveRun({ state, onApprove, onRetry }: { state: RunState; onApprove: (c: ApprovalRequest["choices"][number]) => void; onRetry: () => void }) {
+function LiveRun({
+  state,
+  onApprove,
+  onRetry,
+}: {
+  state: RunState;
+  onApprove: (c: ApprovalRequest["choices"][number]) => Promise<void> | void;
+  onRetry: () => void;
+}) {
   const who = useContext(AssistantName);
   const text = state.text || (isTerminal(state.phase) ? (state.output ?? "") : "");
   return (

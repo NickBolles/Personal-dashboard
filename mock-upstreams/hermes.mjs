@@ -93,6 +93,20 @@ export function createHermes({ apiKey }) {
     for (const sub of run.subscribers) sub(e);
   }
 
+  /**
+   * Ask for approval the way production Hermes does (session-authority run path): the
+   * `approval.request` event and `GET /v1/runs/{id}` `pending_controls` carry `prompt_id` +
+   * `execution_generation` (no `request_id`), and POST /approval must echo exactly
+   * `{ choice, request_id: prompt_id, execution_generation }` (see the approval route below).
+   */
+  function askApproval(run, { command, description, choices }) {
+    const prompt_id = hex(16);
+    run.status = "waiting_for_approval";
+    run.approval = { kind: "approval", prompt_id, execution_generation: run.execution_generation, command, ...(description ? { description } : {}), choices };
+    pushEvent(run, { event: "approval.request", ...run.approval });
+    return prompt_id;
+  }
+
   function finish(run, status, extra = {}) {
     if (["completed", "failed", "cancelled", "interrupted"].includes(run.status)) return;
     run.status = status;
@@ -267,8 +281,7 @@ export function createHermes({ apiKey }) {
       if (s) s.estimated_cost_usd = cost;
       if (/FORCE_APPROVAL/.test(input)) {
         run.status = "waiting_for_approval";
-        run.approval = { event: "approval.request", command: "rm -rf build", request_id: hex(8), choices: ["once", "deny"] };
-        pushEvent(run, run.approval);
+        askApproval(run, { command: "rm -rf build", choices: ["once", "deny"] });
         await new Promise((resolve) => (run.approvalResolver = resolve));
         return;
       }
@@ -291,8 +304,7 @@ export function createHermes({ apiKey }) {
       state.structuredCount++;
       if (/FORCE_APPROVAL/.test(input)) {
         run.status = "waiting_for_approval";
-        run.approval = { event: "approval.request", command: "skylight write", request_id: hex(8), choices: ["once", "deny"] };
-        pushEvent(run, run.approval);
+        askApproval(run, { command: "skylight write", choices: ["once", "deny"] });
         await new Promise((resolve) => (run.approvalResolver = resolve));
         return;
       }
@@ -316,25 +328,13 @@ export function createHermes({ apiKey }) {
       pushEvent(run, { event: "subagent.complete", subagent_id: "sa_1", goal: "Research options", status: "completed", summary: "Found 3 options" });
     }
     if (/approv|delete|rm /i.test(said)) {
-      const request_id = hex(16);
       run.status = "waiting_for_approval";
-      run.approval = {
-        event: "approval.request",
-        command: "rm -rf build",
-        pattern_key: "rm_recursive",
-        pattern_keys: ["rm_recursive"],
-        description: "Recursive delete",
-        allow_permanent: true,
-        allow_session: true,
-        request_id,
-        choices: ["once", "session", "always", "deny"],
-      };
-      pushEvent(run, run.approval);
+      const prompt_id = askApproval(run, { command: "rm -rf build", description: "Recursive delete", choices: ["once", "session", "always", "deny"] });
       const choice = await new Promise((resolve) => (run.approvalResolver = resolve));
       if (run.status === "stopping" || run.status === "cancelled") return;
       run.status = "running";
       delete run.approval;
-      pushEvent(run, { event: "approval.responded", choice, request_id, resolved: 1 });
+      pushEvent(run, { event: "approval.settled", prompt_id, execution_generation: run.execution_generation });
       if (choice === "deny") {
         pushEvent(run, { event: "tool.completed", tool: "terminal", duration: 0, error: true, preview: "BLOCKED: denied by user" });
       } else {
@@ -415,11 +415,12 @@ export function createHermes({ apiKey }) {
   }
 
   function runStatus(run) {
-    const { events, subscribers, enders, approvalResolver, speed, pendingSteer, ...rest } = run;
+    const { events, subscribers, enders, approvalResolver, speed, pendingSteer, approval, ...rest } = run;
     return {
       object: "hermes.run",
       ...rest,
-      ...(run.status === "waiting_for_approval" && run.approval ? { approval: run.approval } : {}),
+      // Session-authority projection: no `approval` field; pending prompts live in `pending_controls`.
+      pending_controls: run.status === "waiting_for_approval" && run.approval ? [run.approval] : [],
       ...(pendingSteer ? { pending_steer: pendingSteer } : {}),
     };
   }
@@ -632,6 +633,7 @@ export function createHermes({ apiKey }) {
         session_id: sessionId,
         model: body.model ?? "hermes-agent",
         profile,
+        execution_generation: 1,
         events: [],
         subscribers: new Set(),
         enders: [],
@@ -704,13 +706,23 @@ export function createHermes({ apiKey }) {
       const run = state.runs.get(match[1]);
       if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
       const body = await readBody(req);
-      const choice = { approve: "once", approved: "once", allow: "once" }[body.choice] ?? body.choice;
-      if (!["once", "session", "always", "deny"].includes(choice)) return hermesError(res, 400, "invalid_approval_choice", "Invalid choice");
-      if (!run.approvalResolver || run.status !== "waiting_for_approval") return hermesError(res, 409, "approval_not_pending", "No approval pending");
+      // Mirrors gateway/platforms/api_server_authority_runs.py respond_run + session_pending_controls.py:
+      // the key set must be EXACTLY these three (else 400 invalid_params, which is what production
+      // returned when Jarvis sent `{ choice, request_id }`), the generation must match, and the
+      // choice must be one the prompt offered.
+      const keys = Object.keys(body ?? {})
+        .sort()
+        .join(",");
+      if (keys !== "choice,execution_generation,request_id") return hermesError(res, 400, "invalid_params", "invalid_params");
+      if (!Number.isInteger(body.execution_generation) || body.execution_generation !== run.execution_generation || run.status !== "waiting_for_approval")
+        return hermesError(res, 409, "stale_generation", "stale_generation");
+      if (!run.approval || !run.approvalResolver || run.approval.prompt_id !== body.request_id)
+        return hermesError(res, 409, "approval_not_pending", "approval_not_pending");
+      if (!run.approval.choices.includes(body.choice)) return hermesError(res, 400, "invalid_params", "invalid_params");
       const resolve = run.approvalResolver;
       run.approvalResolver = null;
-      resolve(choice);
-      return json(res, 200, { object: "hermes.run.approval_response", run_id: run.run_id, choice, request_id: body.request_id, resolved: 1 });
+      resolve(body.choice);
+      return json(res, 200, { status: "resolved", prompt_id: body.request_id });
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/steer$/)) && m === "POST") {
       const run = state.runs.get(match[1]);

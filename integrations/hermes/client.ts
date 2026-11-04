@@ -21,6 +21,13 @@ import {
 
 export type HermesConn = { baseUrl: string; apiKey?: string };
 
+/**
+ * POST /v1/runs/{id}/approval body. Session-authority Hermes rejects anything but EXACTLY
+ * `{ choice, request_id, execution_generation }` with 400 `invalid_params`; the legacy run store
+ * takes `{ choice, request_id? }`. Built only by `approvalBody` in service.ts.
+ */
+export type HermesApprovalBody = { choice: string; request_id: string; execution_generation: number } | { choice: string; request_id?: string };
+
 /** Ordinary use requires enabled; only this integration's admin connection test may opt out. */
 export function hermesConn(purpose?: "admin-connection-test"): HermesConn {
   const r = resolveIntegration("hermes");
@@ -158,7 +165,7 @@ export const HermesExecutionClient = {
       { path: `/v1/runs/${encodeURIComponent(runId)}/stop`, method: "POST", signal },
       z.object({ run_id: z.string().optional(), status: z.string() }).passthrough(),
     ),
-  approve: (c: HermesConn, runId: string, body: { choice: string; request_id?: string }) =>
+  approve: (c: HermesConn, runId: string, body: HermesApprovalBody) =>
     call(
       c,
       { path: `/v1/runs/${encodeURIComponent(runId)}/approval`, method: "POST", body },
