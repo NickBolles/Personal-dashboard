@@ -24,7 +24,8 @@ test("todos merges Skylight chores behind a Skylight source chip", async ({ page
   await expect(chip.locator("option", { hasText: /^Skylight$/ })).toHaveCount(1, { timeout: 15_000 });
   await chip.selectOption("Skylight");
   await expect(page.getByText(/Take out recycling/).first()).toBeVisible();
-  const completed = page.locator("section", { has: page.getByText("Completed recently", { exact: true }) });
+  // The heading also holds the count ("Completed recently2"), so match the labelled region.
+  const completed = page.getByRole("region", { name: /^Completed recently/ });
   await expect(completed).toContainText("Wipe the kitchen counters");
   // Only Skylight rows while the chip is on.
   await expect(page.getByText("Renew car registration")).toHaveCount(0);
