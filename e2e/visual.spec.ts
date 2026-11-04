@@ -18,7 +18,7 @@ import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
-import { skylightVisual } from "./fixtures/skylight";
+import { skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 
 /**
@@ -1503,7 +1503,33 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-// Skylight completed chores: "Done today" under Today's chores (stubbed source, light + dark).
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: skylight write (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    const fixture = skylightWriteVisual(new Date(await page.evaluate(() => new Date().toISOString())));
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
+    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+    await page.goto("/skylight");
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await expect(page.getByRole("radio", { name: "Mine", exact: true })).toBeChecked();
+    await expect(page.getByRole("heading", { name: "Visualsky Groceries" })).toBeVisible();
+    await expect(page.getByText("Visualsky family walk", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New event", exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    const overlays = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(page).toHaveScreenshot(`skylight-write-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+    await page.getByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ }).click();
+    const confirm = page.getByRole("dialog", { name: "Confirm Skylight change" });
+    await expect(confirm).toContainText("Visualsky water the ferns");
+    await expect(confirm).toHaveScreenshot(`skylight-write-confirm-${scheme}.png`);
+    await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+    await overlays.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Skylight completed chores (stubbed source, light + dark).
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight done today (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });

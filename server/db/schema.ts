@@ -126,6 +126,25 @@ export const sourceCompletions = sqliteTable(
   (t) => [uniqueIndex("source_completions_unique").on(t.source, t.sourceId, t.day), index("source_completions_at").on(t.completedAt)],
 );
 
+/** Confirmed direct Skylight changes and their bounded, per-person undo history. */
+export const skylightWrites = sqliteTable(
+  "skylight_writes",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    via: text("via"),
+    op: text("op").notNull(),
+    target: text("target").notNull(),
+    label: text("label").notNull(),
+    payload: text("payload").notNull(),
+    inverse: text("inverse"),
+    at: text("at").notNull().default(now),
+    undoneAt: text("undone_at"),
+    undoOf: text("undo_of"),
+  },
+  (t) => [index("skylight_writes_user_at").on(t.userId, t.at), index("skylight_writes_at").on(t.at)],
+);
+
 export const notifications = sqliteTable(
   "notifications",
   {

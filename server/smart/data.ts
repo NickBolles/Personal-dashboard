@@ -138,6 +138,11 @@ export function calendarConfig() {
   return { calendars: parseLines(cfg.calendarEntities) };
 }
 
+export function usesSkylightCalendar() {
+  const r = resolveIntegration("skylight");
+  return r.enabled && r.config.mode === "direct" && r.config.writes !== "false";
+}
+
 /** Household calendar events this person may see, from the cached Skylight + Home Assistant snapshots. */
 export function visibleEvents(user: CurrentUser, now = new Date()): CalendarEvent[] {
   return (["skylight", "home_assistant"] as const).flatMap((s) => scopeResult(user, cachedSource(s, now))?.data?.events ?? []);
@@ -171,7 +176,9 @@ export function calendarWeek(user: CurrentUser, ref: string, now = new Date()): 
     .filter((e) => days.has(e.day))
     .sort((a, b) => (a.day + (a.start ?? "") < b.day + (b.start ?? "") ? -1 : 1))
     .slice(0, 100);
-  const writable = getSmartSettings(user.id).calendarWrites && calendarConfig().calendars.length > 0 && can(user, "home_assistant.calendar");
+  const writable =
+    getSmartSettings(user.id).calendarWrites &&
+    (usesSkylightCalendar() ? can(user, "skylight.write") : calendarConfig().calendars.length > 0 && can(user, "home_assistant.calendar"));
   return { ref, kind: "calendar", events, writable };
 }
 

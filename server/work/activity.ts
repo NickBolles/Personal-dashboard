@@ -4,6 +4,8 @@ import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { can } from "@/server/access";
+import { doneLabel, type SkylightWriteOp } from "@/lib/skylight-write";
+import { agentProfileOf } from "@/server/work/actor";
 import { latestOp, undoCheck, undoWindowFor } from "@/server/work/undo-rules";
 import { AUTO_SETTLE_UNDO_MS } from "@/server/work/settle-rules";
 import {
@@ -307,6 +309,31 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           verb: "chore completed",
           object: null,
           detail: r.title,
+          undoOpId: null,
+        });
+      }
+    }
+
+    if (chores) {
+      const S = schema.skylightWrites;
+      const writes = db
+        .select()
+        .from(S)
+        .where(and(eq(S.userId, user.id), cur ? tieBound("skylight_writes", "at", "id", "sw:", cur) : undefined))
+        .orderBy(desc(S.at), desc(S.id))
+        .limit(SOURCE_CAP)
+        .all();
+      const last = writes[writes.length - 1];
+      if (writes.length === SOURCE_CAP && last) capped({ at: last.at, id: `sw:${last.id}` });
+      for (const r of writes) {
+        out.push({
+          id: `sw:${r.id}`,
+          at: r.at,
+          type: "chore",
+          actor: r.via ? { kind: "agent", name: agentProfileOf(r.via) ?? r.via } : { kind: "you", name: "You" },
+          verb: r.undoOf ? "undid a Skylight change" : `${doneLabel(JSON.parse(r.payload) as SkylightWriteOp).toLowerCase()} in Skylight`,
+          object: null,
+          detail: r.label,
           undoOpId: null,
         });
       }

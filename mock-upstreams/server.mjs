@@ -89,6 +89,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
             failing: [...control.fail],
           });
         if (path === "/health") return json(res, 200, { ok: true });
+        if (path === "/skylight/writes" && req.method === "GET") return json(res, 200, { writes: services.skylight.state.writes });
         if (path === "/drive")
           return json(res, 200, {
             files: services.drive.state.files.map(({ id, name, mimeType, parents, content }) => ({ id, name, mimeType, parents, bytes: content?.length ?? 0 })),

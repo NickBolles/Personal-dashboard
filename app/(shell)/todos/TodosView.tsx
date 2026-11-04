@@ -5,12 +5,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { NextAction } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
 import { useSource } from "@/components/useSource";
+import { useAccess } from "@/components/access";
+import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
+import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
+import type { SkylightExtra } from "@/components/skylight/model";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
 import { Button, Field, PageHeader, Spinner, inputCls, useOnline, useToast } from "@/components/ui";
-import { EmptyState, SectionHeader } from "@/components/ui/kit";
+import { ChipSelect, EmptyState, SectionHeader } from "@/components/ui/kit";
 
 const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
   { title: "Overdue", match: (a) => a.status === "open" && a.priorityReason === "overdue" },
@@ -20,17 +24,28 @@ const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
 ];
 
 /** Todos' source chip: every Skylight chore (mine, up for grabs) files under one "Skylight" option. */
-const todoSourceLabel = (a: NextAction) => (a.source === "skylight" ? "Skylight" : taskSourceLabel(a));
+const todoSourceLabel = (a: NextAction) =>
+  a.source === "skylight" ? (a.skylight?.kind === "list_item" ? a.sourceLabel || `Skylight · ${a.skylight.listLabel}` : "Skylight") : taskSourceLabel(a);
 
 export function TodosView() {
   const q = useSource("todos");
-  // Skylight chores (open and done today) sit beside the canonical list; read-only, edited in Skylight.
+  // Skylight chores and lists keep their upstream identity beside the canonical list.
   const sky = useSource("skylight");
+  const { can } = useAccess();
+  const write = useSkylightWrite();
+  const extra = (sky.data?.data?.extra ?? {}) as SkylightExtra;
+  const writable = extra.writable === true && can("skylight.write");
   const provider = (q.data?.data?.extra?.provider as string | undefined) ?? undefined;
-  const all = useMemo(() => [...(q.data?.data?.actions ?? []), ...(sky.data?.data?.actions ?? [])], [q.data, sky.data]);
+  const all = useMemo(
+    () => [...(q.data?.data?.actions ?? []), ...(sky.data?.data?.actions ?? []), ...((sky.data?.data?.extra as SkylightExtra | undefined)?.listItems ?? [])],
+    [q.data, sky.data],
+  );
   const [source, setSource] = useState("");
+  const [whose, setWhose] = useState("mine");
   const options = useMemo(() => [...new Set(all.map(todoSourceLabel))].sort((a, b) => a.localeCompare(b)), [all]);
-  const actions = all.filter((a) => !source || todoSourceLabel(a) === source);
+  const actions = all.filter(
+    (a) => (!source || todoSourceLabel(a) === source) && (whose === "everyone" || a.source !== "skylight" || a.assignee?.kind !== "other"),
+  );
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -43,6 +58,10 @@ export function TodosView() {
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
       {provider === "jarvis" ? <AddTodo /> : null}
       <SourceFilter options={options} value={source} onChange={setSource} />
+      <ChipSelect aria-label="Whose" className="mt-2 w-36 [&>select]:w-full" value={whose} onChange={(e) => setWhose(e.target.value)} active={whose !== "mine"}>
+        <option value="mine">Mine</option>
+        <option value="everyone">Everyone</option>
+      </ChipSelect>
       {q.data?.data || sky.data?.data
         ? GROUPS.map((g) => {
             const items = actions.filter(g.match);
@@ -55,8 +74,11 @@ export function TodosView() {
                 <ul className="jv-feed">
                   {items.map((a) => (
                     <li key={a.id} id={a.source === "todos" ? `todo-${a.sourceId}` : undefined}>
-                      {/* Skylight rows are read-only: no inline "Open Skylight" button (⋯ → Open in source). */}
-                      <ActionCard action={a.source === "skylight" ? { ...a, primaryAction: undefined } : a} compact={a.status === "completed"} quiet row />
+                      {a.source === "skylight" ? (
+                        <SkylightActionRow action={a} writable={writable} request={write.request} />
+                      ) : (
+                        <ActionCard action={a} compact={a.status === "completed"} quiet row />
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -64,6 +86,7 @@ export function TodosView() {
             );
           })
         : null}
+      {write.node}
       {(q.data?.data || sky.data?.data) && !actions.length ? (
         <div className="mt-6">
           <EmptyState title="No open todos." />
