@@ -101,7 +101,8 @@ export function SkylightView() {
                 {items.length ? (
                   <ul className="jv-feed" data-testid={group.id === "sk-done" ? "skylight-done" : undefined}>
                     {items.map((action) => (
-                      <li key={action.id}>
+                      // Wrap only when the row can't fit (320 px at 200% text: checkbox + Claim/Reopen + ⋯).
+                      <li key={action.id} className="[&>.jv-trow]:flex-wrap">
                         <SkylightActionRow action={action} writable={writable} request={write.request} management />
                       </li>
                     ))}

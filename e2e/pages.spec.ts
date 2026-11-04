@@ -40,10 +40,11 @@ test("skylight and brain pages render source data", async ({ page }) => {
   await page.goto("/skylight");
   await expect(page.getByText("Dentist — Will")).toBeVisible();
   await expect(page.getByText(/Take out recycling/)).toBeVisible();
-  // Owner "Nick" auto-matches the Skylight member: others' chores are hidden, the rest carry source chips.
+  // Owner "Nick" auto-matches the Skylight member (Mine): others' chores are hidden, up-for-grabs chores can be claimed.
   await expect(page.getByText(/Practice piano scales/)).toHaveCount(0);
-  await expect(page.getByTestId("source-chip").filter({ hasText: "Skylight · Up for grabs" }).first()).toBeVisible();
-  await expect(page.getByTestId("source-chip").filter({ hasText: "Skylight · Chores" }).first()).toBeVisible();
+  await expect(page.getByText(/Skylight chore · up for grabs/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Claim: / }).first()).toBeVisible();
+  await expect(page.getByText(/Skylight chore · Nick/).first()).toBeVisible();
   await page.goto("/brain");
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Failing ×2")).toBeVisible();
