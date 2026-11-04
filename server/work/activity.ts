@@ -3,6 +3,7 @@ import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
+import { can } from "@/server/access";
 import { latestOp, undoCheck } from "@/server/work/undo-rules";
 import { AUTO_SETTLE_UNDO_MS } from "@/server/work/settle-rules";
 import {
@@ -105,7 +106,9 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
     }
   }
   const ids = scope ? [...scope] : rows.map((r) => r.id);
-  if (!ids.length) return pageActivity([], q);
+  // Skylight chore completions belong to no work item: only the unscoped timeline shows them.
+  const chores = !scope && can(user, "skylight.view");
+  if (!ids.length && !chores) return pageActivity([], q);
 
   const chunks: string[][] = [];
   for (let i = 0; i < ids.length; i += 500) chunks.push(ids.slice(i, i + 500));
@@ -278,6 +281,32 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
                     : "replied in",
           object: node,
           detail: null,
+          undoOpId: null,
+        });
+      }
+    }
+
+    // Skylight chores completed (first seen done by a sync; no work item, so no object link).
+    if (chores) {
+      const C = schema.sourceCompletions;
+      const done = db
+        .select({ id: C.id, title: C.title, completedAt: C.completedAt })
+        .from(C)
+        .where(and(eq(C.source, "skylight"), cur ? tieBound("source_completions", "completed_at", "id", "sc:", cur) : undefined))
+        .orderBy(desc(C.completedAt), desc(C.id))
+        .limit(SOURCE_CAP)
+        .all();
+      const last = done[done.length - 1];
+      if (done.length === SOURCE_CAP && last) capped({ at: last.completedAt, id: `sc:${last.id}` });
+      for (const r of done) {
+        out.push({
+          id: `sc:${r.id}`,
+          at: r.completedAt,
+          type: "chore",
+          actor: { kind: "system", name: "Skylight" },
+          verb: "chore completed",
+          object: null,
+          detail: r.title,
           undoOpId: null,
         });
       }

@@ -75,6 +75,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/alerts",
     "/settings",
     "/todos",
+    "/skylight",
     "/home-control",
     "/settings/people",
     "/workouts",

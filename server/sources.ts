@@ -25,6 +25,7 @@ import type { AdapterContext, SourceData } from "@/integrations/types";
 import { can, type Capable } from "@/server/access";
 import { workHomeActionsFor } from "@/server/work/home";
 import { moduleForSource, sourceCapability } from "@/lib/modules";
+import { recordCompletions } from "@/server/skylight-completions";
 
 type Viewer = Capable & { id: string };
 
@@ -101,7 +102,9 @@ export async function refreshSource(source: AdapterSource, ctx = adapterContext(
   const adapter = ADAPTERS[source];
   const now = new Date().toISOString();
   try {
-    const data = await withTimeout(adapter.fetch(ctx), SOURCE_TIMEOUT_MS, SOURCE_LABELS[source]);
+    let data = await withTimeout(adapter.fetch(ctx), SOURCE_TIMEOUT_MS, SOURCE_LABELS[source]);
+    // Skylight completions: first-seen time + history for Activity/trend (the snapshot is replaced below).
+    if (source === "skylight") data = recordCompletions(data, snapshotRow(source)?.payload, ctx.today);
     // Cached upstream answers (e.g. via Hermes) carry their own read time; freshness follows it.
     const fetchedAt = data.asOf ?? now;
     const staleAfter = data.staleAfter ?? iso(new Date(fetchedAt).getTime() + adapter.staleAfterMs);

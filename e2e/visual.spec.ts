@@ -18,6 +18,7 @@ import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
+import { skylightVisual } from "./fixtures/skylight";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -638,6 +639,8 @@ for (const [name, path] of [
         });
       }
       if (name === "workouts") await page.route(/\/api\/workouts$/, (route) => route.fulfill({ json: { workouts: [] } }));
+      // Todos merges Skylight chores: fixed fixture so the mock's clock-dependent chores never leak in.
+      if (name === "todos") await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual() }));
       await page.goto(path);
       await page.locator("h1").first().waitFor();
       await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
@@ -1398,6 +1401,24 @@ for (const scheme of ["light", "dark"] as const) {
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(500);
     await expect(header).toHaveScreenshot(`chat-agent-badge-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Skylight completed chores: "Done today" under Today's chores (stubbed source, light + dark).
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: skylight done today (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual() }));
+    await page.goto("/skylight");
+    await page.locator("h1").first().waitFor();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await expect(page.getByTestId("skylight-done")).toContainText("Visualsky wipe the stovetop");
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"].fixed, .chat-dock { visibility: hidden !important; }' });
+    await expect(page).toHaveScreenshot(`skylight-done-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
   });
 }

@@ -273,9 +273,16 @@ export function ActionCard({
         >
           <SourceBadge source={action.source} label={action.sourceLabel} />
           {action.assignee?.kind === "up_for_grabs" ? null : <AssigneeChip assignee={action.assignee} />}
-          <Badge tone={REASON_TONE[action.priorityReason]} dot>
-            {PRIORITY_LABELS[action.priorityReason]}
-          </Badge>
+          {action.status === "completed" ? (
+            // Done items say so instead of their old due reason ("Due today" on a finished chore reads as open).
+            <Badge tone="neutral" dot>
+              Done
+            </Badge>
+          ) : (
+            <Badge tone={REASON_TONE[action.priorityReason]} dot>
+              {PRIORITY_LABELS[action.priorityReason]}
+            </Badge>
+          )}
           {action.pinned ? <Badge tone="accent">Pinned</Badge> : null}
           {rank?.tier === "compass" ? <Badge tone="violet">Compass focus</Badge> : null}
           {!compact && action.detail ? (

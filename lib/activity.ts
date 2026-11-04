@@ -6,7 +6,7 @@
 import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
 import { localDate } from "@/lib/time";
 
-export const ACTIVITY_TYPES = ["edit", "status", "created", "structure", "link", "github", "capture", "chat", "validation"] as const;
+export const ACTIVITY_TYPES = ["edit", "status", "created", "structure", "link", "github", "capture", "chat", "validation", "chore"] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
 export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
@@ -19,6 +19,7 @@ export const ACTIVITY_TYPE_LABELS: Record<ActivityType, string> = {
   capture: "Inbox",
   chat: "Chats & runs",
   validation: "Validations",
+  chore: "Chores",
 };
 
 export type ActorKind = "you" | "agent" | "github" | "system";

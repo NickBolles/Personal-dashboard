@@ -106,6 +106,26 @@ export const sourceSnapshots = sqliteTable("source_snapshots", {
   updatedAt: text("updated_at").notNull().default(now),
 });
 
+/**
+ * Completed chores read from a source (Skylight): one row per chore per local day, written the first
+ * time a sync sees it completed. `completedAt` is that first-seen time (Skylight only reports the
+ * date); `wasOpen` = an earlier sync had it open (an open → done transition). Feeds Activity, the
+ * Home trend and the completed cards' time.
+ */
+export const sourceCompletions = sqliteTable(
+  "source_completions",
+  {
+    id: text("id").primaryKey(),
+    source: text("source").notNull(),
+    sourceId: text("source_id").notNull(),
+    day: text("day").notNull(),
+    title: text("title").notNull(),
+    wasOpen: integer("was_open", { mode: "boolean" }).notNull().default(false),
+    completedAt: text("completed_at").notNull().default(now),
+  },
+  (t) => [uniqueIndex("source_completions_unique").on(t.source, t.sourceId, t.day), index("source_completions_at").on(t.completedAt)],
+);
+
 export const notifications = sqliteTable(
   "notifications",
   {

@@ -90,10 +90,25 @@ async function googleListLabel(): Promise<string> {
   return name ? `Google Tasks · ${name}` : "Google Tasks";
 }
 
-async function listHa(): Promise<TodoItem[]> {
+/** Home Assistant keeps every completed item forever: "Completed recently" shows the last 14 days. */
+export const HA_COMPLETED_DAYS = 14;
+
+/**
+ * Completed HA items whose completion time is older than the window are dropped. A due date says
+ * nothing about when an item was completed, so completions without a `completed` stamp always stay.
+ */
+export function recentHaItem(i: { status?: string; completed?: string | null; due?: string | null }, now: Date): boolean {
+  if (i.status !== "completed") return true;
+  const when = i.completed;
+  if (!when) return true;
+  const t = Date.parse(when);
+  return Number.isNaN(t) || t >= now.getTime() - HA_COMPLETED_DAYS * DAY;
+}
+
+async function listHa(ctx: AdapterContext): Promise<TodoItem[]> {
   const entity = resolveIntegration("todos").config.haEntityId;
   if (!entity) throw new UpstreamError("Home Assistant", "unsupported", "Choose a to-do entity");
-  const items = await HomeAssistantClient.todoItems(haConn(), entity);
+  const items = (await HomeAssistantClient.todoItems(haConn(), entity)).filter((i) => recentHaItem(i, ctx.now));
   return items.map((i) => ({
     id: i.uid,
     title: i.summary,
@@ -129,7 +144,7 @@ export async function listTodos(ctx: AdapterContext): Promise<TodoItem[]> {
     case "google_tasks":
       return listGoogle(ctx);
     case "home_assistant":
-      return listHa();
+      return listHa(ctx);
     case "jarvis":
       return listLocal(ctx);
   }
@@ -234,7 +249,8 @@ export const todosAdapter: SourceAdapter = {
         {
           name: "Read to-do entity",
           run: async () => {
-            const items = await listHa();
+            const { adapterContext } = await import("@/server/sources");
+            const items = await listHa(adapterContext());
             return `${items.filter((i) => !i.completed).length} open items`;
           },
         },
