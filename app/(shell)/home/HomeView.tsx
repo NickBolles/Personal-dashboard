@@ -155,8 +155,8 @@ function KpiStrip({ a, pulse }: { a: AttentionSummary; pulse?: HomePulse }) {
   const value = "text-[1.0625rem] leading-6 font-semibold tabular-nums";
   const extra: { key: string; short: string; long: string; n: number | null | undefined; href: string; tone: string }[] = [
     { key: "approvals", short: "Approvals", long: "Approvals waiting", n: pulse?.approvals, href: "/alerts", tone: "text-warn" },
-    { key: "validation", short: "Validation", long: "Awaiting validation", n: pulse?.awaitingValidation, href: "/areas#today-proof", tone: "text-warn" },
-    { key: "merged", short: "Merged", long: "Merged, not settled", n: pulse?.mergedNotSettled, href: "/areas#today-settle", tone: "text-ok" },
+    { key: "validation", short: "Validation", long: "Awaiting validation", n: pulse?.awaitingValidation, href: "/areas/today#today-proof", tone: "text-warn" },
+    { key: "merged", short: "Merged", long: "Merged, not settled", n: pulse?.mergedNotSettled, href: "/areas/today#today-settle", tone: "text-ok" },
   ];
   return (
     <div className="mb-4 space-y-1.5">

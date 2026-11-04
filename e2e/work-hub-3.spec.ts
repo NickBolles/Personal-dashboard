@@ -54,9 +54,9 @@ async function centre(l: Locator) {
 
 test("work opens on Today; capture to the inbox, file it, no sideways scrolling", async ({ page }) => {
   await page.goto("/areas");
-  await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
-  await expect(page.getByRole("list", { name: "Work at a glance" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Areas sections" }).getByRole("button", { name: "Today" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { level: 2, name: "Overview" })).toBeVisible();
+  await expect(page.getByTestId("map-overview")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Areas sections" }).getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
   await expect(page).not.toHaveURL(/item=/);
   await expectNoHorizontalOverflow(page);
 
@@ -277,7 +277,7 @@ test("command dock: tap opens the palette, ↑ opens the radial menu, hold-and-s
   await expect(page.locator('[data-sub="work.today"]')).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/areas$/);
-  await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Overview" })).toBeVisible();
 
   // Capture from the map's Capture petal: the quick-capture dialog.
   await page.keyboard.press("Control+.");
@@ -318,7 +318,7 @@ test.describe("phone, 320 px", () => {
   test.use({ viewport: { width: 320, height: 640 } });
   test("Today, inbox and the packet dialog fit; the dialog's primary action stays reachable", async ({ page }) => {
     await page.goto("/areas");
-    await expect(page.getByRole("heading", { level: 2, name: "Today" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Overview" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.goto("/inbox");
     await expect(page.getByRole("heading", { level: 1, name: "Inbox" })).toBeVisible();

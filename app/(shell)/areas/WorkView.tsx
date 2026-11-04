@@ -1,14 +1,13 @@
 "use client";
 
 import { ItemAgentPanel } from "@/components/agents/AgentRuns";
-import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { addDays, daysBetween } from "@/lib/time";
+import { daysBetween } from "@/lib/time";
 import { SectionHeader } from "@/components/ui/kit";
 import {
   Badge,
@@ -34,6 +33,7 @@ import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMut
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
+import { AreaCoordinator, AreaProjects } from "@/components/map/AreaPage";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
@@ -47,7 +47,9 @@ import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
 import { NEW_WORK_EVENT } from "@/components/navigation/commands";
 import { useShowArchived } from "@/lib/client/show-archived";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
-import { TodayView, useInbox } from "@/components/work/today";
+import { useInbox } from "@/components/work/today";
+import { MapView } from "@/components/map/MapView";
+import "@/components/map/map.css";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
@@ -166,7 +168,7 @@ export function WorkView({
     },
   );
 
-  const go = (next: View) => {
+  const go = (next: View, opts?: { push?: boolean }) => {
     setView(next);
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
@@ -174,7 +176,9 @@ export function WorkView({
     url.searchParams.delete("do");
     if (next.kind === "item") url.searchParams.set("item", next.id);
     else if (next.kind !== "today") url.searchParams.set("view", next.kind);
-    window.history.replaceState(null, "", url);
+    // Opening an area from the overview pushes, so Back returns to the overview.
+    if (opts?.push) window.history.pushState({ jarvisAreas: true }, "", url);
+    else window.history.replaceState(null, "", url);
     // Phones: the content sits above the tree, so bring it into view.
     if (next.kind !== "tree" && window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
   };
@@ -184,9 +188,18 @@ export function WorkView({
     if (it?.kind === "conversation" && it.sessionId && canChat) openConversation(it.sessionId);
     else go({ kind: "item", id });
   };
-  const openWith = (id: string, action?: string) => go({ kind: "item", id, action });
 
-  const wide = useWide();
+  // Back/Forward after opening an area from the overview: follow the URL.
+  useEffect(() => {
+    const onPop = () => {
+      const u = new URL(window.location.href);
+      const id = u.searchParams.get("item");
+      const v = u.searchParams.get("view");
+      setView(id ? { kind: "item", id } : v === "tree" ? { kind: "tree" } : { kind: "today" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
@@ -270,11 +283,9 @@ export function WorkView({
         ) : null}
         <div className={selectMode ? "lg:hidden" : undefined}>
           {view.kind === "today" ? (
-            <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
-              <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-                <TodayView onOpen={openWith} onInbox={() => router.push("/inbox")} />
-              </div>
-              {wide ? <TodayRail items={list} onSelect={select} /> : null}
+            // "Map is Areas": the landing is the portfolio overview; a card opens its area here, in place.
+            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+              <MapView onOpen={(id) => go({ kind: "item", id }, { push: true })} />
             </div>
           ) : view.kind === "tree" ? (
             <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
@@ -391,43 +402,6 @@ export function WorkView({
       {capturing ? <CaptureDialog initialText={typeof capturing === "string" ? capturing : undefined} onClose={() => setCapturing(false)} /> : null}
       {undo ? <UndoBar key={undo.id} op={undo} onDone={clearUndo} /> : null}
     </div>
-  );
-}
-
-const OPEN_STATUSES = new Set<WorkStatus>(["captured", "exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "reopened"]);
-
-/** Today's context rail (wide screens): what's due soon, what's parked, and the keys. Read from the tree, no extra request. */
-function TodayRail({ items, onSelect }: { items: WorkItem[]; onSelect: (id: string) => void }) {
-  const today = todayIso();
-  const soonLimit = addDays(today, 14);
-  const live = items.filter((i) => !i.archived && i.parentId !== null);
-  const soon = live
-    .filter((i) => OPEN_STATUSES.has(i.status) && i.targetDate && i.targetDate >= today && i.targetDate <= soonLimit)
-    .sort((a, b) => (a.targetDate! < b.targetDate! ? -1 : 1))
-    .slice(0, 6);
-  const parked = live.filter((i) => i.status === "on_hold").slice(0, 5);
-  const row = (i: WorkItem, meta: string) => (
-    <li key={i.id} className="flex items-baseline justify-between gap-2 py-1">
-      <button type="button" className="min-w-0 truncate text-left text-[13px] text-accent hover:underline" onClick={() => onSelect(i.id)}>
-        {i.title}
-      </button>
-      <span className="shrink-0 text-xs text-muted tabular-nums">{meta}</span>
-    </li>
-  );
-  return (
-    <aside aria-label="Today context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5">
-      <Block label="Due in the next 14 days">
-        {soon.length ? <ul>{soon.map((i) => row(i, shortDate(i.targetDate!)))}</ul> : <p className="text-[13px] text-muted">Nothing due soon.</p>}
-      </Block>
-      <Block label="On hold">{parked.length ? <ul>{parked.map((i) => row(i, ""))}</ul> : <p className="text-[13px] text-muted">Nothing parked.</p>}</Block>
-      <Block label="Keys">
-        <p className="text-[13px] leading-6 text-muted">
-          <kbd className="wk-kbd">Ctrl K</kbd> jump or do · <kbd className="wk-kbd">/</kbd> search · <kbd className="wk-kbd">↑</kbd>
-          <kbd className="wk-kbd">↓</kbd> tree · <kbd className="wk-kbd">←</kbd>
-          <kbd className="wk-kbd">→</kbd> fold
-        </p>
-      </Block>
-    </aside>
   );
 }
 
@@ -948,6 +922,8 @@ function ItemDetail({
   const menu: MenuItem[] = (
     [
       container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
+      isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1105,7 +1081,6 @@ function ItemDetail({
                   Chat here
                 </Button>
               ) : null}
-              {isArea && canChat && !isFinanceAreaLike(item) ? <CoordinatorButton areaId={item.id} areaTitle={item.title} /> : null}
               {container ? (
                 <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
                   + {childLabel}
@@ -1346,8 +1321,6 @@ function ContainerBody({
   const isArea = item.parentId === null;
   const r = rollup(items, item.id);
   const kids = items.filter((i) => i.parentId === item.id && !i.archived);
-  const projects = kids.filter((k) => k.kind === "project");
-  const rest = kids.filter((k) => k.kind !== "project");
   // Recently changed anywhere below this node.
   const below = new Set<string>([item.id]);
   for (let grew = true; grew;) {
@@ -1365,6 +1338,12 @@ function ContainerBody({
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, 5);
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
+  const newChat = useAskHermes();
+  // Finance never goes to AI: no coordinator for finance(-like) areas.
+  const coord =
+    isArea && canChat && !isFinanceAreaLike(item)
+      ? { area: { id: item.id, title: item.title }, chats: itemChatRows(d), onNew: () => newChat.start({ areaId: item.id }), busy: newChat.busy }
+      : null;
   return (
     <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
       <div className="wk-cpage-main min-w-0 space-y-3">
@@ -1386,31 +1365,10 @@ function ContainerBody({
             <span>Proof due</span>
           </div>
         </div>
-        {isArea ? (
-          <>
-            <ChildrenCard
-              label="Projects"
-              parent={item}
-              list={projects}
-              items={items}
-              onSelect={onSelect}
-              addLabel={projects.length ? "Add a project" : "Add your first project"}
-              addKind="project"
-              empty="Projects group related work. Add one, or type a path like “Launch / pricing page”."
-            />
-            <ChildrenCard
-              label="Filed in this area"
-              testId="items-chats-here"
-              parent={item}
-              list={rest}
-              items={items}
-              onSelect={onSelect}
-              addLabel="Add an item"
-              addKind="thread"
-              empty={canChat ? "Loose items and chats filed straight into this area show here." : "Loose items show here."}
-            />
-          </>
-        ) : (
+        {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
+        {isArea ? <AreaProjects areaId={item.id} onOpen={onSelect} /> : null}
+        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
+        {isArea ? null : (
           <ChildrenCard
             label="Work"
             parent={item}
@@ -1436,6 +1394,8 @@ function ContainerBody({
       </div>
       {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
       <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
+        {/* Map is Areas: the area coordinator leads the side column at ≥1280 (a sheet below that). */}
+        {coord ? <AreaCoordinator variant="column" {...coord} /> : null}
         {/* A3: the side column leads with what moved; settings and details follow. */}
         {recent.length ? (
           <section aria-labelledby="recent-h">
@@ -1443,10 +1403,10 @@ function ContainerBody({
             <ul className="wk-recent">
               {recent.map((i) => (
                 <li key={i.id}>
-                  <button type="button" className="tap min-w-0 truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
+                  <button type="button" className="tap min-w-0 flex-[1_1_6rem] truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
                     {i.title}
                   </button>
-                  <span className="shrink-0 text-xs text-muted" data-dynamic>
+                  <span className="max-w-full shrink-0 truncate text-xs text-muted" data-dynamic>
                     {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
                   </span>
                 </li>

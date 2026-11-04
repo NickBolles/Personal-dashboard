@@ -166,7 +166,7 @@ function CardList({
 
 /** Today: the /work front door. Continue first, then what needs proof, settling or attention. */
 /**
- * Deep links like /areas#today-proof land before the Today data loads, so the
+ * Deep links like /areas/today#today-proof land before the Today data loads, so the
  * browser's own anchor jump finds nothing. Once the data is ready (the target
  * has mounted), scroll the hashed section into view — once per hash.
  */

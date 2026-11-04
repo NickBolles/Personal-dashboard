@@ -35,8 +35,10 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");
   const ids = await seed(page, nonce);
+  // "Map is Areas": /map is a bookmark alias of the /areas landing.
   await page.goto("/map");
-  await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
+  await expect(page).toHaveURL(/\/areas$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Areas" })).toBeVisible();
 
   const card = page.getByTestId("map-area-card").filter({ hasText: `Pelican wharf ${nonce}` });
   await expect(card).toBeVisible();
@@ -44,9 +46,8 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await expect(card).toContainText("1 Next");
   await expect(card).toContainText("1 Backlog");
 
-  // Tapping a card scopes the tree to that area.
-  await card.click();
-  await expect(card).toHaveAttribute("aria-pressed", "true");
+  // The area filter scopes the drill-down to that area (tapping the card opens the area itself).
+  await page.getByLabel("Filter by area").selectOption(ids.area);
   const tree = page.getByTestId("map-tree");
   await expect(tree.locator("details.mp-area")).toHaveCount(1);
   // Projects start collapsed; open one to drill in.
@@ -83,6 +84,42 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await page.locator("#map-tag").selectOption("");
 
   // Clean up the open decision so Today/other specs don't see it.
+  const clear = await page.request.patch(`/api/work/items/${ids.gannet}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });
+  expect(clear.ok()).toBeTruthy();
+});
+
+test("areas landing: card opens the area in place, Back returns; /map redirects keep the query", async ({ page }) => {
+  const nonce = `l${Date.now().toString(36)}`;
+  await page.goto("/home");
+  const ids = await seed(page, nonce);
+  await page.goto("/areas");
+  await expect(page.getByTestId("chief-of-staff")).toBeVisible();
+  const card = page.getByTestId("map-area-card").filter({ hasText: `Pelican wharf ${nonce}` });
+  await expect(card).toHaveAttribute("href", `/areas?item=${encodeURIComponent(ids.area)}`);
+  await card.click();
+  await expect(page).toHaveURL(new RegExp(`item=${ids.area}`));
+  await expect(page.getByRole("heading", { name: `Pelican wharf ${nonce}` }).first()).toBeVisible();
+  // Area → project → item, all in place.
+  await page.getByText(`Marigold dock ${nonce}`, { exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`item=${ids.project}`));
+  await page.getByText(`Heron ledger ${nonce}`, { exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`item=${ids.heron}`));
+  await page.goto("/areas");
+  await card.click();
+  await expect(page).toHaveURL(new RegExp(`item=${ids.area}`));
+  await page.goBack();
+  await expect(page).toHaveURL(/\/areas$/);
+  await expect(page.getByTestId("map-overview")).toBeVisible();
+  // The Today work queue is one tap from the overview header.
+  await page.getByTestId("work-queue-link").click();
+  await expect(page).toHaveURL(/\/areas\/today$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Work today" })).toBeVisible();
+
+  await page.goto(`/map?area=${ids.area}`);
+  await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids.area}$`));
+  await page.goto("/map?view=tree");
+  await expect(page).toHaveURL(/\/areas\?view=tree$/);
+
   const clear = await page.request.patch(`/api/work/items/${ids.gannet}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });
   expect(clear.ok()).toBeTruthy();
 });

@@ -95,7 +95,8 @@ test("Today row: F2 renames the focused row title in place", async ({ page }) =>
   const nonce = Date.now().toString(36);
   await page.goto("/home");
   const { title } = await makeItem(page, nonce, { status: "in_progress", nextAction: "Ink the margins" });
-  await page.goto("/areas");
+  // /areas opens on the portfolio overview; Today's work queue (with its F2-renamable rows) is /areas/today.
+  await page.goto("/areas/today");
   const row = page.getByRole("button", { name: title, exact: true });
   await row.focus();
   await page.keyboard.press("F2");
