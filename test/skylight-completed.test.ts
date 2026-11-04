@@ -32,14 +32,16 @@ const chore = (id: string, done: boolean, ctx: AdapterContext) =>
   });
 const snap = (actions: SourceData["actions"]): SourceData => ({ actions, events: [], extra: {} });
 
-describe("adapter keeps today's completed chores", () => {
+describe("adapter keeps completed chores inside the read window", () => {
   const today = "2026-11-03";
-  it("keeps open and completed-today chores, drops skipped and other days' completions", () => {
-    expect(keepChore({ status: "pending" }, today)).toBe(true);
-    expect(keepChore({ status: "complete", completed_on: today }, today)).toBe(true);
-    expect(keepChore({ status: "complete", start: today }, today)).toBe(true);
-    expect(keepChore({ status: "complete", completed_on: "2026-11-02" }, today)).toBe(false);
-    expect(keepChore({ status: "skipped", start: today }, today)).toBe(false);
+  const w = { from: "2026-10-27", to: "2026-11-10" };
+  it("keeps open and in-window completions, drops skipped and out-of-window completions", () => {
+    expect(keepChore({ status: "pending" }, w)).toBe(true);
+    expect(keepChore({ status: "complete", completed_on: today }, w)).toBe(true);
+    expect(keepChore({ status: "complete", start: today }, w)).toBe(true);
+    expect(keepChore({ status: "complete", completed_on: "2026-11-02" }, w)).toBe(true);
+    expect(keepChore({ status: "complete", completed_on: "2026-10-20" }, w)).toBe(false);
+    expect(keepChore({ status: "skipped", start: today }, w)).toBe(false);
   });
 
   it("maps a completed chore as completed with no primary action; Hermes mode too", () => {

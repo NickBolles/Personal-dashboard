@@ -1,6 +1,6 @@
 import "server-only";
 import { SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomeHealth, type NextAction } from "@/lib/contracts";
-import { adapterContext, cachedSource, getHome, scopeResult } from "@/server/sources";
+import { adapterContext, cachedSource, getHome, homeScopedSkylight, scopeResult } from "@/server/sources";
 import { listControls } from "@/integrations/home-assistant/controls";
 import { listDevices } from "@/integrations/home-assistant/devices";
 import { can, type Capable } from "@/server/access";
@@ -71,12 +71,13 @@ function header(user: Viewer, source: ActionSource) {
 async function skylight(user: Viewer, tz: string) {
   const { r, line } = header(user, "skylight");
   const events = (r.data?.events ?? []).slice(0, 40);
-  const chores = (r.data?.actions ?? []).filter((a) => a.status === "open");
+  // Mine + up for grabs only (the read covers every member over ±7 days; the page filters at view time).
+  const chores = (homeScopedSkylight(r).data?.actions ?? []).filter((a) => a.status === "open");
   return [
     line,
     events.length ? "Calendar (next 7 days):" : "Calendar: nothing in the next 7 days.",
     ...events.map((e) => fmtEvent(e, tz)),
-    chores.length ? "Open chores today:" : "Chores: none open today.",
+    chores.length ? "Open chores (yours and up for grabs, overdue through next week):" : "Chores: none open.",
     ...chores.map((a) => fmtAction(a, tz)),
   ];
 }

@@ -27,14 +27,18 @@ export function recordCompletions(data: SourceData, prevPayload: string | null |
   const seen = new Map<string, string>();
   db.transaction((tx) => {
     for (const a of done) {
+      // #P0: the window spans ±7 days, so a completion keeps its own (frame-local) day; one first seen
+      // after its day is stamped at noon UTC of that day rather than "now" (no fake "done just now").
+      const day = (a.skylight?.kind === "chore" && a.skylight.completedOn) || today;
+      const stamp = day === today ? at : day < today ? `${day}T12:00:00.000Z` : at;
       tx.insert(T)
-        .values({ id: newId("sc"), source: a.source, sourceId: a.sourceId, day: today, title: a.title, wasOpen: prevOpen.has(a.id), completedAt: at })
+        .values({ id: newId("sc"), source: a.source, sourceId: a.sourceId, day, title: a.title, wasOpen: prevOpen.has(a.id), completedAt: stamp })
         .onConflictDoNothing()
         .run();
       const row = tx
         .select({ completedAt: T.completedAt })
         .from(T)
-        .where(and(eq(T.source, a.source), eq(T.sourceId, a.sourceId), eq(T.day, today)))
+        .where(and(eq(T.source, a.source), eq(T.sourceId, a.sourceId), eq(T.day, day)))
         .get();
       if (row) seen.set(a.id, row.completedAt);
     }

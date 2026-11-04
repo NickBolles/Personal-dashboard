@@ -172,6 +172,8 @@ export type SkylightRef =
       /** Skylight category (member) id it is assigned to; null = unassigned. */
       categoryId: string | null;
       recurring?: boolean;
+      /** Frame-local day it was completed (completed chores only). */
+      completedOn?: string;
     }
   | { kind: "list_item"; listId: string; itemId: string; listLabel: string };
 

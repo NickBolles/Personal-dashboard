@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { joinUrl, upstream } from "@/server/http/fetch";
 import { UpstreamError } from "@/server/http/errors";
-import { iso, localDate, MINUTE, DAY, localTimeToInstant } from "@/lib/time";
+import { iso, localDate, MINUTE, DAY, localTimeToInstant, addDays } from "@/lib/time";
 import type { CalendarEvent, NextAction } from "@/lib/contracts";
 import { resolveIntegration, saveIntegration } from "@/integrations/store";
 import { processSingleton } from "@/server/singleton";
@@ -298,15 +298,33 @@ export function choreState(completed: boolean, due: string | undefined, ctx: Ada
   };
 }
 
+/** Read window for direct mode: calendar days around today (household time zone). */
+export const WINDOW_DAYS = 7;
+export function readWindow(today: string) {
+  return { from: addDays(today, -WINDOW_DAYS), to: addDays(today, WINDOW_DAYS) };
+}
+
 /**
- * Direct-mode chore filter: open chores, plus chores completed today (frame-local `completed_on`,
- * else the scheduled day). Skipped chores and completions from other days are dropped.
+ * The frame-local day a chore was completed. `completed_on` is usually a plain date, but a
+ * timestamp (UTC or offset) must be converted to the household day, not sliced: 21:00 CT on
+ * Nov 3 is "2026-11-04T03:00Z". Falls back to the scheduled day.
  */
-export function keepChore(a: Record<string, unknown>, today: string): boolean {
+export function choreDoneDay(a: Record<string, unknown>, timezone: string): string {
+  const raw = String(a.completed_on ?? a.completed_at ?? a.start ?? "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? raw.slice(0, 10) : localDate(t, timezone);
+}
+
+/**
+ * Direct-mode chore filter: open chores, plus chores completed inside the read window
+ * (frame-local completion day, else the scheduled day). Skipped chores are dropped.
+ */
+export function keepChore(a: Record<string, unknown>, window: { from: string; to: string }, timezone = "America/Chicago"): boolean {
   if (a.status === "skipped") return false;
-  if (a.status !== "complete") return true;
-  const day = String(a.completed_on ?? a.start ?? "").slice(0, 10);
-  return day === today;
+  if (a.status !== "complete" && a.status !== "completed") return true;
+  const day = choreDoneDay(a, timezone);
+  return day >= window.from && day <= window.to;
 }
 
 /** Test connection's "Read calendar" window: today in the household time zone. */
@@ -366,80 +384,220 @@ async function fetchViaHermes(ctx: AdapterContext): Promise<SourceData> {
   };
 }
 
+const MAX_PAGES = 20;
+type Resource = z.infer<typeof resource>;
+const pagedDoc = z.object({
+  data: z.array(resource),
+  included: z.array(resource).optional(),
+  links: z.object({ next: z.string().nullish() }).partial().optional(),
+});
+
+/** GET a JSON:API collection and follow `links.next` (relative or absolute) up to MAX_PAGES. */
+async function collect(path: string, query: Record<string, string>) {
+  const out: Resource[] = [];
+  const included: Resource[] = [];
+  let p: string | null = path;
+  let q: Record<string, string> | undefined = query;
+  for (let page = 0; p && page < MAX_PAGES; page++) {
+    const d = pagedDoc.parse(await api(p, q));
+    out.push(...d.data);
+    included.push(...(d.included ?? []));
+    const next = d.links?.next;
+    if (!next) break;
+    const u = new URL(next, "http://x");
+    // links.next carries the full query; strip the /api prefix our request helper adds back.
+    p = u.pathname.replace(/^\/api(?=\/)/, "");
+    q = Object.fromEntries(u.searchParams);
+  }
+  return { data: out, included };
+}
+
+const listDoc = z.object({ data: z.unknown(), included: z.array(resource).optional() });
+const isDone = (a: Record<string, unknown>) => a.status === "complete" || a.status === "completed";
+
+/** Open chore → due instant / priority from its scheduled day (date-only chores sort by day). */
+function choreDue(a: Record<string, unknown>, ctx: AdapterContext) {
+  const day = String(a.start ?? ctx.today).slice(0, 10);
+  const time = a.start_time ? String(a.start_time).slice(0, 5) : null;
+  const dueAt = time ? iso(localTimeToInstant(day, time, ctx.timezone)) : undefined;
+  if (dueAt) return { dueAt, priorityReason: classifyInstant(dueAt, ctx) };
+  const priorityReason = day < ctx.today ? ("overdue" as const) : day > ctx.today ? ("upcoming" as const) : ("today" as const);
+  return { dueAt: day === ctx.today ? undefined : iso(localTimeToInstant(day, "23:59", ctx.timezone)), dueIsDate: day !== ctx.today, priorityReason };
+}
+
+/** Whether the Skylight write toggle is on for direct mode (default on; each write is still confirmed). */
+export function skylightWritable() {
+  const r = resolveIntegration("skylight");
+  return r.enabled && (r.config.mode || "hermes") === "direct" && r.config.writes !== "false";
+}
+
+async function readLists(frame: string, ctx: AdapterContext) {
+  const lists = doc.parse(await api(`/frames/${frame}/lists`)).data.map((l) => ({
+    id: l.id,
+    label: String(l.attributes.label ?? l.attributes.name ?? "List"),
+    kind: String(l.attributes.kind ?? "to_do"),
+  }));
+  const items: NextAction[] = [];
+  // A household has a handful of lists: read them a few at a time to stay polite.
+  for (let i = 0; i < lists.length; i += 3) {
+    const docs = await Promise.all(lists.slice(i, i + 3).map((l) => api(`/frames/${frame}/lists/${l.id}`).then((d) => ({ l, d: listDoc.parse(d) }))));
+    for (const { l, d } of docs) {
+      for (const it of d.included ?? []) {
+        if (it.type && it.type !== "list_item") continue;
+        const a = it.attributes;
+        const done = a.status === "completed" || a.status === "complete" || a.checked === true;
+        items.push(
+          baseAction("skylight", `li:${l.id}:${it.id}`, ctx, STALE, {
+            title: String(a.label ?? "Item"),
+            detail: `Skylight list · ${l.label}`,
+            sourceLabel: `Skylight · ${l.label}`,
+            status: done ? "completed" : "open",
+            priorityReason: "upcoming",
+            updatedAt: String(a.updated_at ?? iso(ctx.now)),
+            href: "https://app.ourskylight.com/",
+            external: true,
+            skylight: { kind: "list_item", listId: l.id, itemId: it.id, listLabel: l.label },
+          }),
+        );
+      }
+    }
+  }
+  return { lists, items };
+}
+
+/**
+ * Direct read (Phase 0, P1 fix): chores for EVERY member over today−7…today+7 with pagination,
+ * completions dated in the household time zone, events for the next 7 days and all lists.
+ * A failed chores read fails the sync (the last snapshot stays, Settings shows the error and the
+ * failure alert fires) instead of reporting "0 chores"; lists/events failures are partial and
+ * reported in `extra.health`.
+ */
+async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
+  const frame = await frameId();
+  const window = readWindow(ctx.today);
+  const prefs = cfg().prefs;
+  const [eventsR, chores, membersR, listsR] = await Promise.allSettled([
+    api(`/frames/${frame}/calendar_events`, { date_min: ctx.today, date_max: addDays(ctx.today, WINDOW_DAYS + 1), timezone: ctx.timezone }).then((d) =>
+      doc.parse(d),
+    ),
+    collect(`/frames/${frame}/chores`, { after: window.from, before: window.to, timezone: ctx.timezone, include_late: "true" }),
+    listMembers(frame),
+    readLists(frame, ctx),
+  ]);
+  if (chores.status === "rejected") throw chores.reason;
+  // Configured member ids classify without names; auto-matching needs the list.
+  if (membersR.status === "rejected" && !prefs.members.length) throw membersR.reason;
+  const members = membersR.status === "fulfilled" ? membersR.value : [];
+  const failed = [...(eventsR.status === "rejected" ? ["events"] : []), ...(listsR.status === "rejected" ? ["lists"] : [])];
+  for (const r of [eventsR, listsR]) if (r.status === "rejected") console.warn("[jarvis] skylight partial read failed:", (r.reason as Error)?.message);
+
+  const mine = await ownerMembers(members, prefs.members);
+  const groups = groupMemberIds(members, prefs);
+  const events: CalendarEvent[] = (eventsR.status === "fulfilled" ? eventsR.value.data : [])
+    .map((e): CalendarEvent | null => {
+      const a = e.attributes;
+      const startsAt = String(a.starts_at ?? "");
+      if (!startsAt) return null;
+      const allDay = Boolean(a.all_day);
+      const endsAt = a.ends_at ? (allDay ? String(a.ends_at).slice(0, 10) : new Date(String(a.ends_at)).toISOString()) : undefined;
+      return {
+        id: `skylight:${e.id}`,
+        title: String(a.summary ?? "(untitled)"),
+        startsAt: allDay ? startsAt.slice(0, 10) : new Date(startsAt).toISOString(),
+        endsAt,
+        allDay,
+        location: a.location ? String(a.location) : undefined,
+        source: "skylight" as const,
+        href: "https://app.ourskylight.com/",
+        skylight: {
+          eventId: e.id,
+          description: a.description ? String(a.description) : undefined,
+          editable: a.editable !== false && a.read_only !== true && !a.rrule && !a.recurring,
+          calendarId: a.calendar_id ? String(a.calendar_id) : undefined,
+          sourceCalendarId: a.source_calendar_id != null ? String(a.source_calendar_id) : undefined,
+        },
+      };
+    })
+    .filter((e): e is CalendarEvent => Boolean(e))
+    .sort((x, y) => x.startsAt.localeCompare(y.startsAt));
+
+  const seen = new Set<string>();
+  const actions: NextAction[] = [];
+  for (const c of chores.value.data) {
+    if (seen.has(c.id) || !keepChore(c.attributes, window, ctx.timezone)) continue;
+    seen.add(c.id);
+    const a = c.attributes;
+    const categoryId = choreCategory(c.relationships);
+    const who = classifySkylightChore({ categoryId, upForGrabs: a.up_for_grabs === true }, members, mine, groups);
+    const done = isDone(a);
+    const due = done ? { dueAt: undefined, priorityReason: "today" as const } : choreDue(a, ctx);
+    const recurring = a.recurring === true || /-\d{4}-\d{2}-\d{2}/.test(c.id);
+    actions.push(
+      baseAction("skylight", c.id, ctx, STALE, {
+        title: `${a.emoji_icon ? `${a.emoji_icon} ` : ""}${String(a.summary ?? "Chore")}`,
+        detail: who.kind === "up_for_grabs" ? "Skylight chore · up for grabs" : who.name ? `Skylight chore · ${who.name}` : "Skylight chore",
+        ...choreState(done, due.dueAt, ctx),
+        ...due,
+        sourceLabel: who.kind === "up_for_grabs" ? "Skylight · Up for grabs" : "Skylight · Chores",
+        assignee: who.kind === "mine" ? { kind: "mine", name: who.name } : who,
+        skylight: {
+          kind: "chore",
+          choreId: c.id,
+          categoryId,
+          recurring,
+          ...(recurring && a.start ? { instanceDate: String(a.start).slice(0, 10) } : {}),
+          ...(recurring && a.start_time ? { instanceTime: String(a.start_time).slice(0, 5) } : {}),
+          ...(done ? { completedOn: choreDoneDay(a, ctx.timezone) } : {}),
+        },
+      }),
+    );
+  }
+  // Counts stay open-only (attention, alerts, "N open chores"); done chores are counted apart.
+  const open = actions.filter((x) => x.status === "open");
+  const doneList = actions.filter((x) => x.status === "completed");
+  const counts = {
+    mine: open.filter((x) => x.assignee?.kind === "mine").length,
+    upForGrabs: open.filter((x) => x.assignee?.kind === "up_for_grabs").length,
+    others: open.filter((x) => x.assignee?.kind === "other").length,
+    // Not shown on Home/Today by the "whose tasks" prefs (still on the Skylight page under Everyone).
+    hidden: open.filter((x) => x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })).length,
+    completedToday: doneList.filter((x) => x.skylight?.kind === "chore" && x.skylight.completedOn === ctx.today).length,
+    completedWindow: doneList.length,
+  };
+  const lists = listsR.status === "fulfilled" ? listsR.value : { lists: [], items: [] };
+  return {
+    actions,
+    events,
+    extra: {
+      via: "direct",
+      counts,
+      window,
+      members: members.map((m) => ({ id: m.id, name: m.name })),
+      mine,
+      lists: lists.lists,
+      listItems: lists.items,
+      writable: skylightWritable(),
+      // Home/Today keep the "whose tasks" prefs (mine + up for grabs) and today's completions only.
+      homeHidden: actions
+        .filter((x) =>
+          x.status === "completed"
+            ? x.skylight?.kind === "chore" && x.skylight.completedOn !== ctx.today
+            : Boolean(x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })),
+        )
+        .map((x) => x.id),
+      health: { ok: failed.length === 0, failed },
+      // Unconfigured and no unique name match: Settings asks the owner to pick (extra.needsMember).
+      needsMember: mine.length === 0 && members.length > 0,
+    },
+  };
+}
+
 export const skylightAdapter: SourceAdapter = {
   source: "skylight",
   staleAfterMs: STALE,
   async fetch(ctx: AdapterContext) {
     if (cfg().mode === "hermes") return fetchViaHermes(ctx);
-    const frame = await frameId();
-    const until = localDate(ctx.now.getTime() + 7 * DAY, ctx.timezone);
-    const [eventsDoc, choresDoc, members] = await Promise.all([
-      api(`/frames/${frame}/calendar_events`, { date_min: ctx.today, date_max: until, timezone: ctx.timezone }).then((d) => doc.parse(d)),
-      api(`/frames/${frame}/chores`, { after: ctx.today, before: ctx.today, include_late: "true" })
-        .then((d) => doc.parse(d))
-        .catch(() => ({ data: [] as z.infer<typeof resource>[] })),
-      // Configured member ids filter without names; auto-matching needs the list, so a failure then
-      // fails the sync (keeping the last filtered snapshot) instead of showing everyone's chores.
-      listMembers(frame).catch((err) => {
-        if (cfg().prefs.members.length) return [] as SkylightMember[];
-        throw err;
-      }),
-    ]);
-    const prefs = cfg().prefs;
-    const mine = await ownerMembers(members, prefs.members);
-    const effective = { ...prefs, members: mine };
-    const groups = groupMemberIds(members, prefs);
-    let hidden = 0;
-    const events: CalendarEvent[] = eventsDoc.data
-      .map((e) => {
-        const a = e.attributes;
-        const startsAt = String(a.starts_at ?? "");
-        if (!startsAt) return null;
-        return {
-          id: `skylight:${e.id}`,
-          title: String(a.summary ?? "(untitled)"),
-          startsAt: a.all_day ? startsAt.slice(0, 10) : new Date(startsAt).toISOString(),
-          endsAt: a.ends_at ? String(a.ends_at) : undefined,
-          allDay: Boolean(a.all_day),
-          location: a.location ? String(a.location) : undefined,
-          source: "skylight" as const,
-          href: "https://app.ourskylight.com/",
-        };
-      })
-      .filter((e): e is NonNullable<typeof e> => Boolean(e));
-    const actions: NextAction[] = choresDoc.data
-      .filter((c) => keepChore(c.attributes, ctx.today))
-      .map((c) => ({
-        c,
-        who: classifySkylightChore({ categoryId: choreCategory(c.relationships), upForGrabs: c.attributes.up_for_grabs === true }, members, mine, groups),
-      }))
-      .filter(({ c, who }) => {
-        const keep = keepAssigned(who, effective);
-        if (!keep && c.attributes.status !== "complete") hidden++;
-        return keep;
-      })
-      .map(({ c, who }) => {
-        const a = c.attributes;
-        const due = a.start_time ? iso(localTimeToInstant(String(a.start ?? ctx.today), String(a.start_time), ctx.timezone)) : undefined;
-        return baseAction("skylight", c.id, ctx, STALE, {
-          title: `${a.emoji_icon ? `${a.emoji_icon} ` : ""}${String(a.summary ?? "Chore")}`,
-          detail: who.kind === "up_for_grabs" ? "Skylight chore · up for grabs" : who.name ? `Skylight chore · ${who.name}` : "Skylight chore",
-          ...choreState(a.status === "complete", due, ctx),
-          sourceLabel: who.kind === "up_for_grabs" ? "Skylight · Up for grabs" : "Skylight · Chores",
-          assignee: who.kind === "mine" ? { kind: "mine", name: who.name } : who,
-        });
-      });
-    // Counts stay open-only (attention, alerts, "N open chores"); done chores are counted apart.
-    const open = actions.filter((x) => x.status === "open");
-    const counts = {
-      mine: open.filter((x) => x.assignee?.kind === "mine").length,
-      upForGrabs: open.filter((x) => x.assignee?.kind === "up_for_grabs").length,
-      others: open.filter((x) => x.assignee?.kind === "other").length,
-      hidden,
-      completedToday: actions.length - open.length,
-    };
-    // Unconfigured and no unique name match: Settings asks the owner to pick (extra.needsMember).
-    return { actions, events, extra: { via: "direct", counts, needsMember: mine.length === 0 && members.length > 0 } };
+    return fetchDirect(ctx);
   },
   async test() {
     if (cfg().mode === "hermes") {

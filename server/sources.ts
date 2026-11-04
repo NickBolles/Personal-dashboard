@@ -225,6 +225,17 @@ export function nextEvent(events: CalendarEvent[], ctx: AdapterContext): Calenda
     })[0];
 }
 
+/**
+ * Skylight reads every member over ±7 days (the Skylight page filters at view time); Home keeps
+ * the "whose tasks" prefs and only today's completions (`extra.homeHidden`, direct mode).
+ */
+export function homeScopedSkylight(r: SourceResult): SourceResult {
+  const hidden = r.data?.extra?.homeHidden;
+  if (!r.data || !Array.isArray(hidden) || !hidden.length) return r;
+  const drop = new Set(hidden as string[]);
+  return { ...r, data: { ...r.data, actions: r.data.actions.filter((a) => !drop.has(a.id)) } };
+}
+
 export async function collectSources(opts: { live: boolean; sources?: AdapterSource[] } = { live: true }) {
   const ctx = adapterContext();
   const list = opts.sources ?? ACTION_SOURCES;
@@ -249,7 +260,10 @@ export async function homeSelection(user: Viewer, opts: { live: boolean }): Prom
   const visible = ACTION_SOURCES.filter((s) => sourceVisible(user, s));
   const collected = await collectSources({ live: opts.live, sources: visible });
   const ctx = collected.ctx;
-  const results = collected.results.map((r) => scopeResult(user, r)!).filter(Boolean);
+  const results = collected.results
+    .map((r) => scopeResult(user, r)!)
+    .filter(Boolean)
+    .map((r) => (r.status.source === "skylight" ? homeScopedSkylight(r) : r));
   // Work is Jarvis' own per-person data: computed here (local, no fetch) for people with work.use.
   const all = [...results.flatMap((r) => r.data?.actions ?? []), ...(can(user, "work.use") ? workHomeActionsFor(user.id, ctx) : [])];
   const byKey = Object.fromEntries(results.map((r) => [r.status.source, r])) as Record<ActionSource, SourceResult>;
