@@ -39,7 +39,6 @@ const PAGES = [
   "/areas/dashboard",
   "/areas/map",
   "/areas/activity",
-  "/map",
   "/decisions",
   "/capture",
   "/settings/ai",
@@ -81,7 +80,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/finance/plan",
     "/workflows",
     "/areas/activity",
-    "/map",
+    "/areas",
     "/decisions",
   ]) {
     await page.goto(path);
@@ -497,7 +496,7 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
 
-  await page.goto("/map");
+  await page.goto("/areas");
   const card = page.getByTestId("map-area-card").filter({ hasText: `Zoom sandpiper ${nonce}` });
   await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();
   const pane = page.getByTestId("coordinator-pane");

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { addDays, daysBetween } from "@/lib/time";
+import { daysBetween } from "@/lib/time";
 import { SectionHeader } from "@/components/ui/kit";
 import {
   Badge,
@@ -47,7 +47,9 @@ import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
 import { NEW_WORK_EVENT } from "@/components/navigation/commands";
 import { useShowArchived } from "@/lib/client/show-archived";
 import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
-import { TodayView, useInbox } from "@/components/work/today";
+import { useInbox } from "@/components/work/today";
+import { MapView } from "@/components/map/MapView";
+import "@/components/map/map.css";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
@@ -166,7 +168,7 @@ export function WorkView({
     },
   );
 
-  const go = (next: View) => {
+  const go = (next: View, opts?: { push?: boolean }) => {
     setView(next);
     const url = new URL(window.location.href);
     url.searchParams.delete("item");
@@ -174,7 +176,9 @@ export function WorkView({
     url.searchParams.delete("do");
     if (next.kind === "item") url.searchParams.set("item", next.id);
     else if (next.kind !== "today") url.searchParams.set("view", next.kind);
-    window.history.replaceState(null, "", url);
+    // Opening an area from the overview pushes, so Back returns to the overview.
+    if (opts?.push) window.history.pushState({ jarvisAreas: true }, "", url);
+    else window.history.replaceState(null, "", url);
     // Phones: the content sits above the tree, so bring it into view.
     if (next.kind !== "tree" && window.matchMedia?.("(max-width: 1023px)").matches) document.getElementById("work-content")?.scrollIntoView({ block: "start" });
   };
@@ -184,9 +188,18 @@ export function WorkView({
     if (it?.kind === "conversation" && it.sessionId && canChat) openConversation(it.sessionId);
     else go({ kind: "item", id });
   };
-  const openWith = (id: string, action?: string) => go({ kind: "item", id, action });
 
-  const wide = useWide();
+  // Back/Forward after opening an area from the overview: follow the URL.
+  useEffect(() => {
+    const onPop = () => {
+      const u = new URL(window.location.href);
+      const id = u.searchParams.get("item");
+      const v = u.searchParams.get("view");
+      setView(id ? { kind: "item", id } : v === "tree" ? { kind: "tree" } : { kind: "today" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
@@ -270,11 +283,9 @@ export function WorkView({
         ) : null}
         <div className={selectMode ? "lg:hidden" : undefined}>
           {view.kind === "today" ? (
-            <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
-              <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-                <TodayView onOpen={openWith} onInbox={() => router.push("/inbox")} />
-              </div>
-              {wide ? <TodayRail items={list} onSelect={select} /> : null}
+            // "Map is Areas": the landing is the portfolio overview; a card opens its area here, in place.
+            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+              <MapView onOpen={(id) => go({ kind: "item", id }, { push: true })} />
             </div>
           ) : view.kind === "tree" ? (
             <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
@@ -394,42 +405,6 @@ export function WorkView({
   );
 }
 
-const OPEN_STATUSES = new Set<WorkStatus>(["captured", "exploring", "ready", "in_progress", "in_review", "awaiting_validation", "ready_to_settle", "reopened"]);
-
-/** Today's context rail (wide screens): what's due soon, what's parked, and the keys. Read from the tree, no extra request. */
-function TodayRail({ items, onSelect }: { items: WorkItem[]; onSelect: (id: string) => void }) {
-  const today = todayIso();
-  const soonLimit = addDays(today, 14);
-  const live = items.filter((i) => !i.archived && i.parentId !== null);
-  const soon = live
-    .filter((i) => OPEN_STATUSES.has(i.status) && i.targetDate && i.targetDate >= today && i.targetDate <= soonLimit)
-    .sort((a, b) => (a.targetDate! < b.targetDate! ? -1 : 1))
-    .slice(0, 6);
-  const parked = live.filter((i) => i.status === "on_hold").slice(0, 5);
-  const row = (i: WorkItem, meta: string) => (
-    <li key={i.id} className="flex items-baseline justify-between gap-2 py-1">
-      <button type="button" className="min-w-0 truncate text-left text-[13px] text-accent hover:underline" onClick={() => onSelect(i.id)}>
-        {i.title}
-      </button>
-      <span className="shrink-0 text-xs text-muted tabular-nums">{meta}</span>
-    </li>
-  );
-  return (
-    <aside aria-label="Today context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5">
-      <Block label="Due in the next 14 days">
-        {soon.length ? <ul>{soon.map((i) => row(i, shortDate(i.targetDate!)))}</ul> : <p className="text-[13px] text-muted">Nothing due soon.</p>}
-      </Block>
-      <Block label="On hold">{parked.length ? <ul>{parked.map((i) => row(i, ""))}</ul> : <p className="text-[13px] text-muted">Nothing parked.</p>}</Block>
-      <Block label="Keys">
-        <p className="text-[13px] leading-6 text-muted">
-          <kbd className="wk-kbd">Ctrl K</kbd> jump or do · <kbd className="wk-kbd">/</kbd> search · <kbd className="wk-kbd">↑</kbd>
-          <kbd className="wk-kbd">↓</kbd> tree · <kbd className="wk-kbd">←</kbd>
-          <kbd className="wk-kbd">→</kbd> fold
-        </p>
-      </Block>
-    </aside>
-  );
-}
 
 /**
  * The context rails need room: they only exist when the centre column keeps at

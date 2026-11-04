@@ -81,7 +81,7 @@ test("coordinator pane: Catch me up composes the prompt but sends nothing until 
     if (r.method() === "POST" && /\/api\/hermes\/sessions/.test(r.url())) sent.push(r.url());
   });
 
-  await page.goto("/map");
+  await page.goto("/areas");
   const card = page.getByTestId("map-area-card").filter({ hasText: `Dunlin shoal ${nonce}` });
   await expect(card).toBeVisible();
   await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();

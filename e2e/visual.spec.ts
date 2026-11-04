@@ -1180,7 +1180,7 @@ for (const scheme of ["light", "dark"] as const) {
 /** Work from Jarvis: /map overview + drill-down and the Decisions inbox, from the demo fixture. */
 for (const scheme of ["light", "dark"] as const) {
   for (const [name, path, h1] of [
-    ["map", "/map", "Map"],
+    ["map", "/areas", "Areas"],
     ["decisions", "/decisions", "Needs you"],
   ] as const) {
     test(`visual: ${name} (${scheme})`, async ({ page }) => {
@@ -1220,8 +1220,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
     let sent = 0;
     await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "POST" ? (sent++, route.abort()) : route.fallback()));
-    await page.goto("/map");
-    await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
+    await page.goto("/areas");
+    await expect(page.getByRole("heading", { level: 1, name: "Areas" })).toBeVisible();
     const card = page.getByTestId("map-area-card").filter({ hasText: "Jarvis" });
     await expect(card.getByTestId("agents-strip")).toBeVisible();
     await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();

@@ -42,11 +42,11 @@ const PETALS: Petal[] = [
     icon: "↗",
     label: "Go to",
     sub: [
-      { cmd: "work.today", label: "Today" },
+      { cmd: "work.today", label: "Areas" },
       { cmd: "work.inbox", label: "Inbox" },
       { cmd: "work.timeline", label: "Timeline" },
       { cmd: "work.dashboard", label: "Dashboard" },
-      { cmd: "work.map", label: "Map" },
+      { cmd: "work.map", label: "Dependency map" },
       { cmd: "go.home", label: "Today" },
       { cmd: "go.chat", label: "Hermes" },
       { cmd: "go.alerts", label: "Alerts" },

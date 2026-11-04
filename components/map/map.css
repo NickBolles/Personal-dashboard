@@ -201,3 +201,45 @@ details[open] > .mp-sum::before {
     padding-bottom: 6px;
   }
 }
+
+/* /areas landing: area cards + a right coordination column (Chief of staff, Needs you) at ≥1280. */
+.mp-land {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+@media (min-width: 1280px) {
+  .mp-land {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    align-items: start;
+    gap: 16px;
+  }
+  .mp-land-side {
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 12px;
+  }
+}
+.mp-land-side > [data-testid="needs-you"] {
+  margin-bottom: 0;
+}
+.mp-cos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card, 12px);
+  background: var(--surface);
+}
+.mp-cos[data-state="set"] {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+}
+a.mp-card {
+  color: inherit;
+  text-decoration: none;
+}
