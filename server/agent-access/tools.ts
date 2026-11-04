@@ -14,7 +14,7 @@ import { fileConversation } from "@/server/work/conversations";
 import { noteIndexedSession } from "@/server/work/conversation-index";
 import { adoptSession } from "@/integrations/hermes/service";
 import { getAgentSettings } from "@/server/agents/routing";
-import { AGENT_RUN_STATES } from "@/lib/agent-runs";
+import { AGENT_RUN_STATES, isStalled, parseRunChildren, type AgentRunState } from "@/lib/agent-runs";
 import { STATUS_LABELS, WORK_STATUSES, isContainer, parseGithubUrl, type WorkItem } from "@/lib/work";
 import type { AgentScope } from "@/lib/agent-access";
 import type { AgentPrincipal } from "./tokens";
@@ -31,6 +31,20 @@ import type { AgentPrincipal } from "./tokens";
 
 const id = z.string().trim().min(1).max(64);
 const text = (max: number) => z.string().trim().max(max);
+/** Hermes session / delegation ids: opaque handles, never fetched. */
+const handle = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[\w.:@\-/]+$/, "letters, digits and . : @ - / _ only");
+/** A transcript path on the agent's host: shown as copyable text only (Jarvis never opens it). */
+const pathText = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .regex(/^[^\u0000-\u001f\u007f]+$/, "no control characters");
 
 /** Statuses an agent may set. Settling / abandoning / superseding is the owner's call. */
 export const AGENT_STATUSES = WORK_STATUSES.filter((s) => s !== "settled" && s !== "abandoned" && s !== "superseded");
@@ -171,7 +185,20 @@ export const TOOLS: ToolDef[] = [
         .orderBy(desc(schema.agentRuns.updatedAt))
         .limit(10)
         .all()
-        .map((r) => ({ runId: r.id, title: r.title, profile: r.profile, state: r.state, summary: r.summary, prUrl: r.prUrl, updatedAt: r.updatedAt }));
+        .map((r) => ({
+          runId: r.id,
+          title: r.title,
+          profile: r.profile,
+          state: r.state,
+          stalled: isStalled({ state: r.state as AgentRunState, updatedAt: r.updatedAt }),
+          summary: r.summary,
+          prUrl: r.prUrl,
+          hermesSessionId: r.hermesSessionId,
+          delegationId: r.delegationId,
+          transcriptPath: r.transcriptPath,
+          children: parseRunChildren(r.childrenJson),
+          updatedAt: r.updatedAt,
+        }));
       const activity = listActivity(agent.user, { item: i.id, limit: 10 }).items.map((a) => ({
         at: a.at,
         actor: a.via ? `@${a.via}` : a.actor.name,
@@ -371,13 +398,34 @@ export const TOOLS: ToolDef[] = [
   }),
   tool({
     name: "jarvis_run_start",
-    description: "Register an agent run (e.g. a delegated sub-agent) on a work item; it shows in the item's Agent panel. Returns runId for jarvis_run_update.",
+    description:
+      "Register an agent run (e.g. a delegated sub-agent) on a work item; it shows in the item's Agent panel and the Agents strip. Pass delegationId (your delegate_task/batch id) so a retry returns the same runId, plus the sub-agent's hermesSessionId and transcriptPath when known. Send jarvis_run_update at least every 30 min while it runs, or the run shows as Stalled. Returns runId.",
     scope: "runs.write",
-    input: z.object({ itemId: id, title: text(200).min(1), hermesSessionId: z.string().trim().max(200).optional() }).strict(),
-    run: ({ itemId, title, hermesSessionId }, { agent, correlationId }) => {
+    input: z
+      .object({
+        itemId: id,
+        title: text(200).min(1),
+        hermesSessionId: handle.optional(),
+        delegationId: handle.optional(),
+        transcriptPath: pathText.optional(),
+      })
+      .strict(),
+    run: ({ itemId, title, hermesSessionId, delegationId, transcriptPath }, { agent, correlationId }) => {
       const item = visible(agent.user.id, itemId);
       if (item.parentId === null || item.kind === "conversation")
         throw new HttpError(400, "bad_item", "Record runs on a project or item, not an area or conversation");
+      if (delegationId) {
+        // Idempotent per (agent profile, delegation): a retried start returns the run it already made.
+        const prior = getDb()
+          .select({ id: schema.agentRuns.id, itemId: schema.agentRuns.itemId })
+          .from(schema.agentRuns)
+          .where(and(eq(schema.agentRuns.userId, agent.user.id), eq(schema.agentRuns.profile, agent.profile), eq(schema.agentRuns.delegationId, delegationId)))
+          .get();
+        if (prior) {
+          if (prior.itemId !== itemId) throw new HttpError(409, "delegation_taken", "That delegationId is already registered on another item");
+          return { runId: prior.id, existing: true };
+        }
+      }
       const runId = newId("arun");
       const at = new Date().toISOString();
       getDb().transaction((tx) => {
@@ -391,6 +439,8 @@ export const TOOLS: ToolDef[] = [
             title,
             state: "running",
             hermesSessionId: hermesSessionId ?? null,
+            delegationId: delegationId ?? null,
+            transcriptPath: transcriptPath ?? null,
             startedAt: at,
             updatedAt: at,
           })
@@ -406,10 +456,23 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_run_update",
     description:
-      "Update a run you started: state running | waiting | done | failed, a short summary, and the PR URL. A done/failed update is posted to the item's Activity.",
+      "Update a run you started: state running | waiting | done | failed, a short summary, the PR URL, the sub-agent's hermesSessionId/transcriptPath, and children (one {title, state, summary} per sub-agent of a delegation batch; replaces the list). Any update counts as a heartbeat. A done/failed update is posted to the item's Activity. Never settles the item.",
     scope: "runs.write",
-    input: z.object({ runId: id, state: z.enum(AGENT_RUN_STATES), summary: text(2000).optional(), prUrl: z.string().trim().max(500).optional() }).strict(),
-    run: ({ runId, state, summary, prUrl }, { agent, correlationId }) => {
+    input: z
+      .object({
+        runId: id,
+        state: z.enum(AGENT_RUN_STATES),
+        summary: text(2000).optional(),
+        prUrl: z.string().trim().max(500).optional(),
+        hermesSessionId: handle.optional(),
+        transcriptPath: pathText.optional(),
+        children: z
+          .array(z.object({ title: text(200).min(1), state: z.enum(AGENT_RUN_STATES), summary: text(1000).optional() }).strict())
+          .max(20)
+          .optional(),
+      })
+      .strict(),
+    run: ({ runId, state, summary, prUrl, hermesSessionId, transcriptPath, children }, { agent, correlationId }) => {
       const db = getDb();
       const run = db
         .select()
@@ -433,6 +496,9 @@ export const TOOLS: ToolDef[] = [
             updatedAt: at,
             ...(summary !== undefined ? { summary } : {}),
             ...(pr !== undefined ? { prUrl: pr } : {}),
+            ...(hermesSessionId !== undefined ? { hermesSessionId } : {}),
+            ...(transcriptPath !== undefined ? { transcriptPath } : {}),
+            ...(children !== undefined ? { childrenJson: JSON.stringify(children) } : {}),
             finishedAt: terminal ? at : null,
           })
           .where(eq(schema.agentRuns.id, runId))

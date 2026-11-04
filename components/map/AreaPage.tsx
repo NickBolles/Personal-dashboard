@@ -13,6 +13,7 @@ import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { whoLabel } from "@/lib/agent-runs";
 import { Branch, MAP_KEY, type MapResponse } from "./MapView";
+import { useShowArchived } from "@/lib/client/show-archived";
 import "./map.css";
 
 const BUCKET_TONE: Record<MapBucket, string> = { owner: "wn", inflight: "ac", next: "inf", live: "ok", backlog: "neutral", done: "ok" };
@@ -41,7 +42,12 @@ type Card = { item: WorkItem; counts: BucketCounts; total: number; next: WorkIte
  * Data: the same /api/work/overview read as the /areas landing.
  */
 export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id: string) => void }) {
-  const q = useQuery({ queryKey: MAP_KEY, queryFn: () => api.get<MapResponse>("/api/work/overview") });
+  // Show archived (#183): an archived area's projects only come back with ?archived=1.
+  const [archived] = useShowArchived();
+  const q = useQuery({
+    queryKey: archived ? [...MAP_KEY, "archived"] : MAP_KEY,
+    queryFn: () => api.get<MapResponse>(`/api/work/overview${archived ? "?archived=1" : ""}`),
+  });
   const runs = useAgentRuns().data;
   const [view, setView] = useState<"cards" | "tree">("cards");
   const [op, setOp] = useState<UndoOp | null>(null);

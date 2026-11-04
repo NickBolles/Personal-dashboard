@@ -7,6 +7,7 @@ import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { noticesVisual } from "./fixtures/coordinator-chat";
+import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
 
 const PAGES = [
   "/home",
@@ -589,6 +590,61 @@ test("a11y + 200% text: area page (project cards, tree, coordinator column/sheet
   await page.getByRole("group", { name: "Area view" }).getByRole("button", { name: "Tree" }).click();
   await expect(page.getByTestId("area-tree").getByText("depends on")).toBeVisible();
   await axe("area tree");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
+});
+
+test("a11y + 200% text: item Agent panel with a delegation (children, copyable transcript, Stalled)", async ({ page }) => {
+  const d = itemDetailVisual;
+  const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  const base = { profile: "chiefofstaff", summary: null, prUrl: null, hermesSessionId: null, delegationId: null, transcriptPath: null, children: [] };
+  const info = {
+    itemId: d.item.id,
+    areaId: "wk_home",
+    title: d.item.title,
+    who: { kind: "agent", name: "chiefofstaff" },
+    live: "running",
+    liveAt: ago(2),
+    sessionId: null,
+    runs: 2,
+    prs: [],
+    report: null,
+    progress: null,
+    agentRuns: [
+      {
+        ...base,
+        id: "arun_a1",
+        title: "Shelf bracket research with a deliberately long title that has to wrap",
+        state: "running",
+        summary: "Two of three sub-agents done.",
+        delegationId: "deleg_shelf_0123456789abcdef",
+        hermesSessionId: "20261104_120000_abcdef",
+        transcriptPath: "/opt/data/delegations/deleg_shelf_0123456789abcdef/a-very-long-transcript-file-name.md",
+        children: [{ title: "Bracket load ratings", state: "done", summary: "75 lb per pair on studs." }],
+        startedAt: ago(20),
+        updatedAt: ago(2),
+      },
+      { ...base, id: "arun_a2", title: "Paint colour options", state: "running", startedAt: ago(120), updatedAt: ago(90) },
+    ],
+  };
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: { [d.item.id]: info }, active: [info] } }));
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+  await page.route(new RegExp(`/api/work/items/${d.item.id}$`), (route) => route.fulfill({ json: d }));
+  await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemo, items: areasVisual.items, links: {}, relations: {} } }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+  await page.goto(`/areas?item=${d.item.id}`);
+  const panel = page.getByTestId("item-agent-panel");
+  await expect(panel.getByTestId("agent-stalled")).toHaveCount(1);
+  const r = await new AxeBuilder({ page: page as never })
+    .include('[data-testid="item-agent-panel"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(
+    r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+  ).toEqual([]);
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });

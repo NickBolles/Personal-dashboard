@@ -33,6 +33,7 @@ test("item agent panel: who, live state from mock runs, PRs with CI/merge/deploy
       title: `Curlew relay ${nonce}`,
       who: { kind: "agent", name: "devchief" },
       live,
+      ...(live === "waiting" ? { approval: true } : {}),
       liveAt: at,
       sessionId: "sess_morning",
       runs: 2,

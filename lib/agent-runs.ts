@@ -13,7 +13,7 @@ export type RunLive = (typeof RUN_LIVE)[number];
 
 export const RUN_LIVE_LABEL: Record<RunLive, string> = {
   running: "Running",
-  waiting: "Waiting for approval",
+  waiting: "Waiting",
   failed: "Failed",
   finished: "Finished",
   idle: "No runs yet",
@@ -63,7 +63,13 @@ export function liveOfJob(state: string): RunLive {
   }
 }
 
-export type RunSample = { live: RunLive; at: string; sessionId?: string | null; source: "chat" | "job" | "agent" };
+/** `approval` = the run is paused on an actual pending approval (only then does "waiting" read "Waiting for approval"). */
+export type RunSample = { live: RunLive; at: string; sessionId?: string | null; source: "chat" | "job" | "agent"; approval?: boolean };
+
+/** Live label: "Waiting for approval" only when there is a real pending approval, else plain "Waiting". */
+export function liveLabel(live: RunLive, approval?: boolean): string {
+  return live === "waiting" && approval ? "Waiting for approval" : RUN_LIVE_LABEL[live];
+}
 
 /** Runs an agent registered through Jarvis MCP (jarvis_run_start/update, agent_runs table). */
 export const AGENT_RUN_STATES = ["running", "waiting", "done", "failed"] as const;
@@ -71,6 +77,7 @@ export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
 export function liveOfAgentRun(state: string): RunLive {
   return state === "running" ? "running" : state === "waiting" ? "waiting" : state === "failed" ? "failed" : state === "done" ? "finished" : "idle";
 }
+export type RunChild = { title: string; state: AgentRunState; summary?: string | null };
 export type ExternalRun = {
   id: string;
   title: string;
@@ -80,17 +87,48 @@ export type ExternalRun = {
   prUrl: string | null;
   startedAt: string;
   updatedAt: string;
+  hermesSessionId?: string | null;
+  delegationId?: string | null;
+  transcriptPath?: string | null;
+  children?: RunChild[];
 };
+
+/** A run still "running" with no update for this long is shown as Stalled (badge + Needs you nudge; nothing is changed). */
+export const STALL_AFTER_MIN = 30;
+export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt">, now: number = Date.now()): boolean {
+  if (r.state !== "running") return false;
+  const t = Date.parse(r.updatedAt);
+  return Number.isFinite(t) && now - t > STALL_AFTER_MIN * 60_000;
+}
+export const stalledRuns = (i: Pick<ItemAgentInfo, "agentRuns">, now: number = Date.now()) => (i.agentRuns ?? []).filter((r) => isStalled(r, now));
+
+/** children_json → RunChild[] (bad rows dropped). */
+export function parseRunChildren(raw: string | null | undefined): RunChild[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    if (!Array.isArray(v)) return [];
+    return v.flatMap((c): RunChild[] => {
+      if (!c || typeof c !== "object") return [];
+      const o = c as Record<string, unknown>;
+      if (typeof o.title !== "string" || !(AGENT_RUN_STATES as readonly string[]).includes(o.state as string)) return [];
+      return [{ title: o.title, state: o.state as AgentRunState, summary: typeof o.summary === "string" ? o.summary : null }];
+    });
+  } catch {
+    return [];
+  }
+}
 
 /**
  * One state per item: anything waiting on the owner wins, then anything still
  * running, else the latest finished/failed run decides. No samples = idle.
  */
-export function aggregateRunState(samples: readonly RunSample[]): { live: RunLive; at: string | null; sessionId: string | null } {
+export function aggregateRunState(samples: readonly RunSample[]): { live: RunLive; at: string | null; sessionId: string | null; approval?: boolean } {
   const pick = (live: RunLive) => samples.filter((s) => s.live === live).sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0];
+  const approval = samples.some((s) => s.live === "waiting" && s.approval);
   for (const l of ["waiting", "running"] as const) {
     const s = pick(l);
-    if (s) return { live: l, at: s.at, sessionId: s.sessionId ?? null };
+    if (s) return { live: l, at: s.at, sessionId: s.sessionId ?? null, ...(l === "waiting" && approval ? { approval } : {}) };
   }
   const done = samples.filter((s) => s.live === "failed" || s.live === "finished").sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0];
   return done ? { live: done.live, at: done.at, sessionId: done.sessionId ?? null } : { live: "idle", at: null, sessionId: null };
@@ -137,6 +175,8 @@ export type ItemAgentInfo = {
   title: string;
   who: Who | null;
   live: RunLive;
+  /** a run on this item is paused on an actual pending approval (label "Waiting for approval") */
+  approval?: boolean;
   /** when the deciding run started/finished */
   liveAt: string | null;
   /** the Hermes conversation of the deciding run (opens it) */

@@ -122,3 +122,26 @@
     pointer-events: none;
   }
 }
+
+/* Copyable run handles (transcript path, Hermes session, delegation id). */
+.ar-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.ar-code {
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.ar-children {
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}

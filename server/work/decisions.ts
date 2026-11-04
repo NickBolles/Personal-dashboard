@@ -1,8 +1,9 @@
 import "server-only";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
+import { STALL_AFTER_MIN } from "@/lib/agent-runs";
 import { sortDecisions, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
 import type { WorkItem } from "@/lib/work";
 import { areaIndex, type MapExport, type MapExportNode, areaRollups, bucketOf } from "@/lib/map-rollup";
@@ -105,6 +106,42 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
       });
     }
   }
+  if (can(user, "work.use")) {
+    // Agent runs (MCP) still "running" with no update for STALL_AFTER_MIN: a nudge only, nothing changes.
+    const live = new Map(items.filter((i) => !i.archived).map((i) => [i.id, i]));
+    const cutoff = new Date(Date.now() - STALL_AFTER_MIN * 60_000).toISOString();
+    const stale = db
+      .select({
+        id: schema.agentRuns.id,
+        itemId: schema.agentRuns.itemId,
+        title: schema.agentRuns.title,
+        profile: schema.agentRuns.profile,
+        updatedAt: schema.agentRuns.updatedAt,
+      })
+      .from(schema.agentRuns)
+      .where(and(eq(schema.agentRuns.userId, user.id), eq(schema.agentRuns.state, "running"), lt(schema.agentRuns.updatedAt, cutoff)))
+      .orderBy(desc(schema.agentRuns.updatedAt))
+      .all()
+      // Visibility first, then the cap, so runs on archived items never crowd out live ones.
+      .filter((r) => live.has(r.itemId))
+      .slice(0, 50);
+    const areaOf = stale.length ? areaIndex(items) : null;
+    for (const r of stale) {
+      const item = live.get(r.itemId);
+      if (!item) continue;
+      entries.push({
+        key: `stalled:${r.id}`,
+        kind: "stalled",
+        title: item.title,
+        question: `@${r.profile}'s run "${r.title}" hasn't reported in over ${STALL_AFTER_MIN} min. Check on it; nothing was changed.`,
+        choices: [],
+        href: `/areas?item=${encodeURIComponent(item.id)}`,
+        at: r.updatedAt,
+        itemId: item.id,
+        areaTitle: live.get(areaOf!.get(item.id) ?? "")?.title,
+      });
+    }
+  }
   const sorted = sortDecisions(entries);
   return { entries: sorted, count: sorted.length };
 }
@@ -142,8 +179,8 @@ export type MapResponse = {
 const chatUrl = (sessionId: string) => `/chat/${encodeURIComponent(sessionId)}`;
 
 /** Everything /map renders in one read: items, their links (PRs, boards, chats) and the "Needs you" list. */
-export function mapData(user: CurrentUser): MapResponse {
-  const items = listItems(user.id);
+export function mapData(user: CurrentUser, opts: { includeArchived?: boolean } = {}): MapResponse {
+  const items = listItems(user.id, { includeArchived: opts.includeArchived });
   const raw = linksByItem(items.map((i) => i.id));
   const links: Record<string, MapLink[]> = {};
   for (const [id, ls] of raw) {

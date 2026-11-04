@@ -8,6 +8,7 @@ import {
   AGENT_RUN_STATES,
   deployOf,
   liveOfAgentRun,
+  parseRunChildren,
   type ExternalRun,
   isActive,
   liveOfJob,
@@ -61,7 +62,13 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
         .all())
         runsBySession.set(r.sessionId, [
           ...(runsBySession.get(r.sessionId) ?? []),
-          { live: liveOfRun(r.status), at: r.completedAt ?? r.startedAt, sessionId: r.sessionId, source: "chat" },
+          {
+            live: liveOfRun(r.status),
+            at: r.completedAt ?? r.startedAt,
+            sessionId: r.sessionId,
+            source: "chat",
+            approval: r.status === "waiting_for_approval",
+          },
         ]);
 
   // AI jobs and reports on the items.
@@ -83,7 +90,13 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       .all())
       jobs.set(j.subjectId, [
         ...(jobs.get(j.subjectId) ?? []),
-        { live: liveOfJob(j.state), at: j.finishedAt ?? j.startedAt ?? j.createdAt, sessionId: j.visible ? j.sessionId : null, source: "job" },
+        {
+          live: liveOfJob(j.state),
+          at: j.finishedAt ?? j.startedAt ?? j.createdAt,
+          sessionId: j.visible ? j.sessionId : null,
+          source: "job",
+          approval: j.state === "waiting_approval",
+        },
       ]);
     for (const r of db
       .select({
@@ -120,6 +133,10 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
         prUrl: r.prUrl,
         startedAt: r.startedAt,
         updatedAt: r.updatedAt,
+        hermesSessionId: r.hermesSessionId,
+        delegationId: r.delegationId,
+        transcriptPath: r.transcriptPath,
+        children: parseRunChildren(r.childrenJson),
       });
       external.set(r.itemId, list);
     }
@@ -171,13 +188,15 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       title: i.title,
       who,
       live: agg.live,
+      ...(agg.approval ? { approval: true } : {}),
       liveAt: agg.at,
       sessionId: agg.sessionId ?? ([...(sessions.get(i.id) ?? [])][0] || null),
       runs: samples.length,
       prs,
       report,
       progress: kids.length ? { done: kids.filter((c) => bucketOf(c) === "done").length, total: kids.length } : null,
-      ...(ext.length ? { agentRuns: ext.slice(0, 5) } : {}),
+      // Running runs first (newest first within each group) so a stalled one is never cut by the cap.
+      ...(ext.length ? { agentRuns: [...ext.filter((r) => r.state === "running"), ...ext.filter((r) => r.state !== "running")].slice(0, 5) } : {}),
     };
   }
   const active = Object.values(out)

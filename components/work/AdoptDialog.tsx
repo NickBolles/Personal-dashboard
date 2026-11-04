@@ -30,10 +30,13 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
   const [error, setError] = useState<string | null>(null);
   const q = profile === undefined ? `itemId=${encodeURIComponent(item.id)}` : `profile=${encodeURIComponent(profile)}`;
   const list = useQuery({ queryKey: ["adoptable", q], queryFn: () => api.get<Adoptable>(`/api/hermes/sessions/adoptable?${q}`), retry: false });
-  const current = list.data?.profile ?? null;
+  // #186: an explicit pick wins even while the list is loading or failed; the area's own agent
+  // (no pick) is only known once the list answers, so adopting waits for it.
+  const current: string | null | undefined = profile !== undefined ? (profile === "default" ? null : profile) : list.data ? list.data.profile : undefined;
+  const unresolved = current === undefined;
 
   const adopt = async () => {
-    if (!picked) return;
+    if (!picked || current === undefined) return;
     setBusy(true);
     setError(null);
     try {
@@ -64,7 +67,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
             <Button onClick={() => setPicked(null)} disabled={busy}>
               Back
             </Button>
-            <Button variant="primary" busy={busy} onClick={() => void adopt()} data-autofocus>
+            <Button variant="primary" busy={busy} disabled={unresolved} onClick={() => void adopt()} data-autofocus>
               Adopt and file
             </Button>
           </>
@@ -93,7 +96,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
         <Field id="adopt-profile" label="Agent">
           <select id="adopt-profile" className={inputCls} value={profile ?? current ?? "default"} onChange={(e) => setProfile(e.target.value)}>
             <option value="default">Default (Hermes)</option>
-            {(list.data?.profiles ?? (current ? [current] : [])).map((p) => (
+            {[...new Set([...(list.data?.profiles ?? []), ...(current ? [current] : [])])].map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
@@ -140,7 +143,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
               <input id="adopt-id" className={inputCls} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="20261103_…" />
             </Field>
           </div>
-          <Button type="submit" size="sm" disabled={!paste.trim()}>
+          <Button type="submit" size="sm" disabled={!paste.trim() || unresolved}>
             Next
           </Button>
         </form>

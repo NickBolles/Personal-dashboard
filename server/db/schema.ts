@@ -1745,6 +1745,12 @@ export const agentRuns = sqliteTable(
     summary: text("summary"),
     prUrl: text("pr_url"),
     hermesSessionId: text("hermes_session_id"),
+    /** the coordinator's own handle for the delegation (Hermes delegate_task id/batch); run_start is idempotent on it */
+    delegationId: text("delegation_id"),
+    /** where the sub-agent transcript lives on the agent's host (shown as copyable text, never read by Jarvis) */
+    transcriptPath: text("transcript_path"),
+    /** JSON [{title, state, summary?}] child summaries of a delegation batch (max 20) */
+    childrenJson: text("children_json"),
     startedAt: text("started_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
     finishedAt: text("finished_at"),
