@@ -35,6 +35,7 @@ const CHORES = [
   chore("6", "100", { start: "2026-11-02" }), // overdue
   chore("7", "100", { status: "skipped" }),
   chore("8", "100", { status: "complete", completed_on: "2026-11-04" }),
+  chore("9", "200", { status: "complete", completed_on: "2026-11-04" }), // Will's, done today: not on Home
 ];
 
 function stub() {
@@ -128,7 +129,7 @@ describe("Skylight full read (direct)", () => {
   it("keeps every member's chores (others labelled) and completions from earlier days", async () => {
     const data = await fetchNow();
     const by = new Map(data.actions.map((a) => [a.sourceId, a]));
-    expect([...by.keys()].sort()).toEqual(["1", "2", "3", "4", "5", "6", "8"]);
+    expect([...by.keys()].sort()).toEqual(["1", "2", "3", "4", "5", "6", "8", "9"]);
     expect(by.get("2")!.assignee).toEqual({ kind: "other", name: "Will" });
     expect(by.get("5")!.assignee).toMatchObject({ kind: "up_for_grabs" });
     expect(by.get("3")).toMatchObject({ status: "completed", skylight: { kind: "chore", completedOn: "2026-11-01", categoryId: "100" } });
@@ -138,7 +139,7 @@ describe("Skylight full read (direct)", () => {
     expect(by.get("5")!.priorityReason).toBe("upcoming");
     expect(by.get("1")!.priorityReason).toBe("today");
     expect(data.extra).toMatchObject({
-      counts: { mine: 2, upForGrabs: 1, others: 1, hidden: 1, completedToday: 1, completedWindow: 3 },
+      counts: { mine: 2, upForGrabs: 1, others: 1, hidden: 1, completedToday: 2, completedWindow: 4 },
       window: { from: "2026-10-28", to: "2026-11-11" },
       health: { ok: true, failed: [] },
       needsMember: false,

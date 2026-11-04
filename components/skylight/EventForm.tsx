@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import type { CalendarEvent } from "@/lib/contracts";
 import type { SkylightWriteOp } from "@/lib/skylight-write";
-import { addDays, localDate } from "@/lib/time";
+import { addDays, daysBetween, localDate } from "@/lib/time";
 import { Button, Dialog, Field, inputCls, useOnline } from "@/components/ui";
 import { eventInstant, eventTime, previousEvent } from "./eventFields";
 
@@ -63,7 +63,10 @@ export function EventForm({
             return;
           }
           const startsAt = allDay ? date : eventInstant(date, start, timezone);
-          const endsAt = allDay ? addDays(date, 1) : eventInstant(endDate || date, end, timezone);
+          // An existing multi-day all-day event keeps its span (the form has no end-date control).
+          const prev = event?.allDay ? previousEvent(event) : null;
+          const span = prev ? Math.max(1, daysBetween(prev.startsAt, prev.endsAt)) : 1;
+          const endsAt = allDay ? addDays(date, span) : eventInstant(endDate || date, end, timezone);
           if (Date.parse(endsAt) <= Date.parse(startsAt)) {
             setError("End must be after start.");
             return;

@@ -579,10 +579,11 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
       writable: skylightWritable(),
       // Home/Today keep the "whose tasks" prefs (mine + up for grabs) and today's completions only.
       homeHidden: actions
-        .filter((x) =>
-          x.status === "completed"
-            ? x.skylight?.kind === "chore" && x.skylight.completedOn !== ctx.today
-            : Boolean(x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })),
+        .filter(
+          (x) =>
+            // Whose-tasks prefs apply to open AND completed chores; completions also only for today.
+            Boolean(x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })) ||
+            (x.status === "completed" && x.skylight?.kind === "chore" && x.skylight.completedOn !== ctx.today),
         )
         .map((x) => x.id),
       health: { ok: failed.length === 0, failed },
