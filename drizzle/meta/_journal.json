@@ -253,13 +253,6 @@
       "when": 1793797084724,
       "tag": "0035_agent_run_delegations",
       "breakpoints": true
-    },
-    {
-      "idx": 36,
-      "version": "6",
-      "when": 1793810433769,
-      "tag": "0036_quick_actions",
-      "breakpoints": true
     }
   ]
 }
