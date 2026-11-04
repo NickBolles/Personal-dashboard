@@ -278,7 +278,7 @@ test("raycast palette: axe clean and no overflow at 200% text zoom (root, typed,
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
         label,
       )
       .toEqual([]);
@@ -408,7 +408,7 @@ test("workflow builder, edit and save-chat review: axe clean and no overflow at 
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id),
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
         path,
       )
       .toEqual([]);

@@ -338,7 +338,7 @@ export function HomeView() {
   };
 
   return (
-    <Page>
+    <Page className="@container">
       <header className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="eyebrow" data-dynamic>
@@ -362,7 +362,7 @@ export function HomeView() {
       {data ? <FreshnessStrip sources={data.sources} refreshing={live.isFetching && !live.data} online={online} generatedAt={data.generatedAt} /> : null}
       {live.error && !data ? <ErrorNote error={live.error} retry={() => live.refetch()} /> : null}
 
-      <div className="grid gap-x-6 min-[1100px]:grid-cols-[minmax(0,1fr)_300px]">
+      <div className="grid gap-x-6 @min-[780px]:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <NeedsYouSection id="today-needs-you-h" limit={3} />
           {visible("now") ? (
@@ -466,7 +466,7 @@ function Glance({ data }: { data: HomePayload }) {
   return (
     <section aria-labelledby="glance-h">
       <SectionLabel id="glance-h">Household</SectionLabel>
-      <ul className="jv-feed jv-glance grid sm:max-[1099px]:grid-cols-3">
+      <ul className="jv-feed jv-glance grid @min-[592px]:@max-[779px]:grid-cols-3">
         <li className="min-w-0 px-3.5 py-2.5">
           <h3 className="eyebrow">Next event</h3>
           {data.glance.nextEvent ? (
