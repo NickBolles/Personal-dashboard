@@ -101,17 +101,45 @@ async function refreshWith(refreshToken: string) {
   return t.access_token;
 }
 
-async function api<T>(path: string, query?: Record<string, string>) {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** 429 / 5xx / network: worth one more try. Auth, 404, 409 and 4xx validation errors are not. */
+function retryable(err: unknown) {
+  if (!(err instanceof UpstreamError)) return false;
+  if (err.kind === "unreachable" || err.kind === "timeout") return true;
+  return err.kind === "bad_response" && (err.status === 429 || (err.status ?? 0) >= 500);
+}
+
+/**
+ * One Skylight API call. Reads retry twice on 429/5xx/network (250 ms, 1 s backoff).
+ * Writes (`method` ≠ GET) retry only on 429, which Skylight answers before applying anything.
+ */
+export async function skylightRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, opts: { query?: Record<string, string>; body?: unknown } = {}): Promise<T> {
   const c = cfg();
-  const token = await accessToken();
-  return upstream<T>({
-    source: "Skylight",
-    baseUrl: c.baseUrl,
-    path: `/api${path}`,
-    query,
-    headers: { authorization: `Bearer ${token}`, "skylight-api-version": c.apiVersion },
-    timeoutMs: 10_000,
-  });
+  const delays = [250, 1000];
+  for (let attempt = 0; ; attempt++) {
+    const token = await accessToken();
+    try {
+      return await upstream<T>({
+        source: "Skylight",
+        method,
+        baseUrl: c.baseUrl,
+        path: `/api${path}`,
+        query: opts.query,
+        body: opts.body,
+        // A single version header: duplicate-cased variants get coalesced into an invalid value.
+        headers: { authorization: `Bearer ${token}`, "skylight-api-version": c.apiVersion },
+        timeoutMs: 10_000,
+      });
+    } catch (err) {
+      const again = method === "GET" ? retryable(err) : err instanceof UpstreamError && err.status === 429;
+      if (!again || attempt >= delays.length) throw err;
+      await sleep(delays[attempt]!);
+    }
+  }
+}
+
+async function api<T>(path: string, query?: Record<string, string>) {
+  return skylightRequest<T>("GET", path, { query });
 }
 
 const relOne = z.object({ data: z.object({ id: z.union([z.string(), z.number()]) }).nullish() }).partial();
@@ -170,7 +198,7 @@ async function ownerMembers(members: SkylightMember[], configured: string[]): Pr
   }
 }
 
-async function frameId() {
+export async function frameId() {
   const c = cfg();
   if (c.frameId) return c.frameId;
   const frames = await listFrames();
