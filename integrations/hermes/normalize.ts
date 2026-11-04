@@ -21,7 +21,9 @@ export function normalizeChoices(choices: unknown): ApprovalRequest["choices"] {
 export function normalizeApproval(raw: Record<string, unknown> | null | undefined): ApprovalRequest | undefined {
   if (!raw) return undefined;
   return {
-    requestId: str(raw.request_id),
+    // Legacy run store sends `request_id`; the session-authority run path (Hermes ≥ the durable
+    // session runtime) sends the shared prompt's `prompt_id` instead. Both name the same prompt.
+    requestId: str(raw.request_id) ?? str(raw.prompt_id),
     command: scrub(str(raw.command)),
     description: scrub(str(raw.description)),
     choices: normalizeChoices(raw.choices),
@@ -66,6 +68,9 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
       return { type: "approval.requested", seq, at, ...normalizeApproval(e)! };
     case "approval.responded":
       return { type: "approval.resolved", seq, choice: str(e.choice), requestId: str(e.request_id), at };
+    case "approval.settled":
+      // Session-authority runs announce an answered/withdrawn prompt as `approval.settled`.
+      return { type: "approval.resolved", seq, requestId: str(e.prompt_id) ?? str(e.request_id), at };
     case "run.steered":
       return { type: "steer.queued", seq, at };
     case "run.completed":

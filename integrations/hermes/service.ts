@@ -8,12 +8,12 @@ import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
 import { getOwner, type CurrentUser } from "@/server/auth";
-import { HermesExecutionClient, HermesSessionClient, type HermesConn } from "./client";
+import { HermesExecutionClient, HermesSessionClient, type HermesApprovalBody, type HermesConn } from "./client";
 import { connForProfile } from "@/server/agents/routing";
 import { HermesAguiTranslator } from "@/server/agui/hermes";
 import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
 import { SYNC_SESSION_SOURCE } from "./structured";
-import { RUN_TERMINAL, runEventSchema } from "./types";
+import { RUN_TERMINAL, runEventSchema, type HermesRunStatus } from "./types";
 
 const db = () => getDb();
 
@@ -469,7 +469,7 @@ export async function reconcileRun(runId: string): Promise<RunView> {
   const row = db().select().from(schema.runs).where(eq(schema.runs.runId, runId)).get();
   try {
     const s = await HermesExecutionClient.status(connForRun(row), runId);
-    const approval = s.status === "waiting_for_approval" ? normalizeApproval(s.approval ?? undefined) : undefined;
+    const approval = s.status === "waiting_for_approval" ? normalizeApproval(s.approval ?? firstApprovalPrompt(s)) : undefined;
     const terminal = isTerminal(s.status);
     updateRunRow(runId, {
       status: s.status,
@@ -512,15 +512,57 @@ export async function stopRun(user: CurrentUser, runId: string, correlationId: s
   return { runId, sessionId: row.sessionId, status: status as RunView["status"] };
 }
 
-export async function respondApproval(
-  user: CurrentUser,
-  runId: string,
-  body: { choice: "once" | "session" | "always" | "deny"; requestId?: string },
-  correlationId: string,
-) {
+const firstApprovalPrompt = (s: Pick<HermesRunStatus, "pending_controls">) => (s.pending_controls ?? []).find((p) => p.kind === "approval");
+
+/** The approval prompt a session-authority run is waiting on (`GET /v1/runs/{id}` → `pending_controls`). */
+export function pendingApprovalPrompt(s: Pick<HermesRunStatus, "pending_controls">, requestId?: string) {
+  const prompts = (s.pending_controls ?? []).filter((p) => p.kind === "approval" && typeof p.prompt_id === "string");
+  // A known id answers exactly that prompt, never another one that replaced it. A card without an
+  // id (built before Jarvis read `prompt_id`) may only answer when exactly one prompt is waiting.
+  if (requestId) return prompts.find((p) => p.prompt_id === requestId);
+  return prompts.length === 1 ? prompts[0] : undefined;
+}
+
+/**
+ * The exact `/v1/runs/{id}/approval` body for this Hermes. A session-authority run (status carries
+ * `execution_generation`) only accepts `{ choice, request_id, execution_generation }` — any other key
+ * set is 400 `invalid_params` — and `request_id` must be a pending prompt's `prompt_id`. The legacy run
+ * store takes `{ choice, request_id? }`. Returns null when an authority run has no matching prompt.
+ */
+export function approvalBody(
+  s: Pick<HermesRunStatus, "execution_generation" | "pending_controls">,
+  choice: ApprovalChoice,
+  requestId?: string,
+): HermesApprovalBody | null {
+  if (typeof s.execution_generation !== "number") return requestId ? { choice, request_id: requestId } : { choice };
+  const prompt = pendingApprovalPrompt(s, requestId);
+  if (!prompt) return null;
+  const generation = typeof prompt.execution_generation === "number" ? prompt.execution_generation : s.execution_generation;
+  return { choice, request_id: prompt.prompt_id as string, execution_generation: generation };
+}
+
+type ApprovalChoice = "once" | "session" | "always" | "deny";
+
+export async function respondApproval(user: CurrentUser, runId: string, body: { choice: ApprovalChoice; requestId?: string }, correlationId: string) {
   const row = assertRunOwner(user, runId);
+  const conn = connForRun(row);
   try {
-    const res = await HermesExecutionClient.approve(connForRun(row), runId, { choice: body.choice, request_id: body.requestId });
+    // Read the live run first: the request shape depends on the Hermes run path, and the
+    // authority path needs the current generation + prompt id (an old card may carry neither).
+    const status = await HermesExecutionClient.status(conn, runId);
+    const upstreamBody = approvalBody(status, body.choice, body.requestId);
+    if (!upstreamBody) {
+      updateRunRow(runId, { pendingApproval: null });
+      throw new HttpError(409, "approval_not_pending", "This approval isn't waiting any more — it was answered, expired or the run moved on.");
+    }
+    let res;
+    try {
+      res = await HermesExecutionClient.approve(conn, runId, upstreamBody);
+    } catch (err) {
+      if (err instanceof UpstreamError && err.kind === "conflict")
+        throw new HttpError(409, "approval_not_pending", "This approval isn't waiting any more — it was answered, expired or the run moved on.");
+      throw err;
+    }
     updateRunRow(runId, { pendingApproval: null, status: "running" });
     audit({ actor: user.id, action: "hermes.approval", source: "hermes", sourceRecord: runId, result: "ok", correlationId, detail: body });
     return res;
