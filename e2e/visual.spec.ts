@@ -65,7 +65,9 @@ async function freezeMiddayCT(page: Page) {
   // every card and rewraps rows (CI before ~noon CT). Same CT date either way, so relative day
   // labels ("Due today", "N days ago") don't change.
   const midday = Date.parse(`${ymd}T17:00:00.000Z`);
-  await page.clock.setFixedTime(new Date(Math.min(Date.now(), midday)));
+  const frozen = Math.min(Date.now(), midday);
+  await page.clock.setFixedTime(new Date(frozen));
+  return frozen;
 }
 
 for (const [name, path] of [
@@ -1390,8 +1392,8 @@ const gcQuickActions = [
 ];
 const GC_HIDE = 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock], .gc-tablet-dock { visibility: hidden !important; }';
 async function stubGlobalCoordinator(page: Page) {
-  await freezeMiddayCT(page);
-  const at = new Date(Date.now() - 20 * 60_000).toISOString();
+  // Relative to the frozen browser clock: the sheet is a top-layer dialog, so masks can't cover its times.
+  const at = new Date((await freezeMiddayCT(page)) - 20 * 60_000).toISOString();
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
   await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) => route.fulfill({ json: { actions: gcQuickActions } }));
   await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) =>

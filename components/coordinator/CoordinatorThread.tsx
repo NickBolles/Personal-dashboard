@@ -167,10 +167,12 @@ export function CoordinatorThread({
               </Link>
             ) : null}
             {!sid || detail.isSuccess ? inlineActions?.(lastUser?.at ?? null) : null}
+            {/* Rail/sheet: proposals scroll with the thread so the composer keeps its room on short phones. */}
+            {compact ? <ProposedQuickActions /> : null}
           </>
         )}
       </div>
-      {!d.excluded ? <ProposedQuickActions /> : null}
+      {!d.excluded && !compact ? <ProposedQuickActions /> : null}
       {!d.excluded ? (
         <form
           className={compact ? "gc-composer" : "co-foot"}

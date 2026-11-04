@@ -22,7 +22,7 @@ async function stubCoordinator(page: Page) {
   await page.route("**/api/work/decisions*", (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   await page.route("**/api/work/agent-runs*", (route) => route.fulfill({ json: { items: {}, active: [] } }));
   await page.route("**/api/work/activity**", (route) => route.fulfill({ json: { items: [], nextCursor: null, latestAt: null } }));
-  await page.route("**/api/work/items*", (route) => route.fulfill({ json: { items: [], linkedConversations: {} } }));
+  await page.route("**/api/work/items*", (route) => route.fulfill({ json: { items: [], linkedConversations: [] } }));
   await page.route("**/api/hermes/sessions**", (route) => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== "GET") return route.fulfill({ status: 409, json: { error: "Sending is not part of this test" } });

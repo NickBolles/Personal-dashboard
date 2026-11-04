@@ -43,7 +43,8 @@
 }
 .gc-head h2 {
   min-width: 0;
-  flex: 1;
+  /* 8rem basis: on a narrow sheet the agent chip wraps below instead of splitting the title. */
+  flex: 1 1 8rem;
   font-size: 0.9375rem;
   font-weight: 600;
 }
@@ -387,7 +388,13 @@
   right: 8px;
   bottom: calc(86px + 52px + 8px + env(safe-area-inset-bottom));
   z-index: 39;
-  max-width: min(300px, calc(100vw - 16px));
+  /* Definite width so chip max-width:100% resolves (long labels at 200% text wrap instead of overflowing). */
+  width: min(300px, calc(100vw - 16px));
+  pointer-events: none;
+}
+.gc-tray-qa .qa-chip {
+  pointer-events: auto;
+  min-width: 0;
 }
 .gc-tray-qa:empty {
   display: none;
