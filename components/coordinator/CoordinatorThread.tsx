@@ -124,7 +124,7 @@ export function CoordinatorThread({
   const lastUser = timeline.filter((t) => t.kind === "user").at(-1);
   return (
     <>
-      <div className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"}>
+      <div className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
             Finance stays out of AI: this area has no coordinator chat.

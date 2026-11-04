@@ -221,6 +221,8 @@
 .gc-empty a,
 .gc-action a {
   color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .gc-error {
   color: var(--bad);
