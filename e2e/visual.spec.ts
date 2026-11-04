@@ -30,9 +30,25 @@ test.beforeEach(async ({ request, page }) => {
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
   await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
+  // Global Chief of staff (rail/tray on every page): a fixed coordinator with no conversation, no
+  // @chiefofstaff activity and no quick actions, so other specs' data never shows in any baseline.
+  await page.route(/\/api\/work\/coordinator\/global(?:\?.*)?$/, (route) => route.fulfill({ json: globalCoordinatorVisual }));
+  await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) => route.fulfill({ json: { items: [], nextCursor: null, latestAt: null } }));
+  await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) => route.fulfill({ json: { actions: [] } }));
   await mock(request, "/reset");
   await setHa(request, "cover.garage_door", "open", 45);
 });
+
+const globalCoordinatorVisual = {
+  area: { id: "gc_portfolio", title: "Portfolio" },
+  scope: "global",
+  agent: { requested: "chiefofstaff", profile: "chiefofstaff", routed: true, reason: "routed", from: { id: "gc_portfolio", title: "Portfolio" } },
+  sessionId: null,
+  sessionTitle: null,
+  excluded: false,
+  prompt: "Catch me up",
+  lastRunAt: null,
+};
 
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
 
@@ -1351,6 +1367,188 @@ for (const scheme of ["light", "dark"] as const) {
     await t.evaluate((el) => (el as Element).remove());
   });
 }
+
+/** Global Chief of staff (Phase 1): desktop rail open / collapsed / chat strip, 1000 px, phone tray + sheet tabs, quick actions. */
+const gcQuick = (id: string, label: string, prompt: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  userId: "owner",
+  label,
+  prompt,
+  scope: "global",
+  pinned: false,
+  sortOrder: 0,
+  status: "active",
+  source: "owner",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  ...extra,
+});
+const gcQuickActions = [
+  gcQuick("gcq1", "Daily brief", "Brief me on today", { pinned: true }),
+  gcQuick("gcq2", "Plan my week", "Help me plan this week", { sortOrder: 1 }),
+  gcQuick("gcq3", "Weekly review", "Run my weekly review", { status: "proposed", source: "agent:chiefofstaff" }),
+];
+const GC_HIDE = 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock], .gc-tablet-dock { visibility: hidden !important; }';
+async function stubGlobalCoordinator(page: Page) {
+  await freezeMiddayCT(page);
+  const at = new Date(Date.now() - 20 * 60_000).toISOString();
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+  await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) => route.fulfill({ json: { actions: gcQuickActions } }));
+  await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "gca1",
+            at,
+            type: "created",
+            actor: { kind: "agent", name: "chiefofstaff" },
+            verb: "created",
+            object: { id: "gci1", title: "Book the furnace tune-up" },
+            detail: null,
+            via: "chiefofstaff",
+            undoOpId: "gcop1",
+          },
+        ],
+        nextCursor: null,
+        latestAt: at,
+      },
+    }),
+  );
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+  await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: 0 } }));
+  // Never a real coordinator/Hermes write from a visual test.
+  await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
+}
+const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint"].map((m) => scope.locator(m));
+async function gcTheme(page: Page, scheme: "light" | "dark") {
+  await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: chief of staff rail open, collapsed and chat strip (${scheme})`, async ({ page }, info) => {
+    test.skip(info.project.name !== "desktop", "Desktop rail");
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubGlobalCoordinator(page);
+    await page.goto("/more");
+    const rail = page.getByRole("complementary", { name: "Chief of staff" });
+    await expect(rail).toHaveAttribute("data-open", "true");
+    await expect(rail.getByTestId("quick-action-proposal")).toContainText("Weekly review");
+    await expect(rail.getByTestId("quick-actions-row").getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
+    await expect(rail.locator(".gc-priority").first()).toContainText("need");
+    // A chip only fills the composer.
+    await rail.getByTestId("quick-actions-row").getByRole("button", { name: "Plan my week", exact: true }).click();
+    await expect(rail.getByTestId("gc-input")).toHaveValue("Help me plan this week");
+    await gcTheme(page, scheme);
+    const t = await page.addStyleTag({ content: GC_HIDE });
+    await page.waitForTimeout(400);
+    await expectNoHorizontalOverflow(page);
+    await expect(rail).toHaveScreenshot(`gc-rail-open-${scheme}.png`, { animations: "disabled", mask: gcMask(rail) });
+    await rail.getByRole("button", { name: "Collapse Chief of staff" }).click();
+    await expect(rail).toHaveAttribute("data-open", "false");
+    await page.waitForTimeout(300);
+    await expect(page).toHaveScreenshot(`gc-rail-collapsed-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => page.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+    // Chat pages default to the icon strip even when the rail is open elsewhere.
+    await rail.getByRole("button", { name: "Expand Chief of staff" }).click();
+    await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatVisual }));
+    await page.goto("/chat/sess_morning");
+    await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+    await expect(rail).toHaveAttribute("data-open", "false");
+    await gcTheme(page, scheme);
+    const t2 = await page.addStyleTag({ content: GC_HIDE });
+    await page.waitForTimeout(400);
+    await expect(rail).toHaveScreenshot(`gc-rail-strip-${scheme}.png`, { animations: "disabled" });
+    await t2.evaluate((el) => (el as Element).remove());
+  });
+
+  test(`visual: chief of staff at 1000px (${scheme})`, async ({ page }, info) => {
+    test.skip(info.project.name !== "desktop", "1000px band (rail beside content, header wraps)");
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubGlobalCoordinator(page);
+    await page.goto("/more");
+    const rail = page.getByRole("complementary", { name: "Chief of staff" });
+    await expect(rail).toHaveAttribute("data-open", "true");
+    await expect(rail.getByTestId("quick-action-proposal")).toBeVisible();
+    await gcTheme(page, scheme);
+    const t = await page.addStyleTag({ content: GC_HIDE });
+    await page.waitForTimeout(400);
+    await expectNoHorizontalOverflow(page);
+    await expect(page).toHaveScreenshot(`gc-1000-${scheme}.png`, { animations: "disabled", mask: gcMask(page.locator("body")) });
+    await t.evaluate((el) => (el as Element).remove());
+  });
+
+  test(`visual: chief of staff phone tray and sheet (${scheme})`, async ({ page }, info) => {
+    test.skip(info.project.name === "desktop", "Phone tray + sheet");
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubGlobalCoordinator(page);
+    await page.goto("/more");
+    const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+    await expect(tray).toBeVisible();
+    await expect(tray.locator(".gc-dot")).toBeVisible();
+    const pinned = page.getByTestId("quick-actions-tray");
+    await expect(pinned.getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
+    await expect(pinned.getByRole("button", { name: "Plan my week", exact: true })).toHaveCount(0);
+    await gcTheme(page, scheme);
+    const t = await page.addStyleTag({
+      content: 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }',
+    });
+    await page.waitForTimeout(400);
+    // Tray + pinned chips, clipped to the bottom-right corner they float in.
+    const box = await page.locator(".gc-host").evaluate(() => {
+      const r = [document.querySelector(".gc-tray")!, document.querySelector(".gc-tray-qa")!].map((e) => e.getBoundingClientRect());
+      const x = Math.min(...r.map((b) => b.left)) - 4;
+      const y = Math.min(...r.map((b) => b.top)) - 4;
+      return { x, y, width: Math.max(...r.map((b) => b.right)) + 4 - x, height: Math.max(...r.map((b) => b.bottom)) + 4 - y };
+    });
+    await expect(page).toHaveScreenshot(`gc-tray-${scheme}.png`, { animations: "disabled", clip: box });
+    await t.evaluate((el) => (el as Element).remove());
+    // A pinned chip opens the sheet with the composer filled (nothing sent).
+    await pinned.getByRole("button", { name: "Daily brief", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+    await expect(sheet.getByTestId("gc-input")).toHaveValue("Brief me on today");
+    await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
+    await gcTheme(page, scheme);
+    await page.waitForTimeout(400);
+    await expectNoHorizontalOverflow(page);
+    await expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) });
+    await sheet.getByRole("tab", { name: /^Changes/ }).click();
+    await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
+    await page.waitForTimeout(200);
+    await expect(sheet).toHaveScreenshot(`gc-sheet-changes-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) });
+  });
+}
+
+test("chief of staff tray never overlaps the tablet dock (640–900px)", async ({ page }, info) => {
+  test.skip(info.project.name !== "mobile", "Tablet band");
+  await stubGlobalCoordinator(page);
+  for (const width of [640, 700, 768, 820, 899]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/more");
+    const tray = page.locator(".gc-tray");
+    await expect(tray).toBeVisible();
+    await expect(page.getByTestId("quick-actions-tray")).toBeVisible();
+    const boxes = await page.evaluate(() =>
+      [".gc-tray", ".gc-tray-qa", ".gc-tablet-dock [data-command-dock], .gc-tablet-dock > *"].map((sel) => {
+        const el = document.querySelector(sel);
+        const r = el?.getBoundingClientRect();
+        return r && r.width ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+      }),
+    );
+    const [trayBox, chipsBox, dockBox] = boxes;
+    expect(trayBox, `tray at ${width}`).not.toBeNull();
+    for (const b of [trayBox, chipsBox]) {
+      if (!b || !dockBox) continue;
+      const overlap = b.left < dockBox.right && dockBox.left < b.right && b.top < dockBox.bottom && dockBox.top < b.bottom;
+      expect(overlap, `tray/dock overlap at ${width}px: ${JSON.stringify({ b, dockBox })}`).toBe(false);
+    }
+    await expectNoHorizontalOverflow(page);
+  }
+});
 
 /** Batch 5 (H1/C4/A3/C1): House by room, chat list chips + unread, area ⋯ settings dialog, @profile chat badge. */
 const HIDE_OVERLAYS = 'nav[aria-label="Primary"], .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }';
