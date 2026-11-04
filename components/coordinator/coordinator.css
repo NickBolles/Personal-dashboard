@@ -356,15 +356,17 @@
   font-size: 0.625rem;
 }
 .gc-resizer {
+  /* 24px hit area centred on the rail edge (WCAG 2.2 target-size); the visible stripe stays 8px. */
   position: absolute;
-  inset: 0 auto 0 -4px;
-  width: 8px;
+  inset: 0 auto 0 -12px;
+  width: 24px;
+  z-index: 1;
   cursor: col-resize;
   touch-action: none;
 }
 .gc-resizer:hover,
 .gc-resizer:focus-visible {
-  background: var(--accent-soft);
+  background: linear-gradient(to right, transparent 8px, var(--accent-soft) 8px 16px, transparent 16px);
 }
 .gc-phone-orb {
   position: relative;
