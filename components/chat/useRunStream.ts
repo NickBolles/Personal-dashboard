@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { api } from "@/lib/client/api";
-import { isTerminal, type ApprovalRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
+import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
 import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
 
 export type Activity =
@@ -17,6 +17,8 @@ export type RunState = {
   reasoning: string;
   activity: Activity[];
   approval?: ApprovalRequest;
+  /** A Hermes clarify question waiting for an answer (the run stays "running" meanwhile). */
+  clarify?: ClarifyRequest;
   steerQueued: number;
   pendingSteer?: string;
   error?: string;
@@ -55,6 +57,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
         ...state,
         phase,
         approval: v.status === "waiting_for_approval" ? (v.pendingApproval ?? state.approval) : undefined,
+        // GET status is authoritative: no pending clarify there means it was answered or withdrawn.
+        clarify: isTerminal(v.status) ? undefined : v.pendingClarify,
         output: v.output ?? state.output,
         error: v.error ?? (isTerminal(v.status) ? state.error : undefined),
         pendingSteer: v.pendingSteer ?? state.pendingSteer,
@@ -107,10 +111,14 @@ export function reduceRun(state: RunState, a: Action): RunState {
           };
         case "approval.resolved":
           return { ...s, phase: s.phase === "stopping" ? "stopping" : "running", approval: undefined };
+        case "clarify.requested":
+          return { ...s, clarify: { requestId: e.requestId, question: e.question, choices: e.choices, multiSelect: e.multiSelect } };
+        case "clarify.resolved":
+          return !e.requestId || s.clarify?.requestId === e.requestId ? { ...s, clarify: undefined } : s;
         case "steer.queued":
           return { ...s, steerQueued: s.steerQueued + 1 };
         case "run.terminal":
-          return { ...s, phase: e.status, output: e.output ?? s.output, error: e.error, pendingSteer: e.pendingSteer, approval: undefined };
+          return { ...s, phase: e.status, output: e.output ?? s.output, error: e.error, pendingSteer: e.pendingSteer, approval: undefined, clarify: undefined };
         default:
           return s;
       }

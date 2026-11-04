@@ -23,6 +23,14 @@ export type ApprovalRequest = {
   choices: ("once" | "session" | "always" | "deny")[];
 };
 
+/** A Hermes `clarify` question (session-authority `clarify.request`): pick a choice or type an answer. */
+export type ClarifyRequest = {
+  requestId: string;
+  question: string;
+  choices: string[];
+  multiSelect?: boolean;
+};
+
 export type RunEvent =
   | { type: "text.delta"; seq?: number; delta: string }
   | { type: "commentary"; seq?: number; text: string }
@@ -33,6 +41,8 @@ export type RunEvent =
   | { type: "subagent.completed"; seq?: number; id?: string; goal?: string; summary?: string; status?: string; at: string }
   | ({ type: "approval.requested"; seq?: number; at: string } & ApprovalRequest)
   | { type: "approval.resolved"; seq?: number; choice?: string; requestId?: string; at: string }
+  | ({ type: "clarify.requested"; seq?: number; at: string } & ClarifyRequest)
+  | { type: "clarify.resolved"; seq?: number; requestId?: string; at: string }
   | { type: "steer.queued"; seq?: number; at: string }
   | {
       type: "run.terminal";
@@ -55,6 +65,8 @@ export type SessionSummary = {
   lastActiveAt?: string;
   messageCount?: number;
   parentSessionId?: string;
+  /** Hermes delegate_task child sessions folded under this one in lists (not shown as rows). */
+  subagentCount?: number;
   lineageRootId?: string;
   endReason?: string;
   pinned: boolean;
@@ -87,6 +99,7 @@ export type RunView = {
   error?: string;
   pendingSteer?: string;
   pendingApproval?: ApprovalRequest;
+  pendingClarify?: ClarifyRequest;
 };
 
 export const TOOL_LABELS: Record<string, string> = {

@@ -7,11 +7,12 @@ import { processSingleton } from "@/server/singleton";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
+import { foldSubagents, isSubagentSession } from "@/lib/session-children";
 import { getOwner, type CurrentUser } from "@/server/auth";
-import { HermesExecutionClient, HermesSessionClient, type HermesApprovalBody, type HermesConn } from "./client";
+import { HermesExecutionClient, HermesSessionClient, type HermesApprovalBody, type HermesClarifyBody, type HermesConn } from "./client";
 import { connForProfile } from "@/server/agents/routing";
 import { HermesAguiTranslator } from "@/server/agui/hermes";
-import { messagesToTimeline, normalizeApproval, normalizeRunEvent, normalizeSession } from "./normalize";
+import { messagesToTimeline, normalizeApproval, normalizeClarify, normalizeRunEvent, normalizeSession } from "./normalize";
 import { SYNC_SESSION_SOURCE } from "./structured";
 import { RUN_TERMINAL, runEventSchema, type HermesRunStatus } from "./types";
 
@@ -147,7 +148,8 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
   // when a pin occupies the recency window. Err toward continuation, not loss.
   const hasMore = res.has_more === true || res.data.length >= limit || routed.hasMore;
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
-  const sessions = decorate([...visible, ...routed.sessions].map(normalizeSession), user).filter((s) => opts.includeArchived || !s.archived);
+  // Sub-agent child sessions (Hermes delegate_task) fold under their parent row instead of flooding the list.
+  const sessions = decorate(foldSubagents([...visible, ...routed.sessions].map(normalizeSession)), user).filter((s) => opts.includeArchived || !s.archived);
   return {
     sessions: [...new Map(sessions.map((s) => [s.id, s])).values()],
     unavailableProfiles: routed.unavailable,
@@ -205,6 +207,87 @@ const ROUTED_LIST_LIMIT = 30;
 // Existing non-chat callers retain their bounded legacy window.
 export async function listSessions(user: CurrentUser, opts: { includeArchived?: boolean } = {}) {
   return (await listSessionPage(user, opts)).sessions;
+}
+
+// --- Adopt an existing session (one Jarvis didn't create) ---
+
+/** The profile's peer-DM inbox. Never adopted: two clients on one session interleave turns and approvals. */
+export const BOT_CHAT_TITLE = "Bot Chat";
+
+type AdoptRow = Pick<SessionSummary, "id" | "title" | "lastActiveAt" | "messageCount" | "source" | "parentSessionId"> & { hidden?: boolean };
+
+/** Why a session can't be adopted (null = it can). */
+export function adoptRefusal(s: { title?: string | null; hidden?: boolean | null; source?: string | null; parentSessionId?: string | null }): string | null {
+  if ((s.title ?? "").trim().toLowerCase() === BOT_CHAT_TITLE.toLowerCase()) return "bot_chat";
+  if (s.hidden) return "hidden";
+  if (s.source === SYNC_SESSION_SOURCE) return "system";
+  if (s.parentSessionId && isSubagentSession({ parentSessionId: s.parentSessionId, source: s.source ?? undefined, title: s.title ?? "" })) return "subagent";
+  return null;
+}
+
+const ADOPT_REFUSED: Record<string, string> = {
+  bot_chat: "That's the agent's Bot Chat inbox — other agents message it. Start a new chat in the area instead.",
+  hidden: "That conversation is hidden in Hermes, so it can't be filed here.",
+  system: "That's a background sync conversation, not a chat.",
+  subagent: "That's a sub-agent's working session. Open its parent conversation instead.",
+};
+
+/**
+ * Recent sessions on a profile that Jarvis doesn't track yet (no session_meta row): the
+ * profile's own chats from the Hermes web UI/CLI. Bot Chat, hidden, sync and sub-agent
+ * sessions are left out. One Hermes list call on that profile, on explicit request only.
+ */
+export async function adoptableSessions(user: CurrentUser, profile: string | null, signal?: AbortSignal) {
+  if (user.id !== getOwner()?.id) throw new HttpError(403, "forbidden", "Only the owner can adopt existing conversations");
+  const conn = connForProfile(profile);
+  const res = await HermesSessionClient.list(conn, { limit: 50, offset: 0, includeChildren: false, signal });
+  const rows = res.data.map((s) => ({ ...normalizeSession(s), hidden: Boolean(s.hidden) }));
+  const known = metaFor(rows.map((r) => r.id));
+  const sessions: AdoptRow[] = rows
+    .filter((r) => !known.has(r.id) && !adoptRefusal(r) && !r.archived)
+    .slice(0, 30)
+    .map((r) => ({ id: r.id, title: r.title, lastActiveAt: r.lastActiveAt, messageCount: r.messageCount, source: r.source }));
+  return { profile: profile ?? null, sessions };
+}
+
+/**
+ * Start tracking a Hermes session Jarvis didn't create, on the profile it lives on: one GET on
+ * that profile, refuse Bot Chat/hidden/sub-agent sessions, then record session_meta (owner +
+ * profile) so lists, opens and runs use the right profile. Filing into an area is a separate
+ * call (the existing file route), made by the client right after.
+ */
+export async function adoptSession(user: CurrentUser, body: { profile: string | null; sessionId: string }, correlationId: string) {
+  assertSessionId(body.sessionId);
+  if (user.id !== getOwner()?.id) throw new HttpError(403, "forbidden", "Only the owner can adopt existing conversations");
+  const profile = body.profile?.trim().toLowerCase() || null;
+  const existing = metaFor([body.sessionId]).get(body.sessionId);
+  if (existing && (existing.hermesProfile ?? null) !== profile)
+    throw new HttpError(409, "profile_mismatch", "Jarvis already tracks that conversation on another agent.");
+  let raw;
+  try {
+    raw = (await HermesSessionClient.get(connForProfile(profile), body.sessionId)).session;
+  } catch (err) {
+    if (err instanceof UpstreamError && err.kind === "not_found") throw new HttpError(404, "session_not_found", "That agent has no conversation with this id.");
+    throw err;
+  }
+  const s = normalizeSession(raw);
+  const why = adoptRefusal({ title: raw.title, hidden: Boolean(raw.hidden), source: raw.source, parentSessionId: raw.parent_session_id });
+  if (why) {
+    audit({
+      actor: user.id,
+      action: "hermes.session.adopt",
+      source: "hermes",
+      sourceRecord: body.sessionId,
+      result: "rejected",
+      correlationId,
+      detail: { profile, reason: why },
+    });
+    throw new HttpError(409, `not_adoptable_${why}`, ADOPT_REFUSED[why]!);
+  }
+  touchMeta(user, body.sessionId, profile ? { hermesProfile: profile } : {});
+  audit({ actor: user.id, action: "hermes.session.adopt", source: "hermes", sourceRecord: body.sessionId, result: "ok", correlationId, detail: { profile } });
+  const [summary] = decorate([s], user);
+  return { session: summary! };
 }
 
 /** Forks listed on a conversation page (each is one Hermes GET). */
@@ -484,6 +567,7 @@ export async function reconcileRun(runId: string): Promise<RunView> {
       error: s.error ?? undefined,
       pendingSteer: s.pending_steer ?? undefined,
       pendingApproval: approval,
+      pendingClarify: terminal ? undefined : normalizeClarify(pendingClarifyPrompt(s)),
     };
   } catch (err) {
     if (err instanceof UpstreamError && err.kind === "not_found" && row) {
@@ -542,6 +626,68 @@ export function approvalBody(
 }
 
 type ApprovalChoice = "once" | "session" | "always" | "deny";
+
+/** The clarify prompt a session-authority run is waiting on (`pending_controls` kind `clarify`). */
+export function pendingClarifyPrompt(s: Pick<HermesRunStatus, "pending_controls">, requestId?: string) {
+  const prompts = (s.pending_controls ?? []).filter((p) => p.kind === "clarify" && typeof p.prompt_id === "string");
+  if (requestId) return prompts.find((p) => p.prompt_id === requestId);
+  return prompts.length === 1 ? prompts[0] : undefined;
+}
+
+/** Hermes caps a clarify answer at 16384 characters (session_pending_controls.py). */
+export const CLARIFY_ANSWER_MAX = 16384;
+
+/**
+ * The exact `/v1/runs/{id}/clarify` body: `{ answer, request_id, execution_generation }` — any other
+ * key set is 400 `invalid_params`. Only the session-authority path has clarify; returns null when the
+ * run carries no generation or no matching pending clarify prompt.
+ */
+export function clarifyBody(
+  s: Pick<HermesRunStatus, "execution_generation" | "pending_controls">,
+  answer: string,
+  requestId: string,
+): HermesClarifyBody | null {
+  if (typeof s.execution_generation !== "number") return null;
+  if (typeof answer !== "string" || !answer.trim() || answer.length > CLARIFY_ANSWER_MAX) return null;
+  const prompt = pendingClarifyPrompt(s, requestId);
+  if (!prompt) return null;
+  const generation = typeof prompt.execution_generation === "number" ? prompt.execution_generation : s.execution_generation;
+  return { answer, request_id: prompt.prompt_id as string, execution_generation: generation };
+}
+
+const CLARIFY_GONE = "This question isn't waiting any more — it was answered, timed out or the run moved on.";
+
+export async function respondClarify(user: CurrentUser, runId: string, body: { answer: string; requestId: string }, correlationId: string) {
+  const row = assertRunOwner(user, runId);
+  const conn = connForRun(row);
+  // Audit the fact of answering, never the answer text (it can be anything the person typed).
+  const detail = { requestId: body.requestId, chars: body.answer.length };
+  try {
+    const status = await HermesExecutionClient.status(conn, runId);
+    const upstreamBody = clarifyBody(status, body.answer, body.requestId);
+    if (!upstreamBody) throw new HttpError(409, "clarify_not_pending", CLARIFY_GONE);
+    let res;
+    try {
+      res = await HermesExecutionClient.clarify(conn, runId, upstreamBody);
+    } catch (err) {
+      if (err instanceof UpstreamError && err.kind === "conflict") throw new HttpError(409, "clarify_not_pending", CLARIFY_GONE);
+      throw err;
+    }
+    audit({ actor: user.id, action: "hermes.clarify", source: "hermes", sourceRecord: runId, result: "ok", correlationId, detail });
+    return res;
+  } catch (err) {
+    audit({
+      actor: user.id,
+      action: "hermes.clarify",
+      source: "hermes",
+      sourceRecord: runId,
+      result: "error",
+      correlationId,
+      detail: { ...detail, error: (err as Error).message },
+    });
+    throw err;
+  }
+}
 
 export async function respondApproval(user: CurrentUser, runId: string, body: { choice: ApprovalChoice; requestId?: string }, correlationId: string) {
   const row = assertRunOwner(user, runId);

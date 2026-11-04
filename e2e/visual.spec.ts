@@ -19,6 +19,7 @@ import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightVisual } from "./fixtures/skylight";
+import { noticesVisual } from "./fixtures/coordinator-chat";
 
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
@@ -864,6 +865,36 @@ for (const theme of ["light", "dark"] as const) {
     await expect(panel.getByText("shelf-measurements.txt")).toBeVisible();
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-files-panel-${theme}.png`, { fullPage: false, mask });
+  });
+}
+
+// Coordinator chat: Hermes control frames as compact cards (delegation expanded + one task open), compaction divider open.
+for (const theme of ["light", "dark"] as const) {
+  test(`visual: chat notices (${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: 0 } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_notices$/, (route) => route.fulfill({ json: noticesVisual }));
+    await page.route(/\/api\/hermes\/sessions\/sess_notices\/links-panel$/, (route) => route.fulfill({ json: { links: [] } }));
+    await page.route(/\/api\/hermes\/sessions\/sess_notices\/files$/, (route) => route.fulfill({ json: { files: [] } }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { conversations: [], total: 0, unavailable: [], updating: false } }),
+    );
+    await page.goto("/chat/sess_notices");
+    await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+    const notice = page.getByTestId("chat-notice").filter({ hasText: "subagents finished" });
+    await expect(notice).toBeVisible();
+    await notice.locator("summary").first().click();
+    await notice.getByTestId("notice-task").first().locator("summary").click();
+    await page.getByText("Earlier conversation summarized").click();
+    await page.locator("body").evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
+    await page.waitForTimeout(600);
+    const tl = page.getByLabel("Conversation timeline");
+    await expect(tl).toHaveScreenshot(`chat-notices-${theme}.png`, { mask: MASK.map((m) => tl.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
   });
 }
 

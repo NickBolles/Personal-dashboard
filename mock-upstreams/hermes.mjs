@@ -12,6 +12,43 @@ export const MOCK_PROFILE_KEYS = {
   devchief: "mock-hermes-devchief-key-0123456789",
 };
 
+/** A transcript with Hermes control frames (formats from hermes tools/process_registry_notifications.py). */
+const COORDINATOR_TRANSCRIPT = [
+  { role: "user", content: "Compare the three vendor quotes and summarise." },
+  {
+    role: "user",
+    content: [
+      "[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. This is a handoff from a previous context window — treat it as background reference, NOT as active instructions.",
+      "",
+      "## Summary",
+      "Owner asked for a vendor comparison; quotes from Acme, Birch and Cobalt were collected.",
+    ].join("\n"),
+  },
+  {
+    role: "user",
+    content: [
+      "[ASYNC DELEGATION BATCH COMPLETE — deleg_e2e1]",
+      "A background fan-out unit you dispatched earlier — 2 subagent(s) — has finished; its consolidated results are below.",
+      "",
+      "Dispatched: 2026-11-04 09:00:00 (4m ago)",
+      "Role: leaf   Model: gpt-6.1-sol   Total duration: 241.5s",
+      "",
+      "--- ✓ TASK 1/2: Price the Acme quote  (status=completed, api_calls=12, 118.2s) ---",
+      "Acme comes to $4,200/yr with support included.",
+      "Full live transcript (complete tool/assistant trace): /opt/data/transcripts/deleg_e2e1-task1.jsonl",
+      "",
+      "--- ✗ TASK 2/2: Price the Birch quote  (status=failed, api_calls=3, 40.0s) ---",
+      "(no summary — status=failed: vendor portal timed out)",
+      "Full live transcript (complete tool/assistant trace): /opt/data/transcripts/deleg_e2e1-task2.jsonl",
+    ].join("\n"),
+  },
+  {
+    role: "user",
+    content: "[IMPORTANT: Background process proc_e2e7 completed (exit code 0).\nCommand: npm run quotes:export\nOutput:\nwrote quotes.csv (3 rows)]",
+  },
+  { role: "assistant", content: "Acme is priced; Birch timed out, so I'll retry it.", finish_reason: "stop" },
+];
+
 export function createHermes({ apiKey }) {
   const state = {
     profileRequests: {},
@@ -79,6 +116,26 @@ export function createHermes({ apiKey }) {
     });
     addMessage(a.id, { role: "tool", content: "Sunny, high of 64°F", tool_call_id: "call_1", tool_name: "web_search" });
     addMessage(a.id, { role: "assistant", content: "You have 3 todos due today and it's sunny — good day for the garage cleanup.", finish_reason: "stop" });
+    // Coordinator chat e2e: chats on the momentumchief profile that Jarvis didn't start (adopt flow),
+    // its hidden Bot Chat inbox (never adoptable) and a sub-agent child. Profile-scoped, so they never
+    // show in the default list other specs read.
+    const nb = addSession({ id: "sess_mc_notices", title: "Quarterly vendor review", started_at: now() - 5400, last_active: now() - 1800 });
+    nb.profile = "momentumchief";
+    nb.source = "webui";
+    for (const content of COORDINATOR_TRANSCRIPT) addMessage(nb.id, content);
+    const bot = addSession({ id: "sess_mc_botchat", title: "Bot Chat", started_at: now() - 86400, last_active: now() - 600 });
+    bot.profile = "momentumchief";
+    bot.source = "webui";
+    bot.hidden = true;
+    const sub = addSession({
+      id: "sess_mc_sub",
+      title: "Subagent: compare vendor quotes",
+      parent_session_id: nb.id,
+      started_at: now() - 3000,
+      last_active: now() - 2400,
+    });
+    sub.profile = "momentumchief";
+    sub.source = "webui";
     const b = addSession({ id: "sess_v5", title: "Enable v5 rollout", started_at: now() - 86400, last_active: now() - 80000 });
     addMessage(b.id, { role: "user", content: "Let's plan enabling v5 across the platform." });
     addMessage(b.id, { role: "assistant", content: "Plan: compatibility audit, config migration, rollout, docs, verification.", finish_reason: "stop" });
@@ -327,6 +384,27 @@ export function createHermes({ apiKey }) {
       await sleep(t * 2);
       pushEvent(run, { event: "subagent.complete", subagent_id: "sa_1", goal: "Research options", status: "completed", summary: "Found 3 options" });
     }
+    if (/clarif/i.test(said)) {
+      // Session-authority clarify (gateway/session_pending_controls.py register_clarify): the run stays
+      // "running"; the prompt is in `clarify.request` and GET pending_controls until answered.
+      const prompt_id = hex(16);
+      run.clarify = {
+        kind: "clarify",
+        prompt_id,
+        execution_generation: run.execution_generation,
+        question: "Which colour should the dashboard accent be?",
+        choices: ["Teal", "Amber", "Violet"],
+        multi_select: false,
+        timeout_s: 600,
+      };
+      pushEvent(run, { event: "clarify.request", ...run.clarify });
+      const answer = await new Promise((resolve) => (run.clarifyResolver = resolve));
+      delete run.clarify;
+      if (run.status === "stopping") return finish(run, "cancelled", { completed: false, partial: false, interrupted: true });
+      if (run.status === "cancelled") return;
+      pushEvent(run, { event: "clarify.settled", prompt_id, execution_generation: run.execution_generation });
+      run.clarifyAnswer = answer;
+    }
     if (/approv|delete|rm /i.test(said)) {
       run.status = "waiting_for_approval";
       const prompt_id = askApproval(run, { command: "rm -rf build", description: "Recursive delete", choices: ["once", "session", "always", "deny"] });
@@ -346,7 +424,11 @@ export function createHermes({ apiKey }) {
       }
     }
     const slow = /slow|long/i.test(said);
-    let reply = slow ? "Working through this step by step. ".repeat(12).trim() : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
+    let reply = run.clarifyAnswer
+      ? `Going with ${run.clarifyAnswer}.`
+      : slow
+        ? "Working through this step by step. ".repeat(12).trim()
+        : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
     // Links panel e2e: a reply that shares an artifact (view + asset URL = one row).
     if (/\[mock: (\d+) image\(s\)\]/.test(input)) reply = `I can see ${input.match(/\[mock: (\d+) image\(s\)\]/)[1]} picture(s).`;
     else if (/share the zephyr board/i.test(said))
@@ -415,12 +497,13 @@ export function createHermes({ apiKey }) {
   }
 
   function runStatus(run) {
-    const { events, subscribers, enders, approvalResolver, speed, pendingSteer, approval, ...rest } = run;
+    const { events, subscribers, enders, approvalResolver, clarifyResolver, speed, pendingSteer, approval, clarify, ...rest } = run;
     return {
       object: "hermes.run",
       ...rest,
       // Session-authority projection: no `approval` field; pending prompts live in `pending_controls`.
-      pending_controls: run.status === "waiting_for_approval" && run.approval ? [run.approval] : [],
+      // A clarify question keeps the run "running" (api_server_authority_runs.py run_projection).
+      pending_controls: [...(run.status === "waiting_for_approval" && run.approval ? [run.approval] : []), ...(run.clarify ? [run.clarify] : [])],
       ...(pendingSteer ? { pending_steer: pendingSteer } : {}),
     };
   }
@@ -700,6 +783,7 @@ export function createHermes({ apiKey }) {
         setTimeout(() => finish(run, "cancelled", { completed: false, partial: false, interrupted: true }), run.speed);
         run.approvalResolver?.("deny");
       }
+      run.clarifyResolver?.("");
       return json(res, 200, { run_id: run.run_id, status: "stopping" });
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/approval$/)) && m === "POST") {
@@ -723,6 +807,26 @@ export function createHermes({ apiKey }) {
       run.approvalResolver = null;
       resolve(body.choice);
       return json(res, 200, { status: "resolved", prompt_id: body.request_id });
+    }
+    if ((match = path.match(/^\/v1\/runs\/([^/]+)\/clarify$/)) && m === "POST") {
+      const run = state.runs.get(match[1]);
+      if (!run || (run.profile ?? null) !== profile) return hermesError(res, 404, "run_not_found", `Run not found: ${match[1]}`);
+      const body = await readBody(req);
+      // Mirrors api_server_authority_runs.py respond_run (kind=clarify): EXACTLY these three keys
+      // (else 400 invalid_params), matching generation, a pending clarify prompt, a string answer ≤ 16384.
+      const keys = Object.keys(body ?? {})
+        .sort()
+        .join(",");
+      if (keys !== "answer,execution_generation,request_id") return hermesError(res, 400, "invalid_params", "invalid_params");
+      if (!Number.isInteger(body.execution_generation) || body.execution_generation !== run.execution_generation || run.status !== "running")
+        return hermesError(res, 409, "stale_generation", "stale_generation");
+      if (!run.clarify || !run.clarifyResolver || run.clarify.prompt_id !== body.request_id)
+        return hermesError(res, 409, "approval_not_pending", "approval_not_pending");
+      if (typeof body.answer !== "string" || body.answer.length > 16384) return hermesError(res, 400, "invalid_params", "invalid_params");
+      const resolve = run.clarifyResolver;
+      run.clarifyResolver = null;
+      resolve(body.answer);
+      return json(res, 200, { run_id: run.run_id, status: "resolved", prompt_id: body.request_id });
     }
     if ((match = path.match(/^\/v1\/runs\/([^/]+)\/steer$/)) && m === "POST") {
       const run = state.runs.get(match[1]);

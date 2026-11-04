@@ -117,6 +117,11 @@ export function respondApproval(user: CurrentUser, runId: string, body: Paramete
   return hermes.respondApproval(user, runId, body, correlationId);
 }
 
+export function respondClarify(user: CurrentUser, runId: string, body: Parameters<typeof hermes.respondClarify>[2], correlationId: string) {
+  if (isLocalRun(runId)) throw new HttpError(400, "unsupported", "Claude conversations don't ask questions this way.");
+  return hermes.respondClarify(user, runId, body, correlationId);
+}
+
 export function steerRun(user: CurrentUser, runId: string, input: string, correlationId: string) {
   if (isLocalRun(runId)) throw new HttpError(501, "unsupported", "Claude can't be steered mid-answer. Stop it and send a new message.");
   return hermes.steerRun(user, runId, input, correlationId);

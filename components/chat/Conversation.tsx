@@ -47,6 +47,9 @@ import type { AreaSettings, FilingSuggestion, ConversationPlacement, ItemsRespon
 import type { AgentResolution } from "@/lib/agents";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { ApprovalCard } from "@/components/approvals/ApprovalCard";
+import { ClarifyCard } from "@/components/approvals/ClarifyCard";
+import { CompactionDivider, NoticeCard } from "./Notice";
+import { parseNotice } from "@/lib/chat-notices";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -210,6 +213,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   useEffect(() => {
     if (run.state.phase === "waiting_for_approval") announce("Hermes needs your approval");
   }, [run.state.phase, announce]);
+  const clarifyId = run.state.clarify?.requestId;
+  useEffect(() => {
+    if (clarifyId) announce("Hermes has a question for you");
+  }, [clarifyId, announce]);
 
   const session = detail?.session;
   const wfRun = useWorkflowRun(sessionId);
@@ -303,6 +310,19 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     } catch (err) {
       // The approval card shows "Couldn't send your approval" + Retry, with this message folded under Details.
       announce(choice === "deny" ? "Couldn't send your denial" : "Couldn't send your approval");
+      throw err;
+    }
+  };
+
+  const answerClarify = async (answer: string) => {
+    const runId = run.state.runId;
+    const requestId = run.state.clarify?.requestId;
+    if (!runId || !requestId) return;
+    try {
+      await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/clarify`, { answer, requestId });
+      announce("Answer sent");
+    } catch (err) {
+      announce("Couldn't send your answer");
       throw err;
     }
   };
@@ -687,7 +707,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                     </li>
                   ) : null}
                 </ol>
-                {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onRetry={run.retry} /> : null}
+                {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
                 <div ref={bottomRef} />
               </div>
 
@@ -914,6 +934,33 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
   const [open, setOpen] = useState(false);
   const { meta, setMeta, onClick } = useMetaToggle();
   const time = item.at ? formatTime(item.at) : undefined;
+  // Hermes control frames (delegation results, process notices, steers, compaction handoffs) arrive as
+  // plain message text; render them as what they are, not as something the person typed.
+  const notice = item.kind === "tool" ? null : parseNotice(item.text);
+  if (notice?.kind === "compaction")
+    return (
+      <li>
+        <CompactionDivider summary={notice.summary} />
+      </li>
+    );
+  if (notice?.kind === "delegation" || notice?.kind === "process")
+    return (
+      <li>
+        <NoticeCard notice={notice} time={time} />
+      </li>
+    );
+  if (notice?.kind === "steer" && item.kind === "user") {
+    return (
+      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined}>
+        <span className="mb-0.5 text-[11px] text-muted">Sent while it was working</span>
+        <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2" data-testid="msg-bubble" data-who="user" onClick={onClick}>
+          <span className="sr-only">You said mid-run: </span>
+          <UserText text={notice.text} />
+        </div>
+        <MessageMeta time={time} onFork={onFork} who="your message" text={notice.text} />
+      </li>
+    );
+  }
   if (item.kind === "user") {
     return (
       <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined}>
@@ -1073,10 +1120,12 @@ function ActivityRow({ a }: { a: Activity }) {
 function LiveRun({
   state,
   onApprove,
+  onClarify,
   onRetry,
 }: {
   state: RunState;
   onApprove: (c: ApprovalRequest["choices"][number]) => Promise<void> | void;
+  onClarify: (answer: string) => Promise<void> | void;
   onRetry: () => void;
 }) {
   const who = useContext(AssistantName);
@@ -1103,6 +1152,9 @@ function LiveRun({
       ) : null}
 
       {state.approval ? <ApprovalCard approval={state.approval} agent={who} onAnswer={onApprove} /> : null}
+      {state.clarify && !isTerminal(state.phase) ? (
+        <ClarifyCard key={state.clarify.requestId} clarify={state.clarify} agent={who} onAnswer={onClarify} />
+      ) : null}
 
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>

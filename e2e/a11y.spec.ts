@@ -6,6 +6,7 @@ import { PHOTO_PNG } from "./fixtures/chat-files";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
+import { noticesVisual } from "./fixtures/coordinator-chat";
 
 const PAGES = [
   "/home",
@@ -145,6 +146,41 @@ test("approval card: axe clean and no overflow at 200% text zoom (choices + undo
   await expect(card.getByRole("button", { name: "Approve once" })).toBeVisible();
   // Resolve the request so its "needs approval" item doesn't leak into later specs (home-all visual).
   await card.getByRole("button", { name: "Deny" }).click();
+  await expect(card).toBeHidden({ timeout: 15_000 });
+});
+
+test("coordinator notices + clarify card: axe clean and no overflow at 200% text zoom", async ({ page, request }) => {
+  await mock(request, "/reset");
+  await page.route(/\/api\/hermes\/sessions\/sess_notices$/, (route) => route.fulfill({ json: noticesVisual }));
+  await page.route(/\/api\/hermes\/sessions\/sess_notices\/links-panel$/, (route) => route.fulfill({ json: { links: [] } }));
+  await page.route(/\/api\/hermes\/sessions\/sess_notices\/files$/, (route) => route.fulfill({ json: { files: [] } }));
+  await page.goto("/chat/sess_notices");
+  const notice = page.getByTestId("chat-notice").first();
+  await expect(notice).toBeVisible();
+  await notice.locator("summary").first().click();
+  await notice.getByTestId("notice-task").first().locator("summary").click();
+  await page.getByText("Earlier conversation summarized").click();
+  const axe = async (sel: string) => {
+    const results = await new AxeBuilder({ page: page as never }).include(sel).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(
+      results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(",")}`),
+    ).toEqual([]);
+  };
+  await axe('[aria-label="Conversation timeline"]');
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page);
+
+  // Clarify card (mock Hermes asks when the message says "clarify"), then answer it so nothing leaks.
+  await page.goto("/chat");
+  await startConversation(page, "Please clarify the accent first");
+  const card = page.getByTestId("clarify-card");
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await axe('[data-testid="clarify-card"]');
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page);
+  await card.getByRole("button", { name: "Teal" }).click();
   await expect(card).toBeHidden({ timeout: 15_000 });
 });
 
