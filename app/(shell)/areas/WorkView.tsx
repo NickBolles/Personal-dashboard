@@ -405,7 +405,6 @@ export function WorkView({
   );
 }
 
-
 /**
  * The context rails need room: they only exist when the centre column keeps at
  * least 640px beside them (content area ≥ 928px = 640 + the 288px rail). That
