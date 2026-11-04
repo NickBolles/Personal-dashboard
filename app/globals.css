@@ -3077,6 +3077,21 @@ button:active > .dock-orb {
   .jv-activity-actor {
     font-weight: 600;
   }
+  /* #180: "by @profile" — a change an agent token made for the owner */
+  .jv-agent-chip {
+    display: inline-flex;
+    align-items: baseline;
+    max-width: 100%;
+    min-width: 0;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid color-mix(in oklab, var(--ai, var(--accent)) 55%, var(--line));
+  }
   .jv-activity-obj {
     color: var(--accent);
     text-decoration: underline;
@@ -3187,6 +3202,9 @@ button:active > .dock-orb {
     background: var(--line);
   }
   .clarify-card {
+    /* #185: scrollIntoView keeps it clear of the sticky chat header and the composer dock */
+    scroll-margin-top: 6rem;
+    scroll-margin-bottom: 10rem;
     border: 1px solid var(--line-strong, var(--line));
     border-radius: 10px;
     background: var(--surface);

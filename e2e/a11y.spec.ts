@@ -180,9 +180,12 @@ test("coordinator notices + clarify card: axe clean and no overflow at 200% text
   const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page);
-  // At 320 px + 200% text the sticky header and composer cover the card's choices; answer at normal size.
+  // #185: at 320 px + 200% text the composer stays one compact row while the question waits, so the
+  // card's choices are tappable without leaving the zoom.
+  const teal = card.getByRole("button", { name: "Teal" });
+  await teal.scrollIntoViewIfNeeded();
+  await teal.click();
   await zoom.evaluate((el) => (el as Element).remove());
-  await card.getByRole("button", { name: "Teal" }).click();
   await expect(card).toBeHidden({ timeout: 15_000 });
 });
 

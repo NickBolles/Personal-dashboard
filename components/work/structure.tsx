@@ -14,6 +14,7 @@ import type { UndoOp } from "@/components/work/UndoBar";
 import { ProjectIcon } from "@/components/work/WorkTree";
 import { ItemChips } from "@/components/work/ItemMeta";
 import { rollup, type CreatableKind, type UnfiledConversation, type UnfiledResponse, type WorkItem } from "@/lib/work";
+import { itemAgentChip } from "./AgentChip";
 
 /**
  * The one "+ New" menu: chat, item, project, area, capture. Items and
@@ -330,9 +331,10 @@ export function NodeRow({ i, items, onSelect, status }: { i: WorkItem; items: Wo
       <span className="min-w-0 flex-1">
         <span className="block truncate">{i.title}</span>
         {i.nextAction ? <span className="block truncate text-xs text-muted">Next: {i.nextAction}</span> : null}
-        {i.tags?.length || i.assignee ? (
-          <span className="mt-0.5 block min-w-0">
-            <ItemChips tags={i.tags} assignee={i.assignee} max={2} />
+        {i.tags?.length || i.assignee || i.createdVia || i.updatedVia ? (
+          <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
+            {itemAgentChip(i)}
+            {i.tags?.length || i.assignee ? <ItemChips tags={i.tags} assignee={i.assignee} max={2} /> : null}
           </span>
         ) : null}
       </span>

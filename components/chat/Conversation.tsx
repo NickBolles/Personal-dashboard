@@ -741,6 +741,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 <Composer
                   sessionId={sessionId}
                   phase={phase}
+                  clarifying={!!run.state.clarify}
                   online={online}
                   context={context}
                   onRemoveContext={removeContext}
@@ -1210,10 +1211,13 @@ function Composer({
   onFocus,
   agent,
   restore,
+  clarifying,
 }: {
   sessionId: string;
   restore?: { text: string; key: string; at: number };
   phase?: RunPhase;
+  /** #185: a clarify question is waiting — keep the composer one compact row like an approval */
+  clarifying?: boolean;
   online: boolean;
   context: { label: string; ref: string }[];
   onRemoveContext: (ref: string) => void;
@@ -1378,6 +1382,8 @@ function Composer({
   };
 
   const awaitingApproval = phase === "waiting_for_approval";
+  // #185: an approval or clarify card needs the screen; at 320 px / 200 % text a stacked composer covers its buttons.
+  const compact = awaitingApproval || !!clarifying;
   const placeholder = !online
     ? "Offline — drafts are saved, not sent"
     : phase === "waiting_for_approval"
@@ -1437,7 +1443,7 @@ function Composer({
         {/* Phones: one "+" sheet (context, files, camera, photos, model) so the text field gets the width. */}
         <ComposerAddMenu
           online={online}
-          files={!awaitingApproval}
+          files={!compact}
           modelLabel={modelLabel}
           onContext={onAttach}
           onModel={onModel}
@@ -1450,8 +1456,8 @@ function Composer({
         </Button>
         {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
             so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
-        {!awaitingApproval ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
-        {!awaitingApproval ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
+        {!compact ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
+        {!compact ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
         <label htmlFor="composer" className="sr-only">
           {running ? "Guidance for the current run" : `Message ${who}`}
         </label>
@@ -1511,7 +1517,7 @@ function Composer({
               onStop();
             }
           }}
-          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !awaitingApproval ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
+          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
         />
         <button
           type="button"

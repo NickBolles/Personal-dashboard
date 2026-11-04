@@ -9,6 +9,7 @@ import {
   CHECKS_LABEL,
   DEPLOY_LABEL,
   RUN_LIVE_LABEL,
+  liveOfAgentRun,
   progressPct,
   whoLabel,
   type AgentRunsResponse,
@@ -17,6 +18,7 @@ import {
   type RunLive,
 } from "@/lib/agent-runs";
 import { relativeTime } from "@/lib/time";
+import { AgentChip } from "@/components/work/AgentChip";
 import "./agents.css";
 
 export const AGENT_RUNS_KEY = ["work", "agent-runs"] as const;
@@ -119,6 +121,25 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
         <ul className="mt-2 space-y-1.5" aria-label="Pull requests">
           {info.prs.map((p, n) => (
             <PrRow key={n} pr={p} />
+          ))}
+        </ul>
+      ) : null}
+      {info.agentRuns?.length ? (
+        <ul className="mt-2 space-y-1.5" aria-label="Agent runs" data-testid="agent-runs-list">
+          {info.agentRuns.map((r) => (
+            <li key={r.id} className="min-w-0 text-[13px]">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
+                <AgentChip profile={r.profile} />
+                <LiveState live={liveOfAgentRun(r.state)} at={r.updatedAt} compact />
+                {r.prUrl ? (
+                  <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
+                    PR
+                  </a>
+                ) : null}
+              </div>
+              {r.summary ? <p className="mt-0.5 text-[13px] text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
+            </li>
           ))}
         </ul>
       ) : null}

@@ -35,6 +35,8 @@ export type ActivityItem = {
   detail: string | null;
   /** a work_ops id the viewer can still undo (latest of its stack, inside the window) */
   undoOpId: string | null;
+  /** #180: the agent profile that made the change on the owner's behalf (MCP token), shown as "by @profile" */
+  via?: string | null;
   /**
    * Server-only insertion order (SQLite rowid) for rows that share a millisecond: two quick edits
    * often do, and their random ids would order them arbitrarily. Stripped from API responses.
@@ -53,6 +55,8 @@ export type RawWorkEvent = {
   reason: string | null;
   actor: string;
   source: string | null;
+  /** #180: "agent:<profile>" when an agent token made it */
+  via?: string | null;
   at: string;
 };
 
@@ -120,7 +124,14 @@ export function normalizeWorkEvent(e: RawWorkEvent, viewerId: string, title: str
       verb = `edited · ${verb}`;
   }
   if (e.source === "github" && type !== "github") type = "github";
-  return { id: `ev:${e.id}`, at: e.at, type, actor, verb, object, detail, undoOpId: null };
+  // #180: an agent token acting for the owner reads as that agent ("chiefofstaff created …", chip "by @chiefofstaff").
+  const via = agentOf(e.via);
+  return { id: `ev:${e.id}`, at: e.at, type, actor: via ? { kind: "agent", name: via } : actor, verb, object, detail, undoOpId: null, ...(via ? { via } : {}) };
+}
+
+/** "agent:<profile>" → profile; anything else → null. */
+export function agentOf(via: string | null | undefined): string | null {
+  return via?.startsWith("agent:") ? via.slice(6) || null : null;
 }
 
 type SortKey = Pick<ActivityItem, "at" | "id" | "seq">;

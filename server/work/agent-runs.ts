@@ -5,7 +5,10 @@ import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import {
   aggregateRunState,
+  AGENT_RUN_STATES,
   deployOf,
+  liveOfAgentRun,
+  type ExternalRun,
   isActive,
   liveOfJob,
   liveOfRun,
@@ -98,6 +101,29 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
         reports.set(r.subjectId, { title: r.title, summary: r.summary.slice(0, 400), at: r.createdAt, href: `/areas?item=${encodeURIComponent(r.subjectId)}` });
   }
 
+  // Runs agents registered through Jarvis MCP (agent_runs; docs/agent-tools.md).
+  const external = new Map<string, ExternalRun[]>();
+  for (const part of chunks(ids))
+    for (const r of db
+      .select()
+      .from(schema.agentRuns)
+      .where(and(eq(schema.agentRuns.userId, user.id), inArray(schema.agentRuns.itemId, part)))
+      .orderBy(desc(schema.agentRuns.updatedAt))
+      .all()) {
+      const list = external.get(r.itemId) ?? [];
+      list.push({
+        id: r.id,
+        title: r.title,
+        profile: r.profile,
+        state: (AGENT_RUN_STATES as readonly string[]).includes(r.state) ? (r.state as ExternalRun["state"]) : "running",
+        summary: r.summary,
+        prUrl: r.prUrl,
+        startedAt: r.startedAt,
+        updatedAt: r.updatedAt,
+      });
+      external.set(r.itemId, list);
+    }
+
   const prRows = new Map<string, { targetId: string | null; url: string | null; title: string; state: string | null; checks: string | null }[]>();
   for (const part of chunks(ids))
     for (const l of db
@@ -120,7 +146,12 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
   for (const i of work) {
     const areaId = areaOf.get(i.id) ?? null;
     const area = areaId ? byId.get(areaId) : undefined;
-    const samples = [...[...(sessions.get(i.id) ?? [])].flatMap((s) => runsBySession.get(s) ?? []), ...(jobs.get(i.id) ?? [])];
+    const ext = external.get(i.id) ?? [];
+    const samples = [
+      ...[...(sessions.get(i.id) ?? [])].flatMap((s) => runsBySession.get(s) ?? []),
+      ...(jobs.get(i.id) ?? []),
+      ...ext.map((r): RunSample => ({ live: liveOfAgentRun(r.state), at: r.updatedAt, sessionId: null, source: "agent" })),
+    ];
     const prs = (prRows.get(i.id) ?? []).map((p) => ({
       ref: p.targetId ?? p.url ?? "PR",
       url: p.url,
@@ -146,6 +177,7 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       prs,
       report,
       progress: kids.length ? { done: kids.filter((c) => bucketOf(c) === "done").length, total: kids.length } : null,
+      ...(ext.length ? { agentRuns: ext.slice(0, 5) } : {}),
     };
   }
   const active = Object.values(out)

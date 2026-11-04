@@ -17,6 +17,7 @@ import { AgentLine, AgentsStrip, useAgentRuns } from "@/components/agents/AgentR
 import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { activeInArea } from "@/lib/agent-runs";
 import { isFinanceAreaLike } from "@/lib/catch-up";
+import { itemAgentChip } from "@/components/work/AgentChip";
 
 export type MapLink = { kind: string; url: string; title: string | null };
 export type MapRelation = { kind: "depends" | "followup"; id: string; title: string; open: boolean };
@@ -475,8 +476,9 @@ function MapRow({
           ))}
         </div>
       ) : null}
-      {i.tags.length || i.assignee || links.length ? (
+      {i.tags.length || i.assignee || links.length || i.createdVia || i.updatedVia ? (
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
+          {itemAgentChip(i)}
           <ItemChips tags={i.tags} assignee={i.assignee} />
           {links.map((l, n) =>
             l.url.startsWith("/") ? (

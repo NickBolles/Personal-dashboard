@@ -1504,3 +1504,86 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+// Agent access (docs/agent-tools.md): Settings → Agents card with fixed tokens (one revoked), and Activity
+// rows an agent token made ("by @profile" chips). Every list stubbed so other specs' data never leaks in.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: agent access + agent activity (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    const now = Date.now();
+    const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+    await page.route(/\/api\/settings\/agents\/tokens$/, (route) =>
+      route.request().method() === "GET"
+        ? route.fulfill({
+            json: {
+              tokens: [
+                {
+                  id: "agt_v1",
+                  name: "Chief of staff",
+                  profile: "chiefofstaff",
+                  scopes: ["work.read", "work.write", "decisions.write", "runs.write"],
+                  hint: "x7Qe",
+                  createdAt: ago(60 * 26),
+                  lastUsedAt: ago(4),
+                  revokedAt: null,
+                },
+                {
+                  id: "agt_v2",
+                  name: "Old dev token",
+                  profile: "devchief",
+                  scopes: ["work.read"],
+                  hint: "M2pa",
+                  createdAt: ago(60 * 24 * 9),
+                  lastUsedAt: null,
+                  revokedAt: ago(60 * 24 * 2),
+                },
+              ],
+            },
+          })
+        : route.continue(),
+    );
+    await page.goto("/settings/agents");
+    const card = page.getByTestId("agent-access");
+    await expect(card.getByTestId("agent-token-row")).toHaveCount(2);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(300);
+    await expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) });
+    await t.evaluate((el) => (el as Element).remove());
+
+    const row = (id: string, verb: string, title: string, via: string | null, undo = false) => ({
+      id,
+      at: ago(10),
+      type: verb === "created" ? "created" : "edit",
+      actor: via ? { kind: "agent", name: via } : { kind: "you", name: "You" },
+      verb,
+      object: { id: `wk_${id}`, title },
+      detail: null,
+      undoOpId: undo ? `op_${id}` : null,
+      ...(via ? { via } : {}),
+    });
+    await page.route(/\/api\/work\/items(\?.*)?$/, (route) => route.fulfill({ json: { items: [], linkedConversations: [] } }));
+    await page.route(/\/api\/work\/activity(\?.*)?$/, (route) =>
+      route.fulfill({
+        json: {
+          items: [
+            row("a1", "created", "Price the dust ducting", "chiefofstaff", true),
+            row("a2", "edited · next action", "Spokeshave tune-up", "chiefofstaff", true),
+            row("a3", "edited · title", "Workshop lighting", null),
+          ],
+          nextCursor: null,
+          latestAt: ago(10),
+        },
+      }),
+    );
+    await page.goto("/areas/activity");
+    const feed = page.getByRole("region", { name: "All activity" });
+    await expect(feed.getByTestId("agent-chip")).toHaveCount(2);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const t2 = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    await page.waitForTimeout(300);
+    await expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) });
+    await t2.evaluate((el) => (el as Element).remove());
+  });
+}

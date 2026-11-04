@@ -239,6 +239,13 @@
       "when": 1793770460311,
       "tag": "0033_skylight_completions",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1793788790288,
+      "tag": "0034_agent_access",
+      "breakpoints": true
     }
   ]
 }

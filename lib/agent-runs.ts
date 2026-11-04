@@ -63,7 +63,24 @@ export function liveOfJob(state: string): RunLive {
   }
 }
 
-export type RunSample = { live: RunLive; at: string; sessionId?: string | null; source: "chat" | "job" };
+export type RunSample = { live: RunLive; at: string; sessionId?: string | null; source: "chat" | "job" | "agent" };
+
+/** Runs an agent registered through Jarvis MCP (jarvis_run_start/update, agent_runs table). */
+export const AGENT_RUN_STATES = ["running", "waiting", "done", "failed"] as const;
+export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
+export function liveOfAgentRun(state: string): RunLive {
+  return state === "running" ? "running" : state === "waiting" ? "waiting" : state === "failed" ? "failed" : state === "done" ? "finished" : "idle";
+}
+export type ExternalRun = {
+  id: string;
+  title: string;
+  profile: string;
+  state: AgentRunState;
+  summary: string | null;
+  prUrl: string | null;
+  startedAt: string;
+  updatedAt: string;
+};
 
 /**
  * One state per item: anything waiting on the owner wins, then anything still
@@ -129,6 +146,8 @@ export type ItemAgentInfo = {
   report: { title: string; summary: string; at: string; href: string | null } | null;
   /** direct non-container children done / total (null when it has none) */
   progress: { done: number; total: number } | null;
+  /** runs agents recorded on this item through Jarvis MCP, newest first (max 5) */
+  agentRuns?: ExternalRun[];
 };
 
 export type AgentRunsResponse = {
