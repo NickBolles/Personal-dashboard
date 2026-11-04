@@ -97,4 +97,15 @@ describe("ApprovalCard send failure", () => {
     rerender(<ApprovalCard approval={req("r2")} onAnswer={onAnswer} />);
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("a prompt replaced while the send is in flight never inherits the failure or Retry", async () => {
+    let reject!: (e: Error) => void;
+    const onAnswer = vi.fn(() => new Promise<void>((_, r) => (reject = r)));
+    const { rerender } = render(<ApprovalCard approval={req("r1")} onAnswer={onAnswer} />);
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    rerender(<ApprovalCard approval={req("r2")} onAnswer={onAnswer} />);
+    await act(async () => reject(new Error("boom")));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
 });

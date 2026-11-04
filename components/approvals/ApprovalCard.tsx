@@ -55,10 +55,13 @@ export function ApprovalCard({
       setPending(undefined);
       setBusy(c);
       setFailed(undefined);
+      // The prompt this answer is for, captured before the await: a replacement prompt arriving
+      // while the request is in flight must never inherit this failure (or its Retry).
+      const answeredKey = latestKey.current;
       try {
         await onAnswer(c);
       } catch (err) {
-        setFailed({ choice: c, detail: err instanceof Error ? err.message : String(err), requestId: latestKey.current });
+        setFailed({ choice: c, detail: err instanceof Error ? err.message : String(err), requestId: answeredKey });
       } finally {
         setBusy(undefined);
       }
