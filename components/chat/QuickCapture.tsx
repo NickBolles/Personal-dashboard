@@ -9,6 +9,8 @@ import { SendIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { useAssistantChoice } from "./backend";
 import { useAskHermes } from "./useAskHermes";
+import { useModKey } from "@/lib/client/platform";
+import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
 
 /**
  * One input for the core loop (design review D1).
@@ -43,6 +45,7 @@ export function QuickCapture({
   const { backend } = useAssistantChoice();
   const { ask, busy: asking } = useAskHermes();
   const ta = useRef<HTMLTextAreaElement>(null);
+  const mod = useModKey();
   const draftKey = canCapture ? "draft:capture" : "draft:quick";
   useEffect(() => {
     const el = ta.current;
@@ -110,23 +113,24 @@ export function QuickCapture({
         ref={ta}
         rows={1}
         value={text}
-        aria-describedby={canCapture && canAsk ? "quick-capture-hint" : undefined}
+        aria-describedby="quick-capture-hint"
         placeholder={placeholder ?? (canCapture ? (canAsk ? "Capture or ask…" : "Capture something…") : "Ask Hermes…")}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+          // Enter is a newline; Ctrl/⌘ + Enter sends (with Shift: ask instead of capture).
+          if (isSendShortcut(composerKey(e))) {
             e.preventDefault();
-            if ((e.metaKey || e.ctrlKey) && canCapture && canAsk) doAsk();
+            if (e.shiftKey && canCapture && canAsk) doAsk();
             else primary();
           }
         }}
         className={cx(inputCls, "max-h-40 min-w-0 flex-1 basis-48 resize-none border-transparent bg-transparent")}
       />
-      {canCapture && canAsk ? (
-        <span id="quick-capture-hint" className="sr-only">
-          Enter captures to your Inbox. Control or Command plus Enter asks Hermes instead.
-        </span>
-      ) : null}
+      <span id="quick-capture-hint" hidden>
+        {canCapture && canAsk
+          ? "Enter adds a line. Control or Command plus Enter captures to your Inbox; add Shift to ask Hermes instead."
+          : "Enter adds a line. Control or Command plus Enter sends."}
+      </span>
       {canCapture ? (
         <>
           {canAsk ? (
@@ -137,17 +141,35 @@ export function QuickCapture({
               disabled={!text.trim() || busy}
               onClick={doAsk}
               className="shrink-0"
-              title="Ask Hermes (Ctrl/⌘ Enter)"
+              title={`Ask Hermes (${mod === "⌘" ? "⇧⌘↵" : "Ctrl Shift ↵"})`}
             >
               Ask Hermes
             </Button>
           ) : null}
-          <Button type="submit" variant="primary" aria-label="Capture to Inbox" busy={capturing} disabled={!text.trim() || busy} className="shrink-0">
+          <Button
+            type="submit"
+            variant="primary"
+            aria-label="Capture to Inbox"
+            title={`Capture to Inbox (${sendHint(mod)})`}
+            aria-keyshortcuts={SEND_KEYSHORTCUTS}
+            busy={capturing}
+            disabled={!text.trim() || busy}
+            className="shrink-0"
+          >
             Capture
           </Button>
         </>
       ) : (
-        <Button type="submit" variant="primary" aria-label="Send to Hermes" busy={asking} disabled={!text.trim()} className="shrink-0">
+        <Button
+          type="submit"
+          variant="primary"
+          aria-label="Send to Hermes"
+          title={`Send (${sendHint(mod)})`}
+          aria-keyshortcuts={SEND_KEYSHORTCUTS}
+          busy={asking}
+          disabled={!text.trim()}
+          className="shrink-0"
+        >
           {!asking ? <SendIcon className="h-5 w-5" /> : null}
         </Button>
       )}
