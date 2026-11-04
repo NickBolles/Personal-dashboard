@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { api, newIdempotencyKey } from "@/lib/client/api";
@@ -13,6 +14,10 @@ import { Button } from "@/components/ui/kit";
 import { cx, inputCls, useToast } from "@/components/ui";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
+import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
+import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
+import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
+import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import "@/components/agents/agents.css";
 
 export type CoordinatorResponse = {
@@ -25,7 +30,6 @@ export type CoordinatorResponse = {
   lastRunAt: string | null;
 };
 type Detail = { session: SessionSummary; timeline: TimelineItem[] };
-export type QuickActionsSlot = (onPrompt: (text: string) => void) => ReactNode;
 
 /** Shared thread + send mutation. Area variant preserves its labels, testids and composer. */
 export function CoordinatorThread({
@@ -36,7 +40,7 @@ export function CoordinatorThread({
   draft,
   onDraft,
   inlineActions,
-  quickActions,
+  quickContext,
 }: {
   info: CoordinatorResponse;
   compact?: boolean;
@@ -45,7 +49,8 @@ export function CoordinatorThread({
   draft?: string;
   onDraft?: (text: string) => void;
   inlineActions?: (lastUserAt: string | null) => ReactNode;
-  quickActions?: QuickActionsSlot;
+  /** Context for quick-action chips ({area}/{page} fill + scope). Chips fill the composer only. */
+  quickContext?: QuickActionContext;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -59,6 +64,27 @@ export function CoordinatorThread({
     if (!compact) textarea.current?.focus();
   }, [compact]);
   const sid = sessionId ?? d.sessionId;
+  const pathname = usePathname();
+  const quickActions = useQuickActions(!d.excluded);
+  const hasProposals = !!quickActions.data?.actions.some((a) => a.status === "proposed");
+  const fill = (value: string) => {
+    setText(value.slice(0, 8000));
+    requestAnimationFrame(() => textarea.current?.focus());
+  };
+  const fillRef = useRef(fill);
+  useEffect(() => {
+    fillRef.current = fill;
+  });
+  useEffect(() => {
+    // The area pane takes ⌘K quick actions while it is open; the global rail/sheet handles them otherwise.
+    if (compact || d.excluded) return;
+    const onPrompt = (e: Event) => {
+      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof value === "string") fillRef.current(value);
+    };
+    window.addEventListener(COORDINATOR_PROMPT, onPrompt);
+    return () => window.removeEventListener(COORDINATOR_PROMPT, onPrompt);
+  }, [compact, d.excluded]);
   const detail = useQuery({
     queryKey: ["session", sid],
     queryFn: () => api.get<Detail>(`/api/hermes/sessions/${encodeURIComponent(sid!)}`),
@@ -110,8 +136,6 @@ export function CoordinatorThread({
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
                   No coordinator conversation yet. Your first message starts one, filed in this area.
                 </p>
-                {/* quick-actions slot */}
-                {compact ? quickActions?.(setText) : null}
               </div>
             ) : null}
             {detail.isLoading ? <p className="text-sm text-muted">Loading messages…</p> : null}
@@ -146,6 +170,7 @@ export function CoordinatorThread({
           </>
         )}
       </div>
+      {!d.excluded ? <ProposedQuickActions /> : null}
       {!d.excluded ? (
         <form
           className={compact ? "gc-composer" : "co-foot"}
@@ -162,8 +187,7 @@ export function CoordinatorThread({
               </button>
             </div>
           ) : null}
-          {/* quick-actions slot */}
-          {compact ? quickActions?.(setText) : null}
+          <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
           <label htmlFor={`${titleId}-m`} className="sr-only">
             Message the coordinator
           </label>
@@ -221,7 +245,14 @@ export function CoordinatorThread({
                 Catch me up
               </Button>
               <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
-              <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} loading={send.isPending} data-testid="coordinator-send">
+              <Button
+                type="submit"
+                size="sm"
+                variant={hasProposals ? "secondary" : "primary"}
+                disabled={!text.trim()}
+                loading={send.isPending}
+                data-testid="coordinator-send"
+              >
                 Send
               </Button>
             </div>

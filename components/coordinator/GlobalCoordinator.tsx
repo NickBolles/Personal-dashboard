@@ -13,7 +13,9 @@ import { sessionIdFromRoute } from "@/lib/composer-target";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { useToast } from "@/components/ui";
 import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
-import { CoordinatorThread, type CoordinatorResponse, type QuickActionsSlot } from "./CoordinatorThread";
+import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
+import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
+import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
 import { useCoordinatorThings } from "./useCoordinatorThings";
 import "./coordinator.css";
 
@@ -27,7 +29,7 @@ const getWide = () => window.matchMedia("(min-width: 900px)").matches;
 type Tab = "chat" | "needs" | "running" | "changes" | "page";
 
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
-export function GlobalCoordinator({ quickActions }: { quickActions?: QuickActionsSlot }) {
+export function GlobalCoordinator() {
   const pathname = usePathname();
   const search = useSearchParams();
   const pageKey = pathname + "?" + search.toString();
@@ -72,6 +74,7 @@ export function GlobalCoordinator({ quickActions }: { quickActions?: QuickAction
           parents: chain.slice(1, -1).map((i) => i.title),
         });
   const attached = removedOn === pageKey ? null : context;
+  const quickContext: QuickActionContext = { areaId: area?.id, areaTitle: context && area ? area.title : undefined, pageLabel: context?.label, path: pathname };
   const expanded = open && (!chat || chatExpandedOn === pageKey);
   const railWidth = expanded ? width : 54;
   const saveOpen = (value: boolean) => {
@@ -129,8 +132,24 @@ export function GlobalCoordinator({ quickActions }: { quickActions?: QuickAction
         /* optional */
       }
     };
+    // ⌘K quick action: open the rail/sheet and fill the composer. Never sends.
+    const onPrompt = (e: Event) => {
+      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof value !== "string") return;
+      if (document.querySelector('[data-testid="coordinator-pane"]')) return; // an open area pane takes it
+      onOpen();
+      setTab("chat");
+      setDraft(value.slice(0, 8000));
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
+      );
+    };
     window.addEventListener(OPEN_COORDINATOR_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_COORDINATOR_EVENT, onOpen);
+    window.addEventListener(COORDINATOR_PROMPT, onPrompt);
+    return () => {
+      window.removeEventListener(OPEN_COORDINATOR_EVENT, onOpen);
+      window.removeEventListener(COORDINATOR_PROMPT, onPrompt);
+    };
   }, [pageKey]);
   useEffect(() => {
     const shell = host.current?.closest<HTMLElement>(".jv-shell");
@@ -215,8 +234,7 @@ export function GlobalCoordinator({ quickActions }: { quickActions?: QuickAction
       {info.isLoading ? <p className="gc-empty">Loading Chief of staff…</p> : null}
       {info.isSuccess && !d ? (
         <div className="gc-empty">
-          No Chief of staff yet: set an area&apos;s agent to chiefofstaff in <Link href="/settings/agents">Settings → Agents</Link>.{/* quick-actions slot */}
-          {quickActions?.(setDraft)}
+          No Chief of staff yet: set an area&apos;s agent to chiefofstaff in <Link href="/settings/agents">Settings → Agents</Link>.
         </div>
       ) : null}
       {tabs.map((t) => (
@@ -238,7 +256,7 @@ export function GlobalCoordinator({ quickActions }: { quickActions?: QuickAction
               onDraft={setDraft}
               context={attached}
               onRemoveContext={() => setRemovedOn(pageKey)}
-              quickActions={quickActions}
+              quickContext={quickContext}
               inlineActions={(lastUserAt) => <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} />}
             />
           ) : null}
@@ -368,6 +386,19 @@ export function GlobalCoordinator({ quickActions }: { quickActions?: QuickAction
         </aside>
       ) : (
         <>
+          {!chat && d ? (
+            <div className="gc-tray-qa" data-testid="gc-tray-quick-actions">
+              <QuickActionChips
+                variant="tray"
+                context={quickContext}
+                onPrompt={(value) => {
+                  show();
+                  setTab("chat");
+                  setDraft(value.slice(0, 8000));
+                }}
+              />
+            </div>
+          ) : null}
           {!chat ? (
             <button type="button" className="gc-tray" aria-label="Chief of staff" aria-haspopup="dialog" onClick={show}>
               <span className="gc-orb" aria-hidden="true" />

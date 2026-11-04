@@ -1,0 +1,66 @@
+.qa-root {
+  max-width: 100%;
+  min-width: 0;
+}
+.qa-root .qa-hit {
+  min-height: 44px;
+  min-width: 44px;
+  height: auto;
+}
+.qa-root .qa-icon {
+  padding-inline: 8px;
+}
+.qa-root input,
+.qa-root textarea,
+.qa-root select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.qa-chips {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.qa-wrap {
+  flex-wrap: wrap;
+}
+.qa-scroll {
+  overflow-x: auto;
+  padding-block: 3px;
+  mask-image: linear-gradient(to right, black calc(100% - 12px), transparent);
+}
+.qa-root .qa-chip {
+  flex-shrink: 0;
+  max-width: min(24rem, 100%);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+@media (min-width: 600px) {
+  .qa-root .qa-hit {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+@media (min-width: 1100px) and (pointer: fine) {
+  .qa-root .qa-hit {
+    min-height: 28px;
+    min-width: 28px;
+  }
+}
+html[data-density="phone"] .qa-root .qa-hit {
+  min-height: 44px;
+  min-width: 44px;
+}
+html[data-density="tablet"] .qa-root .qa-hit {
+  min-height: 40px;
+  min-width: 40px;
+}
+@media (min-width: 600px) {
+  html[data-density="desktop"] .qa-root .qa-hit {
+    min-height: 28px;
+    min-width: 28px;
+  }
+}

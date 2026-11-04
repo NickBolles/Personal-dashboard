@@ -22,6 +22,20 @@ let info: CoordinatorResponse | { area: null };
 let activity: ActivityItem[];
 let runs: Record<string, ItemAgentInfo>;
 let workItems: Record<string, unknown>[];
+let quick: Record<string, unknown>[];
+const qa = (id: string, label: string, prompt: string, pinned = false) => ({
+  id,
+  userId: "u",
+  label,
+  prompt,
+  scope: "global",
+  pinned,
+  sortOrder: 0,
+  status: "active",
+  source: "owner",
+  createdAt: "",
+  updatedAt: "",
+});
 const base: CoordinatorResponse = {
   area: { id: "portfolio", title: "Portfolio" },
   agent: { requested: "chiefofstaff", profile: null, routed: false, reason: "routing_off" },
@@ -65,6 +79,7 @@ beforeEach(() => {
   activity = [];
   runs = {};
   workItems = [];
+  quick = [];
   vi.stubGlobal("matchMedia", () => ({ matches: nav.wide, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   // jsdom has no dialog top layer. Model only open/close; the browser spec covers real focus trapping.
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
@@ -85,6 +100,7 @@ beforeEach(() => {
     if (path === "/api/work/agent-runs") return { items: runs, active: [] };
     if (path.startsWith("/api/work/activity")) return { items: activity, nextCursor: null, latestAt: activity[0]?.at ?? null };
     if (path === "/api/work/items") return { items: workItems };
+    if (path === "/api/quick-actions") return { actions: quick };
     if (path.startsWith("/api/hermes/sessions/"))
       return {
         session: { id: "s1", pinned: false, archived: false },
@@ -143,27 +159,40 @@ describe("shared coordinator thread", () => {
     expect(api.get).not.toHaveBeenCalled();
     expect(api.post).not.toHaveBeenCalled();
   });
-  it("quick action slots fill the composer, never send", () => {
+  it("quick action chips above the composer fill it, never send", async () => {
     makeClient();
-    render(
-      <CoordinatorThread
-        info={{ ...base, sessionId: "s1" }}
-        compact
-        quickActions={(onPrompt) => (
-          <button type="button" onClick={() => onPrompt("Review this")}>
-            Review
-          </button>
-        )}
-      />,
-      { wrapper },
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
-    expect((screen.getByTestId("gc-input") as HTMLTextAreaElement).value).toBe("Review this");
+    quick = [qa("q1", "Review", "Review {area}")];
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact quickContext={{ areaId: "portfolio", areaTitle: "Portfolio" }} />, { wrapper });
+    fireEvent.click(await within(screen.getByTestId("quick-actions-row")).findByRole("button", { name: "Review" }));
+    expect((screen.getByTestId("gc-input") as HTMLTextAreaElement).value).toBe("Review Portfolio");
     expect(api.post).not.toHaveBeenCalled();
   });
 });
 
 describe("global coordinator", () => {
+  it("a ⌘K quick action opens the phone sheet and fills the composer without sending", async () => {
+    makeClient();
+    nav.wide = false;
+    render(globalView(), { wrapper });
+    await screen.findByRole("button", { name: "Chief of staff" });
+    act(() => {
+      window.dispatchEvent(new CustomEvent("jarvis:coordinator-prompt", { detail: { text: "Plan my week" } }));
+    });
+    expect(((await screen.findByTestId("gc-input")) as HTMLTextAreaElement).value).toBe("Plan my week");
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it("pinned quick actions show above the collapsed tray and open the sheet filled", async () => {
+    makeClient();
+    nav.wide = false;
+    quick = [qa("q1", "Unpinned", "nope"), qa("q2", "Daily brief", "Brief me", true)];
+    render(globalView(), { wrapper });
+    const tray = await screen.findByTestId("quick-actions-tray");
+    expect(within(tray).queryByRole("button", { name: "Unpinned" })).toBeNull();
+    expect(within(tray).queryByRole("button", { name: "Manage quick actions" })).toBeNull();
+    fireEvent.click(within(tray).getByRole("button", { name: "Daily brief" }));
+    expect(((await screen.findByTestId("gc-input")) as HTMLTextAreaElement).value).toBe("Brief me");
+    expect(api.post).not.toHaveBeenCalled();
+  });
   it("removes context until navigation, and This page only fills the draft", async () => {
     makeClient();
     const view = render(globalView(), { wrapper });

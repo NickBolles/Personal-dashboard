@@ -1,6 +1,9 @@
 import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
+import { quickActionInput } from "@/lib/quick-actions";
+import { isFinanceAreaLike } from "@/lib/catch-up";
+import { propose as proposeQuickAction } from "@/server/quick-actions";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
@@ -107,6 +110,24 @@ const CLOSED = new Set(["settled", "abandoned", "superseded"]);
 // --- tools ----------------------------------------------------------------------------------
 
 export const TOOLS: ToolDef[] = [
+  tool({
+    name: "jarvis_add_quick_action",
+    description: "Propose a saved coordinator prompt. Never activates or sends it; the owner must tap Add. Finance scopes are refused.",
+    scope: "work.write",
+    input: quickActionInput.omit({ pinned: true }),
+    run: (input, { agent }) => {
+      if (input.scope?.startsWith("area:")) {
+        const area = visible(agent.user.id, input.scope.slice(5));
+        if (area.kind !== "area" || isFinanceAreaLike(area)) throw new HttpError(404, "not_found", "That area isn't available to agents");
+      }
+      if (input.scope?.startsWith("page:")) {
+        const path = input.scope.slice(5);
+        if (/^\/finance(?:\/|$)/i.test(path)) throw new HttpError(403, "forbidden", "Finance is never available to agents");
+      }
+      const { action } = proposeQuickAction(agent.user.id, agent.profile, input);
+      return { proposed: true, id: action.id, note: "The owner must tap Add" };
+    },
+  }),
   tool({
     name: "jarvis_tree",
     description:

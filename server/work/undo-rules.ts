@@ -6,10 +6,24 @@
 /** The toast offers Undo for ~10 s; the server accepts it a little longer (slow networks, retries). */
 export const UNDO_WINDOW_MS = 10 * 60_000;
 
-export const UNDO_KINDS = ["move", "reorder", "archive", "unarchive", "split", "fork", "settle", "ai_plan_create", "edit", "tag_rename", "create"] as const;
+export const UNDO_KINDS = [
+  "move",
+  "reorder",
+  "archive",
+  "unarchive",
+  "split",
+  "fork",
+  "settle",
+  "ai_plan_create",
+  "edit",
+  "tag_rename",
+  "create",
+  "quick_action",
+] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
 export const UNDO_LABELS: Record<UndoKind, string> = {
+  quick_action: "Quick actions updated",
   move: "Moved",
   reorder: "Reordered",
   archive: "Archived",

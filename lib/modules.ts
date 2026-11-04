@@ -37,6 +37,8 @@ export type ModuleDef = {
   actionsCapability?: string;
   /** web routes (first is the module's main page) */
   routes: { href: string; label: string }[];
+  /** Local API namespaces owned by this module (not navigation destinations). */
+  apiRoutes?: { prefix: string; capability: string }[];
   /** "Ask Hermes about …" snapshot id (server/context.ts) */
   contextSource?: string;
   capabilities: CapabilityDef[];
@@ -49,6 +51,7 @@ export const MODULES: ModuleDef[] = [
     description: "One private tree for AI-assisted work and conversations: handoffs, PR links, validation and a dashboard.",
     sources: ["work"],
     viewCapability: "work.use",
+    apiRoutes: [{ prefix: "/api/quick-actions", capability: "work.use" }],
     routes: [
       { href: "/areas", label: "Areas" },
       { href: "/decisions", label: "Needs you" },

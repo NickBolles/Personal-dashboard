@@ -381,7 +381,26 @@
 .jv-shell[data-gc-dot="red"] .gc-phone-orb::after {
   background: var(--bad);
 }
-html[data-kb="open"] .gc-tray {
+/* Pinned quick actions above the collapsed tray: fill the sheet composer only. */
+.gc-tray-qa {
+  position: fixed;
+  right: 8px;
+  bottom: calc(86px + 52px + 8px + env(safe-area-inset-bottom));
+  z-index: 39;
+  max-width: min(300px, calc(100vw - 16px));
+}
+.gc-tray-qa:empty {
+  display: none;
+}
+.gc-tray-qa .qa-chips {
+  justify-content: flex-end;
+}
+.gc-tray-qa .qa-chip {
+  box-shadow: var(--sh2);
+  background: var(--surface);
+}
+html[data-kb="open"] .gc-tray,
+html[data-kb="open"] .gc-tray-qa {
   display: none;
 }
 @media (min-width: 640px) {

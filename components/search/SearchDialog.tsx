@@ -46,6 +46,8 @@ import { PaletteActionPanel, PaletteChips, type PanelEntry } from "@/components/
 import { useTagDirectory } from "@/components/work/ItemMeta";
 import { INLINE_OP_EVENT } from "@/components/work/InlineEdit";
 import type { UndoOp } from "@/components/work/UndoBar";
+import { useQuickActions } from "@/components/quick-actions/useQuickActions";
+import { contextualActions, fillQuickAction, COORDINATOR_PROMPT, QUICK_ACTION_MANAGE } from "@/lib/quick-actions";
 
 /** Any page can open search: window.dispatchEvent(new Event(OPEN_SEARCH_EVENT)). */
 export const OPEN_SEARCH_EVENT = "jarvis:search";
@@ -187,6 +189,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   }, [res.data, q]);
   const allCommands = useCommands();
   const commands = useMemo(() => matchCommands(allCommands, q.trim()).filter((c) => c.id !== "search"), [allCommands, q]);
+  const quickActions = useQuickActions(open && canWork);
   const canAsk = can("hermes.chat");
   // Area-contextual "Ask": inside an area/project/item it asks that area's agent and files the chat there.
   const target = useComposerTarget();
@@ -236,7 +239,26 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
         .slice(0, 5)
         .map((w) => ({ kind: "workflow" as const, w, rest: slash.rest }))
     : [];
-  const commandRows: Row[] = commands.map((c) => ({ kind: "command" as const, c }));
+  const quickContext = { areaTitle: node?.areaTitle, areaId: node?.areaId, path: pathname };
+  const quickCommands: Command[] = canWork
+    ? [
+        ...contextualActions(quickActions.data?.actions ?? [], quickContext).map((a): Command => ({
+          id: `quick-action.${a.id}`,
+          label: fillQuickAction(a.label, quickContext),
+          group: "Quick actions",
+          keywords: a.prompt,
+          run: () => window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: fillQuickAction(a.prompt, quickContext) } })),
+        })),
+        {
+          id: "quick-actions.manage",
+          label: "Manage quick actions",
+          group: "Quick actions",
+          keywords: "saved prompts edit pin reorder",
+          run: () => requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(QUICK_ACTION_MANAGE, { detail: quickContext }))),
+        },
+      ]
+    : [];
+  const commandRows: Row[] = [...commands, ...matchCommands(quickCommands, q.trim())].map((c) => ({ kind: "command" as const, c }));
   const resultRows: Row[] = results.map((r) => ({ kind: "result" as const, r }));
   const matches = canWork && searching ? matchActions(q, has) : [];
   const exactRows: Row[] = matches.filter((m) => m.exact || q.trim().startsWith("/")).map((m) => ({ kind: "action" as const, m }));
