@@ -61,15 +61,30 @@ test("drafts survive reload and are per conversation", async ({ page }) => {
   await expect(page.getByLabel("Message Hermes")).toHaveValue("");
 });
 
-test("Enter sends, Shift+Enter inserts a newline", async ({ page }) => {
+test("Enter inserts a newline, Ctrl+Enter sends", async ({ page }) => {
   await page.goto("/chat/sess_morning");
   const composer = page.getByLabel("Message Hermes");
   await composer.fill("line one");
-  await composer.press("Shift+Enter");
-  await composer.pressSequentially("line two");
-  await expect(composer).toHaveValue("line one\nline two");
   await composer.press("Enter");
+  await composer.pressSequentially("line two");
+  await composer.press("Shift+Enter");
+  await composer.pressSequentially("line three");
+  // Enter never sends: the text is still in the composer.
+  await expect(composer).toHaveValue("line one\nline two\nline three");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveAttribute("aria-keyshortcuts", /Control\+Enter/);
+  await composer.press("Control+Enter");
   await expect(page.getByText(/Got it: "line one/)).toBeVisible({ timeout: 15_000 });
+  await expect(composer).toHaveValue("");
+});
+
+test("the Send button sends a multi-line message", async ({ page }) => {
+  await page.goto("/chat/sess_morning");
+  const composer = page.getByLabel("Message Hermes");
+  await composer.fill("button first");
+  await composer.press("Enter");
+  await composer.pressSequentially("button second");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText(/Got it: "button first/)).toBeVisible({ timeout: 15_000 });
 });
 
 test("fork latest state leaves the original unchanged and links both ways", async ({ page }) => {

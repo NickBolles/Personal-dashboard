@@ -16,7 +16,7 @@ test("keyboard-only: reach the composer, send, and use a dialog with focus resto
   }
   await expect(page.getByLabel("Message Hermes")).toBeFocused();
   await page.keyboard.type("keyboard hello");
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+Enter"); // Enter adds a line; Ctrl+Enter sends
   await expect(page.getByText(/Got it: "keyboard hello/)).toBeVisible({ timeout: 15_000 });
 
   // Dialog: open via keyboard, Escape closes and focus returns to the trigger

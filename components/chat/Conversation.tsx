@@ -16,6 +16,8 @@ import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline,
 import { ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
+import { useModKey } from "@/lib/client/platform";
+import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
 import { quickAdd, RunPanel, useAgentCapture, useWideRun, useWorkflowRun } from "@/components/workflows/RunPanel";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
@@ -1292,6 +1294,7 @@ function Composer({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [text]);
+  const mod = useModKey();
 
   const syncTrigger = (value: string, caret: number) => {
     const t = triggerAt(value, caret);
@@ -1509,7 +1512,8 @@ function Composer({
               setTrigger(null);
               return;
             }
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            // Enter is a newline (phone and desktop); Ctrl/⌘ + Enter or the Send button sends.
+            if (isSendShortcut(composerKey(e))) {
               e.preventDefault();
               submit();
             } else if (e.key === "Escape" && running) {
@@ -1548,6 +1552,8 @@ function Composer({
             (!text.trim() && !attachments.readyIds.length) || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)
           }
           aria-label={running ? "Send guidance" : "Send"}
+          title={`${running ? "Send guidance" : "Send"} (${sendHint(mod)})`}
+          aria-keyshortcuts={SEND_KEYSHORTCUTS}
           className={running ? "shrink-0" : "shrink-0 max-[400px]:ml-auto"}
         >
           {!busy ? <SendIcon className="h-5 w-5" /> : null}

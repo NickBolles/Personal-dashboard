@@ -17,6 +17,8 @@ import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
+import { useModKey } from "@/lib/client/platform";
+import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
 import "./agents.css";
 
 export type CoordinatorResponse = {
@@ -57,6 +59,15 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
   const titleId = useId();
   const ref = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
+  const mod = useModKey();
+  const msgRef = useRef<HTMLTextAreaElement>(null);
+  // Auto-grow with the text up to a max height, then scroll.
+  useEffect(() => {
+    const el = msgRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
+  }, [text]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const info = useQuery({
     queryKey: ["work", "coordinator", areaId],
@@ -213,12 +224,20 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
                 id={`${titleId}-m`}
                 data-autofocus
                 data-testid="coordinator-input"
-                className={cx(inputCls, "min-h-[72px] w-full min-w-0 resize-y text-[16px] sm:text-sm")}
-                rows={text.length > 200 ? 8 : 3}
+                ref={msgRef}
+                className={cx(inputCls, "max-h-60 min-h-[72px] w-full min-w-0 resize-none overflow-y-auto text-[16px] sm:text-sm")}
+                rows={3}
                 maxLength={8000}
                 value={text}
                 placeholder="Ask the coordinator…"
                 onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter is a newline; Ctrl/⌘ + Enter sends (same as the Send button).
+                  if (isSendShortcut(composerKey(e))) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
               />
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <Button
@@ -239,6 +258,8 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
                   disabled={!text.trim()}
                   loading={send.isPending}
                   data-testid="coordinator-send"
+                  title={`Send (${sendHint(mod)})`}
+                  aria-keyshortcuts={SEND_KEYSHORTCUTS}
                 >
                   Send
                 </Button>
