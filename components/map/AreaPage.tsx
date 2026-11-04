@@ -82,7 +82,8 @@ export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id:
             total: work.length,
             next,
             needsYou: work.filter((i) => bucketOf(i) === "owner").length,
-            ids: new Set(all.map((i) => i.id)),
+            // The project itself too: runs of conversations filed directly under it are attributed to it.
+            ids: new Set([p.id, ...all.map((i) => i.id)]),
           };
         }),
     [kids, areaId],
