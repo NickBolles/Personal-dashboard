@@ -518,7 +518,9 @@ test("a11y + 200% text: area page (project cards, tree, coordinator column/sheet
   await page.route(/\/api\/work\/items\/ma_j$/, (route) => route.fulfill({ json: mapDemoAreaDetail }));
   await page.route(/\/api\/work\/items\/[^/]+\/coordinator(?:\?.*)?$/, (route) => route.fulfill({ json: coordinatorDemo }));
   await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: { items: mapDemo.items } }));
-  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: { items: [], conversations: [], conversationsTotal: 0, unavailable: [], count: 0 } }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { items: [], conversations: [], conversationsTotal: 0, unavailable: [], count: 0 } }),
+  );
   await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
   await page.goto("/areas?item=ma_j");
   await expect(page.getByTestId("area-project-card")).toHaveCount(2);
