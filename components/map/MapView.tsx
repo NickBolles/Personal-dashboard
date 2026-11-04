@@ -105,6 +105,9 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/areas/today" className="k-pick inline-flex items-center px-3 text-[13px]" data-testid="work-queue-link">
+            Work queue
+          </Link>
           <Link href="/decisions" className="k-pick inline-flex items-center px-3 text-[13px]">
             Needs you{q.data?.decisions.count ? ` · ${q.data.decisions.count}` : ""}
           </Link>

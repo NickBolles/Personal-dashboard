@@ -110,6 +110,10 @@ test("areas landing: card opens the area in place, Back returns; /map redirects 
   await page.goBack();
   await expect(page).toHaveURL(/\/areas$/);
   await expect(page.getByTestId("map-overview")).toBeVisible();
+  // The Today work queue is one tap from the overview header.
+  await page.getByTestId("work-queue-link").click();
+  await expect(page).toHaveURL(/\/areas\/today$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Work today" })).toBeVisible();
 
   await page.goto(`/map?area=${ids.area}`);
   await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids.area}$`));
