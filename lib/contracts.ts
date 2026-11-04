@@ -62,6 +62,8 @@ export type NextAction = {
   sourceLabel?: string;
   /** Who the task belongs to when the source knows (Skylight chores, shared lists). */
   assignee?: { kind: "mine" | "up_for_grabs" | "other"; name?: string };
+  /** Skylight write target (chores, list items): what Jarvis needs to complete/claim/check it upstream. */
+  skylight?: SkylightRef;
   pinned?: boolean;
   primaryAction?: {
     kind: PrimaryActionKind;
@@ -154,6 +156,35 @@ export type CalendarEvent = {
   calendar?: string;
   source: ActionSource;
   href?: string;
+  /** Skylight events: the upstream id + fields an edit form needs (Phase 0 calendar write). */
+  skylight?: SkylightEventRef;
+};
+
+/** Skylight write targets (Phase 0, integrations/skylight/write.ts). */
+export type SkylightRef =
+  | {
+      kind: "chore";
+      /** Upstream chore id (recurring occurrences look like `<id>-YYYY-MM-DD-HHMM`). */
+      choreId: string;
+      /** Occurrence date/time for recurring chores (frame-local). */
+      instanceDate?: string;
+      instanceTime?: string;
+      /** Skylight category (member) id it is assigned to; null = unassigned. */
+      categoryId: string | null;
+      recurring?: boolean;
+      /** Frame-local day it was completed (completed chores only). */
+      completedOn?: string;
+    }
+  | { kind: "list_item"; listId: string; itemId: string; listLabel: string };
+
+export type SkylightEventRef = {
+  eventId: string;
+  description?: string;
+  /** Writable through Skylight (false for read-only subscribed calendars). */
+  editable: boolean;
+  calendarId?: string;
+  sourceCalendarId?: string;
+  calendarAccountId?: string;
 };
 
 export type HouseholdGlance = {

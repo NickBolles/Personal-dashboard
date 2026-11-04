@@ -2,7 +2,7 @@
 
 import { useAccess } from "@/components/access";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { PRIORITY_LABELS, type NextAction, type PrimaryActionKind } from "@/lib/contracts";
@@ -57,6 +57,10 @@ export function ActionCard({
   explain,
   quiet,
   row,
+  onComplete,
+  leading,
+  trailing,
+  showSource,
 }: {
   action: NextAction;
   compact?: boolean;
@@ -65,6 +69,13 @@ export function ActionCard({
   quiet?: boolean;
   /** TK2: a dense row inside one list card (`ul.jv-feed`); "Done" becomes a round checkbox. */
   row?: boolean;
+  /** A source-specific confirmed completion replaces /api/actions, including menu actions. */
+  onComplete?: () => void;
+  /** Optional source-specific row controls (e.g. a native list checkbox). */
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  /** Keep distinct upstream lists identifiable in a merged row feed. */
+  showSource?: boolean;
 }) {
   const router = useRouter();
   const online = useOnline();
@@ -80,7 +91,10 @@ export function ActionCard({
   const { glyph, text: titleText } = splitGlyph(action.title);
 
   // "Done" only shows after the server confirmed (readback); the card then leaves on refetch.
-  const run = (kind: PrimaryActionKind | "pin" | "unpin") => m.mutate({ actionId: action.id, kind }, { onSuccess: () => kind === "complete" && setDone(true) });
+  const run = (kind: PrimaryActionKind | "pin" | "unpin") => {
+    if (kind === "complete" && onComplete) return onComplete();
+    m.mutate({ actionId: action.id, kind }, { onSuccess: () => kind === "complete" && setDone(true) });
+  };
   const askHermes = () =>
     router.push(
       `/chat?new=1&context=${encodeURIComponent(`${action.title}${action.detail ? ` — ${action.detail}` : ""} [${action.source}:${action.sourceId}]`)}`,
@@ -104,7 +118,7 @@ export function ActionCard({
   ];
 
   const checkbox =
-    row && primary?.kind === "complete" ? (
+    row && (primary?.kind === "complete" || onComplete) ? (
       <button
         type="button"
         role="checkbox"
@@ -113,7 +127,7 @@ export function ActionCard({
         disabled={!online || done || compact || m.isPending}
         title={!online ? "Unavailable offline" : undefined}
         onClick={() => run("complete")}
-        className="jv-check-btn"
+        className={cx("jv-check-btn", onComplete && "min-h-11 min-w-11 sm:min-h-9 sm:min-w-9")}
       >
         <span aria-hidden="true" className="jv-check-dot">
           {done || compact ? (
@@ -202,7 +216,7 @@ export function ActionCard({
   if (row)
     return (
       <article aria-labelledby={titleId} className={cx("jv-trow", done && "jv-done")}>
-        {checkbox ?? <span aria-hidden="true" className="jv-check-btn" />}
+        {leading ?? checkbox ?? <span aria-hidden="true" className="jv-check-btn" />}
         <div className="min-w-0 flex-1">
           {/* #157: phones wrap long titles to two lines (one truncated line hid most of them at 320) */}
           <h3 id={titleId} className="text-[0.875rem] leading-snug font-medium max-sm:line-clamp-2 max-sm:[overflow-wrap:anywhere] sm:truncate">
@@ -216,7 +230,7 @@ export function ActionCard({
               </Link>
             )}
           </h3>
-          {action.detail || stale || action.pinned || due ? (
+          {showSource || action.detail || stale || action.pinned || due ? (
             <p data-dynamic className="truncate text-xs text-muted">
               {/* Phones: due leads the meta line (no right column to squeeze the title at 320 / 200% text). */}
               {due ? (
@@ -225,6 +239,8 @@ export function ActionCard({
                   {action.detail || stale || action.pinned ? " · " : null}
                 </span>
               ) : null}
+              {showSource ? <SourceBadge source={action.source} label={action.sourceLabel} /> : null}
+              {showSource && (action.pinned || action.detail || stale) ? " · " : null}
               {action.pinned ? "Pinned · " : null}
               {action.detail}
               {stale ? <span className="text-warn"> · Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
@@ -237,6 +253,7 @@ export function ActionCard({
           </span>
         ) : null}
         {primaryButton}
+        {trailing}
         <OverflowMenu label={`More actions for ${action.title}`} items={menu} />
       </article>
     );

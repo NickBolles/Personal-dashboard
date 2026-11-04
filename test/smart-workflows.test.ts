@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import * as store from "@/server/work/store";
 import * as settingsRoute from "@/app/api/smart/settings/route";
@@ -15,6 +15,8 @@ import type { JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import { checkState, readiness, __resetPrCache } from "@/server/smart/data";
 import { resolveContextRefs } from "@/server/smart/context";
 import { smartInstructions } from "@/server/smart/prompt";
+import { saveIntegration } from "@/integrations/store";
+import { applyIntents, undoIntent } from "@/server/smart/apply";
 
 // Workflows slice 2: morning brief (ApprovalChips + metric gauges/sparklines),
 // plan the week (WeekPlan + calendar.block behind its own approval) and the PR
@@ -291,6 +293,65 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
     expect(r.body.results[0]).toMatchObject({ ok: true, message: "Added to the calendar" });
     // Title from Jarvis data, not the client; 13:00 Chicago = 18:00Z.
     expect(ha.created[0]).toMatchObject({ entity_id: "calendar.family", summary: "Renew registration", start_date_time: "2026-10-30T18:00:00.000Z" });
+  });
+
+  it("week plan: Skylight approval, hydration and undo need no HA capability", async () => {
+    const { me } = seed();
+    await enable({ enabled: true, calendarWrites: true });
+    saveIntegration("skylight", {
+      enabled: true,
+      config: {
+        mode: "direct",
+        frameId: "smart-frame",
+        baseUrl: "http://skylight.test",
+        writes: "true",
+        eventCalendarId: "family",
+        eventCalendarAccountId: "1",
+        eventSourceCalendarId: "2",
+      },
+      secrets: { refreshToken: "synthetic-refresh" },
+    });
+    const caps = new Set(me.capabilities);
+    caps.delete("home_assistant.calendar");
+    const user = { ...me, capabilities: caps };
+    const requests: { method: string; path: string; body: unknown }[] = [];
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/oauth/token") return Response.json({ access_token: "synthetic-access", expires_in: 7200 });
+      requests.push({ method: init!.method!, path, body: init!.body ? JSON.parse(String(init!.body)) : null });
+      if (init!.method === "POST") return Response.json({ data: { id: "smart-event" } }, { status: 201 });
+      if (init!.method === "DELETE") return new Response(null, { status: 204 });
+      throw new Error(`Unexpected Skylight request: ${path}`);
+    });
+    try {
+      const w = await workflow("week");
+      const h = await (await call(hydrateRoute.POST, { body: { refs: specRefs(w.body.spec) } })).json();
+      expect(h.refs["cal:week:2026-10-26:5"].writable).toBe(true);
+      const s = await surfaceFor(w.body);
+      const block: Intent = { kind: "calendar.block", ref: "todo:gt-2", date: "2026-10-30", start: "13:00", minutes: 30 };
+      await expect(
+        applyIntents(
+          { ...user, capabilities: new Set(["home_assistant.calendar"]) },
+          { surfaceId: s.id, intents: [block], idempotencyKey: "denied", external: true },
+          cid,
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      const result = await applyIntents(user, { surfaceId: s.id, intents: [block], idempotencyKey: "skylight-block", external: true }, cid);
+      expect(result.results[0]).toMatchObject({ ok: true, message: "Added to the family calendar" });
+      expect(result.surface.applied[0].undo).toMatchObject({ type: "skylight", writeId: expect.any(String) });
+      expect(ha.created).toHaveLength(0);
+      expect(requests[0]).toMatchObject({
+        method: "POST",
+        path: "/api/frames/smart-frame/calendar_events",
+        body: { summary: "Renew registration", description: "Planned in Jarvis", starts_at: "2026-10-30T18:00:00.000Z" },
+      });
+      vi.setSystemTime(Date.now() + 300);
+      await undoIntent(user, { surfaceId: s.id, intentHash: result.results[0].intentHash }, cid);
+      expect(requests[1]).toMatchObject({ method: "DELETE", path: "/api/frames/smart-frame/calendar_events/smart-event" });
+      expect(getDb().select().from(schema.skylightWrites).all()).toHaveLength(2);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("PR card: only PRs linked to your own items hydrate; checks/reviews from GitHub; no write intents", async () => {

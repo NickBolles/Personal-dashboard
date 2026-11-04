@@ -8,6 +8,7 @@ import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-dem
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
+import { skylightWriteVisual } from "./fixtures/skylight";
 
 const PAGES = [
   "/home",
@@ -94,6 +95,32 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     // Soft: report every overflowing page in one run instead of stopping at the first.
     await expectNoHorizontalOverflow(page, { soft: true });
   }
+});
+
+test("Skylight write dialogs: axe clean and reflow at 200% text zoom", async ({ page }) => {
+  await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightWriteVisual() }));
+  await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+  await page.goto("/skylight");
+  const checkDialog = async () => {
+    await expect(page.getByRole("dialog")).toBeVisible();
+    const results = await new AxeBuilder({ page: page as never }).include('[role="dialog"]').withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+    ).toEqual([]);
+    const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await expectNoHorizontalOverflow(page);
+    await zoom.evaluate((el) => (el as Element).remove());
+  };
+  const opener = page.getByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ });
+  await opener.click();
+  await checkDialog();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(opener).toBeFocused();
+  await page.getByRole("button", { name: "New event", exact: true }).click();
+  await checkDialog();
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
 });
 
 test("200% text zoom at 1024 (sidebar + header dock) does not cause horizontal scrolling", async ({ page }) => {

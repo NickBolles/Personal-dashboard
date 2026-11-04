@@ -220,22 +220,27 @@ describe("adapters against the mock upstreams", () => {
     expect(data.events!.length).toBeGreaterThan(0);
   });
 
-  it("skylight: shows the owner's + up-for-grabs chores, hides others', labels them", async () => {
+  it("skylight: reads every member's chores over the window, labels them, scopes Home", async () => {
     saveIntegration("skylight", { config: { members: "13600771", includeUpForGrabs: "true", showOthers: "false" } });
     try {
       const data = await ADAPTERS.skylight.fetch(adapterContext());
       const byTitle = new Map(data.actions.map((a) => [a.title.replace(/^\S+ /, ""), a]));
+      // ±7 days: the 18:00 chore is in the window whether it rolled to tomorrow or not.
       expect(byTitle.get("Take out recycling")).toMatchObject({ sourceLabel: "Skylight · Chores", assignee: { kind: "mine", name: "Nick" } });
       expect(byTitle.get("Schedule vet appointment")).toMatchObject({ sourceLabel: "Skylight · Up for grabs", assignee: { kind: "up_for_grabs" } });
-      expect(byTitle.has("Practice piano scales")).toBe(false);
-      expect(data.extra).toMatchObject({ counts: { mine: 1, upForGrabs: 1, others: 0, hidden: 1, completedToday: 1 }, needsMember: false });
+      expect(byTitle.get("Water the porch plants")).toMatchObject({ assignee: { kind: "up_for_grabs" } });
+      // Others' chores are read (the Skylight page's Everyone filter) but hidden from Home.
+      const piano = byTitle.get("Practice piano scales")!;
+      expect(piano.assignee).toEqual({ kind: "other", name: "Will" });
+      expect(data.extra!.homeHidden).toContain(piano.id);
+      expect(data.extra).toMatchObject({ counts: { upForGrabs: 2, hidden: 1, completedToday: 1 }, needsMember: false, health: { ok: true } });
       // Done today is kept as completed (counts stay open-only); skipped chores are dropped.
       expect(byTitle.get("Wipe the kitchen counters")).toMatchObject({ status: "completed", assignee: { kind: "mine" } });
       expect(byTitle.get("Wipe the kitchen counters")!.primaryAction).toBeUndefined();
       expect(byTitle.has("Sort the mail pile")).toBe(false);
-      saveIntegration("skylight", { config: { showOthers: "true" } });
-      const all = await ADAPTERS.skylight.fetch(adapterContext());
-      expect(all.actions.find((a) => a.title.endsWith("Practice piano scales"))!.assignee).toEqual({ kind: "other", name: "Will" });
+      // Lists are read into list-item rows with a list source chip.
+      const items = data.extra!.listItems as { title: string; sourceLabel: string }[];
+      expect(items.find((i) => i.title === "Oat milk")).toMatchObject({ sourceLabel: "Skylight · Groceries" });
     } finally {
       saveIntegration("skylight", { config: { members: "", includeUpForGrabs: "", showOthers: "" } });
     }
