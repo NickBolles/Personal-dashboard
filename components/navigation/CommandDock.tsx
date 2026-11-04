@@ -67,7 +67,7 @@ const PETALS: Petal[] = [
     label: "Validate",
     sub: [
       { cmd: "work.validate", label: "Record result" },
-      { cmd: "work.today", label: "Proof due (Today)" },
+      { cmd: "work.queue", label: "Proof due (Work queue)" },
     ],
   },
   {
