@@ -8,7 +8,8 @@ import { refreshSource } from "@/server/sources";
 import { createItem, updateItem } from "@/server/work/store";
 import { LIMITS } from "@/lib/jarvis-ui/catalog";
 import { intentInSpec, intentKey, intentSchema, isExternal, type Intent } from "@/lib/jarvis-ui/intents";
-import { addCalendarBlock, requireCalendarWrites } from "./calendar";
+import { addCalendarBlock, requireCalendarWrites, usesSkylightCalendar } from "./calendar";
+import { undoWrite } from "@/server/skylight-writes";
 import { isTask, type AppliedEntry, type ApplyResult, type SurfaceView, type TaskRef } from "@/lib/jarvis-ui/types";
 import { lookup, ownedSurface, sha256, storedSpec, todayLocal, toView, writeApplied } from "./store";
 
@@ -20,7 +21,7 @@ const capFor = (i: Intent) =>
       ? ["todos.edit", "work.use"]
       : ["todos.edit"]
     : i.kind === "calendar.block"
-      ? ["home_assistant.calendar"]
+      ? [usesSkylightCalendar() ? "skylight.write" : "home_assistant.calendar"]
       : ["work.use"];
 
 /**
@@ -110,7 +111,7 @@ async function execute(user: CurrentUser, c: Checked, correlationId: string): Pr
     }
     case "calendar.block":
       // The title is the live one from Jarvis, never client- or model-supplied.
-      return addCalendarBlock(user, i, c.hydrated[i.ref]!.title);
+      return addCalendarBlock(user, i, c.hydrated[i.ref]!.title, correlationId);
   }
 }
 
@@ -224,6 +225,11 @@ async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHa
   const intent = intentSchema.parse(entry.intent);
   const opts = { actor: user.id, correlationId };
   switch (u.type) {
+    case "skylight":
+      if (!can(user, "skylight.write")) throw new HttpError(403, "forbidden", "You don't have access to that.");
+      await undoWrite(u.writeId as string, user, { correlationId });
+      await refreshSource("skylight").catch(() => undefined);
+      break;
     case "reopen":
       if (!can(user, "todos.edit")) throw new HttpError(403, "forbidden", "You don't have access to that.");
       await reopenTodo((intent as { ref: string }).ref.slice(5), opts);

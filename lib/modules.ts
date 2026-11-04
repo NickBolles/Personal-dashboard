@@ -121,7 +121,10 @@ export const MODULES: ModuleDef[] = [
     viewCapability: "skylight.view",
     routes: [{ href: "/skylight", label: "Skylight" }],
     contextSource: "skylight",
-    capabilities: [{ id: "skylight.view", label: "See the family calendar and chores", description: "", roles: ["adult", "kid", "household"] }],
+    capabilities: [
+      { id: "skylight.view", label: "See the family calendar and chores", description: "", roles: ["adult", "kid", "household"] },
+      { id: "skylight.write", label: "Change Skylight chores, lists and the family calendar", description: "", roles: ["adult"] },
+    ],
   },
   {
     id: "daily_compass",

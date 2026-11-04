@@ -7,7 +7,12 @@
  */
 import { z } from "zod";
 
-const id = z.string().min(1).max(200);
+/** Upstream ids go into URL paths: digits/letters/dashes only (recurring occurrences are `<id>-YYYY-MM-DD-HHMM`). */
+const id = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9_-]+$/);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const hhmm = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 const title = z.string().trim().min(1).max(500);

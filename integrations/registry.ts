@@ -317,8 +317,8 @@ export const INTEGRATIONS: IntegrationDef[] = [
   {
     kind: "skylight",
     label: "Skylight",
-    tagline: "Family calendar and chores from your Skylight frame (read-only).",
-    uses: ["Next event in the household glance", "Today's chores as actions"],
+    tagline: "Family calendar, chores and lists from your Skylight frame.",
+    uses: ["Next event in the household glance", "Today's chores as actions", "Complete, claim and list changes (confirmed)"],
     recommended: false,
     docs: "https://github.com/jwmoss/skycli",
     fields: [
@@ -409,6 +409,25 @@ export const INTEGRATIONS: IntegrationDef[] = [
         ],
         showWhen: { field: "mode", oneOf: ["direct"] },
       },
+      {
+        key: "writes",
+        label: "Let Jarvis change Skylight",
+        type: "select",
+        default: "true",
+        options: [
+          { value: "true", label: "Yes — each change is confirmed and can be undone" },
+          { value: "false", label: "No (read-only)" },
+        ],
+        showWhen: { field: "mode", oneOf: ["direct"] },
+      },
+      ...["eventCalendarId", "eventCalendarAccountId", "eventSourceCalendarId"].map((key) => ({
+        key,
+        label: `Calendar for new events ${key === "eventCalendarId" ? "(calendar ID)" : key === "eventCalendarAccountId" ? "(account ID)" : "(source calendar ID)"}`,
+        type: "text" as const,
+        advanced: true,
+        help: "Blank = auto (the writable Family calendar)",
+        showWhen: { field: "mode", oneOf: ["direct"] },
+      })),
       { key: "apiVersion", label: "API version header", type: "text", default: "2026-06-01", advanced: true, showWhen: { field: "mode", oneOf: ["direct"] } },
       {
         key: "baseUrl",
