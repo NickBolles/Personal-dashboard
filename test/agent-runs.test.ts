@@ -203,8 +203,8 @@ describe("decisions + navigation fixes", () => {
     expect(withdrawPost(null, "op1")).toBeNull();
   });
 
-  it("/decisions has its own top-bar title (not Map)", () => {
+  it("/decisions has its own top-bar title (not Areas)", () => {
     expect(breadcrumbFor("/decisions")[0]!.label).toBe("Needs you");
-    expect(breadcrumbFor("/map")[0]!.label).toBe("Map");
+    expect(breadcrumbFor("/areas")[0]!.label).toBe("Areas");
   });
 });

@@ -6,7 +6,7 @@ import { useEffect, useState, useSyncExternalStore, type DragEvent, type ReactNo
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
-import { BellIcon, BoltIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIcon, SunIcon, WorkIcon } from "@/components/icons";
+import { BellIcon, BoltIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
 import { useDecisions } from "@/components/map/Decisions";
 import { useShowArchived } from "@/lib/client/show-archived";
 import { WorkTree, type RowActions } from "@/components/work/WorkTree";
@@ -155,7 +155,6 @@ export function Sidebar({
     ...(canWork || canChat
       ? [{ key: "decisions", href: "/decisions", label: "Needs you", icon: BoltIcon, active: path.startsWith("/decisions"), badge: decisions.data?.count ?? 0 }]
       : []),
-    ...(canWork ? [{ key: "map", href: "/map", label: "Map", icon: WorkIcon, active: path === "/map" }] : []),
     ...(canChat ? [{ key: "chat", href: "/chat", label: "Chat", icon: ChatIcon, active: path === "/chat" }] : []),
     { key: "alerts", href: "/alerts", label: "Alerts", icon: BellIcon, active: path.startsWith("/alerts"), badge: unread },
   ];

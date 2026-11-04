@@ -4,6 +4,8 @@ import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, startConversati
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
+import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
+import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 
 const PAGES = [
   "/home",
@@ -39,7 +41,6 @@ const PAGES = [
   "/areas/dashboard",
   "/areas/map",
   "/areas/activity",
-  "/map",
   "/decisions",
   "/capture",
   "/settings/ai",
@@ -81,7 +82,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/finance/plan",
     "/workflows",
     "/areas/activity",
-    "/map",
+    "/areas",
     "/decisions",
   ]) {
     await page.goto(path);
@@ -497,7 +498,7 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
 
-  await page.goto("/map");
+  await page.goto("/areas");
   const card = page.getByTestId("map-area-card").filter({ hasText: `Zoom sandpiper ${nonce}` });
   await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();
   const pane = page.getByTestId("coordinator-pane");
@@ -508,4 +509,45 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
   await page.keyboard.press("Escape");
+});
+
+test("a11y + 200% text: area page (project cards, tree, coordinator column/sheet)", async ({ page }) => {
+  await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: agentRunsDemo }));
+  await page.route(/\/api\/work\/items\/ma_j$/, (route) => route.fulfill({ json: mapDemoAreaDetail }));
+  await page.route(/\/api\/work\/items\/[^/]+\/coordinator(?:\?.*)?$/, (route) => route.fulfill({ json: coordinatorDemo }));
+  await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: { items: mapDemo.items } }));
+  await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { items: [], conversations: [], conversationsTotal: 0, unavailable: [], count: 0 } }),
+  );
+  await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+  await page.goto("/areas?item=ma_j");
+  await expect(page.getByTestId("area-project-card")).toHaveCount(2);
+  const axe = async (label: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect
+      .soft(
+        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+        label,
+      )
+      .toEqual([]);
+  };
+  await axe("area page");
+  const wide = (page.viewportSize()?.width ?? 0) >= 1280;
+  if (wide) {
+    await expect(page.getByTestId("area-coordinator").getByTestId("area-discussions")).toContainText("Plan the areas merge");
+  } else {
+    await page.getByTestId("area-coordinator-sheet-open").click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByTestId("area-discussions")).toContainText("Plan the areas merge");
+    await axe("area coordinator sheet");
+    await page.keyboard.press("Escape");
+  }
+  await page.getByRole("group", { name: "Area view" }).getByRole("button", { name: "Tree" }).click();
+  await expect(page.getByTestId("area-tree").getByText("depends on")).toBeVisible();
+  await axe("area tree");
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await page.waitForTimeout(200);
+  await expectNoHorizontalOverflow(page, { soft: true });
 });

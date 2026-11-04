@@ -13,8 +13,8 @@ export function DecisionsView() {
           <h1 className="text-xl leading-tight font-semibold tracking-tight">Needs you</h1>
           <p className="mt-0.5 text-[13px] text-muted">Decisions on your work, Hermes approvals and workflow proposals. Nothing here settles on its own.</p>
         </div>
-        <Link href="/map" className="k-pick inline-flex items-center px-3 text-[13px]">
-          Open the map
+        <Link href="/areas" className="k-pick inline-flex items-center px-3 text-[13px]">
+          Open Areas
         </Link>
       </header>
       {q.error ? <p className="text-sm text-danger">Couldn&apos;t load: {(q.error as Error).message}</p> : null}

@@ -12,12 +12,12 @@ import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/
 export type AreasSection = "today" | "inbox" | "tree" | "timeline" | "dashboard" | "map";
 
 const SECTIONS: { key: AreasSection; href: string; label: string; icon?: ComponentType<{ className?: string }> }[] = [
-  { key: "today", href: "/areas", label: "Today", icon: SunIcon },
+  { key: "today", href: "/areas", label: "Overview", icon: SunIcon },
   { key: "inbox", href: "/inbox", label: "Inbox", icon: InboxIcon },
   { key: "tree", href: "/areas?view=tree", label: "Areas", icon: AreasIcon },
   { key: "timeline", href: "/areas/timeline", label: "Timeline" },
   { key: "dashboard", href: "/areas/dashboard", label: "Dashboard" },
-  { key: "map", href: "/areas/map", label: "Map" },
+  { key: "map", href: "/areas/map", label: "Dependency map" },
 ];
 const IN_PAGE = new Set<AreasSection>(["today", "tree"]);
 
@@ -30,7 +30,7 @@ export function WorkShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * The one Areas navigation row: Today · Inbox · Areas │ Timeline · Dashboard · Map.
+ * The one Areas navigation row: Overview · Inbox · Areas │ Timeline · Dashboard · Dependency map.
  * On /areas the first three switch in place (`onPick`, rendered as buttons);
  * everywhere else every entry is a link. Scrolls sideways on narrow phones.
  */

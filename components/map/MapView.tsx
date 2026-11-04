@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx } from "@/components/ui";
 import { ChipButton, ChipSelect } from "@/components/ui/kit";
 import { InlineText, useInlinePatch } from "@/components/work/InlineEdit";
 import { ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
@@ -19,8 +18,15 @@ import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { activeInArea } from "@/lib/agent-runs";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 
-type MapLink = { kind: string; url: string; title: string | null };
-export type MapResponse = { items: WorkItem[]; links: Record<string, MapLink[]>; decisions: DecisionsResponse };
+export type MapLink = { kind: string; url: string; title: string | null };
+export type MapRelation = { kind: "depends" | "followup"; id: string; title: string; open: boolean };
+export type MapResponse = {
+  items: WorkItem[];
+  links: Record<string, MapLink[]>;
+  /** older servers/stubs omit it */
+  relations?: Record<string, MapRelation[]>;
+  decisions: DecisionsResponse;
+};
 export const MAP_KEY = ["work", "overview"] as const;
 
 const BUCKET_TONE: Record<MapBucket, string> = { owner: "wn", inflight: "ac", next: "inf", live: "ok", backlog: "neutral", done: "ok" };
@@ -34,11 +40,13 @@ function linkLabel(l: MapLink) {
 }
 
 /**
- * /map: the portfolio overview. Area cards with Live / In flight / Next /
- * Backlog / Blocked-on-you / Done rollups, then the Area → Project → Item tree
- * with filter chips, search, inline status + next action and each row's links.
+ * The /areas landing ("Map is Areas"): area cards with Live / In flight / Next /
+ * Backlog / Blocked-on-you / Done rollups (tap opens the area in place), the
+ * Chief of staff slot + Needs you on the right, then the Area → Project → Item
+ * drill-down with filter chips, search, inline status + next action and links.
+ * /map redirects here.
  */
-export function MapView() {
+export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
   const q = useQuery({ queryKey: MAP_KEY, queryFn: () => api.get<MapResponse>("/api/work/overview") });
   const [area, setArea] = useState("");
   const [bucket, setBucket] = useState<MapBucket | "">("");
@@ -61,6 +69,8 @@ export function MapView() {
       .map((i) => (i.parentId && byId.get(i.parentId)?.kind === "conversation" ? { ...i, parentId: keptParent(i.parentId) } : i));
   }, [q.data]);
   const rolls = useMemo(() => areaRollups(items), [items]);
+  const runs = useAgentRuns().data;
+  const agentCount = useMemo(() => rolls.reduce((n, r) => n + activeInArea(runs, r.id).length, 0), [rolls, runs]);
   const filter = { bucket: bucket || undefined, tag: meta.tag ?? undefined, assignee: meta.assignee ?? undefined, q: search };
   const filtering = !!(bucket || meta.tag || meta.assignee || search.trim());
   const kids = useMemo(() => {
@@ -85,16 +95,19 @@ export function MapView() {
   const shown = items.filter((i) => visible.has(i.id) && !isContainer(i)).length;
 
   return (
-    <div className="mx-auto max-w-6xl px-3 pt-3 pb-24 sm:px-5" data-testid="map-page">
+    <div className="min-w-0 pb-24" data-testid="map-page">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <p className="wk-eyebrow">Work from Jarvis</p>
-          <h1 className="text-xl leading-tight font-semibold tracking-tight">Map</h1>
+          <h2 className="text-lg leading-tight font-semibold tracking-tight">Overview</h2>
           <p className="mt-0.5 text-[13px] text-muted" data-dynamic>
-            {rolls.length} {rolls.length === 1 ? "area" : "areas"} · {items.filter((i) => !isContainer(i)).length} items
+            {rolls.length} {rolls.length === 1 ? "area" : "areas"} · {items.filter((i) => !isContainer(i) && bucketOf(i) !== "done").length} open
+            {agentCount ? ` · ${agentCount} ${agentCount === 1 ? "agent" : "agents"} working` : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/areas/today" className="k-pick inline-flex items-center px-3 text-[13px]" data-testid="work-queue-link">
+            Work queue
+          </Link>
           <Link href="/decisions" className="k-pick inline-flex items-center px-3 text-[13px]">
             Needs you{q.data?.decisions.count ? ` · ${q.data.decisions.count}` : ""}
           </Link>
@@ -111,27 +124,32 @@ export function MapView() {
         </p>
       ) : null}
 
-      {q.data ? <NeedsYouSection entries={dq.data?.entries ?? q.data.decisions.entries} id="map-needs-you-h" limit={5} /> : null}
-
       {q.data ? (
-        <section aria-labelledby="map-areas-h" className="mb-5">
-          <h2 id="map-areas-h" className="wk-label mb-1.5">
-            Overview
-          </h2>
-          <ul className="mp-cards" data-testid="map-overview">
-            {rolls.map((r) => (
-              <AreaCard key={r.id} roll={r} active={area === r.id} onPick={() => setArea(area === r.id ? "" : r.id)} />
-            ))}
-          </ul>
-        </section>
+        <div className="mp-land mb-5">
+          {/* Phones: Chief of staff + Needs you come first; ≥1280 they're the right column. */}
+          <aside aria-label="Coordination" className="mp-land-side flex min-w-0 flex-col gap-3">
+            <ChiefOfStaffSlot items={items} onOpen={onOpen} />
+            <NeedsYouSection entries={dq.data?.entries ?? q.data.decisions.entries} id="map-needs-you-h" limit={5} />
+          </aside>
+          <section aria-labelledby="map-areas-h" className="min-w-0">
+            <h3 id="map-areas-h" className="wk-label mb-1.5">
+              Areas
+            </h3>
+            <ul className="mp-cards" data-testid="map-overview">
+              {rolls.map((r) => (
+                <AreaCard key={r.id} roll={r} onOpen={onOpen} />
+              ))}
+            </ul>
+          </section>
+        </div>
       ) : null}
 
       {q.data ? (
         <section aria-labelledby="map-tree-h">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 id="map-tree-h" className="wk-label">
+            <h3 id="map-tree-h" className="wk-label">
               Drill down <span className="text-muted">· {shown} shown</span>
-            </h2>
+            </h3>
           </div>
           <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Map filters">
             <label htmlFor="map-search" className="sr-only">
@@ -190,7 +208,16 @@ export function MapView() {
                       {r.total} {r.total === 1 ? "item" : "items"}
                     </span>
                   </summary>
-                  <Branch parent={r.id} kids={kids} visible={visible} open={filtering} depth={1} links={q.data!.links} onOp={setOp} />
+                  <Branch
+                    parent={r.id}
+                    kids={kids}
+                    visible={visible}
+                    open={filtering}
+                    depth={1}
+                    links={q.data!.links}
+                    relations={q.data!.relations}
+                    onOp={setOp}
+                  />
                 </details>
               ))}
             </div>
@@ -206,12 +233,22 @@ export function MapView() {
   );
 }
 
-function AreaCard({ roll: r, active, onPick }: { roll: AreaRollup; active: boolean; onPick: () => void }) {
+function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string) => void }) {
   const open = r.total - r.counts.done;
   const agents = activeInArea(useAgentRuns().data, r.id);
   return (
     <li className="flex min-w-0 flex-col gap-1">
-      <button type="button" className={cx("mp-card", active && "mp-card-on")} aria-pressed={active} onClick={onPick} data-testid="map-area-card">
+      {/* A real link (bookmarks, new tab); inside /areas it opens the area in place. */}
+      <Link
+        href={`/areas?item=${encodeURIComponent(r.id)}`}
+        className="mp-card"
+        onClick={(e) => {
+          if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          e.preventDefault();
+          onOpen(r.id);
+        }}
+        data-testid="map-area-card"
+      >
         <span className="flex min-w-0 items-baseline justify-between gap-2">
           <span className="truncate font-semibold">{r.title}</span>
           <span className="shrink-0 text-xs text-muted">{open} open</span>
@@ -244,20 +281,85 @@ function AreaCard({ roll: r, active, onPick }: { roll: AreaRollup; active: boole
             <AgentsStrip entries={agents} max={2} />
           </span>
         ) : null}
-      </button>
+      </Link>
       {/* Finance never goes to AI: no coordinator chat there. */}
       {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="self-end" />}
     </li>
   );
 }
 
-function Branch({
+/** The agent mode that makes an area's coordinator the primary one ("Chief of staff"). */
+export const CHIEF_OF_STAFF_MODE = "chiefofstaff";
+
+/** The area whose coordinator is the Chief of staff: a top-level, non-finance area with agent mode `chiefofstaff`. */
+export function chiefOfStaffArea(items: WorkItem[]): WorkItem | null {
+  return (
+    items.find(
+      (i) =>
+        i.kind === "area" &&
+        i.parentId === null &&
+        !i.archived &&
+        (i.settings?.agentMode ?? "").trim().toLowerCase() === CHIEF_OF_STAFF_MODE &&
+        !isFinanceAreaLike(i),
+    ) ?? null
+  );
+}
+
+/**
+ * The primary coordinator slot. Shows the Chief of staff area's coordinator
+ * (opens its pane: latest discussion + composer; sends nothing by itself), or
+ * an empty state explaining how to set it up. No invented activity.
+ */
+function ChiefOfStaffSlot({ items, onOpen }: { items: WorkItem[]; onOpen?: (id: string) => void }) {
+  const area = chiefOfStaffArea(items);
+  if (!area)
+    return (
+      <section aria-labelledby="cos-h" className="mp-cos" data-testid="chief-of-staff" data-state="empty">
+        <h3 id="cos-h" className="font-semibold">
+          Set up Chief of staff
+        </h3>
+        <p className="text-[13px] text-muted">
+          One coordinator that sees every area. Open an area (for example Portfolio), then Area settings → Agent mode <code>chiefofstaff</code>.
+        </p>
+      </section>
+    );
+  return (
+    <section aria-labelledby="cos-h" className="mp-cos" data-testid="chief-of-staff" data-state="set">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-[1_1_10rem]">
+          <h3 id="cos-h" className="font-semibold">
+            Chief of staff
+          </h3>
+          <p className="text-[13px] text-muted [overflow-wrap:anywhere]">
+            Coordinates every area from{" "}
+            <Link
+              href={`/areas?item=${encodeURIComponent(area.id)}`}
+              className="text-accent hover:underline"
+              onClick={(e) => {
+                if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                e.preventDefault();
+                onOpen(area.id);
+              }}
+            >
+              {area.title}
+            </Link>{" "}
+            · @{CHIEF_OF_STAFF_MODE}
+          </p>
+        </div>
+        <CoordinatorButton areaId={area.id} areaTitle={area.title} className="shrink-0" />
+      </div>
+    </section>
+  );
+}
+
+export function Branch({
   parent,
   kids,
   visible,
   open,
   depth,
   links,
+  relations,
   onOp,
 }: {
   parent: string;
@@ -266,6 +368,7 @@ function Branch({
   open: boolean;
   depth: number;
   links: Record<string, MapLink[]>;
+  relations?: Record<string, MapRelation[]>;
   onOp: (op: UndoOp) => void;
 }) {
   const list = (kids.get(parent) ?? []).filter((i) => visible.has(i.id));
@@ -290,15 +393,15 @@ function Branch({
                 </span>
               </span>
             </summary>
-            <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} onOp={onOp} />
+            <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
           </details>
         );
       })}
       {rows.length ? (
         <ul className="mp-rows">
           {rows.map((i) => (
-            <MapRow key={i.id} item={i} links={links[i.id] ?? []} onOp={onOp}>
-              <Branch parent={i.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} onOp={onOp} />
+            <MapRow key={i.id} item={i} links={links[i.id] ?? []} relations={relations?.[i.id]} onOp={onOp}>
+              <Branch parent={i.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
             </MapRow>
           ))}
         </ul>
@@ -307,7 +410,19 @@ function Branch({
   );
 }
 
-function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: MapLink[]; onOp: (op: UndoOp) => void; children?: React.ReactNode }) {
+function MapRow({
+  item: i,
+  links,
+  relations = [],
+  onOp,
+  children,
+}: {
+  item: WorkItem;
+  links: MapLink[];
+  relations?: MapRelation[];
+  onOp: (op: UndoOp) => void;
+  children?: React.ReactNode;
+}) {
   const patch = useInlinePatch(i.id, (op) => (op ? onOp(op) : undefined));
   const b = bucketOf(i);
   const agent = useAgentRuns().data?.items[i.id];
@@ -326,7 +441,7 @@ function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: Map
           id={`mp-st-${i.id}`}
           value={i.status}
           onChange={(e) => patch.mutate({ status: e.target.value as WorkStatus })}
-          className="w-32 [&>select]:w-full"
+          className="w-32 max-w-full [&>select]:w-full"
         >
           {WORK_STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -343,6 +458,21 @@ function MapRow({ item: i, links, onOp, children }: { item: WorkItem; links: Map
       {agent && (agent.live !== "idle" || agent.who?.kind === "agent") ? (
         <div className="mt-1 min-w-0 pl-4">
           <AgentLine info={agent} />
+        </div>
+      ) : null}
+      {relations.length ? (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 pl-4" data-testid="map-relations">
+          {relations.map((r) => (
+            <Link
+              key={`${r.kind}-${r.id}`}
+              href={`/areas?item=${encodeURIComponent(r.id)}`}
+              className="mp-rel"
+              data-kind={r.kind}
+              data-open={r.open ? "true" : undefined}
+            >
+              {r.kind === "depends" ? "depends on" : "follow-up of"} <b>{r.title}</b>
+            </Link>
+          ))}
         </div>
       ) : null}
       {i.tags.length || i.assignee || links.length ? (

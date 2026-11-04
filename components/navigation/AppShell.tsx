@@ -89,7 +89,7 @@ export function breadcrumbFor(pathname: string): { href: string; label: string }
   const out: { href: string; label: string }[] = [];
   parts.forEach((seg, i) => {
     const href = "/" + parts.slice(0, i + 1).join("/");
-    // /decisions shares the Map tab (destinations match) but has its own title.
+    // /decisions has its own title (the sidebar's "Needs you").
     const top = href === "/decisions" ? "Needs you" : (destFor(href)?.label ?? titleize(seg));
     const label = i === 0 ? top : parts[0] === "chat" ? "Conversation" : titleize(seg);
     out.push({ href, label: i === 0 && parts[0] === "chat" ? "Chat" : label });

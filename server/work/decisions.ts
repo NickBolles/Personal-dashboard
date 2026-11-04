@@ -130,7 +130,14 @@ export function linksByItem(ids: string[]) {
 }
 
 export type MapLink = { kind: string; url: string; title: string | null };
-export type MapResponse = { items: WorkItem[]; links: Record<string, MapLink[]>; decisions: DecisionsResponse };
+/** A relation chip on the area tree: "depends on <x>" (work_dependencies) or "follow-up of <x>" (reopen hand-off lineage). */
+export type MapRelation = { kind: "depends" | "followup"; id: string; title: string; open: boolean };
+export type MapResponse = {
+  items: WorkItem[];
+  links: Record<string, MapLink[]>;
+  relations: Record<string, MapRelation[]>;
+  decisions: DecisionsResponse;
+};
 
 const chatUrl = (sessionId: string) => `/chat/${encodeURIComponent(sessionId)}`;
 
@@ -145,7 +152,31 @@ export function mapData(user: CurrentUser): MapResponse {
       .filter((l) => l.url.startsWith("/") || /^https?:\/\//.test(l.url));
     if (out.length) links[id] = out;
   }
-  return { items, links, decisions: listDecisions(user, items) };
+  return { items, links, relations: relationsByItem(user.id, items), decisions: listDecisions(user, items) };
+}
+
+const CLOSED = new Set(["settled", "superseded", "abandoned"]);
+
+/** Dependency and follow-up relations between the user's live items (both ends must exist and be unarchived). */
+export function relationsByItem(userId: string, items: WorkItem[]): Record<string, MapRelation[]> {
+  const byId = new Map(items.filter((i) => !i.archived).map((i) => [i.id, i]));
+  const out: Record<string, MapRelation[]> = {};
+  const add = (id: string, r: MapRelation) => (out[id] ??= []).push(r);
+  const db = getDb();
+  for (const d of db.select().from(schema.workDependencies).where(eq(schema.workDependencies.userId, userId)).all()) {
+    const on = byId.get(d.dependsOnId);
+    if (byId.has(d.itemId) && on) add(d.itemId, { kind: "depends", id: on.id, title: on.title, open: !CLOSED.has(on.status) });
+  }
+  const lineage = db
+    .select()
+    .from(schema.workLineage)
+    .where(and(eq(schema.workLineage.userId, userId), eq(schema.workLineage.relation, "handoff_from")))
+    .all();
+  for (const l of lineage) {
+    const src = l.parentId ? byId.get(l.parentId) : undefined;
+    if (byId.has(l.childId) && src) add(l.childId, { kind: "followup", id: src.id, title: src.title, open: !CLOSED.has(src.status) });
+  }
+  return out;
 }
 
 /** JSON export of the map (import into a draft area is follow-up #153). */
