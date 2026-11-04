@@ -15,7 +15,7 @@ import { useToast } from "@/components/ui";
 import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
-import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
+import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
 import { useCoordinatorThings } from "./useCoordinatorThings";
 import "./coordinator.css";
 
@@ -144,11 +144,16 @@ export function GlobalCoordinator() {
         requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
       );
     };
+    // The phone sheet is a native modal (top layer, rest of the app inert): close it so the
+    // app-shell "Manage quick actions" dialog is reachable.
+    const onManage = () => setPhoneOpen(false);
     window.addEventListener(OPEN_COORDINATOR_EVENT, onOpen);
     window.addEventListener(COORDINATOR_PROMPT, onPrompt);
+    window.addEventListener(QUICK_ACTION_MANAGE, onManage);
     return () => {
       window.removeEventListener(OPEN_COORDINATOR_EVENT, onOpen);
       window.removeEventListener(COORDINATOR_PROMPT, onPrompt);
+      window.removeEventListener(QUICK_ACTION_MANAGE, onManage);
     };
   }, [pageKey]);
   useEffect(() => {
