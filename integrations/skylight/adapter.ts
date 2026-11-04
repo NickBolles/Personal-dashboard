@@ -113,7 +113,11 @@ function retryable(err: unknown) {
  * One Skylight API call. Reads retry twice on 429/5xx/network (250 ms, 1 s backoff).
  * Writes (`method` ≠ GET) retry only on 429, which Skylight answers before applying anything.
  */
-export async function skylightRequest<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, opts: { query?: Record<string, string>; body?: unknown } = {}): Promise<T> {
+export async function skylightRequest<T>(
+  method: "GET" | "POST" | "PUT" | "DELETE",
+  path: string,
+  opts: { query?: Record<string, string>; body?: unknown } = {},
+): Promise<T> {
   const c = cfg();
   const delays = [250, 1000];
   for (let attempt = 0; ; attempt++) {
