@@ -36,6 +36,11 @@ test("adopt an existing chat into an area; its notices render as cards", async (
   expect(bot.status()).toBe(409);
   expect(await bot.text()).toContain("Bot Chat");
 
+  // Whether an earlier project/attempt already adopted the seeded chat (then it isn't offered any more).
+  const adoptable = await page.request.get("/api/hermes/sessions/adoptable?profile=momentumchief");
+  expect(adoptable.ok(), await adoptable.text()).toBeTruthy();
+  const fresh = ((await adoptable.json()) as { sessions: { id: string }[] }).sessions.some((s) => s.id === "sess_mc_notices");
+
   await page.goto(`/areas?item=${item.id}`);
   await page.getByRole("button", { name: "More item actions" }).click();
   await page.getByRole("menuitem", { name: "Adopt existing chat…" }).click();
@@ -43,11 +48,19 @@ test("adopt an existing chat into an area; its notices render as cards", async (
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("Agent")).toHaveValue("momentumchief");
   const list = dialog.getByRole("list", { name: "Chats to adopt" });
-  await expect(list.getByRole("button", { name: /Quarterly vendor review/ })).toBeVisible();
   // Never offered: the Bot Chat inbox and sub-agent working sessions.
   await expect(list.getByText("Bot Chat")).toHaveCount(0);
   await expect(list.getByText(/Subagent:/)).toHaveCount(0);
-  await list.getByRole("button", { name: /Quarterly vendor review/ }).click();
+  if (fresh) {
+    await expect(list.getByRole("button", { name: /Quarterly vendor review/ })).toBeVisible();
+    await list.getByRole("button", { name: /Quarterly vendor review/ }).click();
+  } else {
+    // Another project/attempt already adopted it (shared server DB, adoption isn't undone by the mock reset):
+    // it's no longer listed, so take the paste-an-id path (adopting a chat already tracked on the same agent is idempotent).
+    await expect(list.getByRole("button", { name: /Quarterly vendor review/ })).toHaveCount(0);
+    await dialog.getByLabel("Or paste a session id").fill("sess_mc_notices");
+    await dialog.getByRole("button", { name: "Next" }).click();
+  }
 
   const confirm = page.getByRole("dialog", { name: "Adopt this chat?" });
   await expect(confirm).toContainText("momentumchief");

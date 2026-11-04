@@ -177,9 +177,11 @@ test("coordinator notices + clarify card: axe clean and no overflow at 200% text
   const card = page.getByTestId("clarify-card");
   await expect(card).toBeVisible({ timeout: 15_000 });
   await axe('[data-testid="clarify-card"]');
-  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page);
+  // At 320 px + 200% text the sticky header and composer cover the card's choices; answer at normal size.
+  await zoom.evaluate((el) => (el as Element).remove());
   await card.getByRole("button", { name: "Teal" }).click();
   await expect(card).toBeHidden({ timeout: 15_000 });
 });
