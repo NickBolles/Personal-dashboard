@@ -105,6 +105,14 @@ test("coordinator pane: Catch me up composes the prompt but sends nothing until 
   expect(sent).toEqual([]);
 
   await page.getByRole("listitem").filter({ has: card }).getByTestId("coordinator-open").click();
+  // Enter adds a line and never sends; Send (or Ctrl/⌘ + Enter) does.
+  const typed = pane.getByTestId("coordinator-input");
+  await typed.fill(`Plover line ${nonce}`);
+  await typed.press("Enter");
+  await typed.pressSequentially("second line");
+  await expect(typed).toHaveValue(`Plover line ${nonce}\nsecond line`);
+  await page.waitForTimeout(300);
+  expect(sent).toEqual([]);
   await pane.getByTestId("coordinator-catch-up").click();
   await pane.getByTestId("coordinator-send").click();
   await expect(page.getByText("Sent to the coordinator")).toBeVisible();

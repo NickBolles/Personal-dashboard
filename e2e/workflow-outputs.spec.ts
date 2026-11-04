@@ -54,7 +54,7 @@ test("workflow outputs: edit session → end form → summary accept → markdow
   for (const t of ["Prune the orchard rows", "Call the orchard group"]) {
     await panel.getByRole("button", { name: "Action", exact: true }).click();
     await composer.fill(t);
-    await composer.press("Enter");
+    await composer.press("Control+Enter");
     await expect(panel.getByTestId("workflow-outline")).toContainText(t);
   }
 
@@ -260,7 +260,7 @@ test("#147/#148/#145 typed Edit session + end form answers are kept; invalid ans
   const composer = page.getByRole("textbox", { name: /message/i });
   await panel.getByRole("button", { name: "Action", exact: true }).click();
   await composer.fill("Prune the quince hedge");
-  await composer.press("Enter");
+  await composer.press("Control+Enter");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Prune the quince hedge");
 
   // #147 End form: out-of-range number keeps the session live with the answers in place
