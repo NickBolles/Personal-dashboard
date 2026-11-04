@@ -128,14 +128,20 @@ export async function runSkylightWrite(
     const base = `/frames/${f}`;
     switch (op.op) {
       case "chore.complete":
-      case "chore.reopen":
-        await write("PUT", `${base}/chores/${op.choreId}/completions`, {
+      case "chore.reopen": {
+        // Recurring occurrences read as "<baseId>-YYYY-MM-DD[-HHMM]"; the completions URL takes the BASE id
+        // and the occurrence goes in the body (docs/research/integrations-api.md, chores).
+        const occ = /^([A-Za-z0-9_]+)-(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?$/.exec(op.choreId);
+        const instanceDate = op.instanceDate ?? occ?.[2];
+        const instanceTime = op.instanceTime ?? (occ?.[3] ? `${occ[3]}:${occ[4]}` : undefined);
+        await write("PUT", `${base}/chores/${occ ? occ[1] : op.choreId}/completions`, {
           status: op.op === "chore.complete" ? "complete" : "pending",
-          ...(op.instanceDate != null ? { instance_date: op.instanceDate } : {}),
-          ...(op.instanceTime != null ? { instance_time: op.instanceTime } : {}),
+          ...(instanceDate != null ? { instance_date: instanceDate } : {}),
+          ...(instanceTime != null ? { instance_time: instanceTime } : {}),
           ...(op.categoryId != null ? { category_id: op.categoryId } : {}),
         });
         break;
+      }
       case "chore.claim": {
         const to = op.toCategoryId ?? (await ownerMember());
         if (!to) throw new HttpError(409, "pick_member", "Pick your Skylight member in Settings → Connections first.");

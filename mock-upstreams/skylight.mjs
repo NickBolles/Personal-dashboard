@@ -261,7 +261,15 @@ export function createSkylight({ refreshToken }) {
       return json(res, status, { data: result });
     };
     if ((match = path.match(/^\/api\/frames\/[^/]+\/chores\/([^/]+)(\/completions)?$/)) && m === "PUT") {
-      const c = state.chores.get(match[1]);
+      // Real API: completions take the BASE chore id in the path; the occurrence goes in the body.
+      if (match[2] && /-\d{4}-\d{2}-\d{2}/.test(match[1])) return invalid(res);
+      const occurrence = () => {
+        const date = typeof body?.instance_date === "string" ? body.instance_date : null;
+        if (!date) return undefined;
+        const time = typeof body.instance_time === "string" ? body.instance_time.replace(":", "") : null;
+        return state.chores.get(`${match[1]}-${date}${time ? `-${time}` : ""}`) ?? state.chores.get(`${match[1]}-${date}`);
+      };
+      const c = state.chores.get(match[1]) ?? (match[2] ? occurrence() : undefined);
       if (!c) return notFound(res);
       if (match[2]) {
         if (

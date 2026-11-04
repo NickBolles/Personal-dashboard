@@ -75,15 +75,13 @@ test("skywrite completes a Nick chore and undoes its completion", async ({ page 
   await expect(page.getByTestId("skylight-done")).toContainText("Take out recycling");
   await expect(check).toHaveCount(0);
   await expect
-    .poll(async () =>
-      (await writes(page)).some((w) => w.method === "PUT" && /\/chores\/55780859[^/]*\/completions$/.test(w.path) && w.body.status === "complete"),
-    )
+    .poll(async () => (await writes(page)).some((w) => w.method === "PUT" && /\/chores\/55780859\/completions$/.test(w.path) && w.body.status === "complete"))
     .toBe(true);
   await undo(page);
   await expect(check).toBeVisible();
   await expect(page.getByTestId("skylight-done")).not.toContainText("Take out recycling");
   await expect
-    .poll(async () => (await writes(page)).filter((w) => /\/chores\/55780859[^/]*\/completions$/.test(w.path)).map((w) => w.body.status))
+    .poll(async () => (await writes(page)).filter((w) => /\/chores\/55780859\/completions$/.test(w.path)).map((w) => w.body.status))
     .toEqual(["complete", "pending"]);
 });
 

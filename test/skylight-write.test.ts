@@ -143,7 +143,17 @@ describe("exact raw Skylight write contracts", () => {
     await run({ op: "chore.claim", ...chore, fromCategoryId: null, toCategoryId: "13600772" });
     tick();
     await run({ op: "chore.assign", ...chore, toCategoryId: "14463836" });
-    expect((await writes()).map((w) => w.body)).toEqual([
+    // Completions take the BASE id in the path (the mock answers 422 to a composite id).
+    expect((await writes())[0].path).toBe(`/api${f}/chores/${recurring.id.split("-")[0]}/completions`);
+    tick();
+    // An op without explicit instance fields (e.g. an Undo of an older write) parses them from the composite id.
+    await run({ op: "chore.reopen", choreId: recurring.id, title: "Recycling" });
+    expect((await writes())[3]).toEqual({
+      method: "PUT",
+      path: `/api${f}/chores/${recurring.id.split("-")[0]}/completions`,
+      body: { status: "pending", instance_date: recurring.id.slice(9, 19), instance_time: "18:00" },
+    });
+    expect((await writes()).slice(0, 3).map((w) => w.body)).toEqual([
       { status: "complete", instance_date: recurring.attributes.start, instance_time: "18:00", category_id: "13600771" },
       { category_id: 13600772 },
       { category_id: 14463836 },
