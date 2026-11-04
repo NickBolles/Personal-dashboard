@@ -13,6 +13,10 @@ import { AgentChip } from "@/components/agents/AgentChip";
 import { Markdown } from "@/components/markdown/Markdown";
 import { Button } from "@/components/ui/kit";
 import { cx, inputCls, useToast } from "@/components/ui";
+import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
+import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
+import { useQuickActions } from "@/components/quick-actions/useQuickActions";
+import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
 import "./agents.css";
 
 export type CoordinatorResponse = {
@@ -76,6 +80,8 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
     ref.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // A nested modal (Manage quick actions) owns Escape while it is open.
+        if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
         e.stopPropagation();
         closeRef.current();
       }
@@ -114,6 +120,21 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
   });
 
   const d = info.data;
+  const quickActions = useQuickActions(!!d && !d.excluded);
+  const hasProposals = quickActions.data?.actions.some((a) => a.status === "proposed");
+  const quickContext = { areaId, areaTitle: d?.area.title, path: typeof window !== "undefined" ? window.location.pathname : undefined };
+  useEffect(() => {
+    if (!d || d.excluded) return;
+    const fill = (e: Event) => {
+      const value = (e as CustomEvent<{ text?: string }>).detail?.text;
+      if (typeof value === "string") {
+        setText(value.slice(0, 8000));
+        requestAnimationFrame(() => ref.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus());
+      }
+    };
+    window.addEventListener(COORDINATOR_PROMPT, fill);
+    return () => window.removeEventListener(COORDINATOR_PROMPT, fill);
+  }, [d]);
   const msgs = (detail.data?.timeline ?? [])
     .filter((t): t is Extract<TimelineItem, { kind: "user" | "assistant" }> => t.kind === "user" || t.kind === "assistant")
     .slice(-6);
@@ -144,9 +165,12 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
             </p>
           ) : null}
           {d && !d.excluded && !sid ? (
-            <p className="text-sm text-muted" data-testid="coordinator-empty">
-              No coordinator conversation yet. Your first message starts one, filed in this area.
-            </p>
+            <div className="grid min-w-0 gap-2">
+              <p className="text-sm text-muted" data-testid="coordinator-empty">
+                No coordinator conversation yet. Your first message starts one, filed in this area.
+              </p>
+              <QuickActionChips variant="empty" context={quickContext} onPrompt={setText} />
+            </div>
           ) : null}
           {sid && msgs.length ? (
             <ol aria-label="Latest messages">
@@ -172,44 +196,55 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
           ) : null}
         </div>
         {d && !d.excluded ? (
-          <form
-            className="co-foot"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (text.trim() && !send.isPending) send.mutate(text.trim());
-            }}
-          >
-            <label htmlFor={`${titleId}-m`} className="sr-only">
-              Message the coordinator
-            </label>
-            <textarea
-              id={`${titleId}-m`}
-              data-autofocus
-              data-testid="coordinator-input"
-              className={cx(inputCls, "min-h-[72px] w-full min-w-0 resize-y text-[16px] sm:text-sm")}
-              rows={text.length > 200 ? 8 : 3}
-              maxLength={8000}
-              value={text}
-              placeholder="Ask the coordinator…"
-              onChange={(e) => setText(e.target.value)}
-            />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={!d.prompt}
-                onClick={() => d.prompt && setText(d.prompt)}
-                data-testid="coordinator-catch-up"
-                title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
-              >
-                Catch me up
-              </Button>
-              <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
-              <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} loading={send.isPending} data-testid="coordinator-send">
-                Send
-              </Button>
-            </div>
-          </form>
+          <>
+            <ProposedQuickActions />
+            <form
+              className="co-foot"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (text.trim() && !send.isPending) send.mutate(text.trim());
+              }}
+            >
+              <QuickActionChips variant="row" context={quickContext} onPrompt={setText} />
+              <label htmlFor={`${titleId}-m`} className="sr-only">
+                Message the coordinator
+              </label>
+              <textarea
+                id={`${titleId}-m`}
+                data-autofocus
+                data-testid="coordinator-input"
+                className={cx(inputCls, "min-h-[72px] w-full min-w-0 resize-y text-[16px] sm:text-sm")}
+                rows={text.length > 200 ? 8 : 3}
+                maxLength={8000}
+                value={text}
+                placeholder="Ask the coordinator…"
+                onChange={(e) => setText(e.target.value)}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!d.prompt}
+                  onClick={() => d.prompt && setText(d.prompt)}
+                  data-testid="coordinator-catch-up"
+                  title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
+                >
+                  Catch me up
+                </Button>
+                <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant={hasProposals ? "secondary" : "primary"}
+                  disabled={!text.trim()}
+                  loading={send.isPending}
+                  data-testid="coordinator-send"
+                >
+                  Send
+                </Button>
+              </div>
+            </form>
+          </>
         ) : null}
       </div>
     </>

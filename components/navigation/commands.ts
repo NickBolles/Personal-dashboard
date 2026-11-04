@@ -14,7 +14,7 @@ import { useToast } from "@/components/ui";
 export type Command = {
   id: string;
   label: string;
-  group: "Go to" | "Work" | "Search";
+  group: "Go to" | "Work" | "Search" | "Quick actions";
   keywords: string;
   run: () => void;
 };
