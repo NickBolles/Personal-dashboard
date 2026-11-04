@@ -1,4 +1,4 @@
-import type { ApprovalRequest, RunEvent, SessionSummary, TimelineItem } from "@/lib/hermes";
+import type { ApprovalRequest, ClarifyRequest, RunEvent, SessionSummary, TimelineItem } from "@/lib/hermes";
 import type { HermesMessage, HermesRunEvent, HermesSession } from "./types";
 
 const iso = (unix?: number | null) => (unix ? new Date(unix * 1000).toISOString() : undefined);
@@ -27,6 +27,24 @@ export function normalizeApproval(raw: Record<string, unknown> | null | undefine
     command: scrub(str(raw.command)),
     description: scrub(str(raw.description)),
     choices: normalizeChoices(raw.choices),
+  };
+}
+
+/**
+ * A session-authority `clarify.request` event / `pending_controls` entry:
+ * `{ kind: "clarify", prompt_id, execution_generation, question, choices[], multi_select, timeout_s? }`
+ * (gateway/session_pending_controls.py register_clarify). No id → undefined (can't be answered).
+ */
+export function normalizeClarify(raw: Record<string, unknown> | null | undefined): ClarifyRequest | undefined {
+  if (!raw) return undefined;
+  const requestId = str(raw.prompt_id) ?? str(raw.request_id) ?? str(raw.clarify_id);
+  if (!requestId) return undefined;
+  const choices = Array.isArray(raw.choices) ? raw.choices.filter((c): c is string => typeof c === "string" && c.trim().length > 0).slice(0, 12) : [];
+  return {
+    requestId,
+    question: scrub(str(raw.question)) ?? "Hermes has a question",
+    choices: choices.map((c) => scrub(c) ?? c),
+    multiSelect: raw.multi_select === true ? true : undefined,
   };
 }
 
@@ -71,6 +89,12 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
     case "approval.settled":
       // Session-authority runs announce an answered/withdrawn prompt as `approval.settled`.
       return { type: "approval.resolved", seq, requestId: str(e.prompt_id) ?? str(e.request_id), at };
+    case "clarify.request": {
+      const c = normalizeClarify(e);
+      return c ? { type: "clarify.requested", seq, at, ...c } : { type: "unknown", seq, event: e.event };
+    }
+    case "clarify.settled":
+      return { type: "clarify.resolved", seq, requestId: str(e.prompt_id) ?? str(e.request_id), at };
     case "run.steered":
       return { type: "steer.queued", seq, at };
     case "run.completed":

@@ -225,6 +225,18 @@ export class HermesAguiTranslator {
       case "steer.queued":
         out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.steer_queued", value: { at: e.at } }));
         break;
+      case "clarify.requested":
+        out.push(
+          this.ev({
+            type: EventType.CUSTOM,
+            name: "jarvis.clarify",
+            value: { requestId: e.requestId, question: e.question, choices: e.choices, multiSelect: e.multiSelect ?? false },
+          }),
+        );
+        break;
+      case "clarify.resolved":
+        out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.clarify_settled", value: { requestId: e.requestId ?? null } }));
+        break;
       case "replay.truncated":
         out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.replay_truncated", value: { oldestSeq: e.oldestSeq ?? null } }));
         break;

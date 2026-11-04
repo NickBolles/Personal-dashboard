@@ -153,6 +153,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
                       <ForkIcon className="h-3.5 w-3.5" /> Fork
                     </span>
                   ) : null}
+                  {s.subagentCount ? <span>{s.subagentCount === 1 ? "1 sub-agent" : `${s.subagentCount} sub-agents`}</span> : null}
                   {s.pinned ? <span>Pinned</span> : null}
                   {s.archived ? <span>Archived</span> : null}
                   {s.lastActiveAt ? <span data-dynamic>{relativeTime(s.lastActiveAt)}</span> : null}

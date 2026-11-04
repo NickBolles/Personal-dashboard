@@ -35,6 +35,7 @@ import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { AreaCoordinator, AreaProjects } from "@/components/map/AreaPage";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
+import { AdoptDialog } from "@/components/work/AdoptDialog";
 import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
@@ -806,7 +807,7 @@ function shortDate(d: string) {
   return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-type DialogKind = null | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | CloseStatus | LinkKind;
+type DialogKind = null | "adopt" | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | CloseStatus | LinkKind;
 
 /** Terminal statuses set from ⋯ with an optional reason (Settle keeps its own gated dialog). */
 type CloseStatus = "abandoned" | "superseded";
@@ -877,6 +878,7 @@ function ItemDetail({
   }
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
+  const isOwner = useAccess().isAdmin;
   const newChat = useAskHermes();
   if (dialog === "continue" && !canChat) setDialog(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
@@ -928,6 +930,7 @@ function ItemDetail({
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
       container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+      isArea && canChat && isOwner ? { label: "Adopt existing chat…", onSelect: () => setDialog("adopt") } : null,
       // A project with no items yet can still be worked directly.
       (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
         ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
@@ -1286,6 +1289,7 @@ function ItemDetail({
       {aiSheet ? <ActionSheet itemId={item.id} areaId={d.area?.id ?? null} action={aiSheet} onClose={() => setAiSheet(null)} /> : null}
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
       {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
+      {dialog === "adopt" ? <AdoptDialog item={item} onClose={close} /> : null}
       {dialog === "chat_session" ? (
         <ConversationLinkDialog
           item={item}

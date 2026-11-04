@@ -28,6 +28,14 @@ export type HermesConn = { baseUrl: string; apiKey?: string };
  */
 export type HermesApprovalBody = { choice: string; request_id: string; execution_generation: number } | { choice: string; request_id?: string };
 
+/**
+ * POST /v1/runs/{id}/clarify body. Session-authority Hermes (api_server_authority_runs.py respond_run +
+ * session_pending_controls.py respond) rejects anything but EXACTLY `{ answer, request_id,
+ * execution_generation }` (400 `invalid_params`); `answer` is a string ≤ 16384 chars and `request_id`
+ * is the pending clarify prompt's `prompt_id`. Built only by `clarifyBody` in service.ts.
+ */
+export type HermesClarifyBody = { answer: string; request_id: string; execution_generation: number };
+
 /** Ordinary use requires enabled; only this integration's admin connection test may opt out. */
 export function hermesConn(purpose?: "admin-connection-test"): HermesConn {
   const r = resolveIntegration("hermes");
@@ -170,6 +178,12 @@ export const HermesExecutionClient = {
       c,
       { path: `/v1/runs/${encodeURIComponent(runId)}/approval`, method: "POST", body },
       z.object({ choice: z.string().optional(), resolved: z.number().optional() }).passthrough(),
+    ),
+  clarify: (c: HermesConn, runId: string, body: HermesClarifyBody) =>
+    call(
+      c,
+      { path: `/v1/runs/${encodeURIComponent(runId)}/clarify`, method: "POST", body },
+      z.object({ status: z.string().optional(), prompt_id: z.string().optional() }).passthrough(),
     ),
   steer: (c: HermesConn, runId: string, input: string) =>
     call(

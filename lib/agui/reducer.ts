@@ -76,6 +76,18 @@ export function aguiToRunEvents(e: AGUIEvent, st: AguiReadState): RunEvent[] {
       const v = (e.value ?? {}) as Record<string, unknown>;
       if (e.name === "jarvis.commentary") return [{ type: "commentary", text: str(v.text) ?? "" }];
       if (e.name === "jarvis.steer_queued") return [{ type: "steer.queued", at }];
+      if (e.name === "jarvis.clarify" && typeof v.requestId === "string")
+        return [
+          {
+            type: "clarify.requested",
+            requestId: v.requestId,
+            question: str(v.question) ?? "Hermes has a question",
+            choices: Array.isArray(v.choices) ? v.choices.filter((c): c is string => typeof c === "string") : [],
+            multiSelect: v.multiSelect === true || undefined,
+            at,
+          },
+        ];
+      if (e.name === "jarvis.clarify_settled") return [{ type: "clarify.resolved", requestId: str(v.requestId), at }];
       if (e.name === "jarvis.replay_truncated") return [{ type: "replay.truncated", oldestSeq: num(v.oldestSeq) }];
       return [];
     }
