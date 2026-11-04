@@ -1070,6 +1070,7 @@ for (const theme of ["light", "dark"] as const) {
 for (const theme of ["light", "dark"] as const) {
   test(`visual: agent delegation panel (${theme})`, async ({ page }) => {
     await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: theme });
     const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
     const now = Math.min(Date.now(), Date.parse(`${ymd}T17:00:00.000Z`));
     const ago = (min: number) => new Date(now - min * 60_000).toISOString();
@@ -1113,9 +1114,9 @@ for (const theme of ["light", "dark"] as const) {
     await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
     await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
     await page.goto(`/areas?item=${d.item.id}`);
-    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     const panel = page.getByTestId("item-agent-panel");
     await expect(panel.getByTestId("agent-run")).toHaveCount(2);
+    if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     await expect(panel.getByTestId("agent-run").nth(1).getByTestId("agent-stalled")).toHaveText("Stalled");
     await expect(panel.getByTestId("agent-run").first().getByTestId("agent-stalled")).toHaveCount(0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

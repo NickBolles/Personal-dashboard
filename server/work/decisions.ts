@@ -121,8 +121,10 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
       .from(schema.agentRuns)
       .where(and(eq(schema.agentRuns.userId, user.id), eq(schema.agentRuns.state, "running"), lt(schema.agentRuns.updatedAt, cutoff)))
       .orderBy(desc(schema.agentRuns.updatedAt))
-      .limit(50)
-      .all();
+      .all()
+      // Visibility first, then the cap, so runs on archived items never crowd out live ones.
+      .filter((r) => live.has(r.itemId))
+      .slice(0, 50);
     const areaOf = stale.length ? areaIndex(items) : null;
     for (const r of stale) {
       const item = live.get(r.itemId);

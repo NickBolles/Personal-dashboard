@@ -190,7 +190,7 @@ function AgentRunRow({ run: r }: { run: ExternalRun }) {
   const stalled = isStalled(r);
   return (
     <li className="min-w-0 text-[13px]" data-testid="agent-run" data-stalled={stalled || undefined}>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="agent-run-head">
         <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
         <AgentChip profile={r.profile} />
         <LiveState live={liveOfAgentRun(r.state)} at={r.updatedAt} compact />
