@@ -17,6 +17,7 @@ function StepIcon({ kind }: { kind: ToolKind }) {
 }
 /** Shared by live activity and the persisted transcript; raw payloads are secondary. */
 export const ToolStep = memo(function ToolStep({
+  id,
   tool,
   input,
   output,
@@ -24,6 +25,7 @@ export const ToolStep = memo(function ToolStep({
   error,
   duration,
 }: {
+  id?: string;
   tool: string;
   input?: string;
   output?: string;
@@ -31,13 +33,27 @@ export const ToolStep = memo(function ToolStep({
   error?: boolean;
   duration?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    try {
+      return !!id && sessionStorage.getItem(`jarvis:tool-open:${id}`) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setOpen(!open);
+    try {
+      if (id) sessionStorage.setItem(`jarvis:tool-open:${id}`, open ? "0" : "1");
+    } catch {
+      /* storage unavailable */
+    }
+  };
   const info = presentTool(tool, input);
   const status = toolResultState(output, error, done);
   const outcome = done && status !== "failed" ? toolOutcome(info.children.length === 1 ? info.children[0].name : tool, output) : undefined;
   return (
     <li>
-      <button type="button" className={cx("chat-tool", status === "failed" && "text-danger")} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className={cx("chat-tool", status === "failed" && "text-danger")} aria-expanded={open} onClick={toggle}>
         <StepIcon kind={info.kind} />
         <span className="min-w-0 flex-1 break-words">
           {outcome?.label ?? info.label}

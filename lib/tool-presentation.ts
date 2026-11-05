@@ -80,10 +80,26 @@ export function presentTool(name: string, input?: unknown, depth = 0): ToolPrese
     children,
   };
 }
+function hasFailure(raw: unknown, depth = 0): boolean {
+  if (depth > 5) return false;
+  const value = parse(raw);
+  if (Array.isArray(value)) return value.slice(0, 50).some((v) => hasFailure(v, depth + 1));
+  const v = record(value);
+  if (!v) return false;
+  if (v.error || v.isError === true || v.success === false || v.ok === false || v.status === "failed" || (typeof v.exit_code === "number" && v.exit_code !== 0))
+    return true;
+  if (v.result && hasFailure(v.result, depth + 1)) return true;
+  if (v.results && hasFailure(v.results, depth + 1)) return true;
+  if (Array.isArray(v.content))
+    return v.content.slice(0, 50).some((p) => {
+      const part = record(p);
+      return part?.type === "text" && hasFailure(part.text, depth + 1);
+    });
+  return false;
+}
 export function toolResultState(output?: string, failed?: boolean, done = true): string {
   if (!done) return "running";
-  const value = record(parse(output));
-  if (failed || value?.error || value?.success === false || value?.ok === false || /^(error|BLOCKED:)/i.test(output?.trim() ?? "")) return "failed";
+  if (failed || hasFailure(output) || /^(error|BLOCKED:)/i.test(output?.trim() ?? "")) return "failed";
   // A returned tool call is not evidence its proposed action took effect.
   return "returned";
 }

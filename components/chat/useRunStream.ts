@@ -4,9 +4,21 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "rea
 import { api } from "@/lib/client/api";
 import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
 import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
+import { toolResultState } from "@/lib/tool-presentation";
 
 export type Activity =
-  | { id: string; kind: "tool"; tool: string; preview?: string; result?: string; done: boolean; error?: boolean; startedAt: string; durationSec?: number }
+  | {
+      id: string;
+      callId?: string;
+      kind: "tool";
+      tool: string;
+      preview?: string;
+      result?: string;
+      done: boolean;
+      error?: boolean;
+      startedAt: string;
+      durationSec?: number;
+    }
   | { id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string }
   | { id: string; kind: "commentary"; text: string; startedAt: string };
 
@@ -76,11 +88,15 @@ export function reduceRun(state: RunState, a: Action): RunState {
         case "reasoning":
           return { ...s, reasoning: s.reasoning + e.text };
         case "tool.started":
-          return { ...s, activity: [...s.activity, { id: aid(), kind: "tool", tool: e.tool, preview: e.preview, done: false, startedAt: e.at }] };
+          if (e.callId && s.activity.some((x) => x.kind === "tool" && x.callId === e.callId)) return s;
+          return {
+            ...s,
+            activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, preview: e.preview, done: false, startedAt: e.at }],
+          };
         case "tool.completed": {
-          const idx = s.activity.findIndex((x) => x.kind === "tool" && x.tool === e.tool && !x.done);
-          const done = { done: true, result: e.preview, error: e.error, durationSec: e.durationSec };
-          if (idx === -1) return { ...s, activity: [...s.activity, { id: aid(), kind: "tool", tool: e.tool, startedAt: e.at, ...done }] };
+          const idx = s.activity.findIndex((x) => x.kind === "tool" && (e.callId ? x.callId === e.callId : x.tool === e.tool && !x.done));
+          const done = { done: true, result: e.preview, error: toolResultState(e.preview, e.error) === "failed", durationSec: e.durationSec };
+          if (idx === -1) return { ...s, activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, startedAt: e.at, ...done }] };
           const next = [...s.activity];
           next[idx] = { ...(next[idx] as Extract<Activity, { kind: "tool" }>), ...done };
           return { ...s, activity: next };

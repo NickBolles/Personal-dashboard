@@ -1,5 +1,6 @@
 import type { ApprovalRequest, ClarifyRequest, RunEvent, SessionSummary, TimelineItem } from "@/lib/hermes";
 import type { HermesMessage, HermesRunEvent, HermesSession } from "./types";
+import { toolResultState } from "@/lib/tool-presentation";
 
 const iso = (unix?: number | null) => (unix ? new Date(unix * 1000).toISOString() : undefined);
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -59,10 +60,11 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
     case "reasoning.available":
       return { type: "reasoning", seq, text: str(e.text) ?? "" };
     case "tool.started":
-      return { type: "tool.started", seq, tool: str(e.tool) ?? "tool", preview: scrub(str(e.preview)), at };
+      return { type: "tool.started", seq, callId: str(e.tool_call_id), tool: str(e.tool) ?? "tool", preview: scrub(str(e.preview)), at };
     case "tool.completed":
       return {
         type: "tool.completed",
+        callId: str(e.tool_call_id),
         seq,
         tool: str(e.tool) ?? "tool",
         preview: scrub(str(e.preview)),
@@ -186,7 +188,7 @@ export function messagesToTimeline(messages: HermesMessage[]): TimelineItem[] {
         at,
         // `at` is the tool-result time; the call was issued with the assistant message that requested it.
         startedAt: call?.at,
-        error: /^(error|BLOCKED:)/i.test(text.trim()),
+        error: toolResultState(detail) === "failed",
       });
     } else if (m.role === "system") {
       if (text.trim()) items.push({ kind: "system", id, text, at });

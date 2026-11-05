@@ -32,6 +32,15 @@ test("file picker: a picture and a text file go out; Hermes gets the image, the 
   await expect(page.getByTestId("attachment-chip")).toHaveCount(2);
   await expect(page.getByText("PDFs and text files are sent as extracted text")).toBeVisible();
   await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
+  const draftPhoto = page.getByRole("button", { name: "Open picture walrus-porch.png" });
+  await draftPhoto.click();
+  const viewer = page.getByRole("dialog", { name: "walrus-porch.png" });
+  await expect(viewer).toBeVisible();
+  await viewer.getByRole("button", { name: "Zoom picture" }).click();
+  await expect(viewer.getByRole("button", { name: "Fit picture" })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Escape");
+  await expect(viewer).not.toBeVisible();
+  await expect(draftPhoto).toBeFocused();
   await sendAndWait(page, "walrus what is this");
   await expect(page.getByText("I can see 1 picture(s).")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("attachment-chip")).toHaveCount(0);

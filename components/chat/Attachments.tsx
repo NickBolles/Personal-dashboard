@@ -503,10 +503,18 @@ function FileRow({ sessionId, f }: { sessionId: string; f: ChatFileView }) {
 }
 
 export function Lightbox({ sessionId, file, onClose }: { sessionId: string; file: ChatFileView; onClose: () => void }) {
-  return <PhotoViewer name={file.name} src={fileUrl(sessionId, file.id)} onClose={onClose} />;
+  return (
+    <PhotoViewer
+      name={file.name}
+      src={fileUrl(sessionId, file.id)}
+      onClose={onClose}
+      details={`${formatBytes(file.bytes)}${file.width && file.height ? ` · ${file.width}×${file.height}` : ""}${file.locationRemoved ? " · location removed" : ""}`}
+      download
+    />
+  );
 }
 
-function PhotoViewer({ name, src, onClose }: { name: string; src: string; onClose: () => void }) {
+function PhotoViewer({ name, src, onClose, details, download }: { name: string; src: string; onClose: () => void; details?: string; download?: boolean }) {
   const [zoom, setZoom] = useState(false);
   return (
     <Dialog open onClose={onClose} title={name} size="full">
@@ -520,6 +528,20 @@ function PhotoViewer({ name, src, onClose }: { name: string; src: string; onClos
         {/* eslint-disable-next-line @next/next/no-img-element -- same-origin authorized route or owned blob; never public */}
         <img src={src} alt={name} className={zoom ? "max-w-none" : "mx-auto max-h-[70dvh] w-auto max-w-full rounded"} />
       </div>
+      {details || download ? (
+        <p className="mt-2 text-xs text-muted">
+          {details}
+          {download ? (
+            <>
+              {" "}
+              ·{" "}
+              <a className="text-accent underline" href={src} download={name}>
+                Download
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
     </Dialog>
   );
 }

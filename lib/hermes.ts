@@ -35,8 +35,8 @@ export type RunEvent =
   | { type: "text.delta"; seq?: number; delta: string }
   | { type: "commentary"; seq?: number; text: string }
   | { type: "reasoning"; seq?: number; text: string }
-  | { type: "tool.started"; seq?: number; tool: string; preview?: string; at: string }
-  | { type: "tool.completed"; seq?: number; tool: string; preview?: string; durationSec?: number; error?: boolean; at: string }
+  | { type: "tool.started"; seq?: number; callId?: string; tool: string; preview?: string; at: string }
+  | { type: "tool.completed"; seq?: number; callId?: string; tool: string; preview?: string; durationSec?: number; error?: boolean; at: string }
   | { type: "subagent.started"; seq?: number; id?: string; goal?: string; at: string }
   | { type: "subagent.completed"; seq?: number; id?: string; goal?: string; summary?: string; status?: string; at: string }
   | ({ type: "approval.requested"; seq?: number; at: string } & ApprovalRequest)

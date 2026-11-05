@@ -995,6 +995,7 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
   if (item.kind === "tool") {
     return (
       <ToolStep
+        id={item.id}
         tool={item.tool}
         input={item.input}
         output={item.detail}
@@ -1079,7 +1080,7 @@ function MessageMeta({ time, onFork, who, text }: { time?: string; onFork: () =>
 function ActivityRow({ a }: { a: Activity }) {
   const [open, setOpen] = useState(false);
   if (a.kind === "commentary") return <li className="text-sm italic text-muted">{a.text}</li>;
-  if (a.kind === "tool") return <ToolStep tool={a.tool} input={a.preview} output={a.result} done={a.done} error={a.error} />;
+  if (a.kind === "tool") return <ToolStep id={a.callId ?? a.id} tool={a.tool} input={a.preview} output={a.result} done={a.done} error={a.error} />;
   const label = `Subagent${a.goal ? `: ${a.goal}` : ""}${a.summary ? ` — ${a.summary}` : ""}`;
   const status = !a.done ? "running" : (a.status ?? "returned");
   return (

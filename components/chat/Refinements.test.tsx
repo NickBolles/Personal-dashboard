@@ -4,8 +4,28 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ToolStep } from "./ToolStep";
 import { AttachmentChips, type DraftFile } from "./Attachments";
 import { toolOutcome } from "@/lib/tool-outcome";
+import { reduceRun, type RunState } from "./useRunStream";
+const undefinedState = (): RunState => ({ phase: "completed", text: "", reasoning: "", activity: [], steerQueued: 0, attempts: 0 });
 afterEach(cleanup);
 describe("chat refinements", () => {
+  it("retains ids for parallel same-name calls and surfaces a nested error", () => {
+    const start = reduceRun(undefinedState(), { type: "reset", runId: "r" });
+    let s = reduceRun(start, { type: "event", event: { type: "tool.started", callId: "a", tool: "read_file", at: "2026-11-05T00:00:00Z" } });
+    s = reduceRun(s, { type: "event", event: { type: "tool.started", callId: "b", tool: "read_file", at: "2026-11-05T00:00:00Z" } });
+    s = reduceRun(s, {
+      type: "event",
+      event: { type: "tool.completed", callId: "b", tool: "read_file", preview: '{"results":[{"error":"denied"}]}', at: "2026-11-05T00:00:01Z" },
+    });
+    expect(s.activity[0]).toMatchObject({ callId: "a", done: false });
+    expect(s.activity[1]).toMatchObject({ callId: "b", done: true, error: true });
+  });
+  it("keeps expansion across summary unmounts", () => {
+    const first = render(<ToolStep id="persistent-step" tool="read_file" />);
+    fireEvent.click(screen.getByRole("button"));
+    first.unmount();
+    render(<ToolStep id="persistent-step" tool="read_file" />);
+    expect(screen.getByRole("button").getAttribute("aria-expanded")).toBe("true");
+  });
   it("keeps JSON behind two disclosures and shows semantic file path", () => {
     render(<ToolStep tool="read_file" input={'{"path":"/src/a.ts","extra":"raw-only"}'} output="private output" />);
     expect(screen.getByRole("button").textContent).toContain("Read a file · /src/a.ts");
