@@ -169,6 +169,9 @@ export type SkylightRef =
       /** Occurrence date/time for recurring chores (frame-local). */
       instanceDate?: string;
       instanceTime?: string;
+      /** Frame-local due day and time of day (`start` / `start_time`; recurring BYHOUR 6/14/20 → 06:00/14:00/20:00). */
+      startDate?: string;
+      startTime?: string;
       /** Skylight category (member) id it is assigned to; null = unassigned. */
       categoryId: string | null;
       recurring?: boolean;

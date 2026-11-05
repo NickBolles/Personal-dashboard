@@ -12,10 +12,25 @@ export type SkylightExtra = {
   health?: { ok: boolean; failed: string[] };
 };
 
-export function choreWrite(action: NextAction, op: "chore.complete" | "chore.reopen"): SkylightWriteOp | null {
+export function choreWrite(action: NextAction, op: "chore.complete" | "chore.reopen" | "chore.skip"): SkylightWriteOp | null {
   const ref = action.skylight;
   if (ref?.kind !== "chore") return null;
-  return { op, title: action.title, choreId: ref.choreId, instanceDate: ref.instanceDate, instanceTime: ref.instanceTime, categoryId: ref.categoryId };
+  return {
+    op,
+    title: action.title,
+    choreId: ref.choreId,
+    instanceDate: ref.instanceDate,
+    instanceTime: ref.instanceTime,
+    categoryId: ref.categoryId,
+    ...(action.assignee?.kind === "up_for_grabs" ? { upForGrabs: true } : {}),
+  };
+}
+
+/** Move a one-off chore to `day` (recurring occurrences can't be moved from Jarvis). */
+export function rescheduleWrite(action: NextAction, day: string): SkylightWriteOp | null {
+  const ref = action.skylight;
+  if (ref?.kind !== "chore" || ref.recurring || !ref.startDate || ref.startDate === day) return null;
+  return { op: "chore.reschedule", title: action.title, choreId: ref.choreId, start: day, previousStart: ref.startDate };
 }
 
 export function listWrite(action: NextAction): SkylightWriteOp | null {

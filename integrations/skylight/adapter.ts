@@ -547,6 +547,8 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           recurring,
           ...(recurring && a.start ? { instanceDate: String(a.start).slice(0, 10) } : {}),
           ...(recurring && a.start_time ? { instanceTime: String(a.start_time).slice(0, 5) } : {}),
+          ...(a.start ? { startDate: String(a.start).slice(0, 10) } : {}),
+          ...(a.start_time ? { startTime: String(a.start_time).slice(0, 5) } : {}),
           ...(done ? { completedOn: choreDoneDay(a, ctx.timezone) } : {}),
         },
       }),
