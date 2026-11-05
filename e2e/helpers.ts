@@ -74,7 +74,10 @@ export async function openChatContext(page: Page) {
 /** Same tabs on the container-sized desktop panel and the narrow-screen sheet. */
 export async function openChatPanel(page: Page, tab = "Links") {
   const panel = page.getByTestId("chat-panel-content");
-  if (!(await panel.isVisible())) await page.getByRole("button", { name: "Open chat panel", exact: true }).click();
+  const opener = page.getByRole("button", { name: "Open chat panel", exact: true });
+  // The ≥900 px panel appears once the chat container is measured; on narrow screens the tray opens the sheet.
+  await expect(panel.or(opener).first()).toBeVisible();
+  if (!(await panel.isVisible())) await opener.click();
   await expect(panel).toBeVisible();
   await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
   return panel;
