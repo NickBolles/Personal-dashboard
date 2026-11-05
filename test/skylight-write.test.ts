@@ -9,7 +9,7 @@ import { claimInstance, createSession, userById } from "@/server/auth";
 import { saveIntegration } from "@/integrations/store";
 import { assertSkylightWritable, runSkylightWrite } from "@/integrations/skylight/write";
 import { skylightRequest } from "@/integrations/skylight/adapter";
-import { describeSkylightWrite, inverseOf, type SkylightEventFields, type SkylightWriteOp } from "@/lib/skylight-write";
+import { describeSkylightWrite, inverseOf, skylightWriteOp, type SkylightEventFields, type SkylightWriteOp } from "@/lib/skylight-write";
 import { recordWrite, undoWrite } from "@/server/skylight-writes";
 import { listActivity, __setActivitySourceCap } from "@/server/work/activity";
 import { withVia } from "@/server/work/actor";
@@ -98,6 +98,23 @@ const cases: [SkylightWriteOp, string, string, unknown][] = [
 ];
 
 describe("exact raw Skylight write contracts", () => {
+  it("delete Undo recreates a non-default calendar event on its original calendar, not configured Family", async () => {
+    const work = { ...event, calendarId: "work-mock@group.calendar.google.com", calendarAccountId: "1344359", sourceCalendarId: "4005309" };
+    saveIntegration("skylight", { config: { eventCalendarId: target.calendar_id, eventCalendarAccountId: "1344358", eventSourceCalendarId: "4005307" } });
+    const made = await run(skylightWriteOp.parse({ op: "event.create", event: work }));
+    tick();
+    const deletion = skylightWriteOp.parse({ op: "event.delete", eventId: made.created.eventId!, previous: work });
+    await run(deletion);
+    const row = recordWrite(deletion, { id: userId });
+    expect(inverseOf(deletion)).toEqual({ op: "event.create", event: work });
+    const read = () => skylightRequest<{ data: { id: string; attributes: Record<string, unknown> }[] }>("GET", `${f}/calendar_events`);
+    expect((await read()).data.some((e) => e.id === made.created.eventId)).toBe(false);
+    tick();
+    await undoWrite(row.id, { id: userId }, opts);
+    const restored = (await read()).data.find((e) => e.id === "ev-2");
+    expect(restored?.attributes).toMatchObject({ ...bodyEvent, calendar_id: work.calendarId, calendar_account_id: 1344359, source_calendar_id: 4005309 });
+    expect((await writes())[2].body).toMatchObject({ calendar_id: work.calendarId, calendar_account_id: 1344359, source_calendar_id: 4005309 });
+  });
   it.each(cases)("$op", async (op, method, path, body) => {
     const result = await run(op);
     expect(await writes()).toEqual([{ method, path: `/api${f}${path}`, body }]);

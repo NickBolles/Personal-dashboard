@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx } from "@/components/ui";
-import { ChipButton, ChipSelect } from "@/components/ui/kit";
-import { MetaPicker, PersonIcon, TagIcon, type PickerOption } from "@/components/work/MetaPicker";
+import { ChipButton } from "@/components/ui/kit";
+import { AreaPickerDot, MetaPicker, SelectPicker, PersonIcon, TagIcon, type PickerOption } from "@/components/work/MetaPicker";
 import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
 
 /**
@@ -204,38 +204,34 @@ export function ItemFilterBar({
       <label htmlFor={`${idPrefix}-tag`} className="sr-only">
         Filter by tag
       </label>
-      <ChipSelect
+      <SelectPicker
         id={`${idPrefix}-tag`}
+        label="Filter by tag"
         className="jv-meta-select"
         active={!!value.tag}
         value={value.tag ?? ""}
-        onChange={(e) => onChange({ ...value, tag: e.target.value || null })}
-      >
-        <option value="">All tags</option>
-        {tags.map((t) => (
-          <option key={t} value={t}>
-            #{t}
-          </option>
-        ))}
-      </ChipSelect>
+        onChange={(v) => onChange({ ...value, tag: v || null })}
+        options={[
+          { value: "", label: "All tags" },
+          ...tags.map((t) => ({ value: t, label: `#${t}`, dot: <AreaPickerDot color={colorOf(t, dir.data?.tags)} /> })),
+        ]}
+      />
       <label htmlFor={`${idPrefix}-assignee`} className="sr-only">
         Filter by assignee
       </label>
-      <ChipSelect
+      <SelectPicker
         id={`${idPrefix}-assignee`}
+        label="Filter by assignee"
         className="jv-meta-select"
         active={!!value.assignee}
         value={value.assignee ?? ""}
-        onChange={(e) => onChange({ ...value, assignee: e.target.value || null })}
-      >
-        <option value="">Anyone</option>
-        <option value="none">Unassigned</option>
-        {refs.map((r) => (
-          <option key={r} value={r}>
-            {assigneeLabel(r, people)}
-          </option>
-        ))}
-      </ChipSelect>
+        onChange={(v) => onChange({ ...value, assignee: v || null })}
+        options={[
+          { value: "", label: "Anyone" },
+          { value: "none", label: "Unassigned" },
+          ...refs.map((r) => ({ value: r, label: assigneeLabel(r, people) ?? r })),
+        ]}
+      />
       {value.tag || value.assignee ? <ChipButton onClick={() => onChange(NO_FILTER)}>Clear filter</ChipButton> : null}
     </div>
   );

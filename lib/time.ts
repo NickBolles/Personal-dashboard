@@ -20,6 +20,11 @@ export function localDate(at: Date | number, timeZone: string) {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+/** Calendar day for a bare date or an instant in an explicit household timezone. */
+export function calendarDay(value: string, timeZone: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : localDate(new Date(value), timeZone);
+}
+
 /** Calendar-date arithmetic on YYYY-MM-DD (no timezone or DST involved). */
 export function addDays(date: string, days: number) {
   const [y, m, d] = date.split("-").map(Number);

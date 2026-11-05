@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { CalendarEvent, NextAction } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
-import { localDate } from "@/lib/time";
+import { calendarDay, localDate } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
@@ -39,7 +39,7 @@ export function SkylightView() {
   const dueToday = (action: NextAction) => {
     if (action.priorityReason === "today") return true;
     if (!action.dueAt) return false;
-    const day = action.dueIsDate || action.dueAt.length === 10 ? action.dueAt.slice(0, 10) : localDate(new Date(action.dueAt), timezone);
+    const day = calendarDay(action.dueAt, action.dueTimezone ?? timezone);
     return day === today;
   };
   const groups = [
@@ -131,7 +131,7 @@ export function SkylightView() {
           <section aria-labelledby="sk-events" className="mt-6">
             <SectionHeader
               id="sk-events"
-              label="Next 7 days"
+              label="Events · next 7 days"
               action={
                 writable ? (
                   <Button type="button" size="sm" disabled={!online} onClick={() => setForm({})}>

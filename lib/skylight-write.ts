@@ -25,6 +25,10 @@ export const skylightEventFields = z.object({
   endsAt: z.string().min(10).max(40),
   location: z.string().max(1000).nullish(),
   description: z.string().max(4000).nullish(),
+  /** Original calendar target, retained by delete Undo instead of rediscovering Family. */
+  calendarId: z.string().min(1).max(500).optional(),
+  sourceCalendarId: z.string().regex(/^\d+$/).optional(),
+  calendarAccountId: z.string().regex(/^\d+$/).optional(),
 });
 export type SkylightEventFields = z.infer<typeof skylightEventFields>;
 

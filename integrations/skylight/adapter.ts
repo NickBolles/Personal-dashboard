@@ -422,7 +422,12 @@ function choreDue(a: Record<string, unknown>, ctx: AdapterContext) {
   const dueAt = time ? iso(localTimeToInstant(day, time, ctx.timezone)) : undefined;
   if (dueAt) return { dueAt, priorityReason: classifyInstant(dueAt, ctx) };
   const priorityReason = day < ctx.today ? ("overdue" as const) : day > ctx.today ? ("upcoming" as const) : ("today" as const);
-  return { dueAt: day === ctx.today ? undefined : iso(localTimeToInstant(day, "23:59", ctx.timezone)), dueIsDate: day !== ctx.today, priorityReason };
+  return {
+    dueAt: day === ctx.today ? undefined : iso(localTimeToInstant(day, "23:59", ctx.timezone)),
+    dueIsDate: day !== ctx.today,
+    dueTimezone: ctx.timezone,
+    priorityReason,
+  };
 }
 
 /** Whether the Skylight write toggle is on for direct mode (default on; each write is still confirmed). */
@@ -515,6 +520,7 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           editable: a.editable !== false && a.read_only !== true && !a.rrule && !a.recurring,
           calendarId: a.calendar_id ? String(a.calendar_id) : undefined,
           sourceCalendarId: a.source_calendar_id != null ? String(a.source_calendar_id) : undefined,
+          calendarAccountId: a.calendar_account_id != null ? String(a.calendar_account_id) : undefined,
         },
       };
     })

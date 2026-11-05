@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, pickOption } from "./helpers";
 
 /**
  * Work from Jarvis batch 1: /map (area rollups → drill-down with filters) and
@@ -47,7 +47,7 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await expect(card).toContainText("1 Backlog");
 
   // The area filter scopes the drill-down to that area (tapping the card opens the area itself).
-  await page.getByLabel("Filter by area").selectOption(ids.area);
+  await pickOption(page, "Filter by area", `Pelican wharf ${nonce}`);
   const tree = page.getByTestId("map-tree");
   await expect(tree.locator("details.mp-area")).toHaveCount(1);
   // Projects start collapsed; open one to drill in.
@@ -60,7 +60,7 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await expect(heronRow).toBeVisible();
   await expect(heronRow).toContainText("Next: Count the crates");
   // Inline status edit from a row (one Saved · Undo bar).
-  await page.getByLabel(`Status of Heron ledger ${nonce}`).selectOption("in_progress");
+  await pickOption(page, `Status of Heron ledger ${nonce}`, "In progress");
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
   await expect(card).toContainText("1 In flight");
 
@@ -71,17 +71,17 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await page.getByLabel("Search the map").fill("");
 
   // Status chip: only the item that waits on you.
-  await page.getByLabel("Filter by status").selectOption("owner");
+  await pickOption(page, "Filter by status", "Blocked on you");
   await expect(page.getByTestId("map-row")).toHaveCount(1);
   await expect(page.getByTestId("map-row")).toContainText(`Gannet sail ${nonce}`);
   await expect(page.getByTestId("map-row")).toContainText("Needs you");
 
   // Tag chip.
-  await page.getByLabel("Filter by status").selectOption("");
-  await page.locator("#map-tag").selectOption("pelicanlight");
+  await pickOption(page, "Filter by status", "Any status");
+  await pickOption(page, "Filter by tag", "#pelicanlight");
   await expect(page.getByTestId("map-row")).toHaveCount(1);
   await expect(page.getByTestId("map-row")).toContainText(`Osprey beacon ${nonce}`);
-  await page.locator("#map-tag").selectOption("");
+  await pickOption(page, "Filter by tag", "All tags");
 
   // Clean up the open decision so Today/other specs don't see it.
   const clear = await page.request.patch(`/api/work/items/${ids.gannet}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });

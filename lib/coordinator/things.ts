@@ -2,6 +2,12 @@ import type { ActivityItem } from "@/lib/activity";
 import type { DecisionEntry } from "@/lib/decisions";
 
 export type CoordinatorRun = { id: string; itemId: string; title: string; state: "running" | "stalled" | "failed" | "waiting"; at: string | null };
+
+/** Run rows identify the agent directly; mutations may instead carry normalized/stored via. */
+export function isCoordinatorChange(row: Pick<ActivityItem, "actor" | "via" | "at">, now: number, profile = "chiefofstaff") {
+  const attributed = row.via === profile || row.via === `agent:${profile}` || (row.actor.kind === "agent" && row.actor.name === profile);
+  return attributed && Date.parse(row.at) >= now - 86_400_000;
+}
 export type CoordinatorThings = {
   needsYou: number;
   decisions: DecisionEntry[];

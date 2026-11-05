@@ -1,10 +1,16 @@
 import type { CalendarEvent } from "@/lib/contracts";
 import type { SkylightEventFields } from "@/lib/skylight-write";
-import { addDays, localDate, localMinutes, localTimeToInstant } from "@/lib/time";
+import { addDays, daysBetween, localDate, localMinutes, localTimeToInstant } from "@/lib/time";
 
 export function eventTime(value: string, timezone: string) {
   const minutes = localMinutes(new Date(value), timezone);
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+/** Move an end date by the start's calendar-day offset, preserving overnight/multi-day spans. */
+export function shiftedEndDate(startDate: string, endDate: string, nextStartDate: string) {
+  if (!startDate || !endDate || !nextStartDate) return endDate;
+  return addDays(endDate, daysBetween(startDate, nextStartDate));
 }
 
 /** Keep the household wall-clock offset, not the browser's timezone or midnight's DST offset. */
@@ -32,5 +38,8 @@ export function previousEvent(event: CalendarEvent): SkylightEventFields {
         : new Date(Date.parse(startsAt) + 3_600_000).toISOString(),
     location: event.location ?? null,
     description: event.skylight?.description ?? null,
+    ...(event.skylight?.calendarId ? { calendarId: event.skylight.calendarId } : {}),
+    ...(event.skylight?.sourceCalendarId ? { sourceCalendarId: event.skylight.sourceCalendarId } : {}),
+    ...(event.skylight?.calendarAccountId ? { calendarAccountId: event.skylight.calendarAccountId } : {}),
   };
 }

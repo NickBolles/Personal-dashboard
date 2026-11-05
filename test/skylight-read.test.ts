@@ -73,6 +73,9 @@ function stub() {
               ends_at: "2026-11-05T16:00:00-06:00",
               all_day: false,
               description: "Bring forms",
+              calendar_id: "work@example.com",
+              source_calendar_id: 42,
+              calendar_account_id: 7,
             },
           },
         ],
@@ -137,6 +140,7 @@ describe("Skylight full read (direct)", () => {
     expect(by.get("4")!.skylight).toMatchObject({ completedOn: "2026-11-03" });
     expect(by.get("6")!.priorityReason).toBe("overdue");
     expect(by.get("5")!.priorityReason).toBe("upcoming");
+    expect(by.get("5")).toMatchObject({ dueAt: "2026-11-08T05:59:00.000Z", dueIsDate: true, dueTimezone: "America/Chicago" });
     expect(by.get("1")!.priorityReason).toBe("today");
     expect(data.extra).toMatchObject({
       counts: { mine: 2, upForGrabs: 1, others: 1, hidden: 1, completedToday: 2, completedWindow: 4 },
@@ -171,7 +175,7 @@ describe("Skylight full read (direct)", () => {
       title: "Dentist",
       startsAt: "2026-11-05T21:00:00.000Z",
       endsAt: "2026-11-05T22:00:00.000Z",
-      skylight: { eventId: "e1", description: "Bring forms", editable: true },
+      skylight: { eventId: "e1", description: "Bring forms", editable: true, calendarId: "work@example.com", sourceCalendarId: "42", calendarAccountId: "7" },
     });
   });
 

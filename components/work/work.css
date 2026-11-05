@@ -1480,6 +1480,20 @@ button.wk-kpi:hover {
   .jv-pick-opt[data-active] {
     background: var(--s2);
   }
+  .jv-pick-opt[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .jv-select-btn > svg {
+    flex-shrink: 0;
+  }
+  .jv-select-status::before {
+    display: none;
+  }
+  .jv-pick-list:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: -2px;
+  }
   .jv-pick-opt[aria-selected="true"] {
     font-weight: 500;
   }

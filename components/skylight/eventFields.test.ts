@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent, NextAction } from "@/lib/contracts";
-import { eventInstant, eventTime, previousEvent } from "./eventFields";
+import { eventInstant, eventTime, previousEvent, shiftedEndDate } from "./eventFields";
 import { choreWrite, listWrite } from "./model";
 
 const event: CalendarEvent = {
@@ -28,6 +28,29 @@ const action: NextAction = {
 };
 
 describe("Skylight household calendar fields", () => {
+  it.each([
+    ["multi-day timed", "2026-11-06", "2026-11-09", "2026-11-10", "2026-11-13"],
+    ["overnight", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10"],
+    ["all-day multi-day exclusive end", "2026-11-01", "2026-11-04", "2026-11-08", "2026-11-11"],
+    ["month rollover", "2026-11-29", "2026-11-30", "2026-11-30", "2026-12-01"],
+    ["spring DST boundary", "2026-03-07", "2026-03-09", "2026-03-08", "2026-03-10"],
+    ["backwards across year", "2027-01-02", "2027-01-04", "2026-12-30", "2027-01-01"],
+  ])("shifts %s by calendar days", (_label, start, end, next, expected) => {
+    expect(shiftedEndDate(start, end, next)).toBe(expected);
+  });
+  it("keeps incomplete date inputs safe", () => {
+    expect(shiftedEndDate("2026-11-01", "2026-11-02", "")).toBe("2026-11-02");
+    expect(shiftedEndDate("2026-11-01", "", "2026-11-03")).toBe("");
+  });
+  it("snapshots every original calendar target field for delete Undo", () => {
+    expect(
+      previousEvent({ ...event, skylight: { ...event.skylight!, calendarId: "work@example.com", sourceCalendarId: "42", calendarAccountId: "7" } }),
+    ).toMatchObject({
+      calendarId: "work@example.com",
+      sourceCalendarId: "42",
+      calendarAccountId: "7",
+    });
+  });
   it.each([
     ["2026-03-08", "01:30", "2026-03-08T01:30:00-06:00"],
     ["2026-03-08", "17:30", "2026-03-08T17:30:00-05:00"],

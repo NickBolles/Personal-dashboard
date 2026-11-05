@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost, expectNoHorizontalOverflow } from "./helpers";
+import { appPost, expectNoHorizontalOverflow, pickOption } from "./helpers";
 
 /**
  * Flagship Work journey (docs/work.md): Momentum Bets → Criteria evaluator →
@@ -514,9 +514,9 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await expect(svg.locator('[data-edge="depends_on"]')).toHaveCount(1);
   await page.getByLabel("Contains").uncheck();
   await expect(svg.locator('[data-edge="tree"]')).toHaveCount(0);
-  await page.getByLabel("Status").selectOption("settled");
+  await pickOption(page, /^Status:/, "Settled");
   await expect(svg).toHaveAttribute("data-map-nodes", "0");
-  await page.getByLabel("Status").selectOption("all");
+  await pickOption(page, /^Status:/, "All statuses");
   await page.getByRole("button", { name: "Zoom in" }).click();
   await page.getByRole("button", { name: "Show as list" }).click();
   await expect(page.getByRole("main")).toContainText("Depends on");

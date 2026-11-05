@@ -42,7 +42,8 @@ import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ActivityFeed } from "@/components/work/ActivityFeed";
-import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { INLINE_OP_EVENT, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { DuePicker, SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { filterItems, ItemFilterBar, ItemMetaEditor, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -1013,32 +1014,23 @@ function ItemDetail({
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
     <span className="inline-flex min-w-0 items-center gap-1" data-status={item.status}>
-      <span className="status-pill wk-status-pick shrink-0" data-s={item.status}>
-        <span aria-hidden="true">{STATUS_LABELS[item.status]}</span>
-        <ChevronIcon className="h-3 w-3 rotate-90 opacity-70" />
-        <label htmlFor="work-status" className="sr-only">
-          Status
-        </label>
-        <select
-          id="work-status"
-          className="wk-status-native"
-          value={item.status}
-          onChange={(e) => {
-            const to = e.target.value as WorkStatus;
-            // Settling is never inline: it stays the Settle… dialog (primary action / ⋯).
-            if (to === "reopened") setDialog("reopen");
-            else inline.mutate({ status: to });
-          }}
-        >
-          {inlineStatusOptions(item.status).map((o) => (
-            <option key={o.value} value={o.value} disabled={o.disabled}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </span>
+      <SelectPicker
+        id="work-status"
+        label="Status"
+        className="status-pill jv-select-status shrink-0"
+        data-s={item.status}
+        active={false}
+        value={item.status}
+        options={inlineStatusOptions(item.status).map((o) => ({ ...o, dot: <StatusPickerDot status={o.value} /> }))}
+        onChange={(v) => {
+          const to = v as WorkStatus;
+          // Settling is never inline: it stays the Settle… dialog (primary action / ⋯).
+          if (to === "reopened") setDialog("reopen");
+          else inline.mutate({ status: to });
+        }}
+      />
       {item.settledKind === "auto" && item.status === "settled" ? <Badge tone="neutral">Auto-settled</Badge> : null}
-      {container ? null : <InlineDate value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
+      {container ? null : <DuePicker value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
     </span>
   );
 

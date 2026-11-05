@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, pickOption } from "./helpers";
 
 /**
  * Activity timeline (components/work/ActivityFeed.tsx): item Activity tab shows an inline edit
@@ -34,10 +34,10 @@ test("item activity shows an edit with Undo, and filters narrow it", async ({ pa
   await expect(feed.locator(".jv-activity-row", { hasText: "created" })).toBeVisible();
 
   // Type filter: only "Created" rows.
-  await feed.getByLabel("Type").selectOption("created");
+  await pickOption(feed, /^Type:/, "Created");
   await expect(editRow).toHaveCount(0);
   await expect(feed.locator(".jv-activity-row", { hasText: "created" })).toBeVisible();
-  await feed.getByLabel("Type").selectOption("");
+  await pickOption(feed, /^Type:/, "All types");
   // Search.
   await feed.getByRole("searchbox", { name: "Search activity" }).fill("nothing-matches-zz");
   await feed.getByRole("searchbox", { name: "Search activity" }).press("Enter");
@@ -60,13 +60,13 @@ test("global activity: area filter and Load older paging", async ({ page }) => {
   await page.goto(`/areas/activity?root=${areaId}`);
   await expect(page.getByRole("heading", { level: 1, name: "Activity" })).toBeVisible();
   const feed = page.getByRole("region", { name: "All activity" });
-  await expect(feed.getByLabel("Area")).toHaveValue(areaId);
+  await expect(feed.getByRole("button", { name: /^Area:/ })).toHaveAttribute("data-value", areaId);
   const rows = feed.locator(".jv-activity-row");
   await expect(rows).toHaveCount(50);
   await feed.getByRole("button", { name: "Load older" }).click();
   await expect.poll(() => rows.count()).toBeGreaterThan(50);
   await expect(feed.getByRole("button", { name: "Load older" })).toHaveCount(0);
   // Actor filter: GitHub → nothing in this area.
-  await feed.getByLabel("Who").selectOption("github");
+  await pickOption(feed, /^Who:/, "GitHub");
   await expect(feed.getByText("Nothing matches these filters")).toBeVisible();
 });

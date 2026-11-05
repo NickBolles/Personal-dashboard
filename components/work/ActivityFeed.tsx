@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Empty, ErrorNote, Spinner, inputCls, useToast } from "@/components/ui";
-import { ChipSelect } from "@/components/ui/kit";
+import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import {
   ACTIVITY_TYPES,
   ACTIVITY_TYPE_LABELS,
@@ -154,39 +154,42 @@ export function ActivityFeed({
         <label htmlFor={`${filtersId}-type`} className="sr-only">
           Type
         </label>
-        <ChipSelect id={`${filtersId}-type`} active={!!type} value={type} onChange={(e) => setType(e.target.value as ActivityType | "")}>
-          <option value="">All types</option>
-          {ACTIVITY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {ACTIVITY_TYPE_LABELS[t]}
-            </option>
-          ))}
-        </ChipSelect>
+        <SelectPicker
+          id={`${filtersId}-type`}
+          label="Type"
+          active={!!type}
+          value={type}
+          onChange={(v) => setType(v as ActivityType | "")}
+          options={[{ value: "", label: "All types" }, ...ACTIVITY_TYPES.map((t) => ({ value: t, label: ACTIVITY_TYPE_LABELS[t] }))]}
+        />
         <label htmlFor={`${filtersId}-actor`} className="sr-only">
           Who
         </label>
-        <ChipSelect id={`${filtersId}-actor`} active={!!actor} value={actor} onChange={(e) => setActor(e.target.value as ActorKind | "")}>
-          <option value="">Anyone</option>
-          {(Object.keys(ACTOR_LABELS) as ActorKind[]).map((a) => (
-            <option key={a} value={a}>
-              {ACTOR_LABELS[a]}
-            </option>
-          ))}
-        </ChipSelect>
+        <SelectPicker
+          id={`${filtersId}-actor`}
+          label="Who"
+          active={!!actor}
+          value={actor}
+          onChange={(v) => setActor(v as ActorKind | "")}
+          options={[{ value: "", label: "Anyone" }, ...(Object.keys(ACTOR_LABELS) as ActorKind[]).map((a) => ({ value: a, label: ACTOR_LABELS[a] }))]}
+        />
         {areas ? (
           <>
             <label htmlFor={`${filtersId}-area`} className="sr-only">
               Area
             </label>
-            {/* Fixed width: a native select sizes to its longest option, so long area names would widen the chip and wrap the filter row. */}
-            <ChipSelect id={`${filtersId}-area`} className="w-36 [&>select]:w-full" active={!!area} value={area} onChange={(e) => setArea(e.target.value)}>
-              <option value="">All areas</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </ChipSelect>
+            <SelectPicker
+              id={`${filtersId}-area`}
+              label="Area"
+              className="w-36"
+              active={!!area}
+              value={area}
+              onChange={setArea}
+              options={[
+                { value: "", label: "All areas" },
+                ...areas.map((a) => ({ value: a.id, label: a.title, dot: <AreaPickerDot color={tagged.find((i) => i.id === a.id)?.settings?.color} /> })),
+              ]}
+            />
           </>
         ) : null}
       </form>

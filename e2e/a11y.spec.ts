@@ -74,6 +74,7 @@ for (const path of PAGES) {
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   for (const path of [
     "/home",
+    "/more",
     "/chat/sess_morning",
     "/alerts",
     "/settings",
@@ -762,7 +763,7 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
     await expectNoHorizontalOverflow(page, { soft: true });
     await t.evaluate((el) => (el as Element).remove());
   };
-  await page.goto("/decisions"); // /more itself overflows at 200% text on phones (pre-existing, not the tray)
+  await page.goto("/decisions");
   if (info.project.name === "desktop") {
     const rail = page.getByRole("complementary", { name: "Chief of staff" });
     await expect(rail.getByTestId("quick-action-proposal")).toBeVisible();
