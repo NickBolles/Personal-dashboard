@@ -58,7 +58,7 @@ it("round chore checkbox delegates completion instead of calling /api/actions", 
   const request = vi.fn();
   mount(<SkylightActionRow action={action} writable request={request} management />);
   fireEvent.click(screen.getByRole("checkbox", { name: `Done: ${action.title}` }));
-  expect(request).toHaveBeenCalledWith({ op: "chore.complete", title: action.title, choreId: "chore", categoryId: null, upForGrabs: true });
+  expect(request).toHaveBeenCalledWith({ op: "chore.complete", title: action.title, choreId: "chore", categoryId: null });
   expect(api.post).not.toHaveBeenCalled();
   expect(screen.queryByRole("link", { name: /Open Skylight/ })).toBeNull();
 });
