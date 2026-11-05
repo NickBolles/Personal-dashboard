@@ -23,8 +23,7 @@ function isTypingTarget(t: EventTarget | null) {
 export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, bottomRef: RefObject<HTMLElement | null>, ready: boolean) {
   const follow = useRef(true);
   const [detached, setDetached] = useState(false);
-  const programmatic = useRef(0);
-  const last = useRef({ y: 0, h: 0 });
+  const last = useRef({ y: 0 });
 
   const setFollow = useCallback((on: boolean) => {
     if (follow.current === on) return;
@@ -34,7 +33,6 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
 
   const toBottom = useCallback(
     (smooth = false) => {
-      programmatic.current = performance.now();
       if (smooth) bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
       else window.scrollTo({ top: document.documentElement.scrollHeight });
     },
@@ -61,12 +59,13 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
     };
     const onScroll = () => {
       const y = window.scrollY;
-      const h = document.documentElement.scrollHeight;
-      // Scrollbar drags have no wheel/touch event: an upward move with unchanged content height is intent.
-      // Programmatic scrolls and clamping after content shrank are not.
-      if (y < last.current.y - 2 && h === last.current.h && performance.now() - programmatic.current > 400) up();
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      // Scrollbar drags / emulated wheels can arrive with no wheel/touch event: any upward move that isn't
+      // the browser clamping to a shrunken page (y pinned at the new max) is the person's intent.
+      // Following only ever scrolls DOWN, so programmatic scrolls never trip this.
+      if (y < last.current.y - 2 && y < max - 2) up();
       else if (!follow.current && gap() <= REATTACH_GAP) setFollow(true);
-      last.current = { y, h };
+      last.current = { y };
     };
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
