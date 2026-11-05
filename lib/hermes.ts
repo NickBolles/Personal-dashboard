@@ -88,7 +88,7 @@ export type SessionSummary = {
 export type TimelineItem =
   | { kind: "user"; id: string; text: string; at?: string }
   | { kind: "assistant"; id: string; text: string; at?: string; reasoning?: string }
-  | { kind: "tool"; id: string; tool: string; summary: string; detail?: string; at?: string; startedAt?: string; error?: boolean }
+  | { kind: "tool"; id: string; tool: string; summary: string; input?: string; detail?: string; at?: string; startedAt?: string; error?: boolean }
   | { kind: "system"; id: string; text: string; at?: string };
 
 export type RunView = {

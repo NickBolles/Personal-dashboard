@@ -10,10 +10,11 @@ import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
 import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
-import { isTerminal, toolLabel, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
+import { isTerminal, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
 import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
-import { ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon, ToolIcon } from "@/components/icons";
+import { BrainIcon, ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon } from "@/components/icons";
+import { ToolStep } from "./ToolStep";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
 import { useModKey } from "@/lib/client/platform";
@@ -934,7 +935,6 @@ function useMetaToggle() {
 
 function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: () => void; stepSec?: number }) {
   const who = useContext(AssistantName);
-  const [open, setOpen] = useState(false);
   const { meta, setMeta, onClick } = useMetaToggle();
   const time = item.at ? formatTime(item.at) : undefined;
   // Hermes control frames (delegation results, process notices, steers, compaction handoffs) arrive as
@@ -994,29 +994,13 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
   }
   if (item.kind === "tool") {
     return (
-      <li>
-        <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={cx("chat-tool", item.error && "text-danger")}>
-          <ToolIcon className="h-4 w-4 shrink-0" />
-          <span className="min-w-0 flex-1 break-words">
-            {toolLabel(item.tool)}
-            {item.summary ? ` · ${item.summary}` : ""}
-          </span>
-          <span className={cx("shrink-0 text-xs tabular-nums", item.error ? "text-danger" : "text-muted")} data-dynamic>
-            {stepSec !== undefined ? `${formatStepSec(stepSec)} · ` : ""}
-            {item.error ? "failed" : "done"}
-          </span>
-          <ChevronIcon className={cx("h-4 w-4 transition-transform", open && "rotate-90")} />
-        </button>
-        {open ? (
-          <div className="ml-9 mt-1 rounded-lg border border-line bg-surface-2 p-3 text-xs">
-            <p className="text-muted">
-              Tool: <code>{item.tool}</code>
-              {time ? ` · ${time}` : ""}
-            </p>
-            {item.detail ? <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{item.detail}</pre> : null}
-          </div>
-        ) : null}
-      </li>
+      <ToolStep
+        tool={item.tool}
+        input={item.input}
+        output={item.detail}
+        error={item.error}
+        duration={stepSec !== undefined ? formatStepSec(stepSec) : undefined}
+      />
     );
   }
   return (
@@ -1095,27 +1079,17 @@ function MessageMeta({ time, onFork, who, text }: { time?: string; onFork: () =>
 function ActivityRow({ a }: { a: Activity }) {
   const [open, setOpen] = useState(false);
   if (a.kind === "commentary") return <li className="text-sm italic text-muted">{a.text}</li>;
-  const label =
-    a.kind === "tool"
-      ? `${toolLabel(a.tool)}${a.preview ? ` · ${a.preview}` : ""}`
-      : `Subagent${a.goal ? `: ${a.goal}` : ""}${a.summary ? ` — ${a.summary}` : ""}`;
-  const status = !a.done ? "running" : a.kind === "tool" && a.error ? "failed" : "done";
+  if (a.kind === "tool") return <ToolStep tool={a.tool} input={a.preview} output={a.result} done={a.done} error={a.error} />;
+  const label = `Subagent${a.goal ? `: ${a.goal}` : ""}${a.summary ? ` — ${a.summary}` : ""}`;
+  const status = !a.done ? "running" : (a.status ?? "returned");
   return (
     <li>
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="chat-tool">
-        {a.done ? <ToolIcon className="h-4 w-4 shrink-0" /> : <Spinner />}
+        <BrainIcon className="h-4 w-4 shrink-0" />
         <span className={cx("min-w-0 flex-1 break-words", status === "running" && "chat-work-shimmer")}>{label}</span>
         <span className={cx("shrink-0 text-xs", status === "failed" && "text-danger")}>{status}</span>
       </button>
-      {open && a.kind === "tool" ? (
-        <div className="ml-9 mt-1 rounded-lg border border-line bg-surface-2 p-3 text-xs">
-          <p className="text-muted">
-            Started {formatTime(a.startedAt)}
-            {a.durationSec !== undefined ? ` · ${a.durationSec.toFixed(2)}s` : ""}
-          </p>
-          {a.result ? <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{a.result}</pre> : null}
-        </div>
-      ) : null}
+      {open && a.summary ? <p className="ml-5 text-xs">{a.summary}</p> : null}
     </li>
   );
 }
@@ -1413,7 +1387,7 @@ function Composer({
         </span>
       </div>
       <div className="mx-auto max-w-[760px]">
-        <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} />
+        <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
       </div>
       <form
         className="chat-comp relative flex flex-wrap items-end gap-1"

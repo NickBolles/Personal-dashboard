@@ -11,8 +11,8 @@ export type DraftFile = {
   name: string;
   size: number;
   kind: ChatFileKind;
-  /** 0–100 while uploading */
-  progress: number;
+  /** Actual transport bytes only; null means unknown or server processing. */
+  progress: number | null;
   status: "uploading" | "ready" | "error";
   error?: string;
   file?: ChatFileView;
@@ -22,13 +22,18 @@ export type DraftFile = {
 const fileUrl = (sessionId: string, id: string, thumb = false) =>
   `/api/hermes/sessions/${encodeURIComponent(sessionId)}/files/${encodeURIComponent(id)}${thumb ? "?thumb=1" : ""}`;
 
-function upload(sessionId: string, file: File, onProgress: (p: number) => void): Promise<ChatFileView> {
+function upload(sessionId: string, file: File, onProgress: (p: number | null) => void, signal: AbortSignal): Promise<ChatFileView> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/hermes/sessions/${encodeURIComponent(sessionId)}/files`);
     xhr.setRequestHeader("x-jarvis-csrf", "1");
     xhr.responseType = "json";
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    const abort = () => xhr.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    xhr.onloadend = () => signal.removeEventListener("abort", abort);
+    xhr.onabort = () => reject(new DOMException("Upload cancelled", "AbortError"));
+    xhr.upload.onprogress = (e) => onProgress(e.lengthComputable && e.total > 0 ? Math.round((e.loaded / e.total) * 100) : null);
+    xhr.upload.onload = () => onProgress(null);
     xhr.onload = () => {
       const body = xhr.response as { file?: ChatFileView; error?: string } | null;
       if (xhr.status >= 200 && xhr.status < 300 && body?.file) resolve(body.file);
@@ -49,6 +54,8 @@ export function useChatAttachments(sessionId: string) {
   const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const { toast } = useToast();
   const seq = useRef(0);
+  const uploads = useRef(new Map<string, AbortController>());
+  const originals = useRef(new Map<string, File>());
   const live = useRef(drafts);
   useEffect(() => {
     live.current = drafts;
@@ -88,6 +95,9 @@ export function useChatAttachments(sessionId: string) {
 
   useEffect(
     () => () => {
+      for (const controller of uploads.current.values()) controller.abort();
+      uploads.current.clear();
+      originals.current.clear();
       for (const d of live.current) revoke(d);
     },
     [],
@@ -108,18 +118,26 @@ export function useChatAttachments(sessionId: string) {
           name,
           size: file.size,
           kind,
-          progress: 0,
+          progress: null,
           status: "uploading",
           previewUrl: kind === "image" ? URL.createObjectURL(file) : undefined,
         };
         setDrafts((ds) => [...ds, d]);
-        upload(sessionId, file, (p) => patch(localId, { progress: p })).then(
-          (f) => patch(localId, { status: "ready", progress: 100, file: f }),
-          (err: Error) => {
-            patch(localId, { status: "error", error: err.message });
-            toast(err.message, "danger");
-          },
-        );
+        originals.current.set(localId, file);
+        const controller = new AbortController();
+        uploads.current.set(localId, controller);
+        upload(sessionId, file, (p) => patch(localId, { progress: p }), controller.signal)
+          .then(
+            (f) => {
+              if (!controller.signal.aborted) patch(localId, { status: "ready", progress: 100, file: f });
+            },
+            (err: Error) => {
+              if (controller.signal.aborted) return;
+              patch(localId, { status: "error", error: err.message });
+              toast(err.message, "danger");
+            },
+          )
+          .finally(() => uploads.current.delete(localId));
       }
     },
     [sessionId, toast],
@@ -129,6 +147,8 @@ export function useChatAttachments(sessionId: string) {
     (localId: string) => {
       const d = live.current.find((x) => x.localId === localId);
       if (!d) return;
+      uploads.current.get(localId)?.abort();
+      originals.current.delete(localId);
       revoke(d);
       setDrafts((ds) => ds.filter((x) => x.localId !== localId));
       if (d.file && !d.file.sentAt) void api.del(fileUrl(sessionId, d.file.id)).catch(() => undefined);
@@ -138,14 +158,39 @@ export function useChatAttachments(sessionId: string) {
 
   /** After a successful send: the files now belong to the message. */
   const clear = useCallback(() => {
+    for (const controller of uploads.current.values()) controller.abort();
+    uploads.current.clear();
+    originals.current.clear();
     for (const d of live.current) revoke(d);
     setDrafts([]);
   }, []);
+
+  const retry = useCallback(
+    (localId: string) => {
+      const file = originals.current.get(localId);
+      if (!file || uploads.current.has(localId)) return;
+      const controller = new AbortController();
+      uploads.current.set(localId, controller);
+      patch(localId, { status: "uploading", error: undefined, progress: null });
+      upload(sessionId, file, (p) => patch(localId, { progress: p }), controller.signal)
+        .then(
+          (f) => {
+            if (!controller.signal.aborted) patch(localId, { status: "ready", progress: 100, file: f });
+          },
+          (err: Error) => {
+            if (!controller.signal.aborted) patch(localId, { status: "error", error: err.message });
+          },
+        )
+        .finally(() => uploads.current.delete(localId));
+    },
+    [sessionId],
+  );
 
   return {
     drafts,
     add,
     remove,
+    retry,
     clear,
     uploading: drafts.some((d) => d.status === "uploading"),
     readyIds: drafts.filter((d) => d.status === "ready" && d.file).map((d) => d.file!.id),
@@ -248,7 +293,16 @@ export function CameraButton({ onFiles, disabled, buttonClassName, inputRef }: P
 const KIND_LABEL: Record<ChatFileKind, string> = { image: "Picture", pdf: "PDF", text: "Text" };
 
 /** Chips above the composer: thumbnail/type, name, size, progress, remove. */
-export function AttachmentChips({ drafts, onRemove }: { drafts: DraftFile[]; onRemove: (localId: string) => void }) {
+export function AttachmentChips({
+  drafts,
+  onRemove,
+  onRetry,
+}: {
+  drafts: DraftFile[];
+  onRemove: (localId: string) => void;
+  onRetry?: (localId: string) => void;
+}) {
+  const [view, setView] = useState<{ name: string; url: string } | null>(null);
   if (!drafts.length) return null;
   const hasDocs = drafts.some((d) => d.kind !== "image");
   return (
@@ -265,8 +319,15 @@ export function AttachmentChips({ drafts, onRemove }: { drafts: DraftFile[]; onR
             )}
           >
             {d.previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
-              <img src={d.previewUrl} alt="" className="h-9 w-9 shrink-0 rounded object-cover" />
+              <button
+                type="button"
+                className="tap shrink-0 rounded"
+                aria-label={`Open picture ${d.name}`}
+                onClick={() => setView({ name: d.name, url: d.previewUrl! })}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- local or authorized thumbnail */}
+                <img src={d.previewUrl} alt="" className="h-9 w-9 rounded object-cover" />
+              </button>
             ) : (
               <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded bg-surface-2 text-[10px] font-semibold text-muted uppercase">
                 {d.kind === "pdf" ? "PDF" : "TXT"}
@@ -278,7 +339,9 @@ export function AttachmentChips({ drafts, onRemove }: { drafts: DraftFile[]; onR
               </span>
               <span className="block text-[11px] text-muted" data-dynamic>
                 {d.status === "uploading"
-                  ? `Uploading ${d.progress}%`
+                  ? d.progress === null
+                    ? "Uploading / processing"
+                    : `Uploading ${d.progress}%`
                   : d.status === "error"
                     ? (d.error ?? "Failed")
                     : `${KIND_LABEL[d.kind]} · ${formatBytes(d.size)}`}
@@ -288,13 +351,31 @@ export function AttachmentChips({ drafts, onRemove }: { drafts: DraftFile[]; onR
               <span
                 role="progressbar"
                 aria-label={`Uploading ${d.name}`}
-                aria-valuenow={d.progress}
+                aria-valuenow={d.progress ?? undefined}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                className="absolute inset-x-1 bottom-0.5 h-0.5 rounded bg-line"
+                className="grid h-7 w-7 shrink-0 place-items-center"
               >
-                <span className="block h-full rounded bg-accent" style={{ width: `${d.progress}%` }} />
+                <svg aria-hidden viewBox="0 0 32 32" className={cx("h-7 w-7 -rotate-90", d.progress === null && "motion-safe:animate-spin")}>
+                  <circle cx="16" cy="16" r="12" fill="none" stroke="var(--line)" strokeWidth="3" />
+                  <circle
+                    cx="16"
+                    cy="16"
+                    r="12"
+                    fill="none"
+                    stroke="var(--accent)"
+                    strokeWidth="3"
+                    pathLength="100"
+                    strokeDasharray={`${d.progress ?? 25} 100`}
+                    strokeLinecap="round"
+                  />
+                </svg>
               </span>
+            ) : null}
+            {d.status === "error" && onRetry ? (
+              <button type="button" className="tap text-xs text-accent" onClick={() => onRetry(d.localId)}>
+                Retry
+              </button>
             ) : null}
             <button
               type="button"
@@ -308,6 +389,7 @@ export function AttachmentChips({ drafts, onRemove }: { drafts: DraftFile[]; onR
         ))}
       </ul>
       {hasDocs ? <p className="text-[11px] text-muted">PDFs and text files are sent as extracted text; pictures are sent as images.</p> : null}
+      {view ? <PhotoViewer name={view.name} src={view.url} onClose={() => setView(null)} /> : null}
     </div>
   );
 }
@@ -421,18 +503,23 @@ function FileRow({ sessionId, f }: { sessionId: string; f: ChatFileView }) {
 }
 
 export function Lightbox({ sessionId, file, onClose }: { sessionId: string; file: ChatFileView; onClose: () => void }) {
+  return <PhotoViewer name={file.name} src={fileUrl(sessionId, file.id)} onClose={onClose} />;
+}
+
+function PhotoViewer({ name, src, onClose }: { name: string; src: string; onClose: () => void }) {
+  const [zoom, setZoom] = useState(false);
   return (
-    <Dialog open onClose={onClose} title={file.name}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- authenticated file route */}
-      <img src={fileUrl(sessionId, file.id)} alt={file.name} className="mx-auto max-h-[70vh] w-auto max-w-full rounded" />
-      <p className="mt-2 text-xs text-muted">
-        {formatBytes(file.bytes)}
-        {file.width && file.height ? ` · ${file.width}×${file.height}` : ""}
-        {file.locationRemoved ? " · location removed" : ""} ·{" "}
-        <a className="text-accent underline" href={fileUrl(sessionId, file.id)} download={file.name}>
-          Download
-        </a>
-      </p>
+    <Dialog open onClose={onClose} title={name} size="full">
+      <Button type="button" variant="ghost" onClick={onClose}>
+        Close picture
+      </Button>
+      <Button type="button" variant="ghost" aria-pressed={zoom} onClick={() => setZoom((v) => !v)}>
+        {zoom ? "Fit picture" : "Zoom picture"}
+      </Button>
+      <div className="max-h-[75dvh] overflow-auto overscroll-contain">
+        {/* eslint-disable-next-line @next/next/no-img-element -- same-origin authorized route or owned blob; never public */}
+        <img src={src} alt={name} className={zoom ? "max-w-none" : "mx-auto max-h-[70dvh] w-auto max-w-full rounded"} />
+      </div>
     </Dialog>
   );
 }

@@ -174,12 +174,14 @@ export function messagesToTimeline(messages: HermesMessage[]): TimelineItem[] {
     } else if (m.role === "tool") {
       const call = m.tool_call_id ? pendingCalls.get(m.tool_call_id) : undefined;
       const tool = m.tool_name ?? call?.tool ?? "tool";
-      const detail = scrub(text.slice(0, 500));
+      // Keep bounded complete JSON for semantic rendering; never parse a 500-character preview as a result.
+      const detail = scrub(text.slice(0, 65536));
       items.push({
         kind: "tool",
         id,
         tool,
         summary: summarizeArgs(call?.args) ?? "",
+        input: scrub(call?.args?.slice(0, 65536)),
         detail,
         at,
         // `at` is the tool-result time; the call was issued with the assistant message that requested it.
