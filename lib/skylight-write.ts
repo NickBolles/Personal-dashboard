@@ -32,11 +32,20 @@ export const skylightEventFields = z.object({
 });
 export type SkylightEventFields = z.infer<typeof skylightEventFields>;
 
-const chore = { choreId: id, title, instanceDate: day.optional(), instanceTime: hhmm.optional(), categoryId: id.nullish() };
+/**
+ * `categoryId` = who it is assigned to (kept for display/undo only: Skylight answers 422 "category_id must be
+ * blank" when a completion names the member of a normally-assigned chore). `upForGrabs` = shared chore, whose
+ * completion records who did it (the server sends the owner's member then).
+ */
+const chore = { choreId: id, title, instanceDate: day.optional(), instanceTime: hhmm.optional(), categoryId: id.nullish(), upForGrabs: z.boolean().optional() };
 
 export const skylightWriteOp = z.discriminatedUnion("op", [
   z.object({ op: z.literal("chore.complete"), ...chore }),
   z.object({ op: z.literal("chore.reopen"), ...chore }),
+  /** Skip this occurrence (completions status "skipped"); undone by reopen. */
+  z.object({ op: z.literal("chore.skip"), ...chore }),
+  /** Move a one-off chore to another day (`PUT /chores/{id}` `{start}`); recurring series are left to Skylight. */
+  z.object({ op: z.literal("chore.reschedule"), choreId: id, title, start: day, previousStart: day }),
   /** Claim an up-for-grabs chore for the owner's member (`toCategoryId` resolved server-side when omitted). */
   z.object({ op: z.literal("chore.claim"), choreId: id, title, fromCategoryId: id.nullable(), toCategoryId: id.optional() }),
   /** Inverse of a claim: back to who/what it was assigned to before. */
@@ -61,6 +70,10 @@ export function describeSkylightWrite(op: SkylightWriteOp): string {
       return `Mark “${op.title}” done in Skylight`;
     case "chore.reopen":
       return `Reopen “${op.title}” in Skylight`;
+    case "chore.skip":
+      return `Skip “${op.title}”${op.instanceDate ? ` for ${op.instanceDate}` : ""} in Skylight`;
+    case "chore.reschedule":
+      return `Move “${op.title}” to ${op.start} in Skylight`;
     case "chore.claim":
       return `Claim “${op.title}” (assign it to you in Skylight)`;
     case "chore.assign":
@@ -89,6 +102,10 @@ export function doneLabel(op: SkylightWriteOp): string {
       return "Marked done";
     case "chore.reopen":
       return "Reopened";
+    case "chore.skip":
+      return "Skipped";
+    case "chore.reschedule":
+      return "Rescheduled";
     case "chore.claim":
       return "Claimed";
     case "chore.assign":
@@ -120,6 +137,10 @@ export function inverseOf(op: SkylightWriteOp, created: { itemId?: string; event
       return { ...op, op: "chore.reopen" };
     case "chore.reopen":
       return { ...op, op: "chore.complete" };
+    case "chore.skip":
+      return { ...op, op: "chore.reopen" };
+    case "chore.reschedule":
+      return { ...op, start: op.previousStart, previousStart: op.start };
     case "chore.claim":
       return { op: "chore.assign", choreId: op.choreId, title: op.title, toCategoryId: op.fromCategoryId };
     case "chore.assign":

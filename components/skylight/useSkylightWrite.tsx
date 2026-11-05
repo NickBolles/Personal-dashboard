@@ -10,6 +10,8 @@ import { SkylightUndoBar } from "./SkylightUndoBar";
 export function useSkylightWrite() {
   const [op, setOp] = useState<SkylightWriteOp | null>(null);
   const [undo, setUndo] = useState<{ id: string; label: string } | null>(null);
+  // Shown inside the confirm sheet (a toast lands under/over the sheet and loses Skylight's reason).
+  const [failure, setFailure] = useState<{ message: string; reason?: string; status?: number } | null>(null);
   const qc = useQueryClient();
   const online = useOnline();
   const { toast } = useToast();
@@ -23,6 +25,7 @@ export function useSkylightWrite() {
     mutationFn: (value: SkylightWriteOp) => api.post<SkylightWriteResult>("/api/skylight/write", value),
     onSuccess: (result, value) => {
       setOp(null);
+      setFailure(null);
       invalidate();
       if (result.undoable) setUndo({ id: result.writeId, label: doneLabel(value) });
       else {
@@ -30,9 +33,21 @@ export function useSkylightWrite() {
         toast(doneLabel(value), "ok");
       }
     },
-    onError: (error: Error) => toast(error.message, "danger"),
+    onError: (error: Error) => {
+      // ApiError.detail carries Skylight's own reason ({ status, reason }) when the server had one.
+      const raw = (error as { detail?: unknown }).detail;
+      const d = raw && typeof raw === "object" ? (raw as { reason?: unknown; status?: unknown }) : {};
+      setFailure({
+        message: error.message,
+        ...(typeof d.reason === "string" ? { reason: d.reason } : {}),
+        ...(typeof d.status === "number" ? { status: d.status } : {}),
+      });
+    },
   });
-  const request = useCallback((value: SkylightWriteOp) => setOp(value), []);
+  const request = useCallback((value: SkylightWriteOp) => {
+    setFailure(null);
+    setOp(value);
+  }, []);
   return {
     request,
     node: (
@@ -41,11 +56,22 @@ export function useSkylightWrite() {
           open={op !== null}
           title="Confirm Skylight change"
           onClose={() => {
-            if (!mutation.isPending) setOp(null);
+            if (!mutation.isPending) {
+              setOp(null);
+              setFailure(null);
+            }
           }}
           footer={
             <>
-              <Button type="button" variant="ghost" disabled={mutation.isPending} onClick={() => setOp(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={mutation.isPending}
+                onClick={() => {
+                  setOp(null);
+                  setFailure(null);
+                }}
+              >
                 Cancel
               </Button>
               <Button
@@ -64,6 +90,20 @@ export function useSkylightWrite() {
           }
         >
           <p className="text-sm">{op ? describeSkylightWrite(op) : ""}</p>
+          {failure ? (
+            <div role="alert" className="mt-3 rounded-lg border border-danger bg-danger-soft px-3 py-2 text-sm text-danger" data-testid="skylight-write-error">
+              <p>{failure.message}</p>
+              {failure.reason || failure.status ? (
+                <details className="mt-1 text-xs text-muted">
+                  <summary className="cursor-pointer">Details</summary>
+                  <p className="mt-1 break-words" data-dynamic>
+                    {failure.status ? `Skylight ${failure.status}` : "Skylight"}
+                    {failure.reason ? `: ${failure.reason}` : ""}
+                  </p>
+                </details>
+              ) : null}
+            </div>
+          ) : null}
         </Dialog>
         {undo ? <SkylightUndoBar key={undo.id} op={undo} onDone={dismissUndo} onUndone={invalidate} /> : null}
       </>
