@@ -15,6 +15,7 @@ describe("coordinator change attribution", () => {
     [{ kind: "you", name: "chiefofstaff" }, undefined, false],
     [{ kind: "system", name: "chiefofstaff" }, undefined, false],
     [{ kind: "agent", name: "Hermes" }, "agent:devchief", false],
+    [{ kind: "agent", name: "chiefofstaff" }, "devchief", false],
   ] as const)("accepts exact actor identity or via: %j %s", (actor, via, expected) => {
     expect(isCoordinatorChange({ actor, via, at }, now)).toBe(expected);
   });
