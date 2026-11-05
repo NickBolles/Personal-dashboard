@@ -44,7 +44,7 @@ export function createSkylight({ refreshToken }) {
     attributes: { ...c, category: undefined, recurring: c.id.includes("-") },
     relationships: { category: { data: c.category ? { id: c.category, type: "category" } : null } },
   });
-  const invalid = (res) => json(res, 422, { errors: { summary: ["can't be blank"] } });
+  const invalid = (res, field = "summary", message = "can't be blank") => json(res, 422, { errors: { [field]: [message] } });
   const keysOnly = (body, keys) => body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).every((k) => keys.includes(k));
   const nonempty = (s) => typeof s === "string" && s.trim().length > 0;
   const eventKeys = [
@@ -272,14 +272,22 @@ export function createSkylight({ refreshToken }) {
       const c = state.chores.get(match[1]) ?? (match[2] ? occurrence() : undefined);
       if (!c) return notFound(res);
       if (match[2]) {
-        if (
-          !keysOnly(body, ["status", "instance_date", "instance_time", "category_id"]) ||
-          !["complete", "pending"].includes(body.status) ||
-          (c.id.includes("-") && !body.instance_date)
-        )
-          return invalid(res);
+        // Real API (live-verified by other clients; see docs/research/integrations-api.md): the body is flat,
+        // status complete|pending|skipped; a recurring occurrence must name instance_date (+ instance_time for a
+        // timed occurrence) and a one-off chore must not; category_id must be BLANK unless the chore is up for grabs
+        // (then it records who did it) — sending the assignee's member id answers 422 "category_id must be blank".
+        if (!keysOnly(body, ["status", "instance_date", "instance_time", "category_id", "completed_on"])) return invalid(res, "base", "unknown parameter");
+        if (!["complete", "pending", "skipped"].includes(body.status)) return invalid(res, "status", "is not included in the list");
+        const recurring = c.id.includes("-");
+        if (recurring && !body.instance_date) return invalid(res, "instance_date", "can't be blank");
+        if (!recurring && body.instance_date != null) return invalid(res, "instance_date", "must be blank");
+        if (body.instance_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(body.instance_date)) return invalid(res, "instance_date", "is invalid");
+        if (body.instance_time != null && !/^\d{2}:\d{2}$/.test(body.instance_time)) return invalid(res, "instance_time", "is invalid");
+        const hasCategory = body.category_id != null && body.category_id !== "";
+        if (hasCategory && (body.status !== "complete" || !c.up_for_grabs)) return invalid(res, "category_id", "must be blank");
         c.status = body.status;
-        c.completed_on = body.status === "complete" ? frameNow().date : null;
+        c.completed_on = body.status === "pending" ? null : frameNow().date;
+        if (hasCategory) c.completed_category = String(body.category_id);
       } else {
         if (
           !keysOnly(body, ["category_id", "start", "summary"]) ||
@@ -347,5 +355,11 @@ export function createSkylight({ refreshToken }) {
     }
     return notFound(res);
   }
-  return { handle, reset: seed, state };
+  /** e2e/unit control: add a chore without changing the shared seeds (e.g. an overdue recurring occurrence). */
+  function addChore(c) {
+    if (!c || typeof c.id !== "string" || typeof c.start !== "string") return false;
+    state.chores.set(c.id, { status: "pending", start_time: null, ...c });
+    return true;
+  }
+  return { handle, reset: seed, state, addChore };
 }
