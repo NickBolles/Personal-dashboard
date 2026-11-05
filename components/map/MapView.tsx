@@ -238,11 +238,11 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
   const open = r.total - r.counts.done;
   const agents = activeInArea(useAgentRuns().data, r.id);
   return (
-    <li className="flex min-w-0 flex-col gap-1">
+    <li className="relative flex min-w-0 flex-col gap-1">
       {/* A real link (bookmarks, new tab); inside /areas it opens the area in place. */}
       <Link
         href={`/areas?item=${encodeURIComponent(r.id)}`}
-        className="mp-card"
+        className={isFinanceAreaLike(r) ? "mp-card" : "mp-card mp-card-co"}
         onClick={(e) => {
           if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -284,7 +284,8 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
         ) : null}
       </Link>
       {/* Finance never goes to AI: no coordinator chat there. */}
-      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="self-end" />}
+      {/* ✦ icon in the card's top-right corner (N5); the card reserves room for it (.mp-card-co). */}
+      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="mp-card-coord" />}
     </li>
   );
 }

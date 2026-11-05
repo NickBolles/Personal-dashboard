@@ -203,6 +203,14 @@ export function activeInArea(r: AgentRunsResponse | undefined, areaId: string): 
   return (r?.active ?? []).filter((i) => i.areaId === areaId);
 }
 
+/** Coordinator entry dot (N5): waiting on the owner beats a failure beats work in progress; nothing live → no dot. */
+export function coordinatorDot(entries: readonly Pick<ItemAgentInfo, "live">[]): "running" | "waiting" | "failed" | null {
+  if (entries.some((e) => e.live === "waiting")) return "waiting";
+  if (entries.some((e) => e.live === "failed")) return "failed";
+  if (entries.some((e) => e.live === "running")) return "running";
+  return null;
+}
+
 export const progressPct = (p: ItemAgentInfo["progress"]) => (p && p.total ? Math.round((p.done / p.total) * 100) : null);
 
 export function whoLabel(w: Who | null): string {
