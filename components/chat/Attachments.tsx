@@ -576,7 +576,7 @@ function PhotoViewer({ name, src, onClose, details, download }: { name: string; 
         </p>
       ) : loaded === "error" ? (
         <p role="alert" className="mt-2 text-sm text-danger">
-          Couldn't load this picture. It may have been removed or you may be offline.
+          {"Couldn't load this picture. It may have been removed or you may be offline."}
         </p>
       ) : null}
       {details || download ? (
