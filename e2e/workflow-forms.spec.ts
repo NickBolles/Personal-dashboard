@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
-import { ensureWorkflowActive } from "./helpers";
+import { closeChatPanel, ensureWorkflowActive, openChatPanel } from "./helpers";
 
 /**
  * Workflows W2: palette `/slug args` → prefilled start form (D7) → live run →
@@ -56,13 +56,16 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
   const panel = page.getByTestId("workflow-run");
+  await openChatPanel(page, "Outline");
   await expect(panel).toContainText("Session: Heartland Sun Prairie – Ann Lyle");
   await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
 
   // Agent reply carries a jarvis-capture op → applied instantly, undoable.
   const composer = page.getByRole("textbox", { name: /message/i });
+  await closeChatPanel(page);
   await composer.fill("Quote this: remain in me");
   await composer.press("Control+Enter");
+  await openChatPanel(page, "Outline");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Remain in me, as I also remain in you", { timeout: 20_000 });
   // The raw capture block stays in the stored reply but never renders (the collapsed
   // "Context Jarvis attached" instructions mention the fence name, so count visible text only).
@@ -71,9 +74,11 @@ test("workflow run: prefilled start form → outline fills from the agent → un
   await expect(panel.getByTestId("workflow-outline")).not.toContainText("Remain in me, as I also remain in you");
 
   // Quick-add chip files the next message straight into that section.
-  await panel.getByRole("button", { name: "Point" }).click();
+  await closeChatPanel(page);
+  await page.getByTestId("chat-tray").getByRole("button", { name: "Point", exact: true }).click();
   await composer.fill("Fruit comes from staying connected");
   await composer.press("Control+Enter");
+  await openChatPanel(page, "Outline");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Fruit comes from staying connected");
 
   await panel.getByRole("button", { name: "End session" }).click();

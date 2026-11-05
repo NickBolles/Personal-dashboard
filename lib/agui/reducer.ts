@@ -34,6 +34,17 @@ const parse = (s: string): Record<string, unknown> => {
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 const num = (v: unknown) => (typeof v === "number" ? v : undefined);
 
+function childFields(v: Record<string, unknown>) {
+  return {
+    childSessionId: str(v.childSessionId),
+    delegationId: str(v.delegationId),
+    parentId: str(v.parentId),
+    taskIndex: num(v.taskIndex),
+    taskCount: num(v.taskCount),
+    durationSec: num(v.durationSec),
+  };
+}
+
 export function aguiToRunEvents(e: AGUIEvent, st: AguiReadState): RunEvent[] {
   const at = iso(e.timestamp);
   switch (e.type) {
@@ -58,19 +69,37 @@ export function aguiToRunEvents(e: AGUIEvent, st: AguiReadState): RunEvent[] {
       const p = st.pending.get(e.toolCallId);
       st.pending.delete(e.toolCallId);
       if (!name || !p || p.resumed || name === AGUI_APPROVAL_TOOL) return [];
-      return [{ type: "tool.started", tool: name, preview: str(parse(p.args).preview), at: p.at }];
+      return [{ type: "tool.started", callId: e.toolCallId, tool: name, preview: str(parse(p.args).preview), at: p.at }];
     }
     case EventType.TOOL_CALL_RESULT: {
       const name = st.tools.get(e.toolCallId) ?? "tool";
       const c = typeof e.content === "string" ? parse(e.content) : {};
       if (name === AGUI_APPROVAL_TOOL) return [{ type: "approval.resolved", choice: str(c.choice), at }];
-      return [{ type: "tool.completed", tool: name, preview: str(c.preview), durationSec: num(c.durationSec), error: c.ok === false, at }];
+      return [
+        { type: "tool.completed", callId: e.toolCallId, tool: name, preview: str(c.preview), durationSec: num(c.durationSec), error: c.ok === false, at },
+      ];
     }
     case EventType.SUBAGENT_STARTED:
-      return [{ type: "subagent.started", id: e.subagentRunId, goal: e.description, at }];
+      return [
+        { type: "subagent.started", id: e.subagentRunId, goal: e.description, at, ...childFields((e.metadata?.jarvis ?? {}) as Record<string, unknown>) },
+      ];
     case EventType.SUBAGENT_FINISHED: {
       const r = (e.result ?? {}) as Record<string, unknown>;
-      return [{ type: "subagent.completed", id: e.subagentRunId, goal: str(r.goal), summary: str(r.summary), status: str(r.status), at }];
+      return [{ type: "subagent.completed", id: e.subagentRunId, goal: str(r.goal), summary: str(r.summary), status: str(r.status), at, ...childFields(r) }];
+    }
+    case EventType.SUBAGENT_ERROR: {
+      const r = (e.metadata?.jarvis ?? {}) as Record<string, unknown>;
+      return [
+        {
+          type: "subagent.completed",
+          id: e.subagentRunId,
+          goal: str(r.goal),
+          summary: str(r.summary),
+          status: str(r.status) ?? "unknown",
+          at: str(r.at) ?? at,
+          ...childFields(r),
+        },
+      ];
     }
     case EventType.CUSTOM: {
       const v = (e.value ?? {}) as Record<string, unknown>;

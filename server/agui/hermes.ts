@@ -8,9 +8,9 @@
  * Mapping (plan §2.3):
  *   message.delta        → TEXT_MESSAGE_START/CONTENT … END
  *   reasoning.available  → REASONING_START / MESSAGE_START / CONTENT / MESSAGE_END / END
- *   tool.started         → TOOL_CALL_START/ARGS{preview}/END   (synthesised toolCallId: Hermes sends none)
- *   tool.completed       → TOOL_CALL_RESULT{ok,durationSec,preview}  (FIFO per tool name)
- *   subagent.*           → SUBAGENT_STARTED / SUBAGENT_FINISHED
+ *   tool.started         → TOOL_CALL_START/ARGS{preview}/END   (upstream id, else synthesised)
+ *   tool.completed       → TOOL_CALL_RESULT{ok,durationSec,preview}  (id match, else FIFO per tool name)
+ *   subagent.*           → SUBAGENT_STARTED / SUBAGENT_FINISHED / SUBAGENT_ERROR
  *   approval.request     → TOOL_CALL(hermes_approval) + RUN_FINISHED{outcome: interrupt}
  *   approval.responded   → (new AG-UI run) RUN_STARTED + TOOL_CALL_RESULT(hermes_approval)
  *   run.completed        → RUN_FINISHED{success}
@@ -24,11 +24,22 @@
  * reconnect. The SSE id stays the Hermes `seq`, so Last-Event-ID resume works.
  */
 import { EventType, type AGUIEvent, type Interrupt, type ResumeEntry } from "@ag-ui/core";
-import type { ApprovalRequest, RunEvent } from "@/lib/hermes";
+import type { ApprovalRequest, RunEvent, SubagentIdentity } from "@/lib/hermes";
 
 /** Hermes `approvals.timeout` default (seconds); its in-run approvals expire after this. */
 export const HERMES_APPROVAL_TIMEOUT_S = 300;
 export const APPROVAL_TOOL = "hermes_approval";
+
+function childFields(e: SubagentIdentity) {
+  return {
+    childSessionId: e.childSessionId,
+    delegationId: e.delegationId,
+    parentId: e.parentId,
+    taskIndex: e.taskIndex,
+    taskCount: e.taskCount,
+    durationSec: e.durationSec,
+  };
+}
 
 export type AguiEvent = AGUIEvent;
 
@@ -48,7 +59,7 @@ export class HermesAguiTranslator {
   private segment = 0;
   private textId: string | null = null;
   private openTools = new Map<string, string[]>();
-  private openSubagents: { id: string; goal?: string }[] = [];
+  private openSubagents: ({ id: string; goal?: string } & SubagentIdentity)[] = [];
   private approvalToolCallId: string | null = null;
   private finished = false;
   private lastSeq: number | undefined;
@@ -134,7 +145,7 @@ export class HermesAguiTranslator {
         if (e.text) out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.commentary", value: { text: e.text } }));
         break;
       case "tool.started": {
-        const id = this.toolId(seq);
+        const id = e.callId ?? this.toolId(seq);
         const q = this.openTools.get(e.tool) ?? [];
         q.push(id);
         this.openTools.set(e.tool, q);
@@ -142,10 +153,12 @@ export class HermesAguiTranslator {
         break;
       }
       case "tool.completed": {
-        let id = this.openTools.get(e.tool)?.shift();
+        const queue = this.openTools.get(e.tool);
+        const idx = e.callId ? (queue?.indexOf(e.callId) ?? -1) : 0;
+        let id = idx >= 0 ? queue?.splice(idx, 1)[0] : undefined;
         if (!id) {
           // Started before this connection (reconnect) or never announced: open + close it here.
-          id = this.toolId(seq);
+          id = e.callId ?? this.toolId(seq);
           this.toolCall(out, id, e.tool, undefined, { at: e.at, resumed: true });
         }
         out.push(
@@ -160,23 +173,60 @@ export class HermesAguiTranslator {
         break;
       }
       case "subagent.started": {
-        const id = e.id ?? this.toolId(seq, "sa");
-        this.openSubagents.push({ id, goal: e.goal });
-        out.push(this.ev({ type: EventType.SUBAGENT_STARTED, subagentRunId: id, name: "hermes_subagent", ...(e.goal ? { description: e.goal } : {}) }));
+        const id = e.id ?? e.childSessionId ?? this.toolId(seq, "sa");
+        this.openSubagents.push({ id, goal: e.goal, ...childFields(e) });
+        out.push(
+          this.ev({
+            type: EventType.SUBAGENT_STARTED,
+            subagentRunId: id,
+            name: "hermes_subagent",
+            ...(e.goal ? { description: e.goal } : {}),
+            metadata: { jarvis: childFields(e) },
+          }),
+        );
         break;
       }
       case "subagent.completed": {
-        const idx = this.openSubagents.findIndex((s) => (e.id ? s.id === e.id : s.goal === e.goal));
+        const identified = Boolean(e.id || e.childSessionId || (e.delegationId && e.taskIndex !== undefined));
+        const idx = this.openSubagents.findIndex(
+          (s) =>
+            (e.id && s.id === e.id) ||
+            (e.childSessionId && s.childSessionId === e.childSessionId) ||
+            (e.delegationId && e.taskIndex !== undefined && s.delegationId === e.delegationId && s.taskIndex === e.taskIndex) ||
+            (!identified && e.goal !== undefined && s.goal === e.goal),
+        );
         const open = idx >= 0 ? this.openSubagents.splice(idx, 1)[0] : undefined;
-        const id = open?.id ?? e.id ?? this.toolId(seq, "sa");
+        const id = open?.id ?? e.id ?? e.childSessionId ?? this.toolId(seq, "sa");
         if (!open)
-          out.push(this.ev({ type: EventType.SUBAGENT_STARTED, subagentRunId: id, name: "hermes_subagent", ...(e.goal ? { description: e.goal } : {}) }));
+          out.push(
+            this.ev({
+              type: EventType.SUBAGENT_STARTED,
+              subagentRunId: id,
+              name: "hermes_subagent",
+              ...(e.goal ? { description: e.goal } : {}),
+              metadata: { jarvis: childFields(e) },
+            }),
+          );
+        if (e.status !== "completed" && e.status !== "success") {
+          // AG-UI FINISHED (even without outcome) means success. Close with an explicit
+          // source-state/error code instead; the Jarvis reader retains unknown/cancelled as-is.
+          out.push(
+            this.ev({
+              type: EventType.SUBAGENT_ERROR,
+              subagentRunId: id,
+              code: `hermes.subagent.${e.status ?? "unknown"}`,
+              message: e.summary ?? `Subagent outcome: ${e.status ?? "unknown"}`,
+              metadata: { jarvis: { ...childFields(e), status: e.status, summary: e.summary, goal: e.goal, at: e.at } },
+            }),
+          );
+          break;
+        }
         out.push(
           this.ev({
             type: EventType.SUBAGENT_FINISHED,
             subagentRunId: id,
             outcome: { type: "success" },
-            result: { summary: e.summary ?? null, status: e.status ?? null, goal: e.goal ?? null },
+            result: { summary: e.summary ?? null, status: e.status ?? null, goal: e.goal ?? null, ...childFields(e) },
           }),
         );
         break;

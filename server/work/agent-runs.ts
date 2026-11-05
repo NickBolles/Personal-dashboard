@@ -22,8 +22,97 @@ import { areaIndex, bucketOf } from "@/lib/map-rollup";
 import { isContainer, type WorkItem } from "@/lib/work";
 import { listItems } from "./store";
 import { linksByItem } from "./decisions";
+import type { ExecutionRecord } from "@/lib/chat-execution";
+import { executionLinks, executionState, executionText, EXECUTION_LIMIT } from "@/server/chat/execution-store";
 
 const chunks = <T>(xs: T[], n = 500) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+
+/** Exact session identities only: never associate unrelated work by title or item totals. */
+export function executionRuns(user: CurrentUser, sessionId: string, childIds: string[] = []) {
+  const db = getDb();
+  const ids = [sessionId, ...childIds.slice(0, EXECUTION_LIMIT)];
+  const jarvis: ExecutionRecord[] = db
+    .select()
+    .from(schema.runs)
+    .where(and(eq(schema.runs.userId, user.id), inArray(schema.runs.sessionId, ids)))
+    .orderBy(desc(schema.runs.startedAt))
+    .limit(EXECUTION_LIMIT)
+    .all()
+    .map((r) => ({
+      key: `jarvis_run:${r.runId}`,
+      source: "jarvis_run",
+      id: r.runId,
+      title: executionText(r.inputPreview, 300) ?? "Chat run",
+      state: executionState(r.status),
+      startedAt: r.startedAt,
+      endedAt: r.completedAt,
+      updatedAt: r.lastCheckedAt ?? r.startedAt,
+      href: `/chat/${encodeURIComponent(r.sessionId)}`,
+    }));
+  for (const j of db
+    .select()
+    .from(schema.aiJobs)
+    .where(and(eq(schema.aiJobs.userId, user.id), inArray(schema.aiJobs.hermesSessionId, ids)))
+    .orderBy(desc(schema.aiJobs.updatedAt))
+    .limit(EXECUTION_LIMIT)
+    .all()) {
+    const state =
+      j.state === "succeeded" ? "completed" : ["queued", "waiting_approval", "budget_blocked"].includes(j.state) ? "waiting" : executionState(j.state);
+    const item =
+      j.subjectType === "work_item"
+        ? db
+            .select()
+            .from(schema.workItems)
+            .where(and(eq(schema.workItems.id, j.subjectId), eq(schema.workItems.userId, user.id)))
+            .get()
+        : null;
+    jarvis.push({
+      key: `jarvis_run:${j.id}`,
+      source: "jarvis_run",
+      id: j.id,
+      title: executionText(item?.title, 300) ?? `${j.kind} job`,
+      state,
+      startedAt: j.startedAt,
+      endedAt: j.finishedAt,
+      updatedAt: j.updatedAt,
+      error: executionText(j.errorMessage, 2048),
+      href: item ? `/areas?item=${encodeURIComponent(item.id)}` : null,
+    });
+  }
+  const registered: ExecutionRecord[] = db
+    .select()
+    .from(schema.agentRuns)
+    .where(and(eq(schema.agentRuns.userId, user.id), inArray(schema.agentRuns.hermesSessionId, ids)))
+    .orderBy(desc(schema.agentRuns.updatedAt))
+    .limit(EXECUTION_LIMIT)
+    .all()
+    .flatMap((r) => {
+      const item = db
+        .select()
+        .from(schema.workItems)
+        .where(and(eq(schema.workItems.id, r.itemId), eq(schema.workItems.userId, user.id)))
+        .get();
+      if (!item) return [];
+      return [
+        {
+          key: `registered_run:${r.id}`,
+          source: "registered_run" as const,
+          id: r.id,
+          title: executionText(r.title, 300) ?? "Registered run",
+          state: r.state === "done" ? ("completed" as const) : executionState(r.state),
+          summary: executionText(r.summary),
+          startedAt: r.startedAt,
+          endedAt: r.finishedAt,
+          updatedAt: r.updatedAt,
+          delegationId: r.delegationId,
+          transcriptPath: executionText(r.transcriptPath, 1024),
+          href: `/areas?item=${encodeURIComponent(r.itemId)}`,
+          links: executionLinks(`${r.prUrl ?? ""}\n${r.summary ?? ""}`),
+        },
+      ];
+    });
+  return { jarvis, registered };
+}
 
 /** Each item's Hermes conversations: conversation children + chat_session links. */
 function sessionsByItem(items: WorkItem[], links: Map<string, { kind: string; targetId: string | null }[]>) {

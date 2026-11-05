@@ -31,14 +31,24 @@ export type ClarifyRequest = {
   multiSelect?: boolean;
 };
 
+export type SubagentIdentity = {
+  childSessionId?: string;
+  delegationId?: string;
+  /** Runtime parent subagent id, not necessarily a chat-session id. */
+  parentId?: string;
+  taskIndex?: number;
+  taskCount?: number;
+  durationSec?: number;
+};
+
 export type RunEvent =
   | { type: "text.delta"; seq?: number; delta: string }
   | { type: "commentary"; seq?: number; text: string }
   | { type: "reasoning"; seq?: number; text: string }
   | { type: "tool.started"; seq?: number; callId?: string; tool: string; preview?: string; at: string }
   | { type: "tool.completed"; seq?: number; callId?: string; tool: string; preview?: string; durationSec?: number; error?: boolean; at: string }
-  | { type: "subagent.started"; seq?: number; id?: string; goal?: string; at: string }
-  | { type: "subagent.completed"; seq?: number; id?: string; goal?: string; summary?: string; status?: string; at: string }
+  | ({ type: "subagent.started"; seq?: number; id?: string; goal?: string; at: string } & SubagentIdentity)
+  | ({ type: "subagent.completed"; seq?: number; id?: string; goal?: string; summary?: string; status?: string; at: string } & SubagentIdentity)
   | ({ type: "approval.requested"; seq?: number; at: string } & ApprovalRequest)
   | { type: "approval.resolved"; seq?: number; choice?: string; requestId?: string; at: string }
   | ({ type: "clarify.requested"; seq?: number; at: string } & ClarifyRequest)

@@ -267,6 +267,13 @@
       "when": 1793822329317,
       "tag": "0037_quick_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1793892239325,
+      "tag": "0038_chat_exec_records",
+      "breakpoints": true
     }
   ]
 }

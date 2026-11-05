@@ -901,7 +901,7 @@ export type ConversationPlacement = {
   /** only in Miscellaneous (directly): counts as unfiled */
   inMisc: boolean;
 };
-export const CONVERSATION_FILTERS = ["all", "unfiled"] as const;
+export const CONVERSATION_FILTERS = ["all", "unfiled", "unread", "agents"] as const;
 export type ConversationFilter = (typeof CONVERSATION_FILTERS)[number];
 /**
  * Conversation lists come from a persisted per-person index (stale-while-revalidate):
@@ -917,6 +917,8 @@ export type ConversationListResponse = {
   unfiledCount: number;
   /** C4: conversations in this view that moved since you read them */
   unreadCount: number;
+  /** Counts over the entire accessible, unarchived area scope, before the view/100-row limit. */
+  counts?: { unread: number; agents: number };
   unavailable: string[];
 } & ConversationIndexState;
 /** A conversation linked to a work item (work_links), shown as a child row of that item in the tree. */

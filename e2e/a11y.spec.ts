@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
@@ -450,6 +450,7 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
   const panel = page.getByTestId("workflow-run");
+  await openChatPanel(page, "Outline");
   await expect(panel).toContainText("Zed Quill");
   await axe("run panel");
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
@@ -467,6 +468,7 @@ test("workflow start form + run panel: axe clean and no overflow at 200% text zo
   await axe("end form");
   await endForm.getByTestId("workflow-end-submit").click();
   await expect(panel).toContainText("Ended");
+  await openChatPanel(page, "Outputs");
   await expect(panel.getByTestId("workflow-outputs")).toBeVisible();
   await axe("run outputs");
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
@@ -520,9 +522,11 @@ test("drive + offline bible (#141/#142): axe clean and no overflow at 200% text 
     await form.getByTestId("workflow-start-submit").click();
     await expect(page).toHaveURL(/\/chat\//);
     const panel = page.getByTestId("workflow-run");
+    await openChatPanel(page, "Outline");
     await panel.getByRole("button", { name: "End session" }).click();
     await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
     await expect(panel).toContainText("Ended");
+    await openChatPanel(page, "Outputs");
     // #173: the "Session ended" tone toast may still show above the sheet's scrim; its opaque base keeps it ≥4.5:1
     const ended = page.getByRole("status").filter({ hasText: "Session ended" });
     const toastUp = (await ended.count()) > 0;

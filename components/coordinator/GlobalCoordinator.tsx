@@ -10,6 +10,7 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
+import { usePanelOwner } from "@/lib/client/panel-owner";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { useToast } from "@/components/ui";
 import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
@@ -75,7 +76,9 @@ export function GlobalCoordinator() {
         });
   const attached = removedOn === pageKey ? null : context;
   const quickContext: QuickActionContext = { areaId: area?.id, areaTitle: context && area ? area.title : undefined, pageLabel: context?.label, path: pathname };
-  const expanded = open && (!chat || chatExpandedOn === pageKey);
+  const panelOwner = usePanelOwner();
+  // A chat panel owning the right side collapses the rail to its strip; an explicit open on this page still wins.
+  const expanded = open && (!(chat && panelOwner) || chatExpandedOn === pageKey);
   const railWidth = expanded ? width : 54;
   const saveOpen = (value: boolean) => {
     setOpen(value);
@@ -405,15 +408,59 @@ export function GlobalCoordinator() {
             </div>
           ) : null}
           {!chat ? (
-            <button type="button" className="gc-tray" aria-label="Chief of staff" aria-haspopup="dialog" onClick={show}>
-              <span className="gc-orb" aria-hidden="true" />
-              <span>
-                <strong>Chief of staff</strong>
+            <button type="button" className="gc-tray" data-state={line.state} aria-label="Chief of staff" aria-haspopup="dialog" onClick={show}>
+              <span className="gc-tray-avatar">
+                <span className="gc-orb" aria-hidden="true" />
+                <span className="gc-tray-phone hidden">
+                  <AttentionDot dot={line.dot} />
+                </span>
+              </span>
+              <span className="gc-tray-copy">
+                <strong>
+                  <span className="gc-tray-phone hidden" data-tone={line.tone}>
+                    {line.state === "failing"
+                      ? "Failing"
+                      : line.state === "needs"
+                        ? "Needs you"
+                        : line.state === "done"
+                          ? "Finished"
+                          : line.state === "running"
+                            ? "Running"
+                            : "Quiet"}{" "}
+                    ·{" "}
+                  </span>
+                  Chief of staff
+                </strong>
                 <span className="gc-priority" data-tone={line.tone}>
                   {line.text}
                 </span>
               </span>
-              <AttentionDot dot={line.dot} />
+              <span className="gc-tray-counts hidden">
+                {things.needsYou ? (
+                  <span data-tone="warn" aria-label={`${things.needsYou} need you`}>
+                    <span aria-hidden="true">⛨</span> {things.needsYou}
+                  </span>
+                ) : null}
+                {things.running.length ? (
+                  <span data-tone="ai" aria-label={`${things.running.length} running`}>
+                    <span className="inline-block motion-safe:animate-spin" aria-hidden>
+                      ↻
+                    </span>{" "}
+                    {things.running.length}
+                  </span>
+                ) : null}
+                {things.failing.length ? (
+                  <span data-tone="bad" aria-label={`${things.failing.length} failing`}>
+                    × {things.failing.length}
+                  </span>
+                ) : null}
+              </span>
+              <span className="gc-tray-tablet-dot">
+                <AttentionDot dot={line.dot} />
+              </span>
+              <span className="gc-tray-phone hidden" aria-hidden="true">
+                ⌃
+              </span>
             </button>
           ) : null}
           {phoneOpen ? (

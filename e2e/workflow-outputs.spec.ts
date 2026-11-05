@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
-import { ensureWorkflowActive } from "./helpers";
+import { closeChatPanel, ensureWorkflowActive, openChatPanel } from "./helpers";
 
 /**
  * Workflows W4: Edit session (#132) → End session (end form) → summary
@@ -31,6 +31,7 @@ async function startRun(page: Page) {
   await expect(form.getByLabel("Speaker")).toHaveValue("Orla Pike");
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
+  await openChatPanel(page, "Notes");
   const panel = page.getByTestId("workflow-run");
   await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
   return panel;
@@ -53,8 +54,10 @@ test("workflow outputs: edit session → end form → summary accept → markdow
   const composer = page.getByRole("textbox", { name: /message/i });
   for (const t of ["Prune the orchard rows", "Call the orchard group"]) {
     await panel.getByRole("button", { name: "Action", exact: true }).click();
+    await closeChatPanel(page);
     await composer.fill(t);
     await composer.press("Control+Enter");
+    await openChatPanel(page, "Notes");
     await expect(panel.getByTestId("workflow-outline")).toContainText(t);
   }
 
@@ -74,6 +77,7 @@ test("workflow outputs: edit session → end form → summary accept → markdow
   await expect(panel).toContainText("Ended");
 
   // Summary is a proposal until accepted.
+  await openChatPanel(page, "Outputs");
   const summary = panel.getByTestId("workflow-summary");
   await summary.getByTestId("workflow-summary-draft").click();
   await expect(summary.getByTestId("workflow-summary-text")).toHaveValue(/Mock summary/);
@@ -234,6 +238,7 @@ test("#147/#148/#145 typed Edit session + end form answers are kept; invalid ans
   }).toPass();
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
+  await openChatPanel(page, "Notes");
   const panel = page.getByTestId("workflow-run");
   await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
   const runId = await page.evaluate(async () => {
@@ -259,8 +264,10 @@ test("#147/#148/#145 typed Edit session + end form answers are kept; invalid ans
   // #145: one action, confirm sheet open while another tab creates the same item
   const composer = page.getByRole("textbox", { name: /message/i });
   await panel.getByRole("button", { name: "Action", exact: true }).click();
+  await closeChatPanel(page);
   await composer.fill("Prune the quince hedge");
   await composer.press("Control+Enter");
+  await openChatPanel(page, "Notes");
   await expect(panel.getByTestId("workflow-outline")).toContainText("Prune the quince hedge");
 
   // #147 End form: out-of-range number keeps the session live with the answers in place
@@ -280,6 +287,7 @@ test("#147/#148/#145 typed Edit session + end form answers are kept; invalid ans
   const ended = await capture();
   expect(ended.capture.session).toMatchObject({ rating: 5, again: true, tags: ["vine"] });
 
+  await openChatPanel(page, "Outputs");
   const actions = panel.getByTestId("workflow-actions");
   await actions.getByLabel("Prune the quince hedge").check();
   await actions.getByTestId("workflow-actions-create").click();

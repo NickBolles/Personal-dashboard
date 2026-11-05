@@ -236,6 +236,8 @@ export const sessionMeta = sqliteTable("session_meta", {
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
   archived: integer("archived", { mode: "boolean" }).notNull().default(false),
   forkedFromSessionId: text("forked_from_session_id"),
+  /** Immediate Hermes delegation parent (distinct from a Jarvis fork). */
+  parentSessionId: text("parent_session_id"),
   forkedFromMessageId: text("forked_from_message_id"),
   titleOverride: text("title_override"),
   /** visible to everyone in the household who can chat (read-only for them) */
@@ -245,6 +247,36 @@ export const sessionMeta = sqliteTable("session_meta", {
   /** Hermes profile the session lives on (null = default profile); fixed at creation (Settings → Agents routing) */
   hermesProfile: text("hermes_profile"),
 });
+
+/** Durable, parent-scoped execution identities; never inferred from a parent run's outcome. */
+export const chatExecRecords = sqliteTable(
+  "chat_exec_records",
+  {
+    parentSessionId: text("parent_session_id").notNull(),
+    source: text("source").$type<import("@/lib/chat-execution").ExecSource>().notNull(),
+    externalId: text("external_id").notNull(),
+    childSessionId: text("child_session_id"),
+    childProfile: text("child_profile"),
+    delegationId: text("delegation_id"),
+    subagentId: text("subagent_id"),
+    taskIndex: integer("task_index"),
+    title: text("title").notNull(),
+    state: text("state").$type<import("@/lib/chat-execution").ExecState>().notNull().default("unknown"),
+    step: text("step"),
+    summary: text("summary"),
+    error: text("error"),
+    startedAt: text("started_at"),
+    endedAt: text("ended_at"),
+    updatedAt: text("updated_at").notNull().default(now),
+    transcriptPath: text("transcript_path"),
+    linksJson: text("links_json").notNull().default("[]"),
+  },
+  (t) => [
+    uniqueIndex("chat_exec_identity_idx").on(t.parentSessionId, t.source, t.externalId),
+    index("chat_exec_parent_idx").on(t.parentSessionId),
+    index("chat_exec_child_idx").on(t.childSessionId),
+  ],
+);
 
 /** Runs Jarvis started, tracked until Hermes confirms a terminal state. */
 export const runs = sqliteTable(

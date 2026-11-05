@@ -136,6 +136,7 @@ export function createHermes({ apiKey }) {
     });
     sub.profile = "momentumchief";
     sub.source = "webui";
+    addMessage(sub.id, { role: "assistant", content: "Vendor comparison results are retained here.", finish_reason: "stop" });
     const b = addSession({ id: "sess_v5", title: "Enable v5 rollout", started_at: now() - 86400, last_active: now() - 80000 });
     addMessage(b.id, { role: "user", content: "Let's plan enabling v5 across the platform." });
     addMessage(b.id, { role: "assistant", content: "Plan: compatibility audit, config migration, rollout, docs, verification.", finish_reason: "stop" });
@@ -380,9 +381,27 @@ export function createHermes({ apiKey }) {
       addMessage(run.session_id, { role: "tool", content: "Sunny, 64°F", tool_name: "web_search" });
     }
     if (/subagent|delegate/i.test(said)) {
-      pushEvent(run, { event: "subagent.start", subagent_id: "sa_1", goal: "Research options" });
+      const child = addSession({ id: `child_${run.run_id}`, title: "Subagent: Research options", source: "subagent", parent_session_id: run.session_id });
+      child.profile = state.sessions.get(run.session_id)?.profile;
+      const identity = {
+        subagent_id: `sa_${run.run_id}`,
+        child_session_id: child.id,
+        delegation_id: `deleg_${run.run_id}`,
+        parent_id: null,
+        task_index: 0,
+        task_count: 1,
+      };
+      pushEvent(run, { event: "subagent.start", ...identity, goal: "Research options" });
       await sleep(t * 2);
-      pushEvent(run, { event: "subagent.complete", subagent_id: "sa_1", goal: "Research options", status: "completed", summary: "Found 3 options" });
+      addMessage(child.id, { role: "assistant", content: "Found 3 options", finish_reason: "stop" });
+      pushEvent(run, {
+        event: "subagent.complete",
+        ...identity,
+        goal: "Research options",
+        status: "completed",
+        summary: "Found 3 options",
+        duration_seconds: 0.2,
+      });
     }
     if (/clarif/i.test(said)) {
       // Session-authority clarify (gateway/session_pending_controls.py register_clarify): the run stays

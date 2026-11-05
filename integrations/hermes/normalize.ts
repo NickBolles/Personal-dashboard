@@ -52,6 +52,14 @@ export function normalizeClarify(raw: Record<string, unknown> | null | undefined
 export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
   const seq = num(e.seq);
   const at = iso(num(e.timestamp)) ?? new Date().toISOString();
+  const child = {
+    childSessionId: str(e.child_session_id),
+    delegationId: str(e.delegation_id),
+    parentId: str(e.parent_id),
+    taskIndex: num(e.task_index),
+    taskCount: num(e.task_count),
+    durationSec: num(e.duration_seconds) ?? num(e.duration),
+  };
   switch (e.event) {
     case "message.delta":
       return { type: "text.delta", seq, delta: str(e.delta) ?? "" };
@@ -73,13 +81,14 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
         at,
       };
     case "subagent.start":
-      return { type: "subagent.started", seq, id: str(e.subagent_id), goal: str(e.goal), at };
+      return { type: "subagent.started", seq, id: str(e.subagent_id), goal: scrub(str(e.goal)), at, ...child };
     case "subagent.complete":
       return {
         type: "subagent.completed",
+        ...child,
         seq,
         id: str(e.subagent_id),
-        goal: str(e.goal),
+        goal: scrub(str(e.goal)),
         summary: scrub(str(e.summary)),
         status: str(e.status),
         at,

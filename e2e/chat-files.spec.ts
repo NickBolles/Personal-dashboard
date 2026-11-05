@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { expectNoHorizontalOverflow, mock, startConversation } from "./helpers";
+import { expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
 
 // 1×1 PNG
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -10,10 +10,7 @@ test.beforeEach(async ({ request }) => {
 });
 
 async function openFiles(page: Page) {
-  const vw = page.viewportSize()?.width ?? 0;
-  if (vw >= 1100) return page.getByRole("complementary", { name: "Context and links" });
-  await page.getByTestId("links-button").click();
-  return page.getByRole("dialog", { name: "Context & links" });
+  return openChatPanel(page, "Files");
 }
 
 async function sendAndWait(page: Page, text: string) {

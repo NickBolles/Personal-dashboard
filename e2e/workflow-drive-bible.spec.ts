@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
-import { ensureWorkflowActive } from "./helpers";
+import { ensureWorkflowActive, openChatPanel } from "./helpers";
 import { MOCK_URL } from "../playwright.config";
 
 /**
@@ -54,6 +54,7 @@ test("drive: connect (drive.file), confirm before save, link on the run, disconn
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
   const run = page.getByTestId("workflow-run");
+  await openChatPanel(page, "Outline");
   await expect(run.getByTestId("workflow-outline")).toContainText("John 15");
   await run.getByRole("button", { name: "End session" }).click();
   const end = page.getByRole("dialog", { name: "Before you go" });
@@ -61,6 +62,7 @@ test("drive: connect (drive.file), confirm before save, link on the run, disconn
   await expect(run).toContainText("Ended");
 
   const before = (await driveState(page)).files.length;
+  await openChatPanel(page, "Outputs");
   await run.getByTestId("workflow-drive-open").click();
   const confirm = page.getByRole("dialog", { name: "Save to Google Drive?" });
   await expect(confirm.getByTestId("workflow-drive-confirm")).toContainText(`My Drive › Teaching notes › ${year()}`);
@@ -109,11 +111,13 @@ test("bible: opt-in download, verse text inline in the Scripture field and outli
   await form.getByTestId("workflow-start-submit").click();
   await expect(page).toHaveURL(/\/chat\//);
   const outline = page.getByTestId("workflow-run").getByTestId("workflow-outline");
+  await openChatPanel(page, "Outline");
   await expect(outline.getByTestId("scripture-passage")).toContainText("For God so loved the world");
   await expect(outline).not.toContainText("Reference only");
 
   // removing the pack goes back to reference-only
   await page.request.delete("/api/bible", { headers: H });
   await page.reload();
+  await openChatPanel(page, "Outline");
   await expect(page.getByTestId("workflow-run").getByTestId("workflow-outline")).toContainText("Reference only");
 });

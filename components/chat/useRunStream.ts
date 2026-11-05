@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { api } from "@/lib/client/api";
-import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
+import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView, type SubagentIdentity } from "@/lib/hermes";
 import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
 import { toolResultState } from "@/lib/tool-presentation";
 
@@ -19,7 +19,7 @@ export type Activity =
       startedAt: string;
       durationSec?: number;
     }
-  | { id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string }
+  | ({ id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string } & SubagentIdentity)
   | { id: string; kind: "commentary"; text: string; startedAt: string };
 
 export type RunState = {
@@ -105,22 +105,30 @@ export function reduceRun(state: RunState, a: Action): RunState {
           next[idx] = { ...(next[idx] as Extract<Activity, { kind: "tool" }>), ...done };
           return { ...s, activity: next };
         }
-        case "subagent.started":
+        case "subagent.started": {
+          const fields = subagentFields(e);
           // A resumed stream re-announces subagents still open; keep the original activity.
-          if (e.id && s.activity.some((x) => x.kind === "subagent" && x.id === e.id)) return s;
-          return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at }] };
+          const idx = subagentIndex(s.activity, e);
+          if (idx !== -1) {
+            const next = [...s.activity];
+            next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields };
+            return { ...s, activity: next };
+          }
+          return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at, ...fields }] };
+        }
         case "subagent.completed": {
-          const idx = s.activity.findIndex((x) => x.kind === "subagent" && (x.id === e.id || (!x.done && x.goal === e.goal)));
+          const fields = subagentFields(e);
+          const idx = subagentIndex(s.activity, e);
           if (idx === -1)
             return {
               ...s,
               activity: [
                 ...s.activity,
-                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at },
+                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at, ...fields },
               ],
             };
           const next = [...s.activity];
-          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), summary: e.summary, status: e.status, done: true };
+          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields, summary: e.summary, status: e.status, done: true };
           return { ...s, activity: next };
         }
         case "approval.requested":
@@ -144,6 +152,31 @@ export function reduceRun(state: RunState, a: Action): RunState {
       }
     }
   }
+}
+
+function subagentIndex(activity: Activity[], e: SubagentIdentity & { id?: string; goal?: string }) {
+  const identified = Boolean(e.id || e.childSessionId || (e.delegationId && e.taskIndex !== undefined));
+  return activity.findIndex(
+    (x) =>
+      x.kind === "subagent" &&
+      ((e.id && x.id === e.id) ||
+        (e.childSessionId && x.childSessionId === e.childSessionId) ||
+        (e.delegationId && e.taskIndex !== undefined && x.delegationId === e.delegationId && x.taskIndex === e.taskIndex) ||
+        (!identified && e.goal !== undefined && !x.done && x.goal === e.goal)),
+  );
+}
+
+function subagentFields(e: SubagentIdentity): SubagentIdentity {
+  return Object.fromEntries(
+    Object.entries({
+      childSessionId: e.childSessionId,
+      delegationId: e.delegationId,
+      parentId: e.parentId,
+      taskIndex: e.taskIndex,
+      taskCount: e.taskCount,
+      durationSec: e.durationSec,
+    }).filter(([, v]) => v !== undefined),
+  );
 }
 
 const BACKOFF = [1000, 2000, 4000, 8000, 15000, 15000];

@@ -119,6 +119,15 @@ export const runEventSchema = z
     run_id: z.string().optional(),
     timestamp: z.number().optional(),
     seq: z.number().optional(),
+    subagent_id: z.string().nullish(),
+    child_session_id: z.string().nullish(),
+    delegation_id: z.string().nullish(),
+    parent_id: z.string().nullish(),
+    task_index: z.number().int().nullish(),
+    task_count: z.number().int().nullish(),
+    duration: z.number().nullish(),
+    duration_seconds: z.number().nullish(),
+    tool_call_id: z.string().nullish(),
   })
   .passthrough();
 export type HermesRunEvent = z.infer<typeof runEventSchema> & Record<string, unknown>;

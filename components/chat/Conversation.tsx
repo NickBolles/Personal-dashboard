@@ -1,10 +1,9 @@
 "use client";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { Markdown } from "@/components/markdown/Markdown";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
@@ -12,22 +11,29 @@ import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
 import { isTerminal, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
-import { Badge, Button, Dialog, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
+import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
 import { BrainIcon, ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon } from "@/components/icons";
 import { ToolStep } from "./ToolStep";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
 import { useModKey } from "@/lib/client/platform";
 import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
-import { quickAdd, RunPanel, useAgentCapture, useWideRun, useWorkflowRun } from "@/components/workflows/RunPanel";
+import { quickAdd, useAgentCapture, useWorkflowRun } from "@/components/workflows/RunPanel";
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { ContextSheet, type ContextChip } from "./ContextSheet";
+import { usePanelLinks } from "./LinksPanel";
 import { useFollowScroll } from "./useFollowScroll";
-import { LinksPanel, usePanelLinks } from "./LinksPanel";
+import { ChatPanel, ParentChatLink } from "./things/ChatPanel";
+import { ChatTray } from "./things/ChatTray";
+import { ChatLinkProvider } from "./things/ChatLinkProvider";
+import { useChatThings } from "./things/useChatThings";
+import { useChatPanelLayout } from "./things/useChatPanelLayout";
+import type { ThingsTab } from "@/lib/chat/things";
+import "./things/things.css";
 import {
   AttachButton,
   AttachmentChips,
@@ -125,7 +131,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
   const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
-  const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file" | "links">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "fork" | "track" | "model" | "context" | "file">(null);
   const router = useRouter();
   const newChat = useAskHermes();
   const [forkFrom, setForkFrom] = useState<TimelineItem>();
@@ -193,6 +199,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     firstRun.current = sessionId;
     const first = takeFirstRun(sessionId);
     if (!first) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restore the consumed first-run handoff once
     setPendingInput(first.input);
     first.run.then(
       (r) => {
@@ -224,9 +231,34 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
   const session = detail?.session;
   const wfRun = useWorkflowRun(sessionId);
-  const wide = useWideRun();
-  const sideRun = !!wfRun && wide;
   const [wfTarget, setWfTarget] = useState<string | null>(null);
+  const chatWrapperRef = useRef<HTMLDivElement>(null);
+  const surface = useChatPanelLayout(sessionId, chatWrapperRef, !!detail, !!wfRun);
+  const workflowSections = (wfRun?.panel.find((e) => e.type === "Outline")?.props.sections ?? []) as { title: string; bind: string }[];
+  const workflowChips = (wfRun?.panel.find((e) => e.type === "QuickAddChips")?.props.chips ?? []) as { label: string; field: string }[];
+  const chatThings = useChatThings(sessionId, {
+    links: panel.links,
+    pending: { approval: !!run.state.approval, clarify: !!run.state.clarify && run.active },
+    parentRunning: run.active,
+    parentFailed: run.state.phase === "failed" || run.state.phase === "interrupted",
+    filesCount: filesQ.data ? filesQ.data.filter((f) => f.sentAt).length : null,
+    contextPercent: null,
+    workflow:
+      wfRun?.status === "live"
+        ? {
+            title: wfRun.title,
+            step: wfTarget ? `Next note: ${workflowChips.find((c) => c.field === wfTarget)?.label ?? wfTarget}` : wfRun.title,
+            sections: workflowSections.map((s) => ({
+              title: s.title,
+              count: Array.isArray(wfRun.capture[s.bind]) ? (wfRun.capture[s.bind] as unknown[]).length : 0,
+            })),
+          }
+        : null,
+  });
+  const openPanel = (tab: ThingsTab) => {
+    surface.show(tab);
+    chatThings.markSeen(tab);
+  };
   const onCaptured = useCallback(
     (r: { applied: string[]; dropped: number; proposed: number }) => {
       if (r.dropped) toast(r.dropped === 1 ? "1 note not filed" : `${r.dropped} notes not filed`, "warn");
@@ -497,340 +529,364 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     <AssistantName.Provider value={who}>
       <SmartSession.Provider value={sessionId}>
         <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
-          <div className={sideRun ? "flex justify-center" : "min-[1100px]:flex min-[1100px]:justify-center"}>
-            <div
-              className={cx("chat-page relative mx-auto flex max-w-[880px] min-w-0 flex-col min-[1100px]:mx-0 min-[1100px]:flex-1", sideRun && "mx-0 flex-1")}
-              data-testid="conversation-drop"
-              {...drop.props}
-            >
-              <DropOverlay show={drop.over} />
-              <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
-                <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
-                  <Link
-                    href="/chat"
-                    className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
-                    aria-label="Back to conversations"
-                  >
-                    <ChevronIcon className="h-5 w-5 rotate-180" />
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    <h1 className="truncate text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] sm:text-[1.0625rem] sm:leading-6">{session!.title}</h1>
-                    {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-                    <div
-                      data-scroll-x
-                      className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
-                    >
-                      {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
-                      {phase ? (
-                        <span className="inline-flex shrink-0 rounded-full bg-surface">
-                          <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge>
-                        </span>
-                      ) : null}
-                      {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
-                      {/* C1: agent mark — which Hermes profile answers here. */}
-                      {areaCtx?.agent?.profile || session!.agentProfile ? (
-                        <span
-                          className="chip shrink-0 font-medium"
-                          data-tone="accent"
-                          data-testid="agent-badge"
-                          title="The agent that answers this conversation"
+          <ChatLinkProvider links={panel.links}>
+            <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>
+              <div className="chat-things-layout">
+                <div className="chat-page relative mx-auto flex w-full max-w-[880px] min-w-0 flex-1 flex-col" data-testid="conversation-drop" {...drop.props}>
+                  <DropOverlay show={drop.over} />
+                  <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
+                    <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
+                      <Link
+                        href="/chat"
+                        className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
+                        aria-label="Back to conversations"
+                      >
+                        <ChevronIcon className="h-5 w-5 rotate-180" />
+                      </Link>
+                      <div className="min-w-0 flex-1">
+                        <h1 className="truncate text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] sm:text-[1.0625rem] sm:leading-6">
+                          {session!.title}
+                        </h1>
+                        <ParentChatLink parent={chatThings.execution?.parent} />
+                        {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
+                        <div
+                          data-scroll-x
+                          className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
                         >
-                          @{areaCtx?.agent?.profile ?? session!.agentProfile}
-                        </span>
-                      ) : null}
-                      {readOnly ? (
-                        <Badge>Shared with you · read only</Badge>
-                      ) : session!.shared ? (
-                        <span className="chip" data-tone="accent" data-testid="shared-chip">
-                          Shared with household ·
-                          <button
-                            type="button"
-                            className="underline underline-offset-2"
-                            disabled={!online}
-                            onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
-                          >
-                            Stop sharing
-                          </button>
-                        </span>
-                      ) : null}
-                      {areaCtx ? (
-                        <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
-                          {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
-                          <button
-                            type="button"
-                            className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
-                            title={areaCtx.placement?.path ?? "Not in Areas yet"}
-                            onClick={() => setDialog("file")}
-                            aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
-                          >
-                            <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
-                            <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
-                          </button>
-                          {areaCtx.suggestions.slice(0, 2).map((sg) => (
-                            <button
-                              key={sg.id}
-                              type="button"
-                              className="chip cursor-pointer"
+                          {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
+                          {phase ? (
+                            <span className="inline-flex shrink-0 rounded-full bg-surface">
+                              <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge>
+                            </span>
+                          ) : null}
+                          {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
+                          {/* C1: agent mark — which Hermes profile answers here. */}
+                          {areaCtx?.agent?.profile || session!.agentProfile ? (
+                            <span
+                              className="chip shrink-0 font-medium"
                               data-tone="accent"
-                              title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
-                              onClick={() => fileTo(sg.id, sg.title)}
+                              data-testid="agent-badge"
+                              title="The agent that answers this conversation"
                             >
-                              File under {sg.title}
-                            </button>
-                          ))}
-                          {/* Properties lives in the header ⋯ menu. */}
-                        </span>
-                      ) : null}
-                      {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
-                      {detail.parent ? (
-                        <span className="inline-flex items-center gap-1">
-                          <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
-                          <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
-                            {detail.parent.title}
-                          </Link>
-                        </span>
-                      ) : session!.parentSessionId ? (
-                        <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
-                          <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
-                        </Link>
-                      ) : null}
-                      {detail.children.length ? (
-                        <span className="inline-flex flex-wrap items-center gap-1">
-                          <ForkIcon className="h-3.5 w-3.5" /> Forks:
-                          {detail.children.map((c) => (
-                            <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
-                              {c.title}
+                              @{areaCtx?.agent?.profile ?? session!.agentProfile}
+                            </span>
+                          ) : null}
+                          {readOnly ? (
+                            <Badge>Shared with you · read only</Badge>
+                          ) : session!.shared ? (
+                            <span className="chip" data-tone="accent" data-testid="shared-chip">
+                              Shared with household ·
+                              <button
+                                type="button"
+                                className="underline underline-offset-2"
+                                disabled={!online}
+                                onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
+                              >
+                                Stop sharing
+                              </button>
+                            </span>
+                          ) : null}
+                          {areaCtx ? (
+                            <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
+                              {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
+                              <button
+                                type="button"
+                                className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
+                                title={areaCtx.placement?.path ?? "Not in Areas yet"}
+                                onClick={() => setDialog("file")}
+                                aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
+                              >
+                                <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
+                                <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
+                              </button>
+                              {areaCtx.suggestions.slice(0, 2).map((sg) => (
+                                <button
+                                  key={sg.id}
+                                  type="button"
+                                  className="chip cursor-pointer"
+                                  data-tone="accent"
+                                  title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
+                                  onClick={() => fileTo(sg.id, sg.title)}
+                                >
+                                  File under {sg.title}
+                                </button>
+                              ))}
+                              {/* Properties lives in the header ⋯ menu. */}
+                            </span>
+                          ) : null}
+                          {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
+                          {detail.parent ? (
+                            <span className="inline-flex items-center gap-1">
+                              <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
+                              <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
+                                {detail.parent.title}
+                              </Link>
+                            </span>
+                          ) : session!.parentSessionId ? (
+                            <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
+                              <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
+                            </Link>
+                          ) : null}
+                          {detail.children.length ? (
+                            <span className="inline-flex flex-wrap items-center gap-1">
+                              <ForkIcon className="h-3.5 w-3.5" /> Forks:
+                              {detail.children.map((c) => (
+                                <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
+                                  {c.title}
+                                </Link>
+                              ))}
+                            </span>
+                          ) : null}
+                          {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
+                            <Link
+                              key={l.targetId}
+                              href="/initiatives"
+                              data-dynamic
+                              className="rounded-[6px] border border-line px-1.5 font-mono"
+                              title={l.targetTitle}
+                            >
+                              {l.targetIdentifier}
                             </Link>
                           ))}
-                        </span>
-                      ) : null}
-                      {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
-                        <Link
-                          key={l.targetId}
-                          href="/initiatives"
-                          data-dynamic
-                          className="rounded-[6px] border border-line px-1.5 font-mono"
-                          title={l.targetTitle}
-                        >
-                          {l.targetIdentifier}
-                        </Link>
-                      ))}
-                      {model.model ? <span>Model: {model.model}</span> : null}
-                      {fromCache ? <span className="text-warn">Saved copy</span> : null}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={cx(
-                      "tap inline-flex shrink-0 items-center justify-center rounded-xl px-2 text-xs text-muted hover:text-text",
-                      !sideRun && "min-[1100px]:hidden",
-                    )}
-                    onClick={() => setDialog("links")}
-                    aria-label={`Context and links${panel.links.length ? ` (${panel.links.length})` : ""}`}
-                    data-testid="links-button"
-                  >
-                    Links{panel.links.length ? ` ${panel.links.length}` : ""}
-                  </button>
-                  <OverflowMenu label="Conversation actions" items={menu} />
-                </div>
-              </header>
-
-              <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
-                {detail.timeline.length === 0 && !showLive && !pendingInput ? (
-                  <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
-                    <p className="text-[0.9375rem] font-semibold">
-                      Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
-                    </p>
-                    <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
-                    <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
-                      <li className="chip">
-                        <kbd className="kbd">@</kbd> people, devices, work
-                      </li>
-                      <li className="chip">
-                        <kbd className="kbd">#</kbd> PRs and issues
-                      </li>
-                      <li className="chip">
-                        <kbd className="kbd">/</kbd> commands
-                      </li>
-                    </ul>
-                  </div>
-                ) : null}
-                <ol className="space-y-2.5">
-                  {groupTimeline(detail.timeline).map((g) => {
-                    const row = (item: TimelineItem, stepSec?: number) => (
-                      <TimelineRow
-                        key={item.id}
-                        item={item}
-                        stepSec={stepSec}
-                        onFork={() => {
-                          setForkFrom(item);
-                          setDialog("fork");
-                        }}
-                      />
-                    );
-                    if (!("tools" in g)) {
-                      if (g.kind !== "user" && g.kind !== "assistant") return row(g);
-                      return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
-                    }
-                    return (
-                      <li key={`work-${g.tools[0].id}`}>
-                        <WorkSummary
-                          id={g.tools[0].id}
-                          steps={g.tools}
-                          seconds={g.seconds}
-                          alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
-                        >
-                          {g.tools.map((t, j) => row(t, g.durations[j]))}
-                        </WorkSummary>
-                      </li>
-                    );
-                  })}
-                  {showPendingUser ? (
-                    <li className="flex justify-end">
-                      <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
-                        <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
+                          {model.model ? <span>Model: {model.model}</span> : null}
+                          {fromCache ? <span className="text-warn">Saved copy</span> : null}
+                        </div>
                       </div>
-                    </li>
+                      <OverflowMenu label="Conversation actions" items={menu} />
+                    </div>
+                  </header>
+
+                  <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
+                    {detail.timeline.length === 0 && !showLive && !pendingInput ? (
+                      <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
+                        <p className="text-[0.9375rem] font-semibold">
+                          Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
+                        </p>
+                        <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
+                        <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
+                          <li className="chip">
+                            <kbd className="kbd">@</kbd> people, devices, work
+                          </li>
+                          <li className="chip">
+                            <kbd className="kbd">#</kbd> PRs and issues
+                          </li>
+                          <li className="chip">
+                            <kbd className="kbd">/</kbd> commands
+                          </li>
+                        </ul>
+                      </div>
+                    ) : null}
+                    <ol className="space-y-2.5">
+                      {groupTimeline(detail.timeline).map((g) => {
+                        const row = (item: TimelineItem, stepSec?: number) => (
+                          <TimelineRow
+                            key={item.id}
+                            item={item}
+                            stepSec={stepSec}
+                            onFork={() => {
+                              setForkFrom(item);
+                              setDialog("fork");
+                            }}
+                          />
+                        );
+                        if (!("tools" in g)) {
+                          if (g.kind !== "user" && g.kind !== "assistant") return row(g);
+                          return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
+                        }
+                        return (
+                          <li key={`work-${g.tools[0].id}`}>
+                            <WorkSummary
+                              id={g.tools[0].id}
+                              steps={g.tools}
+                              seconds={g.seconds}
+                              alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
+                            >
+                              {g.tools.map((t, j) => row(t, g.durations[j]))}
+                            </WorkSummary>
+                          </li>
+                        );
+                      })}
+                      {showPendingUser ? (
+                        <li className="flex justify-end">
+                          <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
+                            <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
+                          </div>
+                        </li>
+                      ) : null}
+                    </ol>
+                    {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
+                    <div ref={bottomRef} />
+                  </div>
+
+                  {detached ? (
+                    <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
+                      <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
+                        Jump to latest
+                      </Button>
+                    </div>
                   ) : null}
-                </ol>
-                {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
-                <div ref={bottomRef} />
-              </div>
 
-              {detached ? (
-                <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
-                  <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
-                    Jump to latest
-                  </Button>
-                </div>
-              ) : null}
+                  {readOnly ? (
+                    <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
+                      <ChatTray things={chatThings.things} onOpen={openPanel} />
+                      This conversation was shared with you.{" "}
+                      <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
+                        Fork it
+                      </button>{" "}
+                      to continue it as your own.
+                    </div>
+                  ) : (
+                    <Composer
+                      tray={
+                        <ChatTray
+                          things={chatThings.things}
+                          onOpen={openPanel}
+                          compact={phase === "waiting_for_approval" || !!run.state.clarify}
+                          accessory={
+                            wfRun?.status === "live" ? (
+                              <div className="chat-capture-chips flex gap-1 overflow-x-auto p-1" data-scroll-x role="group" aria-label="Next note goes to">
+                                {workflowChips.map((c) => (
+                                  <button
+                                    key={c.field}
+                                    type="button"
+                                    className="chip min-h-11 shrink-0 sm:min-h-10 dense:min-h-8"
+                                    aria-pressed={wfTarget === c.field}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => setWfTarget(wfTarget === c.field ? null : c.field)}
+                                  >
+                                    {c.label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null
+                          }
+                        />
+                      }
+                      sessionId={sessionId}
+                      phase={phase}
+                      clarifying={!!run.state.clarify}
+                      online={online}
+                      context={context}
+                      onRemoveContext={removeContext}
+                      onAttach={() => setDialog("context")}
+                      attachments={attachments}
+                      onSend={send}
+                      restore={restore}
+                      onSteer={steer}
+                      onStop={run.stop}
+                      onCommand={runCommand}
+                      repo={areaCtx?.settings?.defaultRepo ?? null}
+                      modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
+                      onModel={() => setDialog("model")}
+                      onFocus={toLatest}
+                      agent={
+                        areaCtx?.agent ??
+                        (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
+                      }
+                    />
+                  )}
 
-              {wfRun && !sideRun ? (
-                <div className="wf-run-dock">
-                  <RunPanel sessionId={sessionId} run={wfRun} target={wfTarget} onTarget={setWfTarget} capture={capture} />
+                  <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
+                  <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
+                  <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
+                  {dialog === "model" ? (
+                    <ModelSelectDialog
+                      open
+                      onClose={() => setDialog(null)}
+                      backend={session!.source === "claude" ? "claude" : "hermes"}
+                      value={model}
+                      onChange={(m) => {
+                        setModel(m);
+                        kvSet(`model:${sessionId}`, m);
+                      }}
+                      area={
+                        areaCtx?.area && !areaCtx.area.builtIn
+                          ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
+                          : null
+                      }
+                      onAreaDefault={(m) =>
+                        areaCtx?.area &&
+                        api
+                          .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
+                            settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
+                          })
+                          .then(() => {
+                            qc.invalidateQueries({ queryKey: ["work"] });
+                            toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
+                          })
+                          .catch((e: Error) => toast(e.message, "danger"))
+                      }
+                    />
+                  ) : null}
+                  {dialog === "file" ? (
+                    <FileUnderDialog
+                      c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
+                      items={treeItems.data?.items ?? []}
+                      busy={false}
+                      onClose={() => setDialog(null)}
+                      onFile={async (itemId) => {
+                        if (await fileTo(itemId)) setDialog(null);
+                      }}
+                    />
+                  ) : null}
+                  <ContextSheet
+                    open={dialog === "context"}
+                    onClose={() => setDialog(null)}
+                    sessionId={sessionId}
+                    areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
+                    repo={areaCtx?.settings?.defaultRepo ?? null}
+                    selected={context}
+                    onToggle={(chip) =>
+                      setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))
+                    }
+                  />
                 </div>
-              ) : null}
-
-              {readOnly ? (
-                <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
-                  This conversation was shared with you.{" "}
-                  <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
-                    Fork it
-                  </button>{" "}
-                  to continue it as your own.
-                </div>
-              ) : (
-                <Composer
+                <ChatPanel
                   sessionId={sessionId}
-                  phase={phase}
-                  clarifying={!!run.state.clarify}
-                  online={online}
-                  context={context}
-                  onRemoveContext={removeContext}
-                  onAttach={() => setDialog("context")}
-                  attachments={attachments}
-                  onSend={send}
-                  restore={restore}
-                  onSteer={steer}
-                  onStop={run.stop}
-                  onCommand={runCommand}
-                  repo={areaCtx?.settings?.defaultRepo ?? null}
-                  modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
-                  onModel={() => setDialog("model")}
-                  onFocus={toLatest}
-                  agent={
-                    areaCtx?.agent ??
-                    (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
-                  }
-                />
-              )}
-
-              <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
-              <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
-              <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
-              {dialog === "model" ? (
-                <ModelSelectDialog
-                  open
-                  onClose={() => setDialog(null)}
-                  backend={session!.source === "claude" ? "claude" : "hermes"}
-                  value={model}
-                  onChange={(m) => {
-                    setModel(m);
-                    kvSet(`model:${sessionId}`, m);
+                  open={surface.open}
+                  wide={surface.wide}
+                  tab={surface.tab}
+                  onTab={(tab) => {
+                    surface.setTab(tab);
+                    chatThings.markSeen(tab);
                   }}
-                  area={
-                    areaCtx?.area && !areaCtx.area.builtIn
-                      ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
-                      : null
-                  }
-                  onAreaDefault={(m) =>
-                    areaCtx?.area &&
-                    api
-                      .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
-                        settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
-                      })
-                      .then(() => {
-                        qc.invalidateQueries({ queryKey: ["work"] });
-                        toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
-                      })
-                      .catch((e: Error) => toast(e.message, "danger"))
-                  }
-                />
-              ) : null}
-              {dialog === "file" ? (
-                <FileUnderDialog
-                  c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
-                  items={treeItems.data?.items ?? []}
-                  busy={false}
-                  onClose={() => setDialog(null)}
-                  onFile={async (itemId) => {
-                    if (await fileTo(itemId)) setDialog(null);
-                  }}
-                />
-              ) : null}
-              <ContextSheet
-                open={dialog === "context"}
-                onClose={() => setDialog(null)}
-                sessionId={sessionId}
-                areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
-                repo={areaCtx?.settings?.defaultRepo ?? null}
-                selected={context}
-                onToggle={(chip) => setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))}
-              />
-              <Dialog open={dialog === "links"} onClose={() => setDialog(null)} title="Context & links">
-                <LinksPanel
-                  sessionId={sessionId}
+                  onClose={surface.close}
+                  things={chatThings.things}
                   links={panel.links}
                   context={context}
                   readOnly={readOnly}
                   onPatch={panel.patch}
                   onRemoveContext={removeContext}
+                  execution={chatThings.execution}
+                  executionError={chatThings.error}
+                  executionLoading={chatThings.loading}
+                  retry={chatThings.retry}
+                  onAddContext={() => {
+                    surface.close();
+                    setDialog("context");
+                  }}
+                  workflow={wfRun ? { run: wfRun, target: wfTarget, onTarget: setWfTarget, capture } : null}
+                  pending={
+                    run.state.approval || run.state.clarify ? (
+                      <p className="rounded-lg border border-line p-2 text-xs text-warn">
+                        {run.state.approval ? "Approval waiting" : "A question is waiting"} ·{" "}
+                        <button
+                          type="button"
+                          className="min-h-11 underline sm:min-h-10"
+                          onClick={() => {
+                            surface.close();
+                            document.querySelector('[aria-label="Current run"]')?.scrollIntoView({ block: "center" });
+                          }}
+                        >
+                          Review in conversation
+                        </button>
+                      </p>
+                    ) : null
+                  }
                 />
-              </Dialog>
+              </div>
             </div>
-            {sideRun ? (
-              <aside
-                aria-label="Session outline"
-                className="wf-run-side sticky top-0 h-dvh w-[360px] shrink-0 overflow-y-auto border-l border-line px-3 py-3"
-                data-testid="workflow-run-side"
-              >
-                <RunPanel sessionId={sessionId} run={wfRun!} target={wfTarget} onTarget={setWfTarget} capture={capture} />
-              </aside>
-            ) : null}
-            <aside
-              aria-label="Context and links"
-              className={cx("sticky top-0 hidden h-dvh w-[280px] shrink-0 overflow-y-auto border-l border-line px-4 py-4", !sideRun && "min-[1100px]:block")}
-            >
-              <LinksPanel
-                sessionId={sessionId}
-                links={panel.links}
-                context={context}
-                readOnly={readOnly}
-                onPatch={panel.patch}
-                onRemoveContext={removeContext}
-              />
-            </aside>
-          </div>
+          </ChatLinkProvider>
         </ChatFiles.Provider>
       </SmartSession.Provider>
     </AssistantName.Provider>
@@ -1150,6 +1206,7 @@ function LiveRun({
 }
 
 function Composer({
+  tray,
   sessionId,
   phase,
   online,
@@ -1169,6 +1226,7 @@ function Composer({
   restore,
   clarifying,
 }: {
+  tray: ReactNode;
   sessionId: string;
   restore?: { text: string; key: string; at: number };
   phase?: RunPhase;
@@ -1228,6 +1286,7 @@ function Composer({
 
   // Drafts persist per session across refresh/navigation.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load the session-specific IndexedDB draft
     setLoaded(false);
     Promise.all([kvGet<string>(`draft:${sessionId}`), kvGet<{ input: string; key: string }>(`pending:${sessionId}`)]).then(([d, pending]) => {
       if (pending) {
@@ -1350,169 +1409,166 @@ function Composer({
         : `Message ${who}…`;
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
-  const chips = Boolean(agent && (agent.routed || agent.requested)) || context.length > 0;
-
   return (
     <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg/95 px-2 py-1.5 backdrop-blur sm:px-6 sm:py-2">
-      {/* Chips row only when there is something to show (agent / picked context); the model lives in the composer. */}
-      <div className={cx("mx-auto mb-1.5 max-w-[760px] flex-wrap items-center gap-1", chips ? "flex" : "hidden lg:flex")}>
-        {agent && (agent.routed || agent.requested) ? <AgentChip agent={agent} /> : null}
-        {context.map((c) => (
-          <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
-            {c.label} ✕
-          </button>
-        ))}
-        <span className="ml-auto hidden text-[11px] text-muted lg:inline">
-          <kbd className="kbd">@</kbd> reference · <kbd className="kbd">#</kbd> PR · <kbd className="kbd">/</kbd> command
-        </span>
-      </div>
-      <div className="mx-auto max-w-[760px]">
-        <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
-      </div>
-      <form
-        className="chat-comp relative flex flex-wrap items-end gap-1"
-        onMouseDown={(e) => {
-          // While typing, tapping a composer button (send, +, menu items) keeps the focus in the text field: the
-          // keyboard stays up and the layout doesn't jump under the finger (which can swallow the tap).
-          if (document.activeElement === ta.current && (e.target as HTMLElement).closest("button")) e.preventDefault();
-        }}
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        {open ? (
-          <TriggerPopover
-            trigger={trigger!}
-            rows={rows}
-            active={activeIdx}
-            loading={loading}
-            partial={partial}
-            repo={repo}
-            searched={searched}
-            onRepo={setRepo}
-            onPick={pick}
-            onHover={setActive}
-            onFilter={filterTo}
-            listId={listId}
-          />
-        ) : null}
-        {/* Phones: one "+" sheet (context, files, camera, photos, model) so the text field gets the width. */}
-        <ComposerAddMenu
-          online={online}
-          files={!compact}
-          modelLabel={modelLabel}
-          onContext={onAttach}
-          onModel={onModel}
-          onFile={() => fileInput.current?.click()}
-          onCamera={() => cameraInput.current?.click()}
-          onLibrary={attachments.add}
-        />
-        <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3 max-sm:hidden">
-          +
-        </Button>
-        {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
-            so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
-        {!compact ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
-        {!compact ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
-        <label htmlFor="composer" className="sr-only">
-          {running ? "Guidance for the current run" : `Message ${who}`}
-        </label>
-        <textarea
-          id="composer"
-          ref={ta}
-          rows={1}
-          value={text}
-          placeholder={placeholder}
-          aria-controls={open ? listId : undefined}
-          aria-autocomplete="list"
-          aria-activedescendant={open && rows.length ? `${listId}-${activeIdx}` : undefined}
-          onChange={(e) => {
-            setText(e.target.value);
-            syncTrigger(e.target.value, e.target.selectionStart ?? e.target.value.length);
+      <div className="chat-composer-card mx-auto max-w-[760px] rounded-xl border border-line bg-surface">
+        {tray}
+        <div className="chat-composer-context flex flex-wrap items-center gap-1 px-2" data-compact={compact || undefined}>
+          {agent && (agent.routed || agent.requested) ? <AgentChip agent={agent} /> : null}
+          {context.map((c) => (
+            <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
+              {c.label} ✕
+            </button>
+          ))}
+        </div>
+        <div className="mx-auto max-w-[760px]">
+          <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
+        </div>
+        <form
+          className="chat-comp relative flex flex-wrap items-end gap-1"
+          onMouseDown={(e) => {
+            // While typing, tapping a composer button (send, +, menu items) keeps the focus in the text field: the
+            // keyboard stays up and the layout doesn't jump under the finger (which can swallow the tap).
+            if (document.activeElement === ta.current && (e.target as HTMLElement).closest("button")) e.preventDefault();
           }}
-          onSelect={(e) => {
-            const el = e.currentTarget;
-            if (trigger) syncTrigger(el.value, el.selectionStart ?? el.value.length);
-          }}
-          onBlur={() => setTimeout(() => setTrigger(null), 150)}
-          onFocus={onFocus}
-          onPaste={(e) => {
-            const files = pastedFiles(e);
-            if (!files.length) return;
+          onSubmit={(e) => {
             e.preventDefault();
-            attachments.add(files);
+            submit();
           }}
-          onKeyDown={(e) => {
-            if (open && rows.length) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setActive((a) => (a + 1) % rows.length);
-                return;
-              }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setActive((a) => (a - 1 + rows.length) % rows.length);
-                return;
-              }
-              if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
-                e.preventDefault();
-                pick(rows[activeIdx]!.row);
-                return;
-              }
-            }
-            if (open && e.key === "Escape") {
-              e.preventDefault();
-              setTrigger(null);
-              return;
-            }
-            // Enter is a newline (phone and desktop); Ctrl/⌘ + Enter or the Send button sends.
-            if (isSendShortcut(composerKey(e))) {
-              e.preventDefault();
-              submit();
-            } else if (e.key === "Escape" && running) {
-              e.preventDefault();
-              onStop();
-            }
-          }}
-          className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
-        />
-        <button
-          type="button"
-          className="chip mb-1.5 shrink-0 cursor-pointer self-end hover:border-line-strong max-sm:hidden"
-          onClick={onModel}
-          aria-label={`Model: ${modelLabel}. Change`}
-          data-testid="model-chip"
         >
-          <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
-        </button>
-        {running ? (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onStop}
-            aria-label="Stop the run (Escape)"
-            disabled={phase === "stopping"}
-            className="shrink-0 max-[400px]:ml-auto"
-          >
-            <StopIcon className="h-5 w-5" />
+          {open ? (
+            <TriggerPopover
+              trigger={trigger!}
+              rows={rows}
+              active={activeIdx}
+              loading={loading}
+              partial={partial}
+              repo={repo}
+              searched={searched}
+              onRepo={setRepo}
+              onPick={pick}
+              onHover={setActive}
+              onFilter={filterTo}
+              listId={listId}
+            />
+          ) : null}
+          {/* Phones: one "+" sheet (context, files, camera, photos, model) so the text field gets the width. */}
+          <ComposerAddMenu
+            online={online}
+            files={!compact}
+            modelLabel={modelLabel}
+            onContext={onAttach}
+            onModel={onModel}
+            onFile={() => fileInput.current?.click()}
+            onCamera={() => cameraInput.current?.click()}
+            onLibrary={attachments.add}
+          />
+          <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3 max-sm:hidden">
+            +
           </Button>
-        ) : null}
-        <Button
-          type="submit"
-          variant="primary"
-          busy={busy}
-          disabled={
-            (!text.trim() && !attachments.readyIds.length) || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)
-          }
-          aria-label={running ? "Send guidance" : "Send"}
-          title={`${running ? "Send guidance" : "Send"} (${sendHint(mod)})`}
-          aria-keyshortcuts={SEND_KEYSHORTCUTS}
-          className={running ? "shrink-0" : "shrink-0 max-[400px]:ml-auto"}
-        >
-          {!busy ? <SendIcon className="h-5 w-5" /> : null}
-        </Button>
-      </form>
+          {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
+            so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
+          {!compact ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
+          {!compact ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
+          <label htmlFor="composer" className="sr-only">
+            {running ? "Guidance for the current run" : `Message ${who}`}
+          </label>
+          <textarea
+            id="composer"
+            ref={ta}
+            rows={1}
+            value={text}
+            placeholder={placeholder}
+            aria-controls={open ? listId : undefined}
+            aria-autocomplete="list"
+            aria-activedescendant={open && rows.length ? `${listId}-${activeIdx}` : undefined}
+            onChange={(e) => {
+              setText(e.target.value);
+              syncTrigger(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
+            onSelect={(e) => {
+              const el = e.currentTarget;
+              if (trigger) syncTrigger(el.value, el.selectionStart ?? el.value.length);
+            }}
+            onBlur={() => setTimeout(() => setTrigger(null), 150)}
+            onFocus={onFocus}
+            onPaste={(e) => {
+              const files = pastedFiles(e);
+              if (!files.length) return;
+              e.preventDefault();
+              attachments.add(files);
+            }}
+            onKeyDown={(e) => {
+              if (open && rows.length) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setActive((a) => (a + 1) % rows.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setActive((a) => (a - 1 + rows.length) % rows.length);
+                  return;
+                }
+                if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                  e.preventDefault();
+                  pick(rows[activeIdx]!.row);
+                  return;
+                }
+              }
+              if (open && e.key === "Escape") {
+                e.preventDefault();
+                setTrigger(null);
+                return;
+              }
+              // Enter is a newline (phone and desktop); Ctrl/⌘ + Enter or the Send button sends.
+              if (isSendShortcut(composerKey(e))) {
+                e.preventDefault();
+                submit();
+              } else if (e.key === "Escape" && running) {
+                e.preventDefault();
+                onStop();
+              }
+            }}
+            className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
+          />
+          <button
+            type="button"
+            className="chip mb-1.5 shrink-0 cursor-pointer self-end hover:border-line-strong max-sm:hidden"
+            onClick={onModel}
+            aria-label={`Model: ${modelLabel}. Change`}
+            data-testid="model-chip"
+          >
+            <span className="text-muted">Model</span> {modelLabel} <span aria-hidden="true">▾</span>
+          </button>
+          {running ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={onStop}
+              aria-label="Stop the run (Escape)"
+              disabled={phase === "stopping"}
+              className="shrink-0 max-[400px]:ml-auto"
+            >
+              <StopIcon className="h-5 w-5" />
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            variant="primary"
+            busy={busy}
+            disabled={
+              (!text.trim() && !attachments.readyIds.length) || !online || phase === "waiting_for_approval" || phase === "stopping" || (running && !canSteer)
+            }
+            aria-label={running ? "Send guidance" : "Send"}
+            title={`${running ? "Send guidance" : "Send"} (${sendHint(mod)})`}
+            aria-keyshortcuts={SEND_KEYSHORTCUTS}
+            className={running ? "shrink-0" : "shrink-0 max-[400px]:ml-auto"}
+          >
+            {!busy ? <SendIcon className="h-5 w-5" /> : null}
+          </Button>
+        </form>
+      </div>
       {!online && text ? <p className="mt-1 text-xs text-warn">Draft saved on this device. It has not been sent.</p> : null}
     </div>
   );

@@ -15,6 +15,7 @@ import { HermesAguiTranslator } from "@/server/agui/hermes";
 import { messagesToTimeline, normalizeApproval, normalizeClarify, normalizeRunEvent, normalizeSession } from "./normalize";
 import { SYNC_SESSION_SOURCE } from "./structured";
 import { RUN_TERMINAL, runEventSchema, type HermesRunStatus } from "./types";
+import { executionParent, executionCompletionState, upsertExecution } from "@/server/chat/execution-store";
 
 const db = () => getDb();
 
@@ -38,7 +39,15 @@ type Meta = typeof schema.sessionMeta.$inferSelect;
 
 /** The Hermes profile a session lives on (null = default), recorded when Jarvis created it. */
 export function sessionProfile(id: string) {
-  return metaFor([id]).get(id)?.hermesProfile ?? null;
+  const seen = new Set<string>();
+  let current: string | null = id;
+  while (current && seen.size < 50 && !seen.has(current)) {
+    seen.add(current);
+    const m = metaFor([current]).get(current);
+    if (m?.hermesProfile) return m.hermesProfile;
+    current = m?.parentSessionId ?? null;
+  }
+  return null;
 }
 
 /** Sessions and runs keep using the profile they were created on (Settings → Agents). */
@@ -57,15 +66,21 @@ function access(user: CurrentUser, m: Meta | undefined, ownerId = getOwner()?.id
 }
 
 export function sessionAccess(user: CurrentUser, id: string) {
-  return access(user, metaFor([id]).get(id));
+  const seen = new Set<string>();
+  let current = id;
+  while (seen.size < 50 && !seen.has(current)) {
+    seen.add(current);
+    const m = metaFor([current]).get(current);
+    if (!m?.parentSessionId) return access(user, m);
+    current = m.parentSessionId;
+  }
+  return null;
 }
 
 /** The rows of `list` this person may see (one meta query for the whole list). */
 export function visibleSessions<T extends { id: string }>(user: CurrentUser, list: T[]): T[] {
   if (!list.length) return list;
-  const meta = metaFor(list.map((s) => s.id));
-  const ownerId = getOwner()?.id;
-  return list.filter((s) => access(user, meta.get(s.id), ownerId));
+  return list.filter((s) => sessionAccess(user, s.id));
 }
 
 function assertAccess(user: CurrentUser, id: string, need: "read" | "write") {
@@ -78,20 +93,19 @@ function decorate(list: SessionSummary[], user?: CurrentUser): SessionSummary[] 
   const ids = list.map((s) => s.id);
   const meta = metaFor(ids);
   const runs = activeRunsFor(ids);
-  const ownerId = getOwner()?.id;
-  const visible = user ? list.filter((s) => access(user, meta.get(s.id), ownerId)) : list;
+  const visible = user ? list.filter((s) => sessionAccess(user, s.id)) : list;
   return visible.map((s) => {
     const m = meta.get(s.id);
     const r = runs.get(s.id);
     return {
       ...s,
       shared: Boolean(m?.shared),
-      readOnly: user ? access(user, m, ownerId) === "read" : undefined,
+      readOnly: user ? sessionAccess(user, s.id) === "read" : undefined,
       title: m?.titleOverride ?? s.title,
       forkedFromSessionId: m?.forkedFromSessionId ?? undefined,
       forkedFromMessageId: m?.forkedFromMessageId ?? undefined,
-      agentProfile: m?.hermesProfile ?? undefined,
-      parentSessionId: s.parentSessionId ?? m?.forkedFromSessionId ?? undefined,
+      agentProfile: sessionProfile(s.id) ?? undefined,
+      parentSessionId: m?.parentSessionId ?? m?.forkedFromSessionId ?? s.parentSessionId ?? undefined,
       activeRun: r
         ? {
             runId: r.runId,
@@ -148,6 +162,25 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
   // when a pin occupies the recency window. Err toward continuation, not loss.
   const hasMore = res.has_more === true || res.data.length >= limit || routed.hasMore;
   const visible = res.data.filter((s) => !s.hidden && s.source !== SYNC_SESSION_SOURCE);
+  // Persist relationships encountered in an already-requested list page, never scan on chat open.
+  for (const raw of [...visible, ...routed.sessions]) {
+    const s = normalizeSession(raw);
+    if (!isSubagentSession(s) || !s.parentSessionId || !sessionAccess(user, s.parentSessionId)) continue;
+    upsertExecution(
+      s.parentSessionId,
+      {
+        key: `subagent:${s.id}`,
+        source: "subagent",
+        id: s.id,
+        childSessionId: s.id,
+        title: s.title,
+        state: "unknown",
+        startedAt: s.startedAt,
+        updatedAt: s.lastActiveAt,
+      },
+      sessionProfile(s.parentSessionId),
+    );
+  }
   // Sub-agent child sessions (Hermes delegate_task) fold under their parent row instead of flooding the list.
   const sessions = decorate(foldSubagents([...visible, ...routed.sessions].map(normalizeSession)), user).filter((s) => opts.includeArchived || !s.archived);
   return {
@@ -331,16 +364,25 @@ export async function getSessionDetail(user: CurrentUser, id: string) {
   assertAccess(user, id, "read");
   const conn = connForSession(id);
   const [session, messages] = await Promise.all([HermesSessionClient.get(conn, id), HermesSessionClient.messages(conn, id, { order: "latest", limit: 500 })]);
-  const [summary] = decorate([normalizeSession(session.session)], user);
+  const rawSummary = normalizeSession(session.session);
+  // Unindexed default-profile children must obey parent permissions too, not the owner fallback.
+  if (isSubagentSession(rawSummary)) assertAccess(user, rawSummary.parentSessionId!, "read");
+  const [summary] = decorate([rawSummary], user);
   // Lineage without a session-list scan: Hermes' list is slow (it materialises every session before LIMIT,
   // ~9 s on prod), and it ran on every conversation open, so a new chat took ~10 s to appear. Jarvis records
   // every fork it makes in session_meta, so children come from there; the parent is one GET.
-  const localChildren = db().select().from(schema.sessionMeta).where(eq(schema.sessionMeta.forkedFromSessionId, id)).limit(MAX_LINEAGE).all();
+  const localChildren = db()
+    .select()
+    .from(schema.sessionMeta)
+    .where(or(eq(schema.sessionMeta.forkedFromSessionId, id), eq(schema.sessionMeta.parentSessionId, id)))
+    .limit(MAX_LINEAGE)
+    .all()
+    .filter((c) => sessionAccess(user, c.sessionId));
   const getSummary = (sid: string) =>
     HermesSessionClient.get(connForSession(sid), sid)
       .then((r) => normalizeSession(r.session))
       .catch(() => null);
-  const parentId = summary!.parentSessionId;
+  const parentId = summary!.parentSessionId && sessionAccess(user, summary!.parentSessionId) ? summary!.parentSessionId : undefined;
   const [childRows, parentRow] = await Promise.all([
     Promise.all(localChildren.map((c) => getSummary(c.sessionId))),
     parentId ? getSummary(parentId) : Promise.resolve(null),
@@ -363,7 +405,9 @@ export async function getSessionSummary(user: CurrentUser, id: string) {
   assertSessionId(id);
   assertAccess(user, id, "read");
   const res = await HermesSessionClient.get(connForSession(id), id);
-  const [summary] = decorate([normalizeSession(res.session)], user);
+  const rawSummary = normalizeSession(res.session);
+  if (isSubagentSession(rawSummary)) assertAccess(user, rawSummary.parentSessionId!, "read");
+  const [summary] = decorate([rawSummary], user);
   if (!summary) throw new HttpError(404, "session_not_found", "Conversation not found");
   return summary;
 }
@@ -841,6 +885,33 @@ export function relayRunEvents(
             const parsed = runEventSchema.safeParse(raw);
             if (!parsed.success) continue;
             const ev = normalizeRunEvent(parsed.data as never);
+            if (ev.type === "subagent.started" || ev.type === "subagent.completed") {
+              const id = ev.id ?? ev.childSessionId ?? (ev.delegationId && ev.taskIndex !== undefined ? `${ev.delegationId}:${ev.taskIndex}` : undefined);
+              if (id) {
+                const parentSessionId = executionParent(row.sessionId, ev.parentId);
+                const state = ev.type === "subagent.started" ? "running" : executionCompletionState(ev.status);
+                upsertExecution(
+                  parentSessionId,
+                  {
+                    key: `subagent:${id}`,
+                    source: "subagent",
+                    id,
+                    subagentId: ev.id,
+                    observedCompletion: ev.type === "subagent.completed",
+                    childSessionId: ev.childSessionId,
+                    delegationId: ev.delegationId,
+                    taskIndex: ev.taskIndex,
+                    title: ev.goal ?? "Subagent",
+                    state,
+                    startedAt: ev.type === "subagent.started" ? ev.at : undefined,
+                    endedAt: ["completed", "failed", "cancelled"].includes(state) ? ev.at : undefined,
+                    updatedAt: ev.at,
+                    summary: ev.type === "subagent.completed" ? ev.summary : undefined,
+                  },
+                  sessionProfile(parentSessionId),
+                );
+              }
+            }
             if (ev.type === "approval.requested") {
               updateRunRow(runId, {
                 status: "waiting_for_approval",
