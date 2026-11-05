@@ -26,6 +26,7 @@ import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import { ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { ContextSheet, type ContextChip } from "./ContextSheet";
+import { useFollowScroll } from "./useFollowScroll";
 import { LinksPanel, usePanelLinks } from "./LinksPanel";
 import {
   AttachButton,
@@ -379,34 +380,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     }
   };
 
-  // --- scrolling: follow output unless the user scrolled up ---
+  // --- scrolling: follow the latest output until the person scrolls up (useFollowScroll) ---
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [detached, setDetached] = useState(false);
-  useEffect(() => {
-    const onScroll = () => {
-      const gap = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
-      setDetached(gap > 160);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const { detached, jumpToLatest } = useFollowScroll(threadRef, bottomRef, Boolean(detail));
   // Keyboard open (phones): the bottom bar hides and the composer sits right above the keyboard; jump to the latest message.
   const toLatest = useCallback(() => {
-    setTimeout(() => window.scrollTo({ top: document.documentElement.scrollHeight }), 60);
-  }, []);
+    setTimeout(() => jumpToLatest(), 60);
+  }, [jumpToLatest]);
   const onKeyboard = useCallback((open: boolean) => (open ? toLatest() : undefined), [toLatest]);
   useKeyboardInset(onKeyboard);
-  const contentSize = (detail?.timeline.length ?? 0) + run.state.text.length + run.state.activity.length;
-  useLayoutEffect(() => {
-    if (!detached) bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [contentSize, detached]);
-  const firstLoad = useRef(true);
-  useEffect(() => {
-    if (detail && firstLoad.current) {
-      firstLoad.current = false;
-      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: "end" }));
-    }
-  }, [detail]);
 
   // C4: opening a conversation (and every new message while it's open) marks it read for you.
   const lastItemId = detail?.timeline.at(-1)?.id ?? null;
@@ -652,7 +635,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 </div>
               </header>
 
-              <div className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
+              <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
                 {detail.timeline.length === 0 && !showLive && !pendingInput ? (
                   <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
                     <p className="text-[0.9375rem] font-semibold">
@@ -716,11 +699,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
 
               {detached ? (
                 <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
-                  <Button
-                    size="sm"
-                    className="pointer-events-auto shadow"
-                    onClick={() => bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" })}
-                  >
+                  <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
                     Jump to latest
                   </Button>
                 </div>

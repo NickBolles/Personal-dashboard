@@ -42,6 +42,8 @@ export type RunState = {
 type Action =
   | { type: "reset"; runId?: string; phase?: RunPhase }
   | { type: "event"; event: RunEvent; seq?: number }
+  /** Text/reasoning deltas coalesced per animation frame (one render per frame, not per token). */
+  | { type: "events"; items: { event: RunEvent; seq?: number }[] }
   | { type: "phase"; phase: RunPhase; error?: string }
   | { type: "reconciled"; view: RunView }
   | { type: "attempt"; n: number };
@@ -57,6 +59,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
       return { ...initial, runId: a.runId, phase: a.phase ?? (a.runId ? "running" : "completed") };
     case "attempt":
       return { ...state, attempts: a.n };
+    case "events":
+      return a.items.reduce((s, it) => reduceRun(s, { type: "event", event: it.event, seq: it.seq }), state);
     case "phase":
       // Never regress out of a terminal state, and keep "stopping" until Hermes confirms.
       if (isTerminal(state.phase) && !isTerminal(a.phase)) return state;
@@ -172,6 +176,46 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     timer.current = null;
   }, []);
 
+  // Profile-first perf (Phase 2): every token used to be its own dispatch → full Conversation render +
+  // forced layout per word. Deltas are queued and flushed once per frame; any other event flushes the
+  // queue first so ordering (and terminal/approval handling) is unchanged.
+  const queue = useRef<{ event: RunEvent; seq?: number }[]>([]);
+  const frame = useRef<(() => void) | null>(null);
+  const flush = useCallback(() => {
+    frame.current?.();
+    frame.current = null;
+    const items = queue.current;
+    if (!items.length) return;
+    queue.current = [];
+    dispatch(items.length === 1 ? { type: "event", ...items[0] } : { type: "events", items });
+  }, []);
+  const enqueue = useCallback(
+    (event: RunEvent, seq: number | undefined) => {
+      if (event.type !== "text.delta" && event.type !== "reasoning") {
+        flush();
+        dispatch({ type: "event", event, seq });
+        return;
+      }
+      queue.current.push({ event, seq });
+      if (frame.current) return;
+      // rAF pauses in background tabs: fall back to a short timer so text still lands.
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        const id = requestAnimationFrame(flush);
+        frame.current = () => cancelAnimationFrame(id);
+      } else {
+        const id = setTimeout(flush, 100);
+        frame.current = () => clearTimeout(id);
+      }
+    },
+    [flush],
+  );
+  const dropQueued = useCallback(() => {
+    frame.current?.();
+    frame.current = null;
+    queue.current = [];
+  }, []);
+  useEffect(() => dropQueued, [dropQueued]);
+
   // finish() marks the run as done; the effect below notifies once React has committed the terminal state.
   const pendingFinish = useRef<string | null>(null);
   const finish = useCallback(() => {
@@ -215,6 +259,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   }, []);
 
   const onBroken = useCallback(async () => {
+    flush();
     cleanup();
     if (!conn.current.runId) return;
     dispatch({ type: "phase", phase: "reconnecting" });
@@ -225,7 +270,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       return;
     }
     scheduleReconnect();
-  }, [cleanup, reconcile, finish, scheduleReconnect]);
+  }, [flush, cleanup, reconcile, finish, scheduleReconnect]);
 
   const connect = useCallback(() => {
     const c = conn.current;
@@ -251,7 +296,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
         }
         if (seq !== undefined) conn.current.lastSeq = seq;
         conn.current.attempts = 0;
-        dispatch({ type: "event", event: ev, seq });
+        enqueue(ev, seq);
         if (ev.type === "run.terminal") {
           // Confirm with the authoritative status before finalizing.
           void reconcile().then(() => finish());
@@ -261,7 +306,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     source.onerror = () => {
       if (es.current === source) void onBroken();
     };
-  }, [cleanup, onBroken, reconcile, finish]);
+  }, [cleanup, onBroken, reconcile, finish, enqueue]);
   useLayoutEffect(() => {
     connectRef.current = connect;
   }, [connect]);
@@ -269,6 +314,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   const start = useCallback(
     (runId: string, phase: RunPhase = "running") => {
       cleanup();
+      dropQueued();
       finished.current = null;
       pendingFinish.current = null;
       conn.current = { runId, attempts: 0 };
@@ -276,7 +322,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       dispatch({ type: "reset", runId, phase });
       connectRef.current();
     },
-    [cleanup],
+    [cleanup, dropQueued],
   );
 
   const stop = useCallback(async () => {
@@ -315,9 +361,10 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
 
   const clear = useCallback(() => {
     cleanup();
+    dropQueued();
     conn.current = { attempts: 0 };
     dispatch({ type: "reset" });
-  }, [cleanup]);
+  }, [cleanup, dropQueued]);
   const active = Boolean(state.runId) && !isTerminal(state.phase);
   return { state, start, stop, retry, active, clear };
 }

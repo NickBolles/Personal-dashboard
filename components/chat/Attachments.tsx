@@ -17,6 +17,8 @@ export type DraftFile = {
   error?: string;
   file?: ChatFileView;
   previewUrl?: string;
+  /** Full-size picture for the viewer (owned blob or the authorized original); falls back to previewUrl. */
+  viewUrl?: string;
 };
 
 const fileUrl = (sessionId: string, id: string, thumb = false) =>
@@ -83,6 +85,7 @@ export function useChatAttachments(sessionId: string) {
               status: "ready",
               file: f,
               previewUrl: f.kind === "image" ? fileUrl(sessionId, f.id, true) : undefined,
+              viewUrl: f.kind === "image" ? fileUrl(sessionId, f.id) : undefined,
             }));
           return back.length ? [...back, ...ds] : ds;
         });
@@ -323,7 +326,7 @@ export function AttachmentChips({
                 type="button"
                 className="tap shrink-0 rounded"
                 aria-label={`Open picture ${d.name}`}
-                onClick={() => setView({ name: d.name, url: d.previewUrl! })}
+                onClick={() => setView({ name: d.name, url: d.viewUrl ?? d.previewUrl! })}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element -- local or authorized thumbnail */}
                 <img src={d.previewUrl} alt="" className="h-9 w-9 rounded object-cover" />
@@ -514,11 +517,44 @@ export function Lightbox({ sessionId, file, onClose }: { sessionId: string; file
   );
 }
 
+/**
+ * Browser Back closes the viewer instead of leaving the chat: one history entry while it is open
+ * (Next's router state is kept on the entry so the app router treats it as the same page).
+ */
+function useViewerHistory(onClose: () => void) {
+  const pushed = useRef(false);
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  useEffect(() => {
+    const base: unknown = window.history.state;
+    window.history.pushState({ ...(base && typeof base === "object" ? base : {}), jarvisViewer: true }, "");
+    pushed.current = true;
+    const onPop = () => {
+      if (!pushed.current) return;
+      pushed.current = false;
+      closeRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  return useCallback(() => {
+    if (pushed.current && (window.history.state as { jarvisViewer?: boolean } | null)?.jarvisViewer) {
+      pushed.current = false;
+      window.history.back();
+    }
+    closeRef.current();
+  }, []);
+}
+
 function PhotoViewer({ name, src, onClose, details, download }: { name: string; src: string; onClose: () => void; details?: string; download?: boolean }) {
   const [zoom, setZoom] = useState(false);
+  const [loaded, setLoaded] = useState<"loading" | "ok" | "error">("loading");
+  const close = useViewerHistory(onClose);
   return (
-    <Dialog open onClose={onClose} title={name} size="full">
-      <Button type="button" variant="ghost" onClick={onClose}>
+    <Dialog open onClose={close} title={name} size="full">
+      <Button type="button" variant="ghost" onClick={close}>
         Close picture
       </Button>
       <Button type="button" variant="ghost" aria-pressed={zoom} onClick={() => setZoom((v) => !v)}>
@@ -526,8 +562,23 @@ function PhotoViewer({ name, src, onClose, details, download }: { name: string; 
       </Button>
       <div className="max-h-[75dvh] overflow-auto overscroll-contain">
         {/* eslint-disable-next-line @next/next/no-img-element -- same-origin authorized route or owned blob; never public */}
-        <img src={src} alt={name} className={zoom ? "max-w-none" : "mx-auto max-h-[70dvh] w-auto max-w-full rounded"} />
+        <img
+          src={src}
+          alt={name}
+          onLoad={() => setLoaded("ok")}
+          onError={() => setLoaded("error")}
+          className={cx(zoom ? "max-w-none" : "mx-auto max-h-[70dvh] w-auto max-w-full rounded", loaded === "error" && "hidden")}
+        />
       </div>
+      {loaded === "loading" ? (
+        <p role="status" className="mt-2 text-xs text-muted">
+          Loading picture…
+        </p>
+      ) : loaded === "error" ? (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          Couldn't load this picture. It may have been removed or you may be offline.
+        </p>
+      ) : null}
       {details || download ? (
         <p className="mt-2 text-xs text-muted">
           {details}

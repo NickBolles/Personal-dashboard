@@ -423,12 +423,20 @@ export function createHermes({ apiKey }) {
         addMessage(run.session_id, { role: "tool", content: "", tool_name: "terminal" });
       }
     }
-    const slow = /slow|long/i.test(said);
+    const slow = /slow|long/i.test(said) && !/FORCE_STREAM_LONG/.test(said);
     let reply = run.clarifyAnswer
       ? `Going with ${run.clarifyAnswer}.`
       : slow
         ? "Working through this step by step. ".repeat(12).trim()
         : `Got it: "${said.slice(0, 60)}". Here's what I found.`;
+    // Streaming/scroll perf harness: a long markdown reply (~1.5k words) streamed word by word.
+    if (/FORCE_STREAM_LONG/.test(said))
+      reply = Array.from(
+        { length: 24 },
+        (_, i) =>
+          `### Step ${i + 1}\n\nWorking through part ${i + 1} of the plan, checking each file and noting what changed so the summary stays honest.\n\n` +
+          `- first check for part ${i + 1}\n- second check with a longer line that wraps on a phone screen\n- third check\n`,
+      ).join("\n");
     // Links panel e2e: a reply that shares an artifact (view + asset URL = one row).
     if (/\[mock: (\d+) image\(s\)\]/.test(input)) reply = `I can see ${input.match(/\[mock: (\d+) image\(s\)\]/)[1]} picture(s).`;
     else if (/share the zephyr board/i.test(said))
