@@ -61,6 +61,7 @@ export function ActionCard({
   leading,
   trailing,
   showSource,
+  dueTone,
 }: {
   action: NextAction;
   compact?: boolean;
@@ -76,6 +77,8 @@ export function ActionCard({
   trailing?: ReactNode;
   /** Keep distinct upstream lists identifiable in a merged row feed. */
   showSource?: boolean;
+  /** Optional source-specific urgency colour; leave the shared due label unchanged. */
+  dueTone?: "danger" | "warn";
 }) {
   const router = useRouter();
   const online = useOnline();
@@ -85,6 +88,7 @@ export function ActionCard({
   const [done, setDone] = useState(false);
   const stale = new Date(action.staleAfter).getTime() < now;
   const due = formatDue(action, now);
+  const dueClass = dueTone === "danger" ? "text-danger" : dueTone === "warn" ? "text-warn" : undefined;
   const primary = action.primaryAction;
   const titleId = `act-${action.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
   const rank = explain ? action.rank : undefined;
@@ -234,7 +238,7 @@ export function ActionCard({
             <p data-dynamic className="truncate text-xs text-muted">
               {/* Phones: due leads the meta line (no right column to squeeze the title at 320 / 200% text). */}
               {due ? (
-                <span className="sm:hidden">
+                <span className={cx("sm:hidden", dueClass)}>
                   {due}
                   {action.detail || stale || action.pinned ? " · " : null}
                 </span>
@@ -248,7 +252,7 @@ export function ActionCard({
           ) : null}
         </div>
         {due ? (
-          <span data-dynamic className="hidden shrink-0 text-xs whitespace-nowrap text-muted tabular-nums sm:inline">
+          <span data-dynamic className={cx("hidden shrink-0 text-xs whitespace-nowrap tabular-nums sm:inline", dueClass ?? "text-muted")}>
             {due}
           </span>
         ) : null}
@@ -309,7 +313,7 @@ export function ActionCard({
           ) : null}
           {due || stale ? (
             <span data-dynamic className={cx("text-xs text-muted", rank && "sm:shrink-0 sm:whitespace-nowrap")}>
-              {due ? <span>{due}</span> : null}
+              {due ? <span className={dueClass}>{due}</span> : null}
               {due && stale ? " · " : null}
               {stale ? <span className="text-warn">Last updated {relativeTime(action.fetchedAt, now)}</span> : null}
             </span>
