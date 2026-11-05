@@ -80,12 +80,9 @@ const raw = (method: "POST" | "PUT" | "DELETE", path: string, body?: unknown) =>
 
 const cases: [SkylightWriteOp, string, string, unknown][] = [
   [{ op: "chore.complete", ...chore }, "PUT", "/chores/55900629/completions", { status: "complete" }],
-  [
-    { op: "chore.reopen", ...chore, instanceDate: "2026-11-09", instanceTime: "18:00", categoryId: "13600771" },
-    "PUT",
-    "/chores/55900629/completions",
-    { status: "pending", instance_date: "2026-11-09", instance_time: "18:00", category_id: "13600771" },
-  ],
+  // The assignee (categoryId) is display/undo context only: Skylight 422s "category_id must be blank" when a
+  // completion names the member of an assigned chore (prod 2026-11-05).
+  [{ op: "chore.reopen", ...chore, categoryId: "13600771" }, "PUT", "/chores/55900629/completions", { status: "pending" }],
   [{ op: "chore.claim", ...chore, fromCategoryId: null }, "PUT", "/chores/55900629", { category_id: 13600771 }],
   [{ op: "chore.assign", ...chore, toCategoryId: null }, "PUT", "/chores/55900629", { category_id: null }],
   [{ op: "list.add", listId: list.listId, listLabel: list.listLabel, label: list.label }, "POST", "/lists/7001/list_items", { label: "Oat milk" }],
@@ -95,6 +92,8 @@ const cases: [SkylightWriteOp, string, string, unknown][] = [
   [{ op: "event.create", event }, "POST", "/calendar_events", { ...bodyEvent, ...target, invited_emails: [], rrule: null }],
   [{ op: "event.update", eventId: "ev1-1", event, previous }, "PUT", "/calendar_events/ev1-1", bodyEvent],
   [{ op: "event.delete", eventId: "ev1-1", previous }, "DELETE", "/calendar_events/ev1-1", {}],
+  [{ op: "chore.skip", ...chore, categoryId: "13600771" }, "PUT", "/chores/55900629/completions", { status: "skipped" }],
+  [{ op: "chore.reschedule", ...chore, start: "2026-11-12", previousStart: "2026-11-09" }, "PUT", "/chores/55900629", { start: "2026-11-12" }],
 ];
 
 describe("exact raw Skylight write contracts", () => {
@@ -116,7 +115,9 @@ describe("exact raw Skylight write contracts", () => {
         data: { id: string; attributes: { status: string }; relationships: { category: { data: { id: string } | null } } }[];
       }>("GET", `${f}/chores`, { query: { after: "2000-01-01", before: "2099-01-01" } });
       const found = doc.data.find((c) => c.id === op.choreId)!;
-      if (op.op === "chore.complete" || op.op === "chore.reopen") expect(found.attributes.status).toBe(op.op === "chore.complete" ? "complete" : "pending");
+      if (op.op === "chore.complete" || op.op === "chore.reopen" || op.op === "chore.skip")
+        expect(found.attributes.status).toBe({ "chore.complete": "complete", "chore.reopen": "pending", "chore.skip": "skipped" }[op.op]);
+      else if (op.op === "chore.reschedule") expect((found.attributes as { start?: string }).start).toBe(op.start);
       else expect(found.relationships.category.data?.id ?? null).toBe(op.op === "chore.claim" ? "13600771" : null);
     } else {
       const doc = await skylightRequest<{ data: { id: string; attributes: { summary: string } }[] }>("GET", `${f}/calendar_events`);
@@ -154,10 +155,52 @@ describe("exact raw Skylight write contracts", () => {
       body: { status: "pending", instance_date: recurring.id.slice(9, 19), instance_time: "18:00" },
     });
     expect((await writes()).slice(0, 3).map((w) => w.body)).toEqual([
-      { status: "complete", instance_date: recurring.attributes.start, instance_time: "18:00", category_id: "13600771" },
+      { status: "complete", instance_date: recurring.attributes.start, instance_time: "18:00" },
       { category_id: 13600772 },
       { category_id: 14463836 },
     ]);
+  });
+
+  it("completes an overdue recurring occurrence of an assigned chore (prod 2026-11-05 regression)", async () => {
+    // Same shape as the prod failure: "<series>-YYYY-MM-DD-0600", three days late, assigned to a member.
+    const day = "2026-11-06";
+    const id = `88344853-${day}-0600`;
+    await fetch(`${base}/__mock/skylight/chores`, {
+      method: "POST",
+      body: JSON.stringify({ id, summary: "Overdue routine", start: day, start_time: "06:00", category: "13600771" }),
+    });
+    await run({ op: "chore.complete", choreId: id, title: "Overdue routine", instanceDate: day, instanceTime: "06:00", categoryId: "13600771" });
+    expect(await writes()).toEqual([
+      { method: "PUT", path: `/api${f}/chores/88344853/completions`, body: { status: "complete", instance_date: day, instance_time: "06:00" } },
+    ]);
+    tick();
+    // The old body (assignee as category_id) is what real Skylight rejects; the strict mock does too, and the
+    // reason reaches the caller instead of only the generic message.
+    await expect(
+      raw("PUT", `/chores/88344853/completions`, { status: "pending", instance_date: day, instance_time: "06:00", category_id: "13600771" }),
+    ).rejects.toMatchObject({ status: 422 });
+    const failing = { op: "chore.complete" as const, choreId: "55900777", title: "Practice piano", instanceDate: "2026-11-09" };
+    await expect(run(failing)).rejects.toMatchObject({ status: 502, code: "skylight_failed", detail: { status: 422, reason: "instance_date must be blank" } });
+  });
+
+  it("names the owner only when completing an up-for-grabs chore", async () => {
+    await fetch(`${base}/__mock/skylight/chores`, {
+      method: "POST",
+      body: JSON.stringify({ id: "55901000", summary: "Shared chore", start: "2026-11-09", up_for_grabs: true }),
+    });
+    await run({ op: "chore.complete", choreId: "55901000", title: "Shared chore", categoryId: null, upForGrabs: true });
+    tick();
+    await run({ op: "chore.reopen", choreId: "55901000", title: "Shared chore", categoryId: null, upForGrabs: true });
+    expect((await writes()).map((w) => w.body)).toEqual([{ status: "complete", category_id: 13600771 }, { status: "pending" }]);
+  });
+
+  it("refuses to move a recurring occurrence", async () => {
+    await expect(
+      run({ op: "chore.reschedule", choreId: "55780859-2026-11-09-1800", title: "Recycling", start: "2026-11-12", previousStart: "2026-11-09" }),
+    ).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(await writes()).toHaveLength(0);
   });
 
   it("uses explicit calendar config, preserves event text, and sends exclusive all-day dates", async () => {
@@ -379,6 +422,8 @@ describe("mock strict validation and state", () => {
     ["POST", "/calendar_events", { data: { attributes: bodyEvent } }],
     ["PUT", "/chores/55900629/completions", { status: "completed" }],
     ["PUT", "/chores/55900629/completions", { status: "complete", unexpected: true }],
+    ["PUT", "/chores/55900629/completions", { status: "complete", instance_date: "2026-11-09" }],
+    ["PUT", "/chores/55900777/completions", { status: "complete", category_id: "13600772" }],
     ["POST", "/lists/7001/list_items", {}],
     ["POST", "/lists/7001/list_items", { label: "" }],
     ["PUT", "/lists/7001/list_items/7101", { status: "complete" }],

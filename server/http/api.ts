@@ -61,7 +61,7 @@ export function jsonError(status: number, error: string, code?: string, detail?:
 }
 
 export function toErrorResponse(err: unknown, correlationId?: string) {
-  if (err instanceof HttpError) return jsonError(err.status, err.message, err.code);
+  if (err instanceof HttpError) return jsonError(err.status, err.message, err.code, err.detail);
   if (err instanceof AuthError) {
     const status = err.code === "throttled" ? 429 : err.code === "already_claimed" ? 409 : 401;
     return jsonError(status, err.message, err.code);

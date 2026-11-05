@@ -99,9 +99,24 @@ it("keeps confirmation open on error and reports the server's message", async ()
   vi.mocked(api.post).mockRejectedValueOnce(new Error("Skylight is read-only"));
   setup();
   fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
-  await waitFor(() => expect(state.toast).toHaveBeenCalledWith("Skylight is read-only", "danger"));
+  // Inside the sheet (a toast hides under it), not a toast.
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Skylight is read-only"));
+  expect(state.toast).not.toHaveBeenCalled();
   expect(screen.getByRole("dialog")).toBeDefined();
   expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByText("Details")).toBeNull();
+});
+
+it("shows Skylight's own reason under collapsed Details", async () => {
+  vi.mocked(api.post).mockRejectedValueOnce(
+    Object.assign(new Error("Skylight couldn't accept that change. Refresh and try again."), { detail: { status: 422, reason: "category_id must be blank" } }),
+  );
+  setup();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("couldn't accept"));
+  const details = screen.getByText("Details").closest("details")!;
+  expect(details.open).toBe(false);
+  expect(details.textContent).toContain("Skylight 422: category_id must be blank");
 });
 
 it("disables confirmation and dismissal while a write is pending", async () => {
