@@ -10,6 +10,7 @@ import { useCoordinatorThings, useStableLine } from "@/components/coordinator/us
 import { priorityLine } from "@/lib/coordinator/things";
 import type { ActivityItem } from "@/lib/activity";
 import type { ItemAgentInfo } from "@/lib/agent-runs";
+import { setPanelOwner } from "@/lib/client/panel-owner";
 
 const nav = vi.hoisted(() => ({ path: "/areas", search: "", wide: true }));
 vi.mock("next/navigation", () => ({
@@ -114,6 +115,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  setPanelOwner(null);
   clients.splice(0).forEach((qc) => qc.clear());
   Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
   Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
@@ -244,6 +246,9 @@ describe("global coordinator", () => {
     expect(localStorage.getItem("jarvis.gc.open")).toBe("true");
     nav.path = "/chat/s1";
     view.rerender(globalView());
+    // Without a chat panel owning the right side the rail stays open on chat pages.
+    expect(screen.getByTestId("gc-rail").style.width).toBe("500px");
+    act(() => setPanelOwner("s1"));
     expect(screen.getByTestId("gc-rail").style.width).toBe("54px");
     fireEvent.click(screen.getByRole("button", { name: "Expand Chief of staff" }));
     expect(screen.getByTestId("gc-rail").style.width).toBe("500px");
@@ -257,6 +262,7 @@ describe("global coordinator", () => {
       { id: "finance", parentId: null, kind: "area", title: "Finance", settings: null },
       { id: "private", parentId: "finance", kind: "conversation", title: "Private", sessionId: "private-session", settings: null },
     ];
+    if (path.startsWith("/chat/")) setPanelOwner(path);
     makeClient();
     render(globalView(), { wrapper });
     if (path.startsWith("/chat/")) fireEvent.click(screen.getByRole("button", { name: "Expand Chief of staff" }));

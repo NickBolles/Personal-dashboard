@@ -77,10 +77,34 @@ export function sessionAccess(user: CurrentUser, id: string) {
   return null;
 }
 
+/**
+ * Access for a whole list with one meta query; only rows that are children (parentSessionId)
+ * walk their parent chain. Per-row lookups made palette/@ search ~7x slower on 2k sessions.
+ */
+function accessFor(user: CurrentUser, ids: string[], meta = metaFor(ids)) {
+  const ownerId = getOwner()?.id;
+  const out = new Map<string, "write" | "read" | null>();
+  for (const id of ids) {
+    const m = meta.get(id);
+    out.set(id, m?.parentSessionId ? sessionAccess(user, id) : access(user, m, ownerId));
+  }
+  return out;
+}
+
+/** Profile from an already-loaded meta row; walks parents only for children without their own profile. */
+function profileFrom(id: string, m: Meta | undefined) {
+  if (m?.hermesProfile) return m.hermesProfile;
+  return m?.parentSessionId ? sessionProfile(id) : null;
+}
+
 /** The rows of `list` this person may see (one meta query for the whole list). */
 export function visibleSessions<T extends { id: string }>(user: CurrentUser, list: T[]): T[] {
   if (!list.length) return list;
-  return list.filter((s) => sessionAccess(user, s.id));
+  const acc = accessFor(
+    user,
+    list.map((s) => s.id),
+  );
+  return list.filter((s) => acc.get(s.id));
 }
 
 function assertAccess(user: CurrentUser, id: string, need: "read" | "write") {
@@ -93,18 +117,19 @@ function decorate(list: SessionSummary[], user?: CurrentUser): SessionSummary[] 
   const ids = list.map((s) => s.id);
   const meta = metaFor(ids);
   const runs = activeRunsFor(ids);
-  const visible = user ? list.filter((s) => sessionAccess(user, s.id)) : list;
+  const acc = user ? accessFor(user, ids, meta) : null;
+  const visible = acc ? list.filter((s) => acc.get(s.id)) : list;
   return visible.map((s) => {
     const m = meta.get(s.id);
     const r = runs.get(s.id);
     return {
       ...s,
       shared: Boolean(m?.shared),
-      readOnly: user ? sessionAccess(user, s.id) === "read" : undefined,
+      readOnly: acc ? acc.get(s.id) === "read" : undefined,
       title: m?.titleOverride ?? s.title,
       forkedFromSessionId: m?.forkedFromSessionId ?? undefined,
       forkedFromMessageId: m?.forkedFromMessageId ?? undefined,
-      agentProfile: sessionProfile(s.id) ?? undefined,
+      agentProfile: profileFrom(s.id, m) ?? undefined,
       parentSessionId: m?.parentSessionId ?? m?.forkedFromSessionId ?? s.parentSessionId ?? undefined,
       activeRun: r
         ? {

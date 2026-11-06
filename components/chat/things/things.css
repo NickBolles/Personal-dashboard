@@ -202,6 +202,13 @@
   html[data-kb="open"] .chat-tray-line {
     overflow: hidden;
   }
+  /* Phones: while an approval/question card waits, the composer stays one compact row so the card's
+     buttons are reachable at 200% text (the card itself already says what is waiting). */
+  @media (max-width: 639.98px) {
+    .chat-tray[data-compact="true"] {
+      display: none;
+    }
+  }
   @container (min-width: 900px) {
     .chat-things-layout {
       display: flex;

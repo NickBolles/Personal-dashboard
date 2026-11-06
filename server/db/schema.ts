@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import type { ExecSource, ExecState } from "@/lib/chat-execution";
 
 /**
  * Jarvis-owned persistence only. Hermes sessions/messages, Paperclip issues and
@@ -253,7 +254,7 @@ export const chatExecRecords = sqliteTable(
   "chat_exec_records",
   {
     parentSessionId: text("parent_session_id").notNull(),
-    source: text("source").$type<import("@/lib/chat-execution").ExecSource>().notNull(),
+    source: text("source").$type<ExecSource>().notNull(),
     externalId: text("external_id").notNull(),
     childSessionId: text("child_session_id"),
     childProfile: text("child_profile"),
@@ -261,7 +262,7 @@ export const chatExecRecords = sqliteTable(
     subagentId: text("subagent_id"),
     taskIndex: integer("task_index"),
     title: text("title").notNull(),
-    state: text("state").$type<import("@/lib/chat-execution").ExecState>().notNull().default("unknown"),
+    state: text("state").$type<ExecState>().notNull().default("unknown"),
     step: text("step"),
     summary: text("summary"),
     error: text("error"),

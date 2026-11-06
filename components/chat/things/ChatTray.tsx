@@ -15,7 +15,16 @@ export function ChatTray({
 }) {
   const { counts, line, workflow } = things;
   return (
-    <div className="chat-tray" data-testid="chat-tray" data-compact={compact || undefined}>
+    <div
+      className="chat-tray"
+      data-testid="chat-tray"
+      data-compact={compact || undefined}
+      // The tray sits in the composer dock: on phones a focused textarea hides the bottom nav, so letting
+      // a tap blur it shifts the dock between pointerdown and click and the tap is lost. Keep focus there.
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest("button") && document.activeElement instanceof HTMLTextAreaElement) e.preventDefault();
+      }}
+    >
       <button
         type="button"
         className="chat-tray-line min-h-11 sm:min-h-10 dense:min-h-8"
