@@ -1227,6 +1227,10 @@ button.wk-kpi:hover {
   .work-ui .jv-inline-read {
     min-height: 24px;
     margin-block: calc(-2px - max(0px, (24px - 1lh - 4px) / 2));
+    /* The bleed can touch a neighbour by <1px (a wrapped row status picker above): stay on top so
+       the 24px box is never "partially obscured" (axe target-size). */
+    position: relative;
+    z-index: 1;
   }
   .work-ui .jv-inline-input {
     min-height: 30px;
