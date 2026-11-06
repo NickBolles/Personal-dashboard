@@ -83,6 +83,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
     case "event": {
       const e = a.event;
       const s = { ...state, lastSeq: a.seq ?? state.lastSeq, attempts: 0 };
+      if (e.type === "run.queued") return isTerminal(s.phase) || s.phase === "stopping" ? s : { ...s, phase: "queued" };
+      if (e.type === "unknown" && s.phase === "queued") return s;
       if (s.phase === "reconnecting" || s.phase === "disconnected" || s.phase === "starting" || s.phase === "queued") s.phase = "running";
       switch (e.type) {
         case "text.delta":
