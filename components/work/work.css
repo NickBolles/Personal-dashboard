@@ -1222,8 +1222,11 @@ button.wk-kpi:hover {
   }
 }
 @media (min-width: 1024px) and (pointer: fine) {
+  /* WCAG 2.2 target-size: keep a 24px hit box, but bleed the extra height into the negative
+     margin so the text and row layout stay exactly where a bare line puts them. */
   .work-ui .jv-inline-read {
-    min-height: 0;
+    min-height: 24px;
+    margin-block: calc(-2px - max(0px, (24px - 1lh - 4px) / 2));
   }
   .work-ui .jv-inline-input {
     min-height: 30px;

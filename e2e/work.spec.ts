@@ -184,7 +184,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
 
   // Timeline: the evaluator project, chart and table, row → item.
   await page.goto("/areas/timeline");
-  await page.getByLabel("Area or project").selectOption({ label: "Criteria evaluator" });
+  await pickOption(page, /^Area or project:/, "Criteria evaluator");
   await expect(page.getByRole("link", { name: /^V5 evaluator contract: / })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.getByRole("button", { name: "Show as table" }).click();
