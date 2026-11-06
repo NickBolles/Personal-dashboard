@@ -56,8 +56,15 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
     .orderBy(desc(schema.aiJobs.updatedAt))
     .limit(EXECUTION_LIMIT)
     .all()) {
+    // `cancelling` stays active until Hermes confirms termination (runner keeps adopting it; liveOfJob agrees).
     const state =
-      j.state === "succeeded" ? "completed" : ["queued", "waiting_approval", "budget_blocked"].includes(j.state) ? "waiting" : executionState(j.state);
+      j.state === "succeeded"
+        ? "completed"
+        : j.state === "cancelling"
+          ? "running"
+          : ["queued", "waiting_approval", "budget_blocked"].includes(j.state)
+            ? "waiting"
+            : executionState(j.state);
     const item =
       j.subjectType === "work_item"
         ? db
@@ -66,6 +73,21 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
             .where(and(eq(schema.workItems.id, j.subjectId), eq(schema.workItems.userId, user.id)))
             .get()
         : null;
+    // A visible AI job also has its backing `runs` row (same Hermes run id): one record, job metadata wins.
+    const backing = j.hermesRunId ? jarvis.findIndex((r) => r.id === j.hermesRunId) : -1;
+    if (backing >= 0) {
+      const run = jarvis[backing];
+      jarvis[backing] = {
+        ...run,
+        title: executionText(item?.title, 300) ?? run.title,
+        state,
+        endedAt: j.finishedAt ?? run.endedAt,
+        updatedAt: j.updatedAt,
+        error: executionText(j.errorMessage, 2048) ?? run.error,
+        href: item ? `/areas?item=${encodeURIComponent(item.id)}` : run.href,
+      };
+      continue;
+    }
     jarvis.push({
       key: `jarvis_run:${j.id}`,
       source: "jarvis_run",

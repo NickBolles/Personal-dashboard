@@ -326,6 +326,34 @@ describe("execution endpoint", () => {
     expect(HermesSessionClient.list).not.toHaveBeenCalled();
   });
 
+  it("a visible AI job and its backing run are one record; cancelling stays active", async () => {
+    const area = createItem(me(), { kind: "area", title: "Ops" }, "test");
+    const item = createItem(me(), { kind: "thread", parentId: area.id, title: "Investigate furnace" }, "test");
+    getDb().insert(schema.runs).values({ runId: "vrun", sessionId: "parent-1", userId: owner, idempotencyKey: "vrun", status: "running" }).run();
+    getDb()
+      .insert(schema.aiJobs)
+      .values({
+        id: "aij_vis",
+        userId: owner,
+        kind: "investigate",
+        subjectType: "work_item",
+        subjectId: item.id,
+        state: "cancelling",
+        lane: "work",
+        tier: "standard",
+        visibleSession: true,
+        hermesSessionId: "parent-1",
+        hermesRunId: "vrun",
+        idempotencyKey: "aij:vis",
+        promptVersion: "investigate@1",
+      })
+      .run();
+    const out: ChatExecutionResponse = await (await call(executionRoute.GET)).json();
+    const mine = out.records.filter((r) => r.source === "jarvis_run" && (r.id === "vrun" || r.id === "aij_vis"));
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ id: "vrun", state: "running", title: "Investigate furnace", href: `/areas?item=${item.id}` });
+  });
+
   it("distinguishes an empty transcript from an unavailable source and keeps persisted results", async () => {
     const empty = await chatExecution(me(), "parent-1");
     expect(empty.records).toEqual([]);
