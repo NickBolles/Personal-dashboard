@@ -730,7 +730,7 @@ for (const theme of ["light", "dark"] as const) {
     await head.click();
     await expect(head).toHaveAttribute("aria-expanded", "true");
     await expect(work.locator(".chat-tool")).toHaveCount(4);
-    await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · done");
+    await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · returned");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await withoutTray(page, () => expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" }));
   });
