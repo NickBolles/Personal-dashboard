@@ -6,7 +6,7 @@ import { api } from "@/lib/client/api";
 import type { ActivityResponse } from "@/lib/activity";
 import { isStalled, liveOfAgentRun, type AgentRunsResponse } from "@/lib/agent-runs";
 import { useDecisions } from "@/components/map/Decisions";
-import { priorityLine, stablePriority, type CoordinatorRun, type CoordinatorThings, type PriorityLine } from "@/lib/coordinator/things";
+import { isCoordinatorChange, priorityLine, stablePriority, type CoordinatorRun, type CoordinatorThings, type PriorityLine } from "@/lib/coordinator/things";
 
 const SEEN_KEY = "jarvis.gc.seen";
 const MERGED_SEEN_KEY = "jarvis.gc.mergedSeen";
@@ -76,8 +76,7 @@ export function useCoordinatorThings() {
     running: active,
     failing,
     doneUnseen,
-    // Activity normalizes via to the bare profile; accept the stored form too.
-    changes: (activity.data?.items ?? []).filter((a) => (a.via === "chiefofstaff" || a.via === "agent:chiefofstaff") && Date.parse(a.at) >= now - 86_400_000),
+    changes: (activity.data?.items ?? []).filter((a) => isCoordinatorChange(a, now)),
   };
   const next = priorityLine({ needsYou: things.needsYou, running: active.filter((r) => r.state === "running").length, failing: failing.length, doneUnseen });
   const line = useStableLine(next);

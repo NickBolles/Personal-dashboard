@@ -1,7 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { priorityLine, stablePriority, type PriorityInput } from "@/lib/coordinator/things";
+import { isCoordinatorChange, priorityLine, stablePriority, type PriorityInput } from "@/lib/coordinator/things";
+import type { ActivityItem } from "@/lib/activity";
 
 const idle: PriorityInput = { failing: 0, needsYou: 0, doneUnseen: 0, running: 0 };
+describe("coordinator change attribution", () => {
+  const now = Date.parse("2026-11-07T18:00:00Z");
+  const at = "2026-11-07T17:00:00Z";
+  it.each([
+    [{ kind: "agent", name: "chiefofstaff" }, undefined, true],
+    [{ kind: "agent", name: "devchief" }, "chiefofstaff", true],
+    [{ kind: "you", name: "You" }, "agent:chiefofstaff", true],
+    [{ kind: "agent", name: "devchief" }, undefined, false],
+    [{ kind: "agent", name: "chiefofstaff-helper" }, undefined, false],
+    [{ kind: "you", name: "chiefofstaff" }, undefined, false],
+    [{ kind: "system", name: "chiefofstaff" }, undefined, false],
+    [{ kind: "agent", name: "Hermes" }, "agent:devchief", false],
+    [{ kind: "agent", name: "chiefofstaff" }, "devchief", false],
+  ] as const)("accepts exact actor identity or via: %j %s", (actor, via, expected) => {
+    expect(isCoordinatorChange({ actor, via, at }, now)).toBe(expected);
+  });
+  it("keeps the 24-hour window for run and mutation rows, including the boundary", () => {
+    const row: Pick<ActivityItem, "actor" | "via" | "at"> = { actor: { kind: "agent", name: "chiefofstaff" }, at: new Date(now - 86_400_000).toISOString() };
+    expect(isCoordinatorChange(row, now)).toBe(true);
+    expect(isCoordinatorChange({ ...row, at: new Date(now - 86_400_001).toISOString() }, now)).toBe(false);
+    expect(isCoordinatorChange({ ...row, at: "invalid" }, now)).toBe(false);
+    expect(isCoordinatorChange({ ...row, via: "chiefofstaff", at: new Date(now - 86_400_001).toISOString() }, now)).toBe(false);
+  });
+});
 describe("coordinator priority line", () => {
   it.each([
     [{ failing: 2, needsYou: 3, doneUnseen: 4, running: 5 }, "failing", "bad", "red", 2],

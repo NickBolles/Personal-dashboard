@@ -51,6 +51,8 @@ export type NextAction = {
   dueAt?: string;
   /** true when the source only knows a due date (no time) */
   dueIsDate?: boolean;
+  /** Household timezone when a date-only dueAt is encoded as an instant. */
+  dueTimezone?: string;
   availableAt?: string;
   updatedAt: string;
   fetchedAt: string;
@@ -169,6 +171,11 @@ export type SkylightRef =
       /** Occurrence date/time for recurring chores (frame-local). */
       instanceDate?: string;
       instanceTime?: string;
+      /** Upstream `up_for_grabs` flag (group-assigned chores can read as up for grabs in Jarvis without it). */
+      upForGrabs?: boolean;
+      /** Frame-local due day and time of day (`start` / `start_time`; recurring BYHOUR 6/14/20 → 06:00/14:00/20:00). */
+      startDate?: string;
+      startTime?: string;
       /** Skylight category (member) id it is assigned to; null = unassigned. */
       categoryId: string | null;
       recurring?: boolean;

@@ -6,20 +6,33 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { Button } from "@/components/ui/kit";
+import { CoordinatorGlyph, IconAction } from "@/components/ui/IconAction";
+import { useAgentRuns } from "@/components/agents/AgentRuns";
+import { activeInArea, coordinatorDot } from "@/lib/agent-runs";
 import { CoordinatorThread, type CoordinatorResponse } from "@/components/coordinator/CoordinatorThread";
 import "./agents.css";
 
 export type { CoordinatorResponse } from "@/components/coordinator/CoordinatorThread";
 
-/** "Coordinator" button for an area (map card, area page). Opens the pane; sends nothing. */
+/**
+ * Coordinator entry for an area (map card, area page, Chief of staff slot): a compact ✦ icon
+ * button (N5) with a tooltip and a live dot (working / waiting for you / failed) from the
+ * shared agent-runs poll. Opens the pane; sends nothing.
+ */
 export function CoordinatorButton({ areaId, areaTitle, className }: { areaId: string; areaTitle: string; className?: string }) {
   const [open, setOpen] = useState(false);
+  const dot = coordinatorDot(activeInArea(useAgentRuns().data, areaId));
   return (
     <>
-      <Button size="sm" className={className} onClick={() => setOpen(true)} aria-haspopup="dialog" data-testid="coordinator-open">
-        Coordinator
-        <span className="sr-only"> chat for {areaTitle}</span>
-      </Button>
+      <IconAction
+        label={`Coordinator chat for ${areaTitle}`}
+        icon={<CoordinatorGlyph />}
+        dot={dot}
+        className={className}
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        data-testid="coordinator-open"
+      />
       {open ? <CoordinatorPane areaId={areaId} onClose={() => setOpen(false)} /> : null}
     </>
   );

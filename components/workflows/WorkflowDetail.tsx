@@ -268,7 +268,7 @@ export function WorkflowDetail({ slug }: { slug: string }) {
       </div>
     );
   return (
-    <div className="mx-auto w-full max-w-5xl min-w-0 space-y-3 px-3 py-3 sm:px-6">
+    <div className="@container mx-auto w-full max-w-5xl min-w-0 space-y-3 px-3 py-3 sm:px-6">
       <PageHeader
         title={wf.name}
         subtitle={wf.description}
@@ -283,7 +283,7 @@ export function WorkflowDetail({ slug }: { slug: string }) {
           </div>
         }
       />
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-3 @min-[760px]:grid-cols-[2fr_1fr]">
         <div className="min-w-0">
           {hist.data ? <SessionHistory data={hist.data} filter={filter} setFilter={setFilter} /> : <p className="text-sm text-muted">Loading…</p>}
         </div>

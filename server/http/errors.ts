@@ -15,6 +15,8 @@ export class HttpError extends Error {
     public status: number,
     public code: string,
     message: string,
+    /** Safe, user-visible extra context (e.g. the upstream's own reason), sent as the response `detail`. */
+    public detail?: unknown,
   ) {
     super(message);
   }

@@ -76,7 +76,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
   const controlsFresh = controls.data && now - new Date(controls.data.fetchedAt).getTime() < 60_000;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5 dense:max-w-6xl">
+    <div className="@container mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5 dense:max-w-6xl">
       <PageHeader
         title="House"
         subtitle={
@@ -94,7 +94,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
       <SourceState status={home.data?.status} hasData={Boolean(home.data?.data)} />
 
       {/* Desktop: two balanced columns (owner default); each section stays whole. */}
-      <div className="dense:columns-2 dense:gap-6 dense:[&>section]:mt-0 dense:[&>section]:mb-6 [&>section]:break-inside-avoid">
+      <div className="@min-[880px]:columns-2 @min-[880px]:gap-6 @min-[880px]:[&>section]:mt-0 @min-[880px]:[&>section]:mb-6 [&>section]:break-inside-avoid">
         {can("home_assistant.calendar") && home.data?.data?.events?.length ? <CalendarSection events={home.data.data.events} /> : null}
 
         {home.data?.data && can("home_assistant.view") ? (
@@ -130,7 +130,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         ) : null}
 
         {can("home_assistant.control_doors") ? (
-          <section aria-labelledby="ctl-h" className="mt-6">
+          <section aria-labelledby="ctl-h" className="@container mt-6">
             <SectionHeader id="ctl-h" label="Controls" />
             {!online ? (
               <Banner tone="wn">Controls are disabled while offline. Jarvis never queues physical actions; they’ll re-enable after a fresh state check.</Banner>
@@ -141,7 +141,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
               <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
             ) : null}
             {/* H1: compact two-line tiles, three across on desktops. */}
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">
               {(controls.data?.controls ?? []).map((c) => (
                 <li key={c.entityId}>
                   <Card className={cx(focusEntity === c.entityId && "border-accent")}>
@@ -333,7 +333,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
         // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
         const open = !collapsed.includes(room) || devices.some((x) => x.entityId === focusEntity);
         return (
-          <section key={room} aria-labelledby={`${id}-h`} data-room={room}>
+          <section key={room} aria-labelledby={`${id}-h`} className="@container" data-room={room}>
             <h2 id={`${id}-h`} className="mb-1.5">
               <button
                 type="button"
@@ -348,7 +348,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
               </button>
             </h2>
             {open ? (
-              <ul id={id} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <ul id={id} className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">
                 {devices.map((x) =>
                   x.kind === "light" ? lightTile(x) : x.kind === "camera" ? <CameraCard key={x.entityId} camera={x} online={online} /> : doorTile(x),
                 )}
@@ -363,21 +363,21 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       {toggle}
       {offlineNote}
       {d.doors.length ? (
-        <section aria-labelledby="doors-h" className="mt-6">
+        <section aria-labelledby="doors-h" className="@container mt-6">
           <SectionHeader id="doors-h" label="Doors, locks and garage" />
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.doors.map(doorTile)}</ul>
+          <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">{d.doors.map(doorTile)}</ul>
         </section>
       ) : null}
       {d.lights.length ? (
-        <section aria-labelledby="lights-h" className="mt-6">
+        <section aria-labelledby="lights-h" className="@container mt-6">
           <SectionHeader id="lights-h" label="Lights" />
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{d.lights.map(lightTile)}</ul>
+          <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">{d.lights.map(lightTile)}</ul>
         </section>
       ) : null}
       {d.cameras.length ? (
-        <section aria-labelledby="cams-h" className="mt-6">
+        <section aria-labelledby="cams-h" className="@container mt-6">
           <SectionHeader id="cams-h" label="Cameras" />
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">
             {d.cameras.map((c) => (
               <CameraCard key={c.entityId} camera={c} online={online} />
             ))}

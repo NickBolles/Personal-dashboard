@@ -74,6 +74,7 @@ for (const path of PAGES) {
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   for (const path of [
     "/home",
+    "/more",
     "/chat/sess_morning",
     "/alerts",
     "/settings",
@@ -349,7 +350,9 @@ test("tags + assignee (#111): axe clean and no overflow at 200% text zoom (item 
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} ${n.failureSummary ?? ""}`).join(" ")}`),
         path,
       )
       .toEqual([]);
@@ -602,7 +605,9 @@ test("a11y + 200% text: area page (project cards, tree, coordinator column/sheet
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect
       .soft(
-        r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(" ")}`),
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} ${n.failureSummary ?? ""}`).join(" ")}`),
         label,
       )
       .toEqual([]);
@@ -766,7 +771,7 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
     await expectNoHorizontalOverflow(page, { soft: true });
     await t.evaluate((el) => (el as Element).remove());
   };
-  await page.goto("/decisions"); // /more itself overflows at 200% text on phones (pre-existing, not the tray)
+  await page.goto("/decisions");
   if (info.project.name === "desktop") {
     const rail = page.getByRole("complementary", { name: "Chief of staff" });
     await expect(rail.getByTestId("quick-action-proposal")).toBeVisible();

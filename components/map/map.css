@@ -31,6 +31,21 @@
   background: var(--surface);
   color: var(--text);
 }
+/* N5: the coordinator ✦ icon sits over the card's top-right corner; the first two rows keep clear of it. */
+.mp-card-co > :first-child,
+.mp-card-co > .mp-counts {
+  padding-right: 40px;
+}
+.mp-card-coord {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  border-color: transparent;
+  background: transparent;
+}
+.mp-card-coord:hover {
+  border-color: var(--line);
+}
 .mp-card:hover {
   border-color: var(--line-strong);
 }

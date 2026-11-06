@@ -114,6 +114,59 @@ async function eventBody(event: SkylightEventFields) {
   };
 }
 
+const OCCURRENCE = /^([A-Za-z0-9_]+)-(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?$/;
+const completionPath = (choreId: string) => OCCURRENCE.exec(choreId)?.[1] ?? choreId;
+
+type ChoreStatusOp = Extract<SkylightWriteOp, { op: "chore.complete" | "chore.reopen" | "chore.skip" }>;
+
+/**
+ * The real completions body (matches the Hermes skylight skill and live-verified clients): flat
+ * `{status, instance_date?, instance_time?, category_id?}` with status complete|pending|skipped.
+ * `category_id` must be BLANK for a normally-assigned chore — Skylight answers 422 "category_id must be blank"
+ * (the 2026-11-05 prod failure) — and is only sent when completing an up-for-grabs chore, naming who did it.
+ */
+export async function completionBody(op: ChoreStatusOp, owner: () => Promise<string | undefined> = ownerMember) {
+  const occ = OCCURRENCE.exec(op.choreId);
+  const instanceDate = op.instanceDate ?? occ?.[2];
+  const instanceTime = op.instanceTime ?? (occ?.[3] ? `${occ[3]}:${occ[4]}` : undefined);
+  const who = op.op === "chore.complete" && op.upForGrabs ? await owner() : undefined;
+  return {
+    status: op.op === "chore.complete" ? "complete" : op.op === "chore.skip" ? "skipped" : "pending",
+    ...(instanceDate != null ? { instance_date: instanceDate } : {}),
+    ...(instanceTime != null ? { instance_time: instanceTime } : {}),
+    ...(who ? { category_id: Number(who) } : {}),
+  };
+}
+
+/** Skylight's own reason from an upstream error ("category_id must be blank"), short and secret-free. */
+export function skylightReason(err: UpstreamError): string | undefined {
+  const m = /returned \d+: ([\s\S]*)$/.exec(err.message);
+  const raw = m?.[1]?.trim();
+  if (!raw) return undefined;
+  let text = raw;
+  try {
+    const j = JSON.parse(raw) as { errors?: unknown; error?: unknown; message?: unknown };
+    const e = j.errors ?? j.error ?? j.message;
+    if (typeof e === "string") text = e;
+    else if (Array.isArray(e))
+      text = e
+        .map((x) => (typeof x === "string" ? x : ((x as { detail?: string; title?: string })?.detail ?? (x as { title?: string })?.title ?? JSON.stringify(x))))
+        .join("; ");
+    else if (e && typeof e === "object")
+      text = Object.entries(e as Record<string, unknown>)
+        .map(([k, v]) => `${k === "base" ? "" : `${k} `}${Array.isArray(v) ? v.join(", ") : String(v)}`.trim())
+        .join("; ");
+  } catch {
+    // Truncated or non-JSON body: keep the raw text.
+  }
+  return (
+    text
+      .replace(/Bearer\s+\S+/gi, "Bearer …")
+      .replace(/\s+/g, " ")
+      .slice(0, 240) || undefined
+  );
+}
+
 export async function runSkylightWrite(
   op: SkylightWriteOp,
   user: { id: string },
@@ -128,20 +181,17 @@ export async function runSkylightWrite(
     const base = `/frames/${f}`;
     switch (op.op) {
       case "chore.complete":
-      case "chore.reopen": {
-        // Recurring occurrences read as "<baseId>-YYYY-MM-DD[-HHMM]"; the completions URL takes the BASE id
+      case "chore.reopen":
+      case "chore.skip": {
+        // Recurring occurrences read as "<baseId>-YYYY-MM-DD[-HHMM]"; the completions URL takes the BASE (series) id
         // and the occurrence goes in the body (docs/research/integrations-api.md, chores).
-        const occ = /^([A-Za-z0-9_]+)-(\d{4}-\d{2}-\d{2})(?:-(\d{2})(\d{2}))?$/.exec(op.choreId);
-        const instanceDate = op.instanceDate ?? occ?.[2];
-        const instanceTime = op.instanceTime ?? (occ?.[3] ? `${occ[3]}:${occ[4]}` : undefined);
-        await write("PUT", `${base}/chores/${occ ? occ[1] : op.choreId}/completions`, {
-          status: op.op === "chore.complete" ? "complete" : "pending",
-          ...(instanceDate != null ? { instance_date: instanceDate } : {}),
-          ...(instanceTime != null ? { instance_time: instanceTime } : {}),
-          ...(op.categoryId != null ? { category_id: op.categoryId } : {}),
-        });
+        await write("PUT", `${base}/chores/${completionPath(op.choreId)}/completions`, await completionBody(op));
         break;
       }
+      case "chore.reschedule":
+        if (OCCURRENCE.test(op.choreId)) throw new HttpError(409, "recurring", "Move recurring chores in Skylight for now.");
+        await write("PUT", `${base}/chores/${op.choreId}`, { start: op.start });
+        break;
       case "chore.claim": {
         const to = op.toCategoryId ?? (await ownerMember());
         if (!to) throw new HttpError(409, "pick_member", "Pick your Skylight member in Settings → Connections first.");
@@ -167,7 +217,13 @@ export async function runSkylightWrite(
       case "event.create": {
         const r = await write<{ data: { id: string | number } }>("POST", `${base}/calendar_events`, {
           ...(await eventBody(op.event)),
-          ...(await calendarTarget(f)),
+          ...(op.event.calendarId || op.event.sourceCalendarId || op.event.calendarAccountId
+            ? {
+                ...(op.event.calendarId ? { calendar_id: op.event.calendarId } : {}),
+                ...(op.event.sourceCalendarId ? { source_calendar_id: Number(op.event.sourceCalendarId) } : {}),
+                ...(op.event.calendarAccountId ? { calendar_account_id: Number(op.event.calendarAccountId) } : {}),
+              }
+            : await calendarTarget(f)),
           invited_emails: [],
           rrule: null,
         });
@@ -185,12 +241,14 @@ export async function runSkylightWrite(
   } catch (err) {
     if (err instanceof UpstreamError) {
       if (err.status === 404 || err.kind === "not_found") throw new HttpError(404, "gone", "That isn't in Skylight anymore — refresh.");
+      const reason = skylightReason(err);
       throw new HttpError(
         502,
         "skylight_failed",
         err.status === 422
           ? "Skylight couldn't accept that change. Refresh and try again."
           : "Couldn't confirm the Skylight change. Refresh before trying again.",
+        { status: err.status ?? null, ...(reason ? { reason } : {}) },
       );
     }
     throw err;

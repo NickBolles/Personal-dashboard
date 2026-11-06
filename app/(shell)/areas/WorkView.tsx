@@ -29,7 +29,8 @@ import {
 import { useAccess } from "@/components/access";
 import { Markdown } from "@/components/markdown/Markdown";
 import { WorkTree } from "@/components/work/WorkTree";
-import { ChevronIcon } from "@/components/icons";
+import { ChatIcon, ChevronIcon } from "@/components/icons";
+import { FocusGlyph, IconAction } from "@/components/ui/IconAction";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
@@ -41,7 +42,8 @@ import { WorkflowSurface } from "@/components/smart/WorkflowSurface";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { ActivityFeed } from "@/components/work/ActivityFeed";
-import { INLINE_OP_EVENT, InlineDate, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { INLINE_OP_EVENT, InlineText, useInlinePatch } from "@/components/work/InlineEdit";
+import { DuePicker, SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { filterItems, ItemFilterBar, ItemMetaEditor, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
 import { inlineStatusOptions } from "@/lib/inline-edit";
 import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/components/work/conversations";
@@ -991,11 +993,20 @@ function ItemDetail({
       <Button size="sm" variant="primary" onClick={showBlockers}>
         Resolve blocker
       </Button>
-    ) : (
-      <Button size="sm" variant="primary" onClick={() => setDialog("packet")}>
-        Start focused work
-      </Button>
-    );
+    ) : null;
+  // N5: "Start focused work" (the default next step) and "Chat here" are icon buttons in the header's
+  // action group next to ⋯, so the header keeps exactly one primary and no wall of text buttons.
+  const focusPrimary = !container && primary === null && item.kind !== "conversation";
+  const chatIcon =
+    canChat && item.kind !== "conversation" ? (
+      <IconAction
+        label="Chat here"
+        title="Chat here: starts a conversation filed here"
+        icon={<ChatIcon className="h-[17px] w-[17px]" />}
+        busy={newChat.busy}
+        onClick={() => newChat.start({ areaId: item.id })}
+      />
+    ) : null;
 
   const kids = d.children.filter((c) => !c.archived);
   // "PR merged — settle?" carries the Settle action itself; nothing else repeats it.
@@ -1003,32 +1014,23 @@ function ItemDetail({
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
     <span className="inline-flex min-w-0 items-center gap-1" data-status={item.status}>
-      <span className="status-pill wk-status-pick shrink-0" data-s={item.status}>
-        <span aria-hidden="true">{STATUS_LABELS[item.status]}</span>
-        <ChevronIcon className="h-3 w-3 rotate-90 opacity-70" />
-        <label htmlFor="work-status" className="sr-only">
-          Status
-        </label>
-        <select
-          id="work-status"
-          className="wk-status-native"
-          value={item.status}
-          onChange={(e) => {
-            const to = e.target.value as WorkStatus;
-            // Settling is never inline: it stays the Settle… dialog (primary action / ⋯).
-            if (to === "reopened") setDialog("reopen");
-            else inline.mutate({ status: to });
-          }}
-        >
-          {inlineStatusOptions(item.status).map((o) => (
-            <option key={o.value} value={o.value} disabled={o.disabled}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </span>
+      <SelectPicker
+        id="work-status"
+        label="Status"
+        className="status-pill jv-select-status shrink-0"
+        data-s={item.status}
+        active={false}
+        value={item.status}
+        options={inlineStatusOptions(item.status).map((o) => ({ ...o, dot: <StatusPickerDot status={o.value} /> }))}
+        onChange={(v) => {
+          const to = v as WorkStatus;
+          // Settling is never inline: it stays the Settle… dialog (primary action / ⋯).
+          if (to === "reopened") setDialog("reopen");
+          else inline.mutate({ status: to });
+        }}
+      />
       {item.settledKind === "auto" && item.status === "settled" ? <Badge tone="neutral">Auto-settled</Badge> : null}
-      {container ? null : <InlineDate value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
+      {container ? null : <DuePicker value={item.targetDate} onSave={(targetDate) => inline.mutate({ targetDate })} />}
     </span>
   );
 
@@ -1073,17 +1075,22 @@ function ItemDetail({
           </h2>
           {/* A plain item keeps status · due · ⋯ on one line (the due chip truncates) so ⋯ never drops to its own row;
               containers and badge rows keep the old wrapping layout (the wrapper is display: contents). */}
-          <div className={pinActions ? "flex min-w-0 flex-auto items-center gap-x-2.5" : "contents"}>
+          <div className={pinActions ? "flex min-w-0 flex-auto flex-wrap items-center gap-x-2.5 gap-y-1.5" : "contents"}>
             {statusSelect}
             {item.archived ? <Badge>Archived</Badge> : null}
             {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
             {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
             <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : "flex-wrap"}`}>
               {container ? <ViewSwitch id={item.id} /> : null}
-              {container && canChat ? (
-                <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-                  Chat here
-                </Button>
+              {chatIcon}
+              {focusPrimary ? (
+                <IconAction
+                  label="Start focused work"
+                  title={d.packets.length ? "Start focused work (revise the work packet)" : "Start focused work"}
+                  tone="primary"
+                  icon={<FocusGlyph />}
+                  onClick={() => setDialog("packet")}
+                />
               ) : null}
               {container ? (
                 <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
@@ -1139,14 +1146,9 @@ function ItemDetail({
         )}
         {item.createdVia || item.updatedVia ? <div className="mt-1.5 flex min-w-0 flex-wrap">{itemAgentChip(item)}</div> : null}
         {container ? null : <JobChip itemId={item.id} />}
-        {container ? null : (
+        {container || ((settlePrompt || !primary) && !(canChat && item.kind !== "conversation")) ? null : (
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {settlePrompt ? null : primary}
-            {canChat && item.kind !== "conversation" ? (
-              <Button size="sm" busy={newChat.busy} onClick={() => newChat.start({ areaId: item.id })} title="Starts a conversation filed here">
-                Chat here
-              </Button>
-            ) : null}
             {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
           </div>
         )}

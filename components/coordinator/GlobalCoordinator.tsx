@@ -13,7 +13,7 @@ import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { useToast } from "@/components/ui";
-import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
+import { OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
@@ -148,15 +148,21 @@ export function GlobalCoordinator() {
       );
     };
     // The phone sheet is a native modal (top layer, rest of the app inert): close it so the
-    // app-shell "Manage quick actions" dialog is reachable.
-    const onManage = () => setPhoneOpen(false);
+    // app-shell palette and "Manage quick actions" dialog are reachable. Close the native
+    // top layer synchronously, before either destination tries to focus its input.
+    const onManage = () => {
+      dialog.current?.close();
+      setPhoneOpen(false);
+    };
     window.addEventListener(OPEN_COORDINATOR_EVENT, onOpen);
     window.addEventListener(COORDINATOR_PROMPT, onPrompt);
     window.addEventListener(QUICK_ACTION_MANAGE, onManage);
+    window.addEventListener(OPEN_PALETTE_EVENT, onManage);
     return () => {
       window.removeEventListener(OPEN_COORDINATOR_EVENT, onOpen);
       window.removeEventListener(COORDINATOR_PROMPT, onPrompt);
       window.removeEventListener(QUICK_ACTION_MANAGE, onManage);
+      window.removeEventListener(OPEN_PALETTE_EVENT, onManage);
     };
   }, [pageKey]);
   useEffect(() => {
@@ -478,6 +484,7 @@ export function GlobalCoordinator() {
               }}
             >
               {content}
+              <div data-quick-action-notices className="shrink-0" />
             </dialog>
           ) : null}
         </>

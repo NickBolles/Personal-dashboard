@@ -212,7 +212,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const [y, m, d] = t.today.split("-").map(Number);
   const dateLabel = new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   return (
-    <section aria-labelledby="today-title" className="space-y-2.5" data-testid="work-today">
+    <section aria-labelledby="today-title" className="@container space-y-2.5" data-testid="work-today">
       <div>
         <p className="wk-eyebrow">{dateLabel}</p>
         <h2 id="today-title" className="text-xl leading-tight font-semibold tracking-tight">
@@ -277,7 +277,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         action={{ label: "Continue" }}
         onOpen={onOpen}
       />
-      <div className="grid gap-2.5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 @min-[1000px]:grid-cols-2">
         <CardList
           id="today-proof"
           title="Proof due"

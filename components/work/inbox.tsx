@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "@/lib/client/api";
 import { Badge, Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
@@ -90,19 +90,17 @@ export function CaptureDialog({ onClose, initialText }: { onClose: () => void; i
   );
 }
 
-const TWO_PANE = "(min-width: 640px)";
-const subscribeTwoPane = (cb: () => void) => {
-  const m = window.matchMedia(TWO_PANE);
-  m.addEventListener("change", cb);
-  return () => m.removeEventListener("change", cb);
-};
-/** >=640: list + preview. Rendered conditionally (not CSS-hidden) so row and preview actions never both exist. */
-function useTwoPane() {
-  return useSyncExternalStore(
-    subscribeTwoPane,
-    () => window.matchMedia(TWO_PANE).matches,
-    () => false,
-  );
+/** Match the 560px inbox container query, including rail resize, not viewport width. */
+function useTwoPane(ref: RefObject<HTMLElement | null>) {
+  const [twoPane, setTwoPane] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setTwoPane(entry.contentRect.width >= 560));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return twoPane;
 }
 
 const SOURCE: Record<InboxEntry["source"], string> = { github_issue: "GitHub issue", capture: "Capture" };
@@ -123,8 +121,9 @@ export function InboxView({
   const [accepting, setAccepting] = useState<InboxEntry | null>(null);
   const dismiss = useWorkMutation((id: string) => api.post(`/api/work/inbox/${encodeURIComponent(id)}/dismiss`), { ok: "Dismissed" });
   const entries = q.data?.items ?? [];
-  // Two-pane triage (>=640): the list selects, the preview acts. Keys: j/k or arrows move, Enter files, M chooses, E dismisses.
-  const twoPane = useTwoPane();
+  // Two-pane triage (container >=560): the list selects, the preview acts. Keys: j/k or arrows move, Enter files, M chooses, E dismisses.
+  const sectionRef = useRef<HTMLElement>(null);
+  const twoPane = useTwoPane(sectionRef);
   const [picked, setPicked] = useState<string | null>(initialEntry ?? null);
   // "Triage one at a time": one entry full-width, auto-advance, progress n of N (N fixed when it starts).
   const [focus, setFocus] = useState<{ total: number; done: number; skipped: string[]; handled: string[] } | null>(null);
@@ -199,7 +198,6 @@ export function InboxView({
     setPicked(next.id);
     listRef.current?.querySelector<HTMLButtonElement>(`[data-inbox-pick="${CSS.escape(next.id)}"]`)?.focus();
   };
-  const sectionRef = useRef<HTMLElement>(null);
   const keys = useRef<(ev: globalThis.KeyboardEvent) => void>(() => {});
   // Document-level so triage keeps working after the focused row is filed or dismissed (focus falls to <body>).
   useEffect(() => {
@@ -233,7 +231,7 @@ export function InboxView({
     return () => document.removeEventListener("keydown", on);
   }, []);
   return (
-    <section ref={sectionRef} aria-labelledby="inbox-title" className="space-y-3" data-testid="work-inbox">
+    <section ref={sectionRef} aria-labelledby="inbox-title" className="@container/inbox space-y-3" data-testid="work-inbox">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="wk-eyebrow">Triage</p>
@@ -290,7 +288,7 @@ export function InboxView({
           <div className="wk-card px-3 py-2.5">
             <CaptureForm inline />
           </div>
-          <div className="min-w-0 gap-3 sm:grid sm:grid-cols-[minmax(0,330px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+          <div className="min-w-0 gap-3 @min-[560px]/inbox:grid @min-[560px]/inbox:grid-cols-[minmax(0,330px)_minmax(0,1fr)] @min-[760px]/inbox:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
             <section aria-labelledby="inbox-items" className="wk-card min-w-0 self-start overflow-hidden">
               <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
                 <h3 id="inbox-items" className="wk-label">
@@ -315,7 +313,10 @@ export function InboxView({
                 {entries.map((e) => (
                   <li
                     key={e.id}
-                    className={cx("wk-row-hover flex items-start gap-x-2.5 px-3 py-2 max-[359px]:flex-wrap", sel?.id === e.id && "sm:bg-surface-2")}
+                    className={cx(
+                      "wk-row-hover flex items-start gap-x-2.5 px-3 py-2 max-[359px]:flex-wrap",
+                      sel?.id === e.id && "@min-[560px]/inbox:bg-surface-2",
+                    )}
                     data-inbox-entry={e.id}
                     data-selected={sel?.id === e.id ? "" : undefined}
                   >
@@ -329,7 +330,7 @@ export function InboxView({
                       {e.source === "github_issue" ? "GH" : "CA"}
                     </span>
                     <div className="min-w-0 flex-1 max-[359px]:basis-[calc(100%-32px)]">
-                      <p className="line-clamp-2 text-[14px] leading-snug font-semibold break-words sm:line-clamp-none">
+                      <p className="line-clamp-2 text-[14px] leading-snug font-semibold break-words @min-[560px]/inbox:line-clamp-none">
                         {twoPane ? (
                           <button
                             type="button"
@@ -345,7 +346,7 @@ export function InboxView({
                           e.title
                         )}
                       </p>
-                      {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted sm:line-clamp-1">{e.note}</p> : null}
+                      {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted @min-[560px]/inbox:line-clamp-1">{e.note}</p> : null}
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
                         {e.repo ? (
@@ -364,7 +365,7 @@ export function InboxView({
                       </p>
                       {e.capture && !twoPane ? <CaptureExtras entry={e} onAccepted={onOpenItem} onChoose={() => setAccepting(e)} /> : null}
                     </div>
-                    {/* Phones: one visible action (File/Accept) + ⋯ (Dismiss). >=640 the preview pane holds the actions. */}
+                    {/* Narrow containers: one visible action (File/Accept) + ⋯ (Dismiss). >=560 the preview pane holds the actions. */}
                     {twoPane ? null : (
                       <div className="flex shrink-0 items-center gap-0.5 max-[359px]:ml-[32px] max-[359px]:w-[calc(100%-32px)] max-[359px]:justify-end">
                         {e.url ? (
@@ -522,7 +523,7 @@ function FocusTriage({
   );
 }
 
-/** >=640 preview: the entry, the AI suggestion block and the triage actions (one primary). */
+/** Container >=560 preview: the entry, the AI suggestion block and the triage actions (one primary). */
 function InboxPreview({
   entry: e,
   busy,

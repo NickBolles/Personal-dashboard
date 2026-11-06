@@ -1,4 +1,11 @@
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+
+/** Picker panels are portalled: find the opener in scope, then the option on the page. */
+export async function pickOption(scope: Page | Locator, triggerName: string | RegExp, optionName: string | RegExp) {
+  const page = "page" in scope ? scope.page() : scope;
+  await scope.getByRole("button", { name: triggerName }).click();
+  await page.getByRole("listbox").getByRole("option", { name: optionName, exact: true }).click();
+}
 
 export const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 4020}`;
 export const PASSCODE = "e2e-passcode";

@@ -90,6 +90,10 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           });
         if (path === "/health") return json(res, 200, { ok: true });
         if (path === "/skylight/writes" && req.method === "GET") return json(res, 200, { writes: services.skylight.state.writes });
+        if (path === "/skylight/chores" && req.method === "POST") {
+          const ok = services.skylight.addChore(await readBody(req));
+          return json(res, ok ? 200 : 400, { ok });
+        }
         if (path === "/drive")
           return json(res, 200, {
             files: services.drive.state.files.map(({ id, name, mimeType, parents, content }) => ({ id, name, mimeType, parents, bytes: content?.length ?? 0 })),

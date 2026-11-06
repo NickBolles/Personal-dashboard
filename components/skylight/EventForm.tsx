@@ -3,9 +3,9 @@
 import { useId, useState } from "react";
 import type { CalendarEvent } from "@/lib/contracts";
 import type { SkylightWriteOp } from "@/lib/skylight-write";
-import { addDays, daysBetween, localDate } from "@/lib/time";
+import { addDays, localDate } from "@/lib/time";
 import { Button, Dialog, Field, inputCls, useOnline } from "@/components/ui";
-import { eventInstant, eventTime, previousEvent } from "./eventFields";
+import { eventInstant, eventTime, previousEvent, shiftedEndDate } from "./eventFields";
 
 export function EventForm({
   event,
@@ -28,6 +28,9 @@ export function EventForm({
   const [start, setStart] = useState(() => (event && !event.allDay ? eventTime(event.startsAt, timezone) : "09:00"));
   const [end, setEnd] = useState(() => (event?.endsAt && !event.allDay ? eventTime(event.endsAt, timezone) : "10:00"));
   const [endDate, setEndDate] = useState(() => (event && !event.allDay && event.endsAt ? localDate(new Date(event.endsAt), timezone) : ""));
+  const originallySpansDays = Boolean(
+    event && !event.allDay && event.endsAt && localDate(new Date(event.startsAt), timezone) !== localDate(new Date(event.endsAt), timezone),
+  );
   const [location, setLocation] = useState(event?.location ?? "");
   const [error, setError] = useState("");
   const formId = `${id}-event`;
@@ -65,8 +68,7 @@ export function EventForm({
           const startsAt = allDay ? date : eventInstant(date, start, timezone);
           // An existing multi-day all-day event keeps its span (the form has no end-date control).
           const prev = event?.allDay ? previousEvent(event) : null;
-          const span = prev ? Math.max(1, daysBetween(prev.startsAt, prev.endsAt)) : 1;
-          const endsAt = allDay ? addDays(date, span) : eventInstant(endDate || date, end, timezone);
+          const endsAt = allDay ? (prev ? shiftedEndDate(prev.startsAt, prev.endsAt, date) : addDays(date, 1)) : eventInstant(endDate || date, end, timezone);
           if (Date.parse(endsAt) <= Date.parse(startsAt)) {
             setError("End must be after start.");
             return;
@@ -94,8 +96,8 @@ export function EventForm({
             value={date}
             required
             onChange={(e) => {
+              setEndDate(shiftedEndDate(date, endDate, e.target.value));
               setDate(e.target.value);
-              setEndDate("");
             }}
           />
         </Field>
@@ -113,7 +115,7 @@ export function EventForm({
                 <input id={`${id}-end`} type="time" className={`${inputCls} min-w-0`} value={end} required onChange={(e) => setEnd(e.target.value)} />
               </Field>
             </div>
-            {endDate && endDate !== date ? (
+            {originallySpansDays || (endDate && endDate !== date) ? (
               <Field id={`${id}-end-date`} label="End date">
                 <input id={`${id}-end-date`} type="date" className={inputCls} value={endDate} required onChange={(e) => setEndDate(e.target.value)} />
               </Field>

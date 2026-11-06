@@ -17,7 +17,11 @@ export const POST = api(
       await refreshSource("skylight").catch(() => undefined);
       return { ok: true, message: doneLabel(body), writeId: row.id, undoable: row.inverse != null };
     } catch (err) {
-      audit({ actor: user.id, action: "skylight.write", source: "skylight", sourceRecord: target, result: "error", correlationId });
+      // Keep why it failed (op + error code + Skylight's own short reason) so a failed write can be diagnosed later.
+      const e = err as { code?: unknown; detail?: unknown };
+      const detail: Record<string, unknown> = { op: body.op, ...(typeof e.code === "string" ? { code: e.code } : {}) };
+      if (e.detail && typeof e.detail === "object") Object.assign(detail, e.detail);
+      audit({ actor: user.id, action: "skylight.write", source: "skylight", sourceRecord: target, result: "error", correlationId, detail });
       throw err;
     }
   },
