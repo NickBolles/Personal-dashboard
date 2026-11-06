@@ -14,7 +14,7 @@ is a separate prerequisite, not something this PR performs.
 ## Server contract and boundaries
 
 The companion implementation ([review PR](https://github.com/NickBolles/hermes-agent/pull/1),
-commit `66d86ec976d0ed819a687c2290fa4afb8a97b415`) targets current NousResearch/hermes-agent source at
+commit `3a00ab7fd56a8179edaaf5627284bca4eb2d704d`) targets current NousResearch/hermes-agent source at
 base `6b21d0564de0492e2ebd0d8f63fca86c03b5c892`. It retains the default 10 concurrent
 runs and admits at most 100 waiting requests per API adapter/process. FIFO runs
 start as slots become free. Queued cancellation prevents agent construction and
