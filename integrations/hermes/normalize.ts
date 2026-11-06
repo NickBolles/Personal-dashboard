@@ -108,6 +108,8 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
       return { type: "clarify.resolved", seq, requestId: str(e.prompt_id) ?? str(e.request_id), at };
     case "run.steered":
       return { type: "steer.queued", seq, at };
+    case "run.queued":
+      return { type: "run.queued", seq };
     case "run.completed":
       return { type: "run.terminal", seq, status: "completed", output: str(e.output), pendingSteer: str(e.pending_steer), at };
     case "run.failed":

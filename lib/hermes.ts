@@ -42,6 +42,7 @@ export type SubagentIdentity = {
 };
 
 export type RunEvent =
+  | { type: "run.queued"; seq?: number }
   | { type: "text.delta"; seq?: number; delta: string }
   | { type: "commentary"; seq?: number; text: string }
   | { type: "reasoning"; seq?: number; text: string }

@@ -73,6 +73,11 @@ const viaAgui = (agui: AGUIEvent[]) => {
 };
 
 describe("Hermes → AG-UI adapter (recorded fixtures)", () => {
+  it("preserves queued status through the AG-UI wire", () => {
+    const wire = translate([{ type: "run.queued", seq: 0 }]);
+    for (const event of wire) expect(EventSchemas.safeParse(event).success).toBe(true);
+    expect(fold(viaAgui(wire)).phase).toBe("queued");
+  });
   for (const name of ["hermes-run-tool.sse", "hermes-run-approval.sse"]) {
     it(`${name}: every event passes @ag-ui/core schemas and the @ag-ui/client verifier`, async () => {
       const agui = translate(fixture(name));
