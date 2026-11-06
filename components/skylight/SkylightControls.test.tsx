@@ -240,3 +240,40 @@ it("event form keeps focus and typed values across parent rerenders", () => {
   expect(document.activeElement).toBe(location);
   expect((location as HTMLInputElement).value).toBe("Trailhead");
 });
+
+it.each([
+  ["multi-day timed", false, "2026-11-29T17:00:00-06:00", "2026-12-01T18:00:00-06:00", "2026-12-02T18:00:00-06:00"],
+  ["overnight", false, "2026-11-29T23:00:00-06:00", "2026-11-30T01:00:00-06:00", "2026-12-01T01:00:00-06:00"],
+  ["all-day multi-day", true, "2026-11-29", "2026-12-02", "2026-12-03"],
+])("moving a %s event preserves its end date and wall time", (_label, allDay, startsAt, endsAt, expectedEnd) => {
+  const onSubmit = vi.fn();
+  const event = { id: "sky:event", source: "skylight" as const, title: "Trip", startsAt, endsAt, allDay, skylight: { eventId: "event", editable: true } };
+  mount(<EventForm event={event} timezone="America/Chicago" onClose={vi.fn()} onSubmit={onSubmit} />);
+  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-11-30" } });
+  if (!allDay) expect((screen.getByLabelText("End date") as HTMLInputElement).value).toBe(expectedEnd.slice(0, 10));
+  fireEvent.submit(screen.getByLabelText("Title").closest("form")!);
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ op: "event.update", event: expect.objectContaining({ endsAt: expectedEnd }) }));
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("keeps the original multi-day end-date control visible even after choosing the start day", () => {
+  mount(
+    <EventForm
+      event={{
+        id: "sky:event",
+        source: "skylight",
+        title: "Trip",
+        startsAt: "2026-11-29T09:00:00-06:00",
+        endsAt: "2026-11-30T10:00:00-06:00",
+        skylight: { eventId: "event", editable: true },
+      }}
+      timezone="America/Chicago"
+      onClose={vi.fn()}
+      onSubmit={vi.fn()}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-11-29" } });
+  expect(screen.getByLabelText("End date")).toBeDefined();
+  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-11-30" } });
+  expect((screen.getByLabelText("End date") as HTMLInputElement).value).toBe("2026-11-30");
+});

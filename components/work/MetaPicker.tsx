@@ -4,6 +4,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type C
 import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/kit";
 import { useKeyboardInset } from "@/lib/client/keyboard";
+import type { TagColor } from "@/lib/item-tags";
+import { validateInline } from "@/lib/inline-edit";
+import { dueLabel } from "./InlineEdit";
 
 /**
  * GitHub-label-style picker for the item header (tags, assignee): a compact icon
@@ -13,7 +16,7 @@ import { useKeyboardInset } from "@/lib/client/keyboard";
  * focus to the button; a click outside closes. Each toggle applies at once (the
  * caller saves it, so the item's Undo bar covers it).
  */
-export type PickerOption = { value: string; label: string; section?: string; dot?: ReactNode; lead?: ReactNode; checked: boolean };
+export type PickerOption = { value: string; label: string; section?: string; dot?: ReactNode; lead?: ReactNode; checked: boolean; disabled?: boolean };
 
 export function MetaPicker({
   label,
@@ -97,6 +100,182 @@ export function MetaPicker({
   );
 }
 
+export function StatusPickerDot({ status }: { status: string }) {
+  return <span className="wk-dot" data-s={status} aria-hidden="true" />;
+}
+
+export function AreaPickerDot({ color }: { color?: TagColor | null }) {
+  return <span className={cx("jv-pick-dot", color && `jv-tag-${color}`)} aria-hidden="true" />;
+}
+
+function PickerCaret() {
+  return (
+    <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="m4 6 4 4 4-4" />
+    </svg>
+  );
+}
+
+export type SelectPickerOption = Omit<PickerOption, "checked" | "lead">;
+
+export function SelectPicker({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+  active = !!value,
+  testId,
+  className,
+  triggerLabel,
+  icon,
+  disabled,
+  "data-s": status,
+}: {
+  id?: string;
+  label: string;
+  value: string;
+  options: SelectPickerOption[];
+  onChange: (value: string) => void;
+  active?: boolean;
+  testId?: string;
+  className?: string;
+  triggerLabel?: string;
+  icon?: ReactNode;
+  disabled?: boolean;
+  "data-s"?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const btn = useRef<HTMLButtonElement>(null);
+  const selected = options.find((o) => o.value === value);
+  const current = selected?.label ?? value;
+  const close = (refocus = true) => {
+    setOpen(false);
+    if (refocus) btn.current?.focus();
+  };
+  return (
+    <span className="jv-pick-wrap">
+      <button
+        ref={btn}
+        id={id}
+        type="button"
+        className={cx("k-pick k-pick-btn jv-select-btn min-h-11 sm:min-h-10 dense:min-h-8", active && "k-pick-on", className)}
+        aria-label={`${label}: ${current}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-value={value}
+        data-s={status}
+        data-testid={testId}
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {icon}
+        {selected?.dot}
+        <span className="jv-pick-label">{triggerLabel ?? current}</span>
+        <PickerCaret />
+      </button>
+      {open ? (
+        <PickerPanel
+          label={label}
+          options={options.map((o) => ({ ...o, checked: o.value === value }))}
+          searchable={options.length > 7}
+          placeholder={`Search ${label.toLowerCase()}`}
+          onToggle={(v) => {
+            if (v !== value) onChange(v);
+            close();
+          }}
+          onClose={close}
+          opener={btn}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+/** Local calendar arithmetic, not elapsed milliseconds/UTC. Next week is the next Monday (seven days away on Monday). */
+export function quickDueDates(now: Date) {
+  const date = (offset: number) => {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  return { today: date(0), tomorrow: date(1), nextWeek: date((8 - now.getDay()) % 7 || 7) };
+}
+
+export function DuePicker({ value, onSave, className }: { value: string | null; onSave: (v: string | null) => void; className?: string }) {
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const dates = quickDueDates(new Date());
+  const close = (refocus = true) => {
+    setOpen(false);
+    setCustom(false);
+    if (refocus) btn.current?.focus();
+  };
+  const save = (raw: string) => {
+    const r = validateInline("targetDate", raw);
+    if (!r.ok) {
+      setError(r.error);
+      return;
+    }
+    setError(null);
+    if (r.value !== value) onSave(r.value);
+    close();
+  };
+  const choices = [
+    { value: "today", label: "Today", date: dates.today },
+    { value: "tomorrow", label: "Tomorrow", date: dates.tomorrow },
+    { value: "nextWeek", label: "Next week", date: dates.nextWeek },
+    { value: "custom", label: "Pick a date…", date: undefined },
+    ...(value ? [{ value: "clear", label: "Clear due date", date: "" }] : []),
+  ];
+  const selected = choices.findIndex((o) => o.date === value);
+  const options = choices.map((o, i) => ({ ...o, checked: i === selected }));
+  return (
+    <span className="jv-pick-wrap">
+      <button
+        ref={btn}
+        type="button"
+        className={cx("k-pick k-pick-btn min-h-11 sm:min-h-10 dense:min-h-8", value && "k-pick-on", className)}
+        aria-label={`Due date: ${dueLabel(value)}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-value={value ?? ""}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="jv-pick-label">{dueLabel(value)}</span>
+        <PickerCaret />
+      </button>
+      {open ? (
+        <PickerPanel
+          label="Due date"
+          options={options}
+          searchable={false}
+          placeholder=""
+          opener={btn}
+          onClose={close}
+          onToggle={(v) => (v === "custom" ? setCustom(true) : save(choices.find((o) => o.value === v)?.date ?? ""))}
+          footer={
+            custom ? (
+              <div className="p-2">
+                <input
+                  autoFocus
+                  type="date"
+                  aria-label="Due date"
+                  className="jv-pick-search max-w-full"
+                  value={value ?? ""}
+                  onChange={(e) => save(e.target.value)}
+                />
+                {error ? <p role="alert">{error}</p> : null}
+              </div>
+            ) : null
+          }
+        />
+      ) : null}
+    </span>
+  );
+}
+
 type Row = { kind: "opt"; opt: PickerOption } | { kind: "create"; text: string };
 
 function PickerPanel({
@@ -109,6 +288,8 @@ function PickerPanel({
   multi,
   onClose,
   opener,
+  searchable = true,
+  footer,
 }: {
   label: string;
   options: PickerOption[];
@@ -119,14 +300,26 @@ function PickerPanel({
   multi?: boolean;
   onClose: (refocus?: boolean) => void;
   opener: RefObject<HTMLButtonElement | null>;
+  searchable?: boolean;
+  footer?: ReactNode;
 }) {
   useKeyboardInset();
   const id = useId();
   const listId = `${id}-list`;
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const typed = useRef({ text: "", at: 0 });
   const [q, setQ] = useState("");
-  const [active, setActive] = useState(0);
+  const [active, setActive] = useState(() => {
+    const selected = options.findIndex((o) => o.checked);
+    return selected >= 0
+      ? selected
+      : Math.max(
+          0,
+          options.findIndex((o) => !o.disabled),
+        );
+  });
   const closeRef = useRef(onClose);
   useEffect(() => {
     closeRef.current = onClose;
@@ -140,7 +333,11 @@ function PickerPanel({
     if (onCreate && needle && !exact) out.push({ kind: "create", text: q.trim() });
     return out;
   }, [q, options, onCreate]);
-  const cur = Math.min(active, Math.max(0, rows.length - 1));
+  const bounded = Math.min(active, Math.max(0, rows.length - 1));
+  const enabled = (r: Row) => r.kind === "create" || !r.opt.disabled;
+  // An existing disabled value (e.g. Settled) is still the initial active row;
+  // it can be read but never picked. Filtering starts at an enabled match.
+  const cur = !rows.length ? -1 : q && !enabled(rows[bounded]) ? rows.findIndex(enabled) : bounded;
   // Keep the highlighted row visible while ↑/↓ walk past the list's capped height (#164).
   useEffect(() => {
     document.getElementById(`${listId}-${cur}`)?.scrollIntoView({ block: "nearest" });
@@ -182,27 +379,50 @@ function PickerPanel({
   // Focus the filter once the placed panel is visible (a hidden input ignores focus()).
   const placed = pos !== null;
   useEffect(() => {
-    if (placed) input.current?.focus({ preventScroll: true });
-  }, [placed]);
+    if (placed) (searchable ? input.current : list.current)?.focus({ preventScroll: true });
+  }, [placed, searchable]);
 
   const pick = (r: Row | undefined) => {
-    if (!r) return;
+    if (!r || !enabled(r)) return;
     if (r.kind === "create") {
       onCreate?.(r.text);
       setQ("");
       setActive(0);
     } else onToggle(r.opt.value);
   };
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
+  const onKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
       e.preventDefault();
-      setActive(rows.length ? (cur + 1) % rows.length : 0);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActive(rows.length ? (cur - 1 + rows.length) % rows.length : 0);
-    } else if (e.key === "Enter") {
+      const available = rows.flatMap((r, i) => (enabled(r) ? [i] : []));
+      const next =
+        e.key === "Home"
+          ? available[0]
+          : e.key === "End"
+            ? available.at(-1)
+            : e.key === "ArrowDown"
+              ? (available.find((i) => i > cur) ?? available[0])
+              : (available.filter((i) => i < cur).at(-1) ?? available.at(-1));
+      if (next !== undefined) setActive(next);
+    } else if (e.key === "Enter" || (!searchable && e.key === " ")) {
       e.preventDefault();
       pick(rows[cur]);
+    } else if (!searchable && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      const now = Date.now();
+      const prefix = (now - typed.current.at < 600 ? typed.current.text : "") + e.key.toLowerCase();
+      typed.current = { text: prefix, at: now };
+      const repeated = [...prefix].every((c) => c === prefix[0]);
+      const needle = repeated ? prefix[0] : prefix;
+      // Continue multi-character prefixes at the current row; repeated letters cycle matches.
+      const start = prefix.length > 1 && !repeated ? cur : cur + 1;
+      for (let n = 0; n < rows.length; n++) {
+        const i = (start + n + rows.length) % rows.length;
+        const r = rows[i];
+        if (enabled(r) && r.kind === "opt" && r.opt.label.toLowerCase().startsWith(needle)) {
+          setActive(i);
+          break;
+        }
+      }
     }
   };
 
@@ -222,26 +442,38 @@ function PickerPanel({
             Done
           </button>
         </div>
-        <input
-          ref={input}
-          role="combobox"
-          aria-label={`Search ${label.toLowerCase()}`}
-          aria-expanded="true"
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={rows.length ? `${listId}-${cur}` : undefined}
-          className="jv-pick-search"
-          placeholder={placeholder}
-          value={q}
-          autoComplete="off"
-          enterKeyHint="done"
-          onChange={(e) => {
-            setQ(e.target.value);
-            setActive(0);
-          }}
-          onKeyDown={onKey}
-        />
-        <ul role="listbox" id={listId} aria-label={label} aria-multiselectable={multi || undefined} className="jv-pick-list">
+        {searchable ? (
+          <input
+            ref={input}
+            role="combobox"
+            aria-label={`Search ${label.toLowerCase()}`}
+            aria-expanded="true"
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={rows.length && cur >= 0 ? `${listId}-${cur}` : undefined}
+            className="jv-pick-search"
+            placeholder={placeholder}
+            value={q}
+            autoComplete="off"
+            enterKeyHint="done"
+            onChange={(e) => {
+              setQ(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={onKey}
+          />
+        ) : null}
+        <ul
+          ref={list}
+          role="listbox"
+          id={listId}
+          aria-label={label}
+          aria-multiselectable={multi || undefined}
+          className="jv-pick-list"
+          tabIndex={searchable ? undefined : 0}
+          aria-activedescendant={!searchable && cur >= 0 && rows.length ? `${listId}-${cur}` : undefined}
+          onKeyDown={searchable ? undefined : onKey}
+        >
           {rows.map((r, i) => {
             const head =
               r.kind === "opt" &&
@@ -258,10 +490,11 @@ function PickerPanel({
                   id={`${listId}-${i}`}
                   role="option"
                   aria-selected={r.kind === "opt" ? r.opt.checked : false}
+                  aria-disabled={r.kind === "opt" && r.opt.disabled ? true : undefined}
                   data-active={i === cur || undefined}
                   className={cx("jv-pick-opt", r.kind === "create" && "jv-pick-create")}
                   onMouseDown={(e) => e.preventDefault()}
-                  onPointerMove={() => i !== cur && setActive(i)}
+                  onPointerMove={() => enabled(r) && i !== cur && setActive(i)}
                   onClick={() => pick(r)}
                 >
                   {r.kind === "opt" ? (
@@ -299,6 +532,7 @@ function PickerPanel({
           })}
         </ul>
         {!rows.length ? <p className="jv-pick-empty">Nothing matches.</p> : null}
+        {footer}
       </div>
     </>,
     document.body,

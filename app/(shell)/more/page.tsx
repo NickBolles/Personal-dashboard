@@ -15,18 +15,21 @@ export default async function MorePage() {
   const inbox = caps.includes("work.use") ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon }] : [];
   const items = [...inbox, ...dests, { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
   return (
-    <Page width="medium">
+    <Page width="medium" className="@container">
       <PageHeader title="More" subtitle="Every space you can open." />
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <ul className="grid min-w-0 grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[560px]:grid-cols-3 @min-[760px]:grid-cols-4">
         {items.map((d) => {
           const Icon = d.icon;
           return (
-            <li key={d.key}>
-              <Link href={d.href} className="card press flex min-h-14 items-center gap-3 px-3 py-2.5 hover:border-line-strong hover:bg-surface-2">
+            <li key={d.key} className="min-w-0">
+              <Link
+                href={d.href}
+                className="card press relative flex min-h-14 min-w-0 flex-wrap items-center gap-3 px-3 py-2.5 hover:border-line-strong hover:bg-surface-2"
+              >
                 <span aria-hidden="true" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-accent-soft text-accent">
                   <Icon className="h-[18px] w-[18px]" />
                 </span>
-                <span className="min-w-0 leading-tight font-semibold">{d.label}</span>
+                <span className="min-w-0 flex-1 leading-tight font-semibold [overflow-wrap:anywhere]">{d.label}</span>
               </Link>
             </li>
           );

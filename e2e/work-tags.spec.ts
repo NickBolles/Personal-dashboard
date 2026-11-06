@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, pickOption } from "./helpers";
 
 /**
  * #111 tags + assignee: inline assign/tag on the item detail (Saved · Undo), palette "Assign to" /
@@ -173,10 +173,10 @@ test("filters: project work list and activity timeline by tag and assignee", asy
     .locator('[data-testid$="-filter"]')
     .filter({ has: page.getByLabel("Filter by tag") })
     .first();
-  await filter.getByLabel("Filter by tag").selectOption(tag);
+  await pickOption(filter, "Filter by tag", `#${tag}`);
   await expect(gate).toBeVisible();
   await expect(trellis).toHaveCount(0);
-  await filter.getByLabel("Filter by assignee").selectOption("none");
+  await pickOption(filter, "Filter by assignee", "Unassigned");
   await expect(gate).toHaveCount(0);
   await filter.getByRole("button", { name: "Clear filter" }).click();
   await expect(trellis).toBeVisible();
@@ -185,7 +185,7 @@ test("filters: project work list and activity timeline by tag and assignee", asy
   await page.goto("/areas/activity");
   const feed = page.getByRole("region", { name: "All activity" });
   await expect(feed.getByRole("link", { name: `Tinsmith trellis ${nonce}` }).first()).toBeVisible();
-  await page.getByTestId("act-g-meta-filter").getByLabel("Filter by tag").selectOption(tag);
+  await pickOption(page.getByTestId("act-g-meta-filter"), "Filter by tag", `#${tag}`);
   await expect(feed.getByRole("link", { name: `Tinsmith gate ${nonce}` }).first()).toBeVisible();
   await expect(feed.getByRole("link", { name: `Tinsmith trellis ${nonce}` })).toHaveCount(0);
 });

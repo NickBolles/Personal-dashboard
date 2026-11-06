@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ChipButton, ChipSelect } from "@/components/ui/kit";
+import { ChipButton } from "@/components/ui/kit";
+import { AreaPickerDot, SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { InlineText, useInlinePatch } from "@/components/work/InlineEdit";
 import { ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
 import { StatusDot, fmtDate } from "@/components/work/common";
@@ -167,25 +168,36 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
             <label htmlFor="map-area" className="sr-only">
               Filter by area
             </label>
-            <ChipSelect id="map-area" className="w-36 [&>select]:w-full" active={!!area} value={area} onChange={(e) => setArea(e.target.value)}>
-              <option value="">All areas</option>
-              {rolls.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.title}
-                </option>
-              ))}
-            </ChipSelect>
+            <SelectPicker
+              id="map-area"
+              label="Filter by area"
+              className="w-36"
+              active={!!area}
+              value={area}
+              onChange={setArea}
+              options={[
+                { value: "", label: "All areas" },
+                ...rolls.map((r) => ({ value: r.id, label: r.title, dot: <AreaPickerDot color={items.find((i) => i.id === r.id)?.settings?.color} /> })),
+              ]}
+            />
             <label htmlFor="map-status" className="sr-only">
               Filter by status
             </label>
-            <ChipSelect id="map-status" active={!!bucket} value={bucket} onChange={(e) => setBucket(e.target.value as MapBucket | "")}>
-              <option value="">Any status</option>
-              {MAP_BUCKETS.map((b) => (
-                <option key={b} value={b}>
-                  {MAP_BUCKET_LABELS[b]}
-                </option>
-              ))}
-            </ChipSelect>
+            <SelectPicker
+              id="map-status"
+              label="Filter by status"
+              active={!!bucket}
+              value={bucket}
+              onChange={(v) => setBucket(v as MapBucket | "")}
+              options={[
+                { value: "", label: "Any status" },
+                ...MAP_BUCKETS.map((b) => ({
+                  value: b,
+                  label: MAP_BUCKET_LABELS[b],
+                  dot: <AreaPickerDot color={BUCKET_TONE[b] === "neutral" ? null : (BUCKET_TONE[b] as "ac" | "wn" | "inf" | "ok")} />,
+                })),
+              ]}
+            />
             <ItemFilterBar rows={items} value={meta} onChange={setMeta} idPrefix="map" />
             {area || bucket || search ? (
               <ChipButton
@@ -238,11 +250,11 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
   const open = r.total - r.counts.done;
   const agents = activeInArea(useAgentRuns().data, r.id);
   return (
-    <li className="flex min-w-0 flex-col gap-1">
+    <li className="relative flex min-w-0 flex-col gap-1">
       {/* A real link (bookmarks, new tab); inside /areas it opens the area in place. */}
       <Link
         href={`/areas?item=${encodeURIComponent(r.id)}`}
-        className="mp-card"
+        className={isFinanceAreaLike(r) ? "mp-card" : "mp-card mp-card-co"}
         onClick={(e) => {
           if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -284,7 +296,8 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
         ) : null}
       </Link>
       {/* Finance never goes to AI: no coordinator chat there. */}
-      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="self-end" />}
+      {/* ✦ icon in the card's top-right corner (N5); the card reserves room for it (.mp-card-co). */}
+      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="mp-card-coord" />}
     </li>
   );
 }
@@ -438,18 +451,15 @@ function MapRow({
         <label htmlFor={`mp-st-${i.id}`} className="sr-only">
           Status of {i.title}
         </label>
-        <ChipSelect
+        <SelectPicker
           id={`mp-st-${i.id}`}
+          label={`Status of ${i.title}`}
           value={i.status}
-          onChange={(e) => patch.mutate({ status: e.target.value as WorkStatus })}
-          className="w-32 max-w-full [&>select]:w-full"
-        >
-          {WORK_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </ChipSelect>
+          active={false}
+          onChange={(v) => patch.mutate({ status: v as WorkStatus })}
+          className="w-32 max-w-full"
+          options={WORK_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s], dot: <StatusPickerDot status={s} /> }))}
+        />
       </div>
       <div className="mt-0.5 pl-4 text-[13px] text-muted">
         <InlineText field="nextAction" value={i.nextAction} status={i.status} placeholder="Add a next action" onSave={(v) => patch.mutate({ nextAction: v })}>

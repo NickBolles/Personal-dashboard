@@ -38,6 +38,7 @@ export function choreDay(startTime, d = new Date()) {
 export function createSkylight({ refreshToken }) {
   const state = { refresh: null, access: null, chores: new Map(), lists: new Map(), events: new Map(), writes: [], nextItem: 8000, nextEvent: 1 };
   const familyCalendar = "family-mock@group.calendar.google.com";
+  const workCalendar = "work-mock@group.calendar.google.com";
   const resource = (c) => ({
     id: c.id,
     type: "chore",
@@ -68,7 +69,7 @@ export function createSkylight({ refreshToken }) {
     const pattern = e.all_day ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
     if (![e.starts_at, e.ends_at].every((s) => typeof s === "string" && pattern.test(s) && Number.isFinite(Date.parse(s)))) return false;
     if (Date.parse(e.ends_at) <= Date.parse(e.starts_at)) return false;
-    return e.calendar_id == null || e.calendar_id === familyCalendar;
+    return e.calendar_id == null || [familyCalendar, workCalendar].includes(e.calendar_id);
   }
 
   function seed() {
@@ -208,6 +209,7 @@ export function createSkylight({ refreshToken }) {
         data: [
           { id: "4005307", type: "source_calendar", attributes: { name: "Family", calendar_id: familyCalendar, calendar_account_id: 1344358, writable: true } },
           { id: "4005308", type: "source_calendar", attributes: { name: "US Holidays", writable: false } },
+          { id: "4005309", type: "source_calendar", attributes: { name: "Work", calendar_id: workCalendar, calendar_account_id: 1344359, writable: true } },
         ],
       });
     }

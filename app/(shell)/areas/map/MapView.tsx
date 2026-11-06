@@ -4,10 +4,11 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Empty, ErrorNote, Spinner } from "@/components/ui";
-import { ChipButton, ChipSelect } from "@/components/ui/kit";
+import { ChipButton } from "@/components/ui/kit";
+import { AreaPickerDot, SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { EDGE_STYLE, MapCanvas, MapList } from "@/components/work/WorkMap";
 import { WorkPageHeader } from "@/components/work/common";
-import { isClosed, STATUS_LABELS, WORK_STATUSES, type WorkStatus } from "@/lib/work";
+import { isClosed, STATUS_LABELS, WORK_STATUSES, type ItemsResponse, type WorkStatus } from "@/lib/work";
 import { filterMap, MAP_RELATION_LABELS, MAP_RELATIONS, type MapGraph, type MapRelation } from "@/lib/work-map";
 
 type StatusFilter = "all" | "open" | "closed" | WorkStatus;
@@ -18,6 +19,8 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
   const [relations, setRelations] = useState<Set<MapRelation>>(new Set(MAP_RELATIONS));
   const [status, setStatus] = useState<StatusFilter>("all");
   const [list, setList] = useState(false);
+  // Graph roots are deliberately lean; share the work directory cache for area colours.
+  const directory = useQuery({ queryKey: ["work", "items", false], queryFn: () => api.get<ItemsResponse>("/api/work/items") });
   const q = useQuery({
     queryKey: ["work", "map", root],
     queryFn: () => api.get<MapGraph>(`/api/work/map${root ? `?root=${encodeURIComponent(root)}` : ""}`),
@@ -54,29 +57,39 @@ export function MapView({ initialRoot }: { initialRoot?: string }) {
               <label htmlFor="map-root" className="sr-only">
                 Area or project
               </label>
-              <ChipSelect id="map-root" active={!!root} value={root} onChange={(e) => choose(e.target.value)}>
-                <option value="">All areas</option>
-                {q.data?.roots.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.title}
-                  </option>
-                ))}
-              </ChipSelect>
+              <SelectPicker
+                id="map-root"
+                label="Area or project"
+                active={!!root}
+                value={root}
+                onChange={choose}
+                options={[
+                  { value: "", label: "All areas" },
+                  ...(q.data?.roots ?? []).map((r) => ({
+                    value: r.id,
+                    label: r.title,
+                    dot: <AreaPickerDot color={directory.data?.items.find((i) => i.id === r.id)?.settings?.color} />,
+                  })),
+                ]}
+              />
             </div>
             <div className="min-w-0">
               <label htmlFor="map-status" className="sr-only">
                 Status
               </label>
-              <ChipSelect id="map-status" active={status !== "all"} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
-                <option value="all">All statuses</option>
-                <option value="open">Open work</option>
-                <option value="closed">Settled, superseded or abandoned</option>
-                {WORK_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]}
-                  </option>
-                ))}
-              </ChipSelect>
+              <SelectPicker
+                id="map-status"
+                label="Status"
+                active={status !== "all"}
+                value={status}
+                onChange={(v) => setStatus(v as StatusFilter)}
+                options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "open", label: "Open work" },
+                  { value: "closed", label: "Settled, superseded or abandoned" },
+                  ...WORK_STATUSES.map((s) => ({ value: s, label: STATUS_LABELS[s], dot: <StatusPickerDot status={s} /> })),
+                ]}
+              />
             </div>
             <ChipButton aria-pressed={list} active={list} onClick={() => setList((l) => !l)}>
               {list ? "Show map" : "Show as list"}

@@ -32,9 +32,9 @@ import {
 } from "@/lib/work";
 
 const SIZE_CLS: Record<WidgetSize, string> = {
-  sm: "lg:col-span-6 xl:col-span-4",
-  md: "md:col-span-2 lg:col-span-6 xl:col-span-8",
-  lg: "md:col-span-2 lg:col-span-12",
+  sm: "@min-[760px]:col-span-6 @min-[1000px]:col-span-4",
+  md: "@min-[560px]:col-span-2 @min-[760px]:col-span-6 @min-[1000px]:col-span-8",
+  lg: "@min-[560px]:col-span-2 @min-[760px]:col-span-12",
 };
 const SIZE_LABEL: Record<WidgetSize, string> = { sm: "Small", md: "Medium", lg: "Large" };
 const SCOPED: WidgetKind[] = [
@@ -62,7 +62,7 @@ export function DashboardView() {
     api.patch(`/api/work/dashboard/widgets/${encodeURIComponent(v.id)}`, { position: v.position }),
   );
   return (
-    <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+    <div className="@container min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
       <WorkPageHeader
         eyebrow="Dashboard · yours"
         title="Dashboard"
@@ -85,7 +85,7 @@ export function DashboardView() {
         <Spinner label="Loading dashboard…" />
       ) : q.data ? (
         q.data.widgets.length ? (
-          <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-12">
+          <ul className="grid grid-cols-1 gap-3 @min-[560px]:grid-cols-2 @min-[760px]:grid-cols-12">
             {q.data.widgets.map((w, i) => (
               <WidgetCard
                 key={w.id}
@@ -166,7 +166,7 @@ function WidgetCard({
       <section
         aria-labelledby={headingId}
         className={cx(
-          "wk-card h-full p-3.5",
+          "wk-card @container h-full p-3.5",
           editing && "outline-2 outline-offset-2 outline-dashed outline-line-strong",
           drag?.active && drag.over === index && !mine && "ring-2 ring-accent",
         )}
@@ -295,7 +295,7 @@ function StatusLanes({ lanes }: { lanes: Extract<DashboardWidget["data"], { kind
         ))}
       </div>
       {shown.length ? (
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 @min-[560px]:grid-cols-2 @min-[1000px]:grid-cols-4">
           {shown.map((l) => (
             <section key={l.status} aria-label={`${STATUS_LABELS[l.status]} lane`} className="min-w-0 rounded-lg bg-surface-2 p-2" data-lane={l.status}>
               <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted">

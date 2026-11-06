@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
@@ -213,6 +214,27 @@ export function ManageQuickActions({ open, onClose, context = {} }: { open: bool
   );
 }
 
+const noticeTarget = () => document.querySelector<HTMLElement>("dialog[open].gc-sheet [data-quick-action-notices]") ?? document.body;
+const subscribeNoticeTarget = (notify: () => void) => {
+  const observer = new MutationObserver(notify);
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["open"] });
+  return () => observer.disconnect();
+};
+function QuickActionNotice({ children }: { children: ReactNode }) {
+  // Follow sheet opening/closing even while a notice is already visible.
+  const target = useSyncExternalStore(subscribeNoticeTarget, noticeTarget, () => null);
+  if (!target) return null;
+  return createPortal(
+    <div
+      role="status"
+      className={`qa-root z-50 mx-auto flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1 rounded-lg border border-line bg-surface p-2 text-sm shadow-[var(--sh2)] ${target === document.body ? "fixed inset-x-3 bottom-24" : "relative my-3 shrink-0"}`}
+    >
+      {children}
+    </div>,
+    target,
+  );
+}
+
 /** A single app-shell listener: chips and palette never create competing dialogs. */
 export function QuickActionsHost() {
   const path = usePathname();
@@ -242,10 +264,7 @@ export function QuickActionsHost() {
     <>
       <ManageQuickActions open={context !== null} context={context ?? { path }} onClose={() => setContext(null)} />
       {addedOp ? (
-        <div
-          role="status"
-          className="qa-root fixed inset-x-3 bottom-24 z-50 mx-auto flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center gap-1 rounded-lg border border-line bg-surface p-2 text-sm shadow-[var(--sh2)]"
-        >
+        <QuickActionNotice>
           Added ·{" "}
           <Button className="qa-hit" disabled={undo.isPending} onClick={() => undo.mutate()}>
             Undo
@@ -253,7 +272,7 @@ export function QuickActionsHost() {
           <Button className="qa-hit" aria-label="Close quick action notice" onClick={() => setAddedOp(null)}>
             ×
           </Button>
-        </div>
+        </QuickActionNotice>
       ) : null}
     </>
   );

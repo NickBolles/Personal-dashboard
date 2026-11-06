@@ -1222,8 +1222,15 @@ button.wk-kpi:hover {
   }
 }
 @media (min-width: 1024px) and (pointer: fine) {
+  /* WCAG 2.2 target-size: keep a 24px hit box, but bleed the extra height into the negative
+     margin so the text and row layout stay exactly where a bare line puts them. */
   .work-ui .jv-inline-read {
-    min-height: 0;
+    min-height: 24px;
+    margin-block: calc(-2px - max(0px, (24px - 1lh - 4px) / 2));
+    /* The bleed can touch a neighbour by <1px (a wrapped row status picker above): stay on top so
+       the 24px box is never "partially obscured" (axe target-size). */
+    position: relative;
+    z-index: 1;
   }
   .work-ui .jv-inline-input {
     min-height: 30px;
@@ -1479,6 +1486,20 @@ button.wk-kpi:hover {
   }
   .jv-pick-opt[data-active] {
     background: var(--s2);
+  }
+  .jv-pick-opt[aria-disabled="true"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .jv-select-btn > svg {
+    flex-shrink: 0;
+  }
+  .jv-select-status::before {
+    display: none;
+  }
+  .jv-pick-list:focus-visible {
+    outline: 2px solid var(--ac);
+    outline-offset: -2px;
   }
   .jv-pick-opt[aria-selected="true"] {
     font-weight: 500;

@@ -51,6 +51,8 @@ export type NextAction = {
   dueAt?: string;
   /** true when the source only knows a due date (no time) */
   dueIsDate?: boolean;
+  /** Household timezone when a date-only dueAt is encoded as an instant. */
+  dueTimezone?: string;
   availableAt?: string;
   updatedAt: string;
   fetchedAt: string;

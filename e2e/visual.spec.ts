@@ -21,6 +21,16 @@ import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 
+/** Locator crops must not include fixed phone tray overlays; page shots retain them. */
+async function withoutTray(page: Page, shoot: () => Promise<void>) {
+  const t = await page.addStyleTag({ content: ".gc-tray, .gc-tray-qa { visibility: hidden !important; }" });
+  try {
+    await shoot();
+  } finally {
+    await t.evaluate((el) => (el as Element).remove());
+  }
+}
+
 /**
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
  * is masked. Update with: npm run test:e2e -- --update-snapshots
@@ -138,7 +148,7 @@ test("visual: home suggestions and the backlog", async ({ page, request }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   // Seeded counts and relative dates are deterministic here; keep the grounding
   // copy and controls visible rather than masking every muted paragraph.
-  await expect(assists).toHaveScreenshot("home-suggestions.png");
+  await withoutTray(page, () => expect(assists).toHaveScreenshot("home-suggestions.png"));
   await page.goto("/home/all?bucket=backlog");
   await page.locator("#all-items article").first().waitFor();
   await page.waitForTimeout(300);
@@ -404,7 +414,7 @@ for (const scheme of ["light", "dark"] as const) {
     }).toPass();
     await expect(form.getByLabel("Speaker")).toHaveValue("Ann Lyle");
     const masks = [...MASK, 'input[type="date"]', 'input[type="time"]', 'input[type="datetime-local"]'].map((m) => form.locator(m));
-    await expect(form).toHaveScreenshot(`workflow-start-${scheme}.png`, { animations: "disabled", mask: masks });
+    await withoutTray(page, () => expect(form).toHaveScreenshot(`workflow-start-${scheme}.png`, { animations: "disabled", mask: masks }));
     await form.getByTestId("workflow-start-submit").click();
     await expect(page).toHaveURL(/\/chat\//);
     const panel = page.getByTestId("workflow-run");
@@ -428,7 +438,9 @@ for (const scheme of ["light", "dark"] as const) {
     // the keyboard/focus state), so hide them for the element shot: the baseline is the panel alone.
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const hideOverlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
-    await expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
+    await withoutTray(page, () =>
+      expect(panel).toHaveScreenshot(`workflow-run-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) }),
+    );
     await hideOverlays.evaluate((el) => (el as Element).remove());
     await panel.getByRole("button", { name: "End session" }).click();
     await page.getByRole("dialog", { name: "Before you go" }).getByTestId("workflow-end-submit").click();
@@ -497,11 +509,15 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/settings/connections#drive");
     const drive = page.locator("li#drive");
     await expect(drive.getByTestId("drive-connect")).toBeVisible();
-    await expect(drive).toHaveScreenshot(`connections-drive-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => drive.locator(m)) });
+    await withoutTray(page, () =>
+      expect(drive).toHaveScreenshot(`connections-drive-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => drive.locator(m)) }),
+    );
     await page.getByRole("button", { name: /Offline Bible/ }).click();
     const bible = page.locator("li#bible");
     await expect(bible.getByTestId("bible-installed")).toBeVisible();
-    await expect(bible).toHaveScreenshot(`connections-bible-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => bible.locator(m)) });
+    await withoutTray(page, () =>
+      expect(bible).toHaveScreenshot(`connections-bible-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => bible.locator(m)) }),
+    );
 
     await page.goto("/workflows");
     const form = page.getByRole("dialog", { name: "New session" });
@@ -511,7 +527,7 @@ for (const scheme of ["light", "dark"] as const) {
     }).toPass();
     const passage = form.getByTestId("scripture-passage");
     await expect(passage).toContainText("true vine");
-    await expect(passage).toHaveScreenshot(`scripture-passage-${scheme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(passage).toHaveScreenshot(`scripture-passage-${scheme}.png`, { animations: "disabled" }));
   });
 }
 
@@ -532,7 +548,7 @@ test("visual: markdown in a chat message", async ({ page }) => {
   // A wide table scrolls inside its own box; the page never scrolls sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.waitForTimeout(300);
-  await expect(message).toHaveScreenshot("markdown.png");
+  await withoutTray(page, () => expect(message).toHaveScreenshot("markdown.png"));
 });
 
 // Dark theme of the chat thread (DS kit tokens: s3 user bubble, mono tool rows, composer box).
@@ -585,7 +601,7 @@ for (const theme of ["light", "dark"] as const) {
     await expect(card).toContainText("rm -rf build");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.waitForTimeout(300);
-    await expect(card).toHaveScreenshot(`approval-card-${theme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(card).toHaveScreenshot(`approval-card-${theme}.png`, { animations: "disabled" }));
     // Resolve it so the pending request doesn't leak into other specs' screenshots.
     await card.getByRole("button", { name: "Deny" }).click();
     await expect(card).toBeHidden({ timeout: 15_000 });
@@ -628,7 +644,7 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(surface.getByTestId("smart-tray-count")).toHaveText("1 change staged");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.waitForTimeout(500);
-      await expect(surface).toHaveScreenshot(`smart-surface-${scheme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+      await withoutTray(page, () => expect(surface).toHaveScreenshot(`smart-surface-${scheme}.png`, { mask: MASK.map((m) => page.locator(m)) }));
     } finally {
       await put("/api/smart/settings", { enabled: false });
     }
@@ -709,13 +725,13 @@ for (const theme of ["light", "dark"] as const) {
     await expect(work.locator(".chat-tool")).toHaveCount(1);
     await expect(work.locator(".chat-tool")).toContainText("1s · failed");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(work).toHaveScreenshot(`chat-work-collapsed-${theme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(work).toHaveScreenshot(`chat-work-collapsed-${theme}.png`, { animations: "disabled" }));
     await head.click();
     await expect(head).toHaveAttribute("aria-expanded", "true");
     await expect(work.locator(".chat-tool")).toHaveCount(4);
     await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · done");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" }));
   });
 }
 
@@ -726,7 +742,7 @@ for (const theme of ["light", "dark"] as const) {
     const live = page.getByTestId(`kit-work-live-${theme}`).locator(".chat-work[data-live]");
     await expect(live.getByRole("button", { name: /^Working/ })).toBeVisible();
     await live.scrollIntoViewIfNeeded();
-    await expect(live).toHaveScreenshot(`chat-work-live-${theme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(live).toHaveScreenshot(`chat-work-live-${theme}.png`, { animations: "disabled" }));
   });
 }
 
@@ -914,7 +930,7 @@ for (const theme of ["light", "dark"] as const) {
     });
     await page.waitForTimeout(600);
     const tl = page.getByLabel("Conversation timeline");
-    await expect(tl).toHaveScreenshot(`chat-notices-${theme}.png`, { mask: MASK.map((m) => tl.locator(m)) });
+    await withoutTray(page, () => expect(tl).toHaveScreenshot(`chat-notices-${theme}.png`, { mask: MASK.map((m) => tl.locator(m)) }));
     await t.evaluate((el) => (el as Element).remove());
   });
 }
@@ -1073,11 +1089,11 @@ for (const theme of ["light", "dark"] as const) {
     const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
     await expect(page.locator("#work-item-title")).toHaveText(d.item.title);
     await page.waitForTimeout(500);
-    await expect(header).toHaveScreenshot(`inline-read-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await withoutTray(page, () => expect(header).toHaveScreenshot(`inline-read-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) }));
     await page.locator("#work-item-title").getByRole("button").click();
     await expect(page.getByRole("textbox", { name: "Edit title" })).toBeFocused();
     await page.waitForTimeout(150);
-    await expect(header).toHaveScreenshot(`inline-title-edit-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) });
+    await withoutTray(page, () => expect(header).toHaveScreenshot(`inline-title-edit-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) }));
     await page.keyboard.press("Escape");
   });
 }
@@ -1141,7 +1157,9 @@ for (const theme of ["light", "dark"] as const) {
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
-    await expect(panel).toHaveScreenshot(`agent-delegation-${theme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) });
+    await withoutTray(page, () =>
+      expect(panel).toHaveScreenshot(`agent-delegation-${theme}.png`, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 }
@@ -1183,7 +1201,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(list).toHaveScreenshot(`tags-list-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) });
+    await withoutTray(page, () => expect(list).toHaveScreenshot(`tags-list-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) }));
     await t.evaluate((el) => (el as Element).remove());
 
     await page.goto("/areas?item=wk_garage");
@@ -1194,20 +1212,25 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t2 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    await expect(header).toHaveScreenshot(`tags-item-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
+    await withoutTray(page, () =>
+      expect(header).toHaveScreenshot(`tags-item-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) }),
+    );
     await t2.evaluate((el) => (el as Element).remove());
 
     // the GitHub-label-style pickers: popover on desktop/tablet, bottom sheet on phones
     for (const [btn, name, file] of [
       ["Edit tags", "Tags", "tags-picker"],
       [/^Assignee/, "Assignee", "assignee-picker"],
+      // N4: the status and due-date selects use the same picker (single-select list, no search ≤7 options)
+      [/^Status:/, "Status", "status-picker"],
+      [/^Due date:/, "Due date", "due-picker"],
     ] as const) {
       await page.getByRole("button", { name: btn }).click();
       const pop = page.getByRole("dialog", { name });
       await expect(pop.getByRole("option").first()).toBeVisible();
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       const t3 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
-      await expect(pop).toHaveScreenshot(`${file}-${scheme}.png`, { animations: "disabled" });
+      await withoutTray(page, () => expect(pop).toHaveScreenshot(`${file}-${scheme}.png`, { animations: "disabled" }));
       await t3.evaluate((el) => (el as Element).remove());
       await page.keyboard.press("Escape");
       if (await pop.isVisible())
@@ -1365,7 +1388,9 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(500);
     await expectNoHorizontalOverflow(page);
     // Element shot + pane-scoped mask: page-level masks also paint boxes for the map BEHIND the pane over it.
-    await expect(pane).toHaveScreenshot(`coordinator-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => pane.locator(m)) });
+    await withoutTray(page, () =>
+      expect(pane).toHaveScreenshot(`coordinator-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => pane.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 }
@@ -1448,7 +1473,7 @@ for (const scheme of ["light", "dark"] as const) {
     const t = await page.addStyleTag({ content: GC_HIDE });
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
-    await expect(rail).toHaveScreenshot(`gc-rail-open-${scheme}.png`, { animations: "disabled", mask: gcMask(rail) });
+    await withoutTray(page, () => expect(rail).toHaveScreenshot(`gc-rail-open-${scheme}.png`, { animations: "disabled", mask: gcMask(rail) }));
     await rail.getByRole("button", { name: "Collapse Chief of staff" }).click();
     await expect(rail).toHaveAttribute("data-open", "false");
     await page.waitForTimeout(300);
@@ -1463,7 +1488,7 @@ for (const scheme of ["light", "dark"] as const) {
     await gcTheme(page, scheme);
     const t2 = await page.addStyleTag({ content: GC_HIDE });
     await page.waitForTimeout(400);
-    await expect(rail).toHaveScreenshot(`gc-rail-strip-${scheme}.png`, { animations: "disabled" });
+    await withoutTray(page, () => expect(rail).toHaveScreenshot(`gc-rail-strip-${scheme}.png`, { animations: "disabled" }));
     await t2.evaluate((el) => (el as Element).remove());
   });
 
@@ -1517,11 +1542,11 @@ for (const scheme of ["light", "dark"] as const) {
     await gcTheme(page, scheme);
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
-    await expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) });
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
     await sheet.getByRole("tab", { name: /^Changes/ }).click();
     await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
     await page.waitForTimeout(200);
-    await expect(sheet).toHaveScreenshot(`gc-sheet-changes-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) });
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-changes-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
 }
 
@@ -1629,7 +1654,9 @@ for (const scheme of ["light", "dark"] as const) {
       const right = Math.max(top.right, ...rooms.map((r) => r.right));
       return { x: Math.floor(left), y: Math.floor(top.top + window.scrollY), width: Math.ceil(right - left), height: Math.ceil(bottom - top.top) };
     });
-    await expect(page).toHaveScreenshot(`house-rooms-${scheme}.png`, { fullPage: true, clip, animations: "disabled", mask: MASK.map((m) => page.locator(m)) });
+    await withoutTray(page, () =>
+      expect(page).toHaveScreenshot(`house-rooms-${scheme}.png`, { fullPage: true, clip, animations: "disabled", mask: MASK.map((m) => page.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 
@@ -1656,7 +1683,9 @@ for (const scheme of ["light", "dark"] as const) {
       .filter({ has: page.getByRole("group", { name: "Show" }) })
       .filter({ has: rubric })
       .last();
-    await expect(list).toHaveScreenshot(`chat-list-unread-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) });
+    await withoutTray(page, () =>
+      expect(list).toHaveScreenshot(`chat-list-unread-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => list.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 
@@ -1678,7 +1707,9 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(500);
-    await expect(dialog).toHaveScreenshot(`area-settings-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => dialog.locator(m)) });
+    await withoutTray(page, () =>
+      expect(dialog).toHaveScreenshot(`area-settings-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => dialog.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 
@@ -1698,7 +1729,9 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(500);
-    await expect(header).toHaveScreenshot(`chat-agent-badge-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) });
+    await withoutTray(page, () =>
+      expect(header).toHaveScreenshot(`chat-agent-badge-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => header.locator(m)) }),
+    );
     await t.evaluate((el) => (el as Element).remove());
   });
 }
@@ -1723,7 +1756,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.getByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ }).click();
     const confirm = page.getByRole("dialog", { name: "Confirm Skylight change" });
     await expect(confirm).toContainText("Visualsky water the ferns");
-    await expect(confirm).toHaveScreenshot(`skylight-write-confirm-${scheme}.png`);
+    await withoutTray(page, () => expect(confirm).toHaveScreenshot(`skylight-write-confirm-${scheme}.png`));
     await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
     await overlays.evaluate((el) => (el as Element).remove());
   });
@@ -1839,7 +1872,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(300);
-    await expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) });
+    await withoutTray(page, () => expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) }));
     await t.evaluate((el) => (el as Element).remove());
 
     // Fixed single-digit-hour wall time on today's CT date (14:05Z = 8:05 CST / 9:05 CDT): the
@@ -1877,7 +1910,9 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t2 = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(300);
-    await expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) });
+    await withoutTray(page, () =>
+      expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) }),
+    );
     await t2.evaluate((el) => (el as Element).remove());
   });
 }

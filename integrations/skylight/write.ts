@@ -217,7 +217,13 @@ export async function runSkylightWrite(
       case "event.create": {
         const r = await write<{ data: { id: string | number } }>("POST", `${base}/calendar_events`, {
           ...(await eventBody(op.event)),
-          ...(await calendarTarget(f)),
+          ...(op.event.calendarId || op.event.sourceCalendarId || op.event.calendarAccountId
+            ? {
+                ...(op.event.calendarId ? { calendar_id: op.event.calendarId } : {}),
+                ...(op.event.sourceCalendarId ? { source_calendar_id: Number(op.event.sourceCalendarId) } : {}),
+                ...(op.event.calendarAccountId ? { calendar_account_id: Number(op.event.calendarAccountId) } : {}),
+              }
+            : await calendarTarget(f)),
           invited_emails: [],
           rrule: null,
         });

@@ -89,12 +89,18 @@ it("separates overdue, today, future and newest-first completed rows with valid 
   for (const region of screen.getAllByRole("region")) expect(region.getAttribute("aria-labelledby")).not.toMatch(/\s/);
 });
 
-it("groups timed chores by household date rather than the UTC date prefix", () => {
+it.each([false, true])("groups chores (dueIsDate=%s) by household date rather than the UTC prefix", (dueIsDate) => {
   state.sky.data.actions[0].priorityReason = "due_soon";
   state.sky.data.actions[0].dueAt = "2026-11-05T01:00:00Z";
-  state.sky.data.actions[0].dueIsDate = false;
+  state.sky.data.actions[0].dueIsDate = dueIsDate;
   mount(<SkylightView />);
   expect(screen.getByRole("region", { name: /^Today/ }).textContent).toContain("Visualsky water the ferns");
+});
+
+it("gives the events and chore upcoming sections distinct accessible titles", () => {
+  mount(<SkylightView />);
+  expect(screen.getByRole("region", { name: /^Events · next 7 days/ })).toBeDefined();
+  expect(screen.getByRole("region", { name: /^Next 7 days/ })).toBeDefined();
 });
 
 it("shows a health failure alert and only offers event edits for editable events", () => {

@@ -154,10 +154,10 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setSearchOpen(true);
+        window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
       } else if (e.key === "/" && !(e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable=true]")) {
         e.preventDefault();
-        setSearchOpen(true);
+        window.dispatchEvent(new Event(OPEN_SEARCH_EVENT));
       }
     };
     const onOpen = () => setSearchOpen(true);

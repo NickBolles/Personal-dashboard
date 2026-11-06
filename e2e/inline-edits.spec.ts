@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, pickOption } from "./helpers";
 
 /**
  * Inline edits: tap a field in the item detail (or F2/E on a Today row) to edit
@@ -70,19 +70,20 @@ test("detail: status select excludes Settle; due date and summary save in place"
   await page.goto(`/areas?item=${id}`);
   const status = page.locator("#work-status");
   await expect(status).toBeAttached();
-  const options = await status.locator("option").allTextContents();
+  await status.click();
+  const options = await page.getByRole("listbox").getByRole("option").allTextContents();
   expect(options).not.toContain("Settled");
   expect(options).toContain("On hold");
-  await status.selectOption("on_hold");
+  await page.getByRole("option", { name: "On hold", exact: true }).click();
   await expect(page.locator('[data-status="on_hold"]')).toBeVisible();
 
-  await page.getByLabel("Due date").fill("2026-12-04");
-  await page.getByLabel("Due date").blur();
+  await pickOption(page, /^Due date:/, "Pick a date…");
+  await page.locator('input[type="date"][aria-label="Due date"]').fill("2026-12-04");
   await expect(async () => {
     const d = await (await page.request.get(`/api/work/items/${id}`)).json();
     expect(d.item.targetDate).toBe("2026-12-04");
   }).toPass();
-  await expect(page.locator(".jv-inline-date-text")).toHaveText(/^Due Dec 4/);
+  await expect(page.getByRole("button", { name: /^Due date:/ })).toHaveText(/^Due Dec 4/);
 
   await page.getByRole("button", { name: "Edit summary" }).click();
   const box = page.getByRole("textbox", { name: "Edit summary" });

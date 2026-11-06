@@ -3,6 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { Button, Dialog, inputCls } from "@/components/ui";
 import { KIND_LABELS, type WorkItem } from "@/lib/work";
+import { AreaPickerDot } from "./MetaPicker";
 
 export type Destination = { id: string; title: string; path: string; kind: WorkItem["kind"] };
 
@@ -112,13 +113,16 @@ export function DestinationPicker({
           }}
         />
         {extra}
-        <ul id={lid} role="listbox" aria-label="Destinations" className="wk-pick-list max-h-[50dvh] overflow-y-auto rounded-lg border border-line">
+        <ul id={lid} role="listbox" aria-label="Destinations" className="jv-pick-list max-h-[50dvh] overflow-y-auto rounded-lg border border-line">
           {options.map((o, n) => (
             <li
               key={o.id ?? "top"}
               id={optId(n)}
               role="option"
               aria-selected={n === cur}
+              aria-disabled={busy || undefined}
+              data-active={n === cur || undefined}
+              className="jv-pick-opt"
               data-dest={o.id ?? "top"}
               onMouseEnter={() => setActive(n)}
               onClick={() => pick(n)}
@@ -126,6 +130,10 @@ export function DestinationPicker({
                 if (e.key === "Enter") pick(n);
               }}
             >
+              <span className="jv-pick-check" aria-hidden="true">
+                {n === cur ? "✓" : null}
+              </span>
+              <AreaPickerDot color={items.find((i) => i.id === o.id)?.settings?.color} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{o.label}</span>
                 {o.path || o.why ? (

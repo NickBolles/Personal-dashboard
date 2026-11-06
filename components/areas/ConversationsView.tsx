@@ -9,7 +9,7 @@ import { QuickCapture } from "@/components/chat/QuickCapture";
 import { ContextNote } from "@/components/chat/ContextNote";
 import { BackendSwitch } from "@/components/chat/backend";
 import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useToast } from "@/components/ui";
-import { ChipSelect } from "@/components/ui/kit";
+import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import { ChatIcon } from "@/components/icons";
 import { useWorkMutation } from "@/components/work/common";
 import { FileUnderDialog, FilingActions, UpdatingNote, pollWhileUpdating } from "@/components/work/conversations";
@@ -154,20 +154,17 @@ export function ConversationsView({
         </div>
         <div className="flex max-w-full flex-wrap items-center gap-1">
           {areas.length ? (
-            <ChipSelect
-              aria-label="Area"
+            <SelectPicker
+              label="Area"
               value={areaId}
               active={Boolean(areaId)}
-              onChange={(e) => setAreaId(e.target.value)}
-              className="w-36 [&>select]:w-full"
-            >
-              <option value="">All areas</option>
-              {areas.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </ChipSelect>
+              onChange={setAreaId}
+              className="w-36"
+              options={[
+                { value: "", label: "All areas" },
+                ...areas.map((a) => ({ value: a.id, label: a.title, dot: <AreaPickerDot color={a.settings?.color} /> })),
+              ]}
+            />
           ) : null}
           <Button size="sm" variant="ghost" onClick={refresh} busy={revalidating} aria-label="Refresh conversations">
             Refresh
