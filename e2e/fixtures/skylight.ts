@@ -113,3 +113,54 @@ export function skylightWriteVisual(now = new Date()) {
     },
   };
 }
+
+/**
+ * Skylight-style grouping (writable): Morning (00:30, already past at the frozen clock → amber), Afternoon, Evening,
+ * Anytime up-for-grabs (Claim), a later-this-week chore, an overdue recurring occurrence (yesterday) and an overdue
+ * one-off (3 days ago, red + Move to today), plus one done today.
+ */
+export function skylightGroupingVisual(now = new Date()) {
+  const fixture = skylightWriteVisual(now);
+  const tz = "America/Chicago";
+  const today = localDate(now, tz);
+  const [mine, grabs, done] = fixture.data.actions;
+  const chore = (
+    base: NextAction,
+    id: string,
+    title: string,
+    day: string,
+    time?: string,
+    opts: { recurring?: boolean; priority?: NextAction["priorityReason"] } = {},
+  ): NextAction => ({
+    ...base,
+    id: `skylight:${id}`,
+    sourceId: id,
+    title,
+    priorityReason: opts.priority ?? (day < today ? "overdue" : day > today ? "upcoming" : "today"),
+    ...(time
+      ? { dueAt: localTimeToInstant(day, time, tz).toISOString(), dueIsDate: false }
+      : day === today
+        ? { dueAt: undefined, dueIsDate: undefined }
+        : { dueAt: localTimeToInstant(day, "23:59", tz).toISOString(), dueIsDate: true, dueTimezone: tz }),
+    skylight: {
+      kind: "chore",
+      choreId: opts.recurring ? `${id}-${day}${time ? `-${time.replace(":", "")}` : ""}` : id,
+      categoryId: base.assignee?.kind === "up_for_grabs" ? null : "13600771",
+      recurring: Boolean(opts.recurring),
+      startDate: day,
+      ...(time ? { startTime: time } : {}),
+      ...(opts.recurring ? { instanceDate: day, ...(time ? { instanceTime: time } : {}) } : {}),
+    },
+  });
+  const actions: NextAction[] = [
+    chore(mine, "vis-g1", "🛏️ Visualsky make the beds", today, "00:30", { recurring: true, priority: "overdue" }),
+    chore(mine, "vis-g2", "🐕 Visualsky walk the dog", today, "14:00", { recurring: true }),
+    chore(mine, "vis-g3", "🍽️ Visualsky load the dishwasher", today, "20:00", { recurring: true }),
+    chore(grabs, "vis-g4", "🧺 Visualsky fold the towels", today),
+    chore(mine, "vis-g5", "🌿 Visualsky trim the hedge", addDays(today, 2)),
+    chore(mine, "vis-g6", "🐟 Visualsky feed the fish", addDays(today, -1), "06:00", { recurring: true }),
+    chore(mine, "vis-g7", "🫖 Visualsky descale the kettle", addDays(today, -3)),
+    { ...done, skylight: { kind: "chore", choreId: "vis-3", categoryId: "13600771", recurring: false, completedOn: today } },
+  ];
+  return { ...fixture, data: { ...fixture.data, actions } };
+}

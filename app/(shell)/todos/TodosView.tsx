@@ -1,19 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NextAction } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
 import { useSource } from "@/components/useSource";
 import { useAccess } from "@/components/access";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
+import { groupSkylightChores } from "@/components/skylight/grouping";
 import type { SkylightExtra } from "@/components/skylight/model";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
-import { Button, Field, PageHeader, Spinner, inputCls, useOnline, useToast } from "@/components/ui";
+import { Button, Field, PageHeader, Spinner, inputCls, useNow, useOnline, useToast } from "@/components/ui";
 import { ChipSelect, EmptyState, SectionHeader } from "@/components/ui/kit";
 
 const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
@@ -33,6 +34,9 @@ export function TodosView() {
   const sky = useSource("skylight");
   const { can } = useAccess();
   const write = useSkylightWrite();
+  const now = useNow();
+  const prefs = useQuery({ queryKey: ["preferences"], queryFn: () => api.get<{ timezone: string }>("/api/settings") });
+  const timezone = prefs.data?.timezone || "America/Chicago";
   const extra = (sky.data?.data?.extra ?? {}) as SkylightExtra;
   const writable = extra.writable === true && can("skylight.write");
   const provider = (q.data?.data?.extra?.provider as string | undefined) ?? undefined;
@@ -46,6 +50,21 @@ export function TodosView() {
   const actions = all.filter(
     (a) => (!source || todoSourceLabel(a) === source) && (whose === "everyone" || a.source !== "skylight" || a.assignee?.kind !== "other"),
   );
+  // Skylight chores follow Skylight's own order (time of day today, later days, past days last); everything else
+  // keeps the due-state groups. Overdue — native and Skylight alike — sits at the bottom, above Completed.
+  const isChore = (a: NextAction) => a.source === "skylight" && a.skylight?.kind === "chore" && a.status === "open";
+  const chores = groupSkylightChores(actions, { now, timezone });
+  const choreBucket = (key: string) => chores.find((c) => c.key === key)?.actions ?? [];
+  const native = (title: string) => actions.filter((a) => !isChore(a) && GROUPS.find((g) => g.title === title)!.match(a));
+  const completed = native("Completed recently").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const groups: { title: string; items: NextAction[] }[] = [
+    { title: "Today", items: native("Today") },
+    ...chores.filter((c) => c.key !== "later" && c.key !== "overdue").map((c) => ({ title: `Skylight · ${c.label}`, items: c.actions })),
+    { title: "Upcoming & undated", items: [...native("Upcoming & undated"), ...choreBucket("later")] },
+    { title: "Overdue", items: [...native("Overdue"), ...choreBucket("overdue")] },
+    // Newest completion first, whichever list it came from.
+    { title: "Completed recently", items: completed },
+  ];
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -63,19 +82,22 @@ export function TodosView() {
         <option value="everyone">Everyone</option>
       </ChipSelect>
       {q.data?.data || sky.data?.data
-        ? GROUPS.map((g) => {
-            const items = actions.filter(g.match);
-            // Newest completion first, whichever list it came from.
-            if (g.title === "Completed recently") items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        ? groups.map((g) => {
+            const items = g.items;
             if (!items.length) return null;
             return (
               <section key={g.title} className="mt-4" aria-labelledby={`g-${g.title.replace(/\W+/g, "-")}`}>
                 <SectionHeader id={`g-${g.title.replace(/\W+/g, "-")}`} label={g.title} count={items.length} />
                 <ul className="jv-feed">
                   {items.map((a) => (
-                    <li key={a.id} id={a.source === "todos" ? `todo-${a.sourceId}` : undefined}>
+                    // Skylight rows wrap only when they can't fit (320 px at 200% text: checkbox + icon actions + ⋯).
+                    <li
+                      key={a.id}
+                      id={a.source === "todos" ? `todo-${a.sourceId}` : undefined}
+                      className={a.source === "skylight" ? "[&>.jv-trow]:flex-wrap" : undefined}
+                    >
                       {a.source === "skylight" ? (
-                        <SkylightActionRow action={a} writable={writable} request={write.request} />
+                        <SkylightActionRow action={a} writable={writable} request={write.request} timezone={timezone} />
                       ) : (
                         <ActionCard action={a} compact={a.status === "completed"} quiet row />
                       )}

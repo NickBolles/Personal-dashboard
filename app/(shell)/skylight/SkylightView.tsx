@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { CalendarEvent, NextAction } from "@/lib/contracts";
+import type { CalendarEvent } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
-import { calendarDay, localDate } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
@@ -13,6 +12,7 @@ import { Button, ButtonLink, PageHeader, Spinner, useNow, useOnline } from "@/co
 import { SectionHeader, Segmented } from "@/components/ui/kit";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
+import { groupSkylightChores } from "@/components/skylight/grouping";
 import { SkylightListCard } from "@/components/skylight/SkylightListCard";
 import { EventForm } from "@/components/skylight/EventForm";
 import { previousEvent } from "@/components/skylight/eventFields";
@@ -31,29 +31,13 @@ export function SkylightView() {
   const [form, setForm] = useState<{ event?: CalendarEvent } | null>(null);
   const prefs = useQuery({ queryKey: ["preferences"], queryFn: () => api.get<{ timezone: string }>("/api/settings") });
   const timezone = prefs.data?.timezone || "America/Chicago";
-  const today = localDate(now, timezone);
   const events = [...(q.data?.data?.events ?? [])].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const all = (q.data?.data?.actions ?? []).filter((a) => whose === "everyone" || a.assignee?.kind !== "other");
-  const chores = all.filter((a) => a.status === "open");
   const done = all.filter((a) => a.status === "completed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const dueToday = (action: NextAction) => {
-    if (action.priorityReason === "today") return true;
-    if (!action.dueAt) return false;
-    const day = calendarDay(action.dueAt, action.dueTimezone ?? timezone);
-    return day === today;
-  };
+  // Skylight's order: today by time of day, then later days, Overdue (past days) at the bottom.
+  const choreGroups = groupSkylightChores(all, { now, timezone });
   const groups = [
-    { id: "sk-overdue", label: "Overdue", items: chores.filter((a) => a.priorityReason === "overdue") },
-    {
-      id: "sk-today",
-      label: "Today",
-      items: chores.filter((a) => a.priorityReason !== "overdue" && dueToday(a)),
-    },
-    {
-      id: "sk-upcoming",
-      label: "Next 7 days",
-      items: chores.filter((a) => a.priorityReason !== "overdue" && !dueToday(a)),
-    },
+    ...choreGroups.map((g) => ({ id: `sk-${g.key}`, label: g.label, items: g.actions })),
     { id: "sk-done", label: "Done this week", items: done },
   ];
   return (
@@ -93,8 +77,9 @@ export function SkylightView() {
               { value: "everyone", label: "Everyone" },
             ]}
           />
+          {!choreGroups.length ? <p className="mt-4 text-sm text-muted">No open chores.</p> : null}
           {groups.map((group) => {
-            const items = group.id === "sk-done" ? group.items : [...group.items].sort((a, b) => (a.dueAt ?? "9999").localeCompare(b.dueAt ?? "9999"));
+            const items = group.items;
             return (
               <section key={group.id} aria-labelledby={group.id} className="mt-4">
                 <SectionHeader id={group.id} label={group.label} count={items.length} />
@@ -103,7 +88,7 @@ export function SkylightView() {
                     {items.map((action) => (
                       // Wrap only when the row can't fit (320 px at 200% text: checkbox + Claim/Reopen + ⋯).
                       <li key={action.id} className="[&>.jv-trow]:flex-wrap">
-                        <SkylightActionRow action={action} writable={writable} request={write.request} management />
+                        <SkylightActionRow action={action} writable={writable} request={write.request} timezone={timezone} management />
                       </li>
                     ))}
                   </ul>

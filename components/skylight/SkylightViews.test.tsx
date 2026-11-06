@@ -76,28 +76,48 @@ it.each(["capability", "source"])("requires both write gates: no controls withou
   expect((screen.getByRole("checkbox", { name: "Visualsky oat milk" }) as HTMLInputElement).disabled).toBe(true);
 });
 
-it("separates overdue, today, future and newest-first completed rows with valid section ids", () => {
+it("orders today's chores, later days, then Overdue at the bottom, with newest-first completed rows and valid section ids", () => {
   state.sky.data.actions[0].priorityReason = "overdue";
-  state.sky.data.actions[1].priorityReason = "due_soon";
+  state.sky.data.actions[0].dueAt = "2026-11-01";
+  Object.assign(state.sky.data.actions[0].skylight!, { startDate: "2026-11-01" });
+  state.sky.data.actions[1].priorityReason = "upcoming";
   state.sky.data.actions[1].dueAt = "2026-11-05";
   state.sky.data.actions.push({ ...state.sky.data.actions[2], id: "sky:latest", title: "Newest done chore", updatedAt: "2026-11-04T19:00:00Z" });
   mount(<SkylightView />);
-  expect(screen.getByRole("region", { name: /^Overdue/ }).textContent).toContain("Visualsky water the ferns");
-  expect(document.getElementById("sk-upcoming")?.closest("section")?.textContent).toContain("Visualsky fold the towels");
+  const overdue = screen.getByRole("region", { name: /^Overdue/ });
+  const later = screen.getByRole("region", { name: /^Next 7 days/ });
+  expect(overdue.textContent).toContain("Visualsky water the ferns");
+  expect(later.textContent).toContain("Visualsky fold the towels");
+  // Overdue sits below the not-overdue groups, above Done this week.
+  expect(later.compareDocumentPosition(overdue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(overdue.compareDocumentPosition(screen.getByTestId("skylight-done")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  // Red "Due …" label + Do now as the row's one primary suggested action.
+  expect(overdue.querySelector("[data-due-tone=danger]")?.textContent).toMatch(/^Due 3 days ago/);
+  const actions = within(overdue).getByRole("group", { name: /Suggested actions/ });
+  expect(
+    within(actions)
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label")),
+  ).toEqual(["Do now: 🪴 Visualsky water the ferns", "Skip: 🪴 Visualsky water the ferns", "Move to today: 🪴 Visualsky water the ferns"]);
   const done = screen.getByTestId("skylight-done");
   expect(within(done).getAllByRole("heading")[0].textContent).toBe("Newest done chore");
   for (const region of screen.getAllByRole("region")) expect(region.getAttribute("aria-labelledby")).not.toMatch(/\s/);
 });
 
-it.each([false, true])("groups chores (dueIsDate=%s) by household date rather than the UTC prefix", (dueIsDate) => {
+it.each([
+  [false, /^Evening/],
+  [true, /^Anytime/],
+])("groups chores (dueIsDate=%s) by household date rather than the UTC prefix", (dueIsDate, region) => {
   state.sky.data.actions[0].priorityReason = "due_soon";
   state.sky.data.actions[0].dueAt = "2026-11-05T01:00:00Z";
   state.sky.data.actions[0].dueIsDate = dueIsDate;
   mount(<SkylightView />);
-  expect(screen.getByRole("region", { name: /^Today/ }).textContent).toContain("Visualsky water the ferns");
+  expect(screen.getByRole("region", { name: region }).textContent).toContain("Visualsky water the ferns");
+  expect(screen.queryByRole("region", { name: /^Next 7 days/ })).toBeNull();
 });
 
 it("gives the events and chore upcoming sections distinct accessible titles", () => {
+  state.sky.data.actions[1].dueAt = "2026-11-06";
   mount(<SkylightView />);
   expect(screen.getByRole("region", { name: /^Events · next 7 days/ })).toBeDefined();
   expect(screen.getByRole("region", { name: /^Next 7 days/ })).toBeDefined();
@@ -126,4 +146,19 @@ it("Todos merges lists with their own source chips and the fixed-width Whose fil
   expect(screen.queryByText("Other person's chore")).toBeNull();
   expect(screen.getByRole("checkbox", { name: "Visualsky paper towels" })).toBeDefined();
   expect(screen.queryByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ })).toBeNull();
+});
+
+it("Todos groups Skylight chores by time of day and puts Overdue at the bottom, above Completed recently", () => {
+  state.sky.data.actions[0].dueAt = "2026-11-01";
+  state.sky.data.actions[0].priorityReason = "overdue";
+  mount(<TodosView />);
+  const anytime = screen.getByRole("region", { name: /^Skylight · Anytime/ });
+  const overdue = screen.getByRole("region", { name: /^Overdue/ });
+  const completed = screen.getByRole("region", { name: /^Completed recently/ });
+  expect(anytime.textContent).toContain("Visualsky fold the towels");
+  expect(overdue.textContent).toContain("Visualsky water the ferns");
+  expect(anytime.compareDocumentPosition(overdue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(overdue.compareDocumentPosition(completed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(within(anytime).getByRole("button", { name: /Claim: .*Visualsky fold the towels/ })).toBeDefined();
+  expect(within(completed).getByRole("button", { name: /Reopen: .*Visualsky wipe the stovetop/ })).toBeDefined();
 });

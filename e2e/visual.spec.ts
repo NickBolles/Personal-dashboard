@@ -18,7 +18,7 @@ import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
-import { skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
+import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
@@ -1775,6 +1775,41 @@ for (const scheme of ["light", "dark"] as const) {
     const t = await page.addStyleTag({ content: 'nav[aria-label="Primary"].fixed, .chat-dock { visibility: hidden !important; }' });
     await expect(page).toHaveScreenshot(`skylight-done-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Skylight-style grouping: Morning/Afternoon/Evening/Anytime, Next 7 days, Overdue at the bottom, suggested icon actions.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: skylight grouping (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    const fixture = skylightGroupingVisual(new Date(await page.evaluate(() => new Date().toISOString())));
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
+    await page.route(/\/api\/sources\/todos(?:\?.*)?$/, (route) =>
+      route.fulfill({
+        json: {
+          status: { ...fixture.status, source: "todos", label: "Todos" },
+          data: { actions: [], events: [], extra: { provider: "home_assistant" } },
+        },
+      }),
+    );
+    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+    for (const path of ["/skylight", "/todos"] as const) {
+      await page.goto(path);
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      const overdue = page.getByRole("region", { name: /^Overdue/ });
+      await expect(overdue).toContainText("Visualsky descale the kettle");
+      await expect(overdue.getByRole("button", { name: /^Do now: .*Visualsky feed the fish/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Claim: .*Visualsky fold the towels/ })).toBeVisible();
+      await expectNoHorizontalOverflow(page);
+      const overlays = await page.addStyleTag({ content: `${HIDE_OVERLAYS} .gc-tray, .gc-tray-qa { visibility: hidden !important; }` });
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await expect(page).toHaveScreenshot(`skylight-grouping${path === "/todos" ? "-todos" : ""}-${scheme}.png`, {
+        fullPage: true,
+        mask: MASK.map((m) => page.locator(m)),
+      });
+      await overlays.evaluate((el) => (el as Element).remove());
+    }
   });
 }
 

@@ -14,7 +14,10 @@ test("skylight page lists chores done today apart from the open ones", async ({ 
   await page.goto("/skylight");
   const done = page.getByRole("region", { name: /Done this week/ });
   await expect(done).toContainText("Wipe the kitchen counters", { timeout: 15_000 });
-  await expect(page.getByRole("region", { name: /^Today/ })).not.toContainText("Wipe the kitchen counters");
+  // Not in any open-chore group (Morning … Overdue).
+  await expect(page.locator('section[aria-labelledby^="sk-"]:not([aria-labelledby="sk-done"])').filter({ hasText: "Wipe the kitchen counters" })).toHaveCount(
+    0,
+  );
   await expect(page.getByText(/Sort the mail pile/)).toHaveCount(0);
 });
 
