@@ -207,4 +207,43 @@ describe("Hermes → AG-UI adapter (recorded fixtures)", () => {
     expect(isAguiEvent({ type: "text.delta", delta: "x" })).toBe(false);
     expect(isAguiEvent({ type: "RUN_STARTED", threadId: "t", runId: "r" })).toBe(true);
   });
+
+  it("correlates parallel same-goal subagents by child identity when runtime handles are missing", async () => {
+    const at = "2026-11-01T00:00:00Z";
+    const src: RunEvent[] = [
+      { type: "subagent.started", seq: 1, childSessionId: "child-a", goal: "Same goal", at },
+      { type: "subagent.started", seq: 2, childSessionId: "child-b", goal: "Same goal", at },
+      { type: "subagent.completed", seq: 3, childSessionId: "child-b", goal: "Same goal", status: "completed", summary: "Second done", at },
+      { type: "subagent.completed", seq: 4, childSessionId: "child-a", goal: "Same goal", status: "failed", summary: "First failed", at },
+      { type: "run.terminal", seq: 5, status: "completed", at },
+    ];
+    const agui = translate(src);
+    for (const e of agui) EventSchemas.parse(e);
+    await verifyRuns(agui);
+    const children = fold(viaAgui(agui)).activity;
+    expect(children).toHaveLength(2);
+    expect(children[0]).toMatchObject({ childSessionId: "child-a", status: "failed", summary: "First failed" });
+    expect(children[1]).toMatchObject({ childSessionId: "child-b", status: "completed", summary: "Second done" });
+  });
+
+  it("retains child and tool identities through AG-UI and never labels an unknown child as success", async () => {
+    const at = "2026-11-01T00:00:00Z";
+    const fields = { childSessionId: "child", delegationId: "deleg", parentId: "parent-sa", taskIndex: 0, taskCount: 2, durationSec: 1 };
+    const src: RunEvent[] = [
+      { type: "tool.started", tool: "terminal", callId: "call-real", at },
+      { type: "tool.completed", tool: "terminal", callId: "call-real", at },
+      { type: "subagent.started", id: "sa", at, ...fields },
+      { type: "subagent.completed", id: "sa", status: "unknown", at, ...fields },
+      { type: "run.terminal", status: "completed", at },
+    ];
+    const agui = translate(src);
+    for (const e of agui) EventSchemas.parse(e);
+    await verifyRuns(agui);
+    const roundtrip = viaAgui(agui);
+    expect(roundtrip.filter((e) => e.type.startsWith("subagent."))).toEqual(
+      expect.arrayContaining([expect.objectContaining(fields), expect.objectContaining({ ...fields, status: "unknown" })]),
+    );
+    expect(roundtrip.find((e) => e.type === "tool.completed")).toMatchObject({ callId: "call-real" });
+    expect(agui.some((e) => e.type === EventType.SUBAGENT_FINISHED)).toBe(false);
+  });
 });

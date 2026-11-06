@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { expectNoHorizontalOverflow, mock, openChatContext, startConversation } from "./helpers";
+import { expectNoHorizontalOverflow, mock, openChatContext, openChatPanel, startConversation } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -41,12 +41,7 @@ test("Add context sheet: search, keyboard multi-select, chips, Esc", async ({ pa
 test("an artifact shared in a reply lands in Links (one row per artifact)", async ({ page }) => {
   await startConversation(page, "please share the zephyr board");
   await expect(page.getByText(/Published:/)).toBeVisible({ timeout: 15_000 });
-  const vw = page.viewportSize()?.width ?? 0;
-  let panel = page.getByRole("complementary", { name: "Context and links" });
-  if (vw < 1100) {
-    await page.getByTestId("links-button").click();
-    panel = page.getByRole("dialog", { name: "Context & links" });
-  }
+  const panel = await openChatPanel(page, "Links");
   const row = panel.locator('[data-kind="artifact"]');
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await expect(row).toContainText("zephyr-board-e2e");
@@ -62,8 +57,7 @@ test("context sheet and Links: axe clean and no overflow at 200% text zoom", asy
     const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
     expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${label} ${v.id}`)).toEqual([]);
   };
-  await page.getByTestId("links-button").click();
-  const dialog = page.getByRole("dialog", { name: "Context & links" });
+  const dialog = await openChatPanel(page, "Links");
   await expect(dialog.locator('[data-kind="artifact"]')).toHaveCount(1, { timeout: 15_000 });
   await axe("links");
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });

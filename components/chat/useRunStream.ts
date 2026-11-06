@@ -2,12 +2,24 @@
 
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { api } from "@/lib/client/api";
-import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView } from "@/lib/hermes";
+import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView, type SubagentIdentity } from "@/lib/hermes";
 import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
+import { toolResultState } from "@/lib/tool-presentation";
 
 export type Activity =
-  | { id: string; kind: "tool"; tool: string; preview?: string; result?: string; done: boolean; error?: boolean; startedAt: string; durationSec?: number }
-  | { id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string }
+  | {
+      id: string;
+      callId?: string;
+      kind: "tool";
+      tool: string;
+      preview?: string;
+      result?: string;
+      done: boolean;
+      error?: boolean;
+      startedAt: string;
+      durationSec?: number;
+    }
+  | ({ id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string } & SubagentIdentity)
   | { id: string; kind: "commentary"; text: string; startedAt: string };
 
 export type RunState = {
@@ -30,6 +42,8 @@ export type RunState = {
 type Action =
   | { type: "reset"; runId?: string; phase?: RunPhase }
   | { type: "event"; event: RunEvent; seq?: number }
+  /** Text/reasoning deltas coalesced per animation frame (one render per frame, not per token). */
+  | { type: "events"; items: { event: RunEvent; seq?: number }[] }
   | { type: "phase"; phase: RunPhase; error?: string }
   | { type: "reconciled"; view: RunView }
   | { type: "attempt"; n: number };
@@ -45,6 +59,8 @@ export function reduceRun(state: RunState, a: Action): RunState {
       return { ...initial, runId: a.runId, phase: a.phase ?? (a.runId ? "running" : "completed") };
     case "attempt":
       return { ...state, attempts: a.n };
+    case "events":
+      return a.items.reduce((s, it) => reduceRun(s, { type: "event", event: it.event, seq: it.seq }), state);
     case "phase":
       // Never regress out of a terminal state, and keep "stopping" until Hermes confirms.
       if (isTerminal(state.phase) && !isTerminal(a.phase)) return state;
@@ -76,31 +92,43 @@ export function reduceRun(state: RunState, a: Action): RunState {
         case "reasoning":
           return { ...s, reasoning: s.reasoning + e.text };
         case "tool.started":
-          return { ...s, activity: [...s.activity, { id: aid(), kind: "tool", tool: e.tool, preview: e.preview, done: false, startedAt: e.at }] };
+          if (e.callId && s.activity.some((x) => x.kind === "tool" && x.callId === e.callId)) return s;
+          return {
+            ...s,
+            activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, preview: e.preview, done: false, startedAt: e.at }],
+          };
         case "tool.completed": {
-          const idx = s.activity.findIndex((x) => x.kind === "tool" && x.tool === e.tool && !x.done);
-          const done = { done: true, result: e.preview, error: e.error, durationSec: e.durationSec };
-          if (idx === -1) return { ...s, activity: [...s.activity, { id: aid(), kind: "tool", tool: e.tool, startedAt: e.at, ...done }] };
+          const idx = s.activity.findIndex((x) => x.kind === "tool" && (e.callId ? x.callId === e.callId : x.tool === e.tool && !x.done));
+          const done = { done: true, result: e.preview, error: toolResultState(e.preview, e.error) === "failed", durationSec: e.durationSec };
+          if (idx === -1) return { ...s, activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, startedAt: e.at, ...done }] };
           const next = [...s.activity];
           next[idx] = { ...(next[idx] as Extract<Activity, { kind: "tool" }>), ...done };
           return { ...s, activity: next };
         }
-        case "subagent.started":
+        case "subagent.started": {
+          const fields = subagentFields(e);
           // A resumed stream re-announces subagents still open; keep the original activity.
-          if (e.id && s.activity.some((x) => x.kind === "subagent" && x.id === e.id)) return s;
-          return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at }] };
+          const idx = subagentIndex(s.activity, e);
+          if (idx !== -1) {
+            const next = [...s.activity];
+            next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields };
+            return { ...s, activity: next };
+          }
+          return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at, ...fields }] };
+        }
         case "subagent.completed": {
-          const idx = s.activity.findIndex((x) => x.kind === "subagent" && (x.id === e.id || (!x.done && x.goal === e.goal)));
+          const fields = subagentFields(e);
+          const idx = subagentIndex(s.activity, e);
           if (idx === -1)
             return {
               ...s,
               activity: [
                 ...s.activity,
-                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at },
+                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at, ...fields },
               ],
             };
           const next = [...s.activity];
-          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), summary: e.summary, status: e.status, done: true };
+          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields, summary: e.summary, status: e.status, done: true };
           return { ...s, activity: next };
         }
         case "approval.requested":
@@ -124,6 +152,31 @@ export function reduceRun(state: RunState, a: Action): RunState {
       }
     }
   }
+}
+
+function subagentIndex(activity: Activity[], e: SubagentIdentity & { id?: string; goal?: string }) {
+  const identified = Boolean(e.id || e.childSessionId || (e.delegationId && e.taskIndex !== undefined));
+  return activity.findIndex(
+    (x) =>
+      x.kind === "subagent" &&
+      ((e.id && x.id === e.id) ||
+        (e.childSessionId && x.childSessionId === e.childSessionId) ||
+        (e.delegationId && e.taskIndex !== undefined && x.delegationId === e.delegationId && x.taskIndex === e.taskIndex) ||
+        (!identified && e.goal !== undefined && !x.done && x.goal === e.goal)),
+  );
+}
+
+function subagentFields(e: SubagentIdentity): SubagentIdentity {
+  return Object.fromEntries(
+    Object.entries({
+      childSessionId: e.childSessionId,
+      delegationId: e.delegationId,
+      parentId: e.parentId,
+      taskIndex: e.taskIndex,
+      taskCount: e.taskCount,
+      durationSec: e.durationSec,
+    }).filter(([, v]) => v !== undefined),
+  );
 }
 
 const BACKOFF = [1000, 2000, 4000, 8000, 15000, 15000];
@@ -155,6 +208,46 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
   }, []);
+
+  // Profile-first perf (Phase 2): every token used to be its own dispatch → full Conversation render +
+  // forced layout per word. Deltas are queued and flushed once per frame; any other event flushes the
+  // queue first so ordering (and terminal/approval handling) is unchanged.
+  const queue = useRef<{ event: RunEvent; seq?: number }[]>([]);
+  const frame = useRef<(() => void) | null>(null);
+  const flush = useCallback(() => {
+    frame.current?.();
+    frame.current = null;
+    const items = queue.current;
+    if (!items.length) return;
+    queue.current = [];
+    dispatch(items.length === 1 ? { type: "event", ...items[0] } : { type: "events", items });
+  }, []);
+  const enqueue = useCallback(
+    (event: RunEvent, seq: number | undefined) => {
+      if (event.type !== "text.delta" && event.type !== "reasoning") {
+        flush();
+        dispatch({ type: "event", event, seq });
+        return;
+      }
+      queue.current.push({ event, seq });
+      if (frame.current) return;
+      // rAF pauses in background tabs: fall back to a short timer so text still lands.
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        const id = requestAnimationFrame(flush);
+        frame.current = () => cancelAnimationFrame(id);
+      } else {
+        const id = setTimeout(flush, 100);
+        frame.current = () => clearTimeout(id);
+      }
+    },
+    [flush],
+  );
+  const dropQueued = useCallback(() => {
+    frame.current?.();
+    frame.current = null;
+    queue.current = [];
+  }, []);
+  useEffect(() => dropQueued, [dropQueued]);
 
   // finish() marks the run as done; the effect below notifies once React has committed the terminal state.
   const pendingFinish = useRef<string | null>(null);
@@ -199,6 +292,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   }, []);
 
   const onBroken = useCallback(async () => {
+    flush();
     cleanup();
     if (!conn.current.runId) return;
     dispatch({ type: "phase", phase: "reconnecting" });
@@ -209,7 +303,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       return;
     }
     scheduleReconnect();
-  }, [cleanup, reconcile, finish, scheduleReconnect]);
+  }, [flush, cleanup, reconcile, finish, scheduleReconnect]);
 
   const connect = useCallback(() => {
     const c = conn.current;
@@ -235,7 +329,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
         }
         if (seq !== undefined) conn.current.lastSeq = seq;
         conn.current.attempts = 0;
-        dispatch({ type: "event", event: ev, seq });
+        enqueue(ev, seq);
         if (ev.type === "run.terminal") {
           // Confirm with the authoritative status before finalizing.
           void reconcile().then(() => finish());
@@ -245,7 +339,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     source.onerror = () => {
       if (es.current === source) void onBroken();
     };
-  }, [cleanup, onBroken, reconcile, finish]);
+  }, [cleanup, onBroken, reconcile, finish, enqueue]);
   useLayoutEffect(() => {
     connectRef.current = connect;
   }, [connect]);
@@ -253,6 +347,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   const start = useCallback(
     (runId: string, phase: RunPhase = "running") => {
       cleanup();
+      dropQueued();
       finished.current = null;
       pendingFinish.current = null;
       conn.current = { runId, attempts: 0 };
@@ -260,7 +355,7 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       dispatch({ type: "reset", runId, phase });
       connectRef.current();
     },
-    [cleanup],
+    [cleanup, dropQueued],
   );
 
   const stop = useCallback(async () => {
@@ -299,9 +394,10 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
 
   const clear = useCallback(() => {
     cleanup();
+    dropQueued();
     conn.current = { attempts: 0 };
     dispatch({ type: "reset" });
-  }, [cleanup]);
+  }, [cleanup, dropQueued]);
   const active = Boolean(state.runId) && !isTerminal(state.phase);
   return { state, start, stop, retry, active, clear };
 }

@@ -1,5 +1,6 @@
 import type { ApprovalRequest, ClarifyRequest, RunEvent, SessionSummary, TimelineItem } from "@/lib/hermes";
 import type { HermesMessage, HermesRunEvent, HermesSession } from "./types";
+import { toolResultState } from "@/lib/tool-presentation";
 
 const iso = (unix?: number | null) => (unix ? new Date(unix * 1000).toISOString() : undefined);
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -51,6 +52,14 @@ export function normalizeClarify(raw: Record<string, unknown> | null | undefined
 export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
   const seq = num(e.seq);
   const at = iso(num(e.timestamp)) ?? new Date().toISOString();
+  const child = {
+    childSessionId: str(e.child_session_id),
+    delegationId: str(e.delegation_id),
+    parentId: str(e.parent_id),
+    taskIndex: num(e.task_index),
+    taskCount: num(e.task_count),
+    durationSec: num(e.duration_seconds) ?? num(e.duration),
+  };
   switch (e.event) {
     case "message.delta":
       return { type: "text.delta", seq, delta: str(e.delta) ?? "" };
@@ -59,10 +68,11 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
     case "reasoning.available":
       return { type: "reasoning", seq, text: str(e.text) ?? "" };
     case "tool.started":
-      return { type: "tool.started", seq, tool: str(e.tool) ?? "tool", preview: scrub(str(e.preview)), at };
+      return { type: "tool.started", seq, callId: str(e.tool_call_id), tool: str(e.tool) ?? "tool", preview: scrub(str(e.preview)), at };
     case "tool.completed":
       return {
         type: "tool.completed",
+        callId: str(e.tool_call_id),
         seq,
         tool: str(e.tool) ?? "tool",
         preview: scrub(str(e.preview)),
@@ -71,13 +81,14 @@ export function normalizeRunEvent(e: HermesRunEvent): RunEvent {
         at,
       };
     case "subagent.start":
-      return { type: "subagent.started", seq, id: str(e.subagent_id), goal: str(e.goal), at };
+      return { type: "subagent.started", seq, id: str(e.subagent_id), goal: scrub(str(e.goal)), at, ...child };
     case "subagent.complete":
       return {
         type: "subagent.completed",
+        ...child,
         seq,
         id: str(e.subagent_id),
-        goal: str(e.goal),
+        goal: scrub(str(e.goal)),
         summary: scrub(str(e.summary)),
         status: str(e.status),
         at,
@@ -174,17 +185,19 @@ export function messagesToTimeline(messages: HermesMessage[]): TimelineItem[] {
     } else if (m.role === "tool") {
       const call = m.tool_call_id ? pendingCalls.get(m.tool_call_id) : undefined;
       const tool = m.tool_name ?? call?.tool ?? "tool";
-      const detail = scrub(text.slice(0, 500));
+      // Keep bounded complete JSON for semantic rendering; never parse a 500-character preview as a result.
+      const detail = scrub(text.slice(0, 65536));
       items.push({
         kind: "tool",
         id,
         tool,
         summary: summarizeArgs(call?.args) ?? "",
+        input: scrub(call?.args?.slice(0, 65536)),
         detail,
         at,
         // `at` is the tool-result time; the call was issued with the assistant message that requested it.
         startedAt: call?.at,
-        error: /^(error|BLOCKED:)/i.test(text.trim()),
+        error: toolResultState(detail) === "failed",
       });
     } else if (m.role === "system") {
       if (text.trim()) items.push({ kind: "system", id, text, at });

@@ -349,8 +349,19 @@ function candidates(ctx: Ctx) {
 
 const isUnfiled = (o: ConversationOption) => !o.readOnly && (!o.placement || o.placement.inMisc);
 
+function inConversationArea(ctx: Ctx, c: ConversationOption, areaId?: string | null) {
+  if (!areaId) return true;
+  let item = c.placement?.parentId ? ctx.byId.get(c.placement.parentId) : undefined;
+  for (let n = 0; item?.parentId && n < 50; n++) item = ctx.byId.get(item.parentId);
+  return item?.id === areaId;
+}
+
 /** Your conversations (most recent first), optionally filtered by title/preview text. */
-export async function listConversations(user: CurrentUser, q?: string | null, opts: { revalidate?: boolean } = {}): Promise<ConversationsResponse> {
+export async function listConversations(
+  user: CurrentUser,
+  q?: string | null,
+  opts: { revalidate?: boolean; areaId?: string | null } = {},
+): Promise<ConversationsResponse> {
   requireCap(user, "hermes.chat");
   const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
   const ctx = context(user.id);
@@ -358,6 +369,7 @@ export async function listConversations(user: CurrentUser, q?: string | null, op
   const conversations = sessions
     .filter((s) => !s.archived)
     .map((s) => toOption(s, ctx))
+    .filter((c) => inConversationArea(ctx, c, opts.areaId))
     .filter((c) => !needle || `${c.title} ${c.preview ?? ""}`.toLowerCase().includes(needle))
     .slice(0, 50);
   return { conversations, unavailable, updating, cachedAt };
@@ -368,7 +380,7 @@ export async function conversationList(
   user: CurrentUser,
   filter: ConversationFilter,
   q?: string | null,
-  opts: { revalidate?: boolean } = {},
+  opts: { revalidate?: boolean; areaId?: string | null } = {},
 ): Promise<ConversationListResponse> {
   requireCap(user, "hermes.chat");
   const { sessions, unavailable, updating, cachedAt } = await sessionsFor(user, opts);
@@ -381,14 +393,16 @@ export async function conversationList(
     .map((s) => {
       const o = toOption(s, ctx);
       return { ...o, ...unreadState({ lastActiveAt: o.lastActiveAt, messageCount: s.messageCount }, markers.get(s.id), baseline) };
-    });
+    })
+    .filter((c) => inConversationArea(ctx, c, opts.areaId));
   const unfiledCount = all.filter(isUnfiled).length;
+  const counts = { unread: unreadTotal(all), agents: all.filter((c) => Boolean(c.agentProfile)).length };
   const conversations = all
-    .filter((c) => filter === "all" || isUnfiled(c))
+    .filter((c) => (filter === "unfiled" ? isUnfiled(c) : filter === "unread" ? c.unread : filter === "agents" ? Boolean(c.agentProfile) : true))
     .filter((c) => !needle || `${c.title} ${c.preview ?? ""} ${c.placement?.path ?? ""}`.toLowerCase().includes(needle))
     .slice(0, LIST_LIMIT)
     .map((c) => ({ ...c, suggestions: isUnfiled(c) ? suggestFiling(c.title, cands) : [] }));
-  return { conversations, unfiledCount, unreadCount: unreadTotal(all), unavailable, updating, cachedAt };
+  return { conversations, unfiledCount, unreadCount: counts.unread, counts, unavailable, updating, cachedAt };
 }
 
 /** Recent conversations of yours that aren't in the tree at all (not dismissed), with filing suggestions: the Inbox's list (+ Miscellaneous ones for the Areas list). */

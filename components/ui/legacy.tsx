@@ -284,7 +284,7 @@ export function Dialog({
   description?: ReactNode;
   children?: ReactNode;
   footer?: ReactNode;
-  size?: "md" | "lg";
+  size?: "md" | "lg" | "full";
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -350,7 +350,7 @@ export function Dialog({
         aria-describedby={description ? descId : undefined}
         className={cx(
           "relative z-10 max-h-[90dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-surface p-4 shadow-[var(--shadow-pop)] sm:rounded-[14px] sm:p-5",
-          size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md",
+          size === "full" ? "!h-dvh !max-h-dvh !max-w-none !rounded-none" : size === "lg" ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >
         <h2 id={titleId} className="text-base font-semibold">

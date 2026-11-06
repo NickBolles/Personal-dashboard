@@ -55,6 +55,30 @@ describe("Hermes contract fixtures (pinned v2026.9.24)", () => {
     expect(normalizeRunEvent({ event: "future.thing", seq: 3 } as never)).toEqual({ type: "unknown", seq: 3, event: "future.thing" });
   });
 
+  it("validates and retains runtime child/delegation identities and duration on both lifecycle events", () => {
+    for (const event of ["subagent.start", "subagent.complete"]) {
+      const raw = runEventSchema.parse({
+        event,
+        subagent_id: "sa-0-a",
+        child_session_id: "child-a",
+        delegation_id: "deleg-a",
+        parent_id: "sa-parent",
+        task_index: 0,
+        task_count: 2,
+        duration_seconds: 0,
+      });
+      expect(normalizeRunEvent(raw)).toMatchObject({
+        id: "sa-0-a",
+        childSessionId: "child-a",
+        delegationId: "deleg-a",
+        parentId: "sa-parent",
+        taskIndex: 0,
+        taskCount: 2,
+        durationSec: 0,
+      });
+    }
+  });
+
   it("scrubs credential-looking text from tool previews", () => {
     expect(scrub("curl -H 'Authorization: Bearer abcdef123456789'")).not.toContain("abcdef123456789");
     expect(scrub("api_key=supersecretvalue")).toBe("api_key=[redacted]");

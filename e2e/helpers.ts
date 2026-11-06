@@ -78,6 +78,22 @@ export async function openChatContext(page: Page) {
   await page.getByRole("menuitem", { name: /^Context/ }).click();
 }
 
+/** Same tabs on the container-sized desktop panel and the narrow-screen sheet. */
+export async function openChatPanel(page: Page, tab = "Links") {
+  const panel = page.getByTestId("chat-panel-content");
+  const opener = page.getByRole("button", { name: "Open chat panel", exact: true });
+  // The ≥900 px panel appears once the chat container is measured; on narrow screens the tray opens the sheet.
+  await expect(panel.or(opener).first()).toBeVisible();
+  if (!(await panel.isVisible())) await opener.click();
+  await expect(panel).toBeVisible();
+  await panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) }).click();
+  return panel;
+}
+export async function closeChatPanel(page: Page) {
+  const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });
+  if (await sheet.isVisible()) await sheet.getByRole("button", { name: "Done", exact: true }).click();
+}
+
 /** Reveals a chat message's time + actions (hidden until tapped on touch screens). */
 export async function revealMessageMeta(page: Page, who: "user" | "assistant", index = 0) {
   const bubble = page.locator(`[data-testid="msg-bubble"][data-who="${who}"]`).nth(index);

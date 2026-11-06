@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { ThingsTab } from "@/lib/chat/things";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, cx, useToast } from "@/components/ui";
@@ -128,6 +129,13 @@ function firstField(of: unknown) {
   return of && typeof of === "object" ? Object.keys(of as object)[0] : null;
 }
 
+function capturedValue(capture: Record<string, unknown>, bind: string): unknown {
+  return bind
+    .replace(/^\//, "")
+    .split(/[./]/)
+    .reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined), capture);
+}
+
 /** Quick-add (§2.4): file the sent text straight into the chosen list (by:user), no model needed. */
 export async function quickAdd(run: RunPanelView, field: string, text: string) {
   const of = run.definition.capture[field]?.of;
@@ -151,6 +159,11 @@ export function RunPanel({
   target,
   onTarget,
   capture,
+  section,
+  navigation,
+  children,
+  bodyId,
+  labelledBy,
 }: {
   sessionId: string;
   run: RunPanelView;
@@ -158,6 +171,11 @@ export function RunPanel({
   onTarget: (f: string | null) => void;
   /** Agent-capture state from useAgentCapture: unsaved turns get a visible Retry (#162). */
   capture?: AgentCaptureState;
+  section?: ThingsTab;
+  navigation?: ReactNode;
+  children?: ReactNode;
+  bodyId?: string;
+  labelledBy?: string;
 }) {
   const qc = useQueryClient();
   const bibleInstalled = useBibleStatus().data?.installed ?? false;
@@ -208,7 +226,11 @@ export function RunPanel({
   const count = (b: string) => (Array.isArray(run.capture[b]) ? (run.capture[b] as unknown[]).length : 0);
   const recent = sections.flatMap((s) => ((run.capture[s.bind] as unknown[]) ?? []).map((v) => `${s.title}: ${displayValue(v)}`)).slice(-2);
   return (
-    <section className="wf-run min-w-0 border-b border-line bg-surface px-3 py-2 sm:px-6" aria-label="Workflow run" data-testid="workflow-run">
+    <section
+      className={section ? "chat-workflow-run min-w-0 bg-surface" : "wf-run min-w-0 border-b border-line bg-surface px-3 py-2 sm:px-6"}
+      aria-label="Workflow run"
+      data-testid="workflow-run"
+    >
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {live ? <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden /> : null}
         <h2 className="min-w-0 flex-auto truncate text-sm font-semibold">{(header?.props.title as string) ?? run.title}</h2>
@@ -231,114 +253,138 @@ export function RunPanel({
           <span className="text-xs text-muted">Ended</span>
         )}
       </div>
-      {capture?.unsaved ? (
-        <p className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-warn" role="status" data-testid="workflow-capture-unsaved">
-          <span className="min-w-0">
-            {capture.unsaved === 1 ? "Notes from 1 reply weren’t saved." : `Notes from ${capture.unsaved} replies weren’t saved.`}
-          </span>
-          <Button size="sm" variant="ghost" type="button" onClick={capture.retry}>
-            Retry
-          </Button>
+      {navigation}
+      <div role={section ? "tabpanel" : undefined} id={bodyId} aria-labelledby={labelledBy}>
+        {capture?.unsaved ? (
+          <p className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-xs text-warn" role="status" data-testid="workflow-capture-unsaved">
+            <span className="min-w-0">
+              {capture.unsaved === 1 ? "Notes from 1 reply weren’t saved." : `Notes from ${capture.unsaved} replies weren’t saved.`}
+            </span>
+            <Button size="sm" variant="ghost" type="button" onClick={capture.retry}>
+              Retry
+            </Button>
+          </p>
+        ) : null}
+        {/* strip: counts + last 2 entries (shown while the keyboard is open on phones) */}
+        <p className="wf-run-strip truncate text-xs text-muted" data-dynamic hidden={!!section}>
+          {sections.map((s) => `${s.title} ${count(s.bind)}`).join(" · ")}
+          {recent.length ? ` — ${recent.join(" · ")}` : ""}
         </p>
-      ) : null}
-      {/* strip: counts + last 2 entries (shown while the keyboard is open on phones) */}
-      <p className="wf-run-strip truncate text-xs text-muted" data-dynamic>
-        {sections.map((s) => `${s.title} ${count(s.bind)}`).join(" · ")}
-        {recent.length ? ` — ${recent.join(" · ")}` : ""}
-      </p>
-      {run.proposals.length ? (
-        <div className="wf-run-full mt-2 rounded-lg border border-dashed border-accent p-2 text-sm" role="group" aria-label="Suggested values">
-          {run.proposals.map((p, i) => (
-            <div key={i} className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="min-w-0 flex-auto">
-                {p.path.split("/").pop()}: <strong>{displayValue(p.value)}</strong>
-              </span>
-              <Button size="sm" onClick={() => void proposals([i])}>
-                Accept
-              </Button>
-            </div>
-          ))}
-          <Button size="sm" variant="ghost" onClick={() => void proposals([], true)}>
-            Clear suggestions
-          </Button>
-        </div>
-      ) : null}
-      {live && chips.length ? (
-        <div className="wf-chips mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Next note goes to">
-          {chips.map((c) => (
-            <button
-              key={c.field}
-              type="button"
-              aria-pressed={target === c.field}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onTarget(target === c.field ? null : c.field)}
-              className={cx(
-                "tap min-h-11 rounded-full border px-3 text-sm sm:min-h-9",
-                target === c.field ? "border-accent bg-accent/10 font-medium" : "border-line-strong",
-              )}
-            >
-              {c.label}
-            </button>
-          ))}
-          <ReflectionPrompt sessionId={sessionId} run={out} />
-        </div>
-      ) : null}
-      {dialog === "edit" ? <EditSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
-      {dialog === "end" ? <EndSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
-      {!live ? (
-        <div className="wf-run-full mt-2 grid grid-cols-1 gap-2" data-testid="workflow-outputs">
-          <SummaryCard sessionId={sessionId} run={out} />
-          <ActionChecklist sessionId={sessionId} run={out} />
-          <ExportBar sessionId={sessionId} run={out} />
-        </div>
-      ) : null}
-      <div className="wf-run-full mt-2 grid grid-cols-1 gap-2 text-sm" data-testid="workflow-outline">
-        {sections.map((s) => {
-          const rows = (run.capture[s.bind] as unknown[]) ?? [];
-          return (
-            <div key={s.bind} className="min-w-0">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-                {s.title} <span className="font-normal">({rows.length})</span>
-              </h3>
-              {s.bind === "scripture" && rows.length && !bibleInstalled ? (
-                <p className="text-xs text-muted">Reference only · passage text isn&apos;t downloaded</p>
-              ) : null}
-              {rows.length ? (
-                <ul className="space-y-1">
-                  {rows.map((v, i) => (
-                    <li key={i} className="flex min-w-0 items-start gap-2">
-                      {s.bind === "quotes" ? (
-                        <figure className="min-w-0 flex-1">
-                          <blockquote className="break-words">“{displayValue(v)}”</blockquote>
-                          {(v as { who?: string }).who ? <figcaption className="text-xs text-muted">— {(v as { who?: string }).who}</figcaption> : null}
-                        </figure>
-                      ) : s.bind === "scripture" ? (
-                        <div className="min-w-0 flex-1">
-                          <span className="break-words">{displayValue(v)}</span>
-                          <PassageText reference={displayValue(v)} />
-                        </div>
-                      ) : (
-                        <span className="min-w-0 flex-1 break-words">{displayValue(v)}</span>
-                      )}
-                      {live ? (
-                        <button
-                          type="button"
-                          className="tap shrink-0 text-xs text-muted"
-                          aria-label={`Remove from ${s.title}`}
-                          onClick={() => void remove(s.bind, i)}
-                        >
-                          ×
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-muted">{s.empty ?? "Nothing yet"}</p>
-              )}
-            </div>
-          );
-        })}
+        {run.proposals.length && (!section || section === "Outline" || section === "Notes") ? (
+          <div className="wf-run-full mt-2 rounded-lg border border-dashed border-accent p-2 text-sm" role="group" aria-label="Suggested values">
+            {run.proposals.map((p, i) => (
+              <div key={i} className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="min-w-0 flex-auto">
+                  {p.path.split("/").pop()}: <strong>{displayValue(p.value)}</strong>
+                </span>
+                <Button size="sm" onClick={() => void proposals([i])}>
+                  Accept
+                </Button>
+              </div>
+            ))}
+            <Button size="sm" variant="ghost" onClick={() => void proposals([], true)}>
+              Clear suggestions
+            </Button>
+          </div>
+        ) : null}
+        {live && chips.length && (!section || section === "Notes") ? (
+          <div className="wf-chips mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Next note goes to">
+            {chips.map((c) => (
+              <button
+                key={c.field}
+                type="button"
+                aria-pressed={target === c.field}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onTarget(target === c.field ? null : c.field)}
+                className={cx(
+                  "tap min-h-11 rounded-full border px-3 text-sm sm:min-h-9",
+                  target === c.field ? "border-accent bg-accent/10 font-medium" : "border-line-strong",
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
+            <ReflectionPrompt sessionId={sessionId} run={out} />
+          </div>
+        ) : null}
+        {dialog === "edit" ? <EditSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
+        {dialog === "end" ? <EndSessionDialog sessionId={sessionId} run={out} onClose={() => setDialog(null)} /> : null}
+        {section === "Form" ? (
+          <section className="mt-3 space-y-2" aria-label="Session form">
+            <h3 className="text-sm font-semibold">Session form</h3>
+            {run.definition.mid
+              ?.filter((f) => !f.bind.endsWith("/-"))
+              .map((f) => (
+                <p key={f.id} className="text-sm">
+                  <strong>{f.label}:</strong> {displayValue(capturedValue(run.capture, f.bind)) || "Not set"}
+                </p>
+              ))}
+            {live && canEdit ? (
+              <Button onClick={() => setDialog("edit")}>Edit session</Button>
+            ) : (
+              <p className="text-xs text-muted">No editable session fields.</p>
+            )}
+          </section>
+        ) : null}
+        {!live && (!section || section === "Outputs") ? (
+          <div className="wf-run-full mt-2 grid grid-cols-1 gap-2" data-testid="workflow-outputs">
+            <SummaryCard sessionId={sessionId} run={out} />
+            <ActionChecklist sessionId={sessionId} run={out} />
+            <ExportBar sessionId={sessionId} run={out} />
+          </div>
+        ) : null}
+        {live && section === "Outputs" ? <p className="mt-3 text-sm text-muted">End session to prepare outputs.</p> : null}
+        {!section || section === "Outline" || section === "Notes" ? (
+          <div className="wf-run-full mt-2 grid grid-cols-1 gap-2 text-sm" data-testid="workflow-outline">
+            {sections.map((s) => {
+              const rows = (run.capture[s.bind] as unknown[]) ?? [];
+              return (
+                <div key={s.bind} className="min-w-0">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    {s.title} <span className="font-normal">({rows.length})</span>
+                  </h3>
+                  {s.bind === "scripture" && rows.length && !bibleInstalled ? (
+                    <p className="text-xs text-muted">Reference only · passage text isn&apos;t downloaded</p>
+                  ) : null}
+                  {rows.length ? (
+                    <ul className="space-y-1">
+                      {rows.map((v, i) => (
+                        <li key={i} className="flex min-w-0 items-start gap-2">
+                          {s.bind === "quotes" ? (
+                            <figure className="min-w-0 flex-1">
+                              <blockquote className="break-words">“{displayValue(v)}”</blockquote>
+                              {(v as { who?: string }).who ? <figcaption className="text-xs text-muted">— {(v as { who?: string }).who}</figcaption> : null}
+                            </figure>
+                          ) : s.bind === "scripture" ? (
+                            <div className="min-w-0 flex-1">
+                              <span className="break-words">{displayValue(v)}</span>
+                              <PassageText reference={displayValue(v)} />
+                            </div>
+                          ) : (
+                            <span className="min-w-0 flex-1 break-words">{displayValue(v)}</span>
+                          )}
+                          {live ? (
+                            <button
+                              type="button"
+                              className="tap shrink-0 text-xs text-muted"
+                              aria-label={`Remove from ${s.title}`}
+                              onClick={() => void remove(s.bind, i)}
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted">{s.empty ?? "Nothing yet"}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+        {children}
       </div>
     </section>
   );

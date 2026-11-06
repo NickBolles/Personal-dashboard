@@ -16,20 +16,12 @@ import { FileUnderDialog, FilingActions, UpdatingNote, pollWhileUpdating } from 
 import type { ConversationFilter, ConversationListResponse, ItemsResponse } from "@/lib/work";
 
 type Row = ConversationListResponse["conversations"][number];
-/** C4 chips: All · Unread · Agents · Unfiled (server view `unfiled`; the rest filter the `all` list here). */
+/** C4 chips are applied server-side before the bounded list window. */
 type Chip = "all" | "unread" | "agents" | "unfiled";
 
 /** C1/C4 agent mark: the routed Hermes profile, else the assistant. */
 export function agentMark(c: { agentProfile?: string | null; backend: string }) {
   return c.agentProfile ? `@${c.agentProfile}` : c.backend === "claude" ? "Claude" : "Hermes";
-}
-
-/** Root area of a placement (for the area filter). */
-function rootArea(items: ItemsResponse["items"], parentId: string | undefined) {
-  const byId = new Map(items.map((i) => [i.id, i]));
-  let cur = parentId ? byId.get(parentId) : undefined;
-  for (let n = 0; cur && cur.parentId && n < 50; n++) cur = byId.get(cur.parentId);
-  return cur?.id ?? null;
 }
 
 function group(at: string | null, now = Date.now()) {
@@ -61,14 +53,15 @@ export function ConversationsView({
 }) {
   const [chip, setChip] = useState<Chip>(initialFilter === "unfiled" ? "unfiled" : "all");
   const [areaId, setAreaId] = useState("");
-  const filter: ConversationFilter = chip === "unfiled" ? "unfiled" : "all";
+  const filter: ConversationFilter = chip;
+  const params = new URLSearchParams({ view: filter, ...(areaId ? { areaId } : {}) });
   const qc = useQueryClient();
   const { toast } = useToast();
-  const key = ["work", "conversations", "view", filter];
+  const key = ["work", "conversations", "view", filter, areaId];
   // Answers from the persisted index at once; while it refreshes in the background, poll.
   const q = useQuery({
     queryKey: key,
-    queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=${filter}`),
+    queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?${params}`),
     refetchInterval: pollWhileUpdating,
   });
   // Refresh asks the server to revalidate now; the reply (cached, `updating`) starts the polling.
@@ -76,7 +69,7 @@ export function ConversationsView({
   const refresh = () => {
     setRevalidating(true);
     api
-      .get<ConversationListResponse>(`/api/work/conversations?view=${filter}&refresh=1`)
+      .get<ConversationListResponse>(`/api/work/conversations?${params}&refresh=1`)
       .then((d) => qc.setQueryData(key, d))
       .catch(() => q.refetch())
       .finally(() => setRevalidating(false));
@@ -93,9 +86,7 @@ export function ConversationsView({
   };
   const allItems = items.data?.items ?? [];
   const areas = allItems.filter((i) => i.parentId === null && !i.archived);
-  const list = (q.data?.conversations ?? [])
-    .filter((c) => (chip === "unread" ? c.unread : chip === "agents" ? Boolean(c.agentProfile) : true))
-    .filter((c) => !areaId || rootArea(allItems, c.placement?.parentId) === areaId);
+  const list = q.data?.conversations ?? [];
   const markAll = () =>
     api
       .post("/api/work/conversations/read", { all: true })

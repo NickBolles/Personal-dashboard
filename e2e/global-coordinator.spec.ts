@@ -27,6 +27,8 @@ async function stubCoordinator(page: Page) {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() !== "GET") return route.fulfill({ status: 409, json: { error: "Sending is not part of this test" } });
     if (path.endsWith("/area")) return route.fulfill({ json: { enabled: false } });
+    if (path.endsWith("/execution"))
+      return route.fulfill({ json: { sessionId: session.id, parent: null, records: [], sources: [{ source: "transcript", state: "ok" }], fetchedAt: at } });
     if (path.endsWith("/files") || path.endsWith("/links-panel")) return route.fulfill({ json: { files: [], links: [] } });
     if (path === "/api/hermes/sessions") return route.fulfill({ json: { sessions: [session], nextOffset: null } });
     return route.fulfill({
@@ -107,12 +109,14 @@ test("desktop rail collapse, expansion and width survive navigation and reload",
   await expectNoHorizontalOverflow(page);
 });
 
-test("desktop chat page defaults to the compact icon strip", async ({ page }, testInfo) => {
+test("desktop chat panel temporarily owns the coordinator rail", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Desktop layout");
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await page.addInitScript(() => localStorage.setItem("jarvis.gc.open", "true"));
   await page.goto("/chat/gc-test");
   const rail = page.getByRole("complementary", { name: "Chief of staff" });
   await expect(rail).toHaveAttribute("data-open", "false");
   await expect(rail).toHaveCSS("width", "54px");
-  await rail.getByRole("button", { name: "Expand Chief of staff" }).click();
+  await page.getByRole("button", { name: "Collapse chat panel" }).click();
   await expect(rail).toHaveAttribute("data-open", "true");
 });

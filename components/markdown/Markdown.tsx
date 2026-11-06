@@ -1,6 +1,19 @@
 "use client";
 
-import { Fragment, useState, type ReactNode } from "react";
+import { createContext, Fragment, useContext, useState, type ReactNode } from "react";
+
+/** Optional surface-specific renderer. Receives only already-sanitized hrefs. */
+export const MarkdownLinkRenderer = createContext<((href: string, label: ReactNode) => ReactNode) | null>(null);
+function RenderedLink({ href, children }: { href: string; children: ReactNode }) {
+  const render = useContext(MarkdownLinkRenderer);
+  if (render) return render(href, children);
+  const internal = href.startsWith("/") || href.startsWith("#");
+  return (
+    <a href={href} target={internal ? undefined : "_blank"} rel={internal ? undefined : LINK_REL}>
+      {children}
+    </a>
+  );
+}
 
 /**
  * Safe Markdown for every Jarvis surface that shows model or user text: chat
@@ -38,15 +51,10 @@ const ESCAPABLE = /[\\`*_{}[\]()#+\-.!|~>]/;
 
 function link(href: string | null, label: ReactNode, key: string, fallback: ReactNode): ReactNode {
   if (!href) return <Fragment key={key}>{fallback}</Fragment>;
-  const internal = href.startsWith("/") || href.startsWith("#");
-  return internal ? (
-    <a key={key} href={href}>
+  return (
+    <RenderedLink key={key} href={href}>
       {label}
-    </a>
-  ) : (
-    <a key={key} href={href} target="_blank" rel={LINK_REL}>
-      {label}
-    </a>
+    </RenderedLink>
   );
 }
 

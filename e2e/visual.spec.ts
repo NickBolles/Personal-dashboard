@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, setHa, startConversation } from "./helpers";
+import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, openChatPanel, setHa, startConversation } from "./helpers";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
 import {
@@ -418,6 +418,7 @@ for (const scheme of ["light", "dark"] as const) {
     await form.getByTestId("workflow-start-submit").click();
     await expect(page).toHaveURL(/\/chat\//);
     const panel = page.getByTestId("workflow-run");
+    await openChatPanel(page, "Outline");
     await expect(panel.getByTestId("workflow-outline")).toContainText("John 15");
     // The chat auto-scrolls after the first run lands; wait until the page scroll and the panel box settle,
     // or the element shot catches the dock mid-scroll (mobile-320 light flaked with the composer over the panel).
@@ -729,7 +730,7 @@ for (const theme of ["light", "dark"] as const) {
     await head.click();
     await expect(head).toHaveAttribute("aria-expanded", "true");
     await expect(work.locator(".chat-tool")).toHaveCount(4);
-    await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · done");
+    await expect(work.locator(".chat-tool").nth(1)).toContainText("6s · returned");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await withoutTray(page, () => expect(work).toHaveScreenshot(`chat-work-expanded-${theme}.png`, { animations: "disabled" }));
   });
@@ -848,13 +849,11 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/chat/sess_morning");
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
     await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
-    const wide = (page.viewportSize()?.width ?? 0) >= 1100;
-    const panel = wide ? page.getByRole("complementary", { name: "Context and links" }) : page.getByRole("dialog", { name: "Context & links" });
-    if (!wide) await page.getByTestId("links-button").click();
+    const panel = await openChatPanel(page, "Links");
     await expect(panel.locator('[data-kind="artifact"]')).toHaveCount(1);
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-links-${theme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
-    if (!wide) await page.keyboard.press("Escape");
+    if (await page.getByRole("dialog", { name: "In this chat", exact: true }).isVisible()) await page.keyboard.press("Escape");
     await openChatContext(page);
     const sheet = page.getByRole("dialog", { name: "Add context" });
     await expect(sheet.getByRole("combobox", { name: "Search context" })).toBeFocused();
@@ -893,9 +892,7 @@ for (const theme of ["light", "dark"] as const) {
     await page.waitForTimeout(600);
     const mask = [...MASK, "[role=progressbar]"].map((m) => page.locator(m));
     await expect(page).toHaveScreenshot(`chat-files-${theme}.png`, { fullPage: false, mask });
-    const wide = (page.viewportSize()?.width ?? 0) >= 1100;
-    const panel = wide ? page.getByRole("complementary", { name: "Context and links" }) : page.getByRole("dialog", { name: "Context & links" });
-    if (!wide) await page.getByTestId("links-button").click();
+    const panel = await openChatPanel(page, "Files");
     await expect(panel.getByText("shelf-measurements.txt")).toBeVisible();
     await page.waitForTimeout(600);
     await expect(page).toHaveScreenshot(`chat-files-panel-${theme}.png`, { fullPage: false, mask });
@@ -1479,8 +1476,9 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(300);
     await expect(page).toHaveScreenshot(`gc-rail-collapsed-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => page.locator(m)) });
     await t.evaluate((el) => (el as Element).remove());
-    // Chat pages default to the icon strip even when the rail is open elsewhere.
+    // The chat panel owns the right-hand slot when its container is wide enough.
     await rail.getByRole("button", { name: "Expand Chief of staff" }).click();
+    await page.setViewportSize({ width: 1800, height: 900 });
     await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: chatVisual }));
     await page.goto("/chat/sess_morning");
     await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
@@ -1516,7 +1514,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/more");
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
     await expect(tray).toBeVisible();
-    await expect(tray.locator(".gc-dot")).toBeVisible();
+    await expect(tray.locator(".gc-dot:visible")).toBeVisible();
     const pinned = page.getByTestId("quick-actions-tray");
     await expect(pinned.getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
     await expect(pinned.getByRole("button", { name: "Plan my week", exact: true })).toHaveCount(0);

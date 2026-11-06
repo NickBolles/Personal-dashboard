@@ -30,6 +30,8 @@ import * as eventsRoute from "@/app/api/hermes/runs/[runId]/events/route";
 import * as agentsRoute from "@/app/api/settings/agents/route";
 import * as agentsTestRoute from "@/app/api/settings/agents/test/route";
 import * as resolveRoute from "@/app/api/agents/resolve/route";
+import * as executionRoute from "@/app/api/hermes/sessions/[id]/execution/route";
+import type { ChatExecutionResponse } from "@/lib/chat-execution";
 
 let server: Server;
 let base: string;
@@ -155,6 +157,25 @@ describe("agent settings", () => {
 });
 
 describe("routing chats, runs and AI jobs to the area's profile", () => {
+  it("mock delegated children remain navigable on their parent's profile after relay and reload", async () => {
+    const u = me();
+    const area = store.createItem(u, { kind: "area", title: "Execution routing" }, cid);
+    store.updateItem(u, area.id, { settings: { agentMode: "momentumchief" } } as never, cid);
+    const s = await startConversation(u, { title: "Execution parent", backend: "hermes", areaId: area.id }, cid);
+    const run = await startRun(u, { sessionId: s.id, input: "delegate a bounded task", idempotencyKey: `exec-${s.id}` }, cid);
+    await readSse(run.runId);
+    const response = await call(executionRoute.GET, `/api/hermes/sessions/${s.id}/execution`, owner, "GET", undefined, { id: s.id });
+    expect(response.status).toBe(200);
+    const out: ChatExecutionResponse = await response.json();
+    const child = out.records.find((r) => r.source === "subagent");
+    expect(child).toMatchObject({ childSessionId: `child_${run.runId}`, childProfile: "momentumchief", state: "completed" });
+    const detail = await getSessionDetail(u, child!.childSessionId!);
+    expect(detail.session.agentProfile).toBe("momentumchief");
+    expect(detail.parent?.id).toBe(s.id);
+    const reload = await call(executionRoute.GET, `/api/hermes/sessions/${s.id}/execution`, owner, "GET", undefined, { id: s.id });
+    expect(((await reload.json()) as ChatExecutionResponse).records.filter((r) => r.source === "subagent")).toHaveLength(1);
+  });
+
   it("a chat started under a Momentum project runs on momentumchief end to end", async () => {
     const u = me();
     const area = store.createItem(u, { kind: "area", title: "Momentum bets" }, cid);
@@ -215,6 +236,15 @@ describe("routing chats, runs and AI jobs to the area's profile", () => {
       const parent = list.sessions.find((s) => s.id === "sess_mc_notices");
       expect(parent?.subagentCount).toBe(1);
       expect(list.sessions.some((s) => s.id === "sess_mc_sub")).toBe(false);
+      const response = await call(executionRoute.GET, "/api/hermes/sessions/sess_mc_notices/execution", owner, "GET", undefined, { id: "sess_mc_notices" });
+      const execution: ChatExecutionResponse = await response.json();
+      expect(execution.records.find((r) => r.childSessionId === "sess_mc_sub")).toMatchObject({
+        source: "subagent",
+        state: "unknown",
+        childProfile: "momentumchief",
+      });
+      expect(execution.records.find((r) => r.id === "proc_e2e7")).toMatchObject({ source: "process", state: "completed" });
+      expect((await getSessionDetail(u, "sess_mc_sub")).session.agentProfile).toBe("momentumchief");
     } finally {
       getDb().delete(schema.sessionMeta).where(eq(schema.sessionMeta.sessionId, "sess_mc_notices")).run();
     }
