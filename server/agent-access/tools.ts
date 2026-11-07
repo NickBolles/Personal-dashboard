@@ -22,6 +22,7 @@ import { STATUS_LABELS, WORK_STATUSES, isContainer, parseGithubUrl, type WorkIte
 import type { AgentScope } from "@/lib/agent-access";
 import type { AgentPrincipal } from "./tokens";
 import { registerAgentRun } from "@/server/work/registered-runs";
+import { buildDeviceProposal } from "./ha-proposals";
 
 /**
  * Jarvis MCP tools (docs/agent-tools.md). Every tool:
@@ -515,6 +516,29 @@ export const TOOLS: ToolDef[] = [
       });
       audit({ actor: agent.via, action: "agent.run_update", source: "agent", sourceRecord: runId, result: "ok", correlationId, detail: { state } });
       return { runId, state };
+    },
+  }),
+  tool({
+    name: "jarvis_propose_device_change",
+    description:
+      "Propose a Home Assistant device change (light, switch, fan, climate, media, scene, script, vacuum, cover/garage, lock, alarm). Nothing is operated: it becomes a Needs-you decision on the item and the owner confirms it on the House page (locks, alarm and opening a garage are high-risk and need an explicit confirm). One open decision per item.",
+    scope: "decisions.write",
+    input: z
+      .object({
+        itemId: id,
+        entityId: z.string().regex(/^[a-z_]+\.[a-z0-9_]+$/),
+        service: z.string().regex(/^[a-z_]{2,40}$/),
+        data: z.record(z.string().max(40), z.union([z.string().max(40), z.number()])).optional(),
+        reason: text(300).min(1),
+      })
+      .strict(),
+    run: ({ itemId, entityId, service, data, reason }, { agent, correlationId }) => {
+      const cur = visible(agent.user.id, itemId);
+      if (cur.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask on the work item, not the conversation");
+      if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
+      const p = buildDeviceProposal({ entityId, service, data, reason }, agent.profile, agent.via, correlationId);
+      const item = updateItem(agent.user, itemId, { decision: { question: p.question, choices: p.choices } }, correlationId);
+      return { proposed: true, executed: false, risk: p.risk, confirmAt: p.href, item: brief(item) };
     },
   }),
 ];

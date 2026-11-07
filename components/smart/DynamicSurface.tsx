@@ -1,31 +1,50 @@
 "use client";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, Dialog } from "@/components/ui";
+import { Button } from "@/components/ui";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import type { ControlView } from "@/integrations/home-assistant/controls";
+import { useHaControl } from "@/components/home/HaControls";
 import { SmartSurface } from "./SmartSurface";
 
 export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismiss: () => void }) {
-  const [confirm, setConfirm] = useState<ControlView>();
-  const [service, setService] = useState("close_cover");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [closed, setClosed] = useState(false);
-  const prepare = async (next: string) => {
+  // The garage's state as last confirmed here (cards only appear while it's open).
+  const [state, setState] = useState<"open" | "closed">("open");
+  const ctl = useHaControl({
+    onDone: (r) => {
+      if (r.verified && (r.state === "closed" || r.state === "closing")) setState("closed");
+      if (r.verified && (r.state === "open" || r.state === "opening")) setState("open");
+    },
+  });
+  // Always read live state first: the confirm card shows what Home Assistant reports right now.
+  const prepare = async (next: "close_cover" | "open_cover") => {
     setBusy(true);
+    setMessage("");
     try {
       const data = await api.get<{ controls: ControlView[] }>("/api/home-assistant/controls");
-      const control = data.controls.find((c) => c.entityId === card.garage?.entityId && c.services.some((s) => s.service === next));
-      if (!control) throw new Error("That action is not allowlisted. Close from Home Assistant.");
-      setService(next);
-      setConfirm(control);
+      const control = data.controls.find((c) => c.entityId === card.garage?.entityId);
+      const svc = control?.services.find((s) => s.service === next);
+      if (!control || !svc) throw new Error("That action is not allowed. Use Home Assistant.");
+      ctl.request({
+        entityId: control.entityId,
+        name: control.name,
+        state: control.state,
+        stateToken: control.stateToken,
+        service: next,
+        label: svc.label,
+        // A garage door always gets the confirm card; opening it is high-risk.
+        risk: svc.risk === "low" ? "standard" : svc.risk,
+        observedAt: control.observedAt,
+      });
     } catch (e) {
       setMessage((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+  const g = card.garage;
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pb-3" data-testid="dynamic-card">
       <SmartSurface key={card.id} spec={card.spec} sessionId={card.sessionId} blockIndex={card.blockIndex} dropped={0} />
@@ -38,61 +57,27 @@ export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismi
             {card.footer.label}
           </a>
         ) : null}
-        {card.garage?.closeAllowed && !closed ? (
-          <Button size="sm" variant="primary" busy={busy} onClick={() => void prepare("close_cover")}>
+        {g?.closeAllowed && state === "open" ? (
+          <Button size="sm" variant="primary" busy={busy || ctl.pending?.service === "close_cover"} onClick={() => void prepare("close_cover")}>
             Close garage…
           </Button>
         ) : null}
-        {closed && card.garage?.undoAllowed ? (
-          <Button size="sm" busy={busy} onClick={() => void prepare("open_cover")}>
-            Undo · reopen…
+        {(g?.openAllowed ?? g?.undoAllowed) && state === "closed" ? (
+          <Button size="sm" busy={busy || ctl.pending?.service === "open_cover"} onClick={() => void prepare("open_cover")}>
+            Open garage…
           </Button>
         ) : null}
-        {closed && !card.garage?.undoAllowed ? <span className="text-xs text-muted">Reopening is not allowlisted; no Undo is available.</span> : null}
+        {state === "closed" && !(g?.openAllowed ?? g?.undoAllowed) ? (
+          <span className="text-xs text-muted">Opening is not allowed here; no Undo is available.</span>
+        ) : null}
       </footer>
+      {ctl.toast}
       {message ? (
         <p role="status" className="text-sm">
           {message}
         </p>
       ) : null}
-      {confirm ? (
-        <Dialog
-          open
-          title={service === "close_cover" ? "Close the garage?" : "Reopen the garage?"}
-          description={`${confirm.name} currently reports ${confirm.state}. This operates a physical door.`}
-          onClose={() => setConfirm(undefined)}
-          footer={
-            <>
-              <Button onClick={() => setConfirm(undefined)}>Cancel</Button>
-              <Button
-                variant="primary"
-                busy={busy}
-                onClick={async () => {
-                  setBusy(true);
-                  try {
-                    const result = await api.post<{ verified: boolean; message: string }>("/api/home-assistant/control", {
-                      entityId: confirm.entityId,
-                      service,
-                      stateToken: confirm.stateToken,
-                      confirmed: true,
-                    });
-                    setMessage(result.message);
-                    if (result.verified) setClosed(service === "close_cover");
-                    setConfirm(undefined);
-                  } catch (e) {
-                    setMessage((e as Error).message);
-                    setConfirm(undefined);
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                Confirm {service === "close_cover" ? "close" : "reopen"}
-              </Button>
-            </>
-          }
-        />
-      ) : null}
+      {ctl.dialog}
     </div>
   );
 }

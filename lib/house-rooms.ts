@@ -5,7 +5,24 @@
  */
 export const UNASSIGNED_ROOM = "Unassigned";
 
-const KIND_ORDER: Record<string, number> = { lock: 0, garage: 0, door: 0, window: 0, cover: 0, light: 1, camera: 2 };
+const KIND_ORDER: Record<string, number> = {
+  lock: 0,
+  garage: 0,
+  door: 0,
+  window: 0,
+  cover: 0,
+  alarm: 0,
+  light: 1,
+  climate: 2,
+  switch: 2,
+  fan: 2,
+  toggle: 2,
+  media: 2,
+  vacuum: 2,
+  scene: 3,
+  script: 3,
+  camera: 4,
+};
 
 export type RoomGroup<T> = { room: string; devices: T[] };
 

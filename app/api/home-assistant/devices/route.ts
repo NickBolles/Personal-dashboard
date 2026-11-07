@@ -13,6 +13,7 @@ export const GET = api(
       cameras: can(user, "home_assistant.cameras"),
       doorControls: can(user, "home_assistant.control_doors"),
       lightControls: can(user, "home_assistant.control_lights"),
+      role: user.role,
     }),
   { cap: ["home_assistant.view", "home_assistant.cameras"] },
 );

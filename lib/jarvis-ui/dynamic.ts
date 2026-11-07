@@ -8,6 +8,7 @@ export type DynamicCard = {
   blockIndex: number;
   action: "Fill in" | "Open" | "Review";
   footer?: { label: string; href: string };
-  garage?: { entityId: string; closeAllowed: boolean; undoAllowed: boolean };
+  /** Smart garage card: Close and Open (high-risk) are each other’s Undo (owner decision 2026-11-07, #219). */
+  garage?: { entityId: string; name?: string; closeAllowed: boolean; openAllowed?: boolean; undoAllowed: boolean };
 };
 export type DynamicResponse = { cards: DynamicCard[]; today: string };

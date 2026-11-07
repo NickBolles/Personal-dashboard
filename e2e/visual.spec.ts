@@ -1642,9 +1642,14 @@ for (const scheme of ["light", "dark"] as const) {
     // Real mock-HA devices (rooms from /api/template), minus cameras (live stills) and change times.
     await page.route(/\/api\/home-assistant\/devices$/, async (route) => {
       const res = await route.fetch();
-      const body = (await res.json()) as { cameras: unknown[]; doors: { lastChanged?: string }[]; lights: { lastChanged?: string }[] };
+      const body = (await res.json()) as {
+        cameras: unknown[];
+        doors: { lastChanged?: string }[];
+        lights: { lastChanged?: string }[];
+        others?: { lastChanged?: string }[];
+      };
       const fix = <T extends { lastChanged?: string }>(xs: T[]) => xs.map((x) => ({ ...x, lastChanged: undefined }));
-      await route.fulfill({ json: { ...body, cameras: [], doors: fix(body.doors), lights: fix(body.lights) } });
+      await route.fulfill({ json: { ...body, cameras: [], doors: fix(body.doors), lights: fix(body.lights), others: fix(body.others ?? []) } });
     });
     await page.goto("/home-control");
     await expect(page.locator('section[data-room="Kitchen"]')).toContainText("Kitchen lights");

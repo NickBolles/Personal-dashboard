@@ -1,16 +1,18 @@
 "use client";
 
 import { useAccess } from "@/components/access";
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { CalendarEvent, HomeHealth, SourceStatus } from "@/lib/contracts";
 import type { DeviceView } from "@/integrations/home-assistant/devices";
 import { CameraIcon, ChevronIcon, LightIcon } from "@/components/icons";
 import { useSource } from "@/components/useSource";
-import { Banner, EmptyState, SectionHeader } from "@/components/ui/kit";
+import { Banner, ChipSelect, EmptyState, SectionHeader } from "@/components/ui/kit";
 import { SourceState } from "@/components/SourceState";
-import { Badge, Button, ButtonLink, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline } from "@/components/ui";
+import { useHaControl, type HaAction } from "@/components/home/HaControls";
+import type { HaRisk } from "@/lib/ha-policy";
 import { groupByRoom, roomSlug } from "@/lib/house-rooms";
 
 type Control = {
@@ -21,14 +23,12 @@ type Control = {
   lastChanged?: string;
   observedAt: string;
   stateToken: string;
-  services: { service: string; label: string; wouldChange: boolean }[];
+  services: { service: string; label: string; wouldChange: boolean; risk: HaRisk }[];
 };
 
-export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
+export function HomeControlView({ focusEntity, propose }: { focusEntity?: string; propose?: Proposal }) {
   const online = useOnline();
   const { can } = useAccess();
-  const qc = useQueryClient();
-  const { toast, announce } = useToast();
   const home = useSource("home_assistant");
   // Controls always use live state; refetch whenever we come back online.
   const controls = useQuery({
@@ -47,29 +47,8 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online]);
 
-  const [confirm, setConfirm] = useState<{ control: Control; service: string; label: string }>();
-  const [pendingId, setPendingId] = useState<string>();
-  const exec = useMutation({
-    mutationFn: (v: { control: Control; service: string }) =>
-      api.post<{ verified: boolean; state: string; message: string }>("/api/home-assistant/control", {
-        entityId: v.control.entityId,
-        service: v.service,
-        stateToken: v.control.stateToken,
-        confirmed: true,
-      }),
-    onMutate: (v) => setPendingId(v.control.entityId),
-    onSuccess: (r) => {
-      toast(r.message, r.verified ? "ok" : "warn");
-      announce(r.message);
-    },
-    onError: (e) => toast((e as Error).message, "danger"),
-    onSettled: () => {
-      setPendingId(undefined);
-      qc.invalidateQueries({ queryKey: ["ha"] });
-      qc.invalidateQueries({ queryKey: ["source", "home_assistant"] });
-      qc.invalidateQueries({ queryKey: ["home"] });
-    },
-  });
+  const ctl = useHaControl();
+  const pendingId = ctl.pending?.entityId;
 
   const now = useNow(5_000);
   const exceptions = home.data?.data?.homeExceptions ?? [];
@@ -123,7 +102,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
           </section>
         ) : null}
 
-        {can("home_assistant.view") || can("home_assistant.cameras") ? <Devices focusEntity={focusEntity} online={online} /> : null}
+        {can("home_assistant.view") || can("home_assistant.cameras") ? <Devices focusEntity={focusEntity} online={online} propose={propose} /> : null}
 
         {can("home_assistant.view") && home.data?.status && home.data.status.state !== "unconfigured" && home.data.status.state !== "disabled" ? (
           <HealthPanel status={home.data.status} health={home.data.data?.extra?.health as HomeHealth | undefined} />
@@ -140,6 +119,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
             {controls.data && !controls.data.controls.length ? (
               <EmptyState title="No controls allowlisted. Add some in Settings → Connections → Home Assistant." />
             ) : null}
+            {ctl.toast}
             {/* H1: compact two-line tiles, three across on desktops. */}
             <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">
               {(controls.data?.controls ?? []).map((c) => (
@@ -156,11 +136,24 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
                           size="sm"
                           variant="secondary"
                           disabled={!online || !controlsFresh || c.state === "missing" || pendingId === c.entityId}
-                          busy={pendingId === c.entityId && exec.variables?.service === s.service}
-                          onClick={() => setConfirm({ control: c, service: s.service, label: s.label })}
+                          busy={pendingId === c.entityId && ctl.pending?.service === s.service}
+                          onClick={() =>
+                            ctl.request({
+                              entityId: c.entityId,
+                              name: c.name,
+                              state: c.state,
+                              stateToken: c.stateToken,
+                              service: s.service,
+                              label: s.label,
+                              // Door controls always get the confirm card, even when the policy calls them low-risk.
+                              risk: s.risk === "low" ? "standard" : s.risk,
+                              observedAt: c.observedAt,
+                            })
+                          }
                           aria-label={`${s.label} ${c.name}`}
                         >
                           {s.label}
+                          {s.risk === "high" ? <span className="sr-only"> (high-risk)</span> : null}
                         </Button>
                       ))}
                     </div>
@@ -177,35 +170,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
         ) : null}
       </div>
 
-      <Dialog
-        open={Boolean(confirm)}
-        onClose={() => setConfirm(undefined)}
-        title={confirm ? `${confirm.label} ${confirm.control.name}?` : ""}
-        description={
-          confirm ? (
-            <>
-              Current state: <strong>{confirm.control.state}</strong> (checked {new Date(confirm.control.observedAt).toLocaleTimeString()}). If it changed since
-              then, Jarvis will stop and ask again.
-            </>
-          ) : undefined
-        }
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirm(undefined)} data-autofocus>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (confirm) exec.mutate({ control: confirm.control, service: confirm.service });
-                setConfirm(undefined);
-              }}
-            >
-              Yes, {confirm?.label.toLowerCase()}
-            </Button>
-          </>
-        }
-      />
+      {ctl.dialog}
     </div>
   );
 }
@@ -231,9 +196,20 @@ function CalendarSection({ events }: { events: CalendarEvent[] }) {
   );
 }
 
-type Devices = { fetchedAt: string; lightControl: string; roomsKnown?: boolean; doors: DeviceView[]; lights: DeviceView[]; cameras: DeviceView[] };
+type Devices = {
+  fetchedAt: string;
+  lightControl: string;
+  roomsKnown?: boolean;
+  doors: DeviceView[];
+  lights: DeviceView[];
+  others?: DeviceView[];
+  cameras: DeviceView[];
+};
 
 type HouseView = "rooms" | "all";
+
+/** ?propose=<service>&data=<json> from an agent proposal (validated again by the server on confirm). */
+export type Proposal = { service: string; data?: HaAction["data"] };
 const VIEW_KEY = "jarvis:house-view";
 const COLLAPSED_KEY = "jarvis:house-collapsed";
 const readLocal = <T,>(key: string, fallback: T): T => {
@@ -259,14 +235,30 @@ const KIND_LABEL: Record<DeviceView["kind"], string> = {
   door: "Door",
   window: "Window",
   cover: "Cover",
+  alarm: "Alarm",
   light: "Light",
+  switch: "Switch",
+  fan: "Fan",
+  climate: "Climate",
+  media: "Media",
+  scene: "Scene",
+  script: "Script",
+  toggle: "Toggle",
+  vacuum: "Vacuum",
   camera: "Camera",
 };
 
-function Devices({ focusEntity, online }: { focusEntity?: string; online: boolean }) {
-  const qc = useQueryClient();
-  const { toast, announce } = useToast();
-  const { can } = useAccess();
+type Ctl = ReturnType<typeof useHaControl>;
+
+/** A device tap → HaAction (service must be one the server offered for this device). */
+function actionFor(x: DeviceView, service: string, data?: HaAction["data"]): HaAction | null {
+  const s = x.services.find((v) => v.service === service);
+  if (!s) return null;
+  return { entityId: x.entityId, name: x.name, state: x.state, stateToken: x.stateToken, service, label: s.label, risk: s.risk, data };
+}
+
+function Devices({ focusEntity, online, propose }: { focusEntity?: string; online: boolean; propose?: Proposal }) {
+  const ctl = useHaControl();
   const q = useQuery({
     queryKey: ["ha", "devices"],
     queryFn: () => api.get<Devices>("/api/home-assistant/devices"),
@@ -274,22 +266,25 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
     refetchInterval: 15_000,
     gcTime: 0,
   });
-  const light = useMutation({
-    mutationFn: (v: { entityId: string; on: boolean }) => api.post<{ verified: boolean; message: string }>("/api/home-assistant/lights", v),
-    onSuccess: (r) => {
-      toast(r.message, r.verified ? "ok" : "warn");
-      announce(r.message);
-    },
-    onError: (e) => toast((e as Error).message, "danger"),
-    onSettled: () => qc.invalidateQueries({ queryKey: ["ha"] }),
-  });
   // H1: By room (default when Home Assistant shares rooms) or All (by kind); remembered on this device.
   const [view, setView] = useState<HouseView | null>(() => readLocal<HouseView | null>(VIEW_KEY, null));
   const [collapsed, setCollapsed] = useState<string[]>(() => readLocal<string[]>(COLLAPSED_KEY, []));
+  // An agent's proposal (Needs-you → "Confirm it on House") opens the confirm card once; the owner decides.
+  const proposed = useRef(false);
+  const request = ctl.request;
+  useEffect(() => {
+    if (proposed.current || !propose || !focusEntity || !q.data) return;
+    const x = [...q.data.doors, ...q.data.lights, ...(q.data.others ?? [])].find((d) => d.entityId === focusEntity);
+    if (!x) return;
+    proposed.current = true;
+    const a = actionFor(x, propose.service, propose.data);
+    if (a) request({ ...a, risk: a.risk === "low" ? "standard" : a.risk });
+  }, [q.data, propose, focusEntity, request]);
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   if (!q.data) return q.isLoading ? <Spinner label="Reading devices…" /> : null;
   const d = q.data;
-  const all = [...d.doors, ...d.lights, ...d.cameras];
+  const others = d.others ?? [];
+  const all = [...d.doors, ...d.lights, ...others, ...d.cameras];
   const hasRooms = all.some((x) => x.area);
   const mode: HouseView = view ?? (hasRooms ? "rooms" : "all");
   const choose = (v: HouseView) => {
@@ -302,10 +297,16 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       writeLocal(COLLAPSED_KEY, next);
       return next;
     });
-  const lightTile = (x: DeviceView) => (
-    <LightTile key={x.entityId} x={x} focus={focusEntity === x.entityId} online={online} light={light} canControl={can("home_assistant.control_lights")} />
-  );
-  const doorTile = (x: DeviceView) => <DoorTile key={x.entityId} x={x} focus={focusEntity === x.entityId} />;
+  const tile = (x: DeviceView) =>
+    x.kind === "camera" ? (
+      <CameraCard key={x.entityId} camera={x} online={online} />
+    ) : x.kind === "light" ? (
+      <LightTile key={x.entityId} x={x} focus={focusEntity === x.entityId} online={online} ctl={ctl} />
+    ) : others.includes(x) ? (
+      <DeviceTile key={x.entityId} x={x} focus={focusEntity === x.entityId} online={online} ctl={ctl} />
+    ) : (
+      <DoorTile key={x.entityId} x={x} focus={focusEntity === x.entityId} />
+    );
   const toggle = all.length ? (
     <div className={cx("flex flex-wrap items-center justify-between gap-2", mode === "rooms" ? "" : "mt-6 dense:mt-0 dense:mb-2")}>
       <div role="group" aria-label="Group devices" className="seg">
@@ -321,13 +322,16 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
       ) : null}
     </div>
   ) : null;
-  const offlineNote = !online && d.lights.length ? <p className="mt-2 mb-2 text-sm text-warn">Light switches are off while offline.</p> : null;
+  const offlineNote =
+    !online && (d.lights.length || others.length) ? <p className="mt-2 mb-2 text-sm text-warn">Device controls are off while offline.</p> : null;
+  const grid = "grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3";
   return mode === "rooms" ? (
     // All rooms live in ONE section, so on desktop the page's two columns keep Health/Controls where they
     // were instead of rooms spilling into the right column.
     <section aria-label="Devices by room" className="mt-6 flex flex-col gap-4" data-rooms>
       {toggle}
       {offlineNote}
+      {ctl.toast}
       {groupByRoom(all).map(({ room, devices }) => {
         const id = `room-${roomSlug(room)}`;
         // A deep-linked device (search → ?entity=) always shows, even in a collapsed room.
@@ -348,30 +352,36 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
               </button>
             </h2>
             {open ? (
-              <ul id={id} className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">
-                {devices.map((x) =>
-                  x.kind === "light" ? lightTile(x) : x.kind === "camera" ? <CameraCard key={x.entityId} camera={x} online={online} /> : doorTile(x),
-                )}
+              <ul id={id} className={grid}>
+                {devices.map(tile)}
               </ul>
             ) : null}
           </section>
         );
       })}
+      {ctl.dialog}
     </section>
   ) : (
     <>
       {toggle}
       {offlineNote}
+      {ctl.toast}
       {d.doors.length ? (
         <section aria-labelledby="doors-h" className="@container mt-6">
           <SectionHeader id="doors-h" label="Doors, locks and garage" />
-          <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">{d.doors.map(doorTile)}</ul>
+          <ul className={grid}>{d.doors.map(tile)}</ul>
         </section>
       ) : null}
       {d.lights.length ? (
         <section aria-labelledby="lights-h" className="@container mt-6">
           <SectionHeader id="lights-h" label="Lights" />
-          <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">{d.lights.map(lightTile)}</ul>
+          <ul className={grid}>{d.lights.map(tile)}</ul>
+        </section>
+      ) : null}
+      {others.length ? (
+        <section aria-labelledby="other-h" className="@container mt-6">
+          <SectionHeader id="other-h" label="Switches, climate and media" />
+          <ul className={grid}>{others.map(tile)}</ul>
         </section>
       ) : null}
       {d.cameras.length ? (
@@ -384,6 +394,7 @@ function Devices({ focusEntity, online }: { focusEntity?: string; online: boolea
           </ul>
         </section>
       ) : null}
+      {ctl.dialog}
     </>
   );
 }
@@ -395,34 +406,101 @@ function DoorTile({ x, focus }: { x: DeviceView; focus: boolean }) {
         <span className="block font-medium">{x.name}</span>
         <span className="text-xs text-muted">{KIND_LABEL[x.kind]}</span>
       </span>
-      <Badge tone={["open", "unlocked", "on", "opening"].includes(x.state) ? "warn" : x.state === "unavailable" ? "neutral" : "ok"}>
+      <Badge tone={["open", "unlocked", "on", "opening", "triggered"].includes(x.state) ? "warn" : x.state === "unavailable" ? "neutral" : "ok"}>
         {x.kind === "door" || x.kind === "window" ? (x.state === "on" ? "open" : x.state === "off" ? "closed" : x.state) : x.state}
       </Badge>
     </li>
   );
 }
 
-function LightTile({
+/** Compact on/off switch (role=switch) for a device that has turn_on/turn_off (or toggle). */
+function PowerSwitch({ x, online, ctl }: { x: DeviceView; online: boolean; ctl: Ctl }) {
+  const on = x.state === "on" || x.state === "playing";
+  const svc = x.services.some((s) => s.service === (on ? "turn_off" : "turn_on")) ? (on ? "turn_off" : "turn_on") : "toggle";
+  const act = actionFor(x, svc);
+  if (!act) return null;
+  const busy = ctl.pending?.entityId === x.entityId;
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={`${x.name}: ${on ? "on, turn off" : "off, turn on"}`}
+      className={cx("k-toggle min-h-11 sm:min-h-10 dense:min-h-6", on && "k-toggle-on")}
+      disabled={!online || x.state === "unavailable" || busy}
+      onClick={() => ctl.request(act)}
+    >
+      <span className="k-toggle-t" aria-hidden>
+        <span className="k-toggle-k" />
+      </span>
+    </button>
+  );
+}
+
+/** Slider that sends one change on release (pointer up / key up), never per pixel. */
+function LevelSlider({
   x,
-  focus,
-  online,
-  canControl,
-  light,
+  label,
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  unit = "%",
+  disabled,
+  onCommit,
 }: {
   x: DeviceView;
-  focus: boolean;
-  online: boolean;
-  canControl: boolean;
-  light: { isPending: boolean; variables?: { entityId: string; on: boolean }; mutate: (v: { entityId: string; on: boolean }) => void };
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  disabled: boolean;
+  onCommit: (v: number) => void;
 }) {
-  const on = x.state === "on";
-  const canSwitch = canControl && x.services.length > 0;
-  const busy = light.isPending && light.variables?.entityId === x.entityId;
+  const [draft, setDraft] = useState<number>();
+  const v = draft ?? value;
+  const commit = () => {
+    if (draft !== undefined && draft !== value) onCommit(draft);
+    setDraft(undefined);
+  };
   return (
-    <li className={cx("card flex flex-wrap items-center justify-between gap-2 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
+    <label className="flex min-w-0 flex-1 basis-full items-center gap-2 text-xs text-muted">
+      <span className="sr-only">
+        {label} {x.name}
+      </span>
+      <input
+        type="range"
+        className="ha-range min-w-0 flex-1"
+        min={min}
+        max={max}
+        step={step}
+        value={v}
+        disabled={disabled}
+        aria-valuetext={`${v}${unit}`}
+        onChange={(e) => setDraft(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <span className="w-10 shrink-0 text-right tabular-nums" data-dynamic>
+        {v}
+        {unit}
+      </span>
+    </label>
+  );
+}
+
+function LightTile({ x, focus, online, ctl }: { x: DeviceView; focus: boolean; online: boolean; ctl: Ctl }) {
+  const on = x.state === "on";
+  const dimmable = on && x.brightness !== undefined && x.services.some((s) => s.service === "turn_on");
+  const busy = ctl.pending?.entityId === x.entityId;
+  return (
+    <li className={cx("card flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
       <span className="flex min-w-0 items-center gap-2">
         <LightIcon className={cx("h-5 w-5 shrink-0", on ? "text-warn" : "text-muted")} />
-        <span>
+        <span className="min-w-0">
           <span className="block font-medium">{x.name}</span>
           <span className="text-xs text-muted">
             {x.state}
@@ -430,17 +508,125 @@ function LightTile({
           </span>
         </span>
       </span>
-      {canSwitch ? (
-        <Button
-          size="sm"
-          aria-pressed={on}
-          aria-label={`${x.name}: ${on ? "on, turn off" : "off, turn on"}`}
-          disabled={!online || x.state === "unavailable" || busy}
-          busy={busy}
-          onClick={() => light.mutate({ entityId: x.entityId, on: !on })}
-        >
-          {on ? "Turn off" : "Turn on"}
-        </Button>
+      {x.services.length ? <PowerSwitch x={x} online={online} ctl={ctl} /> : null}
+      {dimmable ? (
+        <LevelSlider
+          x={x}
+          label="Brightness"
+          value={x.brightness!}
+          min={1}
+          disabled={!online || busy}
+          onCommit={(v) => {
+            const a = actionFor(x, "turn_on", { brightness_pct: v });
+            if (a) ctl.request({ ...a, label: "Set brightness" });
+          }}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+/** Switches, fans, climate, media, scenes, scripts, toggles and vacuums: compact inline controls. */
+function DeviceTile({ x, focus, online, ctl }: { x: DeviceView; focus: boolean; online: boolean; ctl: Ctl }) {
+  const busy = ctl.pending?.entityId === x.entityId;
+  const off = !online || x.state === "unavailable" || busy;
+  const has = (s: string) => x.services.some((v) => v.service === s);
+  const run = (service: string, data?: HaAction["data"], label?: string) => {
+    const a = actionFor(x, service, data);
+    if (a) ctl.request(label ? { ...a, label } : a);
+  };
+  const sub =
+    x.kind === "climate"
+      ? `${x.state}${x.currentTemperature !== undefined ? ` · now ${x.currentTemperature}°` : ""}`
+      : x.kind === "fan" && x.percentage !== undefined
+        ? `${x.state} · ${x.percentage}%`
+        : x.kind === "scene" || x.kind === "script"
+          ? KIND_LABEL[x.kind]
+          : x.state;
+  const power = (x.kind === "switch" || x.kind === "toggle" || x.kind === "fan" || x.kind === "media") && (has("turn_on") || has("toggle"));
+  return (
+    <li className={cx("card flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
+      <span className="min-w-0">
+        <span className="block font-medium">{x.name}</span>
+        <span className="text-xs text-muted">{sub}</span>
+      </span>
+      <span className="flex flex-wrap items-center gap-1.5">
+        {x.kind === "media" && has("media_play") && x.state !== "playing" ? (
+          <Button size="sm" variant="secondary" disabled={off} onClick={() => run("media_play")} aria-label={`Play ${x.name}`}>
+            Play
+          </Button>
+        ) : null}
+        {x.kind === "media" && has("media_pause") && x.state === "playing" ? (
+          <Button size="sm" variant="secondary" disabled={off} onClick={() => run("media_pause")} aria-label={`Pause ${x.name}`}>
+            Pause
+          </Button>
+        ) : null}
+        {(x.kind === "scene" || x.kind === "script") && has("turn_on") ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={off}
+            busy={busy}
+            onClick={() => run("turn_on")}
+            aria-label={`${x.kind === "scene" ? "Activate" : "Run"} ${x.name}`}
+          >
+            {x.kind === "scene" ? "Activate" : "Run"}
+          </Button>
+        ) : null}
+        {x.kind === "vacuum" && has("start") && x.state !== "cleaning" ? (
+          <Button size="sm" variant="secondary" disabled={off} onClick={() => run("start")} aria-label={`Start ${x.name}`}>
+            Start
+          </Button>
+        ) : null}
+        {x.kind === "vacuum" && has("return_to_base") && x.state !== "docked" ? (
+          <Button size="sm" variant="secondary" disabled={off} onClick={() => run("return_to_base")} aria-label={`Send ${x.name} home`}>
+            Send home
+          </Button>
+        ) : null}
+        {x.kind === "climate" && has("set_temperature") && x.temperature !== undefined ? (
+          <span className="inline-flex items-center gap-1" role="group" aria-label={`${x.name} target temperature`}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={off || (x.minTemp !== undefined && x.temperature - 1 < x.minTemp)}
+              onClick={() => run("set_temperature", { temperature: x.temperature! - 1 }, `Set to ${x.temperature! - 1}°`)}
+              aria-label={`Lower ${x.name} to ${x.temperature - 1}°`}
+            >
+              −
+            </Button>
+            <span className="w-10 text-center tabular-nums font-medium">{x.temperature}°</span>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={off || (x.maxTemp !== undefined && x.temperature + 1 > x.maxTemp)}
+              onClick={() => run("set_temperature", { temperature: x.temperature! + 1 }, `Set to ${x.temperature! + 1}°`)}
+              aria-label={`Raise ${x.name} to ${x.temperature + 1}°`}
+            >
+              +
+            </Button>
+          </span>
+        ) : null}
+        {x.kind === "climate" && has("set_hvac_mode") && x.hvacModes?.length ? (
+          <ChipSelect
+            aria-label={`${x.name} mode`}
+            value={x.state}
+            disabled={off}
+            onChange={(e) => run("set_hvac_mode", { hvac_mode: e.target.value }, `Set mode to ${e.target.value}`)}
+          >
+            {x.hvacModes.map((m) => (
+              <option key={m} value={m}>
+                {m.replace(/_/g, " ")}
+              </option>
+            ))}
+          </ChipSelect>
+        ) : null}
+        {power ? <PowerSwitch x={x} online={online} ctl={ctl} /> : null}
+      </span>
+      {x.kind === "fan" && has("set_percentage") && x.state === "on" && x.percentage !== undefined ? (
+        <LevelSlider x={x} label="Speed" value={x.percentage} disabled={off} onCommit={(v) => run("set_percentage", { percentage: v }, "Set speed")} />
+      ) : null}
+      {x.kind === "media" && has("volume_set") && x.volume !== undefined ? (
+        <LevelSlider x={x} label="Volume" value={x.volume} disabled={off} onCommit={(v) => run("volume_set", { volume_level: v / 100 }, "Set volume")} />
       ) : null}
     </li>
   );

@@ -2,18 +2,37 @@ import "server-only";
 import { audit } from "@/server/audit";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { joinUrl } from "@/server/http/fetch";
+import { currentVia } from "@/server/work/actor";
 import { resolveIntegration } from "@/integrations/store";
+import { HA_DOMAIN_POLICY, actorMayExecute, allowedServicesFor, controlCap, domainOf, roleMayRun } from "@/lib/ha-policy";
 import { haConn, HomeAssistantClient, type HaState } from "./client";
-import { parseAllowlist } from "./adapter";
-import { EXPECTED_RESULT, SERVICE_LABELS, stateToken } from "./controls";
+import { controlRules, controlServices, stateToken, type ControlService } from "./controls";
 
 /**
- * Every door, lock, light and camera Home Assistant knows about, for viewing.
- * Doors and locks are controlled only through the confirmed allowlist
- * (controls.ts). Lights can be switched directly (setting: all lights, only
- * allowlisted ones, or none), always with readback, never queued.
+ * Every Home Assistant device Jarvis shows on the House page, with the
+ * controls this person may use. Allowed services come from the policy matrix
+ * (lib/ha-policy.ts) ∩ the allowlist (Settings → Connections → Home
+ * Assistant); doors, locks, covers and alarms need `home_assistant.control_doors`,
+ * everything else `home_assistant.control_lights`. Every write is confirmed and
+ * read back (controls.ts); nothing is queued.
  */
-export type DeviceKind = "lock" | "garage" | "door" | "window" | "cover" | "light" | "camera";
+export type DeviceKind =
+  | "lock"
+  | "garage"
+  | "door"
+  | "window"
+  | "cover"
+  | "alarm"
+  | "light"
+  | "switch"
+  | "fan"
+  | "climate"
+  | "media"
+  | "scene"
+  | "script"
+  | "toggle"
+  | "vacuum"
+  | "camera";
 
 export type DeviceView = {
   entityId: string;
@@ -23,24 +42,48 @@ export type DeviceView = {
   lastChanged?: string;
   /** lights: 0–100 when on and dimmable */
   brightness?: number;
+  /** climate */
+  temperature?: number;
+  currentTemperature?: number;
+  hvacModes?: string[];
+  minTemp?: number;
+  maxTemp?: number;
+  /** fan speed 0–100 */
+  percentage?: number;
+  /** media volume 0–100 */
+  volume?: number;
   stateToken: string;
-  /** allowlisted door/lock services, or light on/off */
-  services: { service: string; label: string; wouldChange: boolean }[];
+  services: ControlService[];
   /** H1: Home Assistant area (room); absent = unassigned or unreadable */
   area?: string;
 };
 
 const OPENING_CLASSES = ["door", "garage_door", "window", "opening"];
 
+const DOMAIN_KIND: Record<string, DeviceKind> = {
+  lock: "lock",
+  light: "light",
+  camera: "camera",
+  alarm_control_panel: "alarm",
+  switch: "switch",
+  fan: "fan",
+  climate: "climate",
+  media_player: "media",
+  scene: "scene",
+  script: "script",
+  input_boolean: "toggle",
+  vacuum: "vacuum",
+};
+
+/** Kinds shown with doors/locks (status + Controls section), not as device tiles. */
+export const SECURITY_KINDS: DeviceKind[] = ["lock", "garage", "door", "window", "cover", "alarm"];
+
 export function deviceKind(s: HaState): DeviceKind | null {
-  const [domain] = s.entity_id.split(".");
+  const domain = domainOf(s.entity_id);
   const dc = String(s.attributes.device_class ?? "");
-  if (domain === "lock") return "lock";
-  if (domain === "light") return "light";
-  if (domain === "camera") return "camera";
   if (domain === "cover") return dc === "garage" ? "garage" : dc === "door" ? "door" : dc === "window" ? "window" : "cover";
   if (domain === "binary_sensor" && OPENING_CLASSES.includes(dc)) return dc === "window" ? "window" : dc === "garage_door" ? "garage" : "door";
-  return null;
+  return DOMAIN_KIND[domain] ?? null;
 }
 
 export function lightControlMode(): "all" | "allowlist" | "none" {
@@ -48,47 +91,60 @@ export function lightControlMode(): "all" | "allowlist" | "none" {
   return v === "allowlist" || v === "none" ? v : "all";
 }
 
-function lightAllowed(entityId: string) {
+function lightServices(entityId: string): string[] {
   const mode = lightControlMode();
-  if (mode === "none") return false;
-  if (mode === "all") return true;
-  return parseAllowlist(resolveIntegration("home_assistant").config.controlAllowlist).some((r) => r.entityId === entityId);
+  if (mode === "none") return [];
+  if (mode === "all") return Object.keys(HA_DOMAIN_POLICY.light!);
+  return allowedServicesFor(controlRules(), entityId);
 }
 
-export function toDevice(s: HaState, opts: { doorControls: boolean; lightControls: boolean }): DeviceView | null {
+function lightAllowed(entityId: string) {
+  return lightServices(entityId).length > 0;
+}
+
+const num = (v: unknown) => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? undefined : Number(v));
+
+export function toDevice(s: HaState, opts: { doorControls: boolean; lightControls: boolean; role?: string }, rules = controlRules()): DeviceView | null {
   const kind = deviceKind(s);
   if (!kind) return null;
-  const rules = parseAllowlist(resolveIntegration("home_assistant").config.controlAllowlist);
-  let services: DeviceView["services"] = [];
-  if (kind === "light" && opts.lightControls && lightAllowed(s.entity_id)) {
-    services = ["turn_on", "turn_off"].map((service) => ({
-      service,
-      label: SERVICE_LABELS[service]!,
-      wouldChange: !(EXPECTED_RESULT[service] ?? []).includes(s.state),
-    }));
-  } else if (kind !== "light" && kind !== "camera" && opts.doorControls) {
-    services = (rules.find((r) => r.entityId === s.entity_id)?.services ?? []).map((service) => ({
-      service,
-      label: SERVICE_LABELS[service] ?? service.replace(/_/g, " "),
-      wouldChange: !(EXPECTED_RESULT[service] ?? []).includes(s.state),
-    }));
+  const cap = controlCap(s.entity_id);
+  const may = cap === "home_assistant.control_doors" ? opts.doorControls : opts.lightControls;
+  let names: string[] = [];
+  if (may && kind !== "camera" && domainOf(s.entity_id) !== "binary_sensor") {
+    names = (kind === "light" ? lightServices(s.entity_id) : allowedServicesFor(rules, s.entity_id)).filter((svc) =>
+      roleMayRun(opts.role, s.entity_id, svc, String(s.attributes.device_class ?? "")),
+    );
   }
-  const b = Number(s.attributes.brightness);
+  const a = s.attributes;
+  const b = num(a.brightness);
+  const vol = num(a.volume_level);
   return {
     entityId: s.entity_id,
-    name: String(s.attributes.friendly_name ?? s.entity_id),
+    name: String(a.friendly_name ?? s.entity_id),
     kind,
     state: s.state,
     lastChanged: s.last_changed,
-    brightness: kind === "light" && s.state === "on" && Number.isFinite(b) ? Math.round((b / 255) * 100) : undefined,
+    brightness: kind === "light" && s.state === "on" && b !== undefined ? Math.round((b / 255) * 100) : undefined,
+    ...(kind === "climate"
+      ? {
+          temperature: num(a.temperature),
+          currentTemperature: num(a.current_temperature),
+          hvacModes: Array.isArray(a.hvac_modes) ? (a.hvac_modes as unknown[]).map(String) : undefined,
+          minTemp: num(a.min_temp),
+          maxTemp: num(a.max_temp),
+        }
+      : {}),
+    ...(kind === "fan" ? { percentage: num(a.percentage) } : {}),
+    ...(kind === "media" && vol !== undefined ? { volume: Math.round(vol * 100) } : {}),
     stateToken: stateToken(s),
-    services,
+    services: controlServices(s, s.entity_id, names),
   };
 }
 
-export async function listDevices(opts: { doors: boolean; lights: boolean; cameras: boolean; doorControls: boolean; lightControls: boolean }) {
+export async function listDevices(opts: { doors: boolean; lights: boolean; cameras: boolean; doorControls: boolean; lightControls: boolean; role?: string }) {
   const states = await HomeAssistantClient.states(haConn());
-  const all = states.map((s) => toDevice(s, opts)).filter((d): d is DeviceView => Boolean(d));
+  const rules = controlRules();
+  const all = states.map((s) => toDevice(s, opts, rules)).filter((d): d is DeviceView => Boolean(d));
   // H1: rooms are best-effort — a failed or forbidden area read leaves every device "Unassigned".
   const areas = await HomeAssistantClient.areaNames(
     haConn(),
@@ -104,13 +160,15 @@ export async function listDevices(opts: { doors: boolean; lights: boolean; camer
     lightControl: lightControlMode(),
     /** false when Home Assistant wouldn't tell us the rooms (non-admin token) */
     roomsKnown: areas !== undefined,
-    doors: opts.doors ? all.filter((d) => d.kind !== "light" && d.kind !== "camera").sort(byName) : [],
+    doors: opts.doors ? all.filter((d) => SECURITY_KINDS.includes(d.kind)).sort(byName) : [],
     lights: opts.lights ? all.filter((d) => d.kind === "light").sort(byName) : [],
+    /** switches, fans, climate, media, scenes, scripts, toggles, vacuums */
+    others: opts.lights ? all.filter((d) => !SECURITY_KINDS.includes(d.kind) && d.kind !== "light" && d.kind !== "camera").sort(byName) : [],
     cameras: opts.cameras ? all.filter((d) => d.kind === "camera").sort(byName) : [],
   };
 }
 
-/** Turn a light on or off; success only once Home Assistant reads back the new state. */
+/** Turn a light on or off; success only once Home Assistant reads back the new state. (Android + older clients.) */
 export async function switchLight(
   entityId: string,
   on: boolean,
@@ -124,6 +182,10 @@ export async function switchLight(
   if (!lightAllowed(entityId)) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowed" } });
     throw new HttpError(403, "not_allowlisted", "Jarvis isn't allowed to switch that light (Settings → Connections → Home Assistant).");
+  }
+  if (!actorMayExecute(currentVia())) {
+    audit({ ...base, result: "rejected", detail: { reason: "agent_must_propose" } });
+    throw new HttpError(403, "needs_owner", "Agents and scheduled jobs can't change devices; propose it and the owner confirms.");
   }
   const conn = haConn();
   const live = await HomeAssistantClient.state(conn, entityId);
