@@ -7,6 +7,10 @@ import { HttpError } from "@/server/http/errors";
 import { withVia } from "@/server/work/actor";
 import { rateLimited, type AgentPrincipal } from "./tokens";
 import { TOOLS, TOOL_BY_NAME } from "./tools";
+import { activeScheduledRunFor } from "@/server/agents/schedules";
+
+/** Tools that write directly (not proposals/decisions/run bookkeeping): off while the profile's scheduled run is active. */
+export const SCHEDULED_GUARDED = new Set(["jarvis_create_item", "jarvis_update_item", "jarvis_add_note", "jarvis_link", "jarvis_file_conversation"]);
 
 /**
  * Jarvis MCP server (streamable HTTP, JSON responses; docs/agent-tools.md). Stateless: every POST
@@ -100,6 +104,19 @@ async function callTool(agent: AgentPrincipal, params: Record<string, unknown>, 
   if (!agent.scopes.includes(t.scope)) {
     log("rejected", "scope");
     return textResult({ error: "forbidden", message: `This token lacks the ${t.scope} scope` }, true);
+  }
+  if (SCHEDULED_GUARDED.has(t.name) && activeScheduledRunFor(agent.user.id, agent.profile)) {
+    // A scheduled run's direct writes would bypass the area's autonomy policy: route them through the
+    // run's proposals block, where Jarvis applies Propose-only / Act-on-low-risk (#230).
+    log("rejected", "scheduled_run");
+    return textResult(
+      {
+        error: "scheduled_run",
+        message:
+          "A scheduled run for this agent is active, so direct writes are off. List the change in the jarvis-proposals block instead; Jarvis applies the area's autonomy policy (decisions in Needs you, low-risk changes only where allowed).",
+      },
+      true,
+    );
   }
   if (rateLimited(agent.tokenId)) {
     log("rejected", "rate_limited");

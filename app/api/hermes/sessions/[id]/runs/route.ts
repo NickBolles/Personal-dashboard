@@ -18,6 +18,7 @@ import { areaPolicyFor } from "@/server/ai/jobs";
 import { detectSensitivity } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { HttpError } from "@/server/http/errors";
+import { filedChatContext } from "@/server/work/chat-context";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -72,7 +73,10 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
         ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
-    const rawInstructions = [areaInstructions, smart].filter(Boolean).join("\n\n");
+    // Every filed (non-excluded) conversation tells the agent where it is and what's open there,
+    // including chats already on the area's own profile, which used to get no area context at all.
+    const filed = local ? null : filedChatContext(user, params.id, onProfile);
+    const rawInstructions = [areaInstructions, filed, smart].filter(Boolean).join("\n\n");
     if (detectSensitivity(rawInstructions) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
     const instructions = maskAccountNumbers(rawInstructions) || undefined;
     const run = await startRun(

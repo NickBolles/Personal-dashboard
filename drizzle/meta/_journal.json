@@ -288,6 +288,13 @@
       "when": 1794057433673,
       "tag": "0040_task_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794067868097,
+      "tag": "0041_scheduled_jobs_soft_delete",
+      "breakpoints": true
     }
   ]
 }

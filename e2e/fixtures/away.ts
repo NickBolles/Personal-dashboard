@@ -65,6 +65,7 @@ export function awayFixture(date = "2026-11-07"): AwayDigest {
     manual: true,
     status: "done",
     silent: false,
+    waiting: false,
     startedAt: at("08:00"),
     finishedAt: at("08:02"),
     summary: "Prepared the workshop notes. One next step needs your decision.",
@@ -93,7 +94,7 @@ export function awayFixture(date = "2026-11-07"): AwayDigest {
       },
     ],
     since: null,
-    counts: { ran: 3, failed: 1, changes: 1, needsYou: 1, running: 0 },
+    counts: { ran: 3, failed: 1, changes: 1, needsYou: 1, running: 0, waiting: 0 },
     line: "While you were away: 3 ran · 1 change · 1 needs you",
   };
 }

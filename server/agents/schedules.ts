@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { getOwner, type CurrentUser } from "@/server/auth";
 import { newId } from "@/server/crypto";
@@ -11,6 +11,7 @@ import { localDate } from "@/lib/time";
 import {
   DEFAULT_MAX_RUNS_PER_DAY,
   MAX_JOBS,
+  RUN_TIMEOUT_MS,
   SUGGESTED_TEMPLATES,
   effectiveAutonomy,
   nextRunAt,
@@ -43,14 +44,15 @@ export function scheduleId(raw: string) {
   return id;
 }
 export const scheduleTimezone = () => getPreferences().timezone || "America/Chicago";
-export function jobRow(user: CurrentUser, id: string): JobRow {
+/** Deleted jobs are soft-deleted: only the run ledger/digest may read them (`includeDeleted`). */
+export function jobRow(user: CurrentUser, id: string, includeDeleted = false): JobRow {
   assertAwayOwner(user);
   const r = getDb()
     .select()
     .from(J)
     .where(and(eq(J.userId, user.id), eq(J.id, id)))
     .get();
-  if (!r) throw new HttpError(404, "not_found", "That scheduled job isn't here");
+  if (!r || (r.deletedAt && !includeDeleted)) throw new HttpError(404, "not_found", "That scheduled job isn't here");
   return r;
 }
 export function jobView(user: CurrentUser, r: JobRow, now = new Date()): ScheduledJob {
@@ -80,7 +82,11 @@ export function jobView(user: CurrentUser, r: JobRow, now = new Date()): Schedul
 }
 export function jobRows(user: CurrentUser) {
   assertAwayOwner(user);
-  return getDb().select().from(J).where(eq(J.userId, user.id)).all();
+  return getDb()
+    .select()
+    .from(J)
+    .where(and(eq(J.userId, user.id), isNull(J.deletedAt)))
+    .all();
 }
 export function runCaps(user: CurrentUser, now = new Date(), tz = scheduleTimezone()) {
   const setting = getSetting<unknown>("away_max_runs_per_day");
@@ -93,6 +99,21 @@ export function runCaps(user: CurrentUser, now = new Date(), tz = scheduleTimezo
     .all()
     .filter((r) => localDate(new Date(r.startedAt), tz) === today).length;
   return { maxJobs: MAX_JOBS, maxRunsPerDay, runsToday };
+}
+/**
+ * The scheduled run currently active for this profile, if any (#230). Agent tokens are per profile, not
+ * per Hermes session, so an MCP call can't be tied to one run: while a run for the profile is active
+ * (≤ RUN_TIMEOUT), every direct write from that profile's token is treated as coming from the run.
+ */
+export function activeScheduledRunFor(userId: string, profile: string, now = new Date()) {
+  const since = new Date(now.getTime() - RUN_TIMEOUT_MS).toISOString();
+  return (
+    getDb()
+      .select({ id: R.id, jobId: R.jobId, startedAt: R.startedAt })
+      .from(R)
+      .where(and(eq(R.userId, userId), eq(R.status, "running"), eq(R.profile, profile), gt(R.startedAt, since)))
+      .get() ?? null
+  );
 }
 function mutation(user: CurrentUser, action: string, id: string, correlationId: string) {
   audit({ actor: user.id, action: `agents.schedules.${action}`, source: "agents", sourceRecord: id, result: "ok", correlationId });
@@ -182,7 +203,11 @@ export function patchJob(user: CurrentUser, id: string, input: JobPatch, correla
   mutation(user, "update", id, correlationId);
   return jobView(user, jobRow(user, id), now);
 }
-export function deleteJob(user: CurrentUser, id: string, correlationId: string) {
+/**
+ * Soft delete (#230): the row stays so its `scheduled_job_runs` keep counting toward the daily cap and
+ * completed results stay in the digest. Undo re-creates a job; the old ledger is untouched.
+ */
+export function deleteJob(user: CurrentUser, id: string, correlationId: string, now = new Date()) {
   jobRow(user, id);
   if (
     getDb()
@@ -193,7 +218,8 @@ export function deleteJob(user: CurrentUser, id: string, correlationId: string) 
   )
     throw new HttpError(409, "already_running", "Wait for this job to finish before deleting it");
   getDb()
-    .delete(J)
+    .update(J)
+    .set({ deletedAt: now.toISOString(), enabled: false, updatedAt: now.toISOString() })
     .where(and(eq(J.id, id), eq(J.userId, user.id)))
     .run();
   mutation(user, "delete", id, correlationId);
