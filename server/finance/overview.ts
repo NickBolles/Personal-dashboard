@@ -1,4 +1,7 @@
 import "server-only";
+import { and, gte, lte } from "drizzle-orm";
+import { getDb, schema } from "@/server/db";
+import { financeSnapshot, type FinanceSnapshot } from "@/lib/finance/snapshot";
 import { addDays, type CheckinResult } from "@/lib/finance/engine";
 import type { Cents, FinanceStatus, Issue } from "@/lib/finance/types";
 import { resolveIntegration } from "@/integrations/store";
@@ -13,6 +16,7 @@ import { monarchValidation } from "./sync";
 export type FinanceOverview = {
   /** this month in the household timezone (YYYY-MM) */
   month: string;
+  snapshot: FinanceSnapshot;
   status: FinanceStatus;
   statusText: string;
   /** oldest provider as-of among balances in use; null if any is unknown */
@@ -83,6 +87,15 @@ export function financeOverview(now = new Date()): FinanceOverview {
   const result = res?.result;
   return {
     month: thisMonth(now),
+    snapshot: financeSnapshot(
+      accounts,
+      getDb()
+        .select()
+        .from(schema.finTransactions)
+        .where(and(gte(schema.finTransactions.date, `${t.slice(0, 7)}-01`), lte(schema.finTransactions.date, t)))
+        .all(),
+      t,
+    ),
     status,
     statusText,
     asOf,

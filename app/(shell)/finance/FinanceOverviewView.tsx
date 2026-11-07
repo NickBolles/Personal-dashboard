@@ -10,6 +10,7 @@ import { AlertIcon, CheckIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { SectionHeader } from "@/components/ui/kit";
 import { Delta, Money } from "@/components/finance/money";
+import { FinanceSnapshotCards } from "@/components/finance/FinanceSnapshotCards";
 import { StartCheckinButton, monthLabel } from "./checkin/CheckinList";
 
 const TONE = { ready: "ok", attention: "warn", failed: "danger", setup: "accent" } as const;
@@ -36,7 +37,7 @@ export function FinanceOverviewView() {
   const o = q.data;
   const month = o.month;
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="@container mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
       <PageHeader
         title="Finance"
         subtitle="Plans and records. Jarvis never moves money."
@@ -52,6 +53,7 @@ export function FinanceOverviewView() {
           ) : null
         }
       />
+      {o.setup.accounts ? <FinanceSnapshotCards snapshot={o.snapshot} /> : null}
       <div
         role="status"
         className={cx("card flex flex-wrap items-center gap-3 p-4", o.status === "failed" && "border-danger", o.status === "attention" && "border-warn")}

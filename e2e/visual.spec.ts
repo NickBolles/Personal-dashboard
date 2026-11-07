@@ -21,6 +21,7 @@ import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
+import { financeSnapshotFixture } from "../mock-upstreams/finance-snapshot.mjs";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -1981,5 +1982,37 @@ for (const scheme of ["light", "dark"] as const) {
     } finally {
       await overlays.evaluate((el) => (el as Element).remove());
     }
+  });
+}
+
+// FI1: isolated read-only finance data; no mutations, live accounts or AI calls.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: finance snapshot (${scheme})`, async ({ page }, info) => {
+    test.skip(!["desktop", "mobile"].includes(info.project.name), "Snapshot coverage: desktop and 412px phone");
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    const fixture = financeSnapshotFixture();
+    await page.clock.setFixedTime(new Date(fixture.now));
+    await page.route(/\/api\/finance\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: fixture.overview }));
+    const aiRequests: string[] = [];
+    page.on("request", (request) => {
+      if (/\/api\/ai(?:\/|\?)/.test(request.url())) aiRequests.push(request.url());
+    });
+    await page.goto("/finance");
+    const snapshot = page.getByRole("region", { name: "Snapshot", exact: true });
+    await expect(snapshot.getByText("57,000.00", { exact: true })).toBeVisible();
+    await expect(snapshot.getByText("+3,466.00", { exact: true })).toBeVisible();
+    await expect(snapshot.locator("svg polyline")).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+    const overlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    try {
+      await expect(snapshot).toHaveScreenshot(`finance-snapshot-${scheme}.png`);
+    } finally {
+      await overlays.evaluate((el) => (el as Element).remove());
+    }
+    await page.getByLabel("Hide amounts on this device").check();
+    await expect(snapshot.getByText("57,000.00", { exact: true })).toHaveCount(0);
+    await expect(snapshot.locator("svg")).toHaveCount(0);
+    expect(aiRequests).toEqual([]);
   });
 }
