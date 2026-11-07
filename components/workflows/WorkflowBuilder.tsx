@@ -4,7 +4,9 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Field, Page, PageHeader, cx, inputCls, useToast } from "@/components/ui";
+import { Button, ErrorNote, Field, Page, PageHeader, cx, inputCls, useToast } from "@/components/ui";
+import { EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { FIELD_TYPES, MODEL_TIERS, WORKFLOW_ICONS, formFields, type WorkflowDefinition, type WorkflowField } from "@/lib/workflows/definition";
 import {
   BUILDER_SECTIONS,
@@ -48,11 +50,25 @@ export function WorkflowBuilder({ slug, fromChat }: { slug?: string; fromChat?: 
   });
   const id = slug ? list.data?.workflows.find((w) => w.slug === slug)?.id : undefined;
   const detail = useQuery({ queryKey: ["workflow", id], queryFn: ({ signal }) => api.get<Detail>(`/api/workflows/${id}`, signal), enabled: !!id });
-  if (slug && (list.isLoading || detail.isLoading)) return <Page width="wide">{<p className="text-sm text-muted">Loading…</p>}</Page>;
+  if (slug && (list.error || detail.error))
+    return (
+      <Page width="wide">
+        <PageHeader title="Edit workflow" />
+        <ErrorNote error={list.error ?? detail.error} retry={() => (list.error ? list : detail).refetch()} />
+      </Page>
+    );
+  if (slug && (list.isLoading || detail.isLoading))
+    return (
+      <Page width="wide">
+        <PageHeader title="Edit workflow" />
+        <LoadingState label="Loading…" />
+      </Page>
+    );
   if (slug && !id && !list.isLoading)
     return (
       <Page width="wide">
-        <p className="text-sm text-danger">That workflow isn&apos;t here.</p>
+        <PageHeader title="Edit workflow" />
+        <EmptyState title="That workflow isn't here." />
       </Page>
     );
   if (!slug) return <NewWorkflow fromChat={fromChat} />;

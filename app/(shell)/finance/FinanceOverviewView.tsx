@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import type { FinanceOverview } from "@/server/finance/overview";
-import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, cx, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, cx, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { AlertIcon, CheckIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { SectionHeader } from "@/components/ui/kit";
@@ -32,8 +33,13 @@ export function FinanceOverviewView() {
       qc.invalidateQueries({ queryKey: ["finance"] });
     },
   });
-  if (q.isPending) return <Spinner label="Loading finances" />;
-  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  if (q.isPending || q.error)
+    return (
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
+        <PageHeader title="Finance" subtitle="Plans and records. Jarvis never moves money." />
+        {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : <LoadingState label="Loading finances" />}
+      </div>
+    );
   const o = q.data;
   const month = o.month;
   return (

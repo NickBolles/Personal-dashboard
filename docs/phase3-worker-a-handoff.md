@@ -69,13 +69,18 @@ G6 — Partial (round 2 completes the allowed non-Areas sweep; shared decisions 
 - Files: components/agents/AgentsSettingsView.tsx; app/(shell)/settings/SharedConversations.tsx; app/(shell)/skylight/SkylightView.tsx; app/(shell)/home-control/HomeControlView.tsx; components/workflows/WorkflowsGallery.tsx.
 - Round 2 files: components/ui/LoadingState.tsx; app/(shell)/{todos/TodosView,alerts/AlertsView,brain/BrainView,daily-compass/CompassView,workouts/WorkoutView}.tsx; app/(shell)/settings/{activity/ActivityView,connections/ConnectionsView,notifications/NotificationSettingsView,people/PeopleView,phones/PhonesView}.tsx; components/NotificationSetup.tsx; components/integrations/{IntegrationForm,DriveConnection,BiblePackSettings,GithubConnections}.tsx; components/work/TagsSettingsView.tsx; components/workflows/SavedPlacesSettings.tsx; test/non-area-states.test.tsx.
 
-FI1 — Skipped
+FI1 — Done (round 2 local implementation; visual specs not run)
 
-- Prioritized P1/core UI and verification; no finance fixture or snapshot changes made.
+- Read-only Snapshot cards: observed net worth across recorded accounts (unknown if any balance is missing), current-month posted bank cash flow with a small SVG sparkline, and active account count. Planned check-in movements never masquerade as actual balances. Cash flow excludes card legs, pending/superseded/ambiguous transactions, archived accounts and future/out-of-month entries. No posted records means unavailable, not a fabricated zero. Amount privacy also removes the sparkline.
+- Deterministic synthetic fixture lives in mock-upstreams/finance-snapshot.mjs; fixed cents and reference date, with dates generated through isoDateIn. Monarch mock seed dates now use the same frame-timezone helper instead of UTC slicing. No new AI dependency or data path; existing test/ai-rules.test.ts import graph guard passes.
+- Files: lib/finance/snapshot.ts; server/finance/overview.ts; components/finance/FinanceSnapshotCards.tsx; app/(shell)/finance/FinanceOverviewView.tsx; mock-upstreams/{finance-snapshot,monarch}.mjs; test/finance-snapshot.test.ts; e2e/visual.spec.ts.
+- Commit: c1e1ad0 feat(finance): add deterministic read-only snapshot cards.
 
-O1 — Skipped
+O1 — Done (bounded round 2 scope; production chunk sizes not measured)
 
-- No speculative dynamic boundaries or performance claims without bundle/build verification. Current workout/finance views do not import standalone chart components to trivially split. Left for a measured performance pass.
+- Client-side next/dynamic boundary for the workflow builder on new/edit routes, explicitly keeping SSR enabled. Chunk fallback and edit loading/error/not-found states each retain a page h1. Existing builder header, actions and preview remain together; no new write paths. Failed detail reads can no longer accidentally render an empty creation form.
+- Only the decorative finance SVG sparkline is client-deferred, with a size-matched skeleton; amounts and Snapshot cards are outside the deferred chart. Finance now renders its h1 during loading/error as well as success. No existing standalone heavy finance chart library exists; no bundle-size improvement claim without integrator build output.
+- Files: components/workflows/{WorkflowBuilderEntry,WorkflowBuilder}.tsx; app/(shell)/workflows/{new,[slug]/edit}/page.tsx; components/finance/{FinanceCashFlowSparkline,FinanceSnapshotCards}.tsx; app/(shell)/finance/FinanceOverviewView.tsx; test/phase3-lazy.test.tsx.
 
 O4 — Partial (specs ready, PNG baselines not recorded)
 
@@ -106,6 +111,8 @@ Changed: e2e/visual.spec.ts (tests appended at end)
 - visual: appearance settings card (light)
 - visual: appearance settings card (dark)
   Screenshots settings-appearance-{light,dark}.png, desktop only.
+- Round 2: visual: finance snapshot (light), visual: finance snapshot (dark).
+  Screenshots finance-snapshot-{light,dark}.png on desktop and mobile 412 (mobile-320 deliberately skipped). Exact overview API fixture; no writes. Verifies the SVG has loaded before capture and privacy toggle removes chart/totals afterward. No PNG baselines generated.
 
 Existing alert/task/settings/chat desktop and changed empty-state snapshots will also need review/re-recording. No PNG files generated in this worktree.
 
@@ -114,6 +121,8 @@ Suggested integrator commands:
 - npm run test:e2e -- e2e/approvals-route.spec.ts e2e/task-segments.spec.ts --project=mobile
 - npm run test:e2e -- e2e/a11y.spec.ts --grep 'alder settings'
 - npm run test:e2e -- e2e/visual.spec.ts --grep 'coordinators settings page|appearance settings card'
+- npm run test:e2e -- e2e/visual.spec.ts --grep 'finance snapshot' --project=desktop --project=mobile
+- npm run test:e2e -- e2e/workflow-builder.spec.ts e2e/workflow-draft.spec.ts --project=mobile
 - Follow the existing pinned-container visual-baseline workflow when recording PNGs; then run the broader suite/build.
 
 ## Verified local checks
@@ -127,3 +136,14 @@ Suggested integrator commands:
   env -u HA_BASE_URL -u HA_TOKEN -u HERMES_API_KEY -u HERMES_BASE_URL -u PAPERCLIP_API_KEY -u PAPERCLIP_API_URL -u PAPERCLIP_BASE_URL -u SKYLIGHT_REFRESH_TOKEN -u GH_TOKEN -u GITHUB_TOKEN -u MONARCH_TOKEN -u MONARCH_API_URL -u GOOGLE_CLIENT_ID -u GOOGLE_CLIENT_SECRET npx vitest run test/appearance-card.test.tsx test/coordinator-settings.test.ts test/settings-shell.test.tsx test/theme.test.ts test/task-segments.test.ts test/item-escalation.test.ts test/decision-route.test.ts test/decisions-detail-api.test.ts test/phase3-shortcuts.test.tsx test/decision-answer.test.tsx test/agent-access.test.ts test/ai-rules.test.ts test/agent-runs.test.ts test/work-from-jarvis.test.ts test/ai-runner.test.ts test/mobile.test.ts components/skylight/SkylightViews.test.tsx test/areas.test.ts components/ui/kit.test.tsx test/workflows-builder.test.ts
 
 Regression coverage includes the existing finance/AI import guard, AI runner, decisions aggregation, scoped agent access/provenance, mobile contracts, Skylight views and workflow builder rules. Tests use isolated databases and mocked/local upstreams, not production writes.
+
+## Round 2 final verification
+
+- Commits before the final lazy-boundary commit: c1e1ad0 (FI1), b260f89 (G6). Each finding committed separately.
+- Final consolidated Vitest: 27 files passed, 235 tests passed. The added cached-error SSR test initially retried on mount; the fixture now explicitly disables retryOnMount to exercise its terminal error state. Final rerun is green.
+- Typecheck: nice -n 19 npx tsc --noEmit -p . passed.
+- ESLint on all round-2 TS/TSX/MJS changes: no errors; three pre-existing warnings (NotificationSetup effect, IntegrationForm effect and location assignment). Prettier --check and git diff --check passed.
+- No migration, build, Playwright, PNG generation, push, merge or deployment. No edits under the protected Smart UI, coordinator or map directories.
+- Exact consolidated unit command:
+
+  env -u HA_BASE_URL -u HA_TOKEN -u HERMES_API_KEY -u HERMES_BASE_URL -u PAPERCLIP_API_KEY -u PAPERCLIP_API_URL -u PAPERCLIP_BASE_URL -u SKYLIGHT_REFRESH_TOKEN -u GH_TOKEN -u GITHUB_TOKEN -u MONARCH_TOKEN -u MONARCH_API_URL -u GOOGLE_CLIENT_ID -u GOOGLE_CLIENT_SECRET npx vitest run test/appearance-card.test.tsx test/coordinator-settings.test.ts test/settings-shell.test.tsx test/theme.test.ts test/task-segments.test.ts test/item-escalation.test.ts test/decision-route.test.ts test/decisions-detail-api.test.ts test/phase3-shortcuts.test.tsx test/decision-answer.test.tsx test/agent-access.test.ts test/ai-rules.test.ts test/agent-runs.test.ts test/work-from-jarvis.test.ts test/ai-runner.test.ts test/mobile.test.ts components/skylight/SkylightViews.test.tsx test/areas.test.ts components/ui/kit.test.tsx test/workflows-builder.test.ts test/finance-snapshot.test.ts test/finance.test.ts test/mock-dates.test.ts test/non-area-states.test.tsx test/workouts.test.ts test/people.test.ts test/phase3-lazy.test.tsx

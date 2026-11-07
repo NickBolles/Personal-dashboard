@@ -1,9 +1,15 @@
 "use client";
 
 import { Card } from "@/components/ui";
-import { SectionHeader } from "@/components/ui/kit";
+import dynamic from "next/dynamic";
+import { SectionHeader, Skeleton } from "@/components/ui/kit";
 import { Money, Delta, useHideAmounts } from "./money";
-import { sparklinePoints, type FinanceSnapshot } from "@/lib/finance/snapshot";
+import type { FinanceSnapshot } from "@/lib/finance/snapshot";
+
+const CashFlowSparkline = dynamic(() => import("./FinanceCashFlowSparkline").then((m) => m.FinanceCashFlowSparkline), {
+  ssr: false,
+  loading: () => <Skeleton w={160} h={36} className="mt-2 block max-w-full" />,
+});
 
 export function FinanceSnapshotCards({ snapshot }: { snapshot: FinanceSnapshot }) {
   const { hidden } = useHideAmounts();
@@ -27,18 +33,7 @@ export function FinanceSnapshotCards({ snapshot }: { snapshot: FinanceSnapshot }
               <p className="mt-2 break-words text-2xl">
                 <Delta value={snapshot.cashFlow.net} />
               </p>
-              {!hidden ? (
-                <svg viewBox="0 0 160 36" width="160" height="36" className="mt-2 max-w-full text-accent" aria-hidden="true" focusable="false">
-                  <polyline
-                    points={sparklinePoints([0, ...snapshot.cashFlow.points.map((p) => p.value)])}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              ) : null}
+              {!hidden ? <CashFlowSparkline values={snapshot.cashFlow.points.map((p) => p.value)} /> : null}
               <p className="mt-1 text-xs text-muted">Posted bank movement · excludes pending and ambiguous entries</p>
             </>
           ) : (
