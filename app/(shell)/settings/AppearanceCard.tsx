@@ -41,7 +41,7 @@ export function AppearanceCard() {
         </div>
         <div className="min-w-0 space-y-1">
           <p className="text-sm font-semibold">Density</p>
-          <div className="max-w-full overflow-x-auto pb-1">
+          <div className="max-w-full [&>.k-seg]:max-w-full [&>.k-seg]:flex-wrap [&_.k-seg-i]:whitespace-nowrap">
             <Segmented<DensityPref>
               label="Density"
               value={density}
