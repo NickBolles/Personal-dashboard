@@ -110,6 +110,7 @@ export function lookup(user: CurrentUser): Lookup {
         kind: "item",
         title: it.title,
         due: it.targetDate ?? undefined,
+        createdDate: localDate(new Date(it.createdAt), tz),
         status: it.status,
         where: area && area.id !== it.id ? area.title : undefined,
         href: `/areas?item=${encodeURIComponent(it.id)}`,
@@ -126,7 +127,8 @@ export async function hydrate(user: CurrentUser, refs: string[]): Promise<Record
   const prs: Promise<void>[] = [];
   let prCount = 0;
   for (const ref of [...new Set(refs)].slice(0, LIMITS.hydrateRefs)) {
-    if (ref.startsWith("todo:")) out[ref] = l.todo(ref);
+    if (ref === "approvals:pending") out[ref] = (await import("./queue")).approvalQueue(user);
+    else if (ref.startsWith("todo:")) out[ref] = l.todo(ref);
     else if (ref.startsWith("item:")) out[ref] = l.item(ref);
     else if (ref.startsWith("metric:")) {
       const id = ref.slice(7);

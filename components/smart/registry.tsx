@@ -9,6 +9,7 @@ import { addDays, daysBetween } from "@/lib/time";
 import { Badge, Button, OverflowMenu, cx, type MenuItem } from "@/components/ui";
 import { InlineText, useSurface } from "./context";
 import { ApprovalChips, MetricGauge, PRCard, Sparkline, WeekPlan } from "./workflow-components";
+import { ApprovalQueue, BarChart, DecisionMatrix, Gantt, SmartForm, SmartHeader } from "./v2-components";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
 
@@ -127,7 +128,8 @@ function TaskList({ element }: P<"TaskList">) {
   });
   return (
     <section className="overflow-hidden rounded-[10px] border border-line" aria-label={list.title}>
-      <header className="flex items-center gap-2 bg-surface-2 px-3 py-1.5">
+      <header className="svh">
+        <span className="sv-tag">TaskList</span>
         <h3 className="flex-1 text-sm font-semibold">
           {list.title} <span className="text-muted">{list.rows.length}</span>
         </h3>
@@ -163,7 +165,7 @@ function DecisionCard({ element }: P<"DecisionCard">) {
   );
   return (
     <section className="rounded-[10px] border border-line p-3" aria-label={p.title}>
-      <h3 className="font-semibold">{p.title}</h3>
+      <SmartHeader kind="DecisionCard" title={p.title} />
       {p.context ? (
         <p className="mt-1 text-sm text-muted">
           <InlineText text={p.context} />
@@ -219,6 +221,7 @@ function Checklist({ element }: P<"Checklist">) {
   return (
     <section className="rounded-[10px] border border-line" aria-label={p.title}>
       <header className="flex items-center gap-2 px-3 pt-2">
+        <span className="sv-tag">Checklist</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title}</h3>
         <span className="text-xs text-muted">
           {done}/{p.steps.length} done
@@ -307,7 +310,9 @@ function Table({ element }: P<"Table">) {
               <tr key={i} className="border-t border-line">
                 {p.columns.map((c, ci) => (
                   <td key={c.key} className={cx("px-3 py-1.5", c.align === "right" && "text-right tabular-nums")}>
-                    {ci === 0 && r.ref && title(s.refs[r.ref]) ? title(s.refs[r.ref]) : String(r.cells[c.key] ?? "")}
+                    <span className={cx(c.key === "chore" && r.cells.state === "✓ Done" && "text-muted line-through")}>
+                      {ci === 0 && r.ref && title(s.refs[r.ref]) ? title(s.refs[r.ref]) : String(r.cells[c.key] ?? "")}
+                    </span>
                   </td>
                 ))}
               </tr>
@@ -335,6 +340,11 @@ function ItemRef({ element }: P<"ItemRef">) {
 const TONE_BORDER = { neutral: "", warn: "border-l-warn", ok: "border-l-ok", accent: "border-l-accent" } as const;
 
 export const registry: ComponentRegistry = {
+  DecisionMatrix,
+  Gantt,
+  BarChart,
+  ApprovalQueue,
+  Form: SmartForm,
   Stack: ({ element, children }: P<"Stack">) => (
     <div className={cx("flex", element.props.direction === "row" ? "flex-row flex-wrap" : "flex-col", element.props.gap === "sm" ? "gap-1.5" : "gap-3")}>
       {children}

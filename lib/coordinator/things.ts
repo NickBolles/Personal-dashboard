@@ -1,5 +1,6 @@
 import type { ActivityItem } from "@/lib/activity";
 import type { DecisionEntry } from "@/lib/decisions";
+import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 
 export type CoordinatorRun = { id: string; itemId: string; title: string; state: "running" | "stalled" | "failed" | "waiting"; at: string | null };
 
@@ -55,4 +56,15 @@ export function priorityLine(input: PriorityInput): PriorityLine {
 /** sinceMs is when the pending downward transition was first observed. */
 export function stablePriority(prev: PriorityLine, next: PriorityLine, sinceMs: number, now: number): PriorityLine {
   return ranks[next.state] < ranks[prev.state] && now - sinceMs < 4000 ? prev : next;
+}
+
+/** The server ranks cards. Failing and Needs you are never displaced. */
+export function pickTrayLine(
+  priority: PriorityLine,
+  dynamicCards: (DynamicCard & { snoozed?: boolean })[],
+  snoozed: readonly string[] = [],
+): PriorityLine & { card?: DynamicCard } {
+  if (priority.state === "failing" || priority.state === "needs") return priority;
+  const card = dynamicCards.find((c) => !c.snoozed && !snoozed.includes(c.id));
+  return card ? { ...priority, ...card.line, text: `${card.line.label} · ${card.line.text}`, card } : priority;
 }

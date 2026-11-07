@@ -12,6 +12,7 @@ import {
   type RowAction,
 } from "./catalog";
 import { canonicalJson } from "./validator";
+import { matrixIntent } from "./v2";
 
 /**
  * The action allowlist (spec §4.3, slice 1). An intent is only a proposal: it
@@ -106,7 +107,7 @@ export function blockFits(start: string, minutes: number) {
 
 function inWindow(date: string, today: string) {
   const d = daysBetween(today, date);
-  return Number.isFinite(d) && d >= 0 && d <= LIMITS.dateWindowDays;
+  return z.iso.date().safeParse(date).success && Number.isFinite(d) && d >= 0 && d <= LIMITS.dateWindowDays;
 }
 
 /** "This week" = the coming Friday (today on Fri–Sun). */
@@ -194,6 +195,26 @@ export function intentInSpec(spec: JarvisSpec, intent: Intent, today: string): b
   const onlyTargetDate = intent.kind === "item.update" && Object.keys(intent.patch).length === 1 && Boolean(intent.patch.targetDate);
   const isMove = (intent.kind === "todo.snooze" && ref?.startsWith("todo:")) || (onlyTargetDate && ref?.startsWith("item:"));
   for (const el of Object.values(spec.elements)) {
+    if (el.type === "DecisionMatrix") {
+      const p = el.props as PropsOf<"DecisionMatrix">;
+      if (p.options.some((o) => intentKey(matrixIntent(p, o)) === key)) return true;
+    }
+    if (el.type === "Gantt") {
+      const p = el.props as PropsOf<"Gantt">;
+      if (onlyTargetDate && p.rows.some((r) => r.ref === ref) && dateOf && (!p.from || dateOf >= p.from) && (!p.to || dateOf <= p.to)) return true;
+    }
+    if (el.type === "Form") {
+      const p = el.props as PropsOf<"Form">;
+      if (p.submit.updates?.some((i) => intentKey(i) === key)) return true;
+      if (
+        intent.kind === "item.create" &&
+        Object.keys(intent).every((k) => ["kind", "parentRef", "title"].includes(k)) &&
+        !/https?:\/\/|www\.|<[^>]*>/i.test(intent.title) &&
+        intent.title.trim() &&
+        p.submit.creates?.some((c) => c.parentRef === intent.parentRef || c.parentRefs?.includes(intent.parentRef))
+      )
+        return true;
+    }
     if (el.type === "ApprovalChips") {
       const p = el.props as PropsOf<"ApprovalChips">;
       if (isMove && p.rows.some((r) => r.ref === ref) && (dateOf === today || dateOf === addDays(today, 1))) return true;

@@ -7,6 +7,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, ErrorNote, Spinner, cx } from "@/components/ui";
 import { useSmartSettings } from "@/components/smart/AssistantText";
+import { InlineBrief } from "@/components/smart/InlineBrief";
 import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
 import { STATUS_LABELS, type InboxResponse, type TodayCard, type TodayResponse } from "@/lib/work";
 
@@ -224,14 +225,14 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         </p>
       </div>
       {smart.data?.enabled ? (
-        <nav aria-label="Workflows" className="flex flex-wrap gap-1.5" data-testid="today-workflows">
-          <ButtonLink size="sm" href="/areas/brief">
-            ☀ Morning brief
-          </ButtonLink>
-          <ButtonLink size="sm" href="/areas/plan">
-            Plan the week
-          </ButtonLink>
-        </nav>
+        <>
+          <InlineBrief />
+          <nav aria-label="Workflows" className="flex flex-wrap gap-1.5" data-testid="today-workflows">
+            <ButtonLink size="sm" href="/areas/plan">
+              Plan the week
+            </ButtonLink>
+          </nav>
+        </>
       ) : null}
       <ItemFilterBar rows={allCards} value={filter} onChange={setFilter} idPrefix="today" />
       <KpiStrip
