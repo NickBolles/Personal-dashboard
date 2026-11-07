@@ -88,10 +88,11 @@ describe("validateDefinition", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.issues.map((i) => i.code)).toEqual(expect.arrayContaining(["bind_unknown_path", "duplicate_field", "unknown_field"]));
   });
-  it("blocks Finance, HTML, unknown keys, code and oversize", () => {
+  it("allows Finance; blocks AI-excluded paths, HTML, unknown keys, code and oversize", () => {
     const fin = clone(teaching);
     fin.routing.area = "Finance/Budget";
-    const r = validateDefinition(fin);
+    expect(validateDefinition(fin).ok).toBe(true);
+    const r = validateDefinition(fin, { excludedAreas: ["Finance"] });
     expect(!r.ok && r.issues[0].code).toBe("finance_excluded");
     const excluded = validateDefinition(teaching, { excludedAreas: ["faith"] });
     expect(!excluded.ok && excluded.issues[0].code).toBe("finance_excluded");

@@ -22,7 +22,7 @@ import { stripLocation } from "./exif";
  * Quick capture (phase 5): text/URL/images into the Work inbox, then (with
  * work.ai and AI on) cheap triage → optional investigation. Capture always
  * works deterministically; AI follow-ups are skipped (with a reason) for
- * finance/credential-looking text, people without work.ai, or AI off.
+ * credential-looking text, people without work.ai, or AI off.
  * Files live under ${JARVIS_DATA_DIR}/captures/<userId>/<id> (0600), never
  * under public/, and are served only by the authenticated route.
  */
@@ -331,7 +331,7 @@ export function createCapture(user: CurrentUser, fields: CaptureFields, files: I
   if (!user.capabilities.has("work.ai")) return skip("ai_not_allowed");
   if (!settings.enabled) return skip("ai_disabled");
   if (sensitivity === "credentials") return skip("credentials_detected");
-  if (sensitivity === "finance") return skip("finance_detected");
+
   if (mode === "off") return skip("off");
   return queueFollowUp(user, id, mode, ctx.correlationId);
 }
@@ -427,7 +427,7 @@ export function moveCaptureToItem(entry: { id: string; url: string | null; title
   atts.forEach((a, i) => add(toAttachmentView(a).url, `${a.kind === "image" ? "Captured image" : "Captured text"}${atts.length > 1 ? ` ${i + 1}` : ""}`));
 }
 
-/** Manual (re-)investigate from the inbox; "Send anyway" passes financeOverride (never for credentials or excluded areas). */
+/** Manual (re-)investigate from the inbox; old financeOverride inputs are ignored. */
 export function investigateEntry(
   user: CurrentUser,
   id: string,

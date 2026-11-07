@@ -1,6 +1,6 @@
 /**
  * What POST /api/smart/hydrate returns per ref. Titles, dates and status come
- * from live Jarvis data, never from the model. Unknown, foreign and Finance
+ * from live Jarvis data, never from the model. Unknown, foreign and AI-excluded
  * refs come back `unavailable` and get no actions.
  */
 export type HydratedRef =
@@ -66,7 +66,7 @@ export type HydratedRef =
       /** the work item this PR is linked to */
       itemHref?: string;
     }
-  | { ref: string; unavailable: "unknown" | "finance" | "forbidden" | "not_connected" | "error"; message?: string };
+  | { ref: string; unavailable: "unknown" | "ai_excluded" | "forbidden" | "not_connected" | "error"; message?: string };
 export type ApprovalRow = { id: string; title: string; detail: string; href: string };
 
 export type HydrateResponse = { refs: Record<string, HydratedRef>; today: string };

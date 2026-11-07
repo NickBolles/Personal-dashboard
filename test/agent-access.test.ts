@@ -151,7 +151,10 @@ describe("Jarvis MCP", () => {
     expect(denied).toMatchObject({ isError: true, value: { error: "forbidden" } });
   });
 
-  it("Finance is never visible or writable", async () => {
+  it("Finance is visible; AI-excluded subtrees are never visible or writable", async () => {
+    expect(JSON.stringify((await call(token, "jarvis_tree")).value)).toContain("Finance");
+    expect((await call(token, "jarvis_get_item", { id: secret.id })).isError).toBe(false);
+    store.updateItem(owner, finance.id, { settings: { aiPolicy: "excluded" } }, cid);
     const tree = await call(token, "jarvis_tree");
     expect(JSON.stringify(tree.value)).not.toContain("Finance");
     expect(JSON.stringify(tree.value)).toContain("Workshop");
@@ -163,7 +166,8 @@ describe("Jarvis MCP", () => {
     expect(store.listItems(owner.id).find((i) => i.id === secret.id)!.title).toBe("Tax return");
   });
 
-  it("can't file a conversation out of Finance, and a rejected assignee leaves no item behind", async () => {
+  it("can't file a conversation out of an AI-excluded area, and a rejected assignee leaves no item behind", async () => {
+    store.updateItem(owner, finance.id, { settings: { aiPolicy: "excluded" } }, cid);
     const chat = store.placeConversation(owner, { sessionId: "s-budget", parentId: finance.id, title: "Budget chat" }, cid);
     const filer = mintAgentToken(owner, { name: "Filer", profile: "chiefofstaff", scopes: [...ALL, "conversations.file"] }, cid).token;
     expect((await call(filer, "jarvis_file_conversation", { sessionId: "s-budget", itemId: area.id })).value.error).toBe("not_found");

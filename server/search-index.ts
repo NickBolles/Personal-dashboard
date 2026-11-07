@@ -36,18 +36,20 @@ export type ChatEntry = {
   /** "Areas › Miscellaneous" */
   path?: string;
   lastActiveAt?: string;
-  /** filed under a Finance area: navigation only, never offered or resolved as AI context */
-  finance: boolean;
+  /** AI-excluded ancestry: navigation only, never offered or resolved as AI context */
+  aiExcluded: boolean;
 };
-
-const FINANCE_AREA = /(^|[\s/:._-])(finance|finances|monarch|money|budget)([\s/:._-]|$)/i;
 
 export function pathIndex(items: WorkItem[]) {
   const byId = new Map(items.map((i) => [i.id, i]));
-  const area = (id: string) => {
+  const aiExcluded = (id: string) => {
     let c = byId.get(id);
-    for (let n = 0; c?.parentId && n < 100; n++) c = byId.get(c.parentId);
-    return c && !c.parentId ? c : undefined;
+    for (let n = 0; c && n < 100; n++) {
+      if (c.settings?.aiPolicy === "excluded") return true;
+      if (!c.parentId) return false;
+      c = byId.get(c.parentId);
+    }
+    return true;
   };
   return {
     byId,
@@ -57,14 +59,8 @@ export function pathIndex(items: WorkItem[]) {
       for (let c = byId.get(byId.get(id)?.parentId ?? ""); c && parts.length < 6; c = c.parentId ? byId.get(c.parentId) : undefined) parts.unshift(c.title);
       return parts.join(" › ");
     },
-    /** under an area named like Finance (or is one) */
-    finance: (id: string) => FINANCE_AREA.test(area(id)?.title ?? ""),
+    aiExcluded,
   };
-}
-
-/** Is this Areas node (or its area) Finance? Such nodes never reach AI context. */
-export function isFinanceItem(items: WorkItem[], id: string) {
-  return pathIndex(items).finance(id);
 }
 
 /**
@@ -92,7 +88,7 @@ export function chatEntries(user: Viewer, items: WorkItem[] | null = null): Chat
       itemId: node?.id,
       path: node ? p.path(node.id) : undefined,
       lastActiveAt: s.lastActiveAt ?? s.startedAt,
-      finance: node ? p.finance(node.id) : false,
+      aiExcluded: node ? p.aiExcluded(node.id) : false,
     });
   }
   // Filed nodes the cached list doesn't have yet (index cold, or a brand-new chat): your own tree, so visible.
@@ -110,7 +106,7 @@ export function chatEntries(user: Viewer, items: WorkItem[] | null = null): Chat
       itemId: node.id,
       path: p.path(node.id),
       lastActiveAt: node.updatedAt,
-      finance: p.finance(node.id),
+      aiExcluded: p.aiExcluded(node.id),
     });
   }
   return out.sort((a, b) => (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? ""));

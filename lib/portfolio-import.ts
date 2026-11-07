@@ -20,7 +20,7 @@
  */
 import { z } from "zod";
 import { normaliseTag } from "./item-tags";
-import { isFinanceAreaLike } from "./catch-up";
+import { isFinanceAreaLike } from "./finance-area";
 import type { WorkStatus } from "./work";
 
 const linkPair = z.tuple([z.string().max(300), z.string().max(2000)]);

@@ -30,7 +30,7 @@ export const GET = api(
  * "Suggest with AI" (on demand): one triage-tier job for up to 15 unfiled
  * conversations, on the shared AI budget. Titles are read server-side (never
  * from the request) and each is screened: finance- or credential-looking
- * titles are left out, and AI-excluded areas (Finance) are never offered as
+ * titles are left out, and AI-excluded areas are never offered as
  * destinations. 202 = queued, 200 = an identical job is already running.
  */
 export const POST = api<z.infer<typeof fileSuggestSchema>>(

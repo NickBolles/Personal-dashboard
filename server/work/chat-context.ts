@@ -4,7 +4,7 @@ import { listItems } from "@/server/work/store";
 import { areaDefaultsFor } from "@/server/references";
 import { listAgentTokens } from "@/server/agent-access/tokens";
 import { detectSensitivity } from "@/server/ai/rules";
-import { isFinanceAreaLike } from "@/lib/catch-up";
+import { isFinanceAreaLike } from "@/lib/finance-area";
 import { STATUS_LABELS, isClosed, type WorkItem } from "@/lib/work";
 
 export const FILED_CONTEXT_LIMITS = { items: 40, chars: 4000 } as const;

@@ -30,7 +30,7 @@ const capFor = (i: Intent) =>
 /**
  * Validate the whole batch before writing anything. Any intent that isn't
  * well-formed, isn't offered by the stored spec, or points at something this
- * person can't see → 400 for the batch; Finance → 403 (spec §12).
+ * person can't see → 400 for the batch; AI-excluded area → 403 (spec §12).
  */
 function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeof storedSpec>, external: boolean): Checked[] {
   const spec = specOf();
@@ -62,7 +62,7 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
     for (const ref of refs) {
       const h = ref.startsWith("todo:") ? l.todo(ref) : l.item(ref);
       if ("unavailable" in h) {
-        if (h.unavailable === "finance") throw new HttpError(403, "finance_excluded", "Finance is never changed from an AI reply");
+        if (h.unavailable === "ai_excluded") throw new HttpError(403, "finance_excluded", "Areas excluded from AI are never changed from an AI reply");
         throw new HttpError(400, "unavailable", "Something in that change isn't available any more");
       }
       if (!isTask(h)) throw new HttpError(400, "unavailable", "Something in that change isn't available any more");

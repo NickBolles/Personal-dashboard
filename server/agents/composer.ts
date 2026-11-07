@@ -1,4 +1,7 @@
 import "server-only";
+import { areaPolicyFor } from "@/server/ai/jobs";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { and, asc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { resolveAgentForNode } from "./routing";
@@ -38,6 +41,7 @@ const MAX_CHILDREN = 12;
  * summary/next action and its open children. Only your own items; nothing for an id that isn't yours.
  */
 export function nodeContextBlock(userId: string, nodeId: string): string {
+  if (areaPolicyFor(userId, nodeId) === "excluded") return "";
   const node = composerNode(userId, nodeId);
   if (!node) return "";
   const db = getDb();
@@ -47,13 +51,29 @@ export function nodeContextBlock(userId: string, nodeId: string): string {
     .where(and(eq(schema.workItems.id, nodeId), eq(schema.workItems.userId, userId)))
     .get();
   const kids = db
-    .select({ title: schema.workItems.title, kind: schema.workItems.kind, status: schema.workItems.status, nextAction: schema.workItems.nextAction })
+    .select({
+      id: schema.workItems.id,
+      title: schema.workItems.title,
+      kind: schema.workItems.kind,
+      status: schema.workItems.status,
+      nextAction: schema.workItems.nextAction,
+    })
     .from(schema.workItems)
     .where(and(eq(schema.workItems.parentId, nodeId), eq(schema.workItems.userId, userId), eq(schema.workItems.archived, false)))
     .orderBy(asc(schema.workItems.sortOrder))
     .all()
-    .filter((k) => k.kind !== "conversation" && k.status !== "done" && k.status !== "dropped");
-  const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+    .filter(
+      (k) =>
+        k.kind !== "conversation" &&
+        k.status !== "done" &&
+        k.status !== "dropped" &&
+        areaPolicyFor(userId, k.id) !== "excluded" &&
+        detectSensitivity(`${k.title}\n${k.nextAction}`) !== "credentials",
+    );
+  const clip = (s: string, n: number) => {
+    s = maskAccountNumbers(s);
+    return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+  };
   const lines = [
     `Asked from Jarvis ${node.kind}: ${node.path.join(" › ")}`,
     row?.status ? `Status: ${row.status}` : "",
@@ -66,7 +86,7 @@ export function nodeContextBlock(userId: string, nodeId: string): string {
           .join("\n")}${kids.length > MAX_CHILDREN ? `\n- …and ${kids.length - MAX_CHILDREN} more` : ""}`
       : "",
   ];
-  return lines.filter(Boolean).join("\n");
+  return maskAccountNumbers(lines.filter((line) => line && detectSensitivity(line) !== "credentials").join("\n"));
 }
 
 export { NODE_CTX_PREFIX };

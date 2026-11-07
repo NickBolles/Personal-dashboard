@@ -62,7 +62,25 @@ describe("devices", () => {
     const kinds = Object.fromEntries(d.doors.map((x) => [x.entityId, x.kind]));
     expect(kinds).toMatchObject({ "lock.front_door_lock": "lock", "cover.garage_door": "garage", "binary_sensor.back_door": "door" });
     // Doors keep the safe allowlist (lock, close) only.
-    expect(d.doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock"]);
+    // Owner decision 2026-11-07: locks and the garage are controllable both ways (high-risk ones need the explicit confirm).
+    expect(d.doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => [s.service, s.risk])).toEqual([
+      ["lock", "high"],
+      ["unlock", "high"],
+    ]);
+    expect(Object.fromEntries(d.others.map((x) => [x.entityId, x.kind]))).toEqual(
+      Object.fromEntries([
+        ["switch.coffee_maker", "switch"],
+        ["fan.bedroom_fan", "fan"],
+        ["input_boolean.guest_mode", "toggle"],
+        ["media_player.living_room_speaker", "media"],
+        ["scene.movie_night", "scene"],
+        ["vacuum.roomba", "vacuum"],
+        ["script.goodnight", "script"],
+        ["climate.thermostat", "climate"],
+      ]),
+    );
+    expect(d.others.find((x) => x.kind === "climate")).toMatchObject({ temperature: 68, currentTemperature: 67, hvacModes: ["off", "heat", "cool", "auto"] });
+    expect(d.others.find((x) => x.kind === "media")).toMatchObject({ volume: 30 });
     expect(d.doors.find((x) => x.entityId === "binary_sensor.back_door")!.services).toEqual([]);
   });
 
@@ -74,7 +92,10 @@ describe("devices", () => {
     const r = await call(devicesRoute.GET, "/api/home-assistant/devices", tablet);
     const body = (await r.json()) as { lights: { services: unknown[] }[]; cameras: unknown[] };
     expect(body.cameras.length).toBe(2);
-    expect(body.lights[0]!.services.length).toBe(2);
+    expect(body.lights[0]!.services.map((s) => (s as { service: string }).service)).toEqual(["turn_on", "turn_off", "toggle"]);
+    // A shared tablet keeps the safe direction: lock yes, unlock no.
+    const doors = (body as unknown as { doors: { entityId: string; services: { service: string }[] }[] }).doors;
+    expect(doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock"]);
   });
 
   it("camera stills are proxied, typed as images and never cached", async () => {

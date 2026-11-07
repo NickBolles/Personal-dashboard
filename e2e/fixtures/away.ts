@@ -47,7 +47,8 @@ export function schedulesFixture(date = "2026-11-07"): SchedulesResponse {
     caps: { maxJobs: 12, maxRunsPerDay: 6, runsToday: 3 },
     areas: [
       { id: "area_lantern", title: "Lantern workshop", autonomy: "low_risk" },
-      { id: "area_finance", title: "Finance", autonomy: "off" },
+      { id: "area_finance", title: "Finance", autonomy: "propose" },
+      { id: "area_private", title: "Private journal", autonomy: "off" },
     ],
   };
 }

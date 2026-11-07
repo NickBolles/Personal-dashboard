@@ -51,14 +51,14 @@ describe("overdue triage", () => {
     expect(card!.chat).toBeUndefined();
   });
 
-  it("chat context is bounded, read-only, and never includes finance", () => {
+  it("chat context is bounded, read-only, and includes Finance", () => {
     const list = [
       ...Array.from({ length: 40 }, (_, i) => overdue(`${i}`, "2026-10-01", { title: `A rather long overdue task title number ${i} `.repeat(3) })),
       overdue("fin", "2026-10-01", { source: "finance", id: "finance:x", title: "Pay the card" }),
     ];
     const [card] = buildAssists(input({ overdue: list }));
     expect(card!.chat!.context.length).toBeLessThanOrEqual(1500);
-    expect(card!.chat!.context).not.toMatch(/Pay the card/);
+    expect(card!.chat!.context).toMatch(/Pay the card/);
     expect(card!.chat!.draft).toMatch(/don’t complete, reschedule or delete anything/);
   });
 });

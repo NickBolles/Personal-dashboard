@@ -79,6 +79,7 @@ async function setup() {
   const area = store.createItem(me, { kind: "area", title: "Momentum bets" }, cid);
   const item = store.createItem(me, { kind: "project", title: "Team totals", parentId: area.id }, cid);
   const fin = store.createItem(me, { kind: "area", title: "Finance" }, cid);
+  store.updateItem(me, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
   const finItem = store.createItem(me, { kind: "project", title: "Taxes", parentId: fin.id }, cid);
   expect((await call(settingsRoute.PUT, { method: "PUT", body: { enabled: true } })).status).toBe(200);
   const s = await (await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "sess-1", blockIndex: 0, spec: spec(item.id) } })).json();
@@ -100,7 +101,7 @@ describe("smart UI API", () => {
     const h = await (await call(hydrateRoute.POST, { body: { refs: ["todo:gt-1", `item:${item.id}`, `item:${finItem.id}`, "todo:nope"] } })).json();
     expect(h.refs["todo:gt-1"]).toMatchObject({ title: "Return ladder", due: "2026-10-01", kind: "todo" });
     expect(h.refs[`item:${item.id}`]).toMatchObject({ title: "Team totals", where: "Momentum bets" });
-    expect(h.refs[`item:${finItem.id}`]).toEqual({ ref: `item:${finItem.id}`, unavailable: "finance" });
+    expect(h.refs[`item:${finItem.id}`]).toEqual({ ref: `item:${finItem.id}`, unavailable: "ai_excluded" });
     expect(h.refs["todo:nope"]).toMatchObject({ unavailable: "unknown" });
     const bad = await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "s", blockIndex: 0, spec: { root: "x", elements: {} } } });
     expect(bad.status).toBe(400);
@@ -137,7 +138,7 @@ describe("smart UI API", () => {
     expect((await call(undoRoute.POST, { body: { surfaceId, intentHash: drop!.intentHash } })).status).toBe(404);
   });
 
-  it("refuses forged intents (400), Finance (403), settle, and other people's surfaces", async () => {
+  it("refuses forged intents (400), AI-excluded areas (403), settle, and other people's surfaces", async () => {
     const { item, finItem, surfaceId } = await setup();
     const send = (intents: unknown[], user = owner) =>
       call(applyRoute.POST, { user, body: { surfaceId, intents, idempotencyKey: `${surfaceId}:${Math.random()}` } });
@@ -145,7 +146,7 @@ describe("smart UI API", () => {
     expect((await send([{ kind: "todo.snooze", ref: "todo:gt-1", date: "2029-01-01" }])).status).toBe(400);
     expect((await send([{ kind: "item.update", ref: `item:${item.id}`, patch: { status: "settled" } }])).status).toBe(400);
     expect((await send([{ kind: "item.create", parentRef: `item:${item.id}`, title: "x" }])).status).toBe(400);
-    // Finance: even a spec that offers it is refused at apply
+    // AI-excluded: even a spec that offers it is refused at apply
     const finSpec = { root: "a", elements: { a: { type: "TaskList", props: { title: "F", rows: [{ ref: `item:${finItem.id}`, suggestion: "drop" }] } } } };
     const fs = await (await call(surfacesRoute.PUT, { method: "PUT", body: { sessionId: "sess-2", blockIndex: 0, spec: finSpec } })).json();
     const f = await call(applyRoute.POST, {

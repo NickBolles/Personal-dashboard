@@ -53,7 +53,7 @@ export function AiSettingsView() {
     <div className="space-y-3">
       <PageHeader title="AI" subtitle="Background research, plans, scheduling help, drafts and capture triage through Hermes." />
       <p className="rounded-[10px] border border-line bg-bg px-3 py-2 text-[13px]" role="note">
-        Finance is never sent to AI. Calendar data stays in Jarvis.
+        Areas excluded from AI are never sent. Calendar data stays in Jarvis.
       </p>
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">

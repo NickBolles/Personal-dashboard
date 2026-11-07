@@ -7,14 +7,14 @@
  * - Every schedule ships DISABLED; the owner enables it.
  * - Missed windows are skipped, never replayed; one run per (job, slot).
  * - A slot inside quiet hours runs only when the job is marked `overnight`.
- * - Autonomy is per area: `propose` (default) or `low_risk`. Finance /
+ * - Autonomy is per area: `propose` (default) or `low_risk`. Only
  *   AI-excluded areas are forced `off` (no AI at all).
  * - Low-risk = an explicit allowlist of intents. Everything else becomes a
  *   Needs-you decision; some intents are never done by Jarvis at all.
  */
 import { z } from "zod";
 import { addDays, localDate, localMinutes, localTimeToInstant, MINUTE, parseHHMM, inWindow } from "./time";
-import { isFinanceAreaLike } from "./catch-up";
+
 import { AUTONOMY_MODES, type AutonomyMode } from "./work";
 
 export { AUTONOMY_MODES, type AutonomyMode };
@@ -326,6 +326,8 @@ export const PROPOSAL_INTENTS = [
   "create_project",
   "add_link",
   "raise_decision",
+  /** a Home Assistant change: ALWAYS a Needs-you decision (never low-risk, never executed by a job) */
+  "device_control",
   "settle",
   "abandon",
   "supersede",
@@ -351,19 +353,28 @@ export const proposalSchema = z
     text: z.string().trim().max(4000).optional(),
     /** one-line reason shown to the owner */
     why: z.string().trim().max(300).optional(),
+    /** device_control only: what to change (validated against lib/ha-policy when proposed) */
+    device: z
+      .object({
+        entityId: z.string().regex(/^[a-z_]+\.[a-z0-9_]+$/),
+        service: z.string().regex(/^[a-z_]{2,40}$/),
+        data: z.record(z.string().max(40), z.union([z.string().max(40), z.number()])).optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type Proposal = z.infer<typeof proposalSchema>;
 
 export type PolicyOutcome = "apply" | "decision" | "refuse";
 
-/** Finance / AI-excluded areas are always off; triage-only areas can only propose. */
+/** AI-excluded areas are always off; triage-only areas can only propose. */
 export function effectiveAutonomy(area: {
   title: string;
   systemKey?: string | null;
   settings?: { autonomy?: AutonomyMode | null; aiPolicy?: string | null } | null;
 }): EffectiveAutonomy {
-  if (isFinanceAreaLike(area) || area.settings?.aiPolicy === "excluded") return "off";
+  if (area.settings?.aiPolicy === "excluded") return "off";
   if (area.settings?.aiPolicy === "triage_only") return "propose";
   return area.settings?.autonomy === "low_risk" ? "low_risk" : "propose";
 }
@@ -419,7 +430,7 @@ export function policyInstructions(mode: EffectiveAutonomy) {
     mode === "low_risk"
       ? `This area allows Jarvis to apply low-risk proposals (${LOW_RISK_INTENTS.join(", ")}) automatically with undo; everything else goes to the owner as a decision.`
       : "Every proposal goes to the owner as a decision; nothing is applied automatically.",
-    "Never settle, abandon, supersede, merge, deploy, spend money or message anyone; propose instead. Never include finance data.",
+    "Never settle, abandon, supersede, merge, deploy, spend money or message anyone; propose instead. Never include credentials, tokens or full account numbers. Device changes (Home Assistant) are device_control proposals with {entityId, service, data?}; the owner confirms them.",
     `If nothing changed since your last check-in, reply exactly ${NOTHING_NEW}.`,
   ].join("\n");
 }

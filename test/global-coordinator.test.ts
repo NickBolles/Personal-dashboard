@@ -43,9 +43,9 @@ describe("global coordinator area", () => {
     const expected = store.listItems(user.id).find((i) => i.settings?.agentMode === "chiefofstaff");
     expect(globalCoordinatorArea(user)?.id).toBe(expected?.id ?? first.id);
   });
-  it.each(["missing", "archived", "excluded", "finance", "nested"])("ignores an invalid configured area: %s", (kind) => {
+  it.each(["missing", "archived", "excluded", "nested"])("ignores an invalid configured area: %s", (kind) => {
     const fallback = area("Portfolio");
-    const invalid = area(kind === "finance" ? "Financial planning" : "Invalid", "chiefofstaff");
+    const invalid = area("Invalid", "chiefofstaff");
     if (kind === "archived") store.updateItem(user, invalid.id, { archived: true }, cid);
     if (kind === "excluded") store.updateItem(user, invalid.id, { settings: { aiPolicy: "excluded" } }, cid);
     const child = kind === "nested" ? store.createItem(user, { kind: "project", title: "Child", parentId: invalid.id }, cid) : null;
@@ -54,9 +54,10 @@ describe("global coordinator area", () => {
     setSetting("global_coordinator_area_id", kind === "missing" ? "does-not-exist" : (child?.id ?? invalid.id));
     expect(globalCoordinatorArea(user)?.id).toBe(fallback.id);
   });
-  it("never chooses Finance or AI-excluded areas, even with the right mode", () => {
-    area("Finance", "chiefofstaff");
-    area("Finances", "chiefofstaff");
+  it("chooses Finance but never AI-excluded areas, even with the right mode", () => {
+    const fin = area("Finance", "chiefofstaff");
+    expect(globalCoordinatorArea(user)?.id).toBe(fin.id);
+    store.updateItem(user, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
     const excluded = area("Portfolio", "chiefofstaff");
     store.updateItem(user, excluded.id, { settings: { aiPolicy: "excluded" } }, cid);
     expect(globalCoordinatorArea(user)).toBeNull();

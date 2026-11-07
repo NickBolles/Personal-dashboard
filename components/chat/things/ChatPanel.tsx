@@ -364,7 +364,7 @@ function PanelContent(p: Props) {
           <p className="text-xs text-muted">Token and cost breakdown unavailable.</p>
           <LinksPanel {...linksProps} contextOnly />
           <Button onClick={p.onAddContext}>Add context</Button>
-          <p className="text-xs text-muted">Finance is never shared with the assistant.</p>
+          <p className="text-xs text-muted">Areas excluded from AI are never sent.</p>
         </section>
       ) : null}
     </>

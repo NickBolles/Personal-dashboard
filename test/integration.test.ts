@@ -19,7 +19,7 @@ import type { IntegrationKind } from "@/integrations/registry";
 import { ADAPTERS } from "@/integrations";
 import { adapterContext, getHome, refreshSource } from "@/server/sources";
 import { evaluateException, homeHealth, parseAllowlist } from "@/integrations/home-assistant/adapter";
-import { executeControl, listControls } from "@/integrations/home-assistant/controls";
+import { __resetControlRateLimits, executeControl, listControls, stateToken } from "@/integrations/home-assistant/controls";
 import { track, trackIdempotencyKey } from "@/integrations/paperclip/service";
 import { alertIntegrationFailures, tick } from "@/server/worker";
 import { updatePreferences } from "@/server/settings";
@@ -34,11 +34,11 @@ let userId: string;
 async function mock(p: string, body: unknown = {}) {
   await fetch(`${base}/__mock${p}`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
 }
-async function setHa(entity_id: string, state: string, agoMin = 0) {
+async function setHa(entity_id: string, state: string, agoMin = 0, attributes?: Record<string, unknown>) {
   await fetch(`${base}/ha/__mock/ha/set`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: "Bearer mock-ha-long-lived-token" },
-    body: JSON.stringify({ entity_id, state, agoMin }),
+    body: JSON.stringify({ entity_id, state, agoMin, ...(attributes ? { attributes } : {}) }),
   });
 }
 
@@ -162,16 +162,75 @@ describe("home assistant", () => {
       { entityId: "cover.g", services: ["close_cover"] },
     ]);
   });
-  it("default allowlist is the safe direction only: unlock and open are opt-in", async () => {
+  it("parses domain wildcards", () => {
+    expect(parseAllowlist("light.*: turn_on, turn_off\nlight.*x: turn_on")).toEqual([{ entityId: "light.*", services: ["turn_on", "turn_off"] }]);
+  });
+  it("default allowlist (owner 2026-11-07): lock/unlock and garage open/close, high-risk ones need the explicit confirm", async () => {
+    __resetControlRateLimits();
     await setHa("lock.front_door_lock", "locked");
-    await setHa("cover.garage_door_2", "closed");
     const controls = await listControls();
     const lock = controls.find((c) => c.entityId === "lock.front_door_lock")!;
-    expect(lock.services.map((s) => s.service)).toEqual(["lock"]);
-    expect(controls.flatMap((c) => c.services.map((s) => s.service))).not.toContain("open_cover");
+    expect(lock.services.map((s) => [s.service, s.risk])).toEqual([
+      ["lock", "high"],
+      ["unlock", "high"],
+    ]);
+    const garage = controls.find((c) => c.entityId === "cover.garage_door")!;
+    expect(garage.services.map((s) => [s.service, s.risk])).toEqual([
+      ["open_cover", "high"],
+      ["close_cover", "standard"],
+      ["stop_cover", "standard"],
+    ]);
+    // High-risk without the explicit second confirm: refused, nothing sent.
     await expect(executeControl({ entityId: lock.entityId, service: "unlock", stateToken: lock.stateToken, confirmed: true }, userId, "c0")).rejects.toThrow(
-      /allowlist/,
+      /high-risk/,
     );
+    // Agents and scheduled jobs never execute, whatever they send.
+    await expect(
+      executeControl({ entityId: lock.entityId, service: "unlock", stateToken: lock.stateToken, confirmed: true, highRiskConfirmed: true }, userId, "c0b", {
+        via: "agent:devchief",
+      }),
+    ).rejects.toThrow(/propose/);
+    const r = await executeControl(
+      { entityId: lock.entityId, service: "unlock", stateToken: lock.stateToken, confirmed: true, highRiskConfirmed: true },
+      userId,
+      "c0c",
+      { pollMs: 50, via: null },
+    );
+    expect(r).toMatchObject({ verified: true, state: "unlocked", undo: { service: "lock", risk: "high" } });
+    expect(r.stateToken).toBeTruthy();
+    await setHa("lock.front_door_lock", "locked");
+  });
+  it("high-risk actions are rate-limited per person", async () => {
+    __resetControlRateLimits();
+    for (let i = 0; i < 6; i++) {
+      await setHa("lock.front_door_lock", i % 2 ? "unlocked" : "locked");
+      const c = (await listControls()).find((x) => x.entityId === "lock.front_door_lock")!;
+      const svc = i % 2 ? "lock" : "unlock";
+      await executeControl({ entityId: c.entityId, service: svc, stateToken: c.stateToken, confirmed: true, highRiskConfirmed: true }, userId, `rl${i}`, {
+        pollMs: 20,
+        readbackTimeoutMs: 1000,
+        via: null,
+      });
+    }
+    const c = (await listControls()).find((x) => x.entityId === "lock.front_door_lock")!;
+    const svc = c.state === "locked" ? "unlock" : "lock";
+    await expect(
+      executeControl({ entityId: c.entityId, service: svc, stateToken: c.stateToken, confirmed: true, highRiskConfirmed: true }, userId, "rl7", { via: null }),
+    ).rejects.toThrow(/Too many/);
+    __resetControlRateLimits();
+    await setHa("lock.front_door_lock", "locked");
+  });
+  it("lights: brightness with readback and Undo back to the previous level", async () => {
+    await setHa("light.kitchen", "on", 0, { brightness: 204 });
+    const live = await (await fetch(`${base}/ha/api/states/light.kitchen`, { headers: { authorization: "Bearer mock-ha-long-lived-token" } })).json();
+    const token = stateToken(live);
+    const r = await executeControl(
+      { entityId: "light.kitchen", service: "turn_on", stateToken: token, confirmed: true, data: { brightness_pct: 30 } },
+      userId,
+      "b1",
+      { pollMs: 50, via: null },
+    );
+    expect(r).toMatchObject({ verified: true, state: "on", undo: { service: "turn_on", data: { brightness_pct: 80 }, risk: "low" } });
   });
   it("health: counts only, and unknown (undefined) rather than 0 when HA can't say", async () => {
     const data = await ADAPTERS.home_assistant.fetch(adapterContext());
@@ -186,7 +245,9 @@ describe("home assistant", () => {
     await setHa("cover.garage_door", "open", 20);
     const controls = await listControls();
     const garage = controls.find((c) => c.entityId === "cover.garage_door")!;
-    await expect(executeControl({ entityId: "switch.x", service: "turn_on", stateToken: "x", confirmed: true }, userId, "c1")).rejects.toThrow(/allowlist/);
+    await expect(executeControl({ entityId: "switch.x", service: "self_destruct", stateToken: "x", confirmed: true }, userId, "c1")).rejects.toThrow(
+      /allowlist/,
+    );
     await setHa("cover.garage_door", "closed");
     await expect(
       executeControl({ entityId: garage.entityId, service: "close_cover", stateToken: garage.stateToken, confirmed: true }, userId, "c2"),
@@ -196,7 +257,8 @@ describe("home assistant", () => {
     const res = await executeControl({ entityId: fresh.entityId, service: "close_cover", stateToken: fresh.stateToken, confirmed: true }, userId, "c3", {
       pollMs: 100,
     });
-    expect(res).toMatchObject({ verified: true, state: "closed" });
+    // #219: Close and Open are each other's Undo; reopening is high-risk (explicit confirm in the UI).
+    expect(res).toMatchObject({ verified: true, state: "closed", undo: { service: "open_cover", risk: "high" } });
   });
 });
 

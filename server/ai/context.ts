@@ -7,8 +7,7 @@ import { areaPolicyFor } from "./jobs";
 
 /**
  * Allowlisted context for an AI job (spec §6.2). Never: conversation
- * transcripts, finance (no finance module is reachable from server/ai/**; a
- * unit test scans the import graph), HA live state unless the person picked
+ * transcripts, AI-excluded subtrees, HA live state unless the person picked
  * that context source, secrets or other people's data. ≤ 8000 chars.
  */
 export const CONTEXT_MAX = 8000;
@@ -128,8 +127,8 @@ function recentReports(userId: string, subjectId: string) {
 
 /**
  * Optional "Ask about…" snapshots (Home, Skylight, Todos…). server/context.ts
- * already drops finance; it's loaded lazily so the static import graph of
- * server/ai/** never reaches the source registry (which knows the finance adapter).
+ * screens credentials and masks account numbers; it's loaded lazily so the
+ * static import graph of server/ai/** stays isolated from integration registries and source workers.
  */
 async function extraSources(user: { id: string; capabilities: Set<string>; role: string }, sources: ContextSource[] | undefined) {
   if (!sources?.length) return "";

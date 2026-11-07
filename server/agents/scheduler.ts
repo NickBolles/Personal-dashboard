@@ -1,4 +1,5 @@
 import "server-only";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { getOwner, userById, type CurrentUser } from "@/server/auth";
@@ -128,8 +129,8 @@ export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, 
     const area = areaFor(user, job);
     if (!area) throw new HttpError(409, "not_ready", "Pick an area and coordinator first");
     if (effectiveAutonomy(area) === "off") throw new HttpError(409, "ai_off", "AI is off in this area");
-    if (detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) !== "none")
-      throw new HttpError(409, "ai_off", "Scheduled prompts cannot include Finance data or credentials");
+    if (detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) === "credentials")
+      throw new HttpError(409, "ai_off", "Scheduled prompts cannot include credentials");
     if (!area.settings?.agentMode) throw new HttpError(409, "not_ready", "Set an area coordinator first");
     const resolution = deps.resolveAgentForNode(user.id, area.id);
     if (!["default", "routing_off", "routed"].includes(resolution.reason)) throw new HttpError(409, "not_ready", "The coordinator route isn't ready");
@@ -162,16 +163,17 @@ export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, 
         ? Object.values(agentRuns(user, visible).items)
             .filter((r) => r.live === "failed" || r.agentRuns?.some((r) => isStalled(r, now.getTime())))
             .map((r) => `${r.title}: ${r.live}`)
-            .filter((t) => detectSensitivity(t) === "none")
+            .filter((t) => detectSensitivity(t) !== "credentials")
             .slice(0, 12)
             .join("\n")
         : "";
     const prefs = getPreferences().hermes;
     const settings = area.settings;
     const modeHint = settings?.agentMode && settings.agentMode !== profile ? `Agent mode: ${settings.agentMode}.` : "";
-    const instructions = [modeHint, settings?.instructions, policyInstructions(effectiveAutonomy(area))].filter(Boolean).join("\n\n");
-    const input = [job.prompt, context, stalled].filter(Boolean).join("\n\n");
-    if (detectSensitivity(input) !== "none") throw new HttpError(409, "ai_off", "Scheduled context contains data unavailable to AI");
+    const instructions = maskAccountNumbers([modeHint, settings?.instructions, policyInstructions(effectiveAutonomy(area))].filter(Boolean).join("\n\n"));
+    const rawInput = [job.prompt, context, stalled].filter(Boolean).join("\n\n");
+    if (detectSensitivity(rawInput) === "credentials") throw new HttpError(409, "ai_off", "Scheduled context contains credentials");
+    const input = maskAccountNumbers(rawInput);
     const registered = registerAgentRun(
       user,
       profile ?? "default",
@@ -316,7 +318,7 @@ export async function runSchedulePass(now: Date, deps: SchedulerDeps = defaultDe
       !area ||
       effectiveAutonomy(area) === "off" ||
       !area.settings?.agentMode ||
-      detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) !== "none"
+      detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) === "credentials"
         ? "skipped_policy"
         : !job.overnight && inQuietHours(at, getPreferences(user.id).quietHours, job.tz)
           ? "skipped_quiet"

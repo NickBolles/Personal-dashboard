@@ -24,8 +24,7 @@ import { itemExcluded, getSmartSettings } from "./store";
 /**
  * Hydrators for the v1.1 refs (spec §12a): `metric:`, `cal:week:` and `pr:`.
  * Every number, check and event here comes from Jarvis data or a read-only
- * GitHub GET, never from the model. Finance has no metrics and Finance items'
- * PRs don't resolve.
+ * GitHub GET, never from the model. AI-excluded items' PRs don't resolve.
  */
 
 type Out = Extract<HydratedRef, { kind: "metric" | "calendar" | "pr" }> | Extract<HydratedRef, { unavailable: string }>;
@@ -43,7 +42,7 @@ export function overdueTodos(user: CurrentUser, now = new Date()): NextAction[] 
   });
 }
 
-/** Work items the person owns that a smart surface may show (no conversations, no Finance, not done). */
+/** Work items the person owns that a smart surface may show (no conversations, no AI-excluded areas, not done). */
 export function openItems(user: CurrentUser): { items: WorkItem[]; byId: Map<string, WorkItem> } {
   if (!can(user, "work.use")) return { items: [], byId: new Map() };
   const all = listItems(user.id);
@@ -320,7 +319,7 @@ export async function pullRequest(user: CurrentUser, ref: string, now = Date.now
   const all = listItems(user.id, { includeArchived: true });
   const byId = new Map(all.map((i) => [i.id, i]));
   const item = items.map((id) => byId.get(id)).find((i) => i && !itemExcluded(i, byId));
-  if (!item) return { ref, unavailable: "finance" };
+  if (!item) return { ref, unavailable: "ai_excluded" };
   const itemHref = `/areas?item=${encodeURIComponent(item.id)}`;
   const key = ref.toLowerCase();
   const hit = prCache().get(key);

@@ -41,6 +41,22 @@ export function createHomeAssistant({ token }) {
     set("light.living_room", "off", { friendly_name: "Living room lamp" });
     set("camera.front_door", "idle", { friendly_name: "Front door camera" });
     set("camera.driveway", "recording", { friendly_name: "Driveway camera" });
+    // Devices Jarvis can control since the 2026-11-07 policy (switches, fans, climate, media, scenes…).
+    set("switch.coffee_maker", "off", { friendly_name: "Coffee maker" });
+    set("fan.bedroom_fan", "on", { friendly_name: "Bedroom fan", percentage: 50 });
+    set("climate.thermostat", "heat", {
+      friendly_name: "Thermostat",
+      temperature: 68,
+      current_temperature: 67,
+      hvac_modes: ["off", "heat", "cool", "auto"],
+      min_temp: 50,
+      max_temp: 90,
+    });
+    set("media_player.living_room_speaker", "paused", { friendly_name: "Living room speaker", volume_level: 0.3 });
+    set("scene.movie_night", "scening", { friendly_name: "Movie night" });
+    set("script.goodnight", "off", { friendly_name: "Goodnight" });
+    set("input_boolean.guest_mode", "off", { friendly_name: "Guest mode" });
+    set("vacuum.roomba", "docked", { friendly_name: "Roomba" });
     state.todos.set("todo.shopping_list", [
       { uid: "ha-1", summary: "Milk", status: "needs_action" },
       { uid: "ha-2", summary: "Pay water bill", status: "needs_action", due: isoDate(new Date()), description: "Autopay failed" },
@@ -58,6 +74,11 @@ export function createHomeAssistant({ token }) {
     "camera.front_door": "Front porch",
     "cover.garage_door": "Garage",
     "cover.garage_door_2": "Garage",
+    "switch.coffee_maker": "Kitchen",
+    "fan.bedroom_fan": "Bedroom",
+    "climate.thermostat": "Living room",
+    "media_player.living_room_speaker": "Living room",
+    "vacuum.roomba": "Living room",
   };
 
   const serviceEffects = {
@@ -69,6 +90,34 @@ export function createHomeAssistant({ token }) {
     "alarm_control_panel.alarm_disarm": "disarmed",
     "light.turn_on": "on",
     "light.turn_off": "off",
+    "lock.open": "open",
+    "cover.stop_cover": "stopped",
+    "alarm_control_panel.alarm_arm_home": "armed_home",
+    "alarm_control_panel.alarm_arm_night": "armed_night",
+    "switch.turn_on": "on",
+    "switch.turn_off": "off",
+    "input_boolean.turn_on": "on",
+    "input_boolean.turn_off": "off",
+    "fan.turn_on": "on",
+    "fan.turn_off": "off",
+    "media_player.media_play": "playing",
+    "media_player.media_pause": "paused",
+    "media_player.media_stop": "idle",
+    "media_player.turn_on": "on",
+    "media_player.turn_off": "off",
+    "vacuum.start": "cleaning",
+    "vacuum.return_to_base": "returning",
+  };
+  // Services that change attributes (brightness, temperature, mode, speed, volume).
+  const attributeEffects = {
+    "light.turn_on": (e, b) => ({
+      state: "on",
+      attributes: { ...e.attributes, ...(b.brightness_pct !== undefined ? { brightness: Math.round((b.brightness_pct / 100) * 255) } : {}) },
+    }),
+    "climate.set_temperature": (e, b) => ({ state: e.state, attributes: { ...e.attributes, temperature: b.temperature } }),
+    "climate.set_hvac_mode": (e, b) => ({ state: b.hvac_mode, attributes: e.attributes }),
+    "fan.set_percentage": (e, b) => ({ state: b.percentage > 0 ? "on" : "off", attributes: { ...e.attributes, percentage: b.percentage } }),
+    "media_player.volume_set": (e, b) => ({ state: e.state, attributes: { ...e.attributes, volume_level: b.volume_level } }),
   };
   // A 1x1 PNG stands in for a camera still.
   const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
@@ -191,6 +240,15 @@ export function createHomeAssistant({ token }) {
         return json(res, 200, []);
       }
       const effect = serviceEffects[`${domain}.${service}`];
+      const e0 = state.entities.get(body.entity_id);
+      const attrEffect = attributeEffects[`${domain}.${service}`];
+      if (attrEffect || service === "toggle") {
+        if (!e0) return json(res, 400, { message: "Entity not found" });
+        const next = service === "toggle" ? { state: e0.state === "on" ? "off" : "on", attributes: e0.attributes } : attrEffect(e0, body);
+        setTimeout(() => set(body.entity_id, next.state, next.attributes, 0), control.physicalDelayMs);
+        return json(res, 200, []);
+      }
+      if (domain === "scene" || domain === "script") return json(res, 200, []);
       if (effect) {
         const e = state.entities.get(body.entity_id);
         if (!e) return json(res, 400, { message: "Entity not found" });

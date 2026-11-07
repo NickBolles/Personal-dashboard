@@ -1,7 +1,7 @@
 /**
  * Phase 5 AI actions + capture: shared zod schemas and view types (client-safe,
  * no server imports). Server logic lives in server/ai/*; rules are pure in
- * server/ai/rules.ts. Finance never reaches this layer (docs/security.md).
+ * server/ai/rules.ts. Per-area AI exclusions and credentials are guarded (docs/security.md).
  */
 import { z } from "zod";
 import { CONTEXT_SOURCES } from "@/lib/work";
@@ -120,7 +120,7 @@ export const investigateSchema = z
     model: modelId.optional(),
     instructions: z.string().trim().max(1000).optional(),
     budgetOverride: z.boolean().optional(),
-    /** owner confirmed "Send anyway" for a heuristic finance match (audited; never for credentials or excluded areas) */
+    /** Accepted but ignored for compatibility with older clients. */
     financeOverride: z.boolean().optional(),
   })
   .strict();

@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { MarkdownLinkRenderer } from "@/components/markdown/Markdown";
 import { ARTIFACT_HOST, classifyUrl } from "@/lib/chat-links";
-import { isFinanceContext } from "@/lib/chat-context";
+
 import { isFailingLink } from "@/lib/chat/things";
 import type { PanelLink } from "@/server/chat/links";
 import { ThingIcon } from "./SummaryChip";
@@ -20,7 +20,7 @@ function ChatInlineLink({ href, label, links }: { href: string; label: ReactNode
   const artifact = classified?.kind === "artifact" || /^\/(a|v)\/[\w.-]+/.test(href);
   const item = /^\/(areas|work)(?:\?|\/).*\bitem[=/]/.test(href);
   const github = classified?.kind === "github";
-  const chip = !isFinanceContext({ url: href }) && (artifact || item || github);
+  const chip = artifact || item || github;
   const known = links.find((l) => l.url === (classified?.url ?? href));
   const dot = known && isFailingLink(known) ? "red" : known?.state === "merged" ? "yellow" : null;
   return (

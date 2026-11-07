@@ -46,7 +46,7 @@ Jarvis (Next.js 16 standalone, one container)
 
 **Alerts**: `notify()` writes the canonical inbox row (dedupe by key, escalation resurfaces). The worker's outbox sends Web Push for categories with push enabled, holding non-critical pushes during quiet hours. Read / dismissed / acted are independent timestamps.
 
-**Home controls**: allowlist only → live state token shown in a confirmation dialog → server re-reads state and refuses if it changed → calls the service → success only after readback. Offline: disabled, never queued.
+**Home controls** (docs/home-control.md): policy matrix ∩ allowlist → live state token shown in a confirmation dialog (high-risk: explicit tick) → server re-reads state and refuses if it changed → calls the service → success only after readback. Offline: disabled, never queued.
 
 **People and capabilities** (`lib/modules.ts`, `server/access.ts`): each module declares capabilities (e.g. `finance.view`, `home_assistant.control_lights`). Roles (admin, adult, kid, household tablet) give defaults; Settings → People overrides them per person (`user_capabilities`). Every route checks with `api({ cap })`, every page with `requirePage()`, and navigation hides what a person can't use (`useAccess` on the web, `LocalAccess` on the phone). Hermes conversations are private to their owner; an owner can share one read-only with the household. Alerts go to the people holding the source's capability (`notifyHolders`), with per-person push and quiet-hours preferences.
 
@@ -58,7 +58,7 @@ Jarvis (Next.js 16 standalone, one container)
 
 **Finance** (docs/finance.md): a pure engine in `lib/finance/`, storage in `fin_*` tables, balances from manual entry, CSV or Monarch. It feeds Home a status card with no amounts (`integrations/finance/adapter.ts`).
 
-**Lights, doors and cameras** (`integrations/home-assistant/devices.ts`): everyone with `home_assistant.view` sees every door, lock, light and camera. Lights switch directly (all, allowlisted or none), always with readback. Doors and locks stay behind the confirmed allowlist. Camera stills are proxied with `no-store`, so the HA token never reaches a browser or phone.
+**Lights, doors and cameras** (`integrations/home-assistant/devices.ts`): everyone with `home_assistant.view` sees every door, lock, light and camera. Lights, switches, fans, climate, media, scenes/scripts and vacuums get compact controls (tap = confirmation, Undo); doors, locks, covers and alarm stay behind the confirm card. Everything is read back. Camera stills are proxied with `no-store`, so the HA token never reaches a browser or phone.
 
 ## Why process-wide singletons?
 

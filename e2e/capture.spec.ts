@@ -77,13 +77,13 @@ test("with AI on, a capture is triaged and investigated: Report ready opens the 
   }
 });
 
-test("finance-looking captures are not sent to AI and say so", async ({ page }) => {
+test("credential-looking captures are not sent to AI and say so", async ({ page }) => {
   await api(page, "put", "/api/settings/ai", { enabled: true });
   try {
-    const r = await api<{ entry: { id: string }; triage: string; reason: string }>(page, "post", "/api/capture", { text: "Chase checking balance $4,210" });
-    expect(r).toMatchObject({ triage: "skipped", reason: "finance_detected" });
+    const r = await api<{ entry: { id: string }; triage: string; reason: string }>(page, "post", "/api/capture", { text: "password: synthetic-e2e-password" });
+    expect(r).toMatchObject({ triage: "skipped", reason: "credentials_detected" });
     await page.goto("/inbox");
-    await expect(page.locator(`[data-inbox-entry="${r.entry.id}"]`).getByText("Not sent to AI: looks like finance. File it yourself.")).toBeVisible();
+    await expect(page.locator(`[data-inbox-entry="${r.entry.id}"]`).getByText("Not sent to AI: looks like it contains a credential.")).toBeVisible();
     await api(page, "post", `/api/work/inbox/${r.entry.id}/dismiss`);
   } finally {
     await api(page, "put", "/api/settings/ai", { enabled: false });

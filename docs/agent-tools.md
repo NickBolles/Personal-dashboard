@@ -10,10 +10,10 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 - **Tokens only work on `/api/mcp`.** `resolveUser` never accepts an agent token, so it can't call
   other `/api` routes. `/api/mcp` takes nothing else: no cookies, no proxy identity, no device tokens.
 - **The owner, narrowed.** A token acts for the owner who minted it. Its capabilities are its scopes
-  ∩ the owner's (`work.use`, plus `hermes.chat` for filing). It never gets `finance.*` or `admin`.
+  ∩ the owner's (`work.use`, plus `hermes.chat` for filing). No scope maps to `finance.*` module capabilities or `admin`.
   If ownership moves or the account is disabled, the token stops working.
-- **Finance is never readable or writable.** No tool touches Finance data. Finance areas and areas
-  with `aiPolicy: excluded`, including everything under them, are invisible. An id there answers
+- **AI-excluded areas are hidden.** Finance work areas are available like any other area. Areas
+  with `aiPolicy: excluded`, including everything under them, are invisible. Credentials/tokens/passwords never go to AI; account/card numbers are masked to last 4. An id there answers
   `not_found`, the same as an id that doesn't exist. Archived items are hidden too.
 - **Never settle.** `jarvis_update_item` refuses `settled`, `abandoned` and `superseded`. No tool
   settles, archives, moves, splits, merges or deletes. Those go through `jarvis_request_change`,
@@ -43,7 +43,7 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 | -------------------- | ------------------------------------------------------------------------------------------------------- |
 | `work.read`          | `jarvis_tree`, `jarvis_search`, `jarvis_get_item`, `jarvis_list_decisions`                              |
 | `work.write`         | `jarvis_create_item`, `jarvis_update_item`, `jarvis_add_note`, `jarvis_link`, `jarvis_add_quick_action` |
-| `decisions.write`    | `jarvis_raise_decision`, `jarvis_request_change`                                                        |
+| `decisions.write`    | `jarvis_raise_decision`, `jarvis_request_change`, `jarvis_propose_device_change`                        |
 | `runs.write`         | `jarvis_run_start`, `jarvis_run_update`                                                                 |
 | `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents)                    |
 
@@ -53,8 +53,8 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 (label ≤60, prompt ≤2000; scope `global`, `area:<id>` or `page:<path>`). It only
 creates a `proposed` quick action attributed to `agent:<profile>` through
 `withVia` and the work-op Undo stack. It returns
-`{proposed:true, id, note:"The owner must tap Add"}`. Finance/AI-excluded area
-scopes and Finance page scopes are refused. Only the owner-facing API can
+`{proposed:true, id, note:"The owner must tap Add"}`. AI-excluded area
+scopes are refused; Finance area and page scopes are allowed. Only the owner-facing API can
 accept (optionally with edits) or dismiss it. Accepting never sends a prompt;
 tapping a saved chip only fills the composer. The owner still taps Send.
 
@@ -119,7 +119,7 @@ Hermes config.
 4. **Restart.** Start a new chiefofstaff session; the gateway may need a restart window to pick up
    new MCP servers.
 5. **Check it works.**
-   - Ask the agent to call `jarvis_tree`. It should list your areas, without Finance.
+   - Ask the agent to call `jarvis_tree`. It should list your areas, including Finance unless explicitly excluded from AI.
    - Then ask it to create a test item under Portfolio. In Jarvis → Activity, the row reads "by @chiefofstaff" with Undo.
    - Undo it.
 6. **Kill switch.** Settings → Agents → Agent access → **Revoke…**.
@@ -146,3 +146,7 @@ curl -s -X POST https://jarvis.nickbolles.com/api/mcp -d '{}'
   - `components/work/AgentChip.tsx`
   - Agent panel runs list in `components/agents/AgentRuns.tsx`
 - Tests: `test/agent-access.test.ts`, `e2e/agent-access.spec.ts`
+
+## Home Assistant devices (proposal only)
+
+`jarvis_propose_device_change` (`decisions.write`): `itemId`, `entityId`, `service`, `data?`, `reason`. Agents never operate devices. Jarvis checks the proposal against the policy matrix and allowlist (`lib/ha-policy.ts`, no Home Assistant call), raises a Needs-you decision on the item with a House link (`/home-control?entity=…&propose=…`) and returns `{proposed: true, executed: false, risk, confirmAt}`. The owner confirms on House; high-risk actions (locks, alarm, opening a garage) need the explicit tick. Any direct control call running as an agent or scheduled job is refused (`needs_owner`). See docs/home-control.md.

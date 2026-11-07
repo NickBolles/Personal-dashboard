@@ -4,7 +4,7 @@ import { validateDefinition, type WorkflowDefinition } from "@/lib/workflows/def
 import { blankDefinition, builderReducer, definingSlot, initBuilder, issuesBySection, sourceOfDefault, tokenCount } from "@/lib/workflows/builder";
 import { remembers, resolveFormDefaults } from "@/lib/workflows/runs";
 import { diffDefinitions, restoreDefinition, summarizeDiff } from "@/lib/workflows/versions";
-import { applyProposal, refuseFinanceChat, validateProposal } from "@/lib/workflows/proposal";
+import { applyProposal, refuseExcludedChat, validateProposal } from "@/lib/workflows/proposal";
 
 const teaching = fixture as unknown as WorkflowDefinition;
 
@@ -68,7 +68,7 @@ describe("builder reducer", () => {
     const by = issuesBySection(bad);
     expect(by.instructions.length + by.basics.length).toBeGreaterThan(0);
     const fin = issuesBySection({ ...blankDefinition(), routing: { area: "Finance/Budget", agentProfile: null, modelTier: "fast" } });
-    expect(fin.basics.map((i) => i.code)).toContain("finance_excluded");
+    expect(fin.basics.map((i) => i.code)).not.toContain("finance_excluded");
   });
 
   it("counts instruction tokens", () => {
@@ -132,21 +132,22 @@ describe("AI proposals", () => {
     expect(html.ok).toBe(false);
   });
 
-  it("never drafts into Finance", () => {
+  it("never drafts into an AI-excluded area", () => {
     const r = validateProposal(
       { ...proposal, basics: { ...proposal.basics, area: "Finance" } },
       { basics: "accept", instructions: "accept", capture: "accept", startForm: "accept" },
+      { excludedAreas: ["Finance"] },
     );
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.issues.map((i) => i.code)).toContain("finance_excluded");
   });
 
-  it("refuses Finance chats before any transcript is sent", () => {
-    expect(refuseFinanceChat({ areaPath: "Finance/Budget" }).refused).toBe(true);
-    expect(refuseFinanceChat({ areaPath: "Finance › Bills" }).refused).toBe(true);
-    expect(refuseFinanceChat({ areaPath: "Health › Private", excludedAreas: ["Health"] }).refused).toBe(true);
-    expect(refuseFinanceChat({ areaPath: "Miscellaneous", refs: [{ type: "finance", id: "acct_1", label: "Checking" }] }).refused).toBe(true);
-    expect(refuseFinanceChat({ areaPath: "Miscellaneous", title: "Teaching notes." }).refused).toBe(false);
+  it("allows Finance chats; refuses AI-excluded ancestry before any transcript is sent", () => {
+    expect(refuseExcludedChat({ areaPath: "Finance/Budget" }).refused).toBe(false);
+    expect(refuseExcludedChat({ areaPath: "Finance › Bills" }).refused).toBe(false);
+    expect(refuseExcludedChat({ areaPath: "Health › Private", excludedAreas: ["Health"] }).refused).toBe(true);
+    expect(refuseExcludedChat({ areaPath: "Miscellaneous", refs: [{ type: "finance", id: "acct_1", label: "Checking" }] }).refused).toBe(false);
+    expect(refuseExcludedChat({ areaPath: "Miscellaneous", title: "Teaching notes." }).refused).toBe(false);
   });
 });
 

@@ -35,7 +35,7 @@ export function useAiFiling() {
 
 /**
  * "✦ Suggest with AI" for the unfiled list: on demand only (never automatic),
- * one triage-tier job on the shared AI budget. Finance-looking titles and
+ * one triage-tier job on the shared AI budget. Credentials and
  * AI-excluded areas never go to the model (server-side). The answer replaces
  * the word-match suggestion on each row; filing is still one tap by you.
  */
@@ -48,7 +48,7 @@ export function SuggestWithAi({ allowed }: { allowed: boolean }) {
     setBusy(true);
     try {
       const r = await api.post<{ job: JobView; asked: number; excluded: number }>("/api/work/conversations/suggest", { clientKey: newKey() });
-      if (r.excluded) toast(`${r.excluded} left out: they look like finance or contain a credential`, "warn");
+      if (r.excluded) toast(`${r.excluded} left out: area excluded from AI or credentials detected`, "warn");
       // Poll the job (triage tier: seconds, capped at ~2 minutes) from this handler; no effect loops.
       let job: JobView | null = r.job;
       for (let i = 0; i < 60 && job && ACTIVE_JOB_STATES.includes(job.state) && job.state !== "budget_blocked"; i++) {
@@ -75,7 +75,7 @@ export function SuggestWithAi({ allowed }: { allowed: boolean }) {
       variant="ghost"
       busy={busy}
       onClick={start}
-      title="One cheap AI pass over these titles (shared $5/day AI budget). Finance stays out."
+      title="One cheap AI pass over these titles (shared $5/day AI budget). Areas excluded from AI stay out."
       data-testid="suggest-ai"
     >
       <span aria-hidden="true" className="text-violet">

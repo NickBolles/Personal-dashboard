@@ -69,14 +69,13 @@ describe("workflow versions API", () => {
     expect((await call(restoreRoute.POST, { params: { id: workflow.id, version: "9" } })).status).toBe(404);
   });
 
-  it("validates a draft without saving (Finance refused)", async () => {
+  it("validates a draft without saving (Finance allowed)", async () => {
     const ok = (await (await call(validateRoute.POST, { body: { definition: blankDefinition() } })).json()) as { ok: boolean };
     expect(ok.ok).toBe(true);
     const fin = (await (
       await call(validateRoute.POST, { body: { definition: { ...blankDefinition(), routing: { area: "Finance", agentProfile: null, modelTier: "fast" } } } })
     ).json()) as { ok: boolean; issues: { code: string }[] };
-    expect(fin.ok).toBe(false);
-    expect(fin.issues.map((i) => i.code)).toContain("finance_excluded");
+    expect(fin.ok).toBe(true);
     const list = (await (await call(listRoute.GET, { method: "GET" })).json()) as { workflows: unknown[] };
     expect(list.workflows).toEqual([]);
   });

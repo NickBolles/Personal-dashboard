@@ -42,7 +42,7 @@ export function CoordinatorButton({ areaId, areaTitle, className }: { areaId: st
  * The area's coordinator chat: side pane on desktop, bottom sheet on phones.
  * Shows the coordinator conversation's latest messages and a composer.
  * "Catch me up" only fills the composer with a prepared summary prompt; the
- * owner taps Send. Finance areas never get AI context.
+ * owner taps Send. AI-excluded areas never get AI context.
  */
 export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: () => void }) {
   const titleId = useId();

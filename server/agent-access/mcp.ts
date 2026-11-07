@@ -1,4 +1,6 @@
 import "server-only";
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { detectSensitivity } from "@/server/ai/rules";
 import { z, ZodError } from "zod";
 import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
@@ -68,7 +70,7 @@ export async function handleMcp(agent: AgentPrincipal, raw: unknown, correlation
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "jarvis", version: "1.0.0" },
         instructions:
-          "Jarvis work items for the owner. Writes are attributed to you, logged and undoable. You can't settle, archive, move, split, merge or delete — propose those with jarvis_request_change. Finance is never available.",
+          "Jarvis work items for the owner. Writes are attributed to you, logged and undoable. You can't settle, archive, move, split, merge or delete — propose those with jarvis_request_change. AI-excluded subtrees are hidden. Never include credentials, tokens or full account numbers.",
       });
     }
     case "ping":
@@ -124,7 +126,15 @@ async function callTool(agent: AgentPrincipal, params: Record<string, unknown>, 
     const args = t.input.parse(params.arguments ?? {});
     const value = await withVia(agent.via, () => t.run(args, { agent, correlationId }));
     log("ok");
-    return textResult(value);
+    // Preserve structured data while screening every string, including nested notes and links.
+    // Ids, links and SHAs are never masked (they are not account numbers and agents need them verbatim).
+    const verbatim = (key: string) => /^(id|url|href|sha)$|(Id|Url|Href|Sha|At)$/.test(key);
+    const safe = JSON.parse(
+      JSON.stringify(value, (key, v) =>
+        typeof v === "string" && !verbatim(key) ? (detectSensitivity(v) === "credentials" ? "[credentials blocked]" : maskAccountNumbers(v)) : v,
+      ),
+    );
+    return textResult(safe);
   } catch (err) {
     if (err instanceof ZodError) {
       log("rejected", "validation");

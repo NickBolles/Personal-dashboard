@@ -2,7 +2,7 @@
 
 exports[`prompt + overdue context > catalog prompt names every component and stays ≤ 2.5 KB 1`] = `
 "Interactive workflow: summary outside ONE jarvis-ui fence containing {v:1,catalog:"jarvis-ui@1",root:"r",elements:{r:{type,props,children?:[ids]}}}. JSON only. Only Stack/Section have children.
-Copy refs from context; never invent item titles/dates. Finance excluded. No URLs/HTML/styles. Proposals only: Apply confirms, Undo reverts. Dates=YYYY-MM-DD, today..+365d for writes. Never settle/delete/merge.
+Copy refs from context; never invent item titles/dates. AI-excluded areas stay out. Never include credentials, tokens or full account numbers. No URLs/HTML/styles. Proposals only: Apply confirms, Undo reverts. Dates=YYYY-MM-DD, today..+365d for writes. Never settle/delete/merge.
 DecisionMatrix {title,ref:item,criteria:[{id,label,weight:1-3}],options:[{id,label,consequence?,scores:{criterionId:1-5}}]} 2-6 criteria,2-4 options; scores=model estimates; weights local
 Gantt {title,rows:[{ref:item,start?:date,milestone?}],from?,to?} <=30; live item dates
 BarChart {metric,label?} Jarvis series only

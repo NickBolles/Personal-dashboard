@@ -23,7 +23,7 @@ import { confirmMatch, enterBalances, finishRun, importCsv, proposeMatches, refr
 import { startRun } from "@/server/finance/runs";
 import { addActual, assertLinkableEvent, createEvent, createRevision, ensureYear, getPlan, promoteRevision } from "@/server/finance/plan";
 import { financeAdapter } from "@/integrations/finance/adapter";
-import { adapterContext, homeSelection } from "@/server/sources";
+import { adapterContext, homeSelection, getHome } from "@/server/sources";
 import { buildContext } from "@/server/context";
 import { userById } from "@/server/auth";
 import { issueKey } from "@/lib/finance/types";
@@ -365,12 +365,14 @@ describe("Home", () => {
     expect(kidRows).toEqual([]);
   });
 
-  it("finance cards never reach the AI layer, even in the overview", async () => {
+  it("Finance cards are eligible for overview AI context", async () => {
     const me = userById(nick)!;
     // Within the attention budget the card may sit in the backlog; it must be on Home somewhere.
     const { attention } = await homeSelection(me, { live: true });
     expect([...attention.now, ...attention.today, ...attention.upcoming, ...attention.backlog].some((a) => a.source === "finance")).toBe(true);
     const overview = await buildContext(me, ["overview"], undefined);
-    expect(overview).not.toMatch(/\[finance:|check-in|Finance/);
+    // The overview reflects Home's selected preview, not every backlog card.
+    const home = await getHome(me, { live: false });
+    for (const a of [...home.now, ...home.later.laterToday].filter((a) => a.source === "finance")) expect(overview).toContain(a.title);
   });
 });

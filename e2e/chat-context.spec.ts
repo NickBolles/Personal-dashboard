@@ -31,10 +31,13 @@ test("Add context sheet: search, keyboard multi-select, chips, Esc", async ({ pa
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(page.getByRole("button", { name: `Remove context ${first}` }).first()).toBeVisible();
-  // Finance is never offered.
+  // AI-excluded areas are never offered, regardless of name.
+  const created = await page.request.post("/api/work/items", { data: { kind: "area", title: "Private context e2e" }, headers: { "x-jarvis-csrf": "1" } });
+  const { item } = await created.json();
+  await page.request.patch(`/api/work/items/${item.id}`, { data: { settings: { aiPolicy: "excluded" } }, headers: { "x-jarvis-csrf": "1" } });
   await openChatContext(page);
-  await page.getByRole("combobox", { name: "Search context" }).fill("finance");
-  await expect(page.getByRole("dialog", { name: "Add context" }).getByRole("option", { name: /finance/i })).toHaveCount(0);
+  await page.getByRole("combobox", { name: "Search context" }).fill("Private context e2e");
+  await expect(page.getByRole("dialog", { name: "Add context" }).getByRole("option", { name: /Private context e2e/i })).toHaveCount(0);
   await page.keyboard.press("Escape");
 });
 

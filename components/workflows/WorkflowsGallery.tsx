@@ -20,7 +20,7 @@ type Summary = {
 type BuiltIn = { kind: string; slug: string; name: string; description: string; href: string };
 type ImportResult =
   { ok: true; id: string; slug: string; duplicate: boolean; areaFound: boolean } | { ok: false; code: string; issues: { path: string; message: string }[] };
-type AreaRow = { id: string; title: string; kind: string; parentId: string | null; archived?: boolean };
+type AreaRow = { id: string; title: string; kind: string; parentId: string | null; archived?: boolean; settings?: { aiPolicy?: string } | null };
 
 /** Area paths as the workflow definition names them ("Faith", "Work/Jarvis"). */
 function areaPaths(items: AreaRow[]): string[] {
@@ -30,7 +30,16 @@ function areaPaths(items: AreaRow[]): string[] {
     return p ? `${path(p)}/${i.title}` : i.title;
   };
   return items
-    .filter((i) => i.kind === "area" && !i.archived && !/^finance$/i.test(i.title))
+    .filter((i) => {
+      if (i.kind !== "area" || i.archived) return false;
+      let cur: AreaRow | undefined = i;
+      for (let n = 0; cur && n < 100; n++) {
+        if (cur.settings?.aiPolicy === "excluded") return false;
+        if (!cur.parentId) return true;
+        cur = byId.get(cur.parentId);
+      }
+      return false;
+    })
     .map(path)
     .sort((a, b) => a.localeCompare(b));
 }

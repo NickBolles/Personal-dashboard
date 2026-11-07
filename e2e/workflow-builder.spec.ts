@@ -8,8 +8,14 @@ test("workflow builder: create, preview, save a new version, restore v1", async 
   await page.goto("/workflows/new");
   await expect(page.getByRole("heading", { name: "New workflow", level: 1 })).toBeVisible();
 
-  await page.locator("#wf-name").fill("Choir rehearsal log");
-  await page.locator("#wf-slug").fill(slug);
+  // Under load the first fill can land before hydration and be reset: fill until it sticks.
+  await expect(async () => {
+    await page.locator("#wf-name").fill("Choir rehearsal log");
+    await page.locator("#wf-slug").fill(slug);
+    await page.waitForTimeout(300);
+    await expect(page.locator("#wf-name")).toHaveValue("Choir rehearsal log", { timeout: 1000 });
+    await expect(page.locator("#wf-slug")).toHaveValue(slug, { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
 
   await page
     .getByRole("navigation", { name: "Builder sections" })
@@ -26,14 +32,13 @@ test("workflow builder: create, preview, save a new version, restore v1", async 
   await preview.getByRole("radio", { name: "Errors" }).click();
   await expect(preview).toContainText("Rehearsal date is required");
 
-  // Finance is refused inline and blocks Save.
+  // Finance is allowed; only an area's explicit AI policy may exclude it.
   await page
     .getByRole("navigation", { name: "Builder sections" })
     .getByRole("button", { name: /^Basics/ })
     .click();
   await page.locator("#wf-area").fill("Finance");
-  await expect(page.getByTestId("builder-issues")).toContainText("Finance");
-  await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeEnabled();
   await page.locator("#wf-area").fill("");
 
   await page.getByRole("button", { name: "Save draft" }).click();

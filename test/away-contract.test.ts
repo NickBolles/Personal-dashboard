@@ -8,6 +8,7 @@ import {
   nextRunAt,
   parseProposals,
   policyFor,
+  LOW_RISK_INTENTS,
   PROPOSAL_INTENTS,
   quietEnd,
   scheduleSpecSchema,
@@ -65,13 +66,14 @@ describe("schedule maths (America/Chicago)", () => {
 
 describe("autonomy policy (#217)", () => {
   const area = (title: string, settings: Record<string, unknown> = {}) => ({ title, settings });
-  it("defaults to propose; Finance and AI-excluded are forced off", () => {
+  it("defaults to propose including Finance; only AI-excluded areas are forced off", () => {
     expect(parseAreaSettings(null).autonomy).toBe("propose");
     expect(effectiveAutonomy(area("Home"))).toBe("propose");
     expect(effectiveAutonomy(area("Home", { autonomy: "low_risk" }))).toBe("low_risk");
-    expect(effectiveAutonomy(area("Finance", { autonomy: "low_risk" }))).toBe("off");
-    expect(effectiveAutonomy(area("Financial planning", { autonomy: "low_risk" }))).toBe("off");
-    expect(effectiveAutonomy({ title: "Money", systemKey: "finance", settings: { autonomy: "low_risk" } })).toBe("off");
+    expect(effectiveAutonomy(area("Finance"))).toBe("propose");
+    expect(effectiveAutonomy(area("Finance", { autonomy: "low_risk" }))).toBe("low_risk");
+    expect(effectiveAutonomy(area("Financial planning", { autonomy: "low_risk" }))).toBe("low_risk");
+    expect(effectiveAutonomy({ title: "Money", systemKey: "finance", settings: { autonomy: "low_risk" } })).toBe("low_risk");
     expect(effectiveAutonomy(area("Dev", { autonomy: "low_risk", aiPolicy: "excluded" }))).toBe("off");
     expect(effectiveAutonomy(area("Dev", { autonomy: "low_risk", aiPolicy: "triage_only" }))).toBe("propose");
   });
@@ -84,6 +86,9 @@ describe("autonomy policy (#217)", () => {
       expect(policyFor("low_risk", i)).toBe(never.includes(i) ? "refuse" : low.includes(i) ? "apply" : "decision");
     }
     for (const i of ["settle", "abandon", "supersede", "archive", "move"] as const) expect(policyFor("low_risk", i)).toBe("decision");
+    // Owner 2026-11-07: Home Assistant changes are never low-risk and never applied by a job.
+    expect(LOW_RISK_INTENTS).not.toContain("device_control");
+    expect(policyFor("low_risk", "device_control")).toBe("decision");
   });
 });
 

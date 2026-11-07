@@ -63,7 +63,14 @@ export function applyProposals(user: CurrentUser, areaId: string, jobTitle: stri
         const question = `${jobTitle}: ${subject}${note}${p.why ? `. ${p.why}` : ""}`.slice(0, 460);
         // The owner must see WHAT would be done: persist the proposed content with the decision (#230).
         const detail = p.text ? [p.title, p.text].filter(Boolean).join("\n\n").slice(0, DECISION_DETAIL_MAX) : undefined;
-        if (lifecycle && !elsewhere) {
+        if (p.intent === "device_control") {
+          // Never operates the device: the shared MCP proposal path validates it and raises the decision.
+          if (!p.device) {
+            refuse("missing device");
+            continue;
+          }
+          call("jarvis_propose_device_change", { itemId: dest.id, ...p.device, reason: question.slice(0, 300) });
+        } else if (lifecycle && !elsewhere) {
           // Shared proposal path never performs the requested operation.
           withVia(agent.via, () =>
             requestOwnerChange(agent, { itemId: dest.id, op: p.intent as (typeof DESTRUCTIVE_OPS)[number], reason: question, detail }, "scheduled-proposals", [
