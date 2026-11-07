@@ -936,6 +936,7 @@ function ItemDetail({
   section?: ItemSection;
   onSection?: (s: ItemSection) => void;
 }) {
+  const router = useRouter();
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const [ownTab, setOwnTab] = useState<ItemSection>("overview");
   const tab = section ?? ownTab;
@@ -1051,6 +1052,7 @@ function ItemDetail({
       isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
       isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
       isArea && !item.builtIn ? { label: "Area settings…", onSelect: () => setAreaSheet("settings") } : null,
+      isArea && isOwner ? { label: "Scheduled jobs", onSelect: () => router.push(`/settings/agents?area=${encodeURIComponent(item.id)}#schedules`) } : null,
       {
         label: item.archived ? "Unarchive" : isArea ? "Archive area…" : "Archive",
         // Archiving a whole area hides everything under it: confirm first.

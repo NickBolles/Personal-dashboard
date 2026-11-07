@@ -21,6 +21,7 @@ import { AGENT_RUN_STATES, isStalled, parseRunChildren, type AgentRunState } fro
 import { STATUS_LABELS, WORK_STATUSES, isContainer, parseGithubUrl, type WorkItem } from "@/lib/work";
 import type { AgentScope } from "@/lib/agent-access";
 import type { AgentPrincipal } from "./tokens";
+import { registerAgentRun } from "@/server/work/registered-runs";
 
 /**
  * Jarvis MCP tools (docs/agent-tools.md). Every tool:
@@ -53,7 +54,7 @@ const pathText = z
 export const AGENT_STATUSES = WORK_STATUSES.filter((s) => s !== "settled" && s !== "abandoned" && s !== "superseded");
 const REFUSED_STATUSES = new Set(["settled", "abandoned", "superseded"]);
 
-export const DESTRUCTIVE_OPS = ["settle", "archive", "move", "split", "merge", "delete", "abandon"] as const;
+export const DESTRUCTIVE_OPS = ["settle", "archive", "move", "split", "merge", "delete", "abandon", "supersede"] as const;
 
 type Ctx = { agent: AgentPrincipal; correlationId: string };
 
@@ -106,6 +107,27 @@ const brief = (i: WorkItem) => ({
 });
 
 const CLOSED = new Set(["settled", "abandoned", "superseded"]);
+
+/** Shared owner-change proposal path. Never performs the requested operation. */
+export function requestOwnerChange(
+  agent: AgentPrincipal,
+  input: { itemId: string; op: (typeof DESTRUCTIVE_OPS)[number]; reason: string; targetId?: string },
+  correlationId: string,
+  choices = ["Do it", "Not now"],
+) {
+  const { itemId, op, reason, targetId } = input;
+  const cur = visible(agent.user.id, itemId);
+  if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
+  const target = targetId ? visible(agent.user.id, targetId) : null;
+  const what = `${op}${target ? ` → “${target.title}”` : ""}`;
+  const item = updateItem(
+    agent.user,
+    itemId,
+    { decision: { question: `@${agent.profile} proposes: ${what}. ${reason}`.slice(0, 500), choices } },
+    correlationId,
+  );
+  return { item: brief(item), proposed: op, note: "The owner decides in Needs you; nothing was changed." };
+}
 
 // --- tools ----------------------------------------------------------------------------------
 
@@ -364,17 +386,7 @@ export const TOOLS: ToolDef[] = [
     scope: "decisions.write",
     input: z.object({ itemId: id, op: z.enum(DESTRUCTIVE_OPS), reason: text(500).min(1), targetId: id.optional() }).strict(),
     run: ({ itemId, op, reason, targetId }, { agent, correlationId }) => {
-      const cur = visible(agent.user.id, itemId);
-      if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
-      const target = targetId ? visible(agent.user.id, targetId) : null;
-      const what = `${op}${target ? ` → “${target.title}”` : ""}`;
-      const item = updateItem(
-        agent.user,
-        itemId,
-        { decision: { question: `@${agent.profile} proposes: ${what}. ${reason}`.slice(0, 500), choices: ["Do it", "Not now"] } },
-        correlationId,
-      );
-      return { item: brief(item), proposed: op, note: "The owner decides in Needs you; nothing was changed." };
+      return requestOwnerChange(agent, { itemId, op, reason, targetId }, correlationId);
     },
   }),
   tool({
@@ -435,43 +447,7 @@ export const TOOLS: ToolDef[] = [
       const item = visible(agent.user.id, itemId);
       if (item.parentId === null || item.kind === "conversation")
         throw new HttpError(400, "bad_item", "Record runs on a project or item, not an area or conversation");
-      if (delegationId) {
-        // Idempotent per (agent profile, delegation): a retried start returns the run it already made.
-        const prior = getDb()
-          .select({ id: schema.agentRuns.id, itemId: schema.agentRuns.itemId })
-          .from(schema.agentRuns)
-          .where(and(eq(schema.agentRuns.userId, agent.user.id), eq(schema.agentRuns.profile, agent.profile), eq(schema.agentRuns.delegationId, delegationId)))
-          .get();
-        if (prior) {
-          if (prior.itemId !== itemId) throw new HttpError(409, "delegation_taken", "That delegationId is already registered on another item");
-          return { runId: prior.id, existing: true };
-        }
-      }
-      const runId = newId("arun");
-      const at = new Date().toISOString();
-      getDb().transaction((tx) => {
-        tx.insert(schema.agentRuns)
-          .values({
-            id: runId,
-            userId: agent.user.id,
-            itemId,
-            tokenId: agent.tokenId,
-            profile: agent.profile,
-            title,
-            state: "running",
-            hermesSessionId: hermesSessionId ?? null,
-            delegationId: delegationId ?? null,
-            transcriptPath: transcriptPath ?? null,
-            startedAt: at,
-            updatedAt: at,
-          })
-          .run();
-        tx.insert(schema.workEvents)
-          .values({ id: newId(), itemId, actor: agent.user.id, kind: "agent_run", reason: `started agent run: ${title}`, via: agent.via, at })
-          .run();
-      });
-      audit({ actor: agent.via, action: "agent.run_start", source: "agent", sourceRecord: runId, result: "ok", correlationId, detail: { itemId } });
-      return { runId };
+      return registerAgentRun(agent.user, agent.profile, { itemId, title, hermesSessionId, delegationId, transcriptPath }, correlationId, agent.tokenId);
     },
   }),
   tool({

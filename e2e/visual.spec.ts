@@ -23,6 +23,9 @@ import { noticesVisual } from "./fixtures/coordinator-chat";
 import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
 import { openPrismChat, stubPrismV2 } from "./fixtures/smart-v2";
 import { financeSnapshotFixture } from "../mock-upstreams/finance-snapshot.mjs";
+import { awayFixture, schedulesFixture } from "./fixtures/away";
+import { EMPTY_AWAY } from "../lib/client/away";
+import { localDate } from "../lib/time";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -39,6 +42,8 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
 test.beforeEach(async ({ request, page }) => {
+  await page.route("**/api/agents/away", (route) => route.fulfill({ json: EMPTY_AWAY }));
+  await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(localDate(new Date(), "America/Chicago")) }));
   await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
   await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
@@ -2090,4 +2095,44 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(snapshot.locator("svg")).toHaveCount(0);
     expect(aiRequests).toEqual([]);
   });
+}
+
+// Phase 4 lane 2: scoped ledger shots in every existing viewport project.
+for (const scheme of ["light", "dark"] as const) {
+  for (const surface of ["schedules", "while-away"] as const) {
+    test(`visual: ${surface} quiet ledger (${scheme})`, async ({ page }) => {
+      const frozen = await freezeMiddayCT(page);
+      await page.emulateMedia({ colorScheme: scheme });
+      const date = localDate(new Date(frozen), "America/Chicago");
+      if (surface === "schedules") {
+        await stubPhase3Settings(page);
+        await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(date) }));
+      } else {
+        await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture(date) }));
+        await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
+        await page.route("**/api/home/pulse", (route) => route.fulfill({ json: homePulseVisual }));
+      }
+      await page.goto(surface === "schedules" ? "/settings/agents#schedules" : "/home");
+      const pane = surface === "schedules" ? page.locator("#schedules") : page.locator("main").getByTestId("while-away").first();
+      await expect(pane.getByText("Lantern morning check", { exact: true })).toBeVisible();
+      const overlays = await page.addStyleTag({
+        content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray, .gc-tray-qa, [data-testid="quick-actions-host"] { visibility: hidden !important; }',
+      });
+      const viewport = page.viewportSize();
+      try {
+        // Element screenshots cannot scroll a tall 320px card under fixed overlays safely.
+        if (viewport?.width === 320) {
+          const height = await pane.evaluate((el) => Math.ceil(el.getBoundingClientRect().height));
+          if (height + 80 > viewport.height) await page.setViewportSize({ width: viewport.width, height: height + 80 });
+        }
+        await pane.scrollIntoViewIfNeeded();
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await expectNoHorizontalOverflow(page);
+        await expect(pane).toHaveScreenshot(`${surface}-${scheme}.png`, { mask: [pane.locator("[data-dynamic]")] });
+      } finally {
+        await overlays.evaluate((el) => (el as Element).remove());
+        if (viewport) await page.setViewportSize(viewport);
+      }
+    });
+  }
 }

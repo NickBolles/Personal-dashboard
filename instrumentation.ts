@@ -34,6 +34,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] conversation warmer didn't start", (err as Error).message);
   }
+  // Scheduled coordinator jobs run independently of the general worker in production.
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { tickSchedules } = await import("./server/agents/scheduler");
+    registerDispatcherTask("scheduled_jobs", 30_000, (now) => tickSchedules(now));
+  } catch (err) {
+    console.error("[jarvis] scheduled jobs didn't start", (err as Error).message);
+  }
   // Workflow reminders (W4, D6): opt-in, remind-only notifications; never start a model run.
   try {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
