@@ -1,5 +1,5 @@
 import "server-only";
-import { CATALOG_ID, COMPONENT_DOCS, COMPONENT_NAMES, FENCE, METRICS } from "@/lib/jarvis-ui/catalog";
+import { CATALOG_ID, COMPONENT_NAMES, type ComponentName } from "@/lib/jarvis-ui/catalog";
 
 export const SMART_PROMPT_VERSION = "jarvis-ui-prompt@1";
 
@@ -9,15 +9,34 @@ export const SMART_PROMPT_VERSION = "jarvis-ui-prompt@1";
  * capability and the person has smart replies turned on.
  */
 export function smartInstructions(): string {
-  const comps = COMPONENT_NAMES.map((n) => `${n} ${COMPONENT_DOCS[n]}`).join("\n");
+  const hints: Record<ComponentName, string> = {
+    Stack: "{direction?:row|column,gap?:sm|md}+children",
+    Section: "{title,subtitle?}+children",
+    Text: "{text,variant?:body|meta|lead}",
+    Callout: "{title,text?,tone:info|warn|ok}",
+    Divider: "{}",
+    TaskList: "{title,rows:[{ref,reason?,suggestion?:do_week|reschedule|drop|done,suggestedDate?}],actions?:[done|week|snooze|drop|promote],promoteParentRef?}",
+    DecisionCard: "{title,context?,options:[{id,label,consequence?,recommended?,intent?}]}",
+    Checklist: "{title,steps:[{id,label,detail?,runBy?:you|agent}]}",
+    Gauge: "{metric} or {label,value,max,unit?} labelled estimate",
+    Sparkline: "{metric,label?}",
+    ApprovalChips: "{title,rows:[{ref,reason?}]}",
+    WeekPlan: "{weekOf:Monday,days?:5|7,blocks:[{ref,day:date|null,start?:HH:MM,minutes}]} live calendar added",
+    PRCard: "{ref:pr:owner/repo#n}",
+    Table: "{columns:[{key,label}],rows:[{ref?,cells:{key:text}}]}",
+    ItemRef: "{ref}",
+    DecisionMatrix:
+      "{title,ref:item,criteria:[{id,label,weight:1-3}],options:[{id,label,consequence?,scores:{criterionId:1-5}}]} 2-6 criteria,2-4 options; scores=model estimates; weights local",
+    Gantt: "{title,rows:[{ref:item,start?:date,milestone?}],from?,to?} <=30; live item dates",
+    BarChart: "{metric,label?} Jarvis series only",
+    ApprovalQueue: "{title?} read-only; no approval writes",
+    Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1-3}],updates?:[item.update]}} <=12 fields; stages only",
+  };
   return [
-    `Jarvis can render interactive replies (${CATALOG_ID}). When a reply is really a workflow (triage, a choice, a checklist), add ONE fenced block:`,
-    "```" + FENCE,
-    `{"v":1,"catalog":"${CATALOG_ID}","root":"r","elements":{"r":{"type":"Stack","props":{},"children":["a"]},"a":{"type":"TaskList","props":{"title":"Do this week","bucket":"do_week","rows":[{"ref":"todo:abc","reason":"5 min","suggestion":"do_week"}]}}}}`,
-    "```",
-    "Rules: write a 1–3 sentence summary OUTSIDE the block. Use refs (todo:…, item:…) copied exactly from the Jarvis context; never invent refs, titles or dates for them (Jarvis shows live titles). Propose only: never say you changed anything; the person taps Apply. Group tasks into TaskLists by suggestion (do_week, reschedule with suggestedDate, drop). Keep JSON compact, no comments. Components (props; only Stack/Section take children):",
-    comps,
-    `Metric refs: ${METRICS.map((m) => `metric:${m}`).join(" ")}. Never type numbers for them.`,
-    "Intent objects (DecisionCard option.intent): todo.complete{ref} todo.snooze{ref,date} todo.drop{ref,note?} todo.promote{ref,parentRef} item.update{ref,patch:{status?,nextAction?,targetDate?}} item.create{parentRef,title,itemKind?}. Never settle, delete or merge. If unsure, reply in plain text.",
+    `Interactive workflow: summary outside ONE jarvis-ui fence containing {v:1,catalog:"${CATALOG_ID}",root:"r",elements:{r:{type,props,children?:[ids]}}}. JSON only. Only Stack/Section have children.`,
+    "Copy refs from context; never invent item titles/dates. Finance excluded. No URLs/HTML/styles. Proposals only: Apply confirms, Undo reverts. Dates=YYYY-MM-DD, today..+365d for writes. Never settle/delete/merge.",
+    ...COMPONENT_NAMES.map((n) => `${n} ${hints[n]}`),
+    "metric:ai_spend_today|ai_spend_7d|items_done_14d|overdue_count: Jarvis numbers, never yours.",
+    "Intents: todo.complete{ref}, todo.snooze{ref,date}, todo.drop{ref,note?}, todo.promote{ref,parentRef}, item.update{ref,patch:{nextAction?,targetDate?,status?}}, item.create{parentRef,title}. No direct writes.",
   ].join("\n");
 }

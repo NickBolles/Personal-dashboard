@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useEffectEvent, useId, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { ActivityItem } from "@/lib/activity";
@@ -18,6 +18,10 @@ import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
 import { useCoordinatorThings } from "./useCoordinatorThings";
+import { pickTrayLine } from "@/lib/coordinator/things";
+import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
+import { useSmartSettings } from "@/components/smart/AssistantText";
+import { DynamicSurface } from "@/components/smart/DynamicSurface";
 import "./coordinator.css";
 
 const clamp = (width: number) => Math.min(520, Math.max(300, width));
@@ -46,7 +50,40 @@ export function GlobalCoordinator() {
   const host = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const ids = useId();
-  const { things, line, markSeen, error } = useCoordinatorThings();
+  const { things, line: priority, markSeen, error } = useCoordinatorThings();
+  const smart = useSmartSettings();
+  const requestedCard = search.get("smartCard");
+  const dynamic = useQuery({
+    queryKey: ["smart-dynamic", requestedCard],
+    queryFn: () => api.get<DynamicResponse>(`/api/smart/dynamic${requestedCard ? `?card=${encodeURIComponent(requestedCard)}` : ""}`),
+    enabled: smart.data?.enabled === true,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const [activeCard, setActiveCard] = useState<DynamicCard>();
+  const [snoozed, setSnoozed] = useState<string[]>([]);
+  const line = pickTrayLine(priority, dynamic.data?.cards ?? [], snoozed);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("jarvis.smart.snoozed") ?? "null") as { day?: string; ids?: string[] } | null;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- day-scoped browser preference
+      setSnoozed(saved?.day === dynamic.data?.today && Array.isArray(saved?.ids) ? saved.ids : []);
+    } catch {
+      /* optional */
+    }
+  }, [dynamic.data?.today]);
+  const dismissCard = () => {
+    if (!activeCard) return;
+    const ids = [...snoozed, activeCard.id];
+    setSnoozed(ids);
+    setActiveCard(undefined);
+    try {
+      localStorage.setItem("jarvis.smart.snoozed", JSON.stringify({ day: dynamic.data?.today, ids }));
+    } catch {
+      /* optional */
+    }
+  };
   const info = useQuery({
     queryKey: ["work", "coordinator", "global"],
     queryFn: () => api.get<(CoordinatorResponse & { scope: "global" }) | { area: null }>("/api/work/coordinator/global"),
@@ -101,6 +138,10 @@ export function GlobalCoordinator() {
     saveOpen(true);
     setChatExpandedOn(pageKey);
     setPhoneOpen(true);
+  };
+  const showPriority = () => {
+    setActiveCard(line.card);
+    show();
   };
   const hide = () => {
     if (wide) {
@@ -189,6 +230,20 @@ export function GlobalCoordinator() {
       restore?.focus();
     };
   }, [wide, phoneOpen]);
+  const openedRequest = useRef<string | null>(null);
+  const openRequested = useEffectEvent((card: DynamicCard) => {
+    setActiveCard(card);
+    show();
+  });
+  useEffect(() => {
+    if (!requestedCard || openedRequest.current === requestedCard) return;
+    const card = dynamic.data?.cards.find((c) => c.id === requestedCard);
+    if (card) {
+      openedRequest.current = requestedCard;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- a queued surface deep link explicitly opens its host after data arrives
+      openRequested(card);
+    }
+  }, [requestedCard, dynamic.data]);
   const d = info.data?.area ? (info.data as CoordinatorResponse) : null;
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "chat", label: "Chat" },
@@ -208,130 +263,141 @@ export function GlobalCoordinator() {
       </header>
       <p className="gc-priority" data-tone={line.tone} role="status">
         {line.text}
-      </p>
-      <div className="gc-tabs" role="tablist" aria-label="Chief of staff tabs">
-        {tabs.map((t, index) => (
-          <button
-            type="button"
-            role="tab"
-            id={`${ids}-${t.id}`}
-            aria-controls={`${ids}-panel-${t.id}`}
-            aria-selected={tab === t.id}
-            tabIndex={tab === t.id ? 0 : -1}
-            key={t.id}
-            onClick={() => {
-              setTab(t.id);
-              if (t.id === "changes" || t.id === "running") markSeen();
-            }}
-            onKeyDown={(e) => {
-              let next = index;
-              if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
-              else if (e.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
-              else if (e.key === "Home") next = 0;
-              else if (e.key === "End") next = tabs.length - 1;
-              else return;
-              e.preventDefault();
-              setTab(tabs[next]!.id);
-              document.getElementById(`${ids}-${tabs[next]!.id}`)?.focus();
-            }}
-          >
-            {t.label}
-            {t.count !== undefined ? <span className="gc-badge">{t.count}</span> : null}
+        {line.card ? (
+          <button type="button" className="gc-icon" onClick={showPriority}>
+            {line.card.action}
           </button>
-        ))}
-      </div>
-      {info.error || error ? (
-        <p role="alert" className="gc-error">
-          Some coordinator data couldn&apos;t load. It will retry automatically.
-        </p>
-      ) : null}
-      {info.isLoading ? <p className="gc-empty">Loading Chief of staff…</p> : null}
-      {info.isSuccess && !d ? (
-        <div className="gc-empty">
-          No Chief of staff yet: set an area&apos;s agent to chiefofstaff in <Link href="/settings/agents">Settings → Agents</Link>.
-        </div>
-      ) : null}
-      {tabs.map((t) => (
-        <div
-          key={t.id}
-          className={`gc-panel-content ${t.id === "chat" ? "gc-chat" : ""}`}
-          role="tabpanel"
-          id={`${ids}-panel-${t.id}`}
-          aria-labelledby={`${ids}-${t.id}`}
-          hidden={tab !== t.id}
-          tabIndex={0}
-        >
-          {t.id === "chat" && d ? (
-            <CoordinatorThread
-              key={d.area.id}
-              info={d}
-              compact
-              draft={draft}
-              onDraft={setDraft}
-              context={attached}
-              onRemoveContext={() => setRemovedOn(pageKey)}
-              quickContext={quickContext}
-              inlineActions={(lastUserAt) => <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} />}
-            />
+        ) : null}
+      </p>
+      {activeCard ? (
+        <DynamicSurface card={activeCard} onDismiss={dismissCard} />
+      ) : (
+        <>
+          <div className="gc-tabs" role="tablist" aria-label="Chief of staff tabs">
+            {tabs.map((t, index) => (
+              <button
+                type="button"
+                role="tab"
+                id={`${ids}-${t.id}`}
+                aria-controls={`${ids}-panel-${t.id}`}
+                aria-selected={tab === t.id}
+                tabIndex={tab === t.id ? 0 : -1}
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id);
+                  if (t.id === "changes" || t.id === "running") markSeen();
+                }}
+                onKeyDown={(e) => {
+                  let next = index;
+                  if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
+                  else if (e.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+                  else if (e.key === "Home") next = 0;
+                  else if (e.key === "End") next = tabs.length - 1;
+                  else return;
+                  e.preventDefault();
+                  setTab(tabs[next]!.id);
+                  document.getElementById(`${ids}-${tabs[next]!.id}`)?.focus();
+                }}
+              >
+                {t.label}
+                {t.count !== undefined ? <span className="gc-badge">{t.count}</span> : null}
+              </button>
+            ))}
+          </div>
+          {info.error || error ? (
+            <p role="alert" className="gc-error">
+              Some coordinator data couldn&apos;t load. It will retry automatically.
+            </p>
           ) : null}
-          {t.id === "needs" ? (
-            <div className="gc-list">
-              {things.decisions.length ? (
-                things.decisions.map((decision) => (
-                  <Link key={decision.key} href={decision.href}>
-                    <strong>{decision.title}</strong>
-                    <span>{decision.question}</span>
-                  </Link>
-                ))
-              ) : (
-                <p>Nothing needs you right now.</p>
-              )}
+          {info.isLoading ? <p className="gc-empty">Loading Chief of staff…</p> : null}
+          {info.isSuccess && !d ? (
+            <div className="gc-empty">
+              No Chief of staff yet: set an area&apos;s agent to chiefofstaff in <Link href="/settings/agents">Settings → Agents</Link>.
             </div>
           ) : null}
-          {t.id === "running" ? (
-            <div className="gc-list">
-              {[...things.running, ...things.failing.filter((f) => !things.running.some((r) => r.id === f.id))].map((run) => (
-                <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
-                  <strong>{run.title}</strong>
-                  <span data-tone={run.state === "failed" || run.state === "stalled" ? "bad" : "ai"}>
-                    {run.state}
-                    {run.at ? ` · ${relativeTime(run.at)}` : ""}
-                  </span>
-                </Link>
-              ))}
-              {!things.running.length && !things.failing.length ? <p>No active runs.</p> : null}
+          {tabs.map((t) => (
+            <div
+              key={t.id}
+              className={`gc-panel-content ${t.id === "chat" ? "gc-chat" : ""}`}
+              role="tabpanel"
+              id={`${ids}-panel-${t.id}`}
+              aria-labelledby={`${ids}-${t.id}`}
+              hidden={tab !== t.id}
+              tabIndex={0}
+            >
+              {t.id === "chat" && d ? (
+                <CoordinatorThread
+                  key={d.area.id}
+                  info={d}
+                  compact
+                  draft={draft}
+                  onDraft={setDraft}
+                  context={attached}
+                  onRemoveContext={() => setRemovedOn(pageKey)}
+                  quickContext={quickContext}
+                  inlineActions={(lastUserAt) => <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} />}
+                />
+              ) : null}
+              {t.id === "needs" ? (
+                <div className="gc-list">
+                  {things.decisions.length ? (
+                    things.decisions.map((decision) => (
+                      <Link key={decision.key} href={decision.href}>
+                        <strong>{decision.title}</strong>
+                        <span>{decision.question}</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <p>Nothing needs you right now.</p>
+                  )}
+                </div>
+              ) : null}
+              {t.id === "running" ? (
+                <div className="gc-list">
+                  {[...things.running, ...things.failing.filter((f) => !things.running.some((r) => r.id === f.id))].map((run) => (
+                    <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
+                      <strong>{run.title}</strong>
+                      <span data-tone={run.state === "failed" || run.state === "stalled" ? "bad" : "ai"}>
+                        {run.state}
+                        {run.at ? ` · ${relativeTime(run.at)}` : ""}
+                      </span>
+                    </Link>
+                  ))}
+                  {!things.running.length && !things.failing.length ? <p>No active runs.</p> : null}
+                </div>
+              ) : null}
+              {t.id === "changes" ? (
+                <div className="gc-changes">
+                  <p className="gc-hint">By @chiefofstaff · last 24 hours</p>
+                  <ActionCards rows={things.changes} />
+                  {!things.changes.length ? <p>No recent changes.</p> : null}
+                </div>
+              ) : null}
+              {t.id === "page" ? (
+                <div className="gc-page">
+                  {context ? (
+                    <>
+                      <p>Viewing: {context.label}</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraft("Help me understand this page and suggest the next action.");
+                          setRemovedOn(null);
+                          setTab("chat");
+                        }}
+                      >
+                        Ask about this page
+                      </button>
+                    </>
+                  ) : (
+                    <p>No page context is shared.</p>
+                  )}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-          {t.id === "changes" ? (
-            <div className="gc-changes">
-              <p className="gc-hint">By @chiefofstaff · last 24 hours</p>
-              <ActionCards rows={things.changes} />
-              {!things.changes.length ? <p>No recent changes.</p> : null}
-            </div>
-          ) : null}
-          {t.id === "page" ? (
-            <div className="gc-page">
-              {context ? (
-                <>
-                  <p>Viewing: {context.label}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraft("Help me understand this page and suggest the next action.");
-                      setRemovedOn(null);
-                      setTab("chat");
-                    }}
-                  >
-                    Ask about this page
-                  </button>
-                </>
-              ) : (
-                <p>No page context is shared.</p>
-              )}
-            </div>
-          ) : null}
-        </div>
-      ))}
+          ))}
+        </>
+      )}
     </>
   );
   return (
@@ -414,7 +480,15 @@ export function GlobalCoordinator() {
             </div>
           ) : null}
           {!chat ? (
-            <button type="button" className="gc-tray" data-state={line.state} aria-label="Chief of staff" aria-haspopup="dialog" onClick={show}>
+            <button
+              type="button"
+              className="gc-tray"
+              data-state={line.state}
+              data-dynamic-tone={line.card?.line.tone}
+              aria-label="Chief of staff"
+              aria-haspopup="dialog"
+              onClick={showPriority}
+            >
               <span className="gc-tray-avatar">
                 <span className="gc-orb" aria-hidden="true" />
                 <span className="gc-tray-phone hidden">
@@ -423,24 +497,34 @@ export function GlobalCoordinator() {
               </span>
               <span className="gc-tray-copy">
                 <strong>
-                  <span className="gc-tray-phone hidden" data-tone={line.tone}>
-                    {line.state === "failing"
-                      ? "Failing"
-                      : line.state === "needs"
-                        ? "Needs you"
-                        : line.state === "done"
-                          ? "Finished"
-                          : line.state === "running"
-                            ? "Running"
-                            : "Quiet"}{" "}
-                    ·{" "}
-                  </span>
-                  Chief of staff
+                  {!line.card ? (
+                    <span className="gc-tray-phone hidden" data-tone={line.tone}>
+                      {line.state === "failing"
+                        ? "Failing"
+                        : line.state === "needs"
+                          ? "Needs you"
+                          : line.state === "done"
+                            ? "Finished"
+                            : line.state === "running"
+                              ? "Running"
+                              : "Quiet"}{" "}
+                      ·{" "}
+                    </span>
+                  ) : null}
+                  {line.card ? (
+                    <>
+                      <span aria-hidden="true">{line.card.line.icon} </span>
+                      {line.card.line.label}
+                    </>
+                  ) : (
+                    "Chief of staff"
+                  )}
                 </strong>
                 <span className="gc-priority" data-tone={line.tone}>
-                  {line.text}
+                  {line.card ? line.card.line.text : line.text}
                 </span>
               </span>
+              {line.card ? <span className="shrink-0 text-xs text-accent">{line.card.action}</span> : null}
               <span className="gc-tray-counts hidden">
                 {things.needsYou ? (
                   <span data-tone="warn" aria-label={`${things.needsYou} need you`}>

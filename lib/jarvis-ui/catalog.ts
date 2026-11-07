@@ -43,6 +43,54 @@ export const METRICS = ["ai_spend_today", "ai_spend_7d", "items_done_14d", "over
 export type MetricId = (typeof METRICS)[number];
 export const metricRef = z.enum(METRICS.map((m) => `metric:${m}`) as [`metric:${MetricId}`, ...`metric:${MetricId}`[]]);
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM");
+const safeText = (max = 200) =>
+  z
+    .string()
+    .max(max)
+    .refine((s) => !/https?:\/\/|www\.|<[^>]*>/i.test(s), "Plain text only; no URLs or HTML");
+const fieldId = z
+  .string()
+  .regex(/^[a-z][a-z0-9_-]{0,39}$/)
+  .refine((s) => !["constructor", "prototype"].includes(s), "Reserved id");
+const realDate = z.iso.date();
+export const smartFormField = z
+  .object({
+    id: fieldId,
+    label: safeText(),
+    kind: z.enum(["text", "textarea", "scale", "choice", "toggle"]),
+    options: z
+      .array(z.object({ value: safeText(100), label: safeText() }).strict())
+      .min(1)
+      .max(30)
+      .optional(),
+    required: z.boolean().optional(),
+    proposed: z.union([safeText(2000), z.boolean(), z.number().int().min(1).max(5)]).optional(),
+  })
+  .strict()
+  .refine((f) => {
+    if (f.kind === "choice" && !f.options?.length) return false;
+    if (f.kind !== "choice" && f.options) return false;
+    if (f.proposed === undefined) return true;
+    if (f.kind === "scale") return typeof f.proposed === "number";
+    if (f.kind === "toggle") return typeof f.proposed === "boolean";
+    if (typeof f.proposed !== "string") return false;
+    if (f.kind === "choice") return f.options!.some((o) => o.value === f.proposed);
+    return f.kind !== "text" || f.proposed.length <= 200;
+  }, "Invalid field options or proposed value");
+export const formCreate = z
+  .object({
+    parentRef: itemRef.optional(),
+    parentField: fieldId.optional(),
+    parentRefs: z.array(itemRef).min(1).max(30).optional(),
+    titleField: fieldId,
+    splitLines: z.boolean().optional(),
+    maxItems: z.number().int().min(1).max(3).optional(),
+  })
+  .strict()
+  .refine(
+    (c) => Boolean(c.parentRef && !c.parentField && !c.parentRefs) || Boolean(!c.parentRef && c.parentField && c.parentRefs),
+    "Choose a fixed or field-selected parent",
+  );
 
 export const SUGGESTIONS = ["do_week", "reschedule", "drop", "snooze", "keep", "done"] as const;
 export type Suggestion = (typeof SUGGESTIONS)[number];
@@ -93,6 +141,65 @@ export const externalIntentSchema = z
 export type ExternalIntent = z.infer<typeof externalIntentSchema>;
 
 export const COMPONENTS = {
+  DecisionMatrix: z
+    .object({
+      title: safeText(),
+      ref: itemRef,
+      criteria: z
+        .array(z.object({ id: fieldId, label: safeText(), weight: z.number().int().min(1).max(3) }).strict())
+        .min(2)
+        .max(6),
+      options: z
+        .array(
+          z
+            .object({ id: fieldId, label: safeText(), consequence: safeText(300).optional(), scores: z.record(fieldId, z.number().int().min(1).max(5)) })
+            .strict(),
+        )
+        .min(2)
+        .max(4),
+    })
+    .strict()
+    .refine(
+      (p) =>
+        new Set(p.criteria.map((c) => c.id)).size === p.criteria.length &&
+        new Set(p.options.map((o) => o.id)).size === p.options.length &&
+        p.options.every((o) => Object.keys(o.scores).length === p.criteria.length && p.criteria.every((c) => Object.hasOwn(o.scores, c.id))),
+      "Unique ids and exactly one score per criterion required",
+    ),
+  Gantt: z
+    .object({
+      title: safeText(),
+      rows: z
+        .array(z.object({ ref: itemRef, start: realDate.optional(), milestone: z.boolean().optional() }).strict())
+        .min(1)
+        .max(30),
+      from: realDate.optional(),
+      to: realDate.optional(),
+    })
+    .strict()
+    .refine((p) => !p.from || !p.to || p.from <= p.to, "Invalid timeline range"),
+  BarChart: z.object({ metric: z.string().regex(/^metric:[a-z][a-z0-9_]{0,59}$/), label: safeText().optional() }).strict(),
+  ApprovalQueue: z.object({ title: safeText().optional() }).strict(),
+  Form: z
+    .object({
+      title: safeText(),
+      fields: z.array(smartFormField).min(1).max(12),
+      submit: z
+        .object({ label: safeText(80), creates: z.array(formCreate).max(3).optional(), updates: z.array(inlineIntentSchema).max(12).optional() })
+        .strict(),
+    })
+    .strict()
+    .refine((p) => {
+      const ids = new Map(p.fields.map((f) => [f.id, f]));
+      return (
+        ids.size === p.fields.length &&
+        (p.submit.creates ?? []).every(
+          (c) => ["text", "textarea"].includes(ids.get(c.titleField)?.kind ?? "") && (!c.parentField || ids.get(c.parentField)?.kind === "choice"),
+        ) &&
+        (p.submit.updates ?? []).every((i) => i.kind === "item.update")
+      );
+    }, "Invalid field binding")
+    .refine((p) => !/https?:\/\/|www\.|<[^>]*>/i.test(JSON.stringify(p)), "Plain text only; no URLs or HTML"),
   Stack: z.object({ direction: z.enum(["column", "row"]).optional(), gap: z.enum(["sm", "md"]).optional() }).strict(),
   Section: z.object({ title: label, subtitle: label.optional(), tone: z.enum(["neutral", "warn", "ok", "accent"]).optional() }).strict(),
   Text: z.object({ text: str(), variant: z.enum(["body", "meta", "lead"]).optional() }).strict(),
@@ -206,6 +313,12 @@ export type JarvisSpec = { v: 1; catalog: typeof CATALOG_ID; root: string; eleme
 
 /** One-line summaries used by the prompt and docs. */
 export const COMPONENT_DOCS: Record<ComponentName, string> = {
+  DecisionMatrix:
+    "{title,ref:item,criteria:[{id,label,weight:1–3}],options:[{id,label,consequence?,scores:{criterionId:1–5}}]} scores are model estimates; weights local; pick stages nextAction",
+  Gantt: "{title,rows:[{ref:item,start?:YYYY-MM-DD,milestone?}],from?,to?} ≤30; live dates only; reschedule stages targetDate",
+  BarChart: "{metric,label?} bars from a Jarvis series only",
+  ApprovalQueue: "{title?} read-only owner approvals, decisions and staged surfaces",
+  Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1–3}],updates?:[item.update intent]}} ≤12 fields; submit stages only",
   Stack: "{direction?: column|row, gap?: sm|md} + children",
   Section: "{title, subtitle?, tone?: neutral|warn|ok|accent} + children",
   Text: "{text, variant?: body|meta|lead} plain text, **bold** and `code` only",

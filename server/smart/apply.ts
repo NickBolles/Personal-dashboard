@@ -12,6 +12,7 @@ import { addCalendarBlock, requireCalendarWrites, usesSkylightCalendar } from ".
 import { undoWrite } from "@/server/skylight-writes";
 import { isTask, type AppliedEntry, type ApplyResult, type SurfaceView, type TaskRef } from "@/lib/jarvis-ui/types";
 import { lookup, ownedSurface, sha256, storedSpec, todayLocal, toView, writeApplied } from "./store";
+import { markDynamicApplied } from "./dynamic";
 
 type Checked = { intent: Intent; hash: string; hydrated: Record<string, TaskRef> };
 
@@ -168,6 +169,11 @@ async function applyLocked(
     };
 
   const checked = check(user, body.intents, () => storedSpec(row), body.external === true);
+  const formCreates = Object.values(storedSpec(row).elements).flatMap((e) =>
+    e.type === "Form" ? ((e.props as import("@/lib/jarvis-ui/catalog").PropsOf<"Form">).submit.creates ?? []) : [],
+  );
+  if (formCreates.length && checked.filter((c) => c.intent.kind === "item.create").length > formCreates.reduce((n, c) => n + (c.maxItems ?? 1), 0))
+    throw new HttpError(400, "too_many", "Too many form items");
   const results: ApplyResult[] = [];
   const at = new Date().toISOString();
   let touchedTodos = false;
@@ -199,6 +205,7 @@ async function applyLocked(
   }
   writeApplied(row.id, applied);
   if (touchedTodos) await refreshSource("todos").catch(() => undefined);
+  if (results.length && results.every((r) => r.ok)) markDynamicApplied(user.id, row.sessionId ?? "", true);
   audit({
     actor: user.id,
     action: "smart.apply",
@@ -256,6 +263,7 @@ async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHa
   }
   entry.undone = true;
   writeApplied(row.id, applied);
+  markDynamicApplied(user.id, row.sessionId ?? "", false);
   if (intent.kind.startsWith("todo.")) await refreshSource("todos").catch(() => undefined);
   audit({ actor: user.id, action: "smart.undo", source: "smart", sourceRecord: row.id, result: "ok", correlationId, detail: { kind: intent.kind } });
   return { ok: true, message: "Undone", surface: toView({ ...row, appliedJson: JSON.stringify(applied) }, user) };
