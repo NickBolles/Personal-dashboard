@@ -83,6 +83,17 @@ export function specRefs(spec: JarvisSpec): string[] {
   const refs = new Set<string>();
   for (const el of Object.values(spec.elements)) {
     const p = el.props as Record<string, unknown>;
+    if (el.type === "DecisionMatrix") refs.add(p.ref as string);
+    if (el.type === "Gantt") for (const r of p.rows as { ref: string }[]) refs.add(r.ref);
+    if (el.type === "ApprovalQueue") refs.add("approvals:pending");
+    if (el.type === "Form") {
+      const form = el.props as import("./catalog").PropsOf<"Form">;
+      for (const c of form.submit.creates ?? []) {
+        if (c.parentRef) refs.add(c.parentRef);
+        for (const r of c.parentRefs ?? []) refs.add(r);
+      }
+      for (const i of form.submit.updates ?? []) if ("ref" in i) refs.add(i.ref);
+    }
     if (el.type === "TaskList") for (const r of p.rows as { ref: string }[]) refs.add(r.ref);
     if (el.type === "ItemRef") refs.add(p.ref as string);
     if (el.type === "Table") for (const r of p.rows as { ref?: string }[]) if (r.ref) refs.add(r.ref);
@@ -98,7 +109,7 @@ export function specRefs(spec: JarvisSpec): string[] {
       refs.add(calendarRef(p.weekOf as string, (p.days as 5 | 7 | undefined) ?? 5));
     }
     if (el.type === "PRCard") refs.add(p.ref as string);
-    if ((el.type === "Gauge" || el.type === "Sparkline") && typeof p.metric === "string") refs.add(p.metric);
+    if ((el.type === "Gauge" || el.type === "Sparkline" || el.type === "BarChart") && typeof p.metric === "string") refs.add(p.metric);
   }
   return [...refs];
 }

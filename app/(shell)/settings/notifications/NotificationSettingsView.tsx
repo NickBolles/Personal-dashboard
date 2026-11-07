@@ -5,7 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { NOTIFICATION_CATEGORIES } from "@/lib/contracts";
 import { PushControls, QuietHours, usePreferences } from "@/components/NotificationSetup";
-import { Badge, Card, PageHeader, useToast } from "@/components/ui";
+import { Badge, Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export function NotificationSettingsView() {
   const qc = useQueryClient();
@@ -35,6 +36,8 @@ export function NotificationSettingsView() {
   return (
     <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Notifications" subtitle="Every alert lands in the Alerts inbox. Push is an extra delivery channel." />
+      {prefs.isPending ? <LoadingState label="Loading notification preferences…" /> : null}
+      {prefs.error ? <ErrorNote error={prefs.error} retry={() => prefs.refetch()} /> : null}
       <Card>
         <h2 className="mb-3 font-semibold">Push on this device</h2>
         <PushControls />
@@ -53,6 +56,7 @@ export function NotificationSettingsView() {
                 <label className="flex min-h-11 items-start gap-3">
                   <input
                     type="checkbox"
+                    disabled={!prefs.data || prefs.isError}
                     className="mt-1 h-5 w-5"
                     checked={on}
                     onChange={(e) => {

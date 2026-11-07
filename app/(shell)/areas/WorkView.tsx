@@ -1,6 +1,8 @@
 "use client";
 
 import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
+import { EscalationBanner } from "@/components/work/EscalationBanner";
+import { ItemAiChips } from "@/components/work/ItemAiChips";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
@@ -1044,6 +1046,7 @@ function ItemDetail({
           : null,
       isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
       container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
+      ...aiItems,
       !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
       isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
       isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
@@ -1201,6 +1204,7 @@ function ItemDetail({
             {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
           </div>
         ) : null}
+        {!container && item.kind !== "conversation" ? <ItemAiChips aiActions={aiItems} itemActions={menu} /> : null}
         {container || item.kind === "conversation" ? null : (
           <div className="mt-2" data-testid="work-item-meta">
             <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(patch) => inline.mutate(patch)} />
@@ -1238,6 +1242,9 @@ function ItemDetail({
         {isArea && !item.nextAction ? null : (
           <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={inline.isPending} onSave={(nextAction) => inline.mutate({ nextAction })} />
         )}
+        {!container && item.kind !== "conversation" ? (
+          <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => setDialog("continue") : undefined} />
+        ) : null}
         {item.createdVia || item.updatedVia ? <div className="mt-1.5 flex min-w-0 flex-wrap">{itemAgentChip(item)}</div> : null}
         {container ? null : <JobChip itemId={item.id} />}
         {container || ((settlePrompt || !primary) && !(canChat && item.kind !== "conversation")) ? null : (

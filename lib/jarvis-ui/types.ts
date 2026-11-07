@@ -4,6 +4,7 @@
  * refs come back `unavailable` and get no actions.
  */
 export type HydratedRef =
+  | { ref: string; kind: "approvals"; rows: ApprovalRow[] }
   | {
       ref: string;
       kind: "todo" | "item";
@@ -16,6 +17,7 @@ export type HydratedRef =
       href?: string;
       done?: boolean;
       timed?: boolean;
+      createdDate?: string;
     }
   | {
       ref: string;
@@ -65,6 +67,7 @@ export type HydratedRef =
       itemHref?: string;
     }
   | { ref: string; unavailable: "unknown" | "finance" | "forbidden" | "not_connected" | "error"; message?: string };
+export type ApprovalRow = { id: string; title: string; detail: string; href: string };
 
 export type HydrateResponse = { refs: Record<string, HydratedRef>; today: string };
 

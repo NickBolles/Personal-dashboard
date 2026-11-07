@@ -32,6 +32,7 @@ function mount(node: React.ReactNode, capabilities = ["skylight.write"]) {
   );
 }
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   state.sky = skylightWriteVisual(new Date("2026-11-04T18:00:00Z"));
 });
 afterEach(cleanup);
@@ -132,16 +133,23 @@ it("shows a health failure alert and only offers event edits for editable events
   expect(screen.queryByRole("button", { name: "Delete Visualsky family walk" })).toBeNull();
 });
 
-it("Todos merges lists with their own source chips and the fixed-width Whose filter", () => {
+it("Todos merges lists with their own source chips and honest All / Mine / Waiting segments", () => {
   addOther();
   mount(<TodosView />);
-  const whose = screen.getByRole("combobox", { name: "Whose" });
-  expect(whose.parentElement?.className).toContain("w-36");
-  expect(screen.queryByText("Other person's chore")).toBeNull();
+  const segment = within(screen.getByRole("radiogroup", { name: "Tasks segment" }));
+  expect(segment.getByRole("radio", { name: "All" }).getAttribute("aria-checked")).toBe("true");
+  expect(screen.getByText("Other person's chore")).toBeDefined();
   expect(screen.getByRole("checkbox", { name: "Visualsky oat milk" })).toBeDefined();
   expect(screen.getAllByTestId("source-chip").some((chip) => chip.textContent === "Skylight · Visualsky Groceries")).toBe(true);
-  fireEvent.change(whose, { target: { value: "everyone" } });
+  fireEvent.click(segment.getByRole("radio", { name: "Mine" }));
+  expect(window.location.search).toBe("?seg=mine");
+  expect(screen.queryByText("Other person's chore")).toBeNull();
+  expect(screen.queryByText("Visualsky fold the towels")).toBeNull();
+  expect(screen.getByText("Visualsky water the ferns")).toBeDefined();
+  fireEvent.click(segment.getByRole("radio", { name: "Waiting" }));
+  expect(screen.getByText("Visualsky fold the towels")).toBeDefined();
   expect(screen.getByText("Other person's chore")).toBeDefined();
+  fireEvent.click(segment.getByRole("radio", { name: "All" }));
   fireEvent.change(screen.getByRole("combobox", { name: "Source" }), { target: { value: "Skylight · Visualsky Groceries" } });
   expect(screen.queryByText("Other person's chore")).toBeNull();
   expect(screen.getByRole("checkbox", { name: "Visualsky paper towels" })).toBeDefined();

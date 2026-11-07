@@ -8,7 +8,7 @@ import type { CalendarEvent, HomeHealth, SourceStatus } from "@/lib/contracts";
 import type { DeviceView } from "@/integrations/home-assistant/devices";
 import { CameraIcon, ChevronIcon, LightIcon } from "@/components/icons";
 import { useSource } from "@/components/useSource";
-import { Banner, SectionHeader } from "@/components/ui/kit";
+import { Banner, EmptyState, SectionHeader } from "@/components/ui/kit";
 import { SourceState } from "@/components/SourceState";
 import { Badge, Button, ButtonLink, Card, Dialog, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline, useToast } from "@/components/ui";
 import { groupByRoom, roomSlug } from "@/lib/house-rooms";
@@ -118,7 +118,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">Nothing unusual in your watched entities.</p>
+              <EmptyState title="Nothing unusual in your watched entities." />
             )}
           </section>
         ) : null}
@@ -138,7 +138,7 @@ export function HomeControlView({ focusEntity }: { focusEntity?: string }) {
             {controls.error ? <ErrorNote error={controls.error} retry={() => controls.refetch()} /> : null}
             {controls.isLoading ? <Spinner label="Reading live state…" /> : null}
             {controls.data && !controls.data.controls.length ? (
-              <p className="text-sm text-muted">No controls allowlisted. Add some in Settings → Connections → Home Assistant.</p>
+              <EmptyState title="No controls allowlisted. Add some in Settings → Connections → Home Assistant." />
             ) : null}
             {/* H1: compact two-line tiles, three across on desktops. */}
             <ul className="grid grid-cols-1 gap-2 @min-[400px]:grid-cols-2 @min-[760px]:grid-cols-3">

@@ -221,7 +221,8 @@ export function ApprovalChips({ element }: P<"ApprovalChips">) {
   const p = element.props;
   return (
     <section className="overflow-hidden rounded-[10px] border border-line" aria-label={p.title}>
-      <header className="flex items-center gap-2 bg-surface-2 px-3 py-1.5">
+      <header className="svh">
+        <span className="sv-tag">ApprovalChips</span>
         <h3 className="flex-1 text-sm font-semibold">
           {p.title} <span className="text-muted">{p.rows.length}</span>
         </h3>
@@ -403,7 +404,8 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
   const ghost = drag ? p.blocks.find((b) => b.ref === drag.ref) : undefined;
   return (
     <section className="overflow-hidden rounded-[10px] border border-line" aria-label={p.title ?? `Week of ${fmtDay(p.weekOf)}`} data-testid="week-plan">
-      <header className="flex flex-wrap items-center gap-2 bg-surface-2 px-3 py-1.5">
+      <header className="svh">
+        <span className="sv-tag">WeekPlan</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title ?? `Week of ${fmtDay(p.weekOf)}`}</h3>
         <span className="text-xs text-muted" data-dynamic>
           {scheduled.length} scheduled · {Math.round((totalMin / 60) * 10) / 10} h of {capacity / 60} h
@@ -572,7 +574,8 @@ export function PRCard({ element }: P<"PRCard">) {
   const shown = all ? pr.checks : pr.checks.slice(0, 6);
   return (
     <section className="overflow-hidden rounded-[10px] border border-line" aria-label={`Pull request #${pr.number}: ${pr.title}`} data-testid="pr-card">
-      <header className="flex flex-wrap items-center gap-2 bg-surface-2 px-3 py-1.5">
+      <header className="svh">
+        <span className="sv-tag">PRCard</span>
         <h3 className="min-w-0 flex-1 text-sm font-semibold">
           #{pr.number} {pr.title}
         </h3>

@@ -7,7 +7,8 @@ import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { CompassState } from "@/integrations/types";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, useOnline, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, useOnline, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export function CompassView() {
   const router = useRouter();
@@ -39,7 +40,7 @@ export function CompassView() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader title="Daily Compass" subtitle={s ? `Today · window ${s.windowStart}–${s.windowEnd}` : undefined} />
-      {q.isLoading ? <Spinner label="Loading…" /> : null}
+      {q.isLoading ? <LoadingState label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data && !q.data.enabled ? (
         <Empty

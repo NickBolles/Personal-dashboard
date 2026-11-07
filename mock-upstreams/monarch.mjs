@@ -1,11 +1,12 @@
 // Mock Monarch Money GraphQL (the subset the finance connector uses).
 // Liabilities report positive "owed" balances, like Monarch. Synthetic data only.
-import { json, readBody } from "./util.mjs";
+import { json, readBody, isoDateIn } from "./util.mjs";
 
 export function createMonarch({ token }) {
   const state = { refreshes: 0, syncingUntil: 0, accounts: [], transactions: [] };
   function reset() {
-    const asOf = new Date(Date.now() - 2 * 3600_000).toISOString();
+    const now = new Date();
+    const asOf = `${isoDateIn(0, now)}T06:00:00.000Z`;
     state.refreshes = 0;
     state.syncingUntil = 0;
     state.accounts = [
@@ -56,7 +57,7 @@ export function createMonarch({ token }) {
         displayLastUpdatedAt: null,
       },
     ];
-    const d = (n) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
+    const d = (n) => isoDateIn(-n, now);
     state.transactions = [
       { id: "t-1", amount: -1500, pending: false, date: d(2), plaidName: "VISA PAYMENT", merchant: null, account: { id: "m-chk" } },
       { id: "t-2", amount: 1500, pending: false, date: d(1), plaidName: "PAYMENT THANK YOU", merchant: null, account: { id: "m-visa" } },

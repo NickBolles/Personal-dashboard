@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
-import { SectionHeader } from "@/components/ui/kit";
+import { Badge, Button, Card, ErrorNote, Field, PageHeader, inputCls, useToast } from "@/components/ui";
+import { EmptyState, SectionHeader, Skeleton } from "@/components/ui/kit";
 import { AgentAccessCard } from "./AgentAccessCard";
+import { CoordinatorsCard } from "./CoordinatorsCard";
 import { KEY_ENV_PREFIX, suggestedKeyEnv, type AgentRoute, type AgentSettings } from "@/lib/agents";
 
 type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean; sharedKey?: boolean };
@@ -28,8 +29,23 @@ export function AgentsSettingsView() {
   const [profile, setProfile] = useState("");
   const [keyEnv, setKeyEnv] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
-  if (q.isPending) return <Spinner label="Loading agent settings…" />;
-  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  if (q.isPending)
+    return (
+      <div>
+        <PageHeader title="Agents" />
+        <div role="status" aria-label="Loading agent settings…">
+          <Skeleton />
+          <Skeleton />
+        </div>
+      </div>
+    );
+  if (q.error)
+    return (
+      <div>
+        <PageHeader title="Agents" />
+        <ErrorNote error={q.error} retry={() => q.refetch()} />
+      </div>
+    );
   const s = q.data.settings;
   const save = async (patch: Partial<AgentSettings>, ok = "Saved") => {
     setBusy(true);
@@ -61,6 +77,7 @@ export function AgentsSettingsView() {
   return (
     <div className="space-y-3">
       <PageHeader title="Agents" subtitle="Which Hermes profile answers in each area. Set an area's agent in its Area settings." />
+      <CoordinatorsCard />
       <Card>
         <div className="space-y-2">
           <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
@@ -141,10 +158,10 @@ export function AgentsSettingsView() {
             })}
           </ul>
         ) : (
-          <p className="mb-3 text-[13px] text-muted">No profile routes yet. Everything runs on the default Hermes profile.</p>
+          <EmptyState title="No profile routes yet. Everything runs on the default Hermes profile." />
         )}
         <form
-          className="grid gap-2 sm:grid-cols-3"
+          className="grid grid-cols-1 gap-2 [overflow-wrap:anywhere] sm:grid-cols-3"
           aria-label="Add a profile route"
           onSubmit={async (e) => {
             e.preventDefault();

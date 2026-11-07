@@ -3,7 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, Spinner, useOnline, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, useOnline, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { EmptyState } from "@/components/ui/kit";
 
 type Settled<T> = { ok: true; items: T[] } | { ok: false; error: string };
 type Job = {
@@ -54,7 +56,7 @@ export function BrainView() {
           ) : null
         }
       />
-      {q.isLoading ? <Spinner label="Loading…" /> : null}
+      {q.isLoading ? <LoadingState label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {d ? (
         <div className="space-y-4">
@@ -65,7 +67,7 @@ export function BrainView() {
                 <Badge tone="ok">Online</Badge> <span className="text-muted">{d.health.value?.version}</span>
               </p>
             ) : (
-              <p className="mt-1 text-sm text-danger">Unreachable: {d.health.error}</p>
+              <ErrorNote error={`Unreachable: ${d.health.error}`} retry={() => q.refetch()} />
             )}
             <p className="mt-2 text-sm text-muted">
               Memory: Hermes keeps MEMORY.md and USER.md on the server.{" "}
@@ -78,7 +80,7 @@ export function BrainView() {
           <Card>
             <h2 className="font-semibold">Scheduled jobs</h2>
             {!d.jobs.ok ? (
-              <p className="mt-1 text-sm text-muted">Not available: {d.jobs.error}</p>
+              <ErrorNote error={`Not available: ${d.jobs.error}`} retry={() => q.refetch()} />
             ) : d.jobs.items.length ? (
               <ul className="mt-2 divide-y divide-line">
                 {d.jobs.items.map((j) => (
@@ -114,12 +116,13 @@ export function BrainView() {
                 ))}
               </ul>
             ) : (
-              <p className="mt-1 text-sm text-muted">No scheduled jobs.</p>
+              <EmptyState title="No scheduled jobs." />
             )}
           </Card>
 
           <Card>
             <h2 className="font-semibold">Skills</h2>
+            {d.skills.ok && !d.skills.items.length ? <EmptyState title="No skills available." /> : null}
             {d.skills.ok ? (
               <ul className="mt-2 flex flex-wrap gap-2">
                 {d.skills.items.map((s) => (
@@ -129,12 +132,13 @@ export function BrainView() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">Not available: {d.skills.error}</p>
+              <ErrorNote error={`Not available: ${d.skills.error}`} retry={() => q.refetch()} />
             )}
           </Card>
 
           <Card>
             <h2 className="font-semibold">Toolsets</h2>
+            {d.toolsets.ok && !d.toolsets.items.length ? <EmptyState title="No toolsets available." /> : null}
             {d.toolsets.ok ? (
               <ul className="mt-2 space-y-1 text-sm">
                 {d.toolsets.items.map((t) => (
@@ -148,7 +152,7 @@ export function BrainView() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">Not available: {d.toolsets.error}</p>
+              <ErrorNote error={`Not available: ${d.toolsets.error}`} retry={() => q.refetch()} />
             )}
           </Card>
         </div>

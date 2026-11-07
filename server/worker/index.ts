@@ -13,6 +13,7 @@ import { isLocalRun } from "@/lib/assistant";
 import { isConfigured } from "@/integrations/store";
 import { INTEGRATIONS } from "@/integrations/registry";
 import { reminderInstant } from "@/integrations/daily-compass/adapter";
+import { decisionHref } from "@/lib/decision-route";
 
 const INTEGRATION_KINDS = new Set<string>(INTEGRATIONS.map((d) => d.kind));
 
@@ -39,7 +40,7 @@ export async function tick(now = new Date()) {
               title: "Hermes needs your approval",
               body: view.pendingApproval.description ?? view.pendingApproval.command ?? "A running task is waiting for you.",
               source: "hermes",
-              deepLink: `/chat/${encodeURIComponent(run.sessionId)}`,
+              deepLink: decisionHref({ key: `approval:${run.runId}` }),
               dedupeKey: `approval:${run.runId}:${view.pendingApproval.requestId ?? "pending"}`,
             },
             run.userId,

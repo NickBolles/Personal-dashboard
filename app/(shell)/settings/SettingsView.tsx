@@ -13,6 +13,8 @@ import { AssistantSettings } from "./AssistantSettings";
 import { SharedConversations } from "./SharedConversations";
 import { SmartSettings } from "./SmartSettings";
 import { REASONING_EFFORTS } from "@/lib/ai";
+import { AppearanceCard } from "./AppearanceCard";
+import { settingsSections } from "./sections";
 
 type Prefs = {
   displayName: string;
@@ -52,27 +54,13 @@ export function SettingsView() {
     onError: (e) => toast((e as Error).message, "danger"),
   });
 
-  const links = [
-    ...(isAdmin
-      ? [{ href: "/settings/connections", label: "Connections", desc: "Hermes, todos, Home Assistant, Skylight, Paperclip, Daily Compass, Finance, GitHub" }]
-      : []),
-    ...(isAdmin ? [{ href: "/settings/people", label: "People", desc: "Family members, the kitchen tablet, and what each can use" }] : []),
-    ...(isAdmin ? [{ href: "/settings/configuration", label: "Configuration transfer", desc: "Password-encrypted integration import and export" }] : []),
-    { href: "/settings/home", label: "Home priorities", desc: "What Home shows first, hidden items, saved dates, your feedback" },
-    { href: "/settings/notifications", label: "Notifications", desc: "Push on this device, quiet hours, categories" },
-    { href: "/settings/phones", label: "Phones", desc: "Pair the Jarvis Android app, phone notifications" },
-    ...(isAdmin ? [{ href: "/settings/ai", label: "AI", desc: "Budget, models and capture triage for background AI actions" }] : []),
-    ...(isAdmin ? [{ href: "/settings/agents", label: "Agents", desc: "Which Hermes profile answers in each area" }] : []),
-    ...(can("work.use") ? [{ href: "/settings/tags", label: "Tags", desc: "Rename, merge and colour item tags" }] : []),
-    ...(can("work.use") ? [{ href: "/settings/places", label: "Saved places", desc: "Places workflows can pick or match by location" }] : []),
-    ...(isAdmin ? [{ href: "/settings/activity", label: "Activity log", desc: "Audit trail of consequential actions" }] : []),
-  ];
+  const links = settingsSections(isAdmin, can);
 
   return (
     <Page className="@container">
       <PageHeader title="Settings" />
       <div className="grid grid-cols-1 items-start gap-x-5 gap-y-4 @min-[560px]:grid-cols-[minmax(0,248px)_minmax(0,1fr)] @min-[760px]:gap-x-6 @min-[1000px]:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <nav aria-labelledby="settings-sections-h" className="min-w-0 @min-[560px]:sticky @min-[560px]:top-4">
+        <nav aria-label="Settings sections" className="min-w-0 @min-[560px]:sticky @min-[560px]:top-4">
           {/* The account avatar lives here (the command orb carries the Jarvis mark instead). */}
           <div className="card mb-3 flex items-center gap-3 px-3 py-2.5" data-testid="settings-account">
             <span
@@ -106,6 +94,7 @@ export function SettingsView() {
           </ul>
         </nav>
         <div className="min-w-0 space-y-4">
+          <AppearanceCard />
           {form ? (
             <Card>
               <SectionHeader label="Preferences" />

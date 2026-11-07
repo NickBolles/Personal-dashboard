@@ -20,6 +20,9 @@ import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-dem
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
+import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
+import { openPrismChat, stubPrismV2 } from "./fixtures/smart-v2";
+import { financeSnapshotFixture } from "../mock-upstreams/finance-snapshot.mjs";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -36,6 +39,8 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
 test.beforeEach(async ({ request, page }) => {
+  await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
+  await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
@@ -1936,8 +1941,15 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(card.getByTestId("agent-token-row")).toHaveCount(2);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    // At 320 the card is far taller than the viewport: an element shot that has to scroll draws the
+    // mask boxes ~15 px off their rows (deterministic after #212 + #213 merged). Grow the viewport so
+    // the whole card fits (320 only; 412/desktop baselines unchanged), then restore it for the Activity half.
+    const vp = page.viewportSize();
+    const box = await card.boundingBox();
+    if (vp && vp.width <= 360 && box && box.height + 120 > vp.height) await page.setViewportSize({ width: vp.width, height: Math.ceil(box.height) + 240 });
     await page.waitForTimeout(300);
     await withoutTray(page, () => expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) }));
+    if (vp) await page.setViewportSize(vp);
     await t.evaluate((el) => (el as Element).remove());
 
     // Fixed single-digit-hour wall time on today's CT date (14:05Z = 8:05 CST / 9:05 CDT): the
@@ -1979,5 +1991,103 @@ for (const scheme of ["light", "dark"] as const) {
       expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) }),
     );
     await t2.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Phase 3 gaps: full Agents page was missing (agent-access above crops only one card).
+// Settings/todos/people/house/workouts and the palette already run on all projects above; do not duplicate those shots.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: coordinators settings page (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await stubPhase3Settings(page);
+    await page.goto("/settings/agents");
+    await expect(page.getByRole("heading", { name: /^Coordinators/ })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Shared daily AI job budget used", exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expect(page).toHaveScreenshot(`settings-agents-coordinators-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+  });
+
+  test(`visual: appearance settings card (${scheme})`, async ({ page }, info) => {
+    test.skip(info.project.name !== "desktop", "Settings desktop appearance detail; page shots already cover phone");
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await stubPhase3Settings(page);
+    await page.goto("/settings");
+    const appearance = page.getByRole("region", { name: "Appearance", exact: true });
+    await expect(appearance.getByRole("radiogroup", { name: "Density", exact: true })).toBeVisible();
+    const overlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    try {
+      await expect(appearance).toHaveScreenshot(`settings-appearance-${scheme}.png`);
+    } finally {
+      await overlays.evaluate((el) => (el as Element).remove());
+    }
+  });
+}
+
+// Worker B: appended v2 catalog and deterministic C+ dynamic sheet contracts.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: Prismv2 weekly review sheet (${scheme})`, async ({ page }, testInfo) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubPrismV2(page);
+    await page.goto("/more");
+    if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
+    else {
+      // Tap only once the tray shows the card line: an earlier tap opens the sheet without the card.
+      const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+      await expect(tray).toContainText("Weekly review");
+      await tray.click();
+    }
+    const panel = page.locator(testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet");
+    await expect(panel.getByRole("heading", { name: "Prismv2 weekly review" })).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const style = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    await expect(panel).toHaveScreenshot(`prismv2-weekly-review-${scheme}.png`);
+    await style.evaluate((el) => (el as Element).remove());
+  });
+  test(`visual: Prismv2 matrix Gantt BarChart chat (${scheme})`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "mobile-320", "Catalog board at desktop + 412; sheet also covers 320");
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubPrismV2(page, []);
+    await openPrismChat(page);
+    const surface = page.getByTestId("smart-surface").first();
+    await expect(surface.getByRole("heading", { name: "Prismv2 completions" })).toBeVisible();
+    const style = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    await expect(surface).toHaveScreenshot(`prismv2-catalog-${scheme}.png`);
+    await style.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// FI1: isolated read-only finance data; no mutations, live accounts or AI calls.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: finance snapshot (${scheme})`, async ({ page }, info) => {
+    test.skip(!["desktop", "mobile"].includes(info.project.name), "Snapshot coverage: desktop and 412px phone");
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    const fixture = financeSnapshotFixture();
+    await page.clock.setFixedTime(new Date(fixture.now));
+    await page.route(/\/api\/finance\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: fixture.overview }));
+    const aiRequests: string[] = [];
+    page.on("request", (request) => {
+      if (/\/api\/ai(?:\/|\?)/.test(request.url())) aiRequests.push(request.url());
+    });
+    await page.goto("/finance");
+    const snapshot = page.getByRole("region", { name: "Snapshot", exact: true });
+    await expect(snapshot.getByText("57,000.00", { exact: true })).toBeVisible();
+    await expect(snapshot.getByText("+3,466.00", { exact: true })).toBeVisible();
+    await expect(snapshot.locator("svg polyline")).toHaveCount(1);
+    await expectNoHorizontalOverflow(page);
+    const overlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    try {
+      await expect(snapshot).toHaveScreenshot(`finance-snapshot-${scheme}.png`);
+    } finally {
+      await overlays.evaluate((el) => (el as Element).remove());
+    }
+    await page.getByLabel("Hide amounts on this device").check();
+    await expect(snapshot.getByText("57,000.00", { exact: true })).toHaveCount(0);
+    await expect(snapshot.locator("svg")).toHaveCount(0);
+    expect(aiRequests).toEqual([]);
   });
 }

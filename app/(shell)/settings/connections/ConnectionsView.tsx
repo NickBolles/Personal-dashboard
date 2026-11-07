@@ -8,7 +8,9 @@ import { IntegrationForm } from "@/components/integrations/IntegrationForm";
 import { GithubConnections } from "@/components/integrations/GithubConnections";
 import { DriveConnection } from "@/components/integrations/DriveConnection";
 import { BiblePackSettings } from "@/components/integrations/BiblePackSettings";
-import { Badge, PageHeader, cx } from "@/components/ui";
+import { Badge, ErrorNote, PageHeader, cx } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { Skeleton } from "@/components/ui/kit";
 import { ChevronIcon } from "@/components/icons";
 
 export function ConnectionsView() {
@@ -20,6 +22,8 @@ export function ConnectionsView() {
   return (
     <div className="mx-auto w-full max-w-[880px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
+      {q.isPending ? <LoadingState label="Loading connections…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       <ul className="space-y-1.5">
         {INTEGRATIONS.map((d) => {
           const i = q.data?.integrations.find((x) => x.kind === d.kind);
@@ -39,7 +43,13 @@ export function ConnectionsView() {
                     <span className="block truncate text-sm text-muted">{d.tagline}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2">
-                    {!i?.enabled ? (
+                    {!q.data ? (
+                      q.isPending ? (
+                        <Skeleton w={48} h={20} />
+                      ) : (
+                        <Badge>Unknown</Badge>
+                      )
+                    ) : !i?.enabled ? (
                       <Badge>Off</Badge>
                     ) : i.lastTest?.ok ? (
                       <Badge tone="ok">Verified</Badge>

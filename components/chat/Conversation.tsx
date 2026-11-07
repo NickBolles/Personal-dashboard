@@ -1568,6 +1568,11 @@ function Composer({
             {!busy ? <SendIcon className="h-5 w-5" /> : null}
           </Button>
         </form>
+        {!compact ? (
+          <p className="data-dynamic hidden px-3 pb-2 text-xs text-muted sm:block" data-dynamic>
+            @ context · # PR · / command · {mod === "⌘" ? "⌘" : "Ctrl"}+Enter send
+          </p>
+        ) : null}
       </div>
       {!online && text ? <p className="mt-1 text-xs text-warn">Draft saved on this device. It has not been sent.</p> : null}
     </div>

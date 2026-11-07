@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NextAction } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
@@ -14,8 +14,22 @@ import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
-import { Button, Field, PageHeader, Spinner, inputCls, useNow, useOnline, useToast } from "@/components/ui";
-import { ChipSelect, EmptyState, SectionHeader } from "@/components/ui/kit";
+import { Button, ErrorNote, Field, PageHeader, inputCls, useNow, useOnline, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { EmptyState, SectionHeader, Segmented } from "@/components/ui/kit";
+import { parseTaskSegment, taskInSegment, type TaskSegment } from "@/lib/task-segments";
+
+const SEGMENT_EVENT = "jarvis:task-segment";
+function subscribeSegment(onChange: () => void) {
+  window.addEventListener("popstate", onChange);
+  window.addEventListener(SEGMENT_EVENT, onChange);
+  return () => {
+    window.removeEventListener("popstate", onChange);
+    window.removeEventListener(SEGMENT_EVENT, onChange);
+  };
+}
+const currentSegment = () => parseTaskSegment(new URLSearchParams(window.location.search).get("seg"));
+const serverSegment = () => "all" as const;
 
 const GROUPS: { title: string; match: (a: NextAction) => boolean }[] = [
   { title: "Overdue", match: (a) => a.status === "open" && a.priorityReason === "overdue" },
@@ -45,11 +59,16 @@ export function TodosView() {
     [q.data, sky.data],
   );
   const [source, setSource] = useState("");
-  const [whose, setWhose] = useState("mine");
+  const segment = useSyncExternalStore(subscribeSegment, currentSegment, serverSegment);
+  const setSegment = (value: TaskSegment) => {
+    const url = new URL(window.location.href);
+    if (value === "all") url.searchParams.delete("seg");
+    else url.searchParams.set("seg", value);
+    window.history.pushState(null, "", url);
+    window.dispatchEvent(new Event(SEGMENT_EVENT));
+  };
   const options = useMemo(() => [...new Set(all.map(todoSourceLabel))].sort((a, b) => a.localeCompare(b)), [all]);
-  const actions = all.filter(
-    (a) => (!source || todoSourceLabel(a) === source) && (whose === "everyone" || a.source !== "skylight" || a.assignee?.kind !== "other"),
-  );
+  const actions = all.filter((a) => (!source || todoSourceLabel(a) === source) && taskInSegment(a, segment));
   // Skylight chores follow Skylight's own order (time of day today, later days, past days last); everything else
   // keeps the due-state groups. Overdue — native and Skylight alike — sits at the bottom, above Completed.
   const isChore = isOpenChore;
@@ -62,6 +81,7 @@ export function TodosView() {
     ...chores.filter((c) => c.key !== "later" && c.key !== "overdue").map((c) => ({ title: `Skylight · ${c.label}`, items: c.actions })),
     { title: "Upcoming & undated", items: [...native("Upcoming & undated"), ...choreBucket("later")] },
     { title: "Overdue", items: [...native("Overdue"), ...choreBucket("overdue")] },
+    { title: "Waiting on others", items: actions.filter((a) => a.status === "waiting") },
     // Newest completion first, whichever list it came from.
     { title: "Completed recently", items: completed },
   ];
@@ -69,18 +89,49 @@ export function TodosView() {
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
         title="Todos"
+        actions={
+          <Button
+            type="button"
+            variant="primary"
+            disabled={provider !== "jarvis" || !can("todos.edit")}
+            title={provider !== "jarvis" ? "Create tasks in your canonical list" : undefined}
+            onClick={() => {
+              document.getElementById("new-todo")?.focus();
+              document.getElementById("new-todo")?.scrollIntoView({ block: "center" });
+            }}
+          >
+            New task
+          </Button>
+        }
         subtitle={
           provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Jarvis"}` : undefined
         }
       />
-      {q.isLoading ? <Spinner label="Loading todos…" /> : null}
+      {q.isLoading ? <LoadingState label="Loading todos…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {sky.error ? <ErrorNote error={sky.error} retry={() => sky.refetch()} /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
-      {provider === "jarvis" ? <AddTodo /> : null}
+      {sky.data?.status.state === "error" || sky.data?.status.state === "unauthorized" ? (
+        <SourceState status={sky.data.status} hasData={Boolean(sky.data.data)} />
+      ) : null}
+      <div className="mb-3 space-y-1">
+        <Segmented<TaskSegment>
+          label="Tasks segment"
+          value={segment}
+          onChange={setSegment}
+          options={[
+            { value: "all", label: "All" },
+            { value: "mine", label: "Mine" },
+            { value: "waiting", label: "Waiting" },
+          ]}
+        />
+        <p className="text-xs text-muted">
+          AI assignments aren’t tracked by these task sources yet. Waiting includes unclaimed tasks and tasks assigned to others.
+        </p>
+      </div>
+      {provider === "jarvis" && can("todos.edit") ? <AddTodo /> : null}
       <SourceFilter options={options} value={source} onChange={setSource} />
-      <ChipSelect aria-label="Whose" className="mt-2 w-36 [&>select]:w-full" value={whose} onChange={(e) => setWhose(e.target.value)} active={whose !== "mine"}>
-        <option value="mine">Mine</option>
-        <option value="everyone">Everyone</option>
-      </ChipSelect>
+
       {q.data?.data || sky.data?.data
         ? groups.map((g) => {
             const items = g.items;
@@ -109,7 +160,7 @@ export function TodosView() {
           })
         : null}
       {write.node}
-      {(q.data?.data || sky.data?.data) && !actions.length ? (
+      {!q.isLoading && !sky.isLoading && !q.error && !sky.error && (q.data?.data || sky.data?.data) && !actions.length ? (
         <div className="mt-6">
           <EmptyState title="No open todos." />
         </div>
@@ -153,7 +204,7 @@ function AddTodo() {
       <Field id="new-todo-due" label="Due">
         <input id="new-todo-due" type="date" className={inputCls} value={due} onChange={(e) => setDue(e.target.value)} />
       </Field>
-      <Button type="submit" variant="primary" busy={busy} disabled={!online}>
+      <Button type="submit" busy={busy} disabled={!online}>
         Add
       </Button>
     </form>

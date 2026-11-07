@@ -18,7 +18,8 @@ async function api(page: Page, method: "post" | "put", path: string, data: unkno
   return res.json();
 }
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request, page }) => {
+  await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
   await mock(request, "/reset");
   await mock(request, "/google/tasks", { tasks: TASKS });
 });
@@ -51,7 +52,7 @@ test("overdue triage: smart rows → stage in the tray → apply with readback �
   await expect(page.getByText('"catalog":"jarvis-ui@1"')).toHaveCount(0);
 
   const tray = surface.getByTestId("smart-tray-count");
-  await expect(tray).toHaveText("Nothing changes until you apply");
+  await expect(tray).toHaveText("Nothing staged · nothing changes until you apply");
   await surface.getByRole("button", { name: /^This week .*: Renew car registration$/ }).click();
   await surface.getByRole("button", { name: /^Reschedule .*: Smartui fence repair$/ }).click();
   await surface.getByRole("button", { name: "Drop: Smartui return parcel" }).click();
@@ -67,7 +68,7 @@ test("overdue triage: smart rows → stage in the tray → apply with readback �
 
   await surface.getByRole("button", { name: "Apply 3 changes" }).click();
   await expect(page.getByRole("status").filter({ hasText: "3 changes applied" })).toBeVisible({ timeout: 15_000 });
-  await expect(tray).toHaveText("Nothing changes until you apply");
+  await expect(tray).toHaveText("✓ 3 applied");
   await expect(surface.getByRole("button", { name: /^Undo: / })).toHaveCount(3);
 
   // Applied state survives a reload (stored on the surface, not in the page).

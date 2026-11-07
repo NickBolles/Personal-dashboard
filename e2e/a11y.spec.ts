@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { stubPhase3Settings } from "./fixtures/phase3-gaps";
 import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
@@ -9,6 +10,7 @@ import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
 import { skylightGroupingVisual, skylightWriteVisual } from "./fixtures/skylight";
+import { stubPrismV2 } from "./fixtures/smart-v2";
 
 const PAGES = [
   "/home",
@@ -827,4 +829,49 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await axe("sheet changes");
   await zoom();
   await page.keyboard.press("Escape");
+});
+
+test("alder settings appearance + sub-page section nav: one h1, current section and 200% reflow", async ({ page }) => {
+  await stubPhase3Settings(page);
+  await page.goto("/settings");
+  await expect(page.getByRole("radiogroup", { name: "Theme", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("radio", { name: "Compact", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+  await page.getByRole("radio", { name: "System", exact: true }).click();
+  await page.getByRole("radio", { name: "Auto", exact: true }).click();
+  // The section nav is a container query (page ≥ 720 px): at 1280 the Chief of staff rail leaves less, so check it on a wide desktop.
+  if ((page.viewportSize()?.width ?? 0) >= 1024) await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/settings/agents");
+  await expect(page.getByRole("heading", { name: /^Coordinators/ })).toBeVisible();
+  await expect(page.locator("h1")).toHaveCount(1);
+  const nav = page.locator('nav[aria-label="Settings sections"]');
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Agents", exact: true })).toHaveAttribute("aria-current", "page");
+  } else await expect(nav).toBeHidden();
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+  const results = await new AxeBuilder({ page: page as never }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+});
+
+test("Prismv2 dynamic review sheet/panel: WCAG22AA + 200% text reflow", async ({ page }, testInfo) => {
+  await stubPrismV2(page);
+  await page.goto("/more");
+  if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
+  else {
+    // Tap only once the tray shows the card line: an earlier tap opens the sheet without the card.
+    const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+    await expect(tray).toContainText("Weekly review");
+    await tray.click();
+  }
+  await expect(page.getByTestId("dynamic-card")).toBeVisible();
+  const selector = testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet";
+  const result = await new AxeBuilder({ page: page as never }).include(selector).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+  expect(await page.getByTestId("dynamic-card").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

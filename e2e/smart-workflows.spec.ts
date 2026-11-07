@@ -16,7 +16,8 @@ async function smart(page: Page, enabled: boolean) {
   expect(res.ok(), await res.text()).toBeTruthy();
 }
 
-test.beforeEach(async ({ request }) => {
+test.beforeEach(async ({ request, page }) => {
+  await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
   await mock(request, "/reset");
   await mock(request, "/google/tasks", { tasks: TASKS });
 });

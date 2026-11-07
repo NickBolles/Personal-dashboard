@@ -2,7 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, ErrorNote, PageHeader, Spinner } from "@/components/ui";
+import { Badge, ErrorNote, PageHeader } from "@/components/ui";
+import { EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type Entry = {
   id: string;
@@ -21,8 +23,8 @@ export function ActivityView() {
   return (
     <div className="mx-auto w-full max-w-[1040px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Activity log" subtitle="Consequential actions with their upstream result and correlation ID." />
-      {q.isLoading ? <Spinner label="Loading…" /> : null}
-      {q.error ? <ErrorNote error={q.error} /> : null}
+      {q.isLoading ? <LoadingState label="Loading…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       <ul className="card divide-y divide-line">
         {(q.data?.entries ?? []).map((e) => (
           <li key={e.id} className="p-3 text-sm">
@@ -37,7 +39,11 @@ export function ActivityView() {
             {e.detail ? <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all text-xs text-muted">{e.detail}</pre> : null}
           </li>
         ))}
-        {q.data && !q.data.entries.length ? <li className="p-3 text-sm text-muted">Nothing yet.</li> : null}
+        {q.data && !q.data.entries.length ? (
+          <li>
+            <EmptyState title="Nothing yet." />
+          </li>
+        ) : null}
       </ul>
     </div>
   );

@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from "@/lib/client/push";
 import { isAndroidWrapper } from "@/lib/client/wrapper";
-import { Badge, Button, useToast } from "@/components/ui";
+import { Badge, Button, ErrorNote, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 export type PushCapabilities = {
   fcmConfigured: boolean;
@@ -58,6 +59,8 @@ export function PushControls() {
 
   return (
     <div className="space-y-3">
+      {caps.isPending ? <LoadingState label="Loading notification delivery…" /> : null}
+      {caps.error ? <ErrorNote error={caps.error} retry={() => caps.refetch()} /> : null}
       <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="push-status">
         <span>{inApp ? "This phone:" : "This device:"}</span>
         {nativePush && !subscribed ? (
