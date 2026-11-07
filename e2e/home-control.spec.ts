@@ -23,7 +23,7 @@ test("state changed since the user looked → rejected, nothing sent", async ({ 
   await page.goto("/home-control");
   const card = page.locator("section[aria-labelledby=ctl-h] li", { hasText: "Front door lock" }).first();
   await expect(card).toContainText("unlocked");
-  await card.getByRole("button", { name: "Lock Front door lock" }).click();
+  await card.getByRole("button", { name: "Lock Front door lock", exact: true }).click();
   // Someone locks it physically before we confirm
   await setHa(request, "lock.front_door_lock", "locked");
   const dialog = page.getByRole("dialog");
