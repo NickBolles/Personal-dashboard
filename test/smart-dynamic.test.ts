@@ -160,6 +160,20 @@ describe("deterministic owner dynamic cards", () => {
     saveSmartSettings(owner!.id, { enabled: false });
     expect(dynamicCards(owner!).cards).toEqual([]);
   });
+  it("shows Hermes-mode chores without inventing assignments, and refreshes read-card data", () => {
+    setup();
+    snapshots.sky.actions = [
+      { title: "Iris Hermes sweep", status: "completed", sourceLabel: "Skylight · Chores" },
+      { title: "Iris Hermes bins", status: "open", sourceLabel: "Skylight · Chores" },
+    ];
+    const first = dynamicCards(owner!).cards.find((c) => c.kind === "chores")!;
+    expect(first.line.text).toBe("1 of 2 done · assignments unavailable");
+    expect(JSON.stringify(first.spec)).toContain("Open · assignment unavailable");
+    snapshots.sky.actions = [{ title: "Iris Hermes bins", status: "completed", sourceLabel: "Skylight · Chores" }];
+    const next = dynamicCards(owner!).cards.find((c) => c.kind === "chores")!;
+    expect(next.line.text).toBe("1 of 1 done · 0 up for grabs");
+    expect(next.spec).not.toEqual(first.spec);
+  });
   it("queue hydrates owner decisions without Finance", () => {
     const { item } = setup();
     updateItem(owner!, item.id, { decision: { question: "Iris next step?", choices: ["a", "b"] } }, "test");
