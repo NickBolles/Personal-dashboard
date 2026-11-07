@@ -48,5 +48,9 @@ describe("filedChatContext", () => {
     const finance = store.createItem(owner, { kind: "area", title: "Finance" }, cid);
     store.placeConversation(owner, { sessionId: "api_fin", parentId: finance.id, title: "Budget" }, cid);
     expect(filedChatContext(owner, "api_fin", null)).toBeNull();
+    const ok = store.createItem(owner, { kind: "area", title: "Home" }, cid);
+    const taxes = store.createItem(owner, { kind: "project", title: "Tax return 2026", parentId: ok.id }, cid);
+    store.placeConversation(owner, { sessionId: "api_tax", parentId: taxes.id, title: "Paperwork" }, cid);
+    expect(filedChatContext(owner, "api_tax", null)).toBeNull();
   });
 });

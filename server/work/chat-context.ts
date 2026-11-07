@@ -31,6 +31,8 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
   const path: string[] = [];
   for (let n: WorkItem | undefined = scope, i = 0; n && i < 100; n = n.parentId ? byId.get(n.parentId) : undefined, i++) path.unshift(n.title);
   const safe = (...t: (string | null | undefined)[]) => detectSensitivity(t.filter(Boolean).join(" ")) === "none";
+  // Ancestor titles go to Hermes on every turn: a sensitive one (e.g. "Tax return") means no snapshot at all.
+  if (!safe(...path)) return null;
   // Descendants of the scope (breadth-first), open work only.
   const open: WorkItem[] = [];
   const queue = [scope.id];
