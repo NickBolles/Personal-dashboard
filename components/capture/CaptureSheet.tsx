@@ -7,6 +7,7 @@ import { useAccess } from "@/components/access";
 import { ShareWorkflowPicker } from "@/components/workflows/SharePicker";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CAPTURE_LIMITS } from "@/lib/ai";
+import { CapturePreview } from "./CapturePreview";
 import { QUEUE_EVENT, discardFailed, flushQueue, listQueue, newClientCaptureId, queueCapture, retryFailed, sendCapture } from "@/lib/client/capture-queue";
 
 /**
@@ -212,6 +213,7 @@ export function CaptureSheet({
           placeholder="What's on your mind?"
         />
       </Field>
+      <CapturePreview text={text} url={url} fileCount={files.length} />
       {url ? (
         <p className="flex min-w-0 items-center gap-2 text-[13px]">
           <span className="min-w-0 truncate rounded-full border border-line px-2 py-0.5" title={url}>
