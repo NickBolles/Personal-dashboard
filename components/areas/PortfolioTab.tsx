@@ -57,7 +57,8 @@ export function PortfolioTab({ onOpen }: { onOpen?: (id: string) => void }): JSX
             {rows.length} {rows.length === 1 ? "project" : "projects"} · {open} open{updated ? ` · updated ${fmtDate(updated)}` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/* min-w-0 + max-w-full: at 320 px / 200 % text the w-40 Group chip is 320 px; without a cap here the toolbar sized to it and scrolled the page sideways. */}
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           {tags.length ? (
             <ChipSelect aria-label="Group" value={tag} active={!!tag} onChange={(e) => setTag(e.target.value)} className="w-40 max-w-full [&>select]:w-full">
               <option value="">All groups</option>
