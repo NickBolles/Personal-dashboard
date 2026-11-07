@@ -190,14 +190,13 @@ export function WorkView({
     setView(next);
     if (opts?.tab) setTabState(opts.tab);
     const url = new URL(window.location.href);
-    url.searchParams.delete("item");
-    url.searchParams.delete("view");
-    url.searchParams.delete("do");
+    const keepTab = url.searchParams.get("tab");
+    for (const k of ["item", "view", "do", "tab"]) url.searchParams.delete(k);
     if (next.kind === "item") url.searchParams.set("item", next.id);
     else if (next.kind !== "today") url.searchParams.set("view", next.kind);
     // The tab survives a selection change (re-centre the Graph, pick a tree row) unless the caller switches it.
-    if (opts?.tab === "overview" || next.kind === "tree" || next.kind === "inbox") url.searchParams.delete("tab");
-    else if (opts?.tab) url.searchParams.set("tab", opts.tab);
+    const nextTab = next.kind === "tree" || next.kind === "inbox" ? null : (opts?.tab ?? keepTab);
+    if (nextTab && nextTab !== "overview") url.searchParams.set("tab", nextTab);
     // Opening an area from the overview pushes, so Back returns to the overview.
     if (opts?.push) window.history.pushState({ jarvisAreas: true }, "", url);
     else window.history.replaceState(null, "", url);

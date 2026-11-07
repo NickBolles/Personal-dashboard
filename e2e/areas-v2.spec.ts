@@ -122,7 +122,7 @@ test("desktop: picking a tree row keeps the open tab", async ({ page }, info) =>
   const s = await seed(page);
   await page.goto(`/areas?item=${s.item}&tab=graph`);
   await expect(page.getByTestId("radial-graph")).toBeVisible();
-  await page.locator(`#work-tree [data-row-id="${s.other}"]`).click();
+  await page.locator(`.jv-side-tree [data-row-id="${s.other}"]`).click();
   await expect(page).toHaveURL(new RegExp(`item=${s.other}&tab=graph$`));
   await expect(page.getByTestId("radial-graph").locator(`[data-node-id="${s.other}"][data-centre="true"]`)).toBeVisible();
 });
@@ -132,7 +132,7 @@ test("phone overview: areas, needs you, in progress, outstanding", async ({ page
   await page.goto("/home");
   const s = await seed(page);
   const p = await page.request.patch(`/api/work/items/${s.item}`, { data: { status: "in_progress" }, headers: { "x-jarvis-csrf": "1" } });
-  expect(p.ok()).toBeTruthy();
+  expect(p.ok(), await p.text()).toBeTruthy();
   await page.goto("/areas");
   const order = await page.evaluate(() =>
     ["map-overview", "map-needs-you-h", "digest-inflight", "digest-outstanding"].map((id) => {
