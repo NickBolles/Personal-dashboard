@@ -188,12 +188,14 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
   }
   const sky = scopeResult(user, cachedSource("skylight", now));
   if (sky?.status.state === "ok" && sky.data) {
-    const chores = sky.data.actions.filter((a) =>
-      a.skylight?.kind === "chore"
-        ? (a.status !== "completed" || !a.skylight.completedOn || a.skylight.completedOn === today) && (!a.skylight.startDate || a.skylight.startDate <= today)
-        : // Hermes snapshots are already today-only; they deliberately carry no write ref or assignee.
-          a.sourceLabel === "Skylight · Chores",
-    );
+    const chores = sky.data.actions.filter((a) => {
+      if (a.skylight?.kind === "chore")
+        return (
+          (a.status !== "completed" || !a.skylight.completedOn || a.skylight.completedOn === today) && (!a.skylight.startDate || a.skylight.startDate <= today)
+        );
+      // Hermes snapshots are already today-only; they deliberately carry no write ref or assignee.
+      return a.sourceLabel === "Skylight · Chores";
+    });
     if (chores.length) {
       const done = chores.filter((a) => a.status === "completed");
       const grabs = chores.filter((a) => a.status === "open" && a.assignee?.kind === "up_for_grabs");
@@ -214,14 +216,12 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
             { key: "state", label: "State" },
             { key: "chore", label: "Chore" },
           ],
-          rows: [...done, ...grabs, ...unknown]
-            .slice(0, 50)
-            .map((a) => ({
-              cells: {
-                state: a.status === "completed" ? "✓ Done" : a.assignee ? "Up for grabs" : "Open · assignment unavailable",
-                chore: a.title.slice(0, 200),
-              },
-            })),
+          rows: [...done, ...grabs, ...unknown].slice(0, 50).map((a) => ({
+            cells: {
+              state: a.status === "completed" ? "✓ Done" : a.assignee ? "Up for grabs" : "Open · assignment unavailable",
+              chore: a.title.slice(0, 200),
+            },
+          })),
         }),
         footer: { label: "Open Skylight", href: "/skylight" },
       });
