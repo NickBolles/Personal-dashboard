@@ -9,7 +9,6 @@ import { localDate } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { useSource } from "@/components/useSource";
 import { SectionLabel, useNow } from "@/components/ui";
-import { ChipButton } from "@/components/ui/kit";
 import { SkylightChoreGroups } from "./SkylightChoreGroups";
 import { useSkylightWrite } from "./useSkylightWrite";
 import type { SkylightExtra } from "./model";
@@ -57,16 +56,18 @@ export function TodayChores({
   );
   if (!can("skylight.view") || !sky.data?.data || !todaysChores(raw ?? [], today).length) return <>{fallback}</>;
   const open = chores.filter((a) => a.status === "open").length;
+  // A quiet text toggle (one primary per row stays the rows'): Mine = yours + up for grabs.
   const toggle = (
-    <ChipButton
-      className="k-pick-xs"
-      active={everyone}
+    <button
+      type="button"
       aria-pressed={everyone}
       onClick={() => setEveryone(!everyone)}
       title={everyone ? "Showing everyone’s chores" : "Showing yours and up for grabs"}
+      className="tap relative inline-flex items-center rounded-[8px] px-1 text-xs font-semibold text-muted hover:text-text dense:min-h-6"
     >
       {everyone ? "Everyone" : "Mine"}
-    </ChipButton>
+      <span className="sr-only"> (show {everyone ? "mine" : "everyone’s"})</span>
+    </button>
   );
   const body = chores.length ? (
     <SkylightChoreGroups actions={chores} writable={writable} request={write.request} timezone={timezone} now={now} idPrefix={id} compact />

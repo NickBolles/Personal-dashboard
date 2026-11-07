@@ -93,16 +93,19 @@ test("skyall: completes a chore from Today with motion, then Undo restores it", 
   const row = section.getByRole("article", { name: /Skyall fold the towels/ });
   await expect(row).toBeVisible({ timeout: 15_000 });
   const anytime = section.getByRole("region", { name: /^Anytime/ });
-  await expect(anytime.getByRole("img", { name: /^Anytime: 0 of \d+ done$/ })).toBeVisible();
+  // Other seeded chores share Anytime (one is already done today): compare against the starting count.
+  const progress = anytime.getByRole("img", { name: /^Anytime: \d+ of \d+ done$/ });
+  const before = Number(/(\d+) of/.exec((await progress.getAttribute("aria-label")) ?? "")?.[1]);
+  const label = (n: number) => new RegExp(`^Anytime: ${n} of \\d+ done$`);
   await row.getByRole("checkbox", { name: /Done: .*Skyall fold the towels/ }).click();
   await confirm(page, /Mark “.*Skyall fold the towels” done in Skylight/);
   await expect(anytime.getByRole("article", { name: /Skyall fold the towels/ })).toHaveCount(0);
   await expect(section.getByTestId("today-chores-done")).toContainText("Skyall fold the towels");
-  await expect(anytime.getByRole("img", { name: /^Anytime: 1 of \d+ done$/ })).toBeVisible();
+  await expect(anytime.getByRole("img", { name: label(before + 1) })).toBeVisible();
   await expect.poll(() => completions(page, "88355001")).toEqual(["complete"]);
   await undo(page);
   await expect(anytime.getByRole("article", { name: /Skyall fold the towels/ })).toBeVisible();
-  await expect(anytime.getByRole("img", { name: /^Anytime: 0 of \d+ done$/ })).toBeVisible();
+  await expect(anytime.getByRole("img", { name: label(before) })).toBeVisible();
   await expect.poll(() => completions(page, "88355001")).toEqual(["complete", "pending"]);
 });
 
@@ -167,11 +170,14 @@ test("skyall: reduced motion completes instantly with no animation", async ({ pa
   const section = page.getByTestId("today-chores");
   const row = section.locator(".sk-row").filter({ hasText: "Skyall empty the dryer" });
   await expect(row).toBeVisible({ timeout: 15_000 });
-  expect(await row.evaluate((el) => getComputedStyle(el).transitionDuration)).toMatch(/^0s/);
+  // The global reduced-motion rule: transitions ~0 s (Chromium reports 1e-06s), animations none.
+  const instant = (v: string) => v.split(",").every((d) => parseFloat(d) < 0.01);
+  expect(instant(await row.evaluate((el) => getComputedStyle(el).transitionDuration))).toBe(true);
   await row.getByRole("checkbox", { name: /Done: .*Skyall empty the dryer/ }).click();
   await confirm(page, /Skyall empty the dryer/);
   const done = section.getByTestId("today-chores-done").locator(".sk-row").filter({ hasText: "Skyall empty the dryer" });
   await expect(done).toBeAttached();
-  expect(await done.evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
+  const anim = await done.evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration]);
+  expect(anim[0] === "none" || instant(anim[1]!)).toBe(true);
   await expect.poll(() => completions(page, "88355005")).toEqual(["complete"]);
 });
