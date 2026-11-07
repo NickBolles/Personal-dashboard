@@ -3,8 +3,9 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Card, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
-import { ChipButton, ChipInput, ChipSelect } from "@/components/ui/kit";
+import { Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
+import { ChipButton, ChipInput, ChipSelect, EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor, type WorkTag } from "@/lib/item-tags";
 import { TagChip, useTagDirectory } from "./ItemMeta";
 import { UndoBar, type UndoOp } from "./UndoBar";
@@ -35,11 +36,11 @@ export function TagsSettingsView() {
       <PageHeader title="Tags" subtitle="Tags are created as you add them to items. Rename onto an existing tag to merge them." />
       <Card>
         {q.isPending ? (
-          <Spinner label="Loading tags…" />
+          <LoadingState label="Loading tags…" />
         ) : q.error ? (
           <ErrorNote error={q.error} retry={() => q.refetch()} />
         ) : !q.data.tags.length ? (
-          <p className="text-[14px] text-muted">No tags yet. Add one from an item&apos;s “+ tag” field or the palette (“Tag …”).</p>
+          <EmptyState title="No tags yet. Add one from an item's “+ tag” field or the palette (“Tag …”)." />
         ) : (
           <ul className="wk-rows" data-testid="tags-list">
             {q.data.tags.map((t: WorkTag) => (

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/components/access";
 import { Badge, PageHeader } from "@/components/ui";
-import { Button, SectionHeader } from "@/components/ui/kit";
+import { Banner, Button, EmptyState, SectionHeader } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import {
   EQUIPMENT,
@@ -32,6 +33,7 @@ export function WorkoutView() {
   const { can } = useAccess();
   const [rows, setRows] = useState<WorkoutRow[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [tab, setTab] = useState<"train" | "history">("train");
   const [options, setOptions] = useState<PlanOptions>({
     focuses: ["legs", "push"],
@@ -66,7 +68,7 @@ export function WorkoutView() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [loadAttempt]);
   useEffect(() => {
     if (!dirty && !pending) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -168,7 +170,7 @@ export function WorkoutView() {
     }
   }
 
-  if (!can("workouts.use")) return <p>You do not have access to workouts.</p>;
+  if (!can("workouts.use")) return <EmptyState title="You do not have access to workouts." />;
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
       <div className="[&>header]:mb-0">
@@ -184,27 +186,45 @@ export function WorkoutView() {
       <div aria-live="polite">
         {notice && <p className="text-sm text-ok">{notice}</p>}
         {error && (
-          <div role="alert" className="space-y-2 rounded-xl bg-danger-soft p-3 text-sm text-danger">
-            <p>{error}</p>
-            {pending && (
-              <Button variant="secondary" disabled={busy} onClick={() => void save(pending)}>
-                Retry save
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => {
-                if ((!dirty && !pending) || window.confirm("Reload server state? Unsaved edits will be lost.")) window.location.reload();
-              }}
-            >
-              Reload saved state
-            </Button>
-          </div>
+          <Banner
+            tone="bad"
+            action={
+              <div className="flex min-w-0 flex-wrap gap-2">
+                {!loaded ? (
+                  <Button
+                    onClick={() => {
+                      setError("");
+                      setLoadAttempt((attempt) => attempt + 1);
+                    }}
+                  >
+                    Retry
+                  </Button>
+                ) : null}
+                {pending && (
+                  <Button variant="secondary" disabled={busy} onClick={() => void save(pending)}>
+                    Retry save
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    if ((!dirty && !pending) || window.confirm("Reload server state? Unsaved edits will be lost.")) window.location.reload();
+                  }}
+                >
+                  Reload saved state
+                </Button>
+              </div>
+            }
+          >
+            {error}
+          </Banner>
         )}
       </div>
       {!loaded ? (
-        <p className="text-muted">Loading your private workouts…</p>
+        error ? null : (
+          <LoadingState label="Loading your private workouts…" />
+        )
       ) : tab === "train" ? (
         <>
           {draft ? (
@@ -377,7 +397,7 @@ export function WorkoutView() {
                       <span className="shrink-0 rounded-lg bg-surface-2 px-2 py-1 text-xs tabular-nums">{e.sets.length} × 8</span>
                     </div>
                   ))}
-                  {!plan.length && <p className="text-sm text-muted">Select a focus and matching equipment. Core uses bodyweight.</p>}
+                  {!plan.length && <EmptyState title="Select a focus and matching equipment. Core uses bodyweight." />}
                   <Button
                     variant="primary"
                     className="w-full"
@@ -419,11 +439,7 @@ export function WorkoutView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          {!history.length && (
-            <p className="rounded-2xl bg-surface p-5 text-sm text-muted">
-              Your first session starts here. Train now or bring in your previous workout JSON below.
-            </p>
-          )}
+          {!history.length && <EmptyState title="Your first session starts here. Train now or bring in your previous workout JSON below." />}
           {history
             .filter((r) =>
               `${r.session.title} ${r.session.date} ${r.session.exercises.map((e) => e.name).join(" ")}`.toLowerCase().includes(search.toLowerCase()),

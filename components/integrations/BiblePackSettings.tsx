@@ -3,7 +3,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, useToast } from "@/components/ui";
+import { Button, ErrorNote, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type Status = {
   installed: boolean;
@@ -38,7 +39,8 @@ export function BiblePackSettings() {
       setConfirm(false);
     }
   };
-  if (!s) return <p className="text-sm text-muted">Loading…</p>;
+  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  if (!s) return <LoadingState label="Loading…" />;
   const mb = (s.downloadBytes / 1024 / 1024).toFixed(1);
   return (
     <div className="space-y-2 text-sm" data-testid="bible-pack">

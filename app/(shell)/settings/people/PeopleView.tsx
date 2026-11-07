@@ -6,7 +6,9 @@ import { api } from "@/lib/client/api";
 import type { Person } from "@/lib/people";
 import { defaultCapabilities, MODULES, ROLE_LABELS, ROLES, type Role } from "@/lib/modules";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, inputCls, useToast } from "@/components/ui";
+import { EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type Invite = { code: string; expiresAt: string };
 
@@ -406,8 +408,9 @@ export function PeopleView() {
         }
       />
       {adding ? <AddPerson onDone={() => setAdding(false)} /> : null}
-      {people.isPending ? <Spinner label="Loading people" /> : null}
+      {people.isPending ? <LoadingState label="Loading people" /> : null}
       {people.error ? <ErrorNote error={people.error} retry={() => people.refetch()} /> : null}
+      {people.data && !people.data.people.length ? <EmptyState title="No people yet">Use “Add someone” to invite a household member.</EmptyState> : null}
       <ul className="space-y-3">
         {people.data?.people.map((p) => (
           <PersonCard key={p.id} person={p} me={me.data?.user.id} />

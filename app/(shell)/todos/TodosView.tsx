@@ -14,7 +14,8 @@ import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
-import { Button, Field, PageHeader, Spinner, inputCls, useNow, useOnline, useToast } from "@/components/ui";
+import { Button, ErrorNote, Field, PageHeader, inputCls, useNow, useOnline, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState, SectionHeader, Segmented } from "@/components/ui/kit";
 import { parseTaskSegment, taskInSegment, type TaskSegment } from "@/lib/task-segments";
 
@@ -106,8 +107,13 @@ export function TodosView() {
           provider ? `Canonical list: ${provider === "google_tasks" ? "Google Tasks" : provider === "home_assistant" ? "Home Assistant" : "Jarvis"}` : undefined
         }
       />
-      {q.isLoading ? <Spinner label="Loading todos…" /> : null}
+      {q.isLoading ? <LoadingState label="Loading todos…" /> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {sky.error ? <ErrorNote error={sky.error} retry={() => sky.refetch()} /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
+      {sky.data?.status.state === "error" || sky.data?.status.state === "unauthorized" ? (
+        <SourceState status={sky.data.status} hasData={Boolean(sky.data.data)} />
+      ) : null}
       <div className="mb-3 space-y-1">
         <Segmented<TaskSegment>
           label="Tasks segment"
@@ -154,7 +160,7 @@ export function TodosView() {
           })
         : null}
       {write.node}
-      {(q.data?.data || sky.data?.data) && !actions.length ? (
+      {!q.isLoading && !sky.isLoading && !q.error && !sky.error && (q.data?.data || sky.data?.data) && !actions.length ? (
         <div className="mt-6">
           <EmptyState title="No open todos." />
         </div>

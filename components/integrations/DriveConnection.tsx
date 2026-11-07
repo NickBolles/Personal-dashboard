@@ -3,7 +3,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, useToast } from "@/components/ui";
+import { Button, ErrorNote, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type DriveStatus = { available: boolean; configured: boolean; connected: boolean; connectedAt: string | null; scope: string; redirectPath: string };
 
@@ -34,7 +35,8 @@ export function DriveConnection() {
       setBusy(false);
     }
   };
-  if (!s) return <p className="text-sm text-muted">{q.isError ? (q.error as Error).message : "Loading…"}</p>;
+  if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
+  if (!s) return <LoadingState label="Loading…" />;
   return (
     <div className="space-y-2 text-sm" data-testid="drive-connection">
       <p>
@@ -45,11 +47,7 @@ export function DriveConnection() {
         Access: only files Jarvis creates (<code className="break-all">drive.file</code>). Jarvis can&apos;t read or change anything else in your Drive. This is
         a separate permission from any other Google access.
       </p>
-      {result === "error" && message ? (
-        <p role="alert" className="text-danger">
-          {message}
-        </p>
-      ) : null}
+      {result === "error" && message ? <ErrorNote error={message} /> : null}
       {!s.available ? (
         <p className="text-muted" data-testid="drive-off">
           Not turned on for this Jarvis. The owner enables it on the server once the Google OAuth client allows the redirect{" "}
