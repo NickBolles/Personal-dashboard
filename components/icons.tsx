@@ -268,3 +268,19 @@ export const BoltIcon = ({ className }: P) =>
     </>,
     className,
   );
+export const ThumbUpIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M7 10v11" />
+      <path d="M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 7A2 2 0 0 1 17.5 21H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9Z" />
+    </>,
+    className,
+  );
+export const ThumbDownIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M17 14V3" />
+      <path d="M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-7A2 2 0 0 1 6.5 3H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9Z" />
+    </>,
+    className,
+  );

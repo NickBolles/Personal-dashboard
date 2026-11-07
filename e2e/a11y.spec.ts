@@ -12,6 +12,7 @@ import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-aler
 import { skylightGroupingVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { stubPrismV2 } from "./fixtures/smart-v2";
 import { awayFixture, schedulesFixture } from "./fixtures/away";
+import { feedbackVisual } from "./fixtures/feedback";
 
 const PAGES = [
   "/home",
@@ -917,4 +918,45 @@ test("while away ledger: axe + 200% text", async ({ page }) => {
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expectNoHorizontalOverflow(page, { soft: true });
   expect.soft(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+test("feedback inbox and rate dialogs: axe clean and reflow at 200% text zoom", async ({ page }) => {
+  await page.route(/\/api\/feedback(\?.*)?$/, (route) => {
+    const sid = new URL(route.request().url()).searchParams.get("sessionId");
+    return route.fulfill({ json: sid ? { ...feedbackVisual(), entries: [] } : feedbackVisual() });
+  });
+  const axe = async (include?: string) => {
+    const b = new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]);
+    const results = await (include ? b.include(include) : b).analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+    ).toEqual([]);
+  };
+  const zoomed = async () => {
+    const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await expectNoHorizontalOverflow(page);
+    await zoom.evaluate((el) => (el as Element).remove());
+  };
+  await page.goto("/feedback");
+  await expect(page.getByTestId("feedback-row")).toHaveCount(3);
+  await axe();
+  await zoomed();
+  await page.goto("/chat/sess_morning");
+  const bubble = page.locator('[data-testid="msg-bubble"][data-who="assistant"]').first();
+  await expect(bubble).toBeVisible();
+  await bubble.click({ position: { x: 4, y: 4 } });
+  await bubble
+    .locator("xpath=..")
+    .getByRole("button", { name: /^Bad response/ })
+    .click();
+  await expect(page.getByRole("dialog", { name: "What went wrong?" })).toBeVisible();
+  await axe('[role="dialog"]');
+  await zoomed();
+  await page.getByRole("dialog").getByRole("button", { name: "Ask to fix…" }).click();
+  await expect(page.getByRole("dialog", { name: "Ask to fix" })).toBeVisible();
+  await axe('[role="dialog"]');
+  await zoomed();
+  await page.keyboard.press("Escape");
 });

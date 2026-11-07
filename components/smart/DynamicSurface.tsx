@@ -5,6 +5,7 @@ import { Button, Dialog } from "@/components/ui";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import type { ControlView } from "@/integrations/home-assistant/controls";
 import { SmartSurface } from "./SmartSurface";
+import { RateMessage } from "@/components/feedback/RateMessage";
 
 export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismiss: () => void }) {
   const [confirm, setConfirm] = useState<ControlView>();
@@ -33,6 +34,15 @@ export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismi
         <Button size="sm" variant="ghost" onClick={onDismiss}>
           Not now
         </Button>
+        <span className="flex items-center" data-testid="card-rate">
+          <RateMessage
+            sessionId={card.sessionId}
+            messageId={`card:${card.id}`}
+            surface="card"
+            text={`${card.line.label}: ${card.line.text}`}
+            who={`the ${card.line.label} card`}
+          />
+        </span>
         {card.footer ? (
           <a href={card.footer.href} className="tap min-w-0 text-sm text-accent underline">
             {card.footer.label}

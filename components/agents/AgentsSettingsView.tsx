@@ -8,6 +8,7 @@ import { EmptyState, SectionHeader, Skeleton } from "@/components/ui/kit";
 import { AgentAccessCard } from "./AgentAccessCard";
 import { CoordinatorsCard } from "./CoordinatorsCard";
 import { ScheduledJobsCard } from "./ScheduledJobsCard";
+import { FeedbackSettingsCard } from "@/components/feedback/FeedbackInbox";
 import { KEY_ENV_PREFIX, suggestedKeyEnv, type AgentRoute, type AgentSettings } from "@/lib/agents";
 
 type RouteStatus = AgentRoute & { effectiveBaseUrl: string | null; keyPresent: boolean; sharedKey?: boolean };
@@ -80,6 +81,7 @@ export function AgentsSettingsView() {
       <PageHeader title="Agents" subtitle="Which Hermes profile answers in each area. Set an area's agent in its Area settings." />
       <CoordinatorsCard />
       <ScheduledJobsCard />
+      <FeedbackSettingsCard />
       <Card>
         <div className="space-y-2">
           <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">

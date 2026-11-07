@@ -35,6 +35,7 @@ import {
 import { J, R, assertAwayOwner, jobRows, jobRow, jobView, runCaps, type JobRow, type RunRow } from "./schedules";
 import { applyProposals } from "./proposals";
 import { awayRun } from "./away";
+import { claimTriage, completeTriage, hasTriageWork, releaseTriage } from "@/server/feedback/store";
 
 export const defaultDeps = { createSession, startRun, getRun, getSessionDetail, resolveAgentForNode, sessionProfile, coordinatorFor, notify };
 export type SchedulerDeps = typeof defaultDeps;
@@ -114,6 +115,8 @@ function fail(user: CurrentUser, row: RunRow, now: Date, error: string, deps: Sc
       .where(eq(J.id, job.id))
       .run();
     if (row.agentRunId) finishRegisteredRun(user, row.agentRunId, "failed", message, now);
+    // Feedback triage: entries this run held go back to the queue.
+    releaseTriage(user.id, row.id);
     notification(user, job, row, now, deps, message);
   });
 }
@@ -165,11 +168,13 @@ export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, 
             .slice(0, 12)
             .join("\n")
         : "";
+    // Feedback triage: new 👎 (excluded areas and sensitive text already dropped), held by this run.
+    const feedback = job.kind === "feedback" ? claimTriage(user, row.id, null) : "";
     const prefs = getPreferences().hermes;
     const settings = area.settings;
     const modeHint = settings?.agentMode && settings.agentMode !== profile ? `Agent mode: ${settings.agentMode}.` : "";
     const instructions = [modeHint, settings?.instructions, policyInstructions(effectiveAutonomy(area))].filter(Boolean).join("\n\n");
-    const input = [job.prompt, context, stalled].filter(Boolean).join("\n\n");
+    const input = [job.prompt, feedback, context, stalled].filter(Boolean).join("\n\n");
     if (detectSensitivity(input) !== "none") throw new HttpError(409, "ai_off", "Scheduled context contains data unavailable to AI");
     const registered = registerAgentRun(
       user,
@@ -281,6 +286,7 @@ export async function reconcileScheduledRuns(user: CurrentUser, now = new Date()
             .where(eq(J.id, job.id))
             .run();
           if (row.agentRunId) finishRegisteredRun(user, row.agentRunId, "done", summary, now);
+          completeTriage(user.id, row.id, now);
           if (!silent && applied.decisions.length) notification(user, job, row, now, deps, `${applied.decisions.length} proposals need you`);
         });
       } catch (e) {
@@ -311,11 +317,13 @@ export async function runSchedulePass(now: Date, deps: SchedulerDeps = defaultDe
       !area.settings?.agentMode ||
       detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) !== "none"
         ? "skipped_policy"
-        : !job.overnight && inQuietHours(at, getPreferences(user.id).quietHours, job.tz)
-          ? "skipped_quiet"
-          : caps.runsToday >= caps.maxRunsPerDay
-            ? "skipped_cap"
-            : null;
+        : job.kind === "feedback" && !hasTriageWork(user)
+          ? "skipped_empty"
+          : !job.overnight && inQuietHours(at, getPreferences(user.id).quietHours, job.tz)
+            ? "skipped_quiet"
+            : caps.runsToday >= caps.maxRunsPerDay
+              ? "skipped_cap"
+              : null;
     if (skip) {
       claimJobSlot(user, job, slot, now, skip);
       continue;

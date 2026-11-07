@@ -60,6 +60,7 @@ import { ApprovalCard } from "@/components/approvals/ApprovalCard";
 import { ClarifyCard } from "@/components/approvals/ClarifyCard";
 import { CompactionDivider, NoticeCard } from "./Notice";
 import { parseNotice } from "@/lib/chat-notices";
+import { RateMessage } from "@/components/feedback/RateMessage";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -103,6 +104,24 @@ const PHASE_LABEL: Record<RunPhase, { label: string; tone: Tone }> = {
 
 /** "Hermes" or "Claude": who answers this conversation. */
 const AssistantName = createContext("Hermes");
+/** Feedback loop: what each assistant reply's 👍/👎 needs (null on read-only conversations). */
+type RateContext = { sessionId: string; model: string | null; toolsFor: (messageId: string) => string[]; askFix: (prompt: string) => Promise<boolean> };
+const RateCtx = createContext<RateContext | null>(null);
+
+/** Tool names used for each assistant reply (the tool steps since the previous user message). */
+export function toolsByReply(timeline: TimelineItem[]) {
+  const out = new Map<string, string[]>();
+  let tools: string[] = [];
+  for (const t of timeline) {
+    if (t.kind === "user") tools = [];
+    else if (t.kind === "tool") tools.push(t.tool);
+    else if (t.kind === "assistant") {
+      out.set(t.id, tools);
+      tools = [];
+    }
+  }
+  return out;
+}
 
 function useSessionDetail(sessionId: string) {
   const [offline, setOffline] = useState<Detail>();
@@ -525,370 +544,389 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     },
   });
 
+  const toolMap = toolsByReply(detail?.timeline ?? NO_TIMELINE);
+  const rateCtx: RateContext | null =
+    detail && !detail.session.readOnly
+      ? {
+          sessionId,
+          model: detail.session.model ?? null,
+          toolsFor: (id) => toolMap.get(id) ?? [],
+          askFix: async (prompt) => {
+            if (run.active) {
+              toast("Wait for the current reply to finish, then ask again.", "warn");
+              return false;
+            }
+            return send(prompt, newIdempotencyKey("fix"));
+          },
+        }
+      : null;
+
   return (
     <AssistantName.Provider value={who}>
-      <SmartSession.Provider value={sessionId}>
-        <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
-          <ChatLinkProvider links={panel.links}>
-            <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>
-              <div className="chat-things-layout">
-                <div className="chat-page relative mx-auto flex w-full max-w-[880px] min-w-0 flex-1 flex-col" data-testid="conversation-drop" {...drop.props}>
-                  <DropOverlay show={drop.over} />
-                  <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
-                    <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
-                      <Link
-                        href="/chat"
-                        className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
-                        aria-label="Back to conversations"
-                      >
-                        <ChevronIcon className="h-5 w-5 rotate-180" />
-                      </Link>
-                      <div className="min-w-0 flex-1">
-                        <h1 className="truncate text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] sm:text-[1.0625rem] sm:leading-6">
-                          {session!.title}
-                        </h1>
-                        <ParentChatLink parent={chatThings.execution?.parent} />
-                        {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
-                        <div
-                          data-scroll-x
-                          className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
+      <RateCtx.Provider value={rateCtx}>
+        <SmartSession.Provider value={sessionId}>
+          <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
+            <ChatLinkProvider links={panel.links}>
+              <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>
+                <div className="chat-things-layout">
+                  <div className="chat-page relative mx-auto flex w-full max-w-[880px] min-w-0 flex-1 flex-col" data-testid="conversation-drop" {...drop.props}>
+                    <DropOverlay show={drop.over} />
+                    <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
+                      <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
+                        <Link
+                          href="/chat"
+                          className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
+                          aria-label="Back to conversations"
                         >
-                          {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
-                          {phase ? (
-                            <span className="inline-flex shrink-0 rounded-full bg-surface">
-                              <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge>
-                            </span>
-                          ) : null}
-                          {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
-                          {/* C1: agent mark — which Hermes profile answers here. */}
-                          {areaCtx?.agent?.profile || session!.agentProfile ? (
-                            <span
-                              className="chip shrink-0 font-medium"
-                              data-tone="accent"
-                              data-testid="agent-badge"
-                              title="The agent that answers this conversation"
-                            >
-                              @{areaCtx?.agent?.profile ?? session!.agentProfile}
-                            </span>
-                          ) : null}
-                          {readOnly ? (
-                            <Badge>Shared with you · read only</Badge>
-                          ) : session!.shared ? (
-                            <span className="chip" data-tone="accent" data-testid="shared-chip">
-                              Shared with household ·
-                              <button
-                                type="button"
-                                className="underline underline-offset-2"
-                                disabled={!online}
-                                onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
+                          <ChevronIcon className="h-5 w-5 rotate-180" />
+                        </Link>
+                        <div className="min-w-0 flex-1">
+                          <h1 className="truncate text-[0.9375rem] leading-5 font-semibold tracking-[-0.01em] sm:text-[1.0625rem] sm:leading-6">
+                            {session!.title}
+                          </h1>
+                          <ParentChatLink parent={chatThings.execution?.parent} />
+                          {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
+                          <div
+                            data-scroll-x
+                            className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
+                          >
+                            {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
+                            {phase ? (
+                              <span className="inline-flex shrink-0 rounded-full bg-surface">
+                                <Badge tone={PHASE_LABEL[phase].tone}>{PHASE_LABEL[phase].label}</Badge>
+                              </span>
+                            ) : null}
+                            {session!.source === "claude" ? <Badge tone="accent">Claude · {session!.model}</Badge> : null}
+                            {/* C1: agent mark — which Hermes profile answers here. */}
+                            {areaCtx?.agent?.profile || session!.agentProfile ? (
+                              <span
+                                className="chip shrink-0 font-medium"
+                                data-tone="accent"
+                                data-testid="agent-badge"
+                                title="The agent that answers this conversation"
                               >
-                                Stop sharing
-                              </button>
-                            </span>
-                          ) : null}
-                          {areaCtx ? (
-                            <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
-                              {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
-                              <button
-                                type="button"
-                                className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
-                                title={areaCtx.placement?.path ?? "Not in Areas yet"}
-                                onClick={() => setDialog("file")}
-                                aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
-                              >
-                                <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
-                                <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
-                              </button>
-                              {areaCtx.suggestions.slice(0, 2).map((sg) => (
+                                @{areaCtx?.agent?.profile ?? session!.agentProfile}
+                              </span>
+                            ) : null}
+                            {readOnly ? (
+                              <Badge>Shared with you · read only</Badge>
+                            ) : session!.shared ? (
+                              <span className="chip" data-tone="accent" data-testid="shared-chip">
+                                Shared with household ·
                                 <button
-                                  key={sg.id}
                                   type="button"
-                                  className="chip cursor-pointer"
-                                  data-tone="accent"
-                                  title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
-                                  onClick={() => fileTo(sg.id, sg.title)}
+                                  className="underline underline-offset-2"
+                                  disabled={!online}
+                                  onClick={() => patch({ shared: false }, "Only you can see this conversation now")}
                                 >
-                                  File under {sg.title}
+                                  Stop sharing
                                 </button>
-                              ))}
-                              {/* Properties lives in the header ⋯ menu. */}
-                            </span>
-                          ) : null}
-                          {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
-                          {detail.parent ? (
-                            <span className="inline-flex items-center gap-1">
-                              <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
-                              <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
-                                {detail.parent.title}
-                              </Link>
-                            </span>
-                          ) : session!.parentSessionId ? (
-                            <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
-                              <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
-                            </Link>
-                          ) : null}
-                          {detail.children.length ? (
-                            <span className="inline-flex flex-wrap items-center gap-1">
-                              <ForkIcon className="h-3.5 w-3.5" /> Forks:
-                              {detail.children.map((c) => (
-                                <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
-                                  {c.title}
-                                </Link>
-                              ))}
-                            </span>
-                          ) : null}
-                          {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
-                            <Link
-                              key={l.targetId}
-                              href="/initiatives"
-                              data-dynamic
-                              className="rounded-[6px] border border-line px-1.5 font-mono"
-                              title={l.targetTitle}
-                            >
-                              {l.targetIdentifier}
-                            </Link>
-                          ))}
-                          {model.model ? <span>Model: {model.model}</span> : null}
-                          {fromCache ? <span className="text-warn">Saved copy</span> : null}
-                        </div>
-                      </div>
-                      <OverflowMenu label="Conversation actions" items={menu} />
-                    </div>
-                  </header>
-
-                  <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
-                    {detail.timeline.length === 0 && !showLive && !pendingInput ? (
-                      <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
-                        <p className="text-[0.9375rem] font-semibold">
-                          Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
-                        </p>
-                        <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
-                        <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
-                          <li className="chip">
-                            <kbd className="kbd">@</kbd> people, devices, work
-                          </li>
-                          <li className="chip">
-                            <kbd className="kbd">#</kbd> PRs and issues
-                          </li>
-                          <li className="chip">
-                            <kbd className="kbd">/</kbd> commands
-                          </li>
-                        </ul>
-                      </div>
-                    ) : null}
-                    <ol className="space-y-2.5">
-                      {groupTimeline(detail.timeline).map((g) => {
-                        const row = (item: TimelineItem, stepSec?: number) => (
-                          <TimelineRow
-                            key={item.id}
-                            item={item}
-                            stepSec={stepSec}
-                            onFork={() => {
-                              setForkFrom(item);
-                              setDialog("fork");
-                            }}
-                          />
-                        );
-                        if (!("tools" in g)) {
-                          if (g.kind !== "user" && g.kind !== "assistant") return row(g);
-                          return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
-                        }
-                        return (
-                          <li key={`work-${g.tools[0].id}`}>
-                            <WorkSummary
-                              id={g.tools[0].id}
-                              steps={g.tools}
-                              seconds={g.seconds}
-                              alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
-                            >
-                              {g.tools.map((t, j) => row(t, g.durations[j]))}
-                            </WorkSummary>
-                          </li>
-                        );
-                      })}
-                      {showPendingUser ? (
-                        <li className="flex justify-end">
-                          <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
-                            <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
-                          </div>
-                        </li>
-                      ) : null}
-                    </ol>
-                    {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
-                    <div ref={bottomRef} />
-                  </div>
-
-                  {detached ? (
-                    <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
-                      <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
-                        Jump to latest
-                      </Button>
-                    </div>
-                  ) : null}
-
-                  {readOnly ? (
-                    <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
-                      <ChatTray things={chatThings.things} onOpen={openPanel} />
-                      This conversation was shared with you.{" "}
-                      <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
-                        Fork it
-                      </button>{" "}
-                      to continue it as your own.
-                    </div>
-                  ) : (
-                    <Composer
-                      tray={
-                        <ChatTray
-                          things={chatThings.things}
-                          onOpen={openPanel}
-                          compact={phase === "waiting_for_approval" || !!run.state.clarify}
-                          accessory={
-                            wfRun?.status === "live" ? (
-                              <div className="chat-capture-chips flex gap-1 overflow-x-auto p-1" data-scroll-x role="group" aria-label="Next note goes to">
-                                {workflowChips.map((c) => (
+                              </span>
+                            ) : null}
+                            {areaCtx ? (
+                              <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
+                                {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
+                                <button
+                                  type="button"
+                                  className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
+                                  title={areaCtx.placement?.path ?? "Not in Areas yet"}
+                                  onClick={() => setDialog("file")}
+                                  aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
+                                >
+                                  <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
+                                  <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
+                                </button>
+                                {areaCtx.suggestions.slice(0, 2).map((sg) => (
                                   <button
-                                    key={c.field}
+                                    key={sg.id}
                                     type="button"
-                                    className="chip min-h-11 shrink-0 sm:min-h-10 dense:min-h-8"
-                                    aria-pressed={wfTarget === c.field}
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => setWfTarget(wfTarget === c.field ? null : c.field)}
+                                    className="chip cursor-pointer"
+                                    data-tone="accent"
+                                    title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
+                                    onClick={() => fileTo(sg.id, sg.title)}
                                   >
-                                    {c.label}
+                                    File under {sg.title}
                                   </button>
                                 ))}
-                              </div>
-                            ) : null
-                          }
-                        />
-                      }
-                      sessionId={sessionId}
-                      phase={phase}
-                      clarifying={!!run.state.clarify}
-                      online={online}
-                      context={context}
-                      onRemoveContext={removeContext}
-                      onAttach={() => setDialog("context")}
-                      attachments={attachments}
-                      onSend={send}
-                      restore={restore}
-                      onSteer={steer}
-                      onStop={run.stop}
-                      onCommand={runCommand}
-                      repo={areaCtx?.settings?.defaultRepo ?? null}
-                      modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
-                      onModel={() => setDialog("model")}
-                      onFocus={toLatest}
-                      agent={
-                        areaCtx?.agent ??
-                        (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
-                      }
-                    />
-                  )}
+                                {/* Properties lives in the header ⋯ menu. */}
+                              </span>
+                            ) : null}
+                            {session!.endReason === "branched" ? <span>Forked (transcript unchanged)</span> : null}
+                            {detail.parent ? (
+                              <span className="inline-flex items-center gap-1">
+                                <ForkIcon className="h-3.5 w-3.5" /> Forked from{" "}
+                                <Link className="underline" href={`/chat/${encodeURIComponent(detail.parent.id)}`}>
+                                  {detail.parent.title}
+                                </Link>
+                              </span>
+                            ) : session!.parentSessionId ? (
+                              <Link className="inline-flex items-center gap-1 underline" href={`/chat/${encodeURIComponent(session!.parentSessionId)}`}>
+                                <ForkIcon className="h-3.5 w-3.5" /> Forked from parent
+                              </Link>
+                            ) : null}
+                            {detail.children.length ? (
+                              <span className="inline-flex flex-wrap items-center gap-1">
+                                <ForkIcon className="h-3.5 w-3.5" /> Forks:
+                                {detail.children.map((c) => (
+                                  <Link key={c.id} className="underline" href={`/chat/${encodeURIComponent(c.id)}`}>
+                                    {c.title}
+                                  </Link>
+                                ))}
+                              </span>
+                            ) : null}
+                            {[...new Map(detail.links.map((l) => [l.targetId, l])).values()].map((l) => (
+                              <Link
+                                key={l.targetId}
+                                href="/initiatives"
+                                data-dynamic
+                                className="rounded-[6px] border border-line px-1.5 font-mono"
+                                title={l.targetTitle}
+                              >
+                                {l.targetIdentifier}
+                              </Link>
+                            ))}
+                            {model.model ? <span>Model: {model.model}</span> : null}
+                            {fromCache ? <span className="text-warn">Saved copy</span> : null}
+                          </div>
+                        </div>
+                        <OverflowMenu label="Conversation actions" items={menu} />
+                      </div>
+                    </header>
 
-                  <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
-                  <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
-                  <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
-                  {dialog === "model" ? (
-                    <ModelSelectDialog
-                      open
+                    <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
+                      {detail.timeline.length === 0 && !showLive && !pendingInput ? (
+                        <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
+                          <p className="text-[0.9375rem] font-semibold">
+                            Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
+                          </p>
+                          <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
+                          <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
+                            <li className="chip">
+                              <kbd className="kbd">@</kbd> people, devices, work
+                            </li>
+                            <li className="chip">
+                              <kbd className="kbd">#</kbd> PRs and issues
+                            </li>
+                            <li className="chip">
+                              <kbd className="kbd">/</kbd> commands
+                            </li>
+                          </ul>
+                        </div>
+                      ) : null}
+                      <ol className="space-y-2.5">
+                        {groupTimeline(detail.timeline).map((g) => {
+                          const row = (item: TimelineItem, stepSec?: number) => (
+                            <TimelineRow
+                              key={item.id}
+                              item={item}
+                              stepSec={stepSec}
+                              onFork={() => {
+                                setForkFrom(item);
+                                setDialog("fork");
+                              }}
+                            />
+                          );
+                          if (!("tools" in g)) {
+                            if (g.kind !== "user" && g.kind !== "assistant") return row(g);
+                            return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
+                          }
+                          return (
+                            <li key={`work-${g.tools[0].id}`}>
+                              <WorkSummary
+                                id={g.tools[0].id}
+                                steps={g.tools}
+                                seconds={g.seconds}
+                                alwaysShown={g.tools.flatMap((t, j) => (t.error ? [row(t, g.durations[j])] : []))}
+                              >
+                                {g.tools.map((t, j) => row(t, g.durations[j]))}
+                              </WorkSummary>
+                            </li>
+                          );
+                        })}
+                        {showPendingUser ? (
+                          <li className="flex justify-end">
+                            <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
+                              <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
+                            </div>
+                          </li>
+                        ) : null}
+                      </ol>
+                      {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
+                      <div ref={bottomRef} />
+                    </div>
+
+                    {detached ? (
+                      <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
+                        <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
+                          Jump to latest
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    {readOnly ? (
+                      <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
+                        <ChatTray things={chatThings.things} onOpen={openPanel} />
+                        This conversation was shared with you.{" "}
+                        <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
+                          Fork it
+                        </button>{" "}
+                        to continue it as your own.
+                      </div>
+                    ) : (
+                      <Composer
+                        tray={
+                          <ChatTray
+                            things={chatThings.things}
+                            onOpen={openPanel}
+                            compact={phase === "waiting_for_approval" || !!run.state.clarify}
+                            accessory={
+                              wfRun?.status === "live" ? (
+                                <div className="chat-capture-chips flex gap-1 overflow-x-auto p-1" data-scroll-x role="group" aria-label="Next note goes to">
+                                  {workflowChips.map((c) => (
+                                    <button
+                                      key={c.field}
+                                      type="button"
+                                      className="chip min-h-11 shrink-0 sm:min-h-10 dense:min-h-8"
+                                      aria-pressed={wfTarget === c.field}
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onClick={() => setWfTarget(wfTarget === c.field ? null : c.field)}
+                                    >
+                                      {c.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null
+                            }
+                          />
+                        }
+                        sessionId={sessionId}
+                        phase={phase}
+                        clarifying={!!run.state.clarify}
+                        online={online}
+                        context={context}
+                        onRemoveContext={removeContext}
+                        onAttach={() => setDialog("context")}
+                        attachments={attachments}
+                        onSend={send}
+                        restore={restore}
+                        onSteer={steer}
+                        onStop={run.stop}
+                        onCommand={runCommand}
+                        repo={areaCtx?.settings?.defaultRepo ?? null}
+                        modelLabel={model.model ?? (areaCtx?.settings?.defaultModel ? `${areaCtx.settings.defaultModel} (area)` : "Default")}
+                        onModel={() => setDialog("model")}
+                        onFocus={toLatest}
+                        agent={
+                          areaCtx?.agent ??
+                          (session?.agentProfile ? { requested: session.agentProfile, profile: session.agentProfile, routed: true, reason: "routed" } : null)
+                        }
+                      />
+                    )}
+
+                    <RenameDialog open={dialog === "rename"} onClose={() => setDialog(null)} session={session!} />
+                    <ForkDialog open={dialog === "fork"} onClose={() => setDialog(null)} session={session!} fromMessage={forkFrom} />
+                    <TrackDialog open={dialog === "track"} onClose={() => setDialog(null)} session={session!} />
+                    {dialog === "model" ? (
+                      <ModelSelectDialog
+                        open
+                        onClose={() => setDialog(null)}
+                        backend={session!.source === "claude" ? "claude" : "hermes"}
+                        value={model}
+                        onChange={(m) => {
+                          setModel(m);
+                          kvSet(`model:${sessionId}`, m);
+                        }}
+                        area={
+                          areaCtx?.area && !areaCtx.area.builtIn
+                            ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
+                            : null
+                        }
+                        onAreaDefault={(m) =>
+                          areaCtx?.area &&
+                          api
+                            .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
+                              settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
+                            })
+                            .then(() => {
+                              qc.invalidateQueries({ queryKey: ["work"] });
+                              toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
+                            })
+                            .catch((e: Error) => toast(e.message, "danger"))
+                        }
+                      />
+                    ) : null}
+                    {dialog === "file" ? (
+                      <FileUnderDialog
+                        c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
+                        items={treeItems.data?.items ?? []}
+                        busy={false}
+                        onClose={() => setDialog(null)}
+                        onFile={async (itemId) => {
+                          if (await fileTo(itemId)) setDialog(null);
+                        }}
+                      />
+                    ) : null}
+                    <ContextSheet
+                      open={dialog === "context"}
                       onClose={() => setDialog(null)}
-                      backend={session!.source === "claude" ? "claude" : "hermes"}
-                      value={model}
-                      onChange={(m) => {
-                        setModel(m);
-                        kvSet(`model:${sessionId}`, m);
-                      }}
-                      area={
-                        areaCtx?.area && !areaCtx.area.builtIn
-                          ? { id: areaCtx.area.id, title: areaCtx.area.title, defaultModel: areaCtx.settings?.defaultModel ?? null }
-                          : null
-                      }
-                      onAreaDefault={(m) =>
-                        areaCtx?.area &&
-                        api
-                          .patch(`/api/work/items/${encodeURIComponent(areaCtx.area.id)}`, {
-                            settings: { defaultModel: m.model ?? null, defaultProvider: m.provider ?? null },
-                          })
-                          .then(() => {
-                            qc.invalidateQueries({ queryKey: ["work"] });
-                            toast(`Default model for ${areaCtx.area!.title} saved`, "ok");
-                          })
-                          .catch((e: Error) => toast(e.message, "danger"))
+                      sessionId={sessionId}
+                      areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
+                      repo={areaCtx?.settings?.defaultRepo ?? null}
+                      selected={context}
+                      onToggle={(chip) =>
+                        setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))
                       }
                     />
-                  ) : null}
-                  {dialog === "file" ? (
-                    <FileUnderDialog
-                      c={{ id: sessionId, title: session!.title, suggestions: areaCtx?.suggestions ?? [] }}
-                      items={treeItems.data?.items ?? []}
-                      busy={false}
-                      onClose={() => setDialog(null)}
-                      onFile={async (itemId) => {
-                        if (await fileTo(itemId)) setDialog(null);
-                      }}
-                    />
-                  ) : null}
-                  <ContextSheet
-                    open={dialog === "context"}
-                    onClose={() => setDialog(null)}
+                  </div>
+                  <ChatPanel
                     sessionId={sessionId}
-                    areaTitle={areaCtx?.placement?.path?.split(" / ")[0] ?? null}
-                    repo={areaCtx?.settings?.defaultRepo ?? null}
-                    selected={context}
-                    onToggle={(chip) =>
-                      setContext((c) => (c.some((x) => x.ref === chip.ref) ? c.filter((x) => x.ref !== chip.ref) : [...c, chip].slice(0, 12)))
+                    open={surface.open}
+                    wide={surface.wide}
+                    tab={surface.tab}
+                    onTab={(tab) => {
+                      surface.setTab(tab);
+                      chatThings.markSeen(tab);
+                    }}
+                    onClose={surface.close}
+                    things={chatThings.things}
+                    links={panel.links}
+                    context={context}
+                    readOnly={readOnly}
+                    onPatch={panel.patch}
+                    onRemoveContext={removeContext}
+                    execution={chatThings.execution}
+                    executionError={chatThings.error}
+                    executionLoading={chatThings.loading}
+                    retry={chatThings.retry}
+                    onAddContext={() => {
+                      surface.close();
+                      setDialog("context");
+                    }}
+                    workflow={wfRun ? { run: wfRun, target: wfTarget, onTarget: setWfTarget, capture } : null}
+                    pending={
+                      run.state.approval || run.state.clarify ? (
+                        <p className="rounded-lg border border-line p-2 text-xs text-warn">
+                          {run.state.approval ? "Approval waiting" : "A question is waiting"} ·{" "}
+                          <button
+                            type="button"
+                            className="min-h-11 underline sm:min-h-10"
+                            onClick={() => {
+                              surface.close();
+                              document.querySelector('[aria-label="Current run"]')?.scrollIntoView({ block: "center" });
+                            }}
+                          >
+                            Review in conversation
+                          </button>
+                        </p>
+                      ) : null
                     }
                   />
                 </div>
-                <ChatPanel
-                  sessionId={sessionId}
-                  open={surface.open}
-                  wide={surface.wide}
-                  tab={surface.tab}
-                  onTab={(tab) => {
-                    surface.setTab(tab);
-                    chatThings.markSeen(tab);
-                  }}
-                  onClose={surface.close}
-                  things={chatThings.things}
-                  links={panel.links}
-                  context={context}
-                  readOnly={readOnly}
-                  onPatch={panel.patch}
-                  onRemoveContext={removeContext}
-                  execution={chatThings.execution}
-                  executionError={chatThings.error}
-                  executionLoading={chatThings.loading}
-                  retry={chatThings.retry}
-                  onAddContext={() => {
-                    surface.close();
-                    setDialog("context");
-                  }}
-                  workflow={wfRun ? { run: wfRun, target: wfTarget, onTarget: setWfTarget, capture } : null}
-                  pending={
-                    run.state.approval || run.state.clarify ? (
-                      <p className="rounded-lg border border-line p-2 text-xs text-warn">
-                        {run.state.approval ? "Approval waiting" : "A question is waiting"} ·{" "}
-                        <button
-                          type="button"
-                          className="min-h-11 underline sm:min-h-10"
-                          onClick={() => {
-                            surface.close();
-                            document.querySelector('[aria-label="Current run"]')?.scrollIntoView({ block: "center" });
-                          }}
-                        >
-                          Review in conversation
-                        </button>
-                      </p>
-                    ) : null
-                  }
-                />
               </div>
-            </div>
-          </ChatLinkProvider>
-        </ChatFiles.Provider>
-      </SmartSession.Provider>
+            </ChatLinkProvider>
+          </ChatFiles.Provider>
+        </SmartSession.Provider>
+      </RateCtx.Provider>
     </AssistantName.Provider>
   );
 }
@@ -1018,12 +1056,12 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
   }
   if (item.kind === "assistant") {
     return (
-      <li className="chat-msg flex flex-col" data-meta={meta || undefined}>
+      <li className="chat-msg flex flex-col" data-meta={meta || undefined} id={`msg-${item.id}`}>
         <div className="min-w-0 max-w-full" data-testid="msg-bubble" data-who="assistant" onClick={onClick} onContextMenu={() => setMeta(true)}>
           <span className="sr-only">{who} said: </span>
           <AssistantText text={item.text} />
         </div>
-        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} />
+        <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} rateId={item.id} />
       </li>
     );
   }
@@ -1080,8 +1118,9 @@ function UserText({ text }: { text: string }) {
   );
 }
 
-function MessageMeta({ time, onFork, who, text }: { time?: string; onFork: () => void; who: string; text: string }) {
+function MessageMeta({ time, onFork, who, text, rateId }: { time?: string; onFork: () => void; who: string; text: string; rateId?: string }) {
   const isHermes = useContext(AssistantName) === "Hermes";
+  const rate = useContext(RateCtx);
   const { toast } = useToast();
   const at = text.indexOf(CONTEXT_MARK);
   const body = at >= 0 ? text.slice(0, at).trim() : text;
@@ -1100,6 +1139,18 @@ function MessageMeta({ time, onFork, who, text }: { time?: string; onFork: () =>
       >
         Copy
       </button>
+      {rateId && rate ? (
+        <RateMessage
+          sessionId={rate.sessionId}
+          messageId={rateId}
+          surface="chat"
+          text={body}
+          who={who}
+          model={rate.model}
+          tools={rate.toolsFor(rateId)}
+          onAskFix={rate.askFix}
+        />
+      ) : null}
       <button
         type="button"
         onClick={onFork}

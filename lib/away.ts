@@ -38,13 +38,14 @@ export const scheduleSpecSchema = z
   .refine((s) => s.freq !== "weekly" || s.days.length > 0, { message: "Pick at least one day", path: ["days"] });
 export type ScheduleSpec = z.infer<typeof scheduleSpecSchema>;
 
-export const JOB_KINDS = ["brief", "triage", "review", "stalled", "custom"] as const;
+export const JOB_KINDS = ["brief", "triage", "review", "stalled", "feedback", "custom"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 export const JOB_KIND_LABELS: Record<JobKind, string> = {
   brief: "Morning brief",
   triage: "Inbox triage",
   review: "Weekly review prep",
   stalled: "Check stalled agent runs",
+  feedback: "Feedback triage",
   custom: "Custom prompt",
 };
 
@@ -88,7 +89,7 @@ export const jobPatchSchema = z
   .strict();
 export type JobPatch = z.infer<typeof jobPatchSchema>;
 
-export const JOB_STATUSES = ["never", "running", "ok", "silent", "failed", "skipped_quiet", "skipped_cap", "skipped_policy"] as const;
+export const JOB_STATUSES = ["never", "running", "ok", "silent", "failed", "skipped_quiet", "skipped_cap", "skipped_policy", "skipped_empty"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   never: "Never ran",
@@ -99,6 +100,7 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   skipped_quiet: "Skipped · quiet hours",
   skipped_cap: "Skipped · daily cap",
   skipped_policy: "Skipped · AI off here",
+  skipped_empty: "Skipped · no new feedback",
 };
 
 /** One job as the API returns it. */

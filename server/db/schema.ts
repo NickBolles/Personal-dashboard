@@ -1888,3 +1888,40 @@ export const agentRuns = sqliteTable(
   },
   (t) => [index("agent_runs_item_idx").on(t.userId, t.itemId)],
 );
+
+/** 👍/👎 on an assistant message (chat, coordinator, smart card); the Feedback inbox + daily triage read it. */
+export const messageFeedback = sqliteTable(
+  "message_feedback",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    messageId: text("message_id").notNull(),
+    /** chat | coordinator | card */
+    surface: text("surface").notNull(),
+    /** up | down */
+    rating: text("rating").notNull(),
+    reasonsJson: text("reasons_json").notNull().default("[]"),
+    note: text("note").notNull().default(""),
+    excerpt: text("excerpt").notNull().default(""),
+    profile: text("profile").notNull().default("default"),
+    areaId: text("area_id"),
+    model: text("model"),
+    toolsJson: text("tools_json").notNull().default("[]"),
+    /** new | triaged | fixed | wont_fix */
+    status: text("status").notNull().default("new"),
+    fixRequestedAt: text("fix_requested_at"),
+    itemId: text("item_id"),
+    /** scheduled_job_runs.id of the triage run that has it in flight (cleared if that run fails) */
+    triageRunId: text("triage_run_id"),
+    triagedAt: text("triaged_at"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("message_feedback_msg_idx").on(t.userId, t.sessionId, t.messageId),
+    index("message_feedback_user_status_idx").on(t.userId, t.status, t.createdAt),
+  ],
+);

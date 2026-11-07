@@ -10,6 +10,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import type { SessionSummary, TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
+import { RateMessage } from "@/components/feedback/RateMessage";
 import { Button } from "@/components/ui/kit";
 import { cx, inputCls, useToast } from "@/components/ui";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
@@ -148,7 +149,31 @@ export function CoordinatorThread({
               <ol aria-label="Latest messages">
                 {msgs.map((m) => (
                   <li key={m.id} className="co-msg">
-                    <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
+                    {m.kind === "assistant" && sid ? (
+                      <div className="co-msg-head flex items-center justify-between gap-1">
+                        <p className="text-xs font-semibold text-muted">Coordinator</p>
+                        <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
+                          <RateMessage
+                            sessionId={sid}
+                            messageId={m.id}
+                            surface="coordinator"
+                            text={m.text}
+                            who="the coordinator's message"
+                            model={detail.data?.session.model ?? null}
+                            onAskFix={async (prompt) => {
+                              if (detail.data?.session.activeRun) {
+                                toast("Wait for the coordinator to finish, then ask again.", "warn");
+                                return false;
+                              }
+                              await send.mutateAsync(prompt);
+                              return true;
+                            }}
+                          />
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
+                    )}
                     {m.kind === "assistant" ? (
                       <Markdown text={m.text} />
                     ) : (

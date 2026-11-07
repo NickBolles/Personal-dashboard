@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { scheduleError, type SchedulesResponse } from "@/lib/client/away";
+import { FEEDBACK_TRIAGE_TEMPLATE } from "@/lib/feedback";
 import {
   AUTONOMY_LABELS,
   describeSchedule,
@@ -37,6 +38,7 @@ const starters: Record<JobKind, string> = {
   review: SUGGESTED_TEMPLATES[1].prompt,
   triage: "Review new Inbox captures and suggest where each belongs. If nothing changed, say exactly NOTHING_NEW.",
   stalled: "Check stalled or failed agent runs in this area. Suggest the next action. If nothing changed, say exactly NOTHING_NEW.",
+  feedback: FEEDBACK_TRIAGE_TEMPLATE.prompt,
   custom: "",
 };
 
