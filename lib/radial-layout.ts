@@ -73,7 +73,10 @@ function separateLabels(nodes: PlacedNode[]) {
       boxes.filter((b) => box.left < b.right + LABEL_GAP && box.right + LABEL_GAP > b.left && box.top < b.bottom + LABEL_GAP && box.bottom + LABEL_GAP > b.top);
     let box = radialLabelBox(node);
     // Keep the full title in <title>/aria-label. Try less ink before moving labels.
-    for (let chars = Math.max(...original.map((line) => line.length)) - 1; chars >= 4 && overlaps(box).length; chars--) {
+    // Never shorten past ~60% of the line (a 4-char "Desi…" reads as noise): displace instead.
+    const longest = Math.max(...original.map((line) => line.length));
+    const minChars = Math.max(9, Math.ceil(longest * 0.6));
+    for (let chars = longest - 1; chars >= minChars && overlaps(box).length; chars--) {
       node.lines = original.map((line) => (line.length > chars ? `${line.slice(0, chars - 1).trimEnd()}…` : line));
       box = radialLabelBox(node);
     }
