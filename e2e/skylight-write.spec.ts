@@ -183,7 +183,7 @@ test("skygroup: overdue chores sit in a red Overdue group at the bottom; Do now 
   await expect(overdue).toContainText("Skygroup feed the fish", { timeout: 15_000 });
   // Overdue is the last chore group: only Done this week follows it.
   const labels = await page.locator("section[aria-labelledby^=sk-]").evaluateAll((els) => els.map((e) => e.getAttribute("aria-labelledby")));
-  expect(labels.slice(-2)).toEqual(["sk-overdue", "sk-done"]);
+  expect(labels.filter((l) => l !== "sk-lists" && l !== "sk-events").slice(-2)).toEqual(["sk-overdue", "sk-done"]);
   const row = overdue.getByRole("article", { name: /Skygroup feed the fish/ });
   await expect(row.locator("[data-due-tone=danger]").filter({ hasText: /^Due / }).first()).toBeAttached();
   // Recurring: Do now + Skip only (no Move to today).

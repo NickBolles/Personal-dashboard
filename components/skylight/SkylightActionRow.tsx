@@ -7,6 +7,7 @@ import { localDate } from "@/lib/time";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { CalendarIcon, CheckIcon, PeopleIcon } from "@/components/icons";
 import { IconAction } from "@/components/ui/IconAction";
+import { cx } from "@/components/ui/kit";
 import { useNow, useOnline } from "@/components/ui";
 import { dueState } from "./grouping";
 import { choreWrite, listWrite, rescheduleWrite } from "./model";
@@ -136,7 +137,15 @@ export function SkylightActionRow({
       }
       trailing={
         suggestions.length ? (
-          <div role="group" aria-label={`Suggested actions for ${action.title}`} className="flex shrink-0 flex-wrap items-center gap-1">
+          <div
+            role="group"
+            aria-label={`Suggested actions for ${action.title}`}
+            className={cx(
+              "flex shrink-0 flex-wrap items-center gap-1",
+              // Phones: 2+ icons get their own line under the title (the row wraps) so the title never collapses.
+              suggestions.length > 1 && "max-sm:order-last max-sm:basis-full max-sm:justify-end",
+            )}
+          >
             {suggestions.map((s, i) => (
               <IconAction
                 key={s.key}
