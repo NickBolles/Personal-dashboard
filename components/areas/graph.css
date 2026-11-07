@@ -1,0 +1,313 @@
+@layer components {
+  .ar-graph {
+    container: ar-graph / inline-size;
+    min-width: 0;
+    color: var(--text);
+  }
+
+  .ar-graph-header,
+  .ar-graph-breadcrumb,
+  .ar-graph-breadcrumb > span,
+  .ar-graph-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ar-graph-header {
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .ar-graph-breadcrumb {
+    flex: 1 1 240px;
+    min-width: 0;
+    font-size: 13px;
+  }
+
+  .ar-graph-breadcrumb > span {
+    min-width: 0;
+  }
+
+  .ar-graph-breadcrumb button,
+  .ar-graph-list button {
+    min-height: 44px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: var(--text);
+    text-align: start;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .ar-graph-breadcrumb button:hover,
+  .ar-graph-list button:hover {
+    background: var(--surface-2);
+    color: var(--accent);
+  }
+
+  .ar-graph-breadcrumb button[aria-current] {
+    font-weight: 600;
+  }
+
+  .ar-graph button:focus-visible,
+  .ar-graph-node:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .ar-graph .ar-graph-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .ar-graph-body {
+    display: grid;
+    gap: 12px;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ar-graph-main {
+    min-width: 0;
+  }
+
+  .ar-graph-stage {
+    position: relative;
+    height: min(70dvh, 640px);
+    min-height: 320px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-2);
+  }
+
+  .ar-graph-stage[hidden] {
+    display: none;
+  }
+
+  .ar-graph-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .ar-graph-svg {
+    display: block;
+    touch-action: none;
+    user-select: none;
+    cursor: grab;
+  }
+
+  .ar-graph-svg:active {
+    cursor: grabbing;
+  }
+
+  .ar-graph-edge {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1.25;
+    pointer-events: none;
+  }
+
+  .ar-graph-edge[data-kind="depends"] {
+    stroke: var(--warn);
+    stroke-width: 1.75;
+    stroke-dasharray: 6 4;
+  }
+
+  .ar-graph-edge[data-kind="followup"] {
+    stroke: var(--info);
+    stroke-width: 1.75;
+    stroke-dasharray: 2 4;
+    stroke-linecap: round;
+  }
+
+  .ar-graph-node {
+    cursor: pointer;
+  }
+
+  .ar-graph-hit {
+    fill: transparent;
+    stroke: none;
+  }
+
+  .ar-graph-shape {
+    stroke-width: 2px;
+  }
+
+  .ar-graph-node[data-ghost] .ar-graph-shape {
+    fill: var(--surface);
+    stroke-dasharray: 3 3;
+  }
+
+  .ar-graph-node:hover .ar-graph-shape,
+  .ar-graph-node:focus-visible .ar-graph-shape {
+    stroke: var(--accent);
+    stroke-width: 3px;
+  }
+
+  .ar-graph-label {
+    fill: var(--text);
+    font-size: 12px;
+    /* Keep edges from running through glyphs, in either theme. */
+    paint-order: stroke;
+    stroke: var(--surface-2);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+
+  .ar-graph-node[data-centre] .ar-graph-label {
+    font-size: 13px;
+    font-weight: 600;
+    stroke: var(--surface);
+  }
+
+  .ar-graph-more {
+    fill: var(--muted);
+    font-size: 12px;
+  }
+
+  .ar-graph-agent {
+    fill: var(--ai);
+    stroke: var(--surface);
+    stroke-width: 2px;
+  }
+
+  .ar-graph-agent[data-live="waiting"] {
+    fill: var(--warn);
+  }
+
+  .ar-graph-legend {
+    margin-top: 10px;
+    gap: 8px 16px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .ar-graph-legend > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ar-graph-legend i {
+    width: 20px;
+    border-top: 2px solid var(--line-strong);
+  }
+
+  .ar-graph-legend i[data-kind="depends"] {
+    border-color: var(--warn);
+    border-top-style: dashed;
+  }
+
+  .ar-graph-legend i[data-kind="followup"] {
+    border-color: var(--info);
+    border-top-style: dotted;
+  }
+
+  .ar-graph-legend i[data-kind="agent"] {
+    width: 7px;
+    height: 7px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--ai);
+  }
+
+  .ar-graph-muted {
+    color: var(--muted);
+  }
+
+  .ar-graph-hint,
+  .ar-graph-empty {
+    margin-top: 8px;
+    font-size: 12px;
+  }
+
+  .ar-graph-card {
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .ar-graph-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .ar-graph-card h4 {
+    margin-top: 14px;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ar-graph-card dl {
+    margin-bottom: 12px;
+  }
+
+  .ar-graph-card dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-block: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .ar-graph-card dd {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ar-graph-list {
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .ar-graph-list ul {
+    margin-inline-start: 10px;
+    padding-inline-start: 10px;
+    border-inline-start: 1px solid var(--line-strong);
+  }
+
+  .ar-graph-list-node {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    width: 100%;
+  }
+
+  .ar-graph-list-relation {
+    padding-inline-start: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .ar-graph-list-relation button {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  @container ar-graph (min-width: 560px) {
+    .ar-graph .ar-graph-control,
+    .ar-graph-breadcrumb button {
+      min-height: 32px;
+    }
+  }
+
+  @container ar-graph (min-width: 900px) {
+    .ar-graph-body {
+      grid-template-columns: minmax(0, 1fr) 280px;
+    }
+  }
+}
