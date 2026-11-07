@@ -867,6 +867,20 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
       return { itemId: op.itemId, kind: "import" as UndoKind, outcome: (outcome.archived ? "archived" : "deleted") as "restored" | "deleted" | "archived" };
     }
+    if (op.kind === "edit" && (JSON.parse(op.payload) as { scheduledCapture?: unknown }).scheduledCapture) {
+      const p = (JSON.parse(op.payload) as { scheduledCapture: { id: string; updatedAt: string } }).scheduledCapture;
+      const capture = tx
+        .select()
+        .from(schema.workInbox)
+        .where(and(eq(schema.workInbox.id, p.id), eq(schema.workInbox.userId, user.id)))
+        .get();
+      if (!capture || capture.updatedAt !== p.updatedAt || capture.acceptedAt || capture.dismissedAt)
+        throw new HttpError(409, "superseded", "This capture changed since it was created");
+      tx.update(schema.workInbox).set({ dismissedAt: now.toISOString(), updatedAt: now.toISOString() }).where(eq(schema.workInbox.id, p.id)).run();
+      tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+      event(tx, op.itemId, user.id, { kind: "undo", reason: "Undid scheduled Inbox capture" });
+      return { itemId: op.itemId, kind: "edit" as UndoKind, outcome: "restored" as "restored" | "deleted" | "archived" };
+    }
     if (op.kind === "tag_rename") {
       // #154 Settings → Tags rename/merge: not an item op (item_id = TAG_OPS_ITEM).
       undoTagRename(tx, user.id, JSON.parse(op.payload) as TagRenamePayload);

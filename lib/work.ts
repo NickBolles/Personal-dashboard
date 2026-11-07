@@ -286,7 +286,12 @@ export type AreaSettings = {
   aiPolicy: AiPolicy;
   /** A3: area colour from the token palette (lib/item-tags TAG_COLORS); null = none */
   color: TagColor | null;
+  /** #217: what unattended (scheduled) agent runs may do here; Finance/AI-excluded areas are always off (lib/away.ts effectiveAutonomy) */
+  autonomy: AutonomyMode;
 };
+
+export const AUTONOMY_MODES = ["propose", "low_risk"] as const;
+export type AutonomyMode = (typeof AUTONOMY_MODES)[number];
 
 export const AI_POLICIES = ["allowed", "triage_only", "excluded"] as const;
 export type AiPolicy = (typeof AI_POLICIES)[number];
@@ -303,6 +308,7 @@ export const DEFAULT_AREA_SETTINGS: AreaSettings = {
   quietDays: 3,
   aiPolicy: "allowed",
   color: null,
+  autonomy: "propose",
 };
 
 const repoRe = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
@@ -326,6 +332,7 @@ export const areaSettingsSchema = z
     quietDays: z.number().int().min(1).max(90),
     aiPolicy: z.enum(AI_POLICIES),
     color: z.enum(TAG_COLORS).nullable(),
+    autonomy: z.enum(AUTONOMY_MODES),
   })
   .partial()
   .strict();

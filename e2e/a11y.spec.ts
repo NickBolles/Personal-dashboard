@@ -11,6 +11,7 @@ import { noticesVisual } from "./fixtures/coordinator-chat";
 import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
 import { skylightGroupingVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { stubPrismV2 } from "./fixtures/smart-v2";
+import { awayFixture, schedulesFixture } from "./fixtures/away";
 
 const PAGES = [
   "/home",
@@ -78,12 +79,15 @@ for (const path of PAGES) {
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   // One page per entry; the list outgrew the 60 s default on mobile-320 (Phase 4 added /areas?tab=portfolio).
   test.setTimeout(120_000);
+  await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture() }));
+  await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture() }));
   for (const path of [
     "/home",
     "/more",
     "/chat/sess_morning",
     "/alerts",
     "/settings",
+    "/settings/agents",
     "/todos",
     "/skylight",
     "/home-control",
@@ -878,4 +882,39 @@ test("Prismv2 dynamic review sheet/panel: WCAG22AA + 200% text reflow", async ({
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expectNoHorizontalOverflow(page);
   expect(await page.getByTestId("dynamic-card").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+test("scheduled jobs and edit dialog: axe + 200% text", async ({ page }) => {
+  await stubPhase3Settings(page);
+  await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture() }));
+  await page.goto("/settings/agents#schedules");
+  const schedules = page.locator("#schedules");
+  await expect(schedules.getByText("Lantern morning check", { exact: true })).toBeVisible();
+  const cardResult = await new AxeBuilder({ page: page as never }).include("#schedules").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(cardResult.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  await schedules.getByRole("button", { name: "New job", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New scheduled job" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("switch", { name: "Job enabled" })).not.toBeChecked();
+  const result = await new AxeBuilder({ page: page as never }).include('[role="dialog"]').withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page, { soft: true });
+  expect.soft(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+test("while away ledger: axe + 200% text", async ({ page }) => {
+  await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture() }));
+  await page.goto("/home");
+  const card = page.locator("main").getByTestId("while-away").first();
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "1 change", exact: true }).click();
+  const result = await new AxeBuilder({ page: page as never })
+    .include('main [data-testid="while-away"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page, { soft: true });
+  expect.soft(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });
