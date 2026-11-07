@@ -71,3 +71,8 @@ it("does not invent routes or scope defaults", () => {
   expect(c.scopes).toEqual([]);
   expect(c.spend.jobs).toBe(0);
 });
+
+it("labels stored estimates even when the runner copied them into costUsd", () => {
+  const [c] = deriveCoordinators([{ profile: "devchief" }], [], [], [job({ costUsd: 0.4, costSource: "jarvis_estimate" })], boundaries);
+  expect(c.spend).toEqual({ todayUsd: 0.4, sevenDayUsd: 0.4, estimatedJobs: 1, jobs: 1 });
+});

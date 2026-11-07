@@ -9,7 +9,7 @@ import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
 import { formatWhen } from "@/components/actions/format";
 import { Button, ButtonLink, PageHeader, Spinner, useNow, useOnline } from "@/components/ui";
-import { SectionHeader, Segmented } from "@/components/ui/kit";
+import { EmptyState, SectionHeader, Segmented } from "@/components/ui/kit";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
 import { groupSkylightChores } from "@/components/skylight/grouping";
@@ -77,7 +77,7 @@ export function SkylightView() {
               { value: "everyone", label: "Everyone" },
             ]}
           />
-          {!choreGroups.length ? <p className="mt-4 text-sm text-muted">No open chores.</p> : null}
+          {!choreGroups.length ? <EmptyState title="No open chores." /> : null}
           {groups.map((group) => {
             const items = group.items;
             return (
@@ -93,7 +93,7 @@ export function SkylightView() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted">{group.id === "sk-done" ? "No completed chores this week." : "No open chores."}</p>
+                  <EmptyState title={group.id === "sk-done" ? "No completed chores this week." : "No open chores."} />
                 )}
               </section>
             );
@@ -111,7 +111,7 @@ export function SkylightView() {
                 />
               ))}
             </div>
-            {!extra.lists?.length ? <p className="text-sm text-muted">No lists.</p> : null}
+            {!extra.lists?.length ? <EmptyState title="No lists." /> : null}
           </section>
           <section aria-labelledby="sk-events" className="mt-6">
             <SectionHeader
@@ -154,7 +154,7 @@ export function SkylightView() {
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-muted">No events this week.</p>
+              <EmptyState title="No events this week." />
             )}
           </section>
         </>

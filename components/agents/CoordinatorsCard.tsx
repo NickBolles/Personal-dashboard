@@ -21,7 +21,11 @@ function Lock() {
 }
 
 export function CoordinatorsCard() {
-  const q = useQuery({ queryKey: ["settings", "agents", "coordinators"], queryFn: () => api.get<CoordinatorsResponse>("/api/settings/agents/coordinators") });
+  const q = useQuery({
+    queryKey: ["settings", "agents", "coordinators"],
+    queryFn: () => api.get<CoordinatorsResponse>("/api/settings/agents/coordinators"),
+    refetchInterval: 30_000,
+  });
   const b = q.data?.budget;
   return (
     <Card>

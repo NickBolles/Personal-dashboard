@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { stubPhase3Settings } from "./fixtures/phase3-gaps";
 import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatPanel, startConversation } from "./helpers";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { PHOTO_PNG } from "./fixtures/chat-files";
@@ -824,4 +825,28 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await axe("sheet changes");
   await zoom();
   await page.keyboard.press("Escape");
+});
+
+test("alder settings appearance + sub-page section nav: one h1, current section and 200% reflow", async ({ page }) => {
+  await stubPhase3Settings(page);
+  await page.goto("/settings");
+  await expect(page.getByRole("radiogroup", { name: "Theme", exact: true })).toBeVisible();
+  await page.getByRole("radio", { name: "Dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByRole("radio", { name: "Compact", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+  await page.getByRole("radio", { name: "System", exact: true }).click();
+  await page.getByRole("radio", { name: "Auto", exact: true }).click();
+  await page.goto("/settings/agents");
+  await expect(page.getByRole("heading", { name: "Coordinators", exact: true })).toBeVisible();
+  await expect(page.locator("h1")).toHaveCount(1);
+  const nav = page.locator('nav[aria-label="Settings sections"]');
+  if ((page.viewportSize()?.width ?? 0) >= 1024) {
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Agents", exact: true })).toHaveAttribute("aria-current", "page");
+  } else await expect(nav).toBeHidden();
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+  const results = await new AxeBuilder({ page: page as never }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
+  expect(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
 });

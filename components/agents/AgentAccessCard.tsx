@@ -35,6 +35,7 @@ export function AgentAccessCard() {
       setProfile("");
       setScopes(DEFAULT_AGENT_SCOPES);
       await qc.invalidateQueries({ queryKey: KEY });
+      await qc.invalidateQueries({ queryKey: ["settings", "agents", "coordinators"] });
     } catch (err) {
       toast((err as Error).message, "danger");
     } finally {
@@ -47,6 +48,7 @@ export function AgentAccessCard() {
       await api.del(`/api/settings/agents/tokens/${encodeURIComponent(t.id)}`);
       setConfirm(null);
       await qc.invalidateQueries({ queryKey: KEY });
+      await qc.invalidateQueries({ queryKey: ["settings", "agents", "coordinators"] });
       toast(`Revoked ${t.name}`, "ok");
     } catch (err) {
       toast((err as Error).message, "danger");

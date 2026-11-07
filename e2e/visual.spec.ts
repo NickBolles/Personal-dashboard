@@ -20,6 +20,7 @@ import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-dem
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
+import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -36,6 +37,7 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
 test.beforeEach(async ({ request, page }) => {
+  await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
@@ -1948,5 +1950,36 @@ for (const scheme of ["light", "dark"] as const) {
       expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) }),
     );
     await t2.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Phase 3 gaps: full Agents page was missing (agent-access above crops only one card).
+// Settings/todos/people/house/workouts and the palette already run on all projects above; do not duplicate those shots.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: coordinators settings page (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await stubPhase3Settings(page);
+    await page.goto("/settings/agents");
+    await expect(page.getByRole("heading", { name: "Coordinators", exact: true })).toBeVisible();
+    await expect(page.getByRole("progressbar", { name: "Shared daily AI job budget used", exact: true })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await expect(page).toHaveScreenshot(`settings-agents-coordinators-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
+  });
+
+  test(`visual: appearance settings card (${scheme})`, async ({ page }, info) => {
+    test.skip(info.project.name !== "desktop", "Settings desktop appearance detail; page shots already cover phone");
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await stubPhase3Settings(page);
+    await page.goto("/settings");
+    const appearance = page.getByRole("region", { name: "Appearance", exact: true });
+    await expect(appearance.getByRole("radiogroup", { name: "Density", exact: true })).toBeVisible();
+    const overlays = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    try {
+      await expect(appearance).toHaveScreenshot(`settings-appearance-${scheme}.png`);
+    } finally {
+      await overlays.evaluate((el) => (el as Element).remove());
+    }
   });
 }

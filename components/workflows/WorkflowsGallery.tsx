@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, ButtonLink, Page, PageHeader, useToast } from "@/components/ui";
-import { ChipSelect } from "@/components/ui/kit";
+import { Banner, ChipSelect, EmptyState, Skeleton } from "@/components/ui/kit";
 
 type Summary = {
   id: string;
@@ -227,14 +227,24 @@ export function WorkflowsGallery() {
 
       <h2 className="mb-2 text-sm font-semibold">Your workflows</h2>
       {q.isLoading ? (
-        <p className="text-sm text-muted">Loading…</p>
-      ) : q.isError ? (
-        <p className="text-sm text-danger">Couldn&apos;t load workflows.</p>
-      ) : mine.length === 0 ? (
-        <div className="card mb-6 p-4 text-sm">
-          <p className="font-semibold">No workflows yet</p>
-          <p className="text-muted">Import a workflow JSON file to add one. It arrives as a draft until you turn it on.</p>
+        <div role="status" aria-label="Loading workflows">
+          <Skeleton />
+          <Skeleton />
+          <Skeleton />
         </div>
+      ) : q.isError ? (
+        <Banner
+          tone="bad"
+          action={
+            <Button type="button" size="sm" onClick={() => q.refetch()}>
+              Retry
+            </Button>
+          }
+        >
+          Couldn&apos;t load workflows.
+        </Banner>
+      ) : mine.length === 0 ? (
+        <EmptyState title="No workflows yet">Import a workflow JSON file to add one. It arrives as a draft until you turn it on.</EmptyState>
       ) : (
         <ul className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Your workflows">
           {mine.map((w) => (
