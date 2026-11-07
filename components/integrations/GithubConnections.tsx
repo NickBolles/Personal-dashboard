@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { fineGrainedTokenUrl, parseRepoList, type GithubSettingsResponse, type GithubTestResult, type PublicGithubConnection } from "@/lib/github";
-import { Badge, Button, Dialog, ErrorNote, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { Badge, Button, Dialog, ErrorNote, Field, cx, inputCls, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
+import { EmptyState } from "@/components/ui/kit";
 import { CheckIcon } from "@/components/icons";
 import { GithubAppSection } from "./GithubApp";
 
@@ -32,7 +34,7 @@ function useGithubMutation<V, R = unknown>(fn: (v: V) => Promise<R>, opts: { ok?
 export function GithubConnections() {
   const q = useQuery({ queryKey: KEY, queryFn: () => api.get<GithubSettingsResponse>("/api/github") });
   const [adding, setAdding] = useState(false);
-  if (q.isPending) return <Spinner label="Loading GitHub settings…" />;
+  if (q.isPending) return <LoadingState label="Loading GitHub settings…" />;
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const s = q.data;
   return (
@@ -66,7 +68,7 @@ export function GithubConnections() {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted">No GitHub tokens yet.</p>
+          <EmptyState title="No GitHub tokens yet." />
         )}
       </section>
 

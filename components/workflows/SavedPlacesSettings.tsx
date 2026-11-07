@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Card, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
-import { ChipButton, ChipInput } from "@/components/ui/kit";
+import { Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
+import { ChipButton, ChipInput, EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type Place = { id: string; label: string; addressText: string | null; radiusM: number; lat: number | null; lng: number | null };
 
@@ -53,11 +54,11 @@ export function SavedPlacesSettings() {
       <PageHeader title="Saved places" subtitle="Places a workflow's Place field can pick, and that “Use my location” matches on this device." />
       <Card>
         {q.isPending ? (
-          <Spinner label="Loading places…" />
+          <LoadingState label="Loading places…" />
         ) : q.error ? (
           <ErrorNote error={q.error} retry={() => q.refetch()} />
         ) : !q.data.places.length ? (
-          <p className="text-[14px] text-muted">No saved places yet. Save one from a workflow&apos;s start form (Place → Save this place).</p>
+          <EmptyState title="No saved places yet. Save one from a workflow's start form (Place → Save this place)." />
         ) : (
           <ul className="wk-rows" data-testid="places-list">
             {q.data.places.map((p) => (

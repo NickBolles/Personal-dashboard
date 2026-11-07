@@ -61,11 +61,13 @@ CP1 — Done (local implementation)
 - Live Will create preview with capture icon, actual API-derived title (first line / URL host / Screenshot fallback) and Inbox destination. Capture has no due parser or area/project picker, so no invented date or path is shown. Existing labels remain.
 - Files: components/capture/{CaptureSheet.tsx,CapturePreview.tsx}; test/phase3-shortcuts.test.tsx.
 
-G6 — Partial (bounded sweep, not all requested pages)
+G6 — Partial (round 2 completes the allowed non-Areas sweep; shared decisions list is lane-protected)
 
 - Kit empty states in agent routes, shared conversations, Skylight chore/list/event sections, House exceptions/controls and workflow list. Workflow loading uses skeletons; workflow failure has error Banner + Retry. Agents loading/error retains exactly one h1.
-- Existing strings preserved. Remaining plain-text states in other settings sub-pages, people, workouts and finance were not swept.
+- Round 2: added named kit skeleton loading, retained retryable error banners, and converted empty states in Todos, Alerts/Approvals, People, Workouts, Brain, Daily Compass, and Settings Notifications/Phones/Tags/Places/Activity/Connections (including integration panels). Phone read failures no longer claim there are no paired phones; failed Bible/Drive loads no longer spin forever; workout initial read errors stop loading and offer a read-only Retry. Notification categories cannot write while preferences are unavailable. Existing strings preserved.
+- The /decisions list still belongs to components/map/{DecisionsView,Decisions}.tsx, explicitly protected by the Areas lane rule. Left unchanged rather than duplicating answer/Undo state or altering another lane. Decision detail and the Approvals list already use kit states.
 - Files: components/agents/AgentsSettingsView.tsx; app/(shell)/settings/SharedConversations.tsx; app/(shell)/skylight/SkylightView.tsx; app/(shell)/home-control/HomeControlView.tsx; components/workflows/WorkflowsGallery.tsx.
+- Round 2 files: components/ui/LoadingState.tsx; app/(shell)/{todos/TodosView,alerts/AlertsView,brain/BrainView,daily-compass/CompassView,workouts/WorkoutView}.tsx; app/(shell)/settings/{activity/ActivityView,connections/ConnectionsView,notifications/NotificationSettingsView,people/PeopleView,phones/PhonesView}.tsx; components/NotificationSetup.tsx; components/integrations/{IntegrationForm,DriveConnection,BiblePackSettings,GithubConnections}.tsx; components/work/TagsSettingsView.tsx; components/workflows/SavedPlacesSettings.tsx; test/non-area-states.test.tsx.
 
 FI1 — Skipped
 

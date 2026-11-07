@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { JarvisNotification } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Empty, ErrorNote, OverflowMenu, Page, PageHeader, SourceBadge, Spinner, cx, useToast, type Tone } from "@/components/ui";
+import { Badge, Button, Empty, ErrorNote, OverflowMenu, Page, PageHeader, SourceBadge, cx, useToast, type Tone } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { AlertIcon, BellIcon } from "@/components/icons";
 import Link from "next/link";
 import { useAccess } from "@/components/access";
@@ -85,7 +86,7 @@ export function AlertsView() {
       ) : null}
       {tab === "approvals" ? (
         <section aria-label="Pending approvals">
-          {decisions.isPending ? <Spinner label="Loading approvals…" /> : null}
+          {decisions.isPending ? <LoadingState label="Loading approvals…" /> : null}
           {decisions.error ? <ErrorNote error={decisions.error} retry={() => decisions.refetch()} /> : null}
           {decisions.data && !decisions.data.entries.length ? (
             <EmptyState title="Nothing needs your approval">Decisions and approval requests appear here.</EmptyState>
@@ -127,7 +128,7 @@ export function AlertsView() {
           ))}
         </div>
         {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
-        {q.isLoading ? <Spinner label="Loading alerts…" /> : null}
+        {q.isLoading ? <LoadingState label="Loading alerts…" /> : null}
         {q.data && !list.length ? <Empty title="You're all caught up">New alerts from Hermes, home, and your sources will appear here.</Empty> : null}
         <ul className={cx("rows", list.length > 0 && "card p-0")} data-dynamic>
           {list.map((n) => {

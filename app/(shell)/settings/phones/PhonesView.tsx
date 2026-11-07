@@ -6,7 +6,8 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { CaptureTokens } from "@/components/capture/CaptureTokens";
-import { Badge, Button, Card, Empty, ErrorNote, Field, PageHeader, Spinner, inputCls, useNow, useToast } from "@/components/ui";
+import { Badge, Button, Card, Empty, ErrorNote, Field, PageHeader, inputCls, useNow, useToast } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 
 type Device = { id: string; name: string; platform: string; appVersion?: string; pushEnabled: boolean; createdAt: string; lastSeenAt: string };
 type Pairing = { code: string; expiresAt: string; server: string; uri: string; qrSvg: string };
@@ -100,9 +101,9 @@ export function PhonesView() {
 
       <Card>
         <h2 className="mb-2 font-semibold">Paired phones</h2>
-        {devices.isLoading ? <Spinner label="Loading…" /> : null}
+        {devices.isLoading ? <LoadingState label="Loading…" /> : null}
         {devices.error ? <ErrorNote error={devices.error} retry={() => devices.refetch()} /> : null}
-        {!devices.isLoading && !list.length ? <Empty title="No phones paired yet" /> : null}
+        {devices.data && !devices.error && !list.length ? <Empty title="No phones paired yet" /> : null}
         <ul className="divide-y divide-line">
           {list.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
@@ -126,6 +127,8 @@ export function PhonesView() {
 
       <Card>
         <h2 className="font-semibold">Phone notifications (Firebase)</h2>
+        {push.isPending ? <LoadingState label="Loading phone notifications…" /> : null}
+        {push.error ? <ErrorNote error={push.error} retry={() => push.refetch()} /> : null}
         <p className="mt-1 text-sm text-muted">
           Android delivers notifications to a closed app through Firebase Cloud Messaging. Set it up once (free): create a Firebase project, add an Android app
           with package <code>com.nickbolles.jarvis</code>, download its <code>google-services.json</code>, and create a service-account key under Project
