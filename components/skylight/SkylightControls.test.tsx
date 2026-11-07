@@ -58,7 +58,7 @@ it("round chore checkbox delegates completion instead of calling /api/actions", 
   const request = vi.fn();
   mount(<SkylightActionRow action={action} writable request={request} management />);
   fireEvent.click(screen.getByRole("checkbox", { name: `Done: ${action.title}` }));
-  expect(request).toHaveBeenCalledWith({ op: "chore.complete", title: action.title, choreId: "chore", categoryId: null });
+  expect(request).toHaveBeenCalledWith({ op: "chore.complete", title: action.title, choreId: "chore", categoryId: null }, action.id);
   expect(api.post).not.toHaveBeenCalled();
   expect(screen.queryByRole("link", { name: /Open Skylight/ })).toBeNull();
 });
@@ -99,11 +99,11 @@ it("claims a nonrecurring up-for-grabs chore and reopens a completed chore", () 
   const request = vi.fn();
   const view = mount(<SkylightActionRow action={action} writable request={request} management />);
   fireEvent.click(screen.getByRole("button", { name: `Claim: ${action.title}` }));
-  expect(request).toHaveBeenCalledWith({ op: "chore.claim", choreId: "chore", title: action.title, fromCategoryId: null });
+  expect(request).toHaveBeenCalledWith({ op: "chore.claim", choreId: "chore", title: action.title, fromCategoryId: null }, action.id);
   view.unmount();
   mount(<SkylightActionRow action={{ ...action, status: "completed" }} writable request={request} management />);
   fireEvent.click(screen.getByRole("button", { name: `Reopen: ${action.title}` }));
-  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ op: "chore.reopen" }));
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ op: "chore.reopen" }), action.id);
 });
 
 it("lists show pending before completed, limit done to five, and confirm before changing checks", () => {
@@ -151,7 +151,10 @@ it("completed list rows request uncheck, not chore completion", () => {
     />,
   );
   fireEvent.click(screen.getByRole("checkbox", { name: "Paper towels" }));
-  expect(request).toHaveBeenCalledWith({ op: "list.uncheck", label: "Paper towels", listId: "7001", listLabel: "Groceries", itemId: "paper" });
+  expect(request).toHaveBeenCalledWith(
+    { op: "list.uncheck", label: "Paper towels", listId: "7001", listLabel: "Groceries", itemId: "paper" },
+    expect.any(String),
+  );
   expect(api.post).not.toHaveBeenCalled();
 });
 
