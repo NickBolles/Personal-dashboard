@@ -1799,7 +1799,64 @@ export const agentTokens = sqliteTable(
   (t) => [uniqueIndex("agent_tokens_hash_idx").on(t.tokenHash), index("agent_tokens_user_idx").on(t.userId)],
 );
 
-/** Runs an agent registered on an item through MCP (jarvis_run_start/update); shown in the agent runs panel. */
+/** Owner-managed coordinator schedules. New rows always start disabled. */
+export const scheduledJobs = sqliteTable(
+  "scheduled_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    areaId: text("area_id"),
+    title: text("title").notNull(),
+    kind: text("kind").notNull(),
+    prompt: text("prompt").notNull(),
+    scheduleJson: text("schedule_json").notNull(),
+    tz: text("tz").notNull(),
+    overnight: integer("overnight", { mode: "boolean" }).notNull().default(false),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    templateKey: text("template_key"),
+    sessionId: text("session_id"),
+    lastRunAt: text("last_run_at"),
+    lastStatus: text("last_status").notNull().default("never"),
+    lastError: text("last_error"),
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("scheduled_jobs_user_idx").on(t.userId)],
+);
+
+export const scheduledJobRuns = sqliteTable(
+  "scheduled_job_runs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => scheduledJobs.id, { onDelete: "cascade" }),
+    slot: text("slot").notNull(),
+    status: text("status").notNull().default("running"),
+    silent: integer("silent", { mode: "boolean" }).notNull().default(false),
+    hermesRunId: text("hermes_run_id"),
+    sessionId: text("session_id"),
+    agentRunId: text("agent_run_id"),
+    profile: text("profile"),
+    startedAt: text("started_at").notNull().default(now),
+    finishedAt: text("finished_at"),
+    summary: text("summary"),
+    report: text("report"),
+    error: text("error"),
+    changesJson: text("changes_json").notNull().default("[]"),
+    decisionsJson: text("decisions_json").notNull().default("[]"),
+    refusedJson: text("refused_json").notNull().default("[]"),
+  },
+  (t) => [uniqueIndex("scheduled_job_runs_slot_idx").on(t.jobId, t.slot), index("scheduled_job_runs_user_at_idx").on(t.userId, t.startedAt)],
+);
+
+/** Runs an agent registered on an item through MCP or the scheduler; shown in the agent runs panel. */
 export const agentRuns = sqliteTable(
   "agent_runs",
   {
