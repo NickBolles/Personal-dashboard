@@ -131,7 +131,10 @@ test("phone overview: areas, needs you, in progress, outstanding", async ({ page
   test.skip(info.project.name.startsWith("desktop"), "phone layout");
   await page.goto("/home");
   const s = await seed(page);
-  const p = await page.request.patch(`/api/work/items/${s.item}`, { data: { status: "in_progress" }, headers: { "x-jarvis-csrf": "1" } });
+  const p = await page.request.patch(`/api/work/items/${s.item}`, {
+    data: { status: "in_progress", nextAction: "Polish the lantern glass" },
+    headers: { "x-jarvis-csrf": "1" },
+  });
   expect(p.ok(), await p.text()).toBeTruthy();
   await page.goto("/areas");
   const order = await page.evaluate(() =>
