@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { Button, Card, ErrorNote, Spinner, useToast } from "@/components/ui";
+import { EmptyState } from "@/components/ui/kit";
 
 type Shared = { conversations: { id: string; title: string; lastActiveAt: string | null }[]; unavailable: string[] };
 
@@ -29,7 +30,7 @@ export function SharedConversations() {
       <p className="mb-2 text-sm text-muted">Others in the household can read and fork these; only you can continue them.</p>
       {q.isPending ? <Spinner label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
-      {q.data && !list.length ? <p className="text-sm text-muted">You aren&apos;t sharing any conversations.</p> : null}
+      {q.data && !list.length ? <EmptyState title="You aren't sharing any conversations." /> : null}
       {list.length ? (
         <ul className="rows" aria-label="Shared conversations">
           {list.map((c) => (
