@@ -6,7 +6,8 @@ import { setSetting, updatePreferences } from "@/server/settings";
 import { createItem, listItems, updateItem, undoOp } from "@/server/work/store";
 import { listActivity } from "@/server/work/activity";
 import { agentRuns } from "@/server/work/agent-runs";
-import { createJob, patchJob, listSchedules, jobRow, R } from "@/server/agents/schedules";
+import { createJob, patchJob, listSchedules, jobRow, deleteJob, runCaps, R } from "@/server/agents/schedules";
+import { listDecisions } from "@/server/work/decisions";
 import { defaultDeps, claimJobSlot, runSchedulePass, runJobNow, reconcileScheduledRuns, tickSchedules, type SchedulerDeps } from "@/server/agents/scheduler";
 import { awayDigest, dismissAway } from "@/server/agents/away";
 import { applyProposals } from "@/server/agents/proposals";
@@ -235,7 +236,7 @@ describe("reconciliation and digest", () => {
     await reconcileScheduledRuns(owner, now, deps);
     await reconcileScheduledRuns(owner, now, deps);
     const digest = awayDigest(owner, now);
-    expect(digest.counts).toEqual({ ran: 1, failed: 0, changes: 1, needsYou: 1, running: 0 });
+    expect(digest.counts).toEqual({ ran: 1, failed: 0, changes: 1, needsYou: 1, running: 0, waiting: 0 });
     expect(digest.runs[0].refused).toHaveLength(1);
     expect(listItems(owner.id).filter((i) => i.title === "Lantern check-in note")).toHaveLength(1);
     expect(deps.notify).toHaveBeenCalledTimes(1);
@@ -256,14 +257,6 @@ describe("reconciliation and digest", () => {
     expect(jobRow(owner, j.id).lastStatus).toBe("silent");
     expect(awayDigest(owner, now).runs[0].silent).toBe(true);
     expect(deps.notify).not.toHaveBeenCalled();
-  });
-  it("approval/clarify stays running with waiting summary", async () => {
-    const j = job();
-    await runJobNow(owner, j.id, now, deps);
-    vi.mocked(deps.getRun).mockResolvedValue({ runId: "h", sessionId: "s", status: "waiting_for_approval" });
-    await reconcileScheduledRuns(owner, now, deps);
-    expect(rows()[0]).toMatchObject({ status: "running", summary: "Waiting for you" });
-    expect(awayDigest(owner, now).counts.running).toBe(1);
   });
   it("rechecks changed autonomy before applying and throttles lazy reconciliation", async () => {
     const j = job();
@@ -372,5 +365,98 @@ describe("policy end to end", () => {
     const response = await mcp(req);
     expect((await response.json()).result.isError).toBe(true);
     expect(listItems(owner.id).find((i) => i.id === areaId)!.settings!.autonomy).toBe("propose");
+  });
+});
+
+describe("#230 follow-ups", () => {
+  it("approval/clarify shows as Needs you (not running), notifies once and clears on resume", async () => {
+    const j = job();
+    await runJobNow(owner, j.id, now, deps);
+    vi.mocked(deps.getRun).mockResolvedValue({ runId: "h", sessionId: "s", status: "waiting_for_approval" });
+    await reconcileScheduledRuns(owner, now, deps);
+    await reconcileScheduledRuns(owner, new Date(now.getTime() + 60_000), deps);
+    expect(rows()[0]).toMatchObject({ status: "running", summary: "Waiting for you" });
+    const digest = awayDigest(owner, now);
+    expect(digest.runs[0].waiting).toBe(true);
+    expect(digest.counts).toMatchObject({ running: 0, waiting: 1, needsYou: 1 });
+    expect(deps.notify).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(deps.notify).mock.calls[0][0]).toMatchObject({ dedupeKey: `away-wait:${rows()[0].id}` });
+    vi.mocked(deps.getRun).mockResolvedValue({ runId: "h", sessionId: "s", status: "running" });
+    await reconcileScheduledRuns(owner, new Date(now.getTime() + 120_000), deps);
+    expect(awayDigest(owner, now).counts).toMatchObject({ running: 1, waiting: 0 });
+    vi.mocked(deps.getRun).mockResolvedValue({ runId: "h", sessionId: "s", status: "waiting_for_approval" });
+    await reconcileScheduledRuns(owner, new Date(now.getTime() + 180_000), deps);
+    await reconcileScheduledRuns(owner, new Date(now.getTime() + RUN_TIMEOUT_MS + 1), deps);
+    expect(rows()[0]).toMatchObject({ status: "failed", error: "Timed out waiting for your approval" });
+  });
+  it("dismissing while a run is active still surfaces its result when it finishes", async () => {
+    const j = job();
+    await runJobNow(owner, j.id, now, deps);
+    const later = new Date(now.getTime() + 5 * 60_000);
+    dismissAway(owner, new Date(now.getTime() + 60_000));
+    expect(awayDigest(owner, later).counts.running).toBe(1);
+    complete(proposals([{ intent: "create_note", title: "Finished after dismiss" }]));
+    await reconcileScheduledRuns(owner, later, deps);
+    const digest = awayDigest(owner, later);
+    expect(digest.runs).toHaveLength(1);
+    expect(digest.counts).toMatchObject({ ran: 1, changes: 1 });
+    dismissAway(owner, new Date(later.getTime() + 1));
+    expect(awayDigest(owner, later).runs).toHaveLength(0);
+  });
+  it("deleting a job keeps its run ledger: the daily cap and digest still count it", async () => {
+    setSetting("away_max_runs_per_day", 1);
+    const j = job();
+    await runJobNow(owner, j.id, now, deps);
+    complete("Done.");
+    await reconcileScheduledRuns(owner, now, deps);
+    deleteJob(owner, j.id, "test", now);
+    expect(listSchedules(owner, now).jobs.some((x) => x.id === j.id)).toBe(false);
+    expect(() => jobRow(owner, j.id)).toThrow();
+    expect(runCaps(owner, now).runsToday).toBe(1);
+    expect(awayDigest(owner, now).runs.map((r) => r.jobTitle)).toEqual(["Check in"]);
+    // "Undo" re-creates the job; the cap is not reset.
+    const again = job();
+    await expect(runJobNow(owner, again.id, now, deps)).rejects.toMatchObject({ code: "daily_cap" });
+  });
+  it("propose-only decisions persist the proposed content and name the original target on fallback", async () => {
+    updateItem(owner, areaId, { settings: { autonomy: "propose" } }, "test");
+    const target = createItem(owner, { kind: "thread", title: "Lantern thread", parentId: areaId }, "test");
+    const note = applyProposals(owner, areaId, "Overnight", "devchief", [
+      { intent: "create_note", itemId: target.id, title: "Morning brief", text: "Line one\nLine two", why: "Triage" },
+    ]);
+    expect(note.decisions[0]).toMatchObject({ itemId: target.id });
+    const saved = listItems(owner.id).find((i) => i.id === target.id)!.decision!;
+    expect(saved.detail).toBe("Morning brief\n\nLine one\nLine two");
+    const entry = listDecisions(owner).entries.find((e) => e.itemId === target.id)!;
+    expect(entry.detail).toContain("Line two");
+    // Target already has a decision: archive is asked on the area, naming the thread, never as "archive the area".
+    const out = applyProposals(owner, areaId, "Overnight", "devchief", [{ intent: "archive", itemId: target.id, why: "Stale" }]);
+    expect(out.decisions[0]).toMatchObject({ itemId: areaId, targetId: target.id, targetTitle: "Lantern thread" });
+    const q = listItems(owner.id).find((i) => i.id === areaId)!.decision!.question;
+    expect(q).toContain("archive “Lantern thread”");
+    expect(q).toContain("already has an open decision");
+    expect(q).not.toContain("proposes: archive");
+    expect(listItems(owner.id).find((i) => i.id === target.id)).toMatchObject({ archived: false });
+  });
+  it("while a scheduled run is active, the profile's MCP direct writes are refused; proposals still work", async () => {
+    const { token } = mintAgentToken(owner, { name: "Sched", profile: "devchief", scopes: ["work.write", "decisions.write"] }, "test");
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const req = new NextRequest("http://localhost/api/mcp", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+      });
+      return (await (await mcp(req)).json()).result as { isError?: boolean; content: { text: string }[] };
+    };
+    const j = job();
+    const row = claimJobSlot(owner, j, "slot-mcp", new Date())!;
+    getDb().update(R).set({ profile: "devchief" }).where(eq(R.id, row.id)).run();
+    const refused = await call("jarvis_add_note", { itemId: areaId, title: "Direct write" });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).toContain("scheduled_run");
+    expect(listItems(owner.id).some((i) => i.title === "Direct write")).toBe(false);
+    expect((await call("jarvis_raise_decision", { itemId: areaId, question: "Ok?" })).isError).toBeFalsy();
+    getDb().update(R).set({ status: "done" }).where(eq(R.id, row.id)).run();
+    expect((await call("jarvis_add_note", { itemId: areaId, title: "Direct write" })).isError).toBeFalsy();
   });
 });

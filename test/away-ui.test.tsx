@@ -355,7 +355,7 @@ it("shows running and skipped states, omits closed decisions and zero count chip
     { ...away.runs[0], status: "running", changes: [], decisions: [], refused: [], summary: null },
     { ...away.runs[1], status: "skipped", silent: false, changes: [], decisions: [{ ...away.runs[0].decisions[0], open: false }] },
   ];
-  away.counts = { ran: 0, failed: 0, changes: 0, needsYou: 0, running: 1 };
+  away.counts = { ran: 0, failed: 0, changes: 0, needsYou: 0, running: 1, waiting: 0 };
   render(<WhileAwayCard />, { wrapper });
   await screen.findByTestId("while-away");
   expect(screen.getByRole("img", { name: "Running" })).toBeTruthy();

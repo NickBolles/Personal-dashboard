@@ -1,16 +1,16 @@
 import "server-only";
-import { and, desc, eq, gt, ne } from "drizzle-orm";
+import { and, desc, eq, gt, ne, or } from "drizzle-orm";
 import type { CurrentUser } from "@/server/auth";
 import { getDb } from "@/server/db";
 import { getSetting, setSetting } from "@/server/settings";
 import { listItems } from "@/server/work/store";
 import { localMinutes } from "@/lib/time";
-import { effectiveAutonomy, type AwayDigest, type AwayRun } from "@/lib/away";
+import { effectiveAutonomy, WAITING_SUMMARY, type AwayDigest, type AwayRun } from "@/lib/away";
 import { J, R, assertAwayOwner, jobRow, scheduleTimezone, type RunRow } from "./schedules";
 import { audit } from "@/server/audit";
 const dismissKey = (id: string) => `away_digest_dismissed_at:${id}`;
 export function awayRun(user: CurrentUser, row: RunRow): AwayRun {
-  const job = jobRow(user, row.jobId);
+  const job = jobRow(user, row.jobId, true);
   const items = listItems(user.id);
   const area = items.find((i) => i.id === job.areaId);
   const decisions = JSON.parse(row.decisionsJson) as AwayRun["decisions"];
@@ -24,6 +24,7 @@ export function awayRun(user: CurrentUser, row: RunRow): AwayRun {
     manual: row.slot.startsWith("manual:"),
     status: row.status as AwayRun["status"],
     silent: row.silent,
+    waiting: row.status === "running" && row.summary === WAITING_SUMMARY,
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
     summary: row.summary,
@@ -48,7 +49,9 @@ export function awayDigest(user: CurrentUser, now = new Date()): AwayDigest {
     .select({ run: R, areaId: J.areaId })
     .from(R)
     .innerJoin(J, eq(J.id, R.jobId))
-    .where(and(eq(R.userId, user.id), ne(R.status, "skipped"), gt(R.startedAt, since)))
+    // A run counts as new when it FINISHED after the dismissal (#230): runs already running when the
+    // owner dismissed still surface their results. Active runs always show.
+    .where(and(eq(R.userId, user.id), ne(R.status, "skipped"), or(eq(R.status, "running"), gt(R.finishedAt, since), gt(R.startedAt, since))))
     .orderBy(desc(R.startedAt))
     .all()
     .filter((r) => r.areaId && eligible.has(r.areaId))
@@ -58,8 +61,9 @@ export function awayDigest(user: CurrentUser, now = new Date()): AwayDigest {
     ran: runs.filter((r) => r.status === "done" || r.status === "failed").length,
     failed: runs.filter((r) => r.status === "failed").length,
     changes: runs.reduce((n, r) => n + r.changes.length, 0),
-    needsYou: runs.reduce((n, r) => n + r.decisions.filter((d) => d.open).length, 0),
-    running: runs.filter((r) => r.status === "running").length,
+    needsYou: runs.reduce((n, r) => n + r.decisions.filter((d) => d.open).length, 0) + runs.filter((r) => r.waiting).length,
+    running: runs.filter((r) => r.status === "running" && !r.waiting).length,
+    waiting: runs.filter((r) => r.waiting).length,
   };
   const prefix = localMinutes(now, scheduleTimezone()) < 660 ? "Overnight" : "While you were away";
   const parts = [`${counts.ran} ran`, ...(counts.needsYou ? [`${counts.needsYou} needs you`] : []), ...(counts.running ? [`${counts.running} running`] : [])];
