@@ -4,7 +4,7 @@ Scheduled jobs live in Jarvis, not Hermes cron. The standalone notification disp
 
 ## Enable a job
 
-Open Settings → Agents → Scheduled jobs. Review its area, prompt, local time and overnight option, then enable it. All new jobs, suggested templates and imports arrive disabled. Templates seed once per owner. Missing/deleted areas need a new selection. Finance and AI-excluded areas cannot run, including Run now.
+Open Settings → Agents → Scheduled jobs. Review its area, prompt, local time and overnight option, then enable it. All new jobs, suggested templates and imports arrive disabled. Templates seed once per owner. Missing/deleted areas need a new selection. AI-excluded areas cannot run, including Run now. Finance defaults to propose like any area; triage-only stays propose-only. Credentials/tokens/passwords stay blocked, and account numbers are masked to last 4 before prompts leave.
 
 Schedules use the household timezone when created. Daily, weekdays and weekly schedules are supported; DST follows the shared schedule contract. A slot has a 30-minute grace window. Missed windows are not replayed. A unique `(job_id, slot)` database claim prevents duplicate execution. Run now requires `{ "confirm": true }`, uses a separate minute-scoped slot and ignores quiet hours, but still enforces policy, daily cap and one active run per job. An area cannot be changed and a job cannot be deleted while a run is active.
 
@@ -25,13 +25,13 @@ Schedules use the household timezone when created. Daily, weekdays and weekly sc
 | Status/assignee, project/link, decision               | Needs-you decision         | Needs-you decision                                                          |
 | Settle, abandon, supersede, archive, move             | Owner-only change proposal | Owner-only change proposal                                                  |
 | Merge, deploy, spend, send externally                 | Refused                    | Refused                                                                     |
-| Any intent in Finance/AI-excluded area                | AI off                     | AI off                                                                      |
+| Any intent in an AI-excluded area                     | AI off                     | AI off                                                                      |
 
 The run is instructed to propose, never write with tools. The server validates every proposal target against the owner's live area subtree before writing. It rechecks autonomy when applying the result. Lifecycle changes are never performed. Existing decisions are never overwritten: use the area as fallback, otherwise record a refusal. Inbox captures never trigger recursive AI work, and have Activity undo that dismisses only an unchanged, unfiled capture. Agent tools cannot edit area settings, including autonomy.
 
 ## Digest and API
 
-Owner-only JSON endpoints: `/api/agents/schedules` (CRUD), `/:id/run`, `/export`, `/import`, `/api/agents/away` and `/api/agents/away/dismiss`. Schedule endpoints require admin capability in addition to ownership. Exports download as `jarvis-schedules.json`; imports match area titles case-insensitively, dedupe title+area, enforce the cap and never enable a job. Finance/excluded matches import unassigned; missing matches import unassigned with an `area not found` warning.
+Owner-only JSON endpoints: `/api/agents/schedules` (CRUD), `/:id/run`, `/export`, `/import`, `/api/agents/away` and `/api/agents/away/dismiss`. Schedule endpoints require admin capability in addition to ownership. Exports download as `jarvis-schedules.json`; imports match area titles case-insensitively, dedupe title+area, enforce the cap and never enable a job. AI-excluded matches import unassigned; missing matches import unassigned with an `area not found` warning.
 
 The digest reconciles active runs (throttled to once per 10 seconds), reads at most 20 non-skipped runs since dismissal (24 hours initially), and counts decisions that are still open. It excludes areas currently unavailable to AI. `NOTHING_NEW` is a silent completion. Reports are capped at 8,000 characters and plain summaries at 600. Runs and policy changes commit together so reconciliation retries do not duplicate writes. Agent-panel rows use the existing registered-run store and heartbeat while reconciling.
 

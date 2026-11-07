@@ -4,7 +4,7 @@ import { expectNoHorizontalOverflow } from "./helpers";
 /**
  * Phase 5 AI task actions against the mock Hermes (JARVIS_AI_JOB answers):
  * Get started → Research → report with sources → next action; plan → child items;
- * Finance areas offer no AI actions.
+ * AI-excluded areas offer no AI actions.
  */
 
 async function api<T = unknown>(page: Page, method: "get" | "post" | "put" | "patch" | "delete", path: string, data?: unknown): Promise<T> {
@@ -36,7 +36,7 @@ test("research an item: job chip, report viewer with sources, use a next action"
     .getByRole("button", { name: /Research it/ })
     .click();
   const sheet = page.getByRole("dialog", { name: "Research it" });
-  await expect(sheet.getByText("Finance is never sent to AI.")).toBeVisible();
+  await expect(sheet.getByText("Areas excluded from AI are never sent.")).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await sheet.getByTestId("ai-start").click();
   await expect(sheet).toHaveCount(0);
@@ -72,9 +72,10 @@ test("make a plan → create child items", async ({ page }) => {
   await expect.poll(async () => (await api<{ children: unknown[] }>(page, "get", `/api/work/items/${item.id}`)).children.length).toBe(3);
 });
 
-test("Finance areas offer no AI actions", async ({ page }) => {
+test("AI-excluded areas offer no AI actions, Finance included", async ({ page }) => {
   const nonce = Date.now().toString(36);
   const fin = await create(page, { kind: "area", title: "Finance" });
+  await api(page, "patch", `/api/work/items/${fin.id}`, { settings: { aiPolicy: "excluded" } });
   const item = await create(page, { kind: "thread", title: `Compare savings ${nonce}`, parentId: fin.id });
   await page.goto(`/areas?item=${item.id}`);
   await expect(page.getByRole("heading", { name: `Compare savings ${nonce}` })).toBeVisible();

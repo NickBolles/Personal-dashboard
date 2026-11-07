@@ -5,7 +5,7 @@ A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose 
 - **Home** — up to three ranked next actions (deterministic, with source + freshness), quick capture, Later groups, household glance.
 - **Hermes** — conversations with live streaming, tool activity, inline approvals, steering, stop, reconnect-safe runs, drafts, fork (latest or from a message) with lineage, rename/archive/pin, model override, context attachments, "Track in Paperclip".
 - **Alerts** — canonical inbox (dedupe, read/dismissed/acted), Web Push with quiet hours and per-category settings, deep links.
-- **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (every door, lock, light and camera; lights switch with readback; door controls allowlisted and confirmed), Brain (Hermes status, skills, toolsets, cron jobs), Settings.
+- **More** — Initiatives (Paperclip), Todos (Google Tasks / HA / built-in), Skylight, Daily Compass, Home controls (lights, switches, fans, climate, media, scenes, vacuums, covers/garage, locks and alarm; every write confirmed, read back and undoable; locks, alarm and opening a garage are high-risk; see [docs/home-control.md](docs/home-control.md)), Brain (Hermes status, skills, toolsets, cron jobs), Settings.
 - **Finance** — monthly household check-in (card payments, checking reserve, funds, daily liquidity check), funds and a long-term plan. Manual, CSV or Monarch balances. Never moves money; no amounts in notifications. See [docs/finance.md](docs/finance.md).
 - **People** — you, your partner, kids and a shared home tablet, each with their own sign-in, private conversations, alerts and per-module capabilities.
 - **Search** — Ctrl K / `/` across conversations, todos, devices, calendar, finance and pages, scoped to what each person can see.
@@ -13,6 +13,11 @@ A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose 
 - **Onboarding** — claim with a one-time setup code, connect + live-test every integration (or use the bundled demo server), enable push, install the app, verify everything.
 - **Native Android app** (`android/`, Kotlin + Compose): Home, Chat with approvals, Alerts, Home controls, Skylight, Todos, Daily Compass, "Ask Hermes about …" any source, home-screen widgets, a Quick Settings tile, share-to-Jarvis and FCM notifications. Pairs with a QR code. Screenshot-tested with Roborazzi. See [docs/android.md](docs/android.md).
 - **Installable PWA** too: manifest, maskable icons, service worker, offline shell, share target, shortcuts.
+
+## Product rules
+
+- Jarvis may operate Home Assistant devices (owner-approved 2026-11-07): confirmed + read back + Undo; high-risk (locks, alarm, garage open) need an explicit confirm, are rate-limited and never run by agents or scheduled jobs (they propose; you confirm).
+- AI may use Finance like any area; per-area Exclude from AI is honoured; credentials/tokens never sent; account numbers masked to last 4 — owner-approved 2026-11-07.
 
 ## Quick start
 

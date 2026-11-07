@@ -12,16 +12,9 @@ import { isLocalSession } from "@/lib/assistant";
 import { sessionAccess } from "@/integrations/hermes/service";
 import { localSessionDetail } from "@/server/assistant/local";
 import { getAiSettings } from "@/server/ai/settings";
-import { isFinanceContext } from "@/lib/chat-context";
-import {
-  CHAT_FILE_LIMITS,
-  classifyChatFile,
-  fencedAttachment,
-  FILE_MARK,
-  looksLikeFinanceDocument,
-  type ChatFileKind,
-  type ChatFileView,
-} from "@/lib/chat-files";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { CHAT_FILE_LIMITS, classifyChatFile, fencedAttachment, FILE_MARK, type ChatFileKind, type ChatFileView } from "@/lib/chat-files";
 import { imageSize, sniffMime } from "@/server/capture/sniff";
 import { stripLocation } from "@/server/capture/exif";
 import { extractPdfText } from "./pdf-text";
@@ -118,7 +111,7 @@ export function listChatFiles(user: CurrentUser, sessionId: string): ChatFileVie
 
 export type Upload = { name: string; type: string; bytes: Uint8Array };
 
-/** Checks everything (type by magic bytes, size, finance) before anything is written. */
+/** Checks type by magic bytes, size and credentials before anything is written. */
 export function checkUpload(f: Upload): {
   kind: ChatFileKind;
   mime: string;
@@ -132,7 +125,7 @@ export function checkUpload(f: Upload): {
   const name = (f.name || "file").slice(0, 200);
   const c = classifyChatFile(name, f.type, f.bytes.byteLength);
   if (!c.ok) throw new HttpError(c.reason.includes(" over ") ? 413 : 415, c.reason.includes(" over ") ? "file_too_large" : "unsupported_type", c.reason);
-  if (isFinanceContext({ id: name })) throw new HttpError(403, "finance_blocked", "Finance files aren't sent to AI");
+  if (detectSensitivity(name) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
   let bytes = f.bytes;
   if (c.kind === "image") {
     const mime = sniffMime(bytes);
@@ -152,13 +145,12 @@ export function checkUpload(f: Upload): {
     if (Buffer.from(bytes.subarray(0, 5)).toString("latin1") !== "%PDF-") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't a PDF`);
     const text = extractPdfText(bytes, CHAT_FILE_LIMITS.textChars + 1);
     const status = !text ? "none" : text.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
-    if (text && looksLikeFinanceDocument(text))
-      throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
+    if (detectSensitivity(text) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
     return {
       kind: "pdf",
       mime: "application/pdf",
       bytes,
-      text: text.slice(0, CHAT_FILE_LIMITS.textChars) || null,
+      text: maskAccountNumbers(text).slice(0, CHAT_FILE_LIMITS.textChars) || null,
       width: null,
       height: null,
       locationRemoved: false,
@@ -167,14 +159,13 @@ export function checkUpload(f: Upload): {
   }
   if (sniffMime(bytes) !== "text/plain") throw new HttpError(415, "unsupported_type", `${name.slice(0, 60)} isn't plain UTF-8 text`);
   const full = new TextDecoder().decode(bytes);
-  if (looksLikeFinanceDocument(full))
-    throw new HttpError(403, "finance_blocked", `${name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
+  if (detectSensitivity(full) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
   const status = full.length > CHAT_FILE_LIMITS.textChars ? "truncated" : "ok";
   return {
     kind: "text",
     mime: "text/plain",
     bytes,
-    text: full.slice(0, CHAT_FILE_LIMITS.textChars),
+    text: maskAccountNumbers(full).slice(0, CHAT_FILE_LIMITS.textChars),
     width: null,
     height: null,
     locationRemoved: false,
@@ -334,13 +325,17 @@ export async function prepareRunFiles(user: CurrentUser, sessionId: string, ids:
   const imageUrls: string[] = [];
   const textBlocks: string[] = [];
   for (const r of ordered) {
-    if (isFinanceContext({ id: r.name })) throw new HttpError(403, "finance_blocked", "Finance files aren't sent to AI");
-    // #81: a renamed statement/tax form is caught by its extracted text, not just the filename.
-    if (r.extractedText && looksLikeFinanceDocument(r.extractedText))
-      throw new HttpError(403, "finance_blocked", `${r.name.slice(0, 60)} looks like a financial document; finance files aren't sent to AI`);
+    if (detectSensitivity([r.name, r.extractedText].filter(Boolean).join("\n")) === "credentials")
+      throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
     if (r.kind === "image") imageUrls.push(await modelImageUrl(r, fs.readFileSync(path.join(chatFilesDir(), r.storageKey))));
     else if (r.extractedText)
-      textBlocks.push(fencedAttachment(r.name, r.extractedText, r.textStatus === "truncated" ? `first ${CHAT_FILE_LIMITS.textChars} characters` : undefined));
+      textBlocks.push(
+        fencedAttachment(
+          maskAccountNumbers(r.name),
+          maskAccountNumbers(r.extractedText),
+          r.textStatus === "truncated" ? `first ${CHAT_FILE_LIMITS.textChars} characters` : undefined,
+        ),
+      );
     else textBlocks.push(`Attached file: ${r.name.replace(/[\r\n`]/g, " ")} (PDF attached — text not extracted; it may be a scan)`);
   }
   // #87: Hermes refuses requests over 10 MB; budget the whole encoded batch (prompt + JSON need headroom).

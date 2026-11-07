@@ -247,19 +247,23 @@ describe("global coordinator", () => {
     view.rerender(globalView());
     await chatPanel().findByText("Viewing: Areas");
   });
-  it("never displays or attaches Finance page context", async () => {
+  it("displays and attaches Finance page context", async () => {
     nav.path = "/finance/cards";
     makeClient();
     render(globalView(), { wrapper });
     const input = await screen.findByTestId("gc-input");
-    expect(document.querySelector(".gc-context")).toBeNull();
+    expect(document.querySelector(".gc-context")).not.toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "This page" }));
-    expect(screen.getByText("No page context is shared.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Ask about this page" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ask about this page" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
     fireEvent.change(input, { target: { value: "Hello" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions/s1/runs", expect.objectContaining({ input: "Hello" })));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/api/hermes/sessions/s1/runs",
+        expect.objectContaining({ input: expect.stringContaining("[Viewing: Finance › Cards") }),
+      ),
+    );
   });
   it("persists rail open state and clamps keyboard resizing; chat starts as a strip", async () => {
     makeClient();
@@ -287,12 +291,12 @@ describe("global coordinator", () => {
     expect(screen.getByTestId("gc-rail").style.width).toBe("500px");
     expect(document.querySelector<HTMLElement>(".jv-shell")?.style.getPropertyValue("--gc-w")).toBe("500px");
   });
-  it.each(["/areas?item=private", "/areas?node=private", "/chat/private-session"])("omits page context for Finance ancestry on %s", async (path) => {
+  it.each(["/areas?item=private", "/areas?node=private", "/chat/private-session"])("omits page context for AI-excluded ancestry on %s", async (path) => {
     const url = new URL(path, "http://localhost");
     nav.path = url.pathname;
     nav.search = url.search;
     workItems = [
-      { id: "finance", parentId: null, kind: "area", title: "Finance", settings: null },
+      { id: "finance", parentId: null, kind: "area", title: "Finance", settings: { aiPolicy: "excluded" } },
       { id: "private", parentId: "finance", kind: "conversation", title: "Private", sessionId: "private-session", settings: null },
     ];
     if (path.startsWith("/chat/")) setPanelOwner(path);

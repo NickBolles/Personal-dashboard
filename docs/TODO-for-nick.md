@@ -57,7 +57,7 @@ Daily Compass lives in Hermes, so Jarvis asks Hermes for today's state instead o
 
 - [ ] Create a long-lived token: HA → Profile → Security. An **admin** user's token also lets Jarvis count integrations that failed to load. Otherwise that count shows "unknown".
 - [ ] Onboarding → Home Assistant: enter URL `http://192.168.1.249:8123` and the token. Watched entities are pre-filled from your config: alarm, front lock, both garage doors, front and back doors.
-- [ ] Review the **allowed controls**. Per the assessment's rules on sensitive domains, the defaults are the **safe direction only**: lock the front door, close each garage. Add `, unlock` or `, open_cover` to a line only if you want that from your phone. Jarvis should never be the only way to unlock a door.
+- [ ] Review the **allowed controls**. Since your 2026-11-07 decision the default covers every device domain (lights, switches, fans, climate, media, scenes, scripts, vacuums, covers incl. garage open/close, locks, alarm). Locks, alarm and opening a garage are high-risk: explicit confirm, rate-limited, never done by agents. Narrow it by saving your own list (`entity_id: service` or `domain.*: service`). Jarvis should never be the only way to unlock a door.
 - [ ] Calendars: `calendar.family_calendar` is pre-filled for the household glance.
 - [ ] Glance at Home → **Home Assistant health**: counts of unavailable/unknown entities, pending updates, and failing integrations. Anything unreadable is "unknown", never 0.
 - Ask about your home: **Ask Hermes about my home** on the Home page starts a conversation with a snapshot of exceptions, controllable entities and health (docs/security.md → Home Assistant and Hermes).
@@ -87,7 +87,7 @@ The read-only home audit found **Paperclip-HTTPS already deployed**, on Docker `
 ## 10. Claude as a faster chat backend (optional)
 
 - [ ] Settings → **Assistant**: paste an Anthropic API key (or set `ANTHROPIC_API_KEY`). Pick the default (Hermes or Claude) and the effort. **Low** is the default, for speed.
-- Every new conversation can go to either; Ask shows a Hermes / Claude choice. Claude answers directly with the Jarvis context you attach. It has no Hermes tools, memory or approvals, and it never gets your finances. If Claude declines a request, the API's server-side fallback retries it once with another model before Jarvis reports "declined".
+- Every new conversation can go to either; Ask shows a Hermes / Claude choice. Claude answers directly with the Jarvis context you attach. It has no Hermes tools, memory or approvals. Finance is eligible like any area; per-area Exclude from AI is honoured, credentials/tokens are blocked and account numbers masked to last 4 (owner-approved 2026-11-07). If Claude declines a request, the API's server-side fallback retries it once with another model before Jarvis reports "declined".
 
 ## 11. Finance (docs/finance.md)
 

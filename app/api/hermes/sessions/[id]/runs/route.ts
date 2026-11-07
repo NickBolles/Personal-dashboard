@@ -14,6 +14,10 @@ import { sessionProfile } from "@/integrations/hermes/service";
 import { isLocalSession } from "@/lib/assistant";
 import { CHAT_FILE_LIMITS } from "@/lib/chat-files";
 import { markFilesSent, prepareRunFiles } from "@/server/chat/files";
+import { areaPolicyFor } from "@/server/ai/jobs";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { HttpError } from "@/server/http/errors";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -33,13 +37,14 @@ const schema = z.object({
  * Start a turn. Model/provider: the message's override, else the
  * conversation's area default (Areas), else the household preference.
  * `@`/`#` reference tokens in the input are resolved into context snapshots
- * (only what this person may see; never Finance), and the area's default
+ * (only what this person may see; honouring AI exclusions), and the area's default
  * context sources are attached too.
  */
 export const POST = api<z.infer<typeof schema>, { id: string }>(
   async ({ params, body, user, correlationId }) => {
     const prefs = getPreferences().hermes;
     const area = areaDefaultsFor(user, params.id);
+    if (area && areaPolicyFor(user.id, area.nodeId) === "excluded") throw new HttpError(403, "ai_excluded_area", "AI is off in this area");
     const sources = [...new Set([...(body.contextSources ?? []), ...(area?.settings.contextSources ?? []).filter((s) => contextAllowed(user, s))])];
     const refs = await resolveReferences(user, parseReferences(body.input));
     // @ctx: refs (e.g. all overdue todos) are built here, after the 6 000-char
@@ -53,7 +58,9 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     const context = [await buildContext(user, sources, extra), ...resolved.blocks, ...(files?.textBlocks ?? []), imageNote, files?.marker]
       .filter(Boolean)
       .join("\n\n");
-    const input = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
+    const rawInput = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
+    if (detectSensitivity(rawInput) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
+    const input = maskAccountNumbers(rawInput);
     const s = area?.settings;
     // The agent-mode hint is only for conversations NOT already running on that Hermes profile (Settings → Agents).
     const onProfile = isLocalSession(params.id) ? null : sessionProfile(params.id);
@@ -65,7 +72,9 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
         ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
-    const instructions = [areaInstructions, smart].filter(Boolean).join("\n\n") || undefined;
+    const rawInstructions = [areaInstructions, smart].filter(Boolean).join("\n\n");
+    if (detectSensitivity(rawInstructions) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
+    const instructions = maskAccountNumbers(rawInstructions) || undefined;
     const run = await startRun(
       user,
       {

@@ -1,4 +1,5 @@
 import "server-only";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { decisionHref } from "@/lib/decision-route";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
@@ -312,7 +313,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
   }
   // Screen everything that leaves (packets, links, notes), not only the subject's own fields.
   if (g.guard.ok && !stopGuard.signal.aborted) {
-    const full = financeGuard({ kind, area: g.area, text: outbound, financeOverride: !!params.financeOverride });
+    const full = financeGuard({ kind, area: g.area, text: input, financeOverride: !!params.financeOverride });
     if (!full.ok && refuse(full.reason)) return;
   }
 
@@ -330,14 +331,14 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
     const result = await runHermesTask({
       label: AI_KIND_LABEL[kind],
       visible: row.visibleSession,
-      title: row.visibleSession ? `✦ ${AI_KIND_LABEL[kind]} · ${title}` : `jarvis-ai:${kind}`,
+      title: maskAccountNumbers(row.visibleSession ? `✦ ${AI_KIND_LABEL[kind]} · ${title}` : `jarvis-ai:${kind}`),
       ...(() => {
         const run = tierRun(settings, row.tier as "triage" | "standard" | "deep", row.model);
         return { model: run.model, provider: run.provider, modelOptions: run.modelOptions };
       })(),
       conn,
       instructions: instructionsFor(kind),
-      input,
+      input: maskAccountNumbers(input),
       schema: OUTPUT_SCHEMAS[kind] as never,
       idempotencyKey: row.idempotencyKey,
       timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind === "summarize" ? "draft" : kind] * 1000,
@@ -589,7 +590,7 @@ async function onSuccess(
         });
         kickRunner();
       } catch {
-        /* guard refused (e.g. finance detected): the suggestion stays */
+        /* guard refused (e.g. credentials detected): the suggestion stays */
       }
     }
     return;

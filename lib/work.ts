@@ -239,7 +239,7 @@ export type WorkItem = {
 
 // --- Areas: per-area settings (phase 4) ---
 
-/** What Jarvis may attach automatically as context (server/context.ts builds them; never Finance). */
+/** What Jarvis may attach automatically as context (server/context.ts builds screened, masked snapshots). */
 export const CONTEXT_SOURCES = ["overview", "skylight", "home_assistant", "todos", "daily_compass", "paperclip"] as const;
 export type ContextSource = (typeof CONTEXT_SOURCES)[number];
 export const CONTEXT_SOURCE_LABELS: Record<ContextSource, string> = {
@@ -282,11 +282,11 @@ export type AreaSettings = {
   settlePolicy: SettlePolicy;
   /** days without activity before a suggestion (suggest) or an automatic settle (auto_after_quiet) */
   quietDays: number;
-  /** phase 5 AI actions: allowed (default) | triage_only | excluded. A Finance area is always excluded (server/ai/rules.ts). */
+  /** AI actions: allowed (default) | triage_only | excluded, for every area including Finance. */
   aiPolicy: AiPolicy;
   /** A3: area colour from the token palette (lib/item-tags TAG_COLORS); null = none */
   color: TagColor | null;
-  /** #217: what unattended (scheduled) agent runs may do here; Finance/AI-excluded areas are always off (lib/away.ts effectiveAutonomy) */
+  /** #217: what unattended (scheduled) agent runs may do here; AI-excluded areas are always off (lib/away.ts effectiveAutonomy) */
   autonomy: AutonomyMode;
 };
 

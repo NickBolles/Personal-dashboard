@@ -123,8 +123,9 @@ it("import is disabled, dedupes title+area and roundtrips export", async () => {
   expect(roundtrip.jobs[0]).toMatchObject({ title: "Imported", areaTitle: "Workshop" });
   expect(await (await call(imports.POST, "POST", roundtrip)).json()).toEqual({ created: 0, skipped: [{ title: "Imported", reason: "duplicate" }] });
 });
-it("missing areas create unassigned jobs; Finance/excluded matches never bind to AI", async () => {
-  createItem(owner, { kind: "area", title: "Finance" }, "test");
+it("missing areas create unassigned jobs; AI-excluded matches never bind to AI", async () => {
+  const excluded = createItem(owner, { kind: "area", title: "Finance" }, "test");
+  updateItem(owner, excluded.id, { settings: { aiPolicy: "excluded" } }, "test");
   const jobs = ["Finance", "Not found"].map((areaTitle) => ({
     title: areaTitle,
     areaTitle,
@@ -149,10 +150,11 @@ it("cap is 409 and import skips over-cap entries", async () => {
   ).json();
   expect(result).toEqual({ created: 0, skipped: [{ title: "Synthetic brief", reason: "too_many_jobs" }] });
 });
-it("run-now requires literal confirm, Finance returns ai_off and missing area returns not_ready", async () => {
+it("run-now requires literal confirm, AI-excluded returns ai_off and missing area returns not_ready", async () => {
   const { job } = await (await call(root.POST, "POST", input())).json();
   for (const body of [{}, { confirm: false }, { confirm: "true" }]) expect((await call(run.POST, "POST", body, job.id)).status).toBe(400);
   const finance = createItem(owner, { kind: "area", title: "Finance" }, "test");
+  updateItem(owner, finance.id, { settings: { aiPolicy: "excluded" } }, "test");
   await call(item.PATCH, "PATCH", { areaId: finance.id }, job.id);
   const refused = await call(run.POST, "POST", { confirm: true }, job.id);
   expect(refused.status).toBe(409);

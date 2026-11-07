@@ -1,4 +1,6 @@
 import "server-only";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { HttpError } from "@/server/http/errors";
 import { isLocalRun, isLocalSession, type AssistantBackend } from "@/lib/assistant";
 import type { CurrentUser } from "@/server/auth";
@@ -89,6 +91,9 @@ export const forkSession = async (user: CurrentUser, id: string, input: hermes.F
 };
 
 export const startRun = async (user: CurrentUser, r: hermes.StartRunRequest, correlationId: string) => {
+  if (detectSensitivity([r.input, r.instructions].filter(Boolean).join("\n")) === "credentials")
+    throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
+  r = { ...r, input: maskAccountNumbers(r.input), ...(r.instructions ? { instructions: maskAccountNumbers(r.instructions) } : {}) };
   if (isLocalSession(r.sessionId)) return local.startLocalRun(user, r, correlationId);
   const run = await hermes.startRun(user, r, correlationId);
   try {
@@ -123,6 +128,8 @@ export function respondClarify(user: CurrentUser, runId: string, body: Parameter
 }
 
 export function steerRun(user: CurrentUser, runId: string, input: string, correlationId: string) {
+  if (detectSensitivity(input) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
+  input = maskAccountNumbers(input);
   if (isLocalRun(runId)) throw new HttpError(501, "unsupported", "Claude can't be steered mid-answer. Stop it and send a new message.");
   return hermes.steerRun(user, runId, input, correlationId);
 }

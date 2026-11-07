@@ -76,7 +76,7 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
           {h && "where" in h && h.where ? <span>{h.where}</span> : null}
           {row.reason ? <span className="min-w-0 truncate">· {row.reason}</span> : null}
           {unavailable && !s.hydrating ? (
-            <span>{h && "unavailable" in h && h.unavailable === "finance" ? "Finance is never shown to AI" : "Not available"}</span>
+            <span>{h && "unavailable" in h && h.unavailable === "ai_excluded" ? "Areas excluded from AI are never sent" : "Not available"}</span>
           ) : null}
         </div>
         {error ? (

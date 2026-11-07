@@ -6,6 +6,8 @@
  * message as fenced attachment blocks.
  */
 
+import { maskAccountNumbers } from "@/lib/ai-redact";
+
 export const CHAT_FILE_LIMITS = {
   imageBytes: 10 * 1024 * 1024,
   fileBytes: 25 * 1024 * 1024,
@@ -18,7 +20,7 @@ export const CHAT_FILE_LIMITS = {
 
 /**
  * #81: content heuristic for financial documents (bank/card statements, tax forms) whose filename
- * doesn't say so. Two or more distinct signals → treat as finance (never sent to AI).
+ * doesn't say so. Classification only; Finance documents are allowed with outbound masking.
  */
 const FINANCE_DOC_SIGNALS = [
   /\bstatement (period|date)\b/i,
@@ -148,6 +150,7 @@ export type RunInput = string | { role: "user"; content: (TextPart | ImagePart)[
  * (Hermes reads `input[-1].content`).
  */
 export function buildRunInput(text: string, imageUrls: string[]): RunInput {
+  text = maskAccountNumbers(text);
   if (!imageUrls.length) return text;
   return [
     {

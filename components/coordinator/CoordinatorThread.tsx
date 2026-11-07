@@ -127,7 +127,7 @@ export function CoordinatorThread({
       <div className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
-            Finance stays out of AI: this area has no coordinator chat.
+            Areas excluded from AI are never sent: this area has no coordinator chat.
           </p>
         ) : (
           <>

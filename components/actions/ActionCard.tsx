@@ -113,8 +113,7 @@ export function ActionCard({
         disabled: !online && k !== "acknowledge",
       })),
     { label: action.pinned ? "Unpin" : "Pin to top", onSelect: () => run(action.pinned ? "unpin" : "pin") },
-    // Finance never goes to the AI layer (docs/finance.md).
-    ...(can("hermes.chat") && action.source !== "finance" ? [{ label: "Ask Hermes about this", onSelect: askHermes }] : []),
+    ...(can("hermes.chat") ? [{ label: "Ask Hermes about this", onSelect: askHermes }] : []),
     {
       label: action.external ? "Open in source" : "Open",
       onSelect: () => (action.external ? window.open(action.href, "_blank", "noopener") : router.push(action.href)),

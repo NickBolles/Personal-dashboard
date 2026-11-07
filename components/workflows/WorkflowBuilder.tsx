@@ -316,7 +316,7 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
           ))}
         </select>
       </Field>
-      <Field id="wf-area" label="Area" hint="Path like Faith or Home/Chores; Finance isn't allowed">
+      <Field id="wf-area" label="Area" hint="Path like Faith or Home/Chores; areas excluded from AI aren't allowed">
         <input
           id="wf-area"
           className={cx(inputCls, "w-full")}

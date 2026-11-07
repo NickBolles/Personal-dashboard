@@ -1,21 +1,13 @@
 /**
  * "Catch me up" prompt for an area's coordinator chat (Work from Jarvis batch 2).
  * Pure: builds the text the owner can send with one tap — nothing is sent here.
- * Finance never reaches AI: a Finance area (or one whose AI policy is excluded)
- * gets no prompt, and items/activity that mention finance are left out.
+ * AI-excluded areas get no prompt. Credentials stay out; account numbers are masked.
  */
 import { bucketOf, MAP_BUCKET_LABELS } from "@/lib/map-rollup";
 import { liveLabel, type ItemAgentInfo } from "@/lib/agent-runs";
 import type { WorkItem } from "@/lib/work";
-
-const FINANCE_TEXT = /\b(financ(e|es|ial)|monarch|bank|brokerage|401k|ira)\b/i;
-
-/** Same rule as server/ai/rules.ts isFinanceArea (kept here so the client can hide the button). */
-export function isFinanceAreaLike(area: { title: string; systemKey?: string | null }) {
-  const key = (area.systemKey ?? "").toLowerCase();
-  const title = area.title.trim().toLowerCase();
-  return key === "finance" || title === "finance" || title === "finances" || /^financ(e|es|ial)\b/.test(title);
-}
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { detectSensitivity } from "@/server/ai/rules";
 
 export type CatchUpArea = { id: string; title: string; systemKey?: string | null; aiPolicy?: string | null };
 export type CatchUpActivity = { at: string; verb: string; title: string | null; actor: string };
@@ -35,16 +27,21 @@ export type CatchUpInput = {
 
 export const CATCH_UP_LIMITS = { items: 25, activity: 12, decisions: 10 } as const;
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const mentionsFinanceText = (...parts: (string | null | undefined)[]) => parts.some((p) => !!p && FINANCE_TEXT.test(p));
+const clip = (s: string, n: number) => {
+  s = maskAccountNumbers(s);
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+};
 
-/** null = this area must not go to AI (Finance / AI excluded). */
+/** null = this area must not go to AI. */
 export function buildCatchUpPrompt(input: CatchUpInput): string | null {
   const { area } = input;
-  if (isFinanceAreaLike(area) || area.aiPolicy === "excluded") return null;
+  if (area.aiPolicy === "excluded" || detectSensitivity(area.title) === "credentials") return null;
   const guard = input.sensitive;
-  const mentionsFinance = (...parts: (string | null | undefined)[]) => mentionsFinanceText(...parts) || (!!guard && guard(parts.filter(Boolean).join(" ")));
-  const open = input.items.filter((i) => !i.archived && i.kind !== "conversation" && bucketOf(i) !== "done" && !mentionsFinance(i.title, i.nextAction));
+  const sensitive = (...parts: (string | null | undefined)[]) => {
+    const text = parts.filter(Boolean).join(" ");
+    return detectSensitivity(text) === "credentials" || (!!guard && guard(text));
+  };
+  const open = input.items.filter((i) => !i.archived && i.kind !== "conversation" && bucketOf(i) !== "done" && !sensitive(i.title, i.nextAction));
   const lines: string[] = [];
   lines.push(`Catch me up on the "${area.title}" area.`);
   lines.push(
@@ -58,22 +55,22 @@ export function buildCatchUpPrompt(input: CatchUpInput): string | null {
     lines.push(`- ${clip(i.title, 120)} [${MAP_BUCKET_LABELS[bucketOf(i)]}]${next}`);
   }
   if (open.length > CATCH_UP_LIMITS.items) lines.push(`- …and ${open.length - CATCH_UP_LIMITS.items} more`);
-  const decisions = input.decisions.filter((d) => !mentionsFinance(d.title, d.question));
+  const decisions = input.decisions.filter((d) => !sensitive(d.title, d.question));
   lines.push("");
   lines.push(`Waiting on my decision (${decisions.length}):`);
   if (!decisions.length) lines.push("- none");
   for (const d of decisions.slice(0, CATCH_UP_LIMITS.decisions)) lines.push(`- ${clip(d.title, 100)}: ${clip(d.question, 200)}`);
-  const agents = (input.agents ?? []).filter((a) => !mentionsFinance(a.title));
+  const agents = (input.agents ?? []).filter((a) => !sensitive(a.title, a.who?.name));
   if (agents.length) {
     lines.push("");
     lines.push("Agent runs:");
     for (const a of agents.slice(0, 10))
       lines.push(`- ${clip(a.title, 100)}: ${liveLabel(a.live, a.approval).toLowerCase()}${a.who ? ` (@${a.who.name})` : ""}`);
   }
-  const act = input.activity.filter((a) => !mentionsFinance(a.title, a.verb));
+  const act = input.activity.filter((a) => !sensitive(a.title, a.verb, a.actor));
   lines.push("");
   lines.push("Recent activity:");
   if (!act.length) lines.push("- none recorded");
   for (const a of act.slice(0, CATCH_UP_LIMITS.activity)) lines.push(`- ${a.at.slice(0, 10)} ${a.actor} ${a.verb}${a.title ? ` "${clip(a.title, 80)}"` : ""}`);
-  return lines.join("\n");
+  return maskAccountNumbers(lines.join("\n"));
 }

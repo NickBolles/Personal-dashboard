@@ -120,10 +120,10 @@ describe("upload checks", () => {
     expect(contains32(stripped.bytes, LAT_MARK)).toBe(false);
   });
 
-  it("checks magic bytes, refuses finance files and extracts text", () => {
+  it("checks magic bytes, permits finance files and extracts text", () => {
     expect(() => checkUpload({ name: "x.png", type: "image/png", bytes: new TextEncoder().encode("hello") })).toThrow(/isn't a PNG/);
     expect(() => checkUpload({ name: "x.pdf", type: "application/pdf", bytes: new TextEncoder().encode("hello") })).toThrow(/isn't a PDF/);
-    expect(() => checkUpload({ name: "monarch-export.csv", type: "text/csv", bytes: new TextEncoder().encode("a,b") })).toThrow(/Finance/);
+    expect(checkUpload({ name: "monarch-export.csv", type: "text/csv", bytes: new TextEncoder().encode("a,b") }).text).toBe("a,b");
     const t = checkUpload({ name: "list.csv", type: "text/csv", bytes: new TextEncoder().encode("item,qty\nmilk,2") });
     expect(t).toMatchObject({ kind: "text", text: "item,qty\nmilk,2", textStatus: "ok" });
     const p = checkUpload({ name: "scan.pdf", type: "application/pdf", bytes: pdfWith("q /Im1 Do Q") });
@@ -132,10 +132,11 @@ describe("upload checks", () => {
 });
 
 describe("finance documents by content (#81)", () => {
-  it("needs two signals; a renamed statement is blocked at upload", () => {
+  it("classifies documents without refusing them, masks accounts and blocks credentials", () => {
     expect(looksLikeFinanceDocument("Statement period Oct 1 - Oct 31\nAccount number ****1234\nEnding balance $812.03")).toBe(true);
     expect(looksLikeFinanceDocument("Gutter repair notes: the ending balance of the pool chemicals")).toBe(false);
-    const bytes = new TextEncoder().encode("Opening balance 100\nRouting number 0123\nDeposits and credits");
-    expect(() => checkUpload({ name: "notes.txt", type: "text/plain", bytes })).toThrow(/financial document/);
+    const bytes = new TextEncoder().encode("Opening balance 100\nRouting number 012345678\nDeposits and credits");
+    expect(checkUpload({ name: "notes.txt", type: "text/plain", bytes }).text).toContain("••••5678");
+    expect(() => checkUpload({ name: "notes.txt", type: "text/plain", bytes: new TextEncoder().encode("password: hunter2hunter2") })).toThrow(/Credentials/);
   });
 });

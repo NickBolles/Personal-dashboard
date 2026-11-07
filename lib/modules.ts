@@ -74,7 +74,7 @@ export const MODULES: ModuleDef[] = [
         id: "work.ai",
         label: "Run AI actions and pre-investigation",
         description:
-          "Research, plan, suggest a time and draft on work items; AI triage and investigation of captures. Uses the household AI budget. Finance is never sent.",
+          "Research, plan, suggest a time and draft on work items; AI triage and investigation of captures. Uses the household AI budget. Areas excluded from AI are never sent.",
         roles: [],
       },
     ],

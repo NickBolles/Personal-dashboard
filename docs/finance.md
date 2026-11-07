@@ -7,7 +7,10 @@ Pages: **Finance** (overview), **Check-in**, **Accounts**, **Funds**, **Plan** (
 ## Who sees it
 
 - `finance.view` and `finance.edit` are capabilities (Settings → People). The owner has both. Adults get them by default; kids and the household tablet never do. Turn them off for an adult in Settings → People.
-- Finance is never sent to Hermes or Claude. AI over finances is a non-goal in the plan.
+- Finance areas and Finance data are treated like any other area by AI features: coordinator / catch-me-up, smart cards / dynamic tray cards, Summarize and other AI actions, scheduled jobs/autonomy, MCP agent tools, search/context builders, chat "Add context", capture, workflows drafts.
+- The generic per-area AI policy (`settings.aiPolicy`: "allowed" | "triage_only" | "excluded", the "Exclude from AI" toggle) keeps working for ANY area, Finance included. An excluded area (and its subtree) stays out of all AI paths exactly as today.
+- Secrets never go to AI: credentials/API tokens/passwords stay blocked (keep the "credentials" sensitivity detection and its hard block), and full account/card numbers are masked to the last 4 digits before any text is sent to a model.
+- Owner-approved 2026-11-07. This changes AI eligibility only, not Finance capabilities, LockBar or masked amounts.
 - Notifications are opt-in: the finance category is off by default. They never include amounts, account names or institutions. They only say "October check-in is ready to review", "needs attention (2 items)" or "Balance refresh failed".
 - **Hide amounts**: a per-browser and per-phone toggle replaces every amount with •••••.
 

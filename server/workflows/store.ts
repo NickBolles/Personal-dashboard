@@ -39,7 +39,7 @@ export const BUILT_IN_WORKFLOWS: BuiltInWorkflow[] = BUILT_IN_SURFACE_KINDS.map(
 
 const db = () => getDb();
 
-/** Area paths ("Faith", "Work/Jarvis") → item id, plus the areas AI can't use (Finance / aiPolicy=excluded). */
+/** Area paths ("Faith", "Work/Jarvis") → item id, plus the areas AI can't use (aiPolicy=excluded). */
 function areaIndex(userId: string) {
   const items = listItems(userId);
   const byId = new Map(items.map((i) => [i.id, i]));
@@ -50,7 +50,7 @@ function areaIndex(userId: string) {
   };
   const containers = items.filter((i) => i.parentId === null || i.kind === "area" || i.kind === "project");
   const paths = new Map(containers.map((i) => [path(i.id).toLowerCase(), i]));
-  const excluded = containers.filter((i) => /^finance$/i.test(i.title) || i.settings?.aiPolicy === "excluded").map((i) => path(i.id));
+  const excluded = containers.filter((i) => i.settings?.aiPolicy === "excluded").map((i) => path(i.id));
   return { paths, excluded, path };
 }
 
@@ -64,7 +64,7 @@ function validateFor(userId: string, raw: unknown) {
   if (area && areas.excluded.some((x) => area.toLowerCase().startsWith(`${x.toLowerCase()}/`))) {
     return {
       ok: false as const,
-      issues: [{ path: "routing.area", code: "finance_excluded", message: "Workflows can't use Finance or AI-excluded areas" }],
+      issues: [{ path: "routing.area", code: "finance_excluded", message: "Workflows can't use AI-excluded areas" }],
       areaId: null,
       areaFound: false,
     };
@@ -257,7 +257,7 @@ export function saveVersion(ctx: Ctx, id: string, raw: unknown, changeNote?: str
  * Re-resolve `routing.area` against the CURRENT areas (#123): an area created
  * (or renamed to match) after import gets picked up on activation/start
  * instead of filing chats in Miscellaneous forever. Throws when the area has
- * become Finance/AI-excluded. Returns the (possibly updated) area id.
+ * become AI-excluded. Returns the (possibly updated) area id.
  */
 export function refreshRoutingArea(
   userId: string,
@@ -268,7 +268,7 @@ export function refreshRoutingArea(
   const d = def ?? currentDefinition(row.id, row.currentVersion);
   const r = validateFor(userId, d);
   if (!r.ok) {
-    // at start only the Finance/AI-excluded check blocks; other issues were accepted when the version was saved
+    // at start only the AI-excluded check blocks; other issues were accepted when the version was saved
     if (opts.strict || r.issues.some((i) => i.code === "finance_excluded")) throw new WorkflowValidationError(r.issues);
     return row.areaId;
   }
@@ -280,7 +280,7 @@ export function refreshRoutingArea(
 
 export function setWorkflowStatus(ctx: Ctx, id: string, status: WorkflowStatus) {
   const row = own(ctx.userId, id);
-  // re-check against current areas (an area may have become Finance-excluded, or been created, since import)
+  // re-check against current areas (an area may have become AI-excluded, or been created, since import)
   if (status === "active") refreshRoutingArea(ctx.userId, row);
   db().update(schema.workflows).set({ status, updatedAt: new Date().toISOString() }).where(eq(schema.workflows.id, id)).run();
   audit({
@@ -339,7 +339,7 @@ export function restoreVersion(ctx: Ctx, id: string, version: number) {
   return saveVersion(ctx, id, restoreDefinition(old, current), restoreNote(version));
 }
 
-/** Dry-run validation for the builder's inline errors (includes the area/Finance check). No writes. */
+/** Dry-run validation for the builder's inline errors (includes the area AI policy check). No writes. */
 export function validateDraft(userId: string, raw: unknown) {
   const r = validateFor(userId, raw);
   return r.ok ? { ok: true as const, areaFound: r.areaFound, issues: [] } : { ok: false as const, issues: r.issues };

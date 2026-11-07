@@ -12,7 +12,7 @@ const KEY = ["settings", "agent-tokens"] as const;
 
 /**
  * Settings → Agents → Agent access (docs/agent-tools.md): mint a scoped token for a Hermes profile
- * (shown once), list tokens with last use, revoke (confirmed). Finance is never a scope.
+ * (shown once), list tokens with last use, revoke (confirmed). No scope maps to finance.* module capabilities.
  */
 export function AgentAccessCard() {
   const qc = useQueryClient();
@@ -74,7 +74,8 @@ export function AgentAccessCard() {
         <SectionHeader label="Agent access" count={active.length} id="agent-access-h" />
         <p className="mb-2 text-[13px] text-muted">
           Lets a Hermes profile read and update your work through Jarvis MCP (<code>/api/mcp</code>). Its changes show &quot;by @profile&quot; and can be
-          undone. Agents can&apos;t settle, archive, move or delete — they ask you. Finance is never available to agents.
+          undone. Agents can&apos;t settle, archive, move or delete — they ask you. Areas excluded from AI are never available to agents. Credentials are never
+          sent.
         </p>
         {minted ? (
           <div className="mb-3 rounded-[10px] border border-line p-2.5" role="status" data-testid="agent-token-once">

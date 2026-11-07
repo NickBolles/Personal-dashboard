@@ -2,11 +2,11 @@
  * AI-drafted workflow proposals (W3): "Save chat as workflow" and "Describe
  * it". The model returns a draft split into parts; the owner accepts, edits
  * or drops each part; nothing is saved until the owner taps Save (the result
- * is created as a DRAFT workflow). Finance chats are refused before any
+ * is created as a DRAFT workflow). AI-excluded chats are refused before any
  * transcript reaches the model.
  */
 import { z } from "zod";
-import { isFinanceContext } from "@/lib/chat-context";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { validateDefinition, type DefinitionIssue, type WorkflowDefinition } from "./definition";
 import { blankDefinition } from "./builder";
 
@@ -41,24 +41,17 @@ export type WorkflowProposal = z.infer<typeof proposalSchema>;
 export type ChatSource = {
   title?: string;
   areaPath?: string | null;
-  /** area paths AI can't use (Finance, aiPolicy=excluded), " › "-joined like conversation placement */
+  /** area paths AI can't use (aiPolicy=excluded), " › "-joined like conversation placement */
   excludedAreas?: string[];
   /** refs attached to the chat (context picks, links) */
   refs?: { type?: string; id?: string; label?: string; url?: string }[];
 };
 
-/** Finance chats (filed under Finance, or carrying finance refs) never go to the AI builder. */
-export function refuseFinanceChat(src: ChatSource): { refused: true; reason: string } | { refused: false } {
+/** AI-excluded chats never go to the AI builder. */
+export function refuseExcludedChat(src: ChatSource): { refused: true; reason: string } | { refused: false } {
   const area = (src.areaPath ?? "").trim();
-  if (
-    /^finance(\s*[/›]|$)/i.test(area) ||
-    (src.excludedAreas ?? []).some((x) => area.toLowerCase() === x.toLowerCase() || area.toLowerCase().startsWith(`${x.toLowerCase()} ›`))
-  )
-    return { refused: true, reason: "Finance chats can't become workflows" };
-  if (/\bfinance\b/i.test(src.title ?? "") && /\b(budget|account|transaction|spend)/i.test(src.title ?? ""))
-    return { refused: true, reason: "Finance chats can't become workflows" };
-  if ((src.refs ?? []).some((r) => isFinanceContext(r)))
-    return { refused: true, reason: "This chat includes Finance context, so it can't be sent to the builder" };
+  if ((src.excludedAreas ?? []).some((x) => area.toLowerCase() === x.toLowerCase() || area.toLowerCase().startsWith(`${x.toLowerCase()} ›`)))
+    return { refused: true, reason: "AI-excluded chats can't become workflows" };
   return { refused: false };
 }
 
@@ -123,10 +116,12 @@ export function builderPrompt(input: { kind: "chat"; transcript: string; title?:
     input.kind === "chat"
       ? `Turn this conversation${input.title ? ` ("${input.title}")` : ""} into a reusable workflow. Quote the owner's own phrasing in the instructions.\n\n<transcript>\n${input.transcript.slice(0, 12000)}\n</transcript>`
       : `Draft a workflow from this description:\n${input.description.slice(0, 2000)}`;
-  return [
-    src,
-    "",
-    'Reply with ONE JSON object: {"basics":{"name","slug","icon","description","area"},"instructions":"…","capture":{…jarvis-workflow@1 capture…},"startForm":{"title","fields":[…]},"rationale":"…"}.',
-    "Rules: no code, no HTML, no URLs; capture uses only text|longtext|date|datetime|time|number|bool|scripture_ref|place|person|tags (append ? for optional, list<…> for lists); start form fields bind to capture paths; never Finance.",
-  ].join("\n");
+  return maskAccountNumbers(
+    [
+      src,
+      "",
+      'Reply with ONE JSON object: {"basics":{"name","slug","icon","description","area"},"instructions":"…","capture":{…jarvis-workflow@1 capture…},"startForm":{"title","fields":[…]},"rationale":"…"}.',
+      "Rules: no code, no HTML, no URLs; capture uses only text|longtext|date|datetime|time|number|bool|scripture_ref|place|person|tags (append ? for optional, list<…> for lists); start form fields bind to capture paths; never credentials or full account numbers.",
+    ].join("\n"),
+  );
 }

@@ -296,7 +296,7 @@ describe("AI actions end to end (fake Hermes)", () => {
 
   it.each(["finance", "excluded-root", "excluded-project", "excluded-item"])("summarize refuses %s before any upstream request", async (guard) => {
     const { u, area, item } = setup();
-    if (guard === "finance") store.updateItem(u, area.id, { title: "Finance" }, cid);
+    if (guard === "finance") store.updateItem(u, area.id, { title: "Finance", settings: { aiPolicy: "excluded" } }, cid);
     else {
       const target =
         guard === "excluded-root"
@@ -476,21 +476,24 @@ describe("AI actions end to end (fake Hermes)", () => {
     expect(recentAudit(50).some((a) => a.action === "ai.report.apply")).toBe(true);
   });
 
-  it("Finance area: no AI actions (403), nothing reaches Hermes; work.ai is required", async () => {
+  it("AI-excluded areas refuse AI; Finance text is allowed with masked accounts; work.ai is required", async () => {
     const u = me();
     const fin = store.createItem(u, { kind: "area", title: "Finance" }, cid);
+    store.updateItem(u, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
     const item = store.createItem(u, { kind: "thread", title: "Compare savings accounts", parentId: fin.id }, cid);
     const res = await start(item.id, "research");
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe("ai_excluded_area");
     const ai = await (await call(itemAiRoute.GET, { params: { id: item.id } })).json();
     expect(ai.policy).toEqual({ allowed: false, reason: "ai_excluded_area" });
-    // Finance-looking text on an ordinary item is refused too.
+    // Finance text is allowed and account numbers are masked before the outbound call.
     const { item: plain } = setup();
-    store.updateItem(u, plain.id, { summary: "Chase checking balance $4,210" }, cid);
-    expect((await start(plain.id, "research")).status).toBe(403);
+    store.updateItem(u, plain.id, { summary: "Chase checking balance $4,210 account 123456789012" }, cid);
+    expect((await start(plain.id, "research")).status).toBe(202);
     await settle();
-    expect(fake.starts).toHaveLength(0);
+    expect(fake.starts).toHaveLength(1);
+    expect(fake.starts[0].input).toContain("••••9012");
+    expect(fake.starts[0].input).not.toContain("123456789012");
     // An adult without work.ai gets 403.
     const o = resolveUser(new Headers(), createSession(other).token)!;
     const theirs = store.createItem(o, { kind: "area", title: "Mine" }, cid);
@@ -499,12 +502,12 @@ describe("AI actions end to end (fake Hermes)", () => {
     ).toBe(403);
   });
 
-  it("Suggest with AI (filing): screened titles only, Finance never offered, answers kept only for real destinations", async () => {
+  it("Suggest with AI (filing): credentials excluded, Finance allowed, answers kept only for real destinations", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-test-value");
     const { u, area } = setup();
     const fin = store.createItem(u, { kind: "area", title: "Finance" }, cid);
     const a = createLocalSession(u, "Enable v5 rollout");
-    const b = createLocalSession(u, "Pay card 4111 1111 1111 1111");
+    const b = createLocalSession(u, "password: hunter2hunter2");
     const go = () => call(suggestRoute.POST, { method: "POST", body: { clientKey: `ck${Math.random().toString(36).slice(2, 12)}` } });
     fake.fileAnswer = JSON.stringify({
       suggestions: [
@@ -519,11 +522,12 @@ describe("AI actions end to end (fake Hermes)", () => {
     expect(fake.starts).toHaveLength(1);
     expect(fake.starts[0]!.input).toContain(a.id);
     expect(fake.starts[0]!.input).not.toContain(b.id);
-    expect(fake.starts[0]!.input).not.toContain(fin.id); // AI-excluded area: never a destination
+    expect(fake.starts[0]!.input).toContain(fin.id); // Finance is an eligible destination
     let state = await (await call(suggestRoute.GET)).json();
     expect(state.job).toMatchObject({ kind: "file", state: "succeeded" });
     expect(state.suggestions).toEqual([{ sessionId: a.id, itemId: area.id, confidence: 0.9, reason: "V5 work" }]);
-    // A key outside the offered destinations (Finance, or invented) is dropped to "no home".
+    // Changing the area's policy excludes it from subsequent destinations.
+    store.updateItem(u, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
     fake.fileAnswer = JSON.stringify({ suggestions: [{ sessionId: a.id, destinationKey: fin.id, confidence: 0.7, reason: "money" }] });
     expect((await go()).status).toBe(202);
     await settle();
@@ -534,10 +538,11 @@ describe("AI actions end to end (fake Hermes)", () => {
     vi.unstubAllEnvs();
   });
 
-  it("an item moved into Finance after enqueue is skipped at execution", async () => {
+  it("an item moved into an AI-excluded area after enqueue is skipped at execution", async () => {
     const { u, item } = setup();
     const { job } = await (await start(item.id, "research")).json();
     const fin = store.createItem(u, { kind: "area", title: "Finance" }, cid);
+    store.updateItem(u, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
     store.moveItem(u, item.id, fin.id, cid);
     await settle();
     expect(getJobRow(job.id)).toMatchObject({ state: "skipped", errorCode: "finance_excluded" });

@@ -10,7 +10,7 @@ import { AGENT_TOKEN_PREFIX, parseScopes, type AgentScope, type AgentTokenView, 
 /**
  * Scoped agent tokens (docs/agent-tools.md). Only sha256(token) is stored; the token is returned
  * once at mint. A token is valid only on /api/mcp (resolveUser never accepts it), acts for the
- * owner who minted it, and carries a capability set built from its scopes — never finance.*,
+ * owner who minted it, and carries a capability set built from its scopes — no scope maps to finance.* module capabilities,
  * never admin. Revoking is the kill switch: the next call is refused.
  */
 
@@ -73,7 +73,7 @@ export function revokeAgentToken(user: CurrentUser, id: string, correlationId: s
   return view(db.select().from(schema.agentTokens).where(eq(schema.agentTokens.id, id)).get()!);
 }
 
-/** Capabilities a scope set maps to (intersected with the owner's own). Never finance.*, never admin. */
+/** Capabilities intersect the owner's own; no scope maps to finance.* module capabilities or admin. */
 export function capabilitiesForScopes(scopes: AgentScope[], ownerCaps: Set<string>): Set<string> {
   const want = new Set<string>();
   if (scopes.length) want.add("work.use");

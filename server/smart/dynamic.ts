@@ -40,7 +40,7 @@ function single(type: UIElement["type"], props: Record<string, unknown>) {
   return spec({ r: element(type, props) });
 }
 
-/** Fixed templates, cached source reads only: no model, no provider writes, no Finance. */
+/** Fixed templates, cached source reads only: no model, no provider writes, no AI-excluded areas. */
 export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: string): DynamicResponse {
   if (getOwner()?.id !== user.id) throw new HttpError(403, "owner_only", "Only the owner can open these cards.");
   const ctx = adapterContext(now);

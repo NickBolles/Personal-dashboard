@@ -45,6 +45,7 @@ function setup() {
   const area = createItem(owner!, { kind: "area", title: "Iris workshop" }, "test");
   const item = createItem(owner!, { kind: "thread", parentId: area.id, title: "Iris sandpaper", targetDate: "2026-11-01" }, "test");
   const finance = createItem(owner!, { kind: "area", title: "Finance" }, "test");
+  updateItem(owner!, finance.id, { settings: { aiPolicy: "excluded" } }, "test");
   createItem(owner!, { kind: "thread", parentId: finance.id, title: "Forbidden money title", targetDate: "2026-11-01" }, "test");
   return { area, item };
 }
@@ -266,14 +267,14 @@ describe("deterministic owner dynamic cards", () => {
     expect(dynamicCards(owner!, new Date(), id).cards.some((c) => c.id === id)).toBe(false);
     expect(ownedSurface(owner!.id, surface.id).specJson).toBe(specJson);
   });
-  it("excludes nested Finance and AI-excluded ancestors even inside an allowed root", () => {
+  it("excludes nested AI-excluded ancestors, but permits Finance inside an allowed root", () => {
     const { area, item } = setup();
     const nested = { ...area, id: "nested", parentId: area.id, settings: { ...area.settings!, aiPolicy: "excluded" as const } };
     const leaf = { ...item, parentId: nested.id };
     const map = new Map([area, nested, leaf].map((i) => [i.id, i]));
     expect(itemExcluded(leaf, map)).toBe(true);
     map.set(nested.id, { ...nested, title: "Finance", settings: null });
-    expect(itemExcluded(leaf, map)).toBe(true);
+    expect(itemExcluded(leaf, map)).toBe(false);
   });
   it("route enforces owner identity, not just admin/capabilities; off is empty", async () => {
     setup();
@@ -298,7 +299,7 @@ describe("deterministic owner dynamic cards", () => {
     expect(next.line.text).toBe("1 of 1 done · 0 up for grabs");
     expect(next.spec).not.toEqual(first.spec);
   });
-  it("queue hydrates owner decisions without Finance", () => {
+  it("queue hydrates owner decisions without AI-excluded areas", () => {
     const { item } = setup();
     updateItem(owner!, item.id, { decision: { question: "Iris next step?", choices: ["a", "b"] } }, "test");
     const queue = approvalQueue(owner!);

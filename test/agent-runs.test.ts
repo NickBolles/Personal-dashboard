@@ -7,7 +7,7 @@ import { agentRuns } from "@/server/work/agent-runs";
 import { coordinatorFor } from "@/server/work/coordinator";
 import { listDecisions } from "@/server/work/decisions";
 import { aggregateRunState, deployOf, liveOfJob, liveOfRun, whoIsOn, type RunSample } from "@/lib/agent-runs";
-import { buildCatchUpPrompt, isFinanceAreaLike } from "@/lib/catch-up";
+import { buildCatchUpPrompt } from "@/lib/catch-up";
 import { withdrawPost } from "@/lib/decisions";
 import { detectSensitivity } from "@/server/ai/rules";
 import { breadcrumbFor } from "@/components/navigation/AppShell";
@@ -75,10 +75,9 @@ describe("catch-me-up prompt (pure)", () => {
     expect(p).toContain('2026-11-02 You changed status of "Ship the map"');
   });
 
-  it("excludes Finance: no prompt for a Finance or AI-excluded area, and finance-looking items are dropped", () => {
-    expect(isFinanceAreaLike({ title: "Finances" })).toBe(true);
-    expect(buildCatchUpPrompt({ area: { id: "f", title: "Finance" }, items: [], decisions: [], activity: [] })).toBeNull();
-    expect(buildCatchUpPrompt({ area: { id: "f", title: "Money", systemKey: "finance" }, items: [], decisions: [], activity: [] })).toBeNull();
+  it("includes Finance, excludes AI-excluded areas and credentials", () => {
+    expect(buildCatchUpPrompt({ area: { id: "f", title: "Finance" }, items: [], decisions: [], activity: [] })).toContain('"Finance"');
+    expect(buildCatchUpPrompt({ area: { id: "f", title: "Money", systemKey: "finance" }, items: [], decisions: [], activity: [] })).toContain('"Money"');
     expect(buildCatchUpPrompt({ area: { id: "x", title: "Home", aiPolicy: "excluded" }, items: [], decisions: [], activity: [] })).toBeNull();
     const p = buildCatchUpPrompt({
       area: { id: "ar", title: "Home" },
@@ -86,15 +85,17 @@ describe("catch-me-up prompt (pure)", () => {
       decisions: [{ title: "Budget", question: "Move money from Monarch?" }],
       activity: [{ at: "2026-11-02T10:00:00Z", verb: "edited", title: "Finance review", actor: "You" }],
     })!;
-    expect(p).not.toMatch(/brokerage|monarch|finance review/i);
+    expect(p).toMatch(/brokerage/i);
+    expect(p).toMatch(/monarch/i);
+    expect(p).toMatch(/finance review/i);
     const guarded = buildCatchUpPrompt({
       area: { id: "ar", title: "Home" },
-      items: [{ id: "m", title: "Pay mortgage $2000", status: "todo", decision: null, nextAction: null, kind: "task", archived: false }] as never,
+      items: [{ id: "m", title: "password: hunter2hunter2", status: "ready", decision: null, nextAction: null, kind: "thread", archived: false }] as never,
       decisions: [],
       activity: [],
-      sensitive: (t) => detectSensitivity(t) !== "none",
+      sensitive: (t) => detectSensitivity(t) === "credentials",
     })!;
-    expect(guarded).not.toMatch(/mortgage/i);
+    expect(guarded).not.toMatch(/hunter2/i);
   });
 });
 
@@ -152,13 +153,15 @@ describe("agent runs + coordinator (server)", () => {
     expect(db.select().from(schema.runs).all()).toHaveLength(2);
   });
 
-  it("coordinator info: Finance area gets no prompt; others get one; decisions offer the coordinator chat", async () => {
+  it("coordinator info: Finance gets a prompt unless AI-excluded; decisions offer the coordinator chat", async () => {
     const u = userOf(owner);
     const fin = store.createItem(u, { kind: "area", title: "Finance" }, cid);
     store.createItem(u, { kind: "thread", title: "Rebalance", parentId: fin.id }, cid);
     const fc = coordinatorFor(u, fin.id);
-    expect(fc.excluded).toBe(true);
-    expect(fc.prompt).toBeNull();
+    expect(fc.excluded).toBe(false);
+    expect(fc.prompt).toContain("Rebalance");
+    store.updateItem(u, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
+    expect(coordinatorFor(u, fin.id).prompt).toBeNull();
     const dev = store.createItem(u, { kind: "area", title: "General Dev" }, cid);
     const t = store.createItem(u, { kind: "thread", title: "Coordinator pane", parentId: dev.id }, cid);
     store.updateItem(u, t.id, { decision: { question: "Sheet or dialog?", choices: ["Sheet", "Dialog"] } }, cid);

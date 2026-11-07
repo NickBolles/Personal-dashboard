@@ -64,10 +64,10 @@ describe("workflows API", () => {
   it("dedupes an identical re-import and rejects invalid definitions with issues", async () => {
     await importTeaching();
     expect((await importTeaching()).duplicate).toBe(true);
-    const bad = await call(importRoute.POST, { body: { data: { ...teaching, routing: { area: "Finance", modelTier: "fast" } } } });
+    const bad = await call(importRoute.POST, { body: { data: { ...teaching, instructions: "", routing: { area: "Finance", modelTier: "fast" } } } });
     const { results } = (await bad.json()) as { results: { ok: boolean; issues: { code: string }[] }[] };
     expect(results[0].ok).toBe(false);
-    expect(results[0].issues[0].code).toBe("finance_excluded");
+    expect(results[0].issues[0].code).toBe("invalid");
   });
 
   it("export → import round trip keeps the definition", async () => {

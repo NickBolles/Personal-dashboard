@@ -155,7 +155,7 @@ describe("attention budget on /api/home", () => {
     }
   });
 
-  it("finance corrections and categories never enter the Hermes tuning brief", async () => {
+  it("Finance corrections and categories may enter the Hermes tuning brief", async () => {
     await feedback(owner, {
       target: { kind: "action", id: "finance:private", category: "source:finance" },
       verdict: "wrong_assumption",
@@ -164,8 +164,8 @@ describe("attention budget on /api/home", () => {
     await call(tuningRoute.PUT, "/api/home/tuning", owner, { method: "PUT", body: { category: "source:finance", weight: -1 } });
     const view = await call<{ hermesBrief: string; feedback: unknown[] }>(tuningRoute.GET, "/api/home/tuning", owner);
     expect(view.body.feedback).toHaveLength(1);
-    expect(view.body.hermesBrief).not.toContain("PRIVATE_FINANCIAL_NOTE");
-    expect(view.body.hermesBrief).not.toContain("Finance");
+    expect(view.body.hermesBrief).toContain("PRIVATE_FINANCIAL_NOTE");
+    expect(view.body.hermesBrief).toContain("Finance");
   });
 
   it("Daily Compass focus is reported honestly and only to its owner", async () => {

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Dialog, OverflowMenu, type MenuItem } from "@/components/ui";
+import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { ReportViewer } from "@/components/work/ai/AiActions";
@@ -10,7 +10,7 @@ import type { InboxEntry, WorkItem } from "@/lib/work";
 
 const CHANNEL_LABEL: Record<string, string> = { pwa_share: "Shared", shortcut: "Shortcut", android: "Phone", voice: "Voice", web: "Web", api: "API" };
 const SKIP_TEXT: Record<string, string> = {
-  finance_detected: "Not sent to AI: looks like finance. File it yourself.",
+  finance_detected: "Previously skipped. You can investigate this capture now.",
   credentials_detected: "Not sent to AI: looks like it contains a credential.",
   ai_disabled: "",
   ai_not_allowed: "",
@@ -115,42 +115,16 @@ export function CaptureExtras({ entry, onAccepted, onChoose }: { entry: InboxEnt
 }
 
 /**
- * The ⋯ menu of a capture row: Investigate (work.ai) and "Send anyway…" for
- * finance-looking captures live here with Dismiss, so the row keeps one
+ * The ⋯ menu of a capture row: Investigate (work.ai) lives here with Dismiss, so the row keeps one
  * visible action (File/suggestion).
  */
 export function CaptureRowMenu({ entry, label, onDismiss }: { entry: InboxEntry; label: string; onDismiss: () => void }) {
   const c = entry.capture!;
   const canAi = useAccess().can("work.ai");
-  const [confirm, setConfirm] = useState(false);
-  const investigate = useWorkMutation(
-    (financeOverride: boolean) => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, financeOverride ? { financeOverride: true } : {}),
-    { ok: "Jarvis is looking into it", onSuccess: () => setConfirm(false) },
-  );
+  const investigate = useWorkMutation(() => api.post(`/api/work/inbox/${encodeURIComponent(entry.id)}/investigate`, {}), { ok: "Jarvis is looking into it" });
   const items: MenuItem[] = [];
-  if (canAi && !c.report && !c.investigating && c.sensitivity !== "credentials" && c.sensitivity !== "finance" && c.triageState !== "queued")
-    items.push({ label: "Investigate", onSelect: () => investigate.mutate(false) });
-  if (canAi && c.sensitivity === "finance") items.push({ label: "Send to AI anyway…", onSelect: () => setConfirm(true) });
+  if (canAi && !c.report && !c.investigating && c.sensitivity !== "credentials" && c.triageState !== "queued")
+    items.push({ label: "Investigate", onSelect: () => investigate.mutate() });
   items.push({ label: "Dismiss", onSelect: onDismiss, danger: true });
-  return (
-    <>
-      <OverflowMenu label={label} items={items} />
-      {confirm ? (
-        <Dialog
-          open
-          onClose={() => setConfirm(false)}
-          title="Send to AI anyway?"
-          description="This capture looks like finance. Jarvis keeps finance away from AI unless you confirm. This is recorded in the audit log."
-          footer={
-            <>
-              <Button onClick={() => setConfirm(false)}>Cancel</Button>
-              <Button variant="danger" busy={investigate.isPending} onClick={() => investigate.mutate(true)}>
-                Send anyway
-              </Button>
-            </>
-          }
-        />
-      ) : null}
-    </>
-  );
+  return <OverflowMenu label={label} items={items} />;
 }

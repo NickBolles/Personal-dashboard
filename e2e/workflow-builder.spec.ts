@@ -26,14 +26,13 @@ test("workflow builder: create, preview, save a new version, restore v1", async 
   await preview.getByRole("radio", { name: "Errors" }).click();
   await expect(preview).toContainText("Rehearsal date is required");
 
-  // Finance is refused inline and blocks Save.
+  // Finance is allowed; only an area's explicit AI policy may exclude it.
   await page
     .getByRole("navigation", { name: "Builder sections" })
     .getByRole("button", { name: /^Basics/ })
     .click();
   await page.locator("#wf-area").fill("Finance");
-  await expect(page.getByTestId("builder-issues")).toContainText("Finance");
-  await expect(page.getByRole("button", { name: "Save draft" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Save draft" })).toBeEnabled();
   await page.locator("#wf-area").fill("");
 
   await page.getByRole("button", { name: "Save draft" }).click();

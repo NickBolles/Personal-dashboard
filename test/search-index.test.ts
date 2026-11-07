@@ -5,6 +5,7 @@
  * and chats were never found because that provider always timed out).
  */
 import { beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { writeIndex } from "@/server/work/conversation-index";
@@ -110,7 +111,7 @@ describe("palette search", () => {
     expect(r.results[0]).toMatchObject({ title: "Teaching notes." });
   });
 
-  it("finance-filed chats stay in navigation only (palette), as before", async () => {
+  it("finance-filed chats remain navigable", async () => {
     seed(200);
     expect((await search(me(), "tax planning")).results.some((x) => x.href === "/chat/s_tax")).toBe(true);
   });
@@ -128,15 +129,22 @@ describe("composer @ references", () => {
     expect(ctx).toContain("Filed under: Miscellaneous");
   });
 
-  it("never offers or resolves Finance content as AI context", async () => {
+  it("offers Finance context, but never offers or resolves AI-excluded subtrees", async () => {
     seed(200);
+    expect((await referenceOptions(me(), "finance")).sections.flatMap((s) => s.options).some((o) => o.id === "wi_fin")).toBe(true);
+    expect(await resolveReferences(me(), [{ type: "item", id: "wi_fin_p", label: "Budget review quarterly" }])).toContain("Budget review quarterly");
+    getDb()
+      .update(schema.workItems)
+      .set({ settings: JSON.stringify({ aiPolicy: "excluded" }) })
+      .where(eq(schema.workItems.id, "wi_fin"))
+      .run();
     const all = (await referenceOptions(me(), "tax")).sections.flatMap((s) => s.options);
     expect(all.some((o) => o.id === "s_tax")).toBe(false);
     expect((await referenceOptions(me(), "budget review")).sections.flatMap((s) => s.options)).toEqual([]);
     expect((await referenceOptions(me(), "finance")).sections.flatMap((s) => s.options).some((o) => o.id === "wi_fin")).toBe(false);
     expect(await resolveReferences(me(), [{ type: "chat", id: "s_tax", label: "Tax planning chat" }])).toBe("");
     expect(await resolveReferences(me(), [{ type: "item", id: "wi_fin_p", label: "Budget review quarterly" }])).toBe("");
-    expect(chatEntries(me()).find((c) => c.sessionId === "s_tax")?.finance).toBe(true);
+    expect(chatEntries(me()).find((c) => c.sessionId === "s_tax")?.aiExcluded).toBe(true);
   });
 
   it("lists filed conversations even before the Hermes index has loaded", async () => {

@@ -169,9 +169,7 @@ export function enqueue(input: EnqueueInput): { job: JobView; created: boolean }
         ? "AI actions are off for this area."
         : guard.reason === "area_triage_only"
           ? "This area only allows capture triage."
-          : guard.reason === "credentials_detected"
-            ? "Not sent to AI: it looks like it contains a credential."
-            : "Not sent to AI: it looks like finance.",
+          : "Not sent to AI: it looks like it contains a credential.",
     );
   }
   const db = getDb();
@@ -228,8 +226,7 @@ export function enqueue(input: EnqueueInput): { job: JobView; created: boolean }
     .run();
   if (input.budgetOverride)
     audit({ actor: input.userId, action: "ai.budget_override", source: "ai", sourceRecord: id, result: "ok", correlationId: input.correlationId });
-  if (input.financeOverride)
-    audit({ actor: input.userId, action: "ai.finance_override", source: "ai", sourceRecord: id, result: "ok", correlationId: input.correlationId });
+
   audit({
     actor: input.userId,
     action: "ai.job.queued",

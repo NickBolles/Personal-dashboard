@@ -56,8 +56,7 @@ is invented. Only people with `daily_compass.use` get it (existing scoping).
   calendar events titled birthday/anniversary.
 - Seasonal (Christmas gifts, from Nov 1): labelled as a seasonal idea, not a
   calendar event.
-- Cards are versioned, fingerprinted and snoozable. They never include finance
-  or other people's private data.
+- Cards are versioned, fingerprinted and snoozable. Finance is eligible like any area; AI-excluded subtrees and other people's private data stay out. Credentials are blocked and account numbers masked before model sends.
 
 ## UI
 

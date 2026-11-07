@@ -25,7 +25,7 @@ function hyd<K extends "metric" | "calendar" | "pr" | "todo" | "item">(h: Hydrat
 
 function unavailableText(h: HydratedRef | undefined, hydrating: boolean) {
   if (hydrating && !h) return "Loading…";
-  if (h && "unavailable" in h) return h.message ?? (h.unavailable === "finance" ? "Finance is never shown to AI" : "Not available");
+  if (h && "unavailable" in h) return h.message ?? (h.unavailable === "ai_excluded" ? "Areas excluded from AI are never sent" : "Not available");
   return "Not available";
 }
 

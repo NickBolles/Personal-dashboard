@@ -143,6 +143,7 @@ function seed() {
   const area = store.createItem(me, { kind: "area", title: "Momentum bets" }, cid);
   const item = store.createItem(me, { kind: "project", title: "Team totals", parentId: area.id, targetDate: "2026-10-27", nextAction: "Pick defaults" }, cid);
   const fin = store.createItem(me, { kind: "area", title: "Finance" }, cid);
+  store.updateItem(me, fin.id, { settings: { aiPolicy: "excluded" } }, cid);
   const finItem = store.createItem(me, { kind: "project", title: "Taxes", parentId: fin.id, targetDate: "2026-10-27" }, cid);
   return { me, item, finItem };
 }
@@ -233,7 +234,7 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
     expect((await workflow("brief")).status).toBe(403);
   });
 
-  it("morning brief: rows from Jarvis data (Finance excluded), live metrics, chips stage today/tomorrow and apply", async () => {
+  it("morning brief: rows from Jarvis data (AI-excluded areas omitted), live metrics, chips stage today/tomorrow and apply", async () => {
     const { item, finItem } = seed();
     await enable();
     const w = await workflow("brief");
@@ -367,10 +368,10 @@ describe("workflow surfaces (Jarvis-built, flag-gated)", () => {
     expect(pr.readiness.blockers).toEqual(["1 failing check"]);
     expect(h.refs["pr:someone/else#9"]).toEqual({ ref: "pr:someone/else#9", unavailable: "unknown" });
     expect(gh.calls.every((c) => !c.includes("/merge"))).toBe(true);
-    // A Finance item's PR never hydrates.
+    // An AI-excluded item's PR never hydrates.
     await store.addLink(me, finItem.id, { kind: "github_pr", url: "https://github.com/NickBolles/taxes/pull/3" } as never, cid).catch(() => undefined);
     const f = await (await call(hydrateRoute.POST, { body: { refs: ["pr:NickBolles/taxes#3"] } })).json();
-    expect(f.refs["pr:NickBolles/taxes#3"].unavailable).toBe("finance");
+    expect(f.refs["pr:NickBolles/taxes#3"].unavailable).toBe("ai_excluded");
   });
 
   it("PR card: a check source GitHub didn't return keeps readiness pending", async () => {

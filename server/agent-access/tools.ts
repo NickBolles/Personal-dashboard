@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { quickActionInput } from "@/lib/quick-actions";
-import { isFinanceAreaLike } from "@/lib/catch-up";
+
 import { propose as proposeQuickAction } from "@/server/quick-actions";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
@@ -26,7 +26,7 @@ import { buildDeviceProposal } from "./ha-proposals";
 
 /**
  * Jarvis MCP tools (docs/agent-tools.md). Every tool:
- * - needs a scope; Finance and AI-excluded areas (and everything under them) are invisible —
+ * - needs a scope; AI-excluded areas (and everything under them) are invisible —
  *   an id there answers "not found", exactly like an id that doesn't exist;
  * - validates its input with zod (strict, size-capped);
  * - writes through the normal store functions inside withVia("agent:<profile>") (mcp.ts), so
@@ -71,7 +71,7 @@ const tool = <S extends z.ZodType>(t: ToolDef<S>) => t as unknown as ToolDef;
 
 // --- visibility -----------------------------------------------------------------------------
 
-/** The owner's items an agent may see: no Finance / aiPolicy=excluded subtrees, no archived. */
+/** The owner's items an agent may see: no aiPolicy=excluded subtrees, no archived. */
 export function agentItems(userId: string): { items: WorkItem[]; byId: Map<string, WorkItem> } {
   const all = listItems(userId);
   const byId = new Map(all.map((i) => [i.id, i]));
@@ -81,7 +81,7 @@ export function agentItems(userId: string): { items: WorkItem[]; byId: Map<strin
     const known = hidden.get(i.id);
     if (known !== undefined) return known;
     let h = i.archived;
-    if (!h && i.parentId === null) h = effectiveAreaPolicy({ title: i.title, aiPolicy: i.settings?.aiPolicy ?? null }) === "excluded";
+    if (!h) h = effectiveAreaPolicy({ title: i.title, aiPolicy: i.settings?.aiPolicy ?? null }) === "excluded";
     if (!h && i.parentId !== null) h = depth > 60 ? true : isHidden(byId.get(i.parentId), depth + 1);
     hidden.set(i.id, h);
     return h;
@@ -135,18 +135,15 @@ export function requestOwnerChange(
 export const TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_add_quick_action",
-    description: "Propose a saved coordinator prompt. Never activates or sends it; the owner must tap Add. Finance scopes are refused.",
+    description: "Propose a saved coordinator prompt. Never activates or sends it; the owner must tap Add. AI-excluded areas are refused.",
     scope: "work.write",
     input: quickActionInput.omit({ pinned: true }),
     run: (input, { agent }) => {
       if (input.scope?.startsWith("area:")) {
         const area = visible(agent.user.id, input.scope.slice(5));
-        if (area.kind !== "area" || isFinanceAreaLike(area)) throw new HttpError(404, "not_found", "That area isn't available to agents");
+        if (area.kind !== "area") throw new HttpError(404, "not_found", "That area isn't available to agents");
       }
-      if (input.scope?.startsWith("page:")) {
-        const path = input.scope.slice(5);
-        if (/^\/finance(?:\/|$)/i.test(path)) throw new HttpError(403, "forbidden", "Finance is never available to agents");
-      }
+
       const { action } = proposeQuickAction(agent.user.id, agent.profile, input);
       return { proposed: true, id: action.id, note: "The owner must tap Add" };
     },
@@ -154,7 +151,7 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_tree",
     description:
-      "List the owner's areas → projects → items (status, next action, assignee, open decision). Optional areaId to start from one area or project; depth 1–4 (default 3). Closed items are left out unless includeClosed. Finance and AI-excluded areas are never listed.",
+      "List the owner's areas → projects → items (status, next action, assignee, open decision). Optional areaId to start from one area or project; depth 1–4 (default 3). Closed items are left out unless includeClosed. AI-excluded areas are never listed. Never include credentials or full account numbers.",
     scope: "work.read",
     input: z.object({ areaId: id.optional(), depth: z.number().int().min(1).max(4).optional(), includeClosed: z.boolean().optional() }).strict(),
     run: ({ areaId, depth = 3, includeClosed = false }, { agent }) => {
@@ -414,7 +411,7 @@ export const TOOLS: ToolDef[] = [
     input: z.object({ sessionId: z.string().trim().min(1).max(200), itemId: id }).strict(),
     run: async ({ sessionId, itemId }, { agent, correlationId }) => {
       visible(agent.user.id, itemId);
-      // A conversation already filed somewhere agents can't see (Finance, AI-excluded) stays put.
+      // A conversation already filed somewhere agents can't see (AI-excluded) stays put.
       const existing = conversationNodes(agent.user.id).get(sessionId);
       if (existing) visible(agent.user.id, existing.id);
       const profile = agent.profile === "default" ? null : agent.profile;

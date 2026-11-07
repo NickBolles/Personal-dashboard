@@ -115,7 +115,7 @@ export function toItem(r: ItemRow): WorkItem {
     builtIn: !!r.systemKey,
     validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
     sessionId: r.sessionId ?? null,
-    settings: r.parentId === null && r.kind === "area" ? parseAreaSettings(r.settings) : null,
+    settings: (r.parentId === null && r.kind === "area") || r.settings ? parseAreaSettings(r.settings) : null,
     tags: parseTags(r.tags),
     assignee: r.assignee ?? null,
     decision: parseDecision(r.decision),

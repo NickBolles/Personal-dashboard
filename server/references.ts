@@ -1,4 +1,6 @@
 import "server-only";
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { detectSensitivity } from "@/server/ai/rules";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { can, type Capable } from "@/server/access";
@@ -19,8 +21,7 @@ import { searchGithubRefs, resolveGithubRef } from "@/server/work/github-search"
 /**
  * Composer references (lib/references.ts): the `@` picker's options and the
  * server-side resolution of sent references into context snapshots. Every
- * option and every resolution is filtered by what the person may see; Finance
- * is never offered and never resolved (it's never sent to the AI layer).
+ * option and every resolution is filtered by access and per-area AI exclusions.
  */
 
 type Viewer = CurrentUser & Capable;
@@ -44,8 +45,7 @@ export async function referenceOptions(user: Viewer, raw: string): Promise<RefOp
   const all = can(user, "work.use") ? listItems(user.id) : [];
   const idx = pathIndex(all);
   const path = idx.path;
-  // Finance never reaches AI context: nodes under a Finance area aren't offered.
-  const work = all.filter((i) => !idx.finance(i.id));
+  const work = all.filter((i) => !idx.aiExcluded(i.id));
 
   if (want("area") && work.length) {
     const options = rank(
@@ -72,10 +72,10 @@ export async function referenceOptions(user: Viewer, raw: string): Promise<RefOp
   }
   const tasks: Promise<void>[] = [];
   if (want("chat") && can(user, "hermes.chat")) {
-    // Cached index + filed conversation nodes (never a live Hermes list per keystroke); Finance-filed chats are never offered.
+    // Cached index + filed conversation nodes; AI-excluded chats are never offered.
     const options = rank(
       chatEntries(user, all)
-        .filter((c) => !c.archived && !c.finance)
+        .filter((c) => !c.archived && !c.aiExcluded)
         .map((c) => ({
           type: "chat" as const,
           id: c.sessionId,
@@ -169,7 +169,8 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
     case "area":
     case "item": {
       if (!can(user, "work.use")) return null;
-      if (pathIndex(listItems(user.id, { includeArchived: true })).finance(r.id)) return null;
+      const index = pathIndex(listItems(user.id, { includeArchived: true }));
+      if (index.aiExcluded(r.id)) return null;
       try {
         const d = getDetail(user.id, r.id);
         const p = d.packets[0];
@@ -181,8 +182,9 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
           d.validations.length
             ? `Validations: ${d.validations.map((v) => `${v.metric} ${v.comparator} ${v.threshold}${v.unit} (${v.status})`).join("; ")}`
             : "",
-          d.children.length
+          d.children.filter((c) => !index.aiExcluded(c.id)).length
             ? `Children: ${d.children
+                .filter((c) => !index.aiExcluded(c.id))
                 .slice(0, 12)
                 .map((c) => `${c.title} (${STATUS_LABELS[c.status]})`)
                 .join("; ")}`
@@ -203,7 +205,7 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
       if (!can(user, "hermes.chat")) return null;
       // Hermes owns the content; pass the reference (the agent can open its own sessions) plus where it's filed and its latest snippet.
       const c = chatEntries(user).find((x) => x.sessionId === r.id);
-      if (c?.finance || (!c && !sessionAccess(user, r.id))) return null;
+      if (c?.aiExcluded || (!c && !sessionAccess(user, r.id))) return null;
       const title = c?.title ?? r.label;
       return [`Conversation “${title}” (session id ${r.id})`, c?.path ? `Filed under: ${c.path}` : "", c?.preview ? `Latest: ${c.preview.slice(0, 300)}` : ""]
         .filter(Boolean)
@@ -231,6 +233,7 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
         .innerJoin(schema.workItems, eq(schema.workItems.id, schema.workLinks.itemId))
         .where(and(eq(schema.workLinks.id, r.id), eq(schema.workItems.userId, user.id)))
         .get();
+      if (row && pathIndex(listItems(user.id, { includeArchived: true })).aiExcluded(row.item.id)) return null;
       return row ? `Link: ${row.link.title} — ${row.link.url} (on “${row.item.title}”)` : null;
     }
     case "gh": {
@@ -243,8 +246,8 @@ async function resolveOne(user: Viewer, r: Reference): Promise<string | null> {
 /** Snapshot text for the references in a message (only what this person may see; unknown or forbidden ones are skipped). */
 export async function resolveReferences(user: Viewer, refs: Reference[]): Promise<string> {
   const blocks = await Promise.all(refs.slice(0, 12).map((r) => resolveOne(user, r).catch(() => null)));
-  const lines = blocks.filter((b): b is string => !!b);
-  return lines.length ? `Referenced:\n${lines.map((b) => `- ${b.replace(/\n/g, "\n  ")}`).join("\n")}` : "";
+  const lines = blocks.filter((b): b is string => !!b && detectSensitivity(b) !== "credentials");
+  return maskAccountNumbers(lines.length ? `Referenced:\n${lines.map((b) => `- ${b.replace(/\n/g, "\n  ")}`).join("\n")}` : "");
 }
 
 /** Area defaults for a run in this conversation (its node's area, else the area of an item linking it). */
