@@ -78,7 +78,7 @@ function ScopedBoard({ scopeId, selectedId, onOpen }: { scopeId: string | null; 
     return keep;
   }, [items, byId, bucket, meta, search, filtering]);
   const areas = rolls.filter((r) => (!area || r.id === area) && (!scope || scope.id === r.id) && visible.has(r.id));
-  const project = scope && scope.parentId !== null && scope.kind !== "area" ? scope : null;
+  const branchRoot = scope && scope.parentId !== null ? scope : null;
   const shown = items.filter((i) => visible.has(i.id) && !isContainer(i)).length;
   const branch = (parent: string) => (
     <Branch
@@ -168,9 +168,9 @@ function ScopedBoard({ scopeId, selectedId, onOpen }: { scopeId: string | null; 
               </ChipButton>
             ) : null}
           </div>
-          {project && visible.has(project.id) ? (
-            <div className="space-y-2" data-testid="map-tree" key={`${project.id}-${filtering}`}>
-              {branch(project.id)}
+          {branchRoot && visible.has(branchRoot.id) ? (
+            <div className="space-y-2" data-testid="map-tree" key={`${branchRoot.id}-${filtering}`}>
+              {branch(branchRoot.id)}
             </div>
           ) : areas.length ? (
             <div className="space-y-2" data-testid="map-tree" key={filtering ? "f" : "a"}>

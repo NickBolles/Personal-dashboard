@@ -249,6 +249,18 @@ describe("Board and tree status rendering", () => {
     if (scopeId === "leaf" || scopeId === "sub") expect(view.queryByText("sibling")).toBeNull();
   });
 
+  it.each(["a", "p"])("renders a nested area under %s as a scoped branch, including filters and reset", (parentId) => {
+    const items = [...work(), item("nested-area", { parentId, kind: "area" }), item("nested-leaf", { parentId: "nested-area" })];
+    const view = mount(React.createElement(BoardTab, { scopeId: "nested-area" }), items);
+    expect(view.queryByTestId("map-empty")).toBeNull();
+    expect(view.getByRole("link", { name: "nested-leaf" })).toBeTruthy();
+    expect(view.queryByRole("link", { name: "sibling" })).toBeNull();
+    fireEvent.change(view.getByLabelText("Search the map"), { target: { value: "missing" } });
+    expect(view.getByTestId("map-empty")).toBeTruthy();
+    fireEvent.click(view.getByText("Reset"));
+    expect(view.getByRole("link", { name: "nested-leaf" })).toBeTruthy();
+  });
+
   it("does not render the drill-down on Overview and renders both digest sections", () => {
     const view = mount(React.createElement(MapView), work());
     expect(view.queryByTestId("map-tree")).toBeNull();

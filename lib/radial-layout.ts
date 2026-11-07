@@ -17,6 +17,8 @@ export type PlacedNode = RadialNodeIn & {
   /** Word-wrapped, at most three lines. */
   lines: string[];
   anchor: "start" | "middle" | "end";
+  /** Label-only displacement when truncation cannot leave a safe gap. Dots stay radial. */
+  labelOffsetY: number;
   /** Hidden children, not descendants. */
   more: number;
   ghost?: boolean;
@@ -47,9 +49,50 @@ export function wrapLabel(s: string, max: number): string[] {
 }
 
 const TAU = Math.PI * 2;
+export const LABEL_GAP = 8;
+const LABEL_CHAR_WIDTH = 7.5;
+
+/** Shared with the SVG renderer and Fit; conservative 12px-font glyph bounds. */
+export function radialLabelBox(node: PlacedNode) {
+  const x = node.anchor === "start" ? 18 : node.anchor === "end" ? -18 : 0;
+  const y =
+    (node.anchor === "middle" ? (Math.sin(node.angle) < 0 ? -20 - (node.lines.length - 1) * 15 : 27) : -((node.lines.length - 1) * 15) / 2 + 4) +
+    node.labelOffsetY;
+  const width = Math.max(0, ...node.lines.map((line) => line.length)) * LABEL_CHAR_WIDTH;
+  const left = node.x + x - (node.anchor === "end" ? width : node.anchor === "middle" ? width / 2 : 0);
+  const top = node.y + y - 12;
+  return { x, y, left, right: left + width, top, bottom: top + Math.max(1, node.lines.length) * 15 };
+}
+
+function separateLabels(nodes: PlacedNode[]) {
+  const boxes: ReturnType<typeof radialLabelBox>[] = [];
+  for (const node of nodes) {
+    if (node.ring === 0) continue;
+    const original = node.lines;
+    const overlaps = (box: ReturnType<typeof radialLabelBox>) =>
+      boxes.filter((b) => box.left < b.right + LABEL_GAP && box.right + LABEL_GAP > b.left && box.top < b.bottom + LABEL_GAP && box.bottom + LABEL_GAP > b.top);
+    let box = radialLabelBox(node);
+    // Keep the full title in <title>/aria-label. Try less ink before moving labels.
+    for (let chars = Math.max(...original.map((line) => line.length)) - 1; chars >= 4 && overlaps(box).length; chars--) {
+      node.lines = original.map((line) => (line.length > chars ? `${line.slice(0, chars - 1).trimEnd()}…` : line));
+      box = radialLabelBox(node);
+    }
+    const direction = Math.sin(node.angle) < 0 ? -1 : 1;
+    let collisions = overlaps(box);
+    while (collisions.length) {
+      node.labelOffsetY +=
+        direction < 0
+          ? Math.min(...collisions.map((b) => b.top)) - LABEL_GAP - 1 - box.bottom
+          : Math.max(...collisions.map((b) => b.bottom)) + LABEL_GAP + 1 - box.top;
+      box = radialLabelBox(node);
+      collisions = overlaps(box);
+    }
+    boxes.push(box);
+  }
+}
 
 /**
- * Linear-time, stable radial tree. Callers remove archived/conversation nodes.
+ * Stable radial tree. Callers remove archived/conversation nodes.
  * Dense outer wedges collapse excess children into their parent's +N badge.
  */
 export function radialLayout(
@@ -88,6 +131,7 @@ export function radialLayout(
       more,
       lines: wrapLabel(node.title, opts.compact ? 12 : ring === 2 || ring === 3 ? 12 : 16),
       anchor: ring === 0 ? "middle" : cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle",
+      labelOffsetY: 0,
       ...(ghost ? { ghost: true } : {}),
     };
     placed.set(node.id, result);
@@ -139,6 +183,7 @@ export function radialLayout(
       ghosts++;
     }
   }
+  separateLabels([...placed.values()]);
   // Draw every link whose endpoints survived, including links between ghosts.
   for (const relation of relations) {
     const a = placed.get(relation.from);
