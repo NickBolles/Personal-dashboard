@@ -104,7 +104,7 @@ export function TodayChores({
       >
         Chores
       </SectionLabel>
-      <div className="card px-1.5 py-1">{body}</div>
+      <div>{body}</div>
       {write.node}
     </section>
   );
