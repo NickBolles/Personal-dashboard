@@ -10,7 +10,7 @@ import { AREA_TAB_LABELS, AREA_TABS, areasHref, type AreaTab } from "@/lib/areas
 export const AREA_PANEL_ID = "areas-tabpanel";
 
 /**
- * Areas v2 view tabs: Overview · (Chats) · Board · Activity · Graph. Each tab is a real
+ * Areas v2 view tabs: Overview · (Portfolio on the landing) · (Chats) · Board · Activity · Graph. Each tab is a real
  * link (new tab, bookmarks) but a plain click swaps the pane in place: the
  * selected node (`?item=`) and the page scroll stay where they are.
  * Arrow keys / Home / End move between tabs (WAI-ARIA tabs pattern, automatic activation).
@@ -29,7 +29,7 @@ export function AreaTabs({
   onTab: (t: AreaTab) => void;
   className?: string;
 }) {
-  const tabs = AREA_TABS.filter((t) => t !== "chats" || leaf);
+  const tabs = AREA_TABS.filter((t) => (t !== "chats" || leaf) && (t !== "portfolio" || !item));
   const href = (t: AreaTab) => areasHref(item ? `/areas?item=${encodeURIComponent(item)}` : "/areas", { tab: t });
   const pick = (e: MouseEvent, t: AreaTab) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
