@@ -60,6 +60,7 @@ import "@/components/map/map.css";
 import { AREA_PANEL_ID, AreaTabs } from "@/components/areas/AreaTabs";
 import { BoardTab } from "@/components/areas/BoardTab";
 import { GraphTab } from "@/components/areas/GraphTab";
+import { PortfolioTab } from "@/components/areas/PortfolioTab";
 import { areasHref, parseTab, type AreaTab } from "@/lib/areas-view";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ActionSheet, JobChip, ReportsSection, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
@@ -249,7 +250,7 @@ export function WorkView({
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
   // Work items (leaves) fold their Chats section into the view tabs; areas/projects have no Chats tab.
   const leaf = !!open && !isContainer(open);
-  const shownTab: AreaTab = tab === "chats" && !leaf ? "overview" : tab;
+  const shownTab: AreaTab = (tab === "chats" && !leaf) || (tab === "portfolio" && current) ? "overview" : tab;
 
   // Header bar "New" → Item/Project/Area, created in the open container like the in-page menu.
   useEffect(() => {
@@ -368,6 +369,10 @@ export function WorkView({
                         label="All activity"
                       />
                     )}
+                  </div>
+                ) : shownTab === "portfolio" ? (
+                  <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+                    <PortfolioTab onOpen={(id) => go({ kind: "item", id }, { push: true })} />
                   </div>
                 ) : shownTab === "graph" ? (
                   <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">

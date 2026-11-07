@@ -19,6 +19,7 @@ export const UNDO_KINDS = [
   "tag_rename",
   "create",
   "quick_action",
+  "import",
 ] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
@@ -40,6 +41,8 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   tag_rename: "Renamed tag",
   /** an item an agent created through MCP (docs/agent-tools.md): undo removes it if untouched, else archives it */
   create: "Created",
+  /** a portfolio map import (Phase 4): undo removes the untouched new items and the added links/tags */
+  import: "Imported portfolio map",
 };
 
 /**
@@ -57,6 +60,8 @@ export function undoWindowFor(op: { kind: string; via?: string | null }, autoSet
 
 /** work_ops.item_id for tag rename/merge ops: one per-user stack, so only the latest one can be undone. */
 export const TAG_OPS_ITEM = "tags";
+/** work_ops.item_id for portfolio map imports (one per-user stack). */
+export const IMPORT_OPS_ITEM = "portfolio-import";
 
 /** Fields an "edit" op can restore. */
 export const EDIT_UNDO_FIELDS = ["title", "summary", "nextAction", "targetDate", "status", "tags", "assignee", "decision"] as const;

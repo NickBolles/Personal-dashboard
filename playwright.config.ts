@@ -57,7 +57,7 @@ export default defineConfig({
       name: "desktop",
       dependencies: ["setup"],
       testMatch:
-        /(a11y|visual|chat|chat-panel|chat-files|keyboard|sidebar|palette-raycast|inline-edits|global-coordinator|pickers|icon-actions|areas-v2)\.spec\.ts/,
+        /(a11y|visual|chat|chat-panel|chat-files|keyboard|sidebar|palette-raycast|inline-edits|global-coordinator|pickers|icon-actions|areas-v2|portfolio)\.spec\.ts/,
       use: { viewport: { width: 1280, height: 800 }, browserName: "chromium", storageState: "e2e/.auth/state.json" },
     },
   ],

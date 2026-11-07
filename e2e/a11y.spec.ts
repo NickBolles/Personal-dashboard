@@ -47,6 +47,7 @@ const PAGES = [
   "/areas/dashboard",
   "/areas/map",
   "/areas?tab=board",
+  "/areas?tab=portfolio",
   "/areas/activity",
   "/decisions",
   "/capture",
@@ -76,6 +77,8 @@ for (const path of PAGES) {
 }
 
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
+  // One page per entry; the list outgrew the 60 s default on mobile-320 (Phase 4 added /areas?tab=portfolio).
+  test.setTimeout(120_000);
   await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture() }));
   await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture() }));
   for (const path of [
@@ -97,6 +100,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/areas",
     "/areas?tab=graph",
     "/areas?tab=board",
+    "/areas?tab=portfolio",
     "/decisions",
   ]) {
     await page.goto(path);
