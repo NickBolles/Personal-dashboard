@@ -76,6 +76,8 @@ for (const path of PAGES) {
 }
 
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
+  // One page per entry; the list outgrew the 60 s default on mobile-320 (Phase 4 added /areas?tab=portfolio).
+  test.setTimeout(120_000);
   for (const path of [
     "/home",
     "/more",

@@ -59,7 +59,7 @@ export function PortfolioTab({ onOpen }: { onOpen?: (id: string) => void }): JSX
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {tags.length ? (
-            <ChipSelect aria-label="Group" value={tag} active={!!tag} onChange={(e) => setTag(e.target.value)} className="w-40 [&>select]:w-full">
+            <ChipSelect aria-label="Group" value={tag} active={!!tag} onChange={(e) => setTag(e.target.value)} className="w-40 max-w-full [&>select]:w-full">
               <option value="">All groups</option>
               {tags.map((t) => (
                 <option key={t} value={t}>
