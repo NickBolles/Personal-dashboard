@@ -14,13 +14,26 @@ async function make(page: Page, body: Record<string, unknown>) {
   return ((await r.json()) as { item: { id: string } }).item.id;
 }
 
-/** The importer files unknown board projects under the Portfolio area: make sure one exists. */
-async function ensurePortfolioArea(page: Page) {
+/**
+ * The importer files unknown board projects under the Portfolio area: make sure one exists.
+ * Returns the id when THIS spec created it, so the test can archive it again: a live area
+ * titled "Portfolio" becomes the global coordinator (server/work/coordinator.ts), which adds
+ * the coordinator tray/rail chip to every later spec sharing this server.
+ */
+async function ensurePortfolioArea(page: Page): Promise<string | null> {
   const r = await page.request.get("/api/work/items");
   const { items } = (await r.json()) as { items: { id: string; title: string; parentId: string | null; archived: boolean }[] };
   const found = items.find((i) => i.parentId === null && !i.archived && i.title.toLowerCase() === "portfolio");
-  return found?.id ?? (await make(page, { kind: "area", title: "Portfolio" }));
+  return found ? null : await make(page, { kind: "area", title: "Portfolio" });
 }
+
+let createdPortfolio: string | null = null;
+test.afterEach(async ({ page }) => {
+  if (!createdPortfolio) return;
+  const r = await page.request.patch(`/api/work/items/${createdPortfolio}`, { data: { archived: true }, headers: { "x-jarvis-csrf": "1" } });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  createdPortfolio = null;
+});
 
 const views = (page: Page) => page.getByRole("tablist", { name: "Views" });
 
@@ -35,7 +48,7 @@ test("portfolio tab: project lanes, then import a map with preview, undo and no 
     headers: { "x-jarvis-csrf": "1" },
   });
   expect(r.ok(), await r.text()).toBeTruthy();
-  await ensurePortfolioArea(page);
+  createdPortfolio = await ensurePortfolioArea(page);
 
   await page.goto("/areas");
   await views(page).getByRole("tab", { name: "Portfolio", exact: true }).click();
