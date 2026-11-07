@@ -3352,6 +3352,15 @@ button:active > .dock-orb {
     transform: none;
   }
 }
+.sk-row[data-settled] {
+  overflow: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No animation runs (so no animationend): never clip. */
+  .sk-row[data-phase] {
+    overflow: visible;
+  }
+}
 /* Rollback: a short horizontal shake, then the row is exactly as it was. */
 .sk-row[data-phase="failed"] {
   animation: sk-shake 240ms var(--ease) both;

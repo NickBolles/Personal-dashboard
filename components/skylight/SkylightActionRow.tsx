@@ -186,6 +186,8 @@ export function SkylightActionRow({
   // Height for the collapse (leaving) and re-enter (restored) keyframes: measured, so the motion is exact.
   useLayoutEffect(() => {
     const el = box.current;
+    // A new phase animates again (and clips again until its animation ends).
+    if (el) delete el.dataset.settled;
     if (el && (phase === "pending" || phase === "leaving" || phase === "undoing" || phase === "restored" || phase === "done"))
       el.style.setProperty("--sk-h", `${Math.max(el.scrollHeight, 36)}px`);
   }, [phase]);
@@ -196,6 +198,10 @@ export function SkylightActionRow({
       data-phase={phase}
       data-swipe={swipe.onPointerDown ? "" : undefined}
       aria-busy={busy || undefined}
+      // Collapse/enter clip with overflow:hidden only while animating, so the ⋯ menu is never clipped after.
+      onAnimationEnd={(e) => {
+        if (e.target === e.currentTarget) e.currentTarget.dataset.settled = "";
+      }}
       style={{ "--sk-dx": "0px" } as CSSProperties}
       {...swipe}
     >

@@ -25,6 +25,7 @@ import { useSource } from "@/components/useSource";
 import { TodayChores } from "@/components/skylight/TodayChores";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { useSkylightWriteState } from "@/components/skylight/writeStore";
+import { optimisticStatus } from "@/components/skylight/writeState";
 import { choreWrite, type SkylightExtra } from "@/components/skylight/model";
 
 const PROBLEM: SourceStatus["state"][] = ["stale", "error", "unauthorized", "refreshing"];
@@ -307,7 +308,8 @@ export function HomeView() {
   const skyWrite = useSkylightWrite();
   const skyState = useSkylightWriteState();
   const skyWritable = (sky.data?.data?.extra as SkylightExtra | undefined)?.writable === true && can("skylight.write");
-  const feed = (list: NextAction[]) => list.filter((a) => skyState[a.id]?.phase !== "done");
+  // Hide only rows a landed write took out of the open list (complete/skip); claims and reschedules stay.
+  const feed = (list: NextAction[]) => list.filter((a) => optimisticStatus(a, skyState[a.id]) === a.status);
   const card = (a: NextAction) => {
     const op = skyWritable && a.source === "skylight" && a.status === "open" ? choreWrite(a, "chore.complete") : null;
     return op ? (

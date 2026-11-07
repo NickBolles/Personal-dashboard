@@ -54,7 +54,14 @@ export function TodayChores({
     () => todaysChores(raw ?? [], today).filter((a) => everyone || extra.needsMember || a.assignee?.kind !== "other"),
     [raw, today, everyone, extra.needsMember],
   );
-  if (!can("skylight.view") || !sky.data?.data || !todaysChores(raw ?? [], today).length) return <>{fallback}</>;
+  if (!can("skylight.view") || !sky.data?.data || !todaysChores(raw ?? [], today).length)
+    return (
+      <>
+        {fallback}
+        {/* Keep the confirm card + Undo mounted when the last chore just left (e.g. skipped). */}
+        {write.node}
+      </>
+    );
   const open = chores.filter((a) => a.status === "open").length;
   // A quiet text toggle (one primary per row stays the rows'): Mine = yours + up for grabs.
   const toggle = (
