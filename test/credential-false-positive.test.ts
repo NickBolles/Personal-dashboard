@@ -104,6 +104,26 @@ describe("credential detector: real secrets are still caught", () => {
 });
 
 describe("mask vs block", () => {
+  it("quoted values are masked through the closing quote (Codex P1)", () => {
+    for (const [t, secret] of [
+      [j('Please debug login with password="', "hunter2,secondHalf9", '" on staging'), "secondHalf9"],
+      [j("set password='", "two words 9x", "' then retry"), "two words"],
+      [j('Why does {"client_secret": "', "abc,def;ghi 123", '", "x": 1} fail here?'), "def;ghi"],
+      [j("retry with password=", "hunter2,secondHalf9", " please"), "secondHalf9"],
+    ]) {
+      const m = maskSecrets(t!);
+      expect(m.masked.length, t).toBe(1);
+      expect(m.text, t).not.toContain(secret);
+      expect(m.onlySecrets, t).toBe(false);
+    }
+    expect(maskSecrets("Login fails with password=hunter2.").text).toBe(`Login fails with password=${SECRET_MASK}.`);
+  });
+
+  it("a non-Latin request plus a token is masked and sent, not refused (Codex P2)", () => {
+    const m = maskSecrets(`请帮我调查部署失败的原因 ${GHP}`);
+    expect(m.onlySecrets).toBe(false);
+    expect(m.text).not.toContain(GHP);
+  });
   it("a message with prose plus a secret is masked and sent", () => {
     const m = maskSecrets(`Fix the deploy, it fails with password=hunter2 on the staging box`);
     expect(m.onlySecrets).toBe(false);

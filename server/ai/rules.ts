@@ -100,8 +100,15 @@ const FIN_STRONG = /\b(monarch|401k|401\(k\)|roth ira|net worth|routing number|a
 // headers, URL user:pass and PEM private keys are caught anywhere. Jarvis/Hermes ids and URLs are not secrets.
 
 const SECRET_WORD = String.raw`(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[_-]?(?:access[_-]?)?key|client[_-]?secret|(?:auth|access|refresh|bearer|session|bot|api)[_-]?token|token|secret|password|passwd|pwd|passcode|passphrase|authorization)`;
-/** `password: x`, `token=x`, `"api_key": "x"`, `Authorization: Bearer x` (value checked by `assignedValue`). */
-const ASSIGNED = new RegExp(String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*["']?(?:(?:bearer|basic|token)\s+)?([^\s"'\`,;)}\]]+)`, "gi");
+/**
+ * `password: x`, `token=x`, `"api_key": "x"`, `Authorization: Bearer x` (value checked by `assignedValue`).
+ * A quoted value runs to its closing quote, so `password="hunter2,second half"` is masked whole.
+ */
+const Q = "\"'`";
+const ASSIGNED = new RegExp(
+  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|\x60([^\x60\n]{1,256})\x60|[${Q}]?(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
+  "gid",
+);
 /** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
 const SPACED = new RegExp(String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})\s+(?:is\s+|was\s+|of\s+)?["']?([A-Za-z0-9._~+/=-]{16,})`, "gi");
 const BEARER = /\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})/gi;
@@ -134,6 +141,7 @@ const NOT_SECRET = [
   /^\$\{?[A-Z_][A-Z0-9_]*\}?$/, // ${VAR} / $VAR placeholders
   /^(?:process\.env|os\.environ|env)[.[]/, // code reading a secret, not the secret
   /^<[^>]*>?$/,
+  /^\[secret removed\]$/, // already masked
   /^(?:\*{3,}|x{4,}|\.{3,}|…|•+\d*|redacted|null|none|undefined|true|false|required|optional|set|unset|missing|expired|invalid|revoked|here)$/i,
 ];
 const notSecret = (v: string) => NOT_SECRET.some((r) => r.test(v));
@@ -180,10 +188,14 @@ export function findSecrets(text: string): SecretFinding[] {
     add("Password in a URL", start, start + m[1]!.length, `${m[0].slice(0, m[0].indexOf("://") + 3)}user:…@`);
   }
   for (const m of text.matchAll(ASSIGNED)) {
-    const v = m[2]!;
+    const g = [2, 3, 4, 5].find((i) => m[i] !== undefined);
+    if (!g || !m.indices?.[g]) continue;
+    // Unquoted: trailing sentence punctuation isn't part of the value; commas INSIDE it are (masked whole).
+    const v = g === 5 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
     if (!assignedValue(v)) continue;
-    const start = m.index! + m[0].length - v.length;
-    add("Credential", start, start + v.length, `${m[1]}${m[0].includes("=") ? "=" : ":"} …`);
+    const start = m.indices[g]![0];
+    const sep = m[0].slice(m[1]!.length).match(/[:=]/)?.[0] ?? ":";
+    add("Credential", start, start + v.length, `${m[1]}${sep} …`);
   }
   for (const m of text.matchAll(BEARER)) {
     const v = m[1]!;
@@ -229,9 +241,12 @@ export function maskSecrets(text: string): MaskedSecrets {
     last = f.end;
   }
   rest += text.slice(last);
-  // What's left besides the keywords themselves ("password:", "Authorization: Bearer").
-  const words = rest.replace(new RegExp(String.raw`\b${SECRET_WORD}\b|\b(?:bearer|basic|is|my|the|here|it|this|use)\b`, "gi"), " ").match(/[A-Za-z]{2,}/g);
-  return { text: out, masked: found.map(({ kind, hint }) => ({ kind, hint })), onlySecrets: (words?.length ?? 0) < 2 };
+  // What's left besides the keywords themselves ("password:", "Authorization: Bearer"), in any script
+  // (a Chinese request plus a token is a request, not a bare credential).
+  const letters = rest
+    .replace(new RegExp(String.raw`\b${SECRET_WORD}\b|\b(?:bearer|basic|is|my|the|here|it|this|use)\b`, "gi"), " ")
+    .match(new RegExp("\\p{L}", "gu"));
+  return { text: out, masked: found.map(({ kind, hint }) => ({ kind, hint })), onlySecrets: (letters?.length ?? 0) < 6 };
 }
 
 /** The owner-facing refusal: names the flagged part (never the secret) so the owner can edit it out; the draft stays. */
