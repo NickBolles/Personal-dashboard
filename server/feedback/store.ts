@@ -321,8 +321,14 @@ export function triageCandidates(user: CurrentUser) {
     .all()
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const entries: TriageEntry[] = [];
+  // The conversation may have moved since it was rated: both its area then and its area now must allow AI.
+  const current = new Map<string, string | null>();
+  const areaNow = (sessionId: string) => {
+    if (!current.has(sessionId)) current.set(sessionId, areaForSession(user, sessionId));
+    return current.get(sessionId) ?? null;
+  };
   for (const r of rows) {
-    if (!aiAllowed(user.id, r.areaId)) continue;
+    if (!aiAllowed(user.id, r.areaId) || !aiAllowed(user.id, areaNow(r.sessionId))) continue;
     const v = view(r, items);
     if (detectSensitivity([v.note, v.excerpt].join("\n")) !== "none") continue;
     entries.push({

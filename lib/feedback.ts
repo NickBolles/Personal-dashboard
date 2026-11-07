@@ -180,7 +180,10 @@ export type TriageEntry = {
 };
 
 export function messageLink(origin: string, sessionId: string, messageId: string) {
-  return `${origin.replace(/\/$/, "")}/chat/${encodeURIComponent(sessionId)}#msg-${encodeURIComponent(messageId)}`;
+  const base = origin.replace(/\/$/, "");
+  // Smart cards (DynamicSurface) carry a synthetic `dynamic:<cardId>` id: they open from More, not a chat.
+  if (sessionId.startsWith("dynamic:")) return `${base}/more?smartCard=${encodeURIComponent(sessionId.slice(8))}`;
+  return `${base}/chat/${encodeURIComponent(sessionId)}#msg-${encodeURIComponent(messageId)}`;
 }
 
 /**

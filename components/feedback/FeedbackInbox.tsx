@@ -17,6 +17,7 @@ import {
   FEEDBACK_STATUSES,
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_SURFACE_LABELS,
+  messageLink,
   reasonsText,
   type Feedback,
   type FeedbackFilter,
@@ -265,7 +266,7 @@ function FeedbackRow({
           {e.areaTitle ? <span>{e.areaTitle}</span> : null}
           {e.fixRequestedAt ? <Pill tone="ai">Fix asked</Pill> : null}
           <span data-dynamic>{new Date(e.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
-          <Link href={`/chat/${encodeURIComponent(e.sessionId)}#msg-${encodeURIComponent(e.messageId)}`} className="text-accent hover:underline">
+          <Link href={messageLink("", e.sessionId, e.messageId)} className="text-accent hover:underline">
             Open message
           </Link>
           {e.itemId ? (

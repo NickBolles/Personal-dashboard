@@ -164,6 +164,10 @@ describe("pure helpers", () => {
     expect(excerptOf("Here **it** is\n```jarvis-ui\n{}\n```\n[link](https://x.y) done")).toBe("Here it is link done");
     expect(excerptOf("x".repeat(700)).length).toBe(600);
   });
+  it("links smart-card ratings to the card, not a chat", () => {
+    expect(messageLink("https://j.example/", "dynamic:c1", "card:c1")).toBe("https://j.example/more?smartCard=c1");
+    expect(messageLink("", "s 1", "m1")).toBe("/chat/s%201#msg-m1");
+  });
   it("builds the fix prompt from reasons and note", () => {
     const p = fixPrompt({ reasons: ["didnt_do_it"], note: "Create the item", excerpt: "I'll look into it" });
     expect(p).toContain("rated bad (Didn't do it)");
@@ -226,6 +230,14 @@ describe("daily feedback triage job", () => {
     rate("p3");
     rate("p4", { rating: "up" });
     expect(triageCandidates(owner).map((e) => e.id)).toEqual([listFeedback(owner).entries.find((e) => e.messageId === "p3")!.id]);
+  });
+  it("rechecks the conversation's current area (rated unfiled, then moved into an excluded area)", () => {
+    rate("m1", {}, "s-loose");
+    expect(triageCandidates(owner)).toHaveLength(1);
+    const secret = createItem(owner, { kind: "area", title: "Vault" }, "test").id;
+    updateItem(owner, secret, { settings: { aiPolicy: "excluded" } }, "test");
+    placeConversation(owner, { sessionId: "s-loose", parentId: secret, title: "Moved chat" }, "test");
+    expect(triageCandidates(owner)).toHaveLength(0);
   });
   it("skips the slot when there is nothing new", async () => {
     triageJob();
