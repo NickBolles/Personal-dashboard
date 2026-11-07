@@ -161,7 +161,7 @@ export function AgentsSettingsView() {
           <EmptyState title="No profile routes yet. Everything runs on the default Hermes profile." />
         )}
         <form
-          className="grid gap-2 sm:grid-cols-3"
+          className="grid grid-cols-1 gap-2 [overflow-wrap:anywhere] sm:grid-cols-3"
           aria-label="Add a profile route"
           onSubmit={async (e) => {
             e.preventDefault();

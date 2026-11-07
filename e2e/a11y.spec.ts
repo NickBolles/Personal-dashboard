@@ -838,8 +838,10 @@ test("alder settings appearance + sub-page section nav: one h1, current section 
   await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
   await page.getByRole("radio", { name: "System", exact: true }).click();
   await page.getByRole("radio", { name: "Auto", exact: true }).click();
+  // The section nav is a container query (page ≥ 720 px): at 1280 the Chief of staff rail leaves less, so check it on a wide desktop.
+  if ((page.viewportSize()?.width ?? 0) >= 1024) await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto("/settings/agents");
-  await expect(page.getByRole("heading", { name: "Coordinators", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^Coordinators/ })).toBeVisible();
   await expect(page.locator("h1")).toHaveCount(1);
   const nav = page.locator('nav[aria-label="Settings sections"]');
   if ((page.viewportSize()?.width ?? 0) >= 1024) {
@@ -856,7 +858,12 @@ test("Prismv2 dynamic review sheet/panel: WCAG22AA + 200% text reflow", async ({
   await stubPrismV2(page);
   await page.goto("/more");
   if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
-  else await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
+  else {
+    // Tap only once the tray shows the card line: an earlier tap opens the sheet without the card.
+    const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+    await expect(tray).toContainText("Weekly review");
+    await tray.click();
+  }
   await expect(page.getByTestId("dynamic-card")).toBeVisible();
   const selector = testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet";
   const result = await new AxeBuilder({ page: page as never }).include(selector).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();

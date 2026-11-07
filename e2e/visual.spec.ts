@@ -1964,7 +1964,7 @@ for (const scheme of ["light", "dark"] as const) {
     await freezeMiddayCT(page);
     await stubPhase3Settings(page);
     await page.goto("/settings/agents");
-    await expect(page.getByRole("heading", { name: "Coordinators", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Coordinators/ })).toBeVisible();
     await expect(page.getByRole("progressbar", { name: "Shared daily AI job budget used", exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await expect(page).toHaveScreenshot(`settings-agents-coordinators-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
@@ -1995,7 +1995,12 @@ for (const scheme of ["light", "dark"] as const) {
     await stubPrismV2(page);
     await page.goto("/more");
     if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
-    else await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
+    else {
+      // Tap only once the tray shows the card line: an earlier tap opens the sheet without the card.
+      const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+      await expect(tray).toContainText("Weekly review");
+      await tray.click();
+    }
     const panel = page.locator(testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet");
     await expect(panel.getByRole("heading", { name: "Prismv2 weekly review" })).toBeVisible();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

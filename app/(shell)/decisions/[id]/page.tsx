@@ -1,5 +1,5 @@
 import { requirePage } from "@/server/auth/page";
-import { validDecisionId } from "@/lib/decision-route";
+import { decodeDecisionId, validDecisionId } from "@/lib/decision-route";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
 import { Page, PageHeader } from "@/components/ui";
 import { EmptyState } from "@/components/ui/kit";
@@ -14,7 +14,7 @@ export default async function DecisionPage({
   searchParams: Promise<{ choice?: string | string[] }>;
 }) {
   await requirePage("work.use", "hermes.chat");
-  const { id } = await params;
+  const id = decodeDecisionId((await params).id);
   if (!validDecisionId(id))
     return (
       <Page>
