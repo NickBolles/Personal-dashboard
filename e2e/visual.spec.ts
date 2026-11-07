@@ -1941,8 +1941,15 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(card.getByTestId("agent-token-row")).toHaveCount(2);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+    // At 320 the card is far taller than the viewport: an element shot that has to scroll draws the
+    // mask boxes ~15 px off their rows (deterministic after #212 + #213 merged). Grow the viewport so
+    // the whole card fits (320 only; 412/desktop baselines unchanged), then restore it for the Activity half.
+    const vp = page.viewportSize();
+    const box = await card.boundingBox();
+    if (vp && vp.width <= 360 && box && box.height + 120 > vp.height) await page.setViewportSize({ width: vp.width, height: Math.ceil(box.height) + 240 });
     await page.waitForTimeout(300);
     await withoutTray(page, () => expect(card).toHaveScreenshot(`agent-access-${scheme}.png`, { mask: MASK.map((m) => card.locator(m)) }));
+    if (vp) await page.setViewportSize(vp);
     await t.evaluate((el) => (el as Element).remove());
 
     // Fixed single-digit-hour wall time on today's CT date (14:05Z = 8:05 CST / 9:05 CDT): the
