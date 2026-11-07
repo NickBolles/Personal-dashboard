@@ -1,11 +1,11 @@
 "use client";
 
-import { ItemAgentPanel } from "@/components/agents/AgentRuns";
+import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { daysBetween } from "@/lib/time";
@@ -54,6 +54,10 @@ import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work
 import { useInbox } from "@/components/work/today";
 import { MapView } from "@/components/map/MapView";
 import "@/components/map/map.css";
+import { AREA_PANEL_ID, AreaTabs } from "@/components/areas/AreaTabs";
+import { BoardTab } from "@/components/areas/BoardTab";
+import { GraphTab } from "@/components/areas/GraphTab";
+import { areasHref, parseTab, type AreaTab } from "@/lib/areas-view";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
@@ -82,6 +86,7 @@ import {
 } from "@/lib/work";
 
 const KIND_LABEL = KIND_LABELS;
+type ItemSection = "overview" | "chats" | "activity";
 const textareaCls = `${inputCls} min-h-24`;
 
 function useItems(archived: boolean) {
@@ -107,9 +112,12 @@ export function WorkView({
   initialView,
   initialAction,
   initialCapture,
+  initialTab = "overview",
 }: {
   initialItem?: string;
   initialView?: WorkViewKind;
+  /** Areas v2 view tab (`?tab=`): kept while the selection changes, and vice versa */
+  initialTab?: AreaTab;
   initialAction?: string;
   /** the share target's text: opens the capture sheet prefilled */
   initialCapture?: string;
@@ -122,6 +130,14 @@ export function WorkView({
   const [archived, setArchived] = useShowArchived();
   const items = useItems(archived);
   const [view, setView] = useState<View>(initialItem ? { kind: "item", id: initialItem, action: initialAction } : { kind: initialView ?? "today" });
+  const [tab, setTabState] = useState<AreaTab>(initialTab);
+  // A tab swaps the pane in place: the selection (?item=) and the scroll position stay put.
+  const setTab = (t: AreaTab) => {
+    setTabState(t);
+    // A palette action (?do=) runs once: a tab switch that remounts ItemDetail must not replay it.
+    setView((v) => (v.kind === "item" && v.action ? { kind: "item", id: v.id } : v));
+    window.history.replaceState(window.history.state, "", areasHref(window.location.href, { tab: t }));
+  };
   const [adding, setAdding] = useState<{ kind?: CreatableKind; parent: WorkItem | null } | null>(null);
   const [moving, setMoving] = useState<string[] | null>(null);
   const [selectMode, setSelectMode] = useState(false);
@@ -172,14 +188,17 @@ export function WorkView({
     },
   );
 
-  const go = (next: View, opts?: { push?: boolean }) => {
+  const go = (next: View, opts?: { push?: boolean; tab?: AreaTab }) => {
     setView(next);
+    if (opts?.tab) setTabState(opts.tab);
     const url = new URL(window.location.href);
-    url.searchParams.delete("item");
-    url.searchParams.delete("view");
-    url.searchParams.delete("do");
+    const keepTab = url.searchParams.get("tab");
+    for (const k of ["item", "view", "do", "tab"]) url.searchParams.delete(k);
     if (next.kind === "item") url.searchParams.set("item", next.id);
     else if (next.kind !== "today") url.searchParams.set("view", next.kind);
+    // The tab survives a selection change (re-centre the Graph, pick a tree row) unless the caller switches it.
+    const nextTab = next.kind === "tree" || next.kind === "inbox" ? null : (opts?.tab ?? keepTab);
+    if (nextTab && nextTab !== "overview") url.searchParams.set("tab", nextTab);
     // Opening an area from the overview pushes, so Back returns to the overview.
     if (opts?.push) window.history.pushState({ jarvisAreas: true }, "", url);
     else window.history.replaceState(null, "", url);
@@ -192,6 +211,12 @@ export function WorkView({
     if (it?.kind === "conversation" && it.sessionId && canChat) openConversation(it.sessionId);
     else go({ kind: "item", id });
   };
+  /** Board rows and the Graph's "Open": the node's own page (Overview tab); Back returns to the view. */
+  const openOverview = (id: string) => {
+    const it = items.data?.items.find((i) => i.id === id);
+    if (it?.kind === "conversation" && it.sessionId && canChat) openConversation(it.sessionId);
+    else go({ kind: "item", id }, { push: true, tab: "overview" });
+  };
 
   // Back/Forward after opening an area from the overview: follow the URL.
   useEffect(() => {
@@ -200,6 +225,7 @@ export function WorkView({
       const id = u.searchParams.get("item");
       const v = u.searchParams.get("view");
       setView(id ? { kind: "item", id } : v === "tree" ? { kind: "tree" } : { kind: "today" });
+      setTabState(parseTab(u.searchParams.get("tab")));
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -207,9 +233,20 @@ export function WorkView({
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
+  // Areas v2 (B): the side tree carries status context (needs-you / in-flight counts, agent dots; next actions
+  // only where the tree sits beside the page, ≥1024 — on phones it is a full-screen list and stays one line per row).
+  const phoneTree = usePhone();
+  const agentRuns = useAgentRuns().data;
+  const treeStatus = useMemo(
+    () => ({ showNext: !phoneTree, runs: Object.fromEntries(Object.entries(agentRuns?.items ?? {}).map(([id, r]) => [id, r.live])) }),
+    [agentRuns, phoneTree],
+  );
   // "+ New" creates where you are: inside the open area/project, or next to the open item.
   const open = current ? list.find((i) => i.id === current) : undefined;
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
+  // Work items (leaves) fold their Chats section into the view tabs; areas/projects have no Chats tab.
+  const leaf = !!open && !isContainer(open);
+  const shownTab: AreaTab = tab === "chats" && !leaf ? "overview" : tab;
 
   // Header bar "New" → Item/Project/Area, created in the open container like the in-page menu.
   useEffect(() => {
@@ -252,7 +289,12 @@ export function WorkView({
             />
           </div>
         </header>
-        <AreasNav current={view.kind === "item" ? "tree" : view.kind} inboxCount={inboxCount} onPick={(k) => go({ kind: k })} className="px-1" />
+        <AreasNav
+          current={view.kind === "item" ? "tree" : view.kind}
+          inboxCount={inboxCount}
+          onPick={(k) => go({ kind: k }, { tab: "overview" })}
+          className="px-1"
+        />
       </div>
       <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
         {selectMode ? (
@@ -286,26 +328,71 @@ export function WorkView({
           </section>
         ) : null}
         <div className={selectMode ? "lg:hidden" : undefined}>
-          {view.kind === "today" ? (
-            // "Map is Areas": the landing is the portfolio overview; a card opens its area here, in place.
-            <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
-              <MapView onOpen={(id) => go({ kind: "item", id }, { push: true })} />
+          {view.kind === "today" || current ? (
+            // Areas v2: one tab bar in a fixed spot; a tab swaps only the pane below it and keeps the selection.
+            <div className="min-w-0">
+              <AreaTabs tab={shownTab} item={current} leaf={leaf} onTab={setTab} className="mx-3 mt-2 sm:mx-5 lg:mx-6 lg:mt-3" />
+              <div id={AREA_PANEL_ID} role="tabpanel" aria-labelledby={`areas-tab-${shownTab}`} className="ar-panel min-w-0">
+                {current && (shownTab === "board" || shownTab === "graph" || (shownTab === "activity" && !leaf)) ? (
+                  <NodeHeader id={current} items={list} onSelect={select} />
+                ) : null}
+                {current && leaf && (shownTab === "overview" || shownTab === "chats" || shownTab === "activity") ? (
+                  // A work item keeps its own page (header, actions); the view tab picks its section.
+                  <ItemDetail
+                    key={current}
+                    id={current}
+                    items={list}
+                    onSelect={select}
+                    onOp={onOp}
+                    initialAction={view.kind === "item" ? view.action : undefined}
+                    onAdd={(kind, parent) => setAdding({ kind, parent })}
+                    onMove={(ids) => setMoving(ids)}
+                    section={shownTab}
+                    onSection={setTab}
+                  />
+                ) : shownTab === "board" ? (
+                  <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+                    <BoardTab scopeId={current} selectedId={current} onOpen={openOverview} />
+                  </div>
+                ) : shownTab === "activity" ? (
+                  <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+                    {current ? (
+                      <ActivityFeed key={current} scope={{ item: current, descendants: true }} onSelect={select} label="Activity" />
+                    ) : (
+                      <ActivityFeed
+                        areas={list.filter((i) => i.parentId === null && !i.archived).map((i) => ({ id: i.id, title: i.title }))}
+                        onSelect={select}
+                        label="All activity"
+                      />
+                    )}
+                  </div>
+                ) : shownTab === "graph" ? (
+                  <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+                    <GraphTab items={list} centreId={current} onRecentre={(id) => (id ? select(id) : go({ kind: "today" }))} onOpen={openOverview} />
+                  </div>
+                ) : current ? (
+                  <ItemDetail
+                    key={current}
+                    id={current}
+                    items={list}
+                    onSelect={select}
+                    onOp={onOp}
+                    initialAction={view.kind === "item" ? view.action : undefined}
+                    onAdd={(kind, parent) => setAdding({ kind, parent })}
+                    onMove={(ids) => setMoving(ids)}
+                  />
+                ) : (
+                  // "Map is Areas": the landing is the portfolio overview; a card opens its area here, in place.
+                  <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
+                    <MapView onOpen={(id) => go({ kind: "item", id }, { push: true })} />
+                  </div>
+                )}
+              </div>
             </div>
           ) : view.kind === "tree" ? (
             <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-5">
               <AreasOverview items={list} onSelect={select} onNewArea={() => setAdding({ kind: "area", parent: null })} />
             </div>
-          ) : current ? (
-            <ItemDetail
-              key={current}
-              id={current}
-              items={list}
-              onSelect={select}
-              onOp={onOp}
-              initialAction={view.kind === "item" ? view.action : undefined}
-              onAdd={(kind, parent) => setAdding({ kind, parent })}
-              onMove={(ids) => setMoving(ids)}
-            />
           ) : items.isPending || items.isFetching ? (
             <div className="p-6">
               <Spinner label="Loading…" />
@@ -346,6 +433,7 @@ export function WorkView({
             <WorkTree
               items={list}
               linked={items.data?.linkedConversations}
+              status={treeStatus}
               selected={current}
               onSelect={select}
               onOpenConversation={canChat ? openConversation : undefined}
@@ -831,6 +919,8 @@ function ItemDetail({
   initialAction,
   onAdd,
   onMove,
+  section,
+  onSection,
 }: {
   id: string;
   items: WorkItem[];
@@ -840,9 +930,14 @@ function ItemDetail({
   initialAction?: string;
   onAdd: (kind: CreatableKind | undefined, parent: WorkItem) => void;
   onMove: (ids: string[]) => void;
+  /** Areas v2: the page's view tabs own the work item's sections (one tab bar, no inner tablist) */
+  section?: ItemSection;
+  onSection?: (s: ItemSection) => void;
 }) {
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
-  const [tab, setTab] = useState<"overview" | "chats" | "activity">("overview");
+  const [ownTab, setOwnTab] = useState<ItemSection>("overview");
+  const tab = section ?? ownTab;
+  const setTab = onSection ?? setOwnTab;
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -1081,7 +1176,6 @@ function ItemDetail({
             {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
             {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
             <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : "flex-wrap"}`}>
-              {container ? <ViewSwitch id={item.id} /> : null}
               {chatIcon}
               {focusPrimary ? (
                 <IconAction
@@ -1188,37 +1282,44 @@ function ItemDetail({
       ) : (
         <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
           <div className="min-w-0">
-            <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
-              {(
-                [
-                  ["overview", "Overview"],
-                  ["chats", chats.length ? `Chats ${chats.length}` : "Chats"],
-                  ["activity", "Activity"],
-                ] as const
-              ).map(([k, label], ix, all) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="tab"
-                  id={`tab-${k}`}
-                  aria-selected={tab === k}
-                  aria-controls={`panel-${k}`}
-                  tabIndex={tab === k ? 0 : -1}
-                  onClick={() => setTab(k)}
-                  onKeyDown={(e) => {
-                    if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                      const n = all[(ix + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length][0];
-                      setTab(n);
-                      document.getElementById(`tab-${n}`)?.focus();
-                    }
-                  }}
-                  className="wk-tab"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+            {section ? null : (
+              <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
+                {(
+                  [
+                    ["overview", "Overview"],
+                    ["chats", chats.length ? `Chats ${chats.length}` : "Chats"],
+                    ["activity", "Activity"],
+                  ] as const
+                ).map(([k, label], ix, all) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="tab"
+                    id={`tab-${k}`}
+                    aria-selected={tab === k}
+                    aria-controls={`panel-${k}`}
+                    tabIndex={tab === k ? 0 : -1}
+                    onClick={() => setTab(k)}
+                    onKeyDown={(e) => {
+                      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                        const n = all[(ix + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length][0];
+                        setTab(n);
+                        document.getElementById(`tab-${n}`)?.focus();
+                      }
+                    }}
+                    className="wk-tab"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div
+              role={section ? undefined : "tabpanel"}
+              id={section ? undefined : `panel-${tab}`}
+              aria-labelledby={section ? undefined : `tab-${tab}`}
+              className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4"
+            >
               {tab === "overview" ? (
                 <>
                   {(() => {
@@ -1478,24 +1579,39 @@ function ContainerMeta({ d, items }: { d: WorkDetail; items: WorkItem[] }) {
   );
 }
 
-/** List · Timeline · Map view switch for an area/project (the other views are scoped routes). */
-function ViewSwitch({ id }: { id: string }) {
-  const q = `?root=${encodeURIComponent(id)}`;
+/**
+ * Compact node header for the Board / Activity / Graph tabs: the breadcrumb and
+ * title stay on screen, so switching views never loses where you are.
+ */
+function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; onSelect: (id: string) => void }) {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const node = byId.get(id);
+  if (!node) return null;
+  const trail: WorkItem[] = [];
+  for (let p = node.parentId ? byId.get(node.parentId) : undefined, n = 0; p && n < 50; p = p.parentId ? byId.get(p.parentId) : undefined, n++)
+    trail.unshift(p);
   return (
-    <nav aria-label="Views" className="wk-views hidden sm:flex">
-      <span aria-current="page" className="wk-view">
-        List
-      </span>
-      <Link href={`/areas/timeline${q}`} className="wk-view">
-        Timeline
-      </Link>
-      <Link href={`/areas/map${q}`} className="wk-view">
-        Map
-      </Link>
-      <Link href={`/areas/activity${q}`} className="wk-view">
-        Activity
-      </Link>
-    </nav>
+    <header className="px-3 pt-3 sm:px-5 lg:px-6" data-testid="node-header">
+      <nav aria-label="Breadcrumb" className="wk-crumbs">
+        <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
+          {trail.map((b) => (
+            <li key={b.id} className="flex items-center gap-0.5">
+              <button type="button" className="tap rounded px-1 hover:text-accent hover:underline" onClick={() => onSelect(b.id)}>
+                {b.title}
+              </button>
+              <span aria-hidden="true">›</span>
+            </li>
+          ))}
+          <li aria-current="page" className="px-1">
+            {node.parentId === null ? "Area" : node.kind === "thread" ? "Item" : KIND_LABEL[node.kind]}
+          </li>
+        </ol>
+      </nav>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+        <h2 className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[19px]">{node.title}</h2>
+        {node.parentId === null ? null : <StatusBadge status={node.status} />}
+      </div>
+    </header>
   );
 }
 

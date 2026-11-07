@@ -46,7 +46,7 @@ const PETALS: Petal[] = [
       { cmd: "work.inbox", label: "Inbox" },
       { cmd: "work.timeline", label: "Timeline" },
       { cmd: "work.dashboard", label: "Dashboard" },
-      { cmd: "work.map", label: "Dependency map" },
+      { cmd: "work.map", label: "Graph" },
       { cmd: "go.home", label: "Today" },
       { cmd: "go.chat", label: "Hermes" },
       { cmd: "go.alerts", label: "Alerts" },

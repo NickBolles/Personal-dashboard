@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, ErrorNote, Spinner, useToast } from "@/components/ui";
 import { BellIcon, BoltIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
 import { useDecisions } from "@/components/map/Decisions";
+import { useAgentRuns } from "@/components/agents/AgentRuns";
+import { areasHref } from "@/lib/areas-view";
 import { useShowArchived } from "@/lib/client/show-archived";
 import { WorkTree, type RowActions } from "@/components/work/WorkTree";
 import { MoveToDialog } from "@/components/work/structure";
@@ -146,6 +148,9 @@ export function Sidebar({
   const byId = new Map(list.map((i) => [i.id, i]));
   const pinned = pins.map((id) => byId.get(id)).filter((i): i is WorkItem => !!i);
   const selectedItem = path.startsWith("/areas") ? params.get("item") : null;
+  // Areas v2 (B): status context on the tree rows (needs-you / in-flight pills, agent dots), one line per row.
+  const agentRuns = useAgentRuns(wide).data;
+  const treeStatus = useMemo(() => ({ runs: Object.fromEntries(Object.entries(agentRuns?.items ?? {}).map(([id, r]) => [id, r.live])) }), [agentRuns]);
   const sessionId = path.startsWith("/chat/") ? decodeURIComponent(path.slice(6)) : null;
   const view = path.startsWith("/areas") ? params.get("view") : null;
 
@@ -343,7 +348,13 @@ export function Sidebar({
                 linked={items.data?.linkedConversations}
                 selected={selectedItem}
                 selectedSession={sessionId}
-                onSelect={(id) => router.push(`/areas?item=${encodeURIComponent(id)}`)}
+                status={treeStatus}
+                onSelect={(id) =>
+                  // On /areas a tree pick keeps the open view tab (Areas v2) and the scroll position.
+                  path === "/areas"
+                    ? router.push(areasHref(window.location.href, { item: id }), { scroll: false })
+                    : router.push(`/areas?item=${encodeURIComponent(id)}`)
+                }
                 onOpenConversation={canChat ? (sid) => router.push(`/chat/${encodeURIComponent(sid)}`) : undefined}
                 onPlace={(id, parentId, index) => place.mutate({ id, parentId, index })}
                 onRename={(id, title) => rename.mutate({ id, title })}

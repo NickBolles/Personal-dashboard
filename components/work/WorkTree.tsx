@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { cx, inputCls } from "@/components/ui";
-import { KIND_LABELS, STATUS_LABELS, isContainer, rollup, type LinkedConversationRow, type WorkItem } from "@/lib/work";
+import { KIND_LABELS, STATUS_LABELS, isClosed, isContainer, rollup, type LinkedConversationRow, type WorkItem } from "@/lib/work";
+import { treeCounts } from "@/lib/areas-digest";
 import { ChatIcon } from "@/components/icons";
 import { StatusDot } from "./common";
 import { InlineAdd } from "./QuickAdd";
@@ -79,6 +80,7 @@ export function WorkTree({
   rowMenu,
   rowDrag,
   addOnDemand,
+  status,
 }: {
   items: WorkItem[];
   selected: string | null;
@@ -105,6 +107,8 @@ export function WorkTree({
   rowDrag?: (i: WorkItem) => { mime: string; data: string } | null;
   /** hide the "Add project/item" rows until asked for (row ⋯ → Add…); the sidebar tree stays compact */
   addOnDemand?: boolean;
+  /** Opt-in board context; omitted by the global sidebar to preserve its rows. */
+  status?: { runs?: Record<string, "running" | "waiting" | "failed" | "done" | string>; showNext?: boolean };
 }) {
   const { items, virtual } = useMemo(() => {
     const ids = new Set(realItems.map((i) => i.id));
@@ -194,6 +198,9 @@ export function WorkTree({
     for (const i of realItems) if (isContainer(i) && !i.archived) m.set(i.id, rollup(realItems, i.id));
     return m;
   }, [realItems]);
+
+  const withStatus = status !== undefined;
+  const counts = useMemo(() => (withStatus ? treeCounts(realItems) : null), [realItems, withStatus]);
 
   // Filtering keeps matches plus their ancestors, all expanded.
   const visibleSet = useMemo(() => {
@@ -457,12 +464,40 @@ export function WorkTree({
   function count(i: WorkItem) {
     const r = rollups.get(i.id);
     if (!r || virtual.has(i.id)) return null;
+    const c = counts?.get(i.id);
+    if (c && (c.owner || (i.parentId === null && c.inflight)))
+      return (
+        <span className="wk-tree-counts" aria-hidden="true">
+          {i.parentId !== null && r.total ? (
+            <span className="text-[11px] font-normal text-muted tabular-nums">
+              {r.done}/{r.total}
+            </span>
+          ) : null}
+          {c.owner ? (
+            <span className="wk-tree-count" data-tone="wn" title={`${c.owner} need you`}>
+              {c.owner}
+            </span>
+          ) : null}
+          {i.parentId === null && c.inflight ? (
+            <span className="wk-tree-count" data-tone="ac" title={`${c.inflight} in flight`}>
+              {c.inflight}
+            </span>
+          ) : null}
+        </span>
+      );
     const text = i.parentId === null ? (r.open ? String(r.open) : "") : r.total ? `${r.done}/${r.total}` : "";
     return text ? (
       <span aria-hidden="true" className="ml-1 shrink-0 text-[11px] font-normal text-muted tabular-nums">
         {text}
       </span>
     ) : null;
+  }
+
+  function countLabel(i: WorkItem) {
+    const c = counts?.get(i.id);
+    if (!c) return "";
+    if (i.parentId === null) return `${c.owner ? `, ${c.owner} need you` : ""}${c.inflight ? `, ${c.inflight} in flight` : ""}`;
+    return c.owner ? `, ${c.owner} need you` : "";
   }
 
   function commitRename(i: WorkItem) {
@@ -539,6 +574,9 @@ export function WorkTree({
       const hasKids = !!kids.get(i.id)?.some((k) => !visibleSet || visibleSet.has(k.id)) || showAdd(i);
       const open = isOpen(i.id);
       const sel = isSelected(i);
+      const work = !isContainer(i) && i.kind !== "conversation";
+      const live = status && work ? status.runs?.[i.id] : undefined;
+      const showNext = status?.showNext && work && !i.archived && !isClosed(i.status) && !!i.nextAction;
       return (
         <li
           key={i.id}
@@ -560,7 +598,7 @@ export function WorkTree({
                     : i.kind === "conversation" || i.kind === "project"
                       ? `${KIND_LABELS[i.kind].toLowerCase()}, ${STATUS_LABELS[i.status]}`
                       : STATUS_LABELS[i.status]
-                }${i.archived ? ", archived" : ""}`
+                }${i.archived ? ", archived" : ""}${countLabel(i)}`
           }
           title={i.title}
           tabIndex={tabStop === i.id ? 0 : -1}
@@ -593,6 +631,7 @@ export function WorkTree({
             data-selected={sel || undefined}
             className={cx(
               "wk-tree-row relative flex cursor-pointer items-center gap-1.5 pr-2 text-[13.5px]",
+              withStatus && "wk-tree-status",
               !sel && "hover:bg-surface",
               virtual.has(i.id) && "text-muted",
               level === 1 && "font-semibold",
@@ -632,6 +671,7 @@ export function WorkTree({
             ) : i.parentId === null ? null : (
               <StatusDot status={i.status} />
             )}
+            {live === "running" || live === "waiting" ? <span className="wk-tree-agent" data-live={live} role="img" aria-label={`Agent ${live}`} /> : null}
             {renaming?.id === i.id ? (
               <input
                 aria-label={`Rename ${i.title}`}
@@ -657,6 +697,16 @@ export function WorkTree({
                 }}
                 onBlur={() => commitRename(i)}
               />
+            ) : showNext ? (
+              <span
+                className="wk-tree-title min-w-0 flex-1"
+                onDoubleClick={onRename && !i.builtIn && !virtual.has(i.id) ? () => setRenaming({ id: i.id, title: i.title }) : undefined}
+              >
+                <span className="block truncate">{i.title}</span>
+                <span className="wk-tree-next" data-dynamic>
+                  {i.nextAction}
+                </span>
+              </span>
             ) : (
               <span
                 className="min-w-0 flex-1 truncate"

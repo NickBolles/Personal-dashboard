@@ -42,7 +42,7 @@ test("unified pickers: keyboard status, local Tomorrow, overview filter and Esca
     .poll(async () => ((await (await page.request.get(`/api/work/items/${id}`)).json()) as { item: { status: string; targetDate: string } }).item)
     .toMatchObject({ status: "exploring", targetDate: tomorrow.value });
 
-  await page.goto("/areas");
+  await page.goto("/areas?tab=board");
   const filter = page.getByRole("button", { name: /^Filter by status:/ });
   await pickOption(page, /^Filter by status:/, "Backlog");
   await expect(filter).toHaveAttribute("data-value", "backlog");
