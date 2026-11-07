@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ChipButton } from "@/components/ui/kit";
-import { AreaPickerDot, SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
+import { SectionHeader } from "@/components/ui/kit";
+import { SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { InlineText, useInlinePatch } from "@/components/work/InlineEdit";
-import { ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
+import { ItemChips } from "@/components/work/ItemMeta";
 import { StatusDot, fmtDate } from "@/components/work/common";
-import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
-import { areaRollups, bucketOf, MAP_BUCKET_LABELS, MAP_BUCKETS, matchesFilter, type AreaRollup, type MapBucket } from "@/lib/map-rollup";
-import { isContainer, STATUS_LABELS, WORK_STATUSES, type WorkItem, type WorkStatus } from "@/lib/work";
+import type { UndoOp } from "@/components/work/UndoBar";
+import { areaRollups, bucketOf, MAP_BUCKET_LABELS, MAP_BUCKETS, type AreaRollup, type MapBucket } from "@/lib/map-rollup";
+import { isContainer, todayIso, STATUS_LABELS, WORK_STATUSES, type WorkItem, type WorkStatus } from "@/lib/work";
+import { digest, type DigestRow } from "@/lib/areas-digest";
 import type { DecisionsResponse } from "@/lib/decisions";
 import { NeedsYouSection, useDecisions } from "./Decisions";
 import { AgentLine, AgentsStrip, useAgentRuns } from "@/components/agents/AgentRuns";
@@ -41,63 +42,44 @@ function linkLabel(l: MapLink) {
   return l.title || l.url.replace(/^https?:\/\//, "").slice(0, 32);
 }
 
-/**
- * The /areas landing ("Map is Areas"): area cards with Live / In flight / Next /
- * Backlog / Blocked-on-you / Done rollups (tap opens the area in place), the
- * Chief of staff slot + Needs you on the right, then the Area → Project → Item
- * drill-down with filter chips, search, inline status + next action and links.
- * /map redirects here.
- */
+/** Hide conversations while keeping work split beneath them in the tree. */
+export function mapWorkItems(source: WorkItem[]): WorkItem[] {
+  const all = source.filter((i) => !i.archived);
+  const byId = new Map(all.map((i) => [i.id, i]));
+  const keptParent = (id: string | null) => {
+    let c = id ? byId.get(id) : undefined;
+    for (let n = 0; c && c.kind === "conversation" && n < 100; n++) c = c.parentId ? byId.get(c.parentId) : undefined;
+    return c ? c.id : id && !byId.has(id) ? id : null;
+  };
+  return all
+    .filter((i) => i.kind !== "conversation")
+    .map((i) => (i.parentId && byId.get(i.parentId)?.kind === "conversation" ? { ...i, parentId: keptParent(i.parentId) } : i));
+}
+
+const PHONE = "(max-width: 639.98px)";
+function subscribePhone(callback: () => void) {
+  const media = window.matchMedia(PHONE);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
+const phoneSnapshot = () => window.matchMedia(PHONE).matches;
+const serverPhone = () => false;
+
+/** The Overview landing; the scoped drill-down lives in BoardTab. */
 export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
   const q = useQuery({ queryKey: MAP_KEY, queryFn: () => api.get<MapResponse>("/api/work/overview") });
-  const [area, setArea] = useState("");
-  const [bucket, setBucket] = useState<MapBucket | "">("");
-  const [meta, setMeta] = useState<ItemFilter>(NO_FILTER);
-  const [search, setSearch] = useState("");
-  const [op, setOp] = useState<UndoOp | null>(null);
+  const phone = useSyncExternalStore(subscribePhone, phoneSnapshot, serverPhone);
   // The polling decisions query wins over the overview snapshot (approvals change outside work edits).
   const dq = useDecisions();
-  // Conversations are hidden, but work split beneath one is re-parented to the nearest kept ancestor.
-  const items = useMemo(() => {
-    const all = (q.data?.items ?? []).filter((i) => !i.archived);
-    const byId = new Map(all.map((i) => [i.id, i]));
-    const keptParent = (id: string | null) => {
-      let c = id ? byId.get(id) : undefined;
-      for (let n = 0; c && c.kind === "conversation" && n < 100; n++) c = c.parentId ? byId.get(c.parentId) : undefined;
-      return c ? c.id : id && !byId.has(id) ? id : null;
-    };
-    return all
-      .filter((i) => i.kind !== "conversation")
-      .map((i) => (i.parentId && byId.get(i.parentId)?.kind === "conversation" ? { ...i, parentId: keptParent(i.parentId) } : i));
-  }, [q.data]);
+  const items = useMemo(() => mapWorkItems(q.data?.items ?? []), [q.data]);
   const rolls = useMemo(() => areaRollups(items), [items]);
+  const today = todayIso();
+  const moving = useMemo(() => digest(items, today), [items, today]);
   const runs = useAgentRuns().data;
   const agentCount = useMemo(() => rolls.reduce((n, r) => n + activeInArea(runs, r.id).length, 0), [rolls, runs]);
-  const filter = { bucket: bucket || undefined, tag: meta.tag ?? undefined, assignee: meta.assignee ?? undefined, q: search };
-  const filtering = !!(bucket || meta.tag || meta.assignee || search.trim());
-  const kids = useMemo(() => {
-    const m = new Map<string | null, WorkItem[]>();
-    for (const i of items) m.set(i.parentId, [...(m.get(i.parentId) ?? []), i]);
-    return m;
-  }, [items]);
-  // Which items survive the filters: matching work items plus every container on their path.
-  const visible = useMemo(() => {
-    const keep = new Set<string>();
-    const byId = new Map(items.map((i) => [i.id, i]));
-    for (const i of items) {
-      if (isContainer(i)) continue;
-      if (!matchesFilter(i, filter)) continue;
-      for (let c: WorkItem | undefined = i, n = 0; c && n < 100; c = c.parentId ? byId.get(c.parentId) : undefined, n++) keep.add(c.id);
-    }
-    if (!filtering) for (const i of items) keep.add(i.id);
-    return keep;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- filter is derived from the listed state
-  }, [items, bucket, meta, search, filtering]);
-  const areas = rolls.filter((r) => (!area || r.id === area) && visible.has(r.id));
-  const shown = items.filter((i) => visible.has(i.id) && !isContainer(i)).length;
 
   return (
-    <div className="min-w-0 pb-24" data-testid="map-page">
+    <div className="mp-root min-w-0 pb-24" data-testid="map-page">
       <header className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
           <h2 className="text-lg leading-tight font-semibold tracking-tight">Overview</h2>
@@ -128,11 +110,6 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
 
       {q.data ? (
         <div className="mp-land mb-5">
-          {/* Phones: Chief of staff + Needs you come first; ≥1280 they're the right column. */}
-          <aside aria-label="Coordination" className="mp-land-side flex min-w-0 flex-col gap-3">
-            <ChiefOfStaffSlot items={items} onOpen={onOpen} />
-            <NeedsYouSection entries={dq.data?.entries ?? q.data.decisions.entries} id="map-needs-you-h" limit={5} />
-          </aside>
           <section aria-labelledby="map-areas-h" className="min-w-0">
             <h3 id="map-areas-h" className="wk-label mb-1.5">
               Areas
@@ -143,106 +120,85 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
               ))}
             </ul>
           </section>
+          <aside aria-label="Coordination" className="mp-land-side flex min-w-0 flex-col gap-3">
+            <ChiefOfStaffSlot items={items} onOpen={onOpen} />
+            <NeedsYouSection entries={dq.data?.entries ?? q.data.decisions.entries} id="map-needs-you-h" limit={phone ? 3 : 5} />
+            <DigestSection kind="inflight" rows={moving.inflight} total={moving.inflightTotal} items={items} onOpen={onOpen} />
+            <DigestSection kind="outstanding" rows={moving.outstanding} total={moving.outstandingTotal} items={items} onOpen={onOpen} />
+          </aside>
         </div>
       ) : null}
-
-      {q.data ? (
-        <section aria-labelledby="map-tree-h">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 id="map-tree-h" className="wk-label">
-              Drill down <span className="text-muted">· {shown} shown</span>
-            </h3>
-          </div>
-          <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Map filters">
-            <label htmlFor="map-search" className="sr-only">
-              Search the map
-            </label>
-            <input
-              id="map-search"
-              type="search"
-              className="k-pick min-w-0 flex-1 basis-40 px-2"
-              placeholder="Search titles and next actions"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <label htmlFor="map-area" className="sr-only">
-              Filter by area
-            </label>
-            <SelectPicker
-              id="map-area"
-              label="Filter by area"
-              className="w-36"
-              active={!!area}
-              value={area}
-              onChange={setArea}
-              options={[
-                { value: "", label: "All areas" },
-                ...rolls.map((r) => ({ value: r.id, label: r.title, dot: <AreaPickerDot color={items.find((i) => i.id === r.id)?.settings?.color} /> })),
-              ]}
-            />
-            <label htmlFor="map-status" className="sr-only">
-              Filter by status
-            </label>
-            <SelectPicker
-              id="map-status"
-              label="Filter by status"
-              active={!!bucket}
-              value={bucket}
-              onChange={(v) => setBucket(v as MapBucket | "")}
-              options={[
-                { value: "", label: "Any status" },
-                ...MAP_BUCKETS.map((b) => ({
-                  value: b,
-                  label: MAP_BUCKET_LABELS[b],
-                  dot: <AreaPickerDot color={BUCKET_TONE[b] === "neutral" ? null : (BUCKET_TONE[b] as "ac" | "wn" | "inf" | "ok")} />,
-                })),
-              ]}
-            />
-            <ItemFilterBar rows={items} value={meta} onChange={setMeta} idPrefix="map" />
-            {area || bucket || search ? (
-              <ChipButton
-                onClick={() => {
-                  setArea("");
-                  setBucket("");
-                  setSearch("");
-                }}
-              >
-                Reset
-              </ChipButton>
-            ) : null}
-          </div>
-          {areas.length ? (
-            <div className="space-y-2" data-testid="map-tree" key={filtering ? "f" : "a"}>
-              {areas.map((r) => (
-                <details key={r.id} className="mp-area" open>
-                  <summary className="mp-sum">
-                    <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{r.title}</span>
-                    <span className="shrink-0 text-xs text-muted">
-                      {r.total} {r.total === 1 ? "item" : "items"}
-                    </span>
-                  </summary>
-                  <Branch
-                    parent={r.id}
-                    kids={kids}
-                    visible={visible}
-                    open={filtering}
-                    depth={1}
-                    links={q.data!.links}
-                    relations={q.data!.relations}
-                    onOp={setOp}
-                  />
-                </details>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted" data-testid="map-empty">
-              Nothing matches these filters.
-            </p>
-          )}
-        </section>
-      ) : null}
-      {op ? <UndoBar key={op.id} op={op} onDone={() => setOp(null)} /> : null}
     </div>
+  );
+}
+
+const REASON_LABEL: Record<DigestRow["reason"], string> = { needs_you: "Needs you", overdue: "Overdue", next: "Next", inflight: "In progress" };
+function DigestSection({
+  kind,
+  rows,
+  total,
+  items,
+  onOpen,
+}: {
+  kind: "inflight" | "outstanding";
+  rows: DigestRow[];
+  total: number;
+  items: WorkItem[];
+  onOpen?: (id: string) => void;
+}) {
+  const runs = useAgentRuns().data;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const id = `digest-${kind}-h`;
+  return (
+    <section aria-labelledby={id} data-testid={`digest-${kind}`} className="mp-digest min-w-0">
+      <SectionHeader id={id} label={kind === "inflight" ? "In progress" : "Outstanding"} count={total} />
+      {rows.length ? (
+        <ul className="mp-digest-list">
+          {rows.map((r) => {
+            const live = runs?.items[r.id]?.live;
+            return (
+              <li key={r.id}>
+                <Link
+                  href={`/areas?item=${encodeURIComponent(r.id)}`}
+                  className="mp-digest-row"
+                  onClick={(e) => {
+                    if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    onOpen(r.id);
+                  }}
+                >
+                  <StatusDot status={byId.get(r.id)!.status} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{r.title}</span>
+                    <span className="block truncate text-xs text-muted">{r.path}</span>
+                    {kind === "outstanding" ? (
+                      <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                        <span className="mp-flag" data-reason={r.reason}>
+                          {REASON_LABEL[r.reason]}
+                        </span>
+                        <span className="truncate text-xs text-muted" data-dynamic>
+                          {r.nextAction}
+                        </span>
+                      </span>
+                    ) : null}
+                  </span>
+                  {live === "running" || live === "waiting" ? (
+                    <span className="mp-digest-agent" data-live={live} role="img" aria-label={`Agent ${live}`} />
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-muted">{kind === "inflight" ? "Nothing in progress." : "Nothing outstanding."}</p>
+      )}
+      {total > 5 ? (
+        <Link href="/areas?tab=board" className="mp-digest-all">
+          Show all {total}
+        </Link>
+      ) : null}
+    </section>
   );
 }
 
@@ -283,11 +239,11 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
         <span className="mp-bar" aria-hidden="true">
           {MAP_BUCKETS.map((b) => (r.counts[b] ? <i key={b} data-tone={BUCKET_TONE[b]} style={{ flexGrow: r.counts[b] }} /> : null))}
         </span>
-        <span className="text-xs text-muted" data-dynamic>
+        <span className="mp-card-meta text-xs text-muted" data-dynamic>
           {r.projects} {r.projects === 1 ? "project" : "projects"} · last activity {r.lastActivity ? fmtDate(r.lastActivity) : "—"}
         </span>
         {agents.length ? (
-          <span className="relative block min-w-0">
+          <span className="mp-card-agents relative block min-w-0">
             <span className="sr-only">
               {agents.length} active {agents.length === 1 ? "agent" : "agents"}:
             </span>
@@ -375,6 +331,8 @@ export function Branch({
   links,
   relations,
   onOp,
+  selectedId,
+  onOpen,
 }: {
   parent: string;
   kids: Map<string | null, WorkItem[]>;
@@ -384,6 +342,8 @@ export function Branch({
   links: Record<string, MapLink[]>;
   relations?: Record<string, MapRelation[]>;
   onOp: (op: UndoOp) => void;
+  selectedId?: string | null;
+  onOpen?: (id: string) => void;
 }) {
   const list = (kids.get(parent) ?? []).filter((i) => visible.has(i.id));
   if (!list.length) return null;
@@ -407,15 +367,37 @@ export function Branch({
                 </span>
               </span>
             </summary>
-            <Branch parent={g.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
+            <Branch
+              parent={g.id}
+              kids={kids}
+              visible={visible}
+              open={open}
+              depth={depth + 1}
+              links={links}
+              relations={relations}
+              onOp={onOp}
+              selectedId={selectedId}
+              onOpen={onOpen}
+            />
           </details>
         );
       })}
       {rows.length ? (
         <ul className="mp-rows">
           {rows.map((i) => (
-            <MapRow key={i.id} item={i} links={links[i.id] ?? []} relations={relations?.[i.id]} onOp={onOp}>
-              <Branch parent={i.id} kids={kids} visible={visible} open={open} depth={depth + 1} links={links} relations={relations} onOp={onOp} />
+            <MapRow key={i.id} item={i} links={links[i.id] ?? []} relations={relations?.[i.id]} onOp={onOp} selected={selectedId === i.id} onOpen={onOpen}>
+              <Branch
+                parent={i.id}
+                kids={kids}
+                visible={visible}
+                open={open}
+                depth={depth + 1}
+                links={links}
+                relations={relations}
+                onOp={onOp}
+                selectedId={selectedId}
+                onOpen={onOpen}
+              />
             </MapRow>
           ))}
         </ul>
@@ -430,21 +412,39 @@ function MapRow({
   relations = [],
   onOp,
   children,
+  selected,
+  onOpen,
 }: {
   item: WorkItem;
   links: MapLink[];
   relations?: MapRelation[];
   onOp: (op: UndoOp) => void;
   children?: React.ReactNode;
+  selected?: boolean;
+  onOpen?: (id: string) => void;
 }) {
   const patch = useInlinePatch(i.id, (op) => (op ? onOp(op) : undefined));
   const b = bucketOf(i);
   const agent = useAgentRuns().data?.items[i.id];
+  const row = useRef<HTMLLIElement>(null);
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (selected && !scrolled.current) row.current?.scrollIntoView({ block: "nearest" });
+    scrolled.current = !!selected;
+  }, [selected]);
   return (
-    <li className="mp-row" data-testid="map-row" data-bucket={b}>
+    <li ref={row} className={selected ? "mp-row mp-row-sel" : "mp-row"} data-testid="map-row" data-bucket={b} data-selected={selected ? "true" : undefined}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <StatusDot status={i.status} />
-        <Link href={`/areas?item=${encodeURIComponent(i.id)}`} className="min-w-0 flex-1 basis-40 truncate text-[13px] font-medium hover:underline">
+        <Link
+          href={`/areas?item=${encodeURIComponent(i.id)}`}
+          className="mp-row-title min-w-0 flex-1 basis-40 truncate text-[13px] font-medium hover:underline"
+          onClick={(e) => {
+            if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            onOpen(i.id);
+          }}
+        >
           {i.title}
         </Link>
         {i.decision ? <span className="mp-flag">Needs you</span> : null}

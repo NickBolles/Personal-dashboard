@@ -217,14 +217,31 @@ details[open] > .mp-sum::before {
   }
 }
 
-/* /areas landing: area cards + a right coordination column (Chief of staff, Needs you) at ≥1280. */
+/* Size the landing against its actual pane, not the viewport behind the coordinator rail. */
+.mp-root {
+  container: areas-overview / inline-size;
+}
+.mp-root .mp-cards {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container areas-overview (min-width: 640px) {
+  .mp-root .mp-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container areas-overview (min-width: 1024px) {
+  .mp-root .mp-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* /areas landing: area cards + a right coordination column at ≥1280. */
 .mp-land {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
-@media (min-width: 1280px) {
+@container areas-overview (min-width: 1280px) {
   .mp-land {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 20rem;
@@ -240,6 +257,94 @@ details[open] > .mp-sum::before {
 }
 .mp-land-side > [data-testid="needs-you"] {
   margin-bottom: 0;
+}
+.mp-row-sel {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+.mp-row-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.mp-digest-list {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.mp-digest-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.mp-digest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.mp-digest-row:hover {
+  background: var(--surface-2);
+}
+.mp-digest-agent {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ai);
+}
+.mp-digest-agent[data-live="waiting"] {
+  background: var(--warn);
+}
+.mp-digest-all {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.mp-digest .mp-flag {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.mp-digest .mp-flag[data-reason="next"] {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+@media (min-width: 640px) {
+  .mp-row-title {
+    min-height: 24px;
+  }
+  .mp-digest-row {
+    padding: 4px 8px;
+  }
+  .mp-digest-all {
+    min-height: 28px;
+  }
+}
+/* Phone digest is viewport-based even when a desktop pane becomes narrow. */
+@media (max-width: 639.98px) {
+  .mp-land-side > .mp-cos {
+    order: 1;
+  }
+  .mp-root .mp-card {
+    gap: 4px;
+    padding: 8px 10px;
+  }
+  .mp-root .mp-card > .mp-bar,
+  .mp-root .mp-card > .mp-card-meta,
+  .mp-root .mp-card > .mp-card-agents,
+  .mp-root .mp-card ~ .mp-card-coord {
+    display: none;
+  }
+  .mp-root .mp-card-co > :first-child,
+  .mp-root .mp-card-co > .mp-counts {
+    padding-right: 0;
+  }
 }
 .mp-cos {
   display: flex;

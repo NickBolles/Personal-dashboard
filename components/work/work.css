@@ -1618,3 +1618,57 @@ button.wk-kpi:hover {
     }
   }
 }
+
+/* Areas v2 status context is opt-in; sidebar rows keep their existing markup. */
+.wk-tree-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.wk-tree-count {
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  line-height: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.wk-tree-count[data-tone="wn"] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.wk-tree-count[data-tone="ac"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.wk-tree-agent {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ai);
+}
+.wk-tree-agent[data-live="waiting"] {
+  background: var(--warn);
+}
+.wk-tree-title {
+  padding: 3px 0;
+  line-height: 1.3;
+}
+.wk-tree-next {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+@media (max-width: 639.98px) {
+  .wk-tree-row.wk-tree-status {
+    min-height: 44px;
+  }
+}
