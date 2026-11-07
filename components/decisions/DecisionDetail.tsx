@@ -47,6 +47,12 @@ export function DecisionDetail({ id, initialChoice = "" }: { id: string; initial
             <h2 id="decision-question" className="text-lg font-semibold [overflow-wrap:anywhere]">
               {e.question}
             </h2>
+            {e.detail ? (
+              <div className="min-w-0 rounded-md border border-line bg-surface-2 p-3 text-sm" data-testid="decision-detail">
+                <p className="mb-1 text-xs font-semibold text-muted">Proposed content</p>
+                <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{e.detail}</p>
+              </div>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <ButtonLink href={e.href} size="sm">
                 {e.kind === "item"

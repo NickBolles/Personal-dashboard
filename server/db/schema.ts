@@ -1822,6 +1822,8 @@ export const scheduledJobs = sqliteTable(
     lastStatus: text("last_status").notNull().default("never"),
     lastError: text("last_error"),
     consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    /** soft delete: the run ledger (daily cap, digest) must outlive the schedule (#230) */
+    deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },

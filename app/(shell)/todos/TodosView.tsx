@@ -9,6 +9,7 @@ import { useAccess } from "@/components/access";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
 import { groupSkylightChores, isOpenChore } from "@/components/skylight/grouping";
+import { useOptimisticChores } from "@/components/skylight/SkylightChoreGroups";
 import type { SkylightExtra } from "@/components/skylight/model";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
@@ -56,10 +57,12 @@ export function TodosView() {
   const extra = (sky.data?.data?.extra ?? {}) as SkylightExtra;
   const writable = extra.writable === true && can("skylight.write");
   const provider = (q.data?.data?.extra?.provider as string | undefined) ?? undefined;
-  const all = useMemo(
+  const rawAll = useMemo(
     () => [...(q.data?.data?.actions ?? []), ...(sky.data?.data?.actions ?? []), ...((sky.data?.data?.extra as SkylightExtra | undefined)?.listItems ?? [])],
     [q.data, sky.data],
   );
+  // Same optimistic overlay as Today and the Skylight page: a confirmed chore moves to Completed at once.
+  const all = useOptimisticChores(rawAll, timezone).actions;
   const [source, setSource] = useState("");
   const segment = useSyncExternalStore(subscribeSegment, currentSegment, serverSegment);
   const setSegment = (value: TaskSegment) => {

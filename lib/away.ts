@@ -141,6 +141,8 @@ export type AwayRun = {
   status: JobRunStatus;
   /** silent = finished with nothing to report */
   silent: boolean;
+  /** still running in Hermes but blocked on an approval/clarify prompt: shown as Needs you, not Running */
+  waiting: boolean;
   startedAt: string;
   finishedAt: string | null;
   /** short plain-text excerpt of the agent's report (≤ 600 chars) */
@@ -153,7 +155,16 @@ export type AwayRun = {
   /** low-risk changes Jarvis applied (each undoable from Activity) */
   changes: { intent: ProposalIntent; label: string; itemId: string | null; itemTitle: string | null }[];
   /** proposals turned into Needs-you decisions (still open ones only count in `needsYou`) */
-  decisions: { itemId: string; itemTitle: string; question: string; open: boolean }[];
+  decisions: {
+    /** where the decision is stored (the target, or the job's area when the target already had an open decision) */
+    itemId: string;
+    itemTitle: string;
+    question: string;
+    open: boolean;
+    /** the proposal's original target when it differs from where the decision is stored */
+    targetId?: string;
+    targetTitle?: string;
+  }[];
   /** proposals Jarvis refused outright (merge/deploy/spend/send) */
   refused: { intent: string; label: string }[];
 };
@@ -162,10 +173,13 @@ export type AwayDigest = {
   /** runs since the owner last dismissed the digest (newest first, max 20) */
   runs: AwayRun[];
   since: string | null;
-  counts: { ran: number; failed: number; changes: number; needsYou: number; running: number };
+  counts: { ran: number; failed: number; changes: number; needsYou: number; running: number; waiting: number };
   /** one-line text for the tray's dynamic line, null when nothing to say */
   line: string | null;
 };
+
+/** Run summary while the Hermes run waits on an approval/clarify prompt. */
+export const WAITING_SUMMARY = "Waiting for you";
 
 /** JSON export/import file. */
 export const JOBS_EXPORT_VERSION = 1;
@@ -401,7 +415,7 @@ export const isSilentReport = (report: string, proposals: Proposal[]) => proposa
 /** Policy text appended to every scheduled run's prompt. */
 export function policyInstructions(mode: EffectiveAutonomy) {
   return [
-    "You are running unattended on a schedule (the owner is away). Do not make changes yourself with tools.",
+    "You are running unattended on a schedule (the owner is away). Do not make changes yourself with tools: Jarvis refuses direct write tools from this profile while the run is active.",
     `At the end, list proposed changes as a fenced block \`\`\`${PROPOSALS_FENCE}\\n[ {"intent": …, "itemId"?: …, "title"?: …, "text"?: …, "why"?: …} ]\\n\`\`\` (JSON array, at most ${MAX_PROPOSALS_PER_RUN}).`,
     `Intents: ${PROPOSAL_INTENTS.join(", ")}.`,
     mode === "low_risk"

@@ -47,6 +47,16 @@ test.beforeEach(async ({ request, page }) => {
   await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(localDate(new Date(), "America/Chicago")) }));
   await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
   await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
+  // Today's live Skylight chores change with the time of day (mock seeds roll at 18:00 CT): hidden in page shots;
+  // "visual: skylight everywhere" shows the section with a fixed fixture.
+  await page.addInitScript(() => {
+    document.addEventListener("DOMContentLoaded", () => {
+      const style = document.createElement("style");
+      style.id = "vis-hide-chores";
+      style.textContent = '[data-testid="today-chores"] { display: none !important; }';
+      document.head.appendChild(style);
+    });
+  });
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
@@ -1863,6 +1873,60 @@ for (const scheme of ["light", "dark"] as const) {
       });
       await overlays.evaluate((el) => (el as Element).remove());
     }
+  });
+}
+
+// Skylight everywhere: Today's grouped chores (before/after a completion, final states only) and the tray card.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: skylight everywhere (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await freezeMiddayCT(page);
+    const fixture = skylightGroupingVisual(new Date(await page.evaluate(() => new Date().toISOString())));
+    const day = localDate(new Date(await page.evaluate(() => new Date().toISOString())), "America/Chicago");
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
+    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+    // Never reaches the mock (or real Skylight): a fixed verified answer for the final-state shot.
+    await page.route(/\/api\/skylight\/write$/, (route) => route.fulfill({ json: { ok: true, writeId: "vis-write", undoable: true, message: "Verified" } }));
+    await page.goto("/home");
+    await page.evaluate(() => document.getElementById("vis-hide-chores")?.remove());
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    const section = page.getByTestId("today-chores");
+    await expect(section.getByRole("article", { name: /Visualsky walk the dog/ })).toBeVisible();
+    await expect(section.getByRole("region", { name: /^Overdue/ })).toContainText("Visualsky descale the kettle");
+    await expectNoHorizontalOverflow(page);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await withoutTray(page, () =>
+      expect(section).toHaveScreenshot(`skylight-today-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => section.locator(m)) }),
+    );
+    await section.getByRole("checkbox", { name: /Done: .*Visualsky walk the dog/ }).click();
+    await page.getByRole("dialog", { name: "Confirm Skylight change" }).getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(section.getByRole("img", { name: "Afternoon: 1 of 1 done" })).toBeVisible();
+    await page.getByRole("status").filter({ hasText: "Marked done" }).getByRole("button", { name: "Dismiss" }).click();
+    await section.locator("summary").filter({ hasText: "Done today" }).click();
+    await expect(section.getByTestId("today-chores-done")).toContainText("Visualsky walk the dog");
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await withoutTray(page, () =>
+      expect(section).toHaveScreenshot(`skylight-today-done-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => section.locator(m)) }),
+    );
+    // The Chief of staff tray's Chores card: the same rows, completable in place.
+    await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
+    const card = {
+      id: `chores:${day}`,
+      kind: "chores",
+      action: "Open",
+      line: { tone: "ok", dot: null, icon: "✓", label: "Chores", text: "1 of 8 done · 1 up for grabs" },
+      spec: { root: "t", elements: { t: { type: "Table", props: { columns: [], rows: [] } } } },
+      sessionId: "vis-chores",
+      blockIndex: 0,
+      footer: { label: "Open Skylight", href: "/skylight" },
+    };
+    await page.route("**/api/smart/dynamic*", (r) => r.fulfill({ json: { cards: [card], today: day } }));
+    // Deep link opens the card directly (a "needs you" line from other specs would otherwise win the tray line).
+    await page.goto(`/more?smartCard=${encodeURIComponent(card.id)}`);
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    const chores = page.getByTestId("skylight-chores-card");
+    await expect(chores.getByRole("article", { name: /Visualsky load the dishwasher/ })).toBeVisible();
+    await expect(chores).toHaveScreenshot(`skylight-tray-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => chores.locator(m)) });
   });
 }
 
