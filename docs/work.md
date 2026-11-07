@@ -256,6 +256,12 @@ Sharing stays read-only for the household. Share/unshare writes `conversation.sh
 
 Real Hermes profile routing (the API takes `instructions`, not a profile), syncing archive state from Hermes into nodes, a resizable tree pane, phone-specific composer sheet, workflow-run validations, AI triage (phase 5).
 
+## Portfolio (replaces the portfolio map board)
+
+`/areas?tab=portfolio` (landing only, `components/areas/PortfolioTab.tsx`, rows from `lib/portfolio-view.ts`): one row per project across areas (Finance left out) with its open work in status lanes (Blocked on you · In flight · Next · Live · Backlog; Done as a count), board/PR link chips, a Group filter over item tags, Needs you, and the running release (`GET /api/work/portfolio`: `JARVIS_VERSION`, process start, migrations; local reads only).
+
+Import: `POST /api/work/import/portfolio` `{ map, apply?, aliases? }` takes the published `portfolio-map.json` (`lib/portfolio-import.ts` plans, `server/work/portfolio-import.ts` applies). Dry run by default. Board projects map to containers by title path (`DEFAULT_TARGETS`), unknown ones become projects under the Portfolio area; nodes become items (group → lane tag, links https only, Live/Done → ready to settle, never a final status), owner-blocked asks become Portfolio items with an owner decision. Matching (normalised title, word-boundary prefix ≥ 12 chars, or `aliases`) makes a re-run a no-op; matched items only gain missing links and tags. One transaction and one Undo (`work_ops` kind `import`, item id `portfolio-import`, `server/work/portfolio-undo.ts`). Agents report status by linking boards/PRs onto items (`jarvis_link`), not by editing the board.
+
 ## AI actions, reports and capture (phase 5)
 
 Jarvis runs background AI work through Hermes and keeps the validated result as a **report** on the item.

@@ -67,6 +67,7 @@ import { claimCutoff, dueForRefresh, REFRESH_PARALLELISM } from "./refresh-rules
 import { planPlacement } from "./tree-rules";
 import { assigneeChangeText, normaliseTags, parseTags, serialiseTags, tagsChangeText, validateAssignee } from "@/lib/item-tags";
 import { ensureTags, knownAgents, knownPeople, undoTagRename, type TagRenamePayload } from "./tags";
+import { undoPortfolioImport, type PortfolioImportPayload } from "./portfolio-undo";
 import { EDIT_UNDO_FIELDS, isUntouched, latestOp, TAG_OPS_ITEM, UNDO_LABELS, undoCheck, undoWindowFor, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
@@ -165,7 +166,7 @@ function stampOf(db: Db): string {
   return at;
 }
 
-function event(
+export function event(
   db: Db,
   itemId: string,
   actor: string,
@@ -269,7 +270,7 @@ export function ensureMiscellaneous(userId: string, db: Db = getDb()): ItemRow {
     .get()!;
 }
 
-function ownedItem(userId: string, id: string, db: Db = getDb()): ItemRow {
+export function ownedItem(userId: string, id: string, db: Db = getDb()): ItemRow {
   const r = db
     .select()
     .from(T)
@@ -403,7 +404,7 @@ function nextSort(userId: string, parentId: string | null, db: Db) {
   );
 }
 
-function insertItem(
+export function insertItem(
   db: Db,
   userId: string,
   v: {
@@ -860,6 +861,12 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
       return { itemId: op.itemId, kind: "quick_action" as UndoKind, outcome: "restored" as "restored" | "deleted" | "archived" };
     }
+    if (op.kind === "import") {
+      // Portfolio map import: a non-item stack (item_id = IMPORT_OPS_ITEM); only the latest import can be undone.
+      const outcome = undoPortfolioImport(tx, user.id, JSON.parse(op.payload) as PortfolioImportPayload);
+      tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+      return { itemId: op.itemId, kind: "import" as UndoKind, outcome: (outcome.archived ? "archived" : "deleted") as "restored" | "deleted" | "archived" };
+    }
     if (op.kind === "edit" && (JSON.parse(op.payload) as { scheduledCapture?: unknown }).scheduledCapture) {
       const p = (JSON.parse(op.payload) as { scheduledCapture: { id: string; updatedAt: string } }).scheduledCapture;
       const capture = tx
@@ -1039,7 +1046,10 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
   });
   return {
     ...result,
-    item: result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM || result.kind === "quick_action" ? null : toItem(ownedItem(user.id, result.itemId)),
+    item:
+      result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM || result.kind === "quick_action" || result.kind === "import"
+        ? null
+        : toItem(ownedItem(user.id, result.itemId)),
   };
 }
 
