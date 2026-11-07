@@ -6,12 +6,14 @@ import type { CurrentUser } from "@/server/auth";
 import { todosAdapter, dropTodo, reopenTodo } from "@/integrations/todos/adapter";
 import { refreshSource } from "@/server/sources";
 import { createItem, updateItem } from "@/server/work/store";
+import { capture, dismissEntry } from "@/server/work/inbox";
 import { LIMITS } from "@/lib/jarvis-ui/catalog";
 import { intentInSpec, intentKey, intentSchema, isExternal, type Intent } from "@/lib/jarvis-ui/intents";
 import { addCalendarBlock, requireCalendarWrites, usesSkylightCalendar } from "./calendar";
 import { undoWrite } from "@/server/skylight-writes";
 import { isTask, type AppliedEntry, type ApplyResult, type SurfaceView, type TaskRef } from "@/lib/jarvis-ui/types";
-import { lookup, ownedSurface, sha256, storedSpec, todayLocal, toView, writeApplied } from "./store";
+import { INBOX_REF, lookup, ownedSurface, sha256, storedSpec, todayLocal, toView, writeApplied } from "./store";
+import { checkFormCreateLimits } from "./form-limits";
 import { markDynamicApplied } from "./dynamic";
 
 type Checked = { intent: Intent; hash: string; hydrated: Record<string, TaskRef> };
@@ -49,6 +51,10 @@ function check(user: CurrentUser, raw: unknown[], specOf: () => ReturnType<typeo
     if (isExternal(intent)) requireCalendarWrites(user);
     if (!capFor(intent).every((c) => can(user, c))) throw new HttpError(403, "forbidden", "You don't have access to that.");
     if (!intentInSpec(spec, intent, today)) throw new HttpError(400, "not_offered", "That change wasn't offered by this reply");
+    if (("ref" in intent && intent.ref === INBOX_REF) || ("parentRef" in intent && intent.parentRef === INBOX_REF && intent.kind !== "item.create"))
+      throw new HttpError(400, "not_offered", "Inbox only accepts new captures");
+    if (intent.kind === "item.create" && intent.parentRef === INBOX_REF && !Object.keys(intent).every((key) => ["kind", "parentRef", "title"].includes(key)))
+      throw new HttpError(400, "not_offered", "Inbox captures only accept a title");
     if (intent.kind === "item.create" || intent.kind === "todo.promote") creates++;
     if (creates > LIMITS.createsPerApply) throw new HttpError(400, "too_many", `At most ${LIMITS.createsPerApply} new items per apply`);
     const refs = ["ref" in intent ? intent.ref : undefined, "parentRef" in intent ? intent.parentRef : undefined].filter((x): x is string => Boolean(x));
@@ -103,6 +109,11 @@ async function execute(user: CurrentUser, c: Checked, correlationId: string): Pr
       return { message: "Updated", undo: { type: "item", itemId: id, patch: prev } };
     }
     case "item.create": {
+      if (i.parentRef === INBOX_REF) {
+        // Explicit Apply only. A deterministic card must never trigger background AI.
+        const entry = capture(user, { text: i.title, investigate: "off" }, correlationId);
+        return { message: "Created", undo: { type: "inbox", entryId: entry.id } };
+      }
       const item = createItem(
         user,
         { parentId: i.parentRef.slice(5), kind: i.itemKind ?? "thread", title: i.title, nextAction: i.nextAction, targetDate: i.targetDate ?? null },
@@ -169,11 +180,11 @@ async function applyLocked(
     };
 
   const checked = check(user, body.intents, () => storedSpec(row), body.external === true);
-  const formCreates = Object.values(storedSpec(row).elements).flatMap((e) =>
-    e.type === "Form" ? ((e.props as import("@/lib/jarvis-ui/catalog").PropsOf<"Form">).submit.creates ?? []) : [],
+  checkFormCreateLimits(
+    storedSpec(row),
+    checked.map((c) => c.intent),
+    todayLocal(),
   );
-  if (formCreates.length && checked.filter((c) => c.intent.kind === "item.create").length > formCreates.reduce((n, c) => n + (c.maxItems ?? 1), 0))
-    throw new HttpError(400, "too_many", "Too many form items");
   const results: ApplyResult[] = [];
   const at = new Date().toISOString();
   let touchedTodos = false;
@@ -232,6 +243,10 @@ async function undoLocked(user: CurrentUser, body: { surfaceId: string; intentHa
   const intent = intentSchema.parse(entry.intent);
   const opts = { actor: user.id, correlationId };
   switch (u.type) {
+    case "inbox":
+      if (!can(user, "work.use")) throw new HttpError(403, "forbidden", "You don't have access to that.");
+      dismissEntry(user, u.entryId as string, correlationId);
+      break;
     case "skylight":
       if (!can(user, "skylight.write")) throw new HttpError(403, "forbidden", "You don't have access to that.");
       await undoWrite(u.writeId as string, user, { correlationId });

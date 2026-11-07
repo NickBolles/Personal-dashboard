@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { getOwner, type CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
@@ -10,10 +10,10 @@ import { parseAllowlist } from "@/integrations/home-assistant/adapter";
 import { addDays, localDate, localMinutes } from "@/lib/time";
 import { CATALOG_ID, type UIElement, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
-import { validateSpec } from "@/lib/jarvis-ui/validator";
+import { specRefs, validateSpec } from "@/lib/jarvis-ui/validator";
 import { can } from "@/server/access";
 import { openItems, visibleEvents } from "./data";
-import { getSmartSettings, itemExcluded, upsertSurface } from "./store";
+import { INBOX_REF, getSmartSettings, itemExcluded, upsertSurface } from "./store";
 
 export function isoWeekStart(today: string) {
   const day = new Date(`${today}T12:00:00Z`).getUTCDay();
@@ -48,7 +48,59 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
   const { items, byId } = openItems(user);
   const parents = [...byId.values()].filter((i) => !i.archived && !itemExcluded(i, byId) && (i.kind === "area" || i.kind === "project")).slice(0, 30);
   const cards: DynamicCard[] = [];
+  // Resolve a queued snapshot before generating live cards: the live conflict may
+  // have moved, ended or changed hash even when it still has the same daily id.
+  const kind = requestedId?.split(":")[0];
+  if (requestedId && (kind === "weekly-review" || kind === "calendar-conflict" || kind === "garage" || kind === "chores")) {
+    const row = getDb()
+      .select()
+      .from(schema.uiSurfaces)
+      .where(
+        and(
+          eq(schema.uiSurfaces.userId, user.id),
+          eq(schema.uiSurfaces.sessionId, `dynamic:${requestedId}`),
+          eq(schema.uiSurfaces.blockIndex, 0),
+          sql`coalesce(json_extract(${schema.uiSurfaces.stateJson}, '$.pending'), 0) > 0`,
+        ),
+      )
+      .orderBy(desc(schema.uiSurfaces.updatedAt))
+      .get();
+    if (row) {
+      try {
+        const v = validateSpec(JSON.parse(row.specJson));
+        if (
+          v.ok &&
+          !v.dropped &&
+          !specRefs(v.spec).some((ref) => {
+            if (!ref.startsWith("item:") || ref === INBOX_REF) return false;
+            const item = byId.get(ref.slice(5));
+            return !item || itemExcluded(item, byId);
+          })
+        ) {
+          const labels = { "weekly-review": "Weekly review", "calendar-conflict": "Calendar", garage: "Garage", chores: "Chores" };
+          cards.push({
+            id: requestedId,
+            kind,
+            action: kind === "weekly-review" ? "Fill in" : "Review",
+            line: {
+              tone: "warn",
+              dot: "yellow",
+              icon: kind === "weekly-review" ? "≡" : "◇",
+              label: labels[kind],
+              text: kind === "weekly-review" ? "Draft · continue review" : "Draft · continue staged changes",
+            },
+            sessionId: row.sessionId!,
+            blockIndex: row.blockIndex,
+            spec: v.spec,
+          });
+        }
+      } catch {
+        // Corrupt or obsolete stored templates must not break the live cards.
+      }
+    }
+  }
   const add = (card: Omit<DynamicCard, "sessionId" | "blockIndex">) => {
+    if (cards.some((c) => c.id === card.id)) return;
     const sessionId = `dynamic:${card.id}`;
     // Freeze the questionnaire for draft recovery. Live read cards get a new
     // immutable, hash-keyed surface when their snapshot changes.
@@ -101,7 +153,7 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
       .filter((b) => a.id !== b.id && Date.parse(b.startsAt) < Date.parse(a.endsAt!) && Date.parse(b.endsAt!) > Date.parse(a.startsAt))
       .map((b) => [a, b] as const),
   )[0];
-  if (pair && parents.length) {
+  if (pair && can(user, "work.use")) {
     const [a, b] = pair;
     add({
       id: `calendar-conflict:${today}`,
@@ -130,7 +182,7 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
           options: pair.map((e, i) => ({
             id: `move${i}`,
             label: `Call to move ${e.title}`.slice(0, 200),
-            intent: { kind: "item.create", parentRef: `item:${parents[0]!.id}`, title: `Call to move ${e.title}`.slice(0, 200), targetDate: addDays(today, 1) },
+            intent: { kind: "item.create", parentRef: INBOX_REF, title: `Call to move ${e.title}`.slice(0, 200) },
           })),
         }),
       }),
@@ -231,26 +283,6 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
       });
     }
   }
-  // A queued draft stays reachable after its weekly prompt window closes.
-  if (requestedId && /^weekly-review:\d{4}-\d{2}-\d{2}$/.test(requestedId) && !cards.some((c) => c.id === requestedId)) {
-    const row = getDb()
-      .select()
-      .from(schema.uiSurfaces)
-      .where(and(eq(schema.uiSurfaces.userId, user.id), eq(schema.uiSurfaces.sessionId, `dynamic:${requestedId}`)))
-      .get();
-    if (row && (JSON.parse(row.stateJson) as { pending?: number }).pending) {
-      const v = validateSpec(JSON.parse(row.specJson));
-      if (v.ok)
-        cards.push({
-          id: requestedId,
-          kind: "weekly-review",
-          action: "Fill in",
-          line: { tone: "warn", dot: "yellow", icon: "≡", label: "Weekly review", text: "Draft · continue review" },
-          sessionId: row.sessionId!,
-          blockIndex: row.blockIndex,
-          spec: v.spec,
-        });
-    }
-  }
+
   return { cards, today };
 }

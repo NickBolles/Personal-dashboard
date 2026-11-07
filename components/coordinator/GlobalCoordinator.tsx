@@ -136,14 +136,15 @@ export function GlobalCoordinator() {
     }
   };
   const show = () => {
+    setActiveCard(undefined);
     saveOpen(true);
     setChatExpandedOn(pageKey);
     setPhoneOpen(true);
   };
   const showPriority = () => {
+    show();
     setActiveCard(line.card);
     if (awayLine) setTab("chat");
-    show();
   };
   const hide = () => {
     if (wide) {
@@ -169,6 +170,8 @@ export function GlobalCoordinator() {
   }, []);
   useEffect(() => {
     const onOpen = () => {
+      setActiveCard(undefined);
+      setTab("chat");
       setOpen(true);
       setChatExpandedOn(pageKey);
       setPhoneOpen(true);
@@ -234,8 +237,8 @@ export function GlobalCoordinator() {
   }, [wide, phoneOpen]);
   const openedRequest = useRef<string | null>(null);
   const openRequested = useEffectEvent((card: DynamicCard) => {
-    setActiveCard(card);
     show();
+    setActiveCard(card);
   });
   useEffect(() => {
     if (!requestedCard || openedRequest.current === requestedCard) return;
@@ -388,6 +391,7 @@ export function GlobalCoordinator() {
                       <button
                         type="button"
                         onClick={() => {
+                          setActiveCard(undefined);
                           setDraft("Help me understand this page and suggest the next action.");
                           setRemovedOn(null);
                           setTab("chat");

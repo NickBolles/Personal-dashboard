@@ -34,7 +34,7 @@ export function tierFor(kind: AiJobKind, params: { deep?: boolean } = {}): AiTie
 
 /** Research/plan/draft/investigate get a visible conversation filed under the item; triage/schedule are hidden and deleted. */
 export function visibleFor(kind: AiJobKind) {
-  return kind !== "triage" && kind !== "schedule" && kind !== "file";
+  return kind !== "triage" && kind !== "schedule" && kind !== "file" && kind !== "summarize";
 }
 
 export type BudgetInput = { spentToday: number; reserved: number; estimate: number; daily: number; override: boolean };

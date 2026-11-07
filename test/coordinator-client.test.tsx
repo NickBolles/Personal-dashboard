@@ -11,6 +11,9 @@ import { priorityLine } from "@/lib/coordinator/things";
 import type { ActivityItem } from "@/lib/activity";
 import type { ItemAgentInfo } from "@/lib/agent-runs";
 import { setPanelOwner } from "@/lib/client/panel-owner";
+import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
+import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
+import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
 
 const nav = vi.hoisted(() => ({ path: "/areas", search: "", wide: true }));
 vi.mock("next/navigation", () => ({
@@ -172,6 +175,36 @@ describe("shared coordinator thread", () => {
 });
 
 describe("global coordinator", () => {
+  it.each([true, false])("a palette prompt leaves an open dynamic card for visible chat and a filled draft (wide=%s)", async (wide) => {
+    const qc = makeClient();
+    nav.wide = wide;
+    const card: DynamicCard = {
+      id: "weekly-review:test",
+      kind: "weekly-review",
+      action: "Fill in",
+      line: { tone: "warn", dot: "yellow", icon: "≡", label: "Weekly review", text: "Review this week" },
+      sessionId: "dynamic:weekly-review:test",
+      blockIndex: 0,
+      spec: { v: 1, catalog: "jarvis-ui@1", root: "r", elements: { r: { type: "Text", props: { text: "Review snapshot" } } } },
+    };
+    qc.setQueryData(["smart-dynamic", null], { today: "2026-11-06", cards: [card] });
+    render(globalView(), { wrapper });
+    fireEvent.click(wide ? await screen.findByRole("button", { name: "Fill in" }) : screen.getByRole("button", { name: "Chief of staff" }));
+    expect(await screen.findByTestId("dynamic-card")).toBeTruthy();
+    expect(screen.queryByTestId("gc-input")).toBeNull();
+    act(() => window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: "Plan my week" } })));
+    expect(((await screen.findByTestId("gc-input")) as HTMLTextAreaElement).value).toBe("Plan my week");
+    expect(screen.getByRole("tabpanel", { name: "Chat" }).hidden).toBe(false);
+    expect(screen.queryByTestId("dynamic-card")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId("gc-input")));
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "Fill in" }));
+    expect(screen.getByTestId("dynamic-card")).toBeTruthy();
+    act(() => window.dispatchEvent(new Event(OPEN_COORDINATOR_EVENT)));
+    expect(screen.getByTestId("gc-input")).toBeTruthy();
+    expect(screen.queryByTestId("dynamic-card")).toBeNull();
+  });
+
   it("a ⌘K quick action opens the phone sheet and fills the composer without sending", async () => {
     makeClient();
     nav.wide = false;

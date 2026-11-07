@@ -62,6 +62,8 @@ export type NextAction = {
   external?: boolean;
   /** Source chip text, e.g. "Skylight · Chores", "Google Tasks · Groceries" (lib/task-source.ts). */
   sourceLabel?: string;
+  /** Recorded creator, only when the Jarvis-owned source knows it. */
+  provenance?: { via: string; agent?: string };
   /** Who the task belongs to when the source knows (Skylight chores, shared lists). */
   assignee?: { kind: "mine" | "up_for_grabs" | "other"; name?: string };
   /** Skylight write target (chores, list items): what Jarvis needs to complete/claim/check it upstream. */

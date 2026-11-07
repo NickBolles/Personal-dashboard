@@ -172,8 +172,9 @@ import { createPerson } from "@/server/people";
 import { recentAudit } from "@/server/audit";
 import * as store from "@/server/work/store";
 import { saveAiSettings } from "@/server/ai/settings";
+import { saveAgentSettings } from "@/server/agents/routing";
 import { drainRunner, runnerTick, stopAiRunner } from "@/server/ai/runner";
-import { enqueue, getJobRow } from "@/server/ai/jobs";
+import { areaPolicyFor, enqueue, getJobRow } from "@/server/ai/jobs";
 import { listReports } from "@/server/ai/reports";
 import { dispatchOnce } from "@/server/notifications/dispatcher";
 import { deliverPendingPushes, saveSubscription } from "@/server/notifications/push";
@@ -239,6 +240,143 @@ afterEach(() => {
 });
 
 describe("AI actions end to end (fake Hermes)", () => {
+  it("summarize returns a draft with item context; only Save as note creates an attributed, undoable note", async () => {
+    const { u, item } = setup();
+    store.updateItem(u, item.id, { summary: "A bounded item description" }, cid);
+    store.createItem(u, { parentId: item.id, kind: "note", title: "Existing findings", summary: "Notes from the first review" }, cid);
+    store.createItem(u, { parentId: item.id, kind: "thread", title: "Remaining child work" }, cid);
+    const excluded = store.createItem(u, { parentId: item.id, kind: "note", title: "PRIVATE_CHILD", summary: "PRIVATE_NOTE_BODY" }, cid);
+    getDb()
+      .update(schema.workItems)
+      .set({ settings: JSON.stringify({ aiPolicy: "excluded" }) })
+      .where(eq(schema.workItems.id, excluded.id))
+      .run();
+    getDb()
+      .insert(schema.workLinks)
+      .values({ id: "summary-chat", itemId: item.id, kind: "chat_session", targetId: "session-summary", title: "Discussion of rollout" })
+      .run();
+    getDb()
+      .insert(schema.workEvents)
+      .values({ id: "summary-event", itemId: item.id, kind: "edit", actor: owner, reason: "Reviewed implementation scope" })
+      .run();
+    const before = store.getDetail(owner, item.id);
+    const { job } = await (await start(item.id, "summarize")).json();
+    expect(job).toMatchObject({ kind: "summarize", tier: "standard", state: "queued" });
+    await settle();
+    expect(getJobRow(job.id)?.state).toBe("succeeded");
+    const after = store.getDetail(owner, item.id);
+    expect(after.item).toEqual(before.item);
+    expect(after.children).toEqual(before.children);
+    expect(after.links).toEqual(before.links); // no auto-filed AI conversation
+    const input = fake.starts[0].input;
+    for (const text of [
+      "A bounded item description",
+      "Notes from the first review",
+      "Remaining child work",
+      "Discussion of rollout",
+      "Reviewed implementation scope",
+      "DRAFT",
+    ])
+      expect(input).toContain(text);
+    expect(input).not.toContain("PRIVATE_CHILD");
+    expect(input).not.toContain("PRIVATE_NOTE_BODY");
+    const report = listReports(owner, { subjectId: item.id })[0];
+    expect(report.kind).toBe("summarize");
+    expect(report.structured).not.toHaveProperty("next_actions");
+    const save = await call(applyRoute.POST, { method: "POST", params: { id: report.id }, body: { what: "summary_note" } });
+    expect(save.status).toBe(200);
+    const saved = await save.json();
+    expect(saved.item).toMatchObject({ kind: "note", parentId: item.id, summary: report.bodyMd, createdVia: "agent:default" });
+    expect(saved.op).toMatchObject({ kind: "create" });
+    expect(store.getDetail(owner, item.id).children).toHaveLength(before.children.length + 1);
+    const undo = await call(undoRoute.POST, { method: "POST", params: { id: saved.op.id }, body: {} });
+    expect(undo.status).toBe(200);
+    expect(store.getDetail(owner, item.id).children).toEqual(before.children);
+  });
+
+  it.each(["finance", "excluded-root", "excluded-project", "excluded-item"])("summarize refuses %s before any upstream request", async (guard) => {
+    const { u, area, item } = setup();
+    if (guard === "finance") store.updateItem(u, area.id, { title: "Finance" }, cid);
+    else {
+      const target =
+        guard === "excluded-root"
+          ? area
+          : guard === "excluded-item"
+            ? item
+            : store.createItem(u, { parentId: area.id, kind: "project", title: "Private project" }, cid);
+      getDb()
+        .update(schema.workItems)
+        .set({ settings: JSON.stringify({ aiPolicy: "excluded" }) })
+        .where(eq(schema.workItems.id, target.id))
+        .run();
+      if (guard === "excluded-project") store.moveItem(u, item.id, target.id, cid);
+    }
+    const response = await start(item.id, "summarize");
+    expect(response.status).toBe(403);
+    expect((await response.json()).code).toBe("ai_excluded_area");
+    const ai = await (await call(itemAiRoute.GET, { params: { id: item.id } })).json();
+    expect(ai.policy).toEqual({ allowed: false, reason: "ai_excluded_area" });
+    await settle();
+    expect(fake.starts).toHaveLength(0);
+    expect(listReports(owner, { subjectId: item.id })).toHaveLength(0);
+  });
+
+  it("summarize rechecks exclusions at execution, not only enqueue", async () => {
+    const { area, item } = setup();
+    const { job } = await (await start(item.id, "summarize")).json();
+    getDb()
+      .update(schema.workItems)
+      .set({ settings: JSON.stringify({ aiPolicy: "excluded" }) })
+      .where(eq(schema.workItems.id, area.id))
+      .run();
+    await settle();
+    expect(getJobRow(job.id)).toMatchObject({ state: "skipped", errorCode: "finance_excluded" });
+    expect(fake.starts).toHaveLength(0);
+  });
+
+  it("fails closed when an ancestry cycle prevents finding the root policy", () => {
+    const { area, item } = setup();
+    getDb().update(schema.workItems).set({ parentId: item.id }).where(eq(schema.workItems.id, area.id)).run();
+    expect(areaPolicyFor(owner, item.id)).toBe("excluded");
+  });
+
+  it.each([false, true])("summarize reuses inherited profile routing only when routing=%s and sends the selected tier model", async (routing) => {
+    vi.stubEnv("JARVIS_HERMES_KEY_SUMMARY_FIXTURE", "synthetic-summary-test-value");
+    const { u, area, item } = setup();
+    store.updateItem(u, area.id, { settings: { agentMode: "devchief" } }, cid);
+    saveAgentSettings({ routing, routes: [{ profile: "devchief", keyEnv: "JARVIS_HERMES_KEY_SUMMARY_FIXTURE", baseUrl: null }] });
+    saveAiSettings({
+      models: { triage: "cheap-model", standard: "summary-model", deep: "deep-model" },
+      hermes: { perRunModel: true, midRunCost: false, imageInput: false },
+    });
+    const { job } = await (await start(item.id, "summarize")).json();
+    expect(getJobRow(job.id)).toMatchObject({ hermesProfile: routing ? "devchief" : null, tier: "standard", model: "summary-model" });
+    await settle();
+    expect(fake.starts[0].model).toBe("summary-model");
+    const report = listReports(owner, { subjectId: item.id })[0];
+    const saved = await (await call(applyRoute.POST, { method: "POST", params: { id: report.id }, body: { what: "summary_note" } })).json();
+    expect(saved.item.createdVia).toBe(routing ? "agent:devchief" : "agent:default");
+    vi.unstubAllEnvs();
+  });
+
+  it("summary drafts cannot apply changes other than an explicit note save", async () => {
+    const { item } = setup();
+    await start(item.id, "summarize");
+    await settle();
+    const report = listReports(owner, { subjectId: item.id })[0];
+    const response = await call(applyRoute.POST, { method: "POST", params: { id: report.id }, body: { what: "next_action", index: 0 } });
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe("summary_draft_only");
+    expect(store.getDetail(owner, item.id).children).toHaveLength(0);
+    const unauthorized = await call(actionRoute.POST, {
+      user: other,
+      method: "POST",
+      params: { id: item.id },
+      body: { action: "summarize", clientKey: "summaryfixture" },
+    });
+    expect(unauthorized.status).toBe(403);
+  });
+
   it("research: queued → running → succeeded, report + clean sources, visible session filed under the item, push queued", async () => {
     const { item } = setup();
     const res = await start(item.id, "research", { instructions: "focus on cost" });

@@ -56,7 +56,8 @@ it("a failed edit read preserves its h1 and never opens a blank creation form", 
   expect(html).not.toContain('id="wf-name"');
 });
 it("a missing workflow preserves its h1 and uses a kit empty state", () => {
-  const client = new QueryClient();
+  // A fresh list (no refetch in flight): a stale one still refetching shows the loading state instead.
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
   client.setQueryData(["workflows"], { workflows: [] });
   const html = renderToString(shell(<WorkflowBuilder slug="lazy-state-fixture" />, client));
   expect(html.match(/<h1\b/g)).toHaveLength(1);

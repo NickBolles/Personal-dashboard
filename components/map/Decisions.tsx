@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { cx, useToast } from "@/components/ui";
-import { Button, ChipButton, Pill } from "@/components/ui/kit";
+import { Button, ChipButton, EmptyState, Pill } from "@/components/ui/kit";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { useAccess } from "@/components/access";
 import "./map.css";
@@ -35,7 +35,18 @@ const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", ap
  * there is offered afterwards and only happens on an explicit tap. Approvals and
  * workflow proposals open where they are answered (never auto-settled).
  */
-export function DecisionsList({ entries, compact, emptyText }: { entries: DecisionEntry[]; compact?: boolean; emptyText?: string }) {
+export function DecisionsList({
+  entries,
+  compact,
+  emptyText,
+  emptyHint,
+}: {
+  entries: DecisionEntry[];
+  compact?: boolean;
+  emptyText?: string;
+  /** Page-level empty state (kit EmptyState) instead of the compact one-line note. */
+  emptyHint?: string;
+}) {
   const [op, setOp] = useState<UndoOp | null>(null);
   const [posted, setPosted] = useState<{ key: string; opId: string; sessionId: string; text: string; coordinator: boolean } | null>(null);
   // Undo and "post to conversation" stay mounted after the last entry is answered.
@@ -59,7 +70,11 @@ export function DecisionsList({ entries, compact, emptyText }: { entries: Decisi
             />
           ))}
         </ul>
-      ) : posted ? null : (
+      ) : posted ? null : emptyHint ? (
+        <div data-testid="decisions-empty">
+          <EmptyState title={emptyText ?? "Nothing needs you right now."}>{emptyHint}</EmptyState>
+        </div>
+      ) : (
         <p className="text-sm text-muted" data-testid="decisions-empty">
           {emptyText ?? "Nothing needs you right now."}
         </p>

@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createElement } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { radialLayout, wrapLabel, type RadialNodeIn, type RadialRelation } from "@/lib/radial-layout";
+import { LABEL_GAP, radialLabelBox, radialLayout, wrapLabel, type RadialNodeIn, type RadialRelation } from "@/lib/radial-layout";
 import type { WorkItem } from "@/lib/work";
 
 const node = (id: string, parentId: string | null = "root", title = id): RadialNodeIn => ({
@@ -17,6 +17,29 @@ const opts = { width: 400, height: 400 };
 const tree = [root, ...Array.from({ length: 4 }, (_, i) => node(`child-${i}`)), ...Array.from({ length: 3 }, (_, i) => node(`grandchild-${i}`, "child-0"))];
 
 describe("radialLayout", () => {
+  it.each([344, 480, 640])("leaves a minimum gap between every dense leaf label box (height=%s)", (height) => {
+    const dense = [
+      root,
+      ...Array.from({ length: 8 }, (_, i) => node(`branch${i}`, "root", `Design group ${i}`)),
+      ...Array.from({ length: 64 }, (_, i) => node(`leaf${i}`, `branch${Math.floor(i / 8)}`, `Design batch ${i}`)),
+    ];
+    const layout = radialLayout("root", dense, [], { width: 800, height });
+    const leaves = layout.nodes.filter((n) => n.ring === 2);
+    expect(leaves.length).toBeGreaterThan(8);
+    const boxes = leaves.map(radialLabelBox);
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i],
+          b = boxes[j];
+        expect(
+          a.right + LABEL_GAP <= b.left + 0.001 ||
+            b.right + LABEL_GAP <= a.left + 0.001 ||
+            a.bottom + LABEL_GAP <= b.top + 0.001 ||
+            b.bottom + LABEL_GAP <= a.top + 0.001,
+        ).toBe(true);
+      }
+    expect(layout.nodes.some((n) => n.lines.some((line) => line.endsWith("…")) || n.labelOffsetY !== 0)).toBe(true);
+  });
   it("centres the selected node and uses size-proportional radii", () => {
     const layout = radialLayout("root", tree, [], { width: 800, height: 600 });
     expect(layout.nodes[0]).toMatchObject({ id: "root", ring: 0, x: 400, y: 300, anchor: "middle" });
@@ -301,6 +324,32 @@ describe("GraphTab", () => {
     setup();
     expect(screen.getByTestId("radial-graph").querySelector('[data-ring="2"]')).toBeNull();
     expect(screen.getByRole("button", { name: "child-0, Ready, 3 more" })).toBeTruthy();
+  });
+
+  it("places phone overflow counts outside the dot and keeps SVG defs last", () => {
+    rootWidth = stageWidth = 400;
+    setup();
+    const svg = screen.getByTestId("radial-graph");
+    const parent = svg.querySelector('[data-node-id="child-0"]')!;
+    const badge = parent.querySelector(".ar-graph-more")!;
+    const dot = parent.querySelector("circle.ar-graph-shape")!;
+    expect(badge.textContent).toBe("+3");
+    expect(Number(badge.getAttribute("y")) - 12).toBeGreaterThan(Number(dot.getAttribute("r")));
+    expect(svg.firstElementChild?.tagName.toLowerCase()).toBe("g");
+    expect(svg.lastElementChild?.tagName.toLowerCase()).toBe("defs");
+  });
+
+  it("retains full accessible titles when dense labels are shortened", () => {
+    const items = [
+      root,
+      ...Array.from({ length: 8 }, (_, i) => node(`b${i}`, "root", `Design branch ${i}`)),
+      ...Array.from({ length: 64 }, (_, i) => node(`l${i}`, `b${Math.floor(i / 8)}`, `Design batch ${i}`)),
+    ].map((n) => work(n));
+    setup(items);
+    const labels = [...screen.getByTestId("radial-graph").querySelectorAll(".ar-graph-node")];
+    const shortened = labels.filter((n) => n.querySelector(".ar-graph-label")?.textContent?.includes("…"));
+    expect(shortened.length).toBeGreaterThan(0);
+    for (const n of shortened) expect(n.getAttribute("aria-label")).toContain(n.querySelector("title")!.textContent);
   });
 
   it("renders agent states, relation ghosts and empty centres with missing relation data", () => {

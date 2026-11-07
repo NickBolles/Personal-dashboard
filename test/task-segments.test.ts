@@ -29,8 +29,17 @@ it("Waiting includes waiting statuses and open tasks for others/unclaimed, not o
   expect(taskInSegment(action(), "waiting")).toBe(false);
   expect(taskInSegment(action({ status: "completed" }), "all")).toBe(true);
 });
-it("validates URL segments without inventing an AI identity", () => {
+it("validates URL segments including AI", () => {
   expect(parseTaskSegment("mine")).toBe("mine");
   expect(parseTaskSegment("waiting")).toBe("waiting");
-  for (const value of [null, "ai", "other", "MINE"]) expect(parseTaskSegment(value)).toBe("all");
+  expect(parseTaskSegment("ai")).toBe("ai");
+  for (const value of [null, "other", "MINE"]) expect(parseTaskSegment(value)).toBe("all");
+});
+
+it("AI uses recorded agent creation, not assignment, source, or a guessed profile", () => {
+  expect(taskInSegment(action({ provenance: { via: "agent:devchief", agent: "devchief" } }), "ai")).toBe(true);
+  expect(taskInSegment(action({ provenance: { via: "agent:homelabchief" }, status: "completed" }), "ai")).toBe(true);
+  expect(taskInSegment(action(), "ai")).toBe(false);
+  expect(taskInSegment(action({ provenance: { via: "user", agent: "devchief" } }), "ai")).toBe(false);
+  expect(taskInSegment(action({ assignee: { kind: "other", name: "devchief" } }), "ai")).toBe(false);
 });

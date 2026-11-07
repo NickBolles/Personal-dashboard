@@ -201,6 +201,9 @@ export function quickDueDates(now: Date) {
   return { today: date(0), tomorrow: date(1), nextWeek: date((8 - now.getDay()) % 7 || 7) };
 }
 
+/** Pause after the last keyboard segment edit before a typed custom due date is saved. */
+export const DUE_EDIT_SETTLE_MS = 700;
+
 export function DuePicker({ value, onSave, className }: { value: string | null; onSave: (v: string | null) => void; className?: string }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState(false);
@@ -211,6 +214,13 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
     setOpen(false);
     setCustom(false);
     if (refocus) btn.current?.focus();
+  };
+  const pending = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(pending.current), []);
+  const flush = (raw: string) => {
+    clearTimeout(pending.current);
+    pending.current = undefined;
+    if (raw) save(raw);
   };
   const save = (raw: string) => {
     const r = validateInline("targetDate", raw);
@@ -263,8 +273,22 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
                   type="date"
                   aria-label="Due date"
                   className="jv-pick-search max-w-full"
-                  value={value ?? ""}
-                  onChange={(e) => save(e.target.value)}
+                  defaultValue={value ?? ""}
+                  onChange={(e) => {
+                    // Keyboard edits change one segment at a time (each a valid date): save once editing pauses,
+                    // or right away on Enter/blur, so the editor stays open between segments (#207).
+                    const raw = e.target.value;
+                    if (pending.current) clearTimeout(pending.current);
+                    pending.current = raw ? setTimeout(() => flush(raw), DUE_EDIT_SETTLE_MS) : undefined;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    flush(e.currentTarget.value);
+                  }}
+                  onBlur={(e) => {
+                    if (pending.current) flush(e.currentTarget.value);
+                  }}
                 />
                 {error ? <p role="alert">{error}</p> : null}
               </div>
