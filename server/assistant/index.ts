@@ -1,5 +1,5 @@
 import "server-only";
-import { detectSensitivity } from "@/server/ai/rules";
+import { credentialsMessage, maskSecrets } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { HttpError } from "@/server/http/errors";
 import { isLocalRun, isLocalSession, type AssistantBackend } from "@/lib/assistant";
@@ -91,9 +91,15 @@ export const forkSession = async (user: CurrentUser, id: string, input: hermes.F
 };
 
 export const startRun = async (user: CurrentUser, r: hermes.StartRunRequest, correlationId: string) => {
-  if (detectSensitivity([r.input, r.instructions].filter(Boolean).join("\n")) === "credentials")
-    throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
-  r = { ...r, input: maskAccountNumbers(r.input), ...(r.instructions ? { instructions: maskAccountNumbers(r.instructions) } : {}) };
+  // Last line of defence for every chat path: a message that IS a credential is refused, any other
+  // secret value is replaced inline (the run routes already did this; startRun is also called directly).
+  const typed = maskSecrets(r.input);
+  if (typed.onlySecrets) throw new HttpError(403, "credentials_detected", credentialsMessage(typed.masked));
+  r = {
+    ...r,
+    input: maskAccountNumbers(typed.text),
+    ...(r.instructions ? { instructions: maskAccountNumbers(maskSecrets(r.instructions).text) } : {}),
+  };
   if (isLocalSession(r.sessionId)) return local.startLocalRun(user, r, correlationId);
   const run = await hermes.startRun(user, r, correlationId);
   try {
@@ -128,8 +134,9 @@ export function respondClarify(user: CurrentUser, runId: string, body: Parameter
 }
 
 export function steerRun(user: CurrentUser, runId: string, input: string, correlationId: string) {
-  if (detectSensitivity(input) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
-  input = maskAccountNumbers(input);
+  const typed = maskSecrets(input);
+  if (typed.onlySecrets) throw new HttpError(403, "credentials_detected", credentialsMessage(typed.masked, "guidance"));
+  input = maskAccountNumbers(typed.text);
   if (isLocalRun(runId)) throw new HttpError(501, "unsupported", "Claude can't be steered mid-answer. Stop it and send a new message.");
   return hermes.steerRun(user, runId, input, correlationId);
 }

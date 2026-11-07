@@ -1,3 +1,4 @@
+import { maskSecrets } from "@/server/ai/rules";
 import { z } from "zod";
 import { api } from "@/server/http/api";
 import { listSessions } from "@/server/assistant";
@@ -29,11 +30,15 @@ export const GET = api(
  * New conversation; `backend` picks Hermes or Claude (default: the area's, else the household setting).
  * With Areas it lands in Miscellaneous, or under `areaId` (an area or item you own) — no filing step.
  */
-export const POST = api(({ body, user, correlationId }) => startConversation(user, body, correlationId), {
-  body: z.object({
-    title: z.string().max(200).optional(),
-    backend: z.enum(ASSISTANT_BACKENDS).optional(),
-    areaId: z.string().min(1).max(80).nullable().optional(),
-  }),
-  cap: "hermes.chat",
-});
+// A title made from the first message must not carry a secret into Hermes either.
+export const POST = api(
+  ({ body, user, correlationId }) => startConversation(user, body.title ? { ...body, title: maskSecrets(body.title).text } : body, correlationId),
+  {
+    body: z.object({
+      title: z.string().max(200).optional(),
+      backend: z.enum(ASSISTANT_BACKENDS).optional(),
+      areaId: z.string().min(1).max(80).nullable().optional(),
+    }),
+    cap: "hermes.chat",
+  },
+);

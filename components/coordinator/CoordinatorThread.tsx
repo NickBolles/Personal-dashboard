@@ -8,7 +8,7 @@ import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
-import type { SessionSummary, TimelineItem } from "@/lib/hermes";
+import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
 import { RateMessage } from "@/components/feedback/RateMessage";
 import { Button } from "@/components/ui/kit";
@@ -100,17 +100,17 @@ export function CoordinatorThread({
         target = s.id;
         setSessionId(s.id);
       }
-      await api.post(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
+      const run = await api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
         input: compact ? withPageContext(input, context) : input,
         idempotencyKey: newIdempotencyKey("coord"),
         capabilities: [SMART_CAPABILITY],
       });
-      return target;
+      return { target, notice: maskedNotice(run) };
     },
-    onSuccess: (target) => {
+    onSuccess: ({ target, notice }) => {
       setText("");
       if (textarea.current && compact) textarea.current.style.height = "auto";
-      toast("Sent to the coordinator");
+      toast(notice ?? "Sent to the coordinator", notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
       void refreshSessionLists(qc).catch(() => undefined);
