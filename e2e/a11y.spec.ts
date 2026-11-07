@@ -9,6 +9,7 @@ import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
 import { skylightGroupingVisual, skylightWriteVisual } from "./fixtures/skylight";
+import { stubPrismV2 } from "./fixtures/smart-v2";
 
 const PAGES = [
   "/home",
@@ -824,4 +825,18 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await axe("sheet changes");
   await zoom();
   await page.keyboard.press("Escape");
+});
+
+test("Prismv2 dynamic review sheet/panel: WCAG22AA + 200% text reflow", async ({ page }, testInfo) => {
+  await stubPrismV2(page);
+  await page.goto("/more");
+  if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
+  else await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
+  await expect(page.getByTestId("dynamic-card")).toBeVisible();
+  const selector = testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet";
+  const result = await new AxeBuilder({ page: page as never }).include(selector).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+  expect(result.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+  expect(await page.getByTestId("dynamic-card").evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

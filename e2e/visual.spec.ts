@@ -20,6 +20,7 @@ import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-dem
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
+import { openPrismChat, stubPrismV2 } from "./fixtures/smart-v2";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -36,6 +37,7 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
 test.beforeEach(async ({ request, page }) => {
+  await page.route("**/api/smart/dynamic", (route) => route.fulfill({ json: { cards: [], today: "2026-11-06" } }));
   // "Needs you" (Today, sidebar badge) would show other specs' open decisions: empty unless a test stubs it.
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [], count: 0 } }));
   // Agent runs (map cards, Today rail, item panel) would show other specs' runs: empty unless a test stubs it.
@@ -1948,5 +1950,35 @@ for (const scheme of ["light", "dark"] as const) {
       expect(feed.locator(".jv-activity-days")).toHaveScreenshot(`agent-activity-${scheme}.png`, { mask: MASK.map((m) => feed.locator(m)) }),
     );
     await t2.evaluate((el) => (el as Element).remove());
+  });
+}
+
+// Worker B: appended v2 catalog and deterministic C+ dynamic sheet contracts.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: Prismv2 weekly review sheet (${scheme})`, async ({ page }, testInfo) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubPrismV2(page);
+    await page.goto("/more");
+    if (testInfo.project.name === "desktop") await page.locator(".gc-priority").getByRole("button", { name: "Fill in", exact: true }).click();
+    else await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
+    const panel = page.locator(testInfo.project.name === "desktop" ? ".gc-rail" : ".gc-sheet");
+    await expect(panel.getByRole("heading", { name: "Prismv2 weekly review" })).toBeVisible();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    const style = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    await expect(panel).toHaveScreenshot(`prismv2-weekly-review-${scheme}.png`);
+    await style.evaluate((el) => (el as Element).remove());
+  });
+  test(`visual: Prismv2 matrix Gantt BarChart chat (${scheme})`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "mobile-320", "Catalog board at desktop + 412; sheet also covers 320");
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await stubPrismV2(page, []);
+    await openPrismChat(page);
+    const surface = page.getByTestId("smart-surface").first();
+    await expect(surface.getByRole("heading", { name: "Prismv2 completions" })).toBeVisible();
+    const style = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock, .gc-tray { visibility: hidden !important; }' });
+    await expect(surface).toHaveScreenshot(`prismv2-catalog-${scheme}.png`);
+    await style.evaluate((el) => (el as Element).remove());
   });
 }
