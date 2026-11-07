@@ -256,7 +256,8 @@ function RateDialog({
         </label>
         <textarea
           id={fixId}
-          className={cx(inputCls, "min-h-36 text-sm")}
+          className={cx(inputCls, "text-sm")}
+          rows={7}
           value={prompt}
           maxLength={4000}
           onChange={(e) => setPrompt(e.target.value)}
@@ -317,7 +318,8 @@ function RateDialog({
       </label>
       <textarea
         id={noteId}
-        className={cx(inputCls, "min-h-20 text-sm")}
+        className={cx(inputCls, "text-sm")}
+        rows={3}
         value={note}
         maxLength={FEEDBACK_NOTE_MAX}
         placeholder="What should it have said or done?"

@@ -2193,9 +2193,14 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(inbox.getByTestId("feedback-row")).toHaveCount(3);
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
     await expectNoHorizontalOverflow(page);
+    // Element shots taller than the viewport draw masks off their rows: fit the viewport to the inbox first.
+    const size = page.viewportSize()!;
+    const h = Math.ceil((await inbox.boundingBox())!.height + 160);
+    if (h > size.height) await page.setViewportSize({ width: size.width, height: h });
     await withoutTray(page, () =>
       expect(inbox).toHaveScreenshot(`feedback-inbox-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => inbox.locator(m)) }),
     );
+    await page.setViewportSize(size);
     await page.goto("/chat/sess_morning");
     const bubble = page.locator('[data-testid="msg-bubble"][data-who="assistant"]').first();
     await expect(bubble).toBeVisible();
