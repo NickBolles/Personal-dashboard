@@ -8,7 +8,7 @@ import { AgentChip } from "@/components/agents/AgentChip";
 import { Button } from "@/components/ui/kit";
 import { CoordinatorGlyph, IconAction } from "@/components/ui/IconAction";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
-import { activeInArea, coordinatorDot } from "@/lib/agent-runs";
+import { coordinatorDot, coordinatorEntries } from "@/lib/agent-runs";
 import { CoordinatorThread, type CoordinatorResponse } from "@/components/coordinator/CoordinatorThread";
 import "./agents.css";
 
@@ -21,7 +21,7 @@ export type { CoordinatorResponse } from "@/components/coordinator/CoordinatorTh
  */
 export function CoordinatorButton({ areaId, areaTitle, className }: { areaId: string; areaTitle: string; className?: string }) {
   const [open, setOpen] = useState(false);
-  const dot = coordinatorDot(activeInArea(useAgentRuns().data, areaId));
+  const dot = coordinatorDot(coordinatorEntries(useAgentRuns().data, areaId));
   return (
     <>
       <IconAction

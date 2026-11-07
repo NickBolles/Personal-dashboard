@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingState } from "@/components/ui/LoadingState";
 import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
@@ -430,7 +431,7 @@ export function WorkView({
           </div>
           {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
           {items.isPending ? (
-            <Spinner label="Loading work…" />
+            <LoadingState label="Loading work…" />
           ) : (
             <WorkTree
               items={list}
@@ -986,7 +987,7 @@ function ItemDetail({
   if (q.isPending)
     return (
       <div className="p-6">
-        <Spinner label="Loading…" />
+        <LoadingState label="Loading item…" />
       </div>
     );
   if (q.error)

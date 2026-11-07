@@ -2,7 +2,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { IconAction } from "@/components/ui/IconAction";
-import { coordinatorDot } from "@/lib/agent-runs";
+import { coordinatorDot, coordinatorEntries, type AgentRunsResponse, type ItemAgentInfo } from "@/lib/agent-runs";
 
 afterEach(cleanup);
 
@@ -12,6 +12,23 @@ test("coordinatorDot: waiting beats failed beats running; nothing live → no do
   expect(coordinatorDot([{ live: "running" }])).toBe("running");
   expect(coordinatorDot([{ live: "running" }, { live: "failed" }])).toBe("failed");
   expect(coordinatorDot([{ live: "failed" }, { live: "waiting" }, { live: "running" }])).toBe("waiting");
+});
+
+test("coordinatorEntries: a recent failed run in the area lights the failure dot (#208)", () => {
+  const now = Date.parse("2026-11-07T12:00:00Z");
+  const info = (itemId: string, areaId: string, live: ItemAgentInfo["live"], liveAt: string) =>
+    ({ itemId, areaId, title: itemId, who: null, live, liveAt, sessionId: null, runs: 1, prs: [], report: null, progress: null }) as ItemAgentInfo;
+  const r: AgentRunsResponse = {
+    items: {
+      a: info("a", "area1", "failed", "2026-11-07T10:00:00Z"),
+      b: info("b", "area1", "failed", "2026-11-05T10:00:00Z"),
+      c: info("c", "area2", "failed", "2026-11-07T11:00:00Z"),
+    },
+    active: [],
+  };
+  expect(coordinatorDot(coordinatorEntries(r, "area1", now))).toBe("failed");
+  expect(coordinatorEntries(r, "area1", now).map((e) => e.itemId)).toEqual(["a"]);
+  expect(coordinatorDot(coordinatorEntries({ ...r, items: { b: r.items.b! } }, "area1", now))).toBe(null);
 });
 
 test("IconAction: named by its label (plus the live state), tooltip, click, busy disables", () => {

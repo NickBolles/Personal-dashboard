@@ -203,6 +203,17 @@ export function activeInArea(r: AgentRunsResponse | undefined, areaId: string): 
   return (r?.active ?? []).filter((i) => i.areaId === areaId);
 }
 
+/** A failed run keeps the coordinator dot red this long (then the area goes quiet again). */
+export const FAILED_DOT_MS = 24 * 3_600_000;
+
+/** Entries that drive an area's coordinator dot: runs in flight plus runs that failed recently (#208). */
+export function coordinatorEntries(r: AgentRunsResponse | undefined, areaId: string, now = Date.now()): ItemAgentInfo[] {
+  const failed = Object.values(r?.items ?? {}).filter(
+    (i) => i.areaId === areaId && i.live === "failed" && i.liveAt != null && now - Date.parse(i.liveAt) < FAILED_DOT_MS,
+  );
+  return [...activeInArea(r, areaId), ...failed];
+}
+
 /** Coordinator entry dot (N5): waiting on the owner beats a failure beats work in progress; nothing live → no dot. */
 export function coordinatorDot(entries: readonly Pick<ItemAgentInfo, "live">[]): "running" | "waiting" | "failed" | null {
   if (entries.some((e) => e.live === "waiting")) return "waiting";

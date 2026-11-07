@@ -31,6 +31,8 @@ export function EventForm({
   const originallySpansDays = Boolean(
     event && !event.allDay && event.endsAt && localDate(new Date(event.startsAt), timezone) !== localDate(new Date(event.endsAt), timezone),
   );
+  // Last non-empty start date: clearing Date before picking a new one must still shift the end (#209).
+  const [anchorDate, setAnchorDate] = useState(date);
   const [location, setLocation] = useState(event?.location ?? "");
   const [error, setError] = useState("");
   const formId = `${id}-event`;
@@ -96,8 +98,12 @@ export function EventForm({
             value={date}
             required
             onChange={(e) => {
-              setEndDate(shiftedEndDate(date, endDate, e.target.value));
-              setDate(e.target.value);
+              const next = e.target.value;
+              if (next) {
+                setEndDate(shiftedEndDate(date || anchorDate, endDate, next));
+                setAnchorDate(next);
+              }
+              setDate(next);
             }}
           />
         </Field>

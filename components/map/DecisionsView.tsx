@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { ErrorNote } from "@/components/ui";
+import { EmptyState } from "@/components/ui/kit";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { DecisionsList, useDecisions } from "./Decisions";
 
 export function DecisionsView() {
@@ -17,13 +20,17 @@ export function DecisionsView() {
           Open Areas
         </Link>
       </header>
-      {q.error ? <p className="text-sm text-danger">Couldn&apos;t load: {(q.error as Error).message}</p> : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data ? (
-        <DecisionsList entries={q.data.entries} />
+        q.data.entries.length ? (
+          <DecisionsList entries={q.data.entries} />
+        ) : (
+          <div data-testid="decisions-empty">
+            <EmptyState title="Nothing needs you right now.">Decisions, approvals and proposals from your agents land here.</EmptyState>
+          </div>
+        )
       ) : !q.error ? (
-        <p className="text-sm text-muted" role="status">
-          Loading…
-        </p>
+        <LoadingState label="Loading decisions…" />
       ) : null}
     </div>
   );

@@ -2,12 +2,14 @@ import { expect, test } from "@playwright/test";
 
 /** Workflows W3: create in the builder → preview → save v2 → restore v1. */
 
-test("workflow builder: create, preview, save a new version, restore v1", async ({ page }) => {
+test("workflow builder: create, preview, save a new version, restore v1", async ({ page }, testInfo) => {
+  // A retry must not collide with the slug the failed attempt already saved.
+  const slug = `choirlog${testInfo.retry || ""}`;
   await page.goto("/workflows/new");
   await expect(page.getByRole("heading", { name: "New workflow", level: 1 })).toBeVisible();
 
   await page.locator("#wf-name").fill("Choir rehearsal log");
-  await page.locator("#wf-slug").fill("choirlog");
+  await page.locator("#wf-slug").fill(slug);
 
   await page
     .getByRole("navigation", { name: "Builder sections" })
@@ -35,8 +37,8 @@ test("workflow builder: create, preview, save a new version, restore v1", async 
   await page.locator("#wf-area").fill("");
 
   await page.getByRole("button", { name: "Save draft" }).click();
-  await expect(page).toHaveURL(/\/workflows\/choirlog\/edit$/);
-  await expect(page.getByRole("heading", { name: "Edit Choir rehearsal log", level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/workflows/${slug}/edit$`));
+  await expect(page.getByRole("heading", { name: "Edit Choir rehearsal log", level: 1 })).toBeVisible({ timeout: 15_000 });
 
   await page
     .getByRole("navigation", { name: "Builder sections" })
