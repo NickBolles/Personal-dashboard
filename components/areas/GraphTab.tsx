@@ -413,26 +413,6 @@ function GraphCanvas({
         }}
         onLostPointerCapture={endPointer}
       >
-        <defs>
-          {(["depends", "followup"] as const).map((kind) => (
-            // Arrowheads stop short of the 10px node dot so the direction (from → to) stays readable.
-            <marker
-              key={kind}
-              id={`ar-arrow-${kind}`}
-              className="ar-graph-arrow"
-              data-kind={kind}
-              viewBox="0 0 8 8"
-              refX={20}
-              refY={4}
-              markerWidth={8}
-              markerHeight={8}
-              markerUnits="userSpaceOnUse"
-              orient="auto"
-            >
-              <path d="M0,0 L8,4 L0,8 z" />
-            </marker>
-          ))}
-        </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <g transform={`translate(${padX} ${padY})`}>
             {layout.edges.map((edge, i) => (
@@ -521,6 +501,26 @@ function GraphCanvas({
             })}
           </g>
         </g>
+        <defs>
+          {(["depends", "followup"] as const).map((kind) => (
+            // Arrowheads stop short of the 10px node dot so the direction (from → to) stays readable.
+            <marker
+              key={kind}
+              id={`ar-arrow-${kind}`}
+              className="ar-graph-arrow"
+              data-kind={kind}
+              viewBox="0 0 8 8"
+              refX={20}
+              refY={4}
+              markerWidth={8}
+              markerHeight={8}
+              markerUnits="userSpaceOnUse"
+              orient="auto"
+            >
+              <path d="M0,0 L8,4 L0,8 z" />
+            </marker>
+          ))}
+        </defs>
       </svg>
     </>
   );

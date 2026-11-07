@@ -134,6 +134,8 @@ export function WorkView({
   // A tab swaps the pane in place: the selection (?item=) and the scroll position stay put.
   const setTab = (t: AreaTab) => {
     setTabState(t);
+    // A palette action (?do=) runs once: a tab switch that remounts ItemDetail must not replay it.
+    setView((v) => (v.kind === "item" && v.action ? { kind: "item", id: v.id } : v));
     window.history.replaceState(window.history.state, "", areasHref(window.location.href, { tab: t }));
   };
   const [adding, setAdding] = useState<{ kind?: CreatableKind; parent: WorkItem | null } | null>(null);
@@ -359,6 +361,7 @@ export function WorkView({
                     ) : (
                       <ActivityFeed
                         areas={list.filter((i) => i.parentId === null && !i.archived).map((i) => ({ id: i.id, title: i.title }))}
+                        onSelect={select}
                         label="All activity"
                       />
                     )}

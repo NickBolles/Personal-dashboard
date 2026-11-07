@@ -237,15 +237,15 @@ describe("Board and tree status rendering", () => {
     const title = view.getByRole("link", { name: "leaf" });
     expect(title.getAttribute("href")).toBe("/areas?item=leaf");
     expect(title.closest("li")?.getAttribute("data-selected")).toBe("true");
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+    // Mounting already selected (a tab switch) keeps the page still; only a later selection scrolls.
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     fireEvent.click(title);
     expect(onOpen).toHaveBeenCalledWith("leaf");
     // Preserve native modified-click semantics without asking jsdom to navigate.
     title.addEventListener("click", (event) => event.preventDefault());
     fireEvent.click(title, { ctrlKey: true });
     expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     if (scopeId === "leaf" || scopeId === "sub") expect(view.queryByText("sibling")).toBeNull();
   });
 
