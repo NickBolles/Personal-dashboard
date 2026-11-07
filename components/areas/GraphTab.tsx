@@ -10,7 +10,7 @@ import { STATUS_VAR } from "@/components/work/WorkMap";
 import { api } from "@/lib/client/api";
 import { bucketOf, emptyCounts, MAP_BUCKET_LABELS, MAP_BUCKETS } from "@/lib/map-rollup";
 import { radialLayout, type PlacedNode, type RadialNodeIn, type RadialRelation } from "@/lib/radial-layout";
-import { STATUS_LABELS, type WorkItem } from "@/lib/work";
+import { isContainer, STATUS_LABELS, type WorkItem } from "@/lib/work";
 import type { AgentRunsResponse } from "@/lib/agent-runs";
 
 type GraphTabProps = {
@@ -59,7 +59,7 @@ export function GraphTab({ items, centreId, onRecentre, onOpen }: GraphTabProps)
   const centre = selectedId ? byId.get(selectedId) : undefined;
   const title = centre?.title ?? "All areas";
   const compact = size.root < 560;
-  const listMode = showList || size.root < 300;
+  const listMode = showList || size.root < 260;
 
   useEffect(() => {
     const root = rootRef.current;
@@ -133,8 +133,11 @@ export function GraphTab({ items, centreId, onRecentre, onOpen }: GraphTabProps)
     return index;
   }, [graph]);
   const names = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node.title])), [graph]);
+  // Work below the centre by status (projects are groups, not work: count the items inside them).
   const counts = emptyCounts();
-  for (const item of direct) counts[bucketOf(item)]++;
+  const below = [...direct];
+  for (let n = 0; n < below.length && n < 5000; n++) below.push(...(children.get(below[n].id) ?? []));
+  for (const item of below) if (!isContainer(item)) counts[bucketOf(item)]++;
   const hasRelations = graph.relations.some((relation) => relation.from === selectedId || relation.to === selectedId);
   const listNode = (item: Pick<WorkItem, "id" | "title" | "status">, depth: number, ancestors: Set<string>): JSX.Element => {
     const seen = new Set(ancestors).add(item.id);
@@ -247,7 +250,7 @@ export function GraphTab({ items, centreId, onRecentre, onOpen }: GraphTabProps)
           ) : (
             <p className="ar-graph-muted">Select an area to explore its work.</p>
           )}
-          <h4>Children by status</h4>
+          <h4>Work below by status</h4>
           <dl>
             {MAP_BUCKETS.map((bucket) => (
               <div key={bucket}>

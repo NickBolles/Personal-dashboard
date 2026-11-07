@@ -20,8 +20,8 @@ describe("radialLayout", () => {
   it("centres the selected node and uses size-proportional radii", () => {
     const layout = radialLayout("root", tree, [], { width: 800, height: 600 });
     expect(layout.nodes[0]).toMatchObject({ id: "root", ring: 0, x: 400, y: 300, anchor: "middle" });
-    expect(layout.radius.r1).toBeCloseTo(600 * 0.27);
-    expect(layout.radius.r2).toBeCloseTo(600 * 0.44);
+    expect(layout.radius.r1).toBeCloseTo(600 * 0.3);
+    expect(layout.radius.r2).toBeCloseTo(600 * 0.48);
   });
 
   it("spaces ring 1 evenly, clockwise, starting at the top", () => {
@@ -292,8 +292,8 @@ describe("GraphTab", () => {
     expect(screen.queryByRole("list", { name: "List of Development" })).toBeNull();
   });
 
-  it("auto-selects the list below 300px and collapses grandchildren below 560px", () => {
-    rootWidth = stageWidth = 280;
+  it("auto-selects the list below 260px and collapses grandchildren below 560px", () => {
+    rootWidth = stageWidth = 250;
     setup();
     expect(screen.getByRole("list", { name: "List of Development" })).toBeTruthy();
     cleanup();

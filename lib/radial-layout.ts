@@ -65,7 +65,7 @@ export function radialLayout(
   const width = Math.max(1, opts.width);
   const height = Math.max(1, opts.height);
   const unit = Math.min(width, height);
-  const radius = { r1: unit * (opts.compact ? 0.34 : 0.27), r2: unit * 0.44 };
+  const radius = { r1: unit * (opts.compact ? 0.34 : 0.3), r2: unit * 0.48 };
   const cx = width / 2;
   const cy = height / 2;
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -86,7 +86,7 @@ export function radialLayout(
       x: cx + cos * r,
       y: cy + Math.sin(angle) * r,
       more,
-      lines: wrapLabel(node.title, opts.compact ? 12 : ring === 2 || ring === 3 ? 14 : 16),
+      lines: wrapLabel(node.title, opts.compact ? 12 : ring === 2 || ring === 3 ? 12 : 16),
       anchor: ring === 0 ? "middle" : cos > 0.3 ? "start" : cos < -0.3 ? "end" : "middle",
       ...(ghost ? { ghost: true } : {}),
     };
@@ -110,9 +110,9 @@ export function radialLayout(
     const parent = place(node, 1, angle, radius.r1, opts.compact ? grandchildren.length : 0);
     contains(centre, parent);
     if (opts.compact) return;
-    // Keep 24px between outer dots and a margin on both sides of the wedge.
-    const minAngle = 2 * Math.asin(Math.min(1, 12 / radius.r2));
-    const available = Math.min(wedge * 0.8, TAU * 0.8);
+    // Keep ~72px between outer dots (room for a wrapped 12-character label) and a margin on both sides of the wedge.
+    const minAngle = 2 * Math.asin(Math.min(1, 36 / radius.r2));
+    const available = Math.min(wedge * 0.9, TAU * 0.8);
     const capacity = Math.max(1, Math.floor(available / minAngle) + 1);
     const visible = grandchildren.slice(0, capacity);
     parent.more = grandchildren.length - visible.length;
