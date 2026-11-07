@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DuePicker, MetaPicker, SelectPicker, quickDueDates, type SelectPickerOption } from "./MetaPicker";
+import { DUE_EDIT_SETTLE_MS, DuePicker, MetaPicker, SelectPicker, quickDueDates, type SelectPickerOption } from "./MetaPicker";
 
 beforeEach(() => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -231,7 +231,8 @@ it("Sunday Tomorrow and Next week remain distinct options with one selected row"
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-it("due picker reveals a native date field, saves on change and can clear", () => {
+it("due picker reveals a native date field, saves once editing settles and can clear", () => {
+  vi.useFakeTimers();
   const onSave = vi.fn();
   render(<DuePicker value="2026-11-21" onSave={onSave} />);
   const trigger = screen.getByRole("button", { name: /^Due date:/ });
@@ -240,10 +241,31 @@ it("due picker reveals a native date field, saves on change and can clear", () =
   const date = screen.getByLabelText("Due date", { exact: true, selector: "input" });
   expect(date.getAttribute("type")).toBe("date");
   expect(document.activeElement).toBe(date);
+  // segment-by-segment keyboard edits keep the editor open (#207)
+  fireEvent.change(date, { target: { value: "2027-01-01" } });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS - 100));
   fireEvent.change(date, { target: { value: "2027-01-02" } });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS - 100));
+  expect(onSave).not.toHaveBeenCalled();
+  expect(date.isConnected).toBe(true);
+  act(() => vi.advanceTimersByTime(200));
+  expect(onSave).toHaveBeenCalledTimes(1);
   expect(onSave).toHaveBeenCalledWith("2027-01-02");
   expect(document.activeElement).toBe(trigger);
+  vi.useRealTimers();
   fireEvent.click(trigger);
   fireEvent.click(screen.getByRole("option", { name: "Clear due date" }));
   expect(onSave).toHaveBeenLastCalledWith(null);
+});
+
+it("due picker saves a typed date right away on Enter", () => {
+  const onSave = vi.fn();
+  render(<DuePicker value={null} onSave={onSave} />);
+  fireEvent.click(screen.getByRole("button", { name: /^Due date:/ }));
+  fireEvent.click(screen.getByRole("option", { name: "Pick a date…" }));
+  const date = screen.getByLabelText("Due date", { exact: true, selector: "input" });
+  fireEvent.change(date, { target: { value: "2027-03-04" } });
+  fireEvent.keyDown(date, { key: "Enter" });
+  expect(onSave).toHaveBeenCalledTimes(1);
+  expect(onSave).toHaveBeenCalledWith("2027-03-04");
 });

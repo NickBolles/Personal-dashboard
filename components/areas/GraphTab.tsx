@@ -9,7 +9,7 @@ import { Button } from "@/components/ui";
 import { STATUS_VAR } from "@/components/work/WorkMap";
 import { api } from "@/lib/client/api";
 import { bucketOf, emptyCounts, MAP_BUCKET_LABELS, MAP_BUCKETS } from "@/lib/map-rollup";
-import { radialLayout, type PlacedNode, type RadialNodeIn, type RadialRelation } from "@/lib/radial-layout";
+import { radialLabelBox, radialLayout, type PlacedNode, type RadialNodeIn, type RadialRelation } from "@/lib/radial-layout";
 import { isContainer, STATUS_LABELS, type WorkItem } from "@/lib/work";
 import type { AgentRunsResponse } from "@/lib/agent-runs";
 
@@ -373,10 +373,11 @@ function GraphCanvas({
   const fit = () => {
     if (!layout.nodes.length) return setView({ x: 0, y: 0, k: 1 });
     // Include label extents and ghosts, not just dot centres.
-    const left = Math.min(...layout.nodes.map((node) => node.x + padX - (node.anchor === "start" ? 22 : 112)));
-    const right = Math.max(...layout.nodes.map((node) => node.x + padX + (node.anchor === "end" ? 22 : 112)));
-    const top = Math.min(...layout.nodes.map((node) => node.y + padY - 32));
-    const bottom = Math.max(...layout.nodes.map((node) => node.y + padY + 64));
+    const boxes = layout.nodes.map((node) => ({ node, box: radialLabelBox(node) }));
+    const left = Math.min(...boxes.map(({ node, box }) => Math.min(node.x - 80, box.left) + padX));
+    const right = Math.max(...boxes.map(({ node, box }) => Math.max(node.x + 80, box.right) + padX));
+    const top = Math.min(...boxes.map(({ node, box }) => Math.min(node.y - 32, box.top) + padY));
+    const bottom = Math.max(...boxes.map(({ node, box }) => Math.max(node.y + 40, box.bottom + 20) + padY));
     const k = clamp(Math.min(1, (size.width - 24) / (right - left), (size.height - 24) / (bottom - top)));
     setView({ k, x: size.width / 2 - ((left + right) * k) / 2, y: size.height / 2 - ((top + bottom) * k) / 2 });
   };
@@ -426,9 +427,9 @@ function GraphCanvas({
             ))}
             {layout.nodes.map((node) => {
               const live = runs?.items[node.id]?.live;
-              const labelX = node.anchor === "start" ? 18 : node.anchor === "end" ? -18 : 0;
-              const labelY =
-                node.anchor === "middle" ? (Math.sin(node.angle) < 0 ? -20 - (node.lines.length - 1) * 15 : 27) : -((node.lines.length - 1) * 15) / 2 + 4;
+              const label = radialLabelBox(node);
+              const labelX = label.x;
+              const labelY = label.y;
               const centre = node.ring === 0;
               const pillWidth = Math.max(100, Math.min(158, Math.max(...node.lines.map((line) => line.length)) * 7 + 24));
               return (
@@ -474,6 +475,7 @@ function GraphCanvas({
                       <circle className="ar-graph-shape" r={10} fill={STATUS_VAR[node.status]} stroke={STATUS_VAR[node.status]} />
                     </>
                   )}
+                  {node.labelOffsetY ? <path className="ar-graph-label-leader" d={`M 0 ${Math.sign(node.labelOffsetY) * 12} L ${labelX} ${labelY}`} /> : null}
                   <text
                     className="ar-graph-label"
                     textAnchor={centre ? "middle" : node.anchor}
@@ -487,7 +489,7 @@ function GraphCanvas({
                     ))}
                   </text>
                   {node.more ? (
-                    <text className="ar-graph-more" textAnchor={node.anchor} x={labelX} y={labelY + node.lines.length * 15}>
+                    <text className="ar-graph-more" textAnchor={node.anchor} x={labelX} y={Math.max(28, label.bottom - node.y + 15)}>
                       +{node.more}
                     </text>
                   ) : null}

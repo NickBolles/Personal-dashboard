@@ -6,7 +6,7 @@ import { getOwner } from "@/server/auth";
 import { can } from "@/server/access";
 import { listItems } from "@/server/work/store";
 import { listDecisions } from "@/server/work/decisions";
-import { itemExcluded } from "./store";
+import { INBOX_REF, itemExcluded } from "./store";
 import { specRefs, validateSpec } from "@/lib/jarvis-ui/validator";
 import type { HydratedRef, ApprovalRow } from "@/lib/jarvis-ui/types";
 
@@ -59,7 +59,8 @@ export function approvalQueue(user: CurrentUser): HydratedRef {
     const state = JSON.parse(surface.stateJson) as { pending?: number };
     if (!state.pending) continue;
     const v = validateSpec(JSON.parse(surface.specJson));
-    if (!v.ok || specRefs(v.spec).some((r) => r.startsWith("item:") && (!map.has(r.slice(5)) || itemExcluded(map.get(r.slice(5))!, map)))) continue;
+    if (!v.ok || specRefs(v.spec).some((r) => r.startsWith("item:") && r !== INBOX_REF && (!map.has(r.slice(5)) || itemExcluded(map.get(r.slice(5))!, map))))
+      continue;
     const session = getDb()
       .select()
       .from(schema.sessionMeta)

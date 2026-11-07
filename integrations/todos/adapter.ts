@@ -5,6 +5,7 @@ import { iso, localDate, addDays, MINUTE, DAY } from "@/lib/time";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { newId } from "@/server/crypto";
+import { agentProfileOf, currentVia } from "@/server/work/actor";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { resolveIntegration } from "@/integrations/store";
 import { runChecks } from "@/integrations/testing";
@@ -33,6 +34,7 @@ export type TodoItem = {
   url?: string;
   /** Source chip text: "Google Tasks · <list>", "Home Assistant · <list>", "Jarvis". */
   sourceLabel?: string;
+  provenance?: NextAction["provenance"];
 };
 
 function toAction(t: TodoItem, ctx: AdapterContext): NextAction {
@@ -52,6 +54,7 @@ function toAction(t: TodoItem, ctx: AdapterContext): NextAction {
     updatedAt: t.completedAt ?? t.updatedAt ?? iso(ctx.now),
     href: `/todos#todo-${encodeURIComponent(t.id)}`,
     sourceLabel: t.sourceLabel,
+    ...(t.provenance ? { provenance: t.provenance } : {}),
     primaryAction: t.completed ? undefined : { kind: "complete", label: "Done" },
     secondaryActions: t.completed ? [] : ["snooze"],
   });
@@ -136,6 +139,7 @@ function listLocal(ctx: AdapterContext): TodoItem[] {
       completedAt: t.completedAt ?? undefined,
       updatedAt: t.updatedAt,
       sourceLabel: "Jarvis",
+      ...(t.createdVia ? { provenance: { via: t.createdVia, ...(agentProfileOf(t.createdVia) ? { agent: agentProfileOf(t.createdVia)! } : {}) } } : {}),
     }));
 }
 
@@ -153,7 +157,7 @@ export async function listTodos(ctx: AdapterContext): Promise<TodoItem[]> {
 export function createLocalTodo(input: { title: string; notes?: string; due?: string }) {
   if (provider() !== "jarvis") throw new HttpError(409, "not_canonical", "Todos are owned by another provider");
   const id = newId("todo");
-  getDb().insert(schema.localTodos).values({ id, title: input.title, notes: input.notes, dueAt: input.due }).run();
+  getDb().insert(schema.localTodos).values({ id, title: input.title, notes: input.notes, dueAt: input.due, createdVia: currentVia() }).run();
   return id;
 }
 

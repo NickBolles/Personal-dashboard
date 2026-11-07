@@ -64,6 +64,7 @@ export function areaOf(userId: string, itemId: string): (AreaRef & { id: string 
     .from(T)
     .where(and(eq(T.id, itemId), eq(T.userId, userId)))
     .get();
+  let policy = cur ? effectiveAreaPolicy({ ...cur, aiPolicy: parseAreaSettings(cur.settings).aiPolicy }) : "allowed";
   for (let i = 0; cur && cur.parentId && i < 50; i++) {
     const next = db
       .select()
@@ -72,9 +73,13 @@ export function areaOf(userId: string, itemId: string): (AreaRef & { id: string 
       .get();
     if (!next) break;
     cur = next;
+    const ancestorPolicy = effectiveAreaPolicy({ ...cur, aiPolicy: parseAreaSettings(cur.settings).aiPolicy });
+    if (ancestorPolicy === "excluded" || (ancestorPolicy === "triage_only" && policy !== "excluded")) policy = ancestorPolicy;
   }
   if (!cur) return null;
-  return { id: cur.id, title: cur.title, systemKey: cur.systemKey, aiPolicy: parseAreaSettings(cur.settings).aiPolicy };
+  // A missing ancestor, cycle or excessive depth must not bypass the root's policy.
+  if (cur.parentId) policy = "excluded";
+  return { id: cur.id, title: cur.title, systemKey: cur.systemKey, aiPolicy: policy };
 }
 
 export function subjectText(userId: string, subjectType: string, subjectId: string): { title: string; text: string } | null {

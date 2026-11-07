@@ -4,6 +4,8 @@ import { useMemo, useState, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { ChipButton } from "@/components/ui/kit";
+import { ErrorNote } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { Branch, MAP_KEY, mapWorkItems, type MapResponse } from "@/components/map/MapView";
 import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import { ItemFilterBar, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";
@@ -78,7 +80,7 @@ function ScopedBoard({ scopeId, selectedId, onOpen }: { scopeId: string | null; 
     return keep;
   }, [items, byId, bucket, meta, search, filtering]);
   const areas = rolls.filter((r) => (!area || r.id === area) && (!scope || scope.id === r.id) && visible.has(r.id));
-  const project = scope && scope.parentId !== null && scope.kind !== "area" ? scope : null;
+  const branchRoot = scope && scope.parentId !== null ? scope : null;
   const shown = items.filter((i) => visible.has(i.id) && !isContainer(i)).length;
   const branch = (parent: string) => (
     <Branch
@@ -101,12 +103,8 @@ function ScopedBoard({ scopeId, selectedId, onOpen }: { scopeId: string | null; 
           Drill down <span className="text-muted">· {shown} shown</span>
         </h3>
       </div>
-      {q.error ? <p className="text-sm text-danger">Couldn&apos;t load the map: {(q.error as Error).message}</p> : null}
-      {!q.data && !q.error ? (
-        <p className="text-sm text-muted" role="status">
-          Loading the map…
-        </p>
-      ) : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {!q.data && !q.error ? <LoadingState label="Loading the board…" /> : null}
       {q.data ? (
         <>
           <div className="mb-3 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label="Map filters">
@@ -168,9 +166,9 @@ function ScopedBoard({ scopeId, selectedId, onOpen }: { scopeId: string | null; 
               </ChipButton>
             ) : null}
           </div>
-          {project && visible.has(project.id) ? (
-            <div className="space-y-2" data-testid="map-tree" key={`${project.id}-${filtering}`}>
-              {branch(project.id)}
+          {branchRoot && visible.has(branchRoot.id) ? (
+            <div className="space-y-2" data-testid="map-tree" key={`${branchRoot.id}-${filtering}`}>
+              {branch(branchRoot.id)}
             </div>
           ) : areas.length ? (
             <div className="space-y-2" data-testid="map-tree" key={filtering ? "f" : "a"}>

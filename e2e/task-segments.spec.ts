@@ -53,7 +53,8 @@ test("alder task segments persist in URL, retain due groups, and focus the exist
   await expect(page.getByRole("region", { name: /^Waiting on others/ })).toContainText("Alder await the bearings");
   await segment.getByRole("radio", { name: "All", exact: true }).click();
   await expect(page).not.toHaveURL(/seg=/);
-  await expect(segment.getByRole("radio", { name: "AI", exact: true })).toHaveCount(0);
+  await expect(segment.getByRole("radio", { name: "AI", exact: true })).toHaveCount(1);
+  await expect(page.getByText("AI = tasks an agent created.", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "New task", exact: true }).click();
   await expect(page.getByLabel("New todo", { exact: true })).toBeFocused();
   await expectNoHorizontalOverflow(page);

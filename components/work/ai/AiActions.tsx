@@ -7,7 +7,8 @@ import { Badge, Button, Dialog, Field, OverflowMenu, Spinner, cx, inputCls, useN
 import { useAccess } from "@/components/access";
 import { ModelCombobox, type ModelChoice } from "@/components/areas/ModelPicker";
 import { useWorkMutation } from "@/components/work/common";
-import { type UndoOp } from "@/components/work/UndoBar";
+import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { Pill, ProposedBox } from "@/components/ui/kit";
 import {
   AI_ACTIONS,
   AI_KIND_LABEL,
@@ -49,7 +50,7 @@ const lastActionKey = (areaId: string | null) => `jarvis.ai.last:${areaId ?? "no
 function readLast(areaId: string | null): AiActionKind {
   try {
     const v = localStorage.getItem(lastActionKey(areaId));
-    return v && v in AI_ACTIONS ? (v as AiActionKind) : "research";
+    return v && v !== "summarize" && v in AI_ACTIONS ? (v as AiActionKind) : "research";
   } catch {
     return "research";
   }
@@ -70,10 +71,12 @@ export function GetStarted({ itemId, areaId, compact }: { itemId: string; areaId
       <div className="ai-split-menu">
         <OverflowMenu
           label="More AI actions"
-          items={(Object.keys(AI_ACTIONS) as AiActionKind[]).map((k) => ({
-            label: `${AI_ACTIONS[k].icon} ${AI_ACTIONS[k].label}`,
-            onSelect: () => setSheet(k),
-          }))}
+          items={(Object.keys(AI_ACTIONS) as AiActionKind[])
+            .filter((k) => k !== "summarize")
+            .map((k) => ({
+              label: `${AI_ACTIONS[k].icon} ${AI_ACTIONS[k].label}`,
+              onSelect: () => setSheet(k),
+            }))}
         />
       </div>
       {sheet ? <ActionSheet itemId={itemId} areaId={areaId} action={sheet} onClose={() => setSheet(null)} /> : null}
@@ -86,7 +89,25 @@ export function useAiMenuItems(itemId: string, onPick: (k: AiActionKind) => void
   const can = useAccess().can("work.ai");
   const q = useItemAi(itemId, can);
   if (!can || !q.data?.policy.allowed) return [];
-  return (Object.keys(AI_ACTIONS) as AiActionKind[]).map((k) => ({ label: `✦ ${AI_ACTIONS[k].label}`, onSelect: () => onPick(k) }));
+  return (Object.keys(AI_ACTIONS) as AiActionKind[])
+    .filter((k) => k !== "summarize")
+    .map((k) => ({ label: `✦ ${AI_ACTIONS[k].label}`, onSelect: () => onPick(k) }));
+}
+
+/** Summary is overflow-only; it never enables the item's AI shortcut row. */
+export function useSummaryMenuItem(itemId: string, onPick: (k: AiActionKind) => void) {
+  const can = useAccess().can("work.ai");
+  const q = useItemAi(itemId, can);
+  if (!can || !q.data) return null;
+  const { allowed, reason } = q.data.policy;
+  return {
+    label: "Summarize",
+    disabled: !allowed,
+    hint: allowed ? undefined : reason === "ai_disabled" ? "AI actions are off" : "AI is excluded here",
+    onSelect: () => {
+      if (allowed) onPick("summarize");
+    },
+  };
 }
 
 export function ActionSheet({
@@ -135,7 +156,7 @@ export function ActionSheet({
     {
       onSuccess: () => {
         try {
-          localStorage.setItem(lastActionKey(areaId), action);
+          if (action !== "summarize") localStorage.setItem(lastActionKey(areaId), action);
         } catch {
           /* private mode */
         }
@@ -359,7 +380,7 @@ export function ReportsSection({ itemId, areaId }: { itemId: string; areaId: str
       >
         <span className="flex w-full min-w-0 items-center gap-2">
           {!r.readAt ? <span className="ai-unread-dot" aria-label="Unread" /> : null}
-          <Badge tone="accent">{AI_KIND_LABEL[r.kind]}</Badge>
+          {r.kind === "summarize" ? <Pill tone="ai">Summary draft</Pill> : <Badge tone="accent">{AI_KIND_LABEL[r.kind]}</Badge>}
           <span className="min-w-0 truncate text-[14px] font-medium">{r.title}</span>
           <Badge tone={CONF_TONE[r.confidence]} dot>
             {r.confidence}
@@ -407,6 +428,8 @@ export function ReportViewer({
   const qc = useQueryClient();
   const { toast } = useToast();
   const [rerun, setRerun] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const [noteOp, setNoteOp] = useState<UndoOp | null>(null);
   const q = useQuery({ queryKey: ["work", "ai-report", reportId], queryFn: () => api.get<ReportView>(`/api/ai/reports/${encodeURIComponent(reportId)}`) });
   const [marked, setMarked] = useState(false);
   const patch = useWorkMutation((body: Record<string, unknown>) => api.patch<ReportView>(`/api/ai/reports/${reportId}`, body));
@@ -415,8 +438,12 @@ export function ReportViewer({
     void api.patch(`/api/ai/reports/${reportId}`, { read: true }).then(() => qc.invalidateQueries({ queryKey: ["work", "ai"] }));
   }
   const apply = useWorkMutation((body: Record<string, unknown>) => api.post<{ op: UndoOp | null }>(`/api/ai/reports/${reportId}/apply`, body), {
-    onSuccess: (r) => {
+    onSuccess: (r, body) => {
       onOp?.(r.op);
+      if (body.what === "summary_note") {
+        setNoteSaved(true);
+        if (!onOp) setNoteOp(r.op);
+      }
       toast(r.op ? `${r.op.label}` : "Applied", "ok");
     },
   });
@@ -460,6 +487,25 @@ export function ReportViewer({
                 >
                   Continue in conversation
                 </a>
+              ) : null}
+              {r.kind === "summarize" ? (
+                <>
+                  <Button type="button" size="sm" onClick={onClose}>
+                    Dismiss
+                  </Button>
+                  {isItem ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="primary"
+                      busy={apply.isPending}
+                      disabled={noteSaved}
+                      onClick={() => apply.mutate({ what: "summary_note" })}
+                    >
+                      {noteSaved ? "Saved as note" : "Save as note"}
+                    </Button>
+                  ) : null}
+                </>
               ) : null}
               {isItem && itemId && r.kind !== "triage" && r.kind !== "investigate" ? (
                 <Button size="sm" onClick={() => setRerun(true)}>
@@ -505,7 +551,15 @@ export function ReportViewer({
               {r.archivedAt ? "Unarchive" : "Archive"}
             </Button>
           </div>
-          {r.summary ? <p className="text-[15px]">{r.summary}</p> : null}
+          {r.kind === "summarize" ? (
+            <ProposedBox label="Summary draft · review before saving">
+              <p className="mb-2 text-xs text-muted">Draft only. The item is unchanged until you choose Save as note.</p>
+              {r.summary ? <p className="mb-2 text-[15px]">{r.summary}</p> : null}
+              <SafeMarkdown text={r.bodyMd} sourceCount={0} />
+            </ProposedBox>
+          ) : r.summary ? (
+            <p className="text-[15px]">{r.summary}</p>
+          ) : null}
           {st.next_actions?.length ? (
             <section aria-labelledby="ai-na">
               <h4 id="ai-na" className="wk-label pb-1">
@@ -630,7 +684,7 @@ export function ReportViewer({
               </Button>
             </div>
           ) : null}
-          {r.bodyMd ? <SafeMarkdown text={r.bodyMd} sourceCount={r.sources?.length ?? 0} /> : null}
+          {r.bodyMd && r.kind !== "summarize" ? <SafeMarkdown text={r.bodyMd} sourceCount={r.sources?.length ?? 0} /> : null}
           {r.sources?.length ? (
             <section aria-labelledby="ai-src">
               <h4 id="ai-src" className="wk-label pb-1">
@@ -679,6 +733,7 @@ export function ReportViewer({
       {rerun && r && itemId ? (
         <ActionSheet itemId={itemId} areaId={areaId ?? null} action={r.kind as AiActionKind} rerunOf={r} onClose={() => setRerun(false)} />
       ) : null}
+      {noteOp ? <UndoBar key={noteOp.id} op={noteOp} onDone={() => setNoteOp(null)} onUndone={() => setNoteSaved(false)} /> : null}
     </Dialog>
   );
 }

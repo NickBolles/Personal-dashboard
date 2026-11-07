@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button } from "@/components/ui/kit";
-import { Dialog } from "@/components/ui";
+import { Dialog, ErrorNote } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { bucketOf, emptyCounts, MAP_BUCKET_LABELS, MAP_BUCKETS, type BucketCounts, type MapBucket } from "@/lib/map-rollup";
 import { isContainer, type WorkItem } from "@/lib/work";
@@ -105,7 +106,7 @@ export function AreaProjects({ areaId, onOpen }: { areaId: string; onOpen?: (id:
     );
     return m;
   }, [kids, areaId, view]);
-  if (!q.data) return q.error ? <p className="text-sm text-danger">Couldn&apos;t load projects: {(q.error as Error).message}</p> : null;
+  if (!q.data) return q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : <LoadingState label="Loading projects…" />;
   const visible = new Set(descendants(treeKids, areaId).map((i) => i.id));
   const hasTree = visible.size > 0;
   return (

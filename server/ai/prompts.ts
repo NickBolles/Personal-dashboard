@@ -13,6 +13,7 @@ export const PROMPT_VERSIONS: Record<AiJobKind, string> = {
   plan: "plan@1",
   schedule: "schedule@1",
   draft: "draft@1",
+  summarize: "summarize@1",
   triage: "triage@1",
   investigate: "investigate@1",
   file: "file@1",
@@ -41,6 +42,7 @@ const EXAMPLES: Record<AiJobKind, unknown> = {
   },
   schedule: { durationMinutes: 60, splitOk: false, preferredWindows: ["morning"], earliest: "YYYY-MM-DD", deadline: "YYYY-MM-DD", reason: "…" },
   draft: { ...COMMON_EXAMPLE, subject: "…", body_markdown: "the draft", variants: ["…"], notes: "…" },
+  summarize: { title: "Summary · item title", summary: "≤600 chars", body_markdown: "≤8000 chars: concise draft summary", confidence: "low|medium|high" },
   triage: {
     title: "clean title ≤120",
     kind: "task|idea|reference|question|bug|home_issue|purchase|other",
@@ -97,6 +99,8 @@ export function taskFor(kind: AiJobKind, v: TaskVars) {
       return `Draft a ${v.draftKind ?? "message"} for "${t}".${v.audience ? ` Audience: ${v.audience}.` : ""} Keep Nick's voice: direct, concise. Never send anything.`;
     case "triage":
       return `Classify this capture. Destinations (key — path):\n${v.destinations || "(none)"}\nReturn the best destination key or null, a clean title, the kind, whether a short investigation would save Nick time, and a one-paragraph brief for that investigation.`;
+    case "summarize":
+      return `Summarize "${t}" using only the supplied item context: description, notes, recent activity, child items and linked conversation titles (not transcripts). Cover the objective, current state, key decisions, blockers and next actions; distinguish facts from unknowns. Return a concise DRAFT for review only. Do not use tools, change the item, create notes, or send anything. Nick must explicitly choose Save as note.`;
     case "file":
       return `Suggest where each of Nick's conversations belongs in his Areas tree, judging from the title. Destinations (key — path):\n${v.destinations || "(none)"}\nFor every conversation return its sessionId, the best destination key (or null when nothing fits; Miscellaneous is fine for one-off questions) and a short reason. Don't invent keys.`;
     case "investigate":

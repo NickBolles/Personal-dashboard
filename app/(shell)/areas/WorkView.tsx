@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingState } from "@/components/ui/LoadingState";
 import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
@@ -62,7 +63,7 @@ import { GraphTab } from "@/components/areas/GraphTab";
 import { PortfolioTab } from "@/components/areas/PortfolioTab";
 import { areasHref, parseTab, type AreaTab } from "@/lib/areas-view";
 import { CaptureDialog } from "@/components/work/inbox";
-import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
+import { ActionSheet, JobChip, ReportsSection, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
 import {
   areaValidationDefault,
@@ -435,7 +436,7 @@ export function WorkView({
           </div>
           {items.error ? <ErrorNote error={items.error} retry={() => items.refetch()} /> : null}
           {items.isPending ? (
-            <Spinner label="Loading work…" />
+            <LoadingState label="Loading work…" />
           ) : (
             <WorkTree
               items={list}
@@ -961,11 +962,12 @@ function ItemDetail({
   );
   const close = () => setDialog(null);
   const [aiSheet, setAiSheet] = useState<AiActionKind | null>(
-    initialAction?.startsWith("ai:") && ["research", "plan", "schedule", "draft"].includes(initialAction.slice(3))
+    initialAction?.startsWith("ai:") && ["research", "plan", "schedule", "draft", "summarize"].includes(initialAction.slice(3))
       ? (initialAction.slice(3) as AiActionKind)
       : null,
   );
   const aiItems = useAiMenuItems(id, setAiSheet);
+  const summaryItem = useSummaryMenuItem(id, setAiSheet);
   const wide = useWide();
   const phone = usePhone();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -992,7 +994,7 @@ function ItemDetail({
   if (q.isPending)
     return (
       <div className="p-6">
-        <Spinner label="Loading…" />
+        <LoadingState label="Loading item…" />
       </div>
     );
   if (q.error)
@@ -1053,6 +1055,7 @@ function ItemDetail({
       isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
       container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
       ...aiItems,
+      summaryItem,
       !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
       isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
       isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },

@@ -380,6 +380,7 @@ export const homeMilestones = sqliteTable(
 export const localTodos = sqliteTable("local_todos", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
+  createdVia: text("created_via"),
   notes: text("notes"),
   dueAt: text("due_at"),
   completedAt: text("completed_at"),

@@ -256,6 +256,25 @@ it.each([
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
+it("clearing Date before picking a new one still shifts a multi-day end (#209)", () => {
+  const onSubmit = vi.fn();
+  const event = {
+    id: "sky:event",
+    source: "skylight" as const,
+    title: "Trip",
+    startsAt: "2026-11-29T17:00:00-06:00",
+    endsAt: "2026-12-01T18:00:00-06:00",
+    allDay: false,
+    skylight: { eventId: "event", editable: true },
+  };
+  mount(<EventForm event={event} timezone="America/Chicago" onClose={vi.fn()} onSubmit={onSubmit} />);
+  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "" } });
+  fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-11-30" } });
+  expect((screen.getByLabelText("End date") as HTMLInputElement).value).toBe("2026-12-02");
+  fireEvent.submit(screen.getByLabelText("Title").closest("form")!);
+  expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ event: expect.objectContaining({ endsAt: "2026-12-02T18:00:00-06:00" }) }));
+});
+
 it("keeps the original multi-day end-date control visible even after choosing the start day", () => {
   mount(
     <EventForm

@@ -49,6 +49,9 @@ export function todayLocal(now = new Date()) {
 
 type Lookup = { todo: (ref: string) => HydratedRef; item: (ref: string) => HydratedRef; items: Map<string, WorkItem> };
 
+/** Virtual destination: item.create captures here instead of guessing a work area. */
+export const INBOX_REF = "item:inbox";
+
 function todoActions(user: CurrentUser): NextAction[] {
   return scopeResult(user, cachedSource("todos"))?.data?.actions ?? [];
 }
@@ -67,8 +70,12 @@ function areaOf(item: WorkItem, byId: Map<string, WorkItem>) {
 
 /** True when an item lives under Finance (or an area that excludes AI): never hydrated or written from a smart surface. */
 export function itemExcluded(item: WorkItem, byId: Map<string, WorkItem>) {
-  const area = areaOf(item, byId);
-  return area ? effectiveAreaPolicy({ title: area.title, systemKey: null, aiPolicy: area.settings?.aiPolicy }) === "excluded" : false;
+  const seen = new Set<string>();
+  for (let current: WorkItem | undefined = item; current && !seen.has(current.id); current = current.parentId ? byId.get(current.parentId) : undefined) {
+    seen.add(current.id);
+    if (effectiveAreaPolicy({ title: current.title, systemKey: null, aiPolicy: current.settings?.aiPolicy }) === "excluded") return true;
+  }
+  return false;
 }
 
 export function lookup(user: CurrentUser): Lookup {
@@ -100,6 +107,7 @@ export function lookup(user: CurrentUser): Lookup {
     },
     item(ref) {
       if (!can(user, "work.use")) return { ref, unavailable: "forbidden" };
+      if (ref === INBOX_REF) return { ref, kind: "item", title: "Inbox", status: "captured", href: "/inbox" };
       const map = itemMap();
       const it = map.get(ref.slice("item:".length));
       if (!it || it.kind === "conversation") return { ref, unavailable: "unknown" };

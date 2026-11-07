@@ -1,0 +1,1 @@
+ALTER TABLE `local_todos` ADD `created_via` text;

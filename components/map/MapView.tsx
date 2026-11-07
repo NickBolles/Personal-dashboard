@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { SectionHeader } from "@/components/ui/kit";
+import { ErrorNote } from "@/components/ui";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { SelectPicker, StatusPickerDot } from "@/components/work/MetaPicker";
 import { InlineText, useInlinePatch } from "@/components/work/InlineEdit";
 import { ItemChips } from "@/components/work/ItemMeta";
@@ -101,12 +103,8 @@ export function MapView({ onOpen }: { onOpen?: (id: string) => void } = {}) {
         </div>
       </header>
 
-      {q.error ? <p className="text-sm text-danger">Couldn&apos;t load the map: {(q.error as Error).message}</p> : null}
-      {!q.data && !q.error ? (
-        <p className="text-sm text-muted" role="status">
-          Loading the map…
-        </p>
-      ) : null}
+      {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
+      {!q.data && !q.error ? <LoadingState label="Loading the map…" /> : null}
 
       {q.data ? (
         <div className="mp-land mb-5">

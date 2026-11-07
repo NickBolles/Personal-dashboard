@@ -177,6 +177,13 @@
     font-size: 12px;
   }
 
+  .ar-graph-label-leader {
+    fill: none;
+    stroke: var(--line-strong);
+    stroke-width: 1px;
+    pointer-events: none;
+  }
+
   .ar-graph-agent {
     fill: var(--ai);
     stroke: var(--surface);

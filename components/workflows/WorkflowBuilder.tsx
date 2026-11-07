@@ -57,7 +57,9 @@ export function WorkflowBuilder({ slug, fromChat }: { slug?: string; fromChat?: 
         <ErrorNote error={list.error ?? detail.error} retry={() => (list.error ? list : detail).refetch()} />
       </Page>
     );
-  if (slug && (list.isLoading || detail.isLoading))
+  // Right after "Save draft" the cached list can predate the new workflow: wait for the refetch
+  // instead of flashing "That workflow isn't here." (flaky builder e2e).
+  if (slug && (list.isLoading || detail.isLoading || (!id && list.isFetching)))
     return (
       <Page width="wide">
         <PageHeader title="Edit workflow" />
@@ -173,6 +175,7 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
       } else {
         const r = await api.post<Detail>("/api/workflows", { definition: d, changeNote: note || undefined });
         toast("Saved as a draft (v1)");
+        qc.setQueryData(["workflow", r.workflow.id], r);
         await qc.invalidateQueries({ queryKey: ["workflows"] });
         router.replace(`/workflows/${r.workflow.slug}/edit`);
       }

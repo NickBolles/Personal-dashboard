@@ -12,6 +12,8 @@ import { groupSkylightChores, isOpenChore } from "@/components/skylight/grouping
 import type { SkylightExtra } from "@/components/skylight/model";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
+import { AgentChip } from "@/components/work/AgentChip";
+import { agentOf } from "@/lib/activity";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
 import { Button, ErrorNote, Field, PageHeader, inputCls, useNow, useOnline, useToast } from "@/components/ui";
@@ -122,12 +124,11 @@ export function TodosView() {
           options={[
             { value: "all", label: "All" },
             { value: "mine", label: "Mine" },
+            { value: "ai", label: "AI" },
             { value: "waiting", label: "Waiting" },
           ]}
         />
-        <p className="text-xs text-muted">
-          AI assignments aren’t tracked by these task sources yet. Waiting includes unclaimed tasks and tasks assigned to others.
-        </p>
+        <p className="text-xs text-muted">AI = tasks an agent created. Waiting includes unclaimed tasks and tasks assigned to others.</p>
       </div>
       {provider === "jarvis" && can("todos.edit") ? <AddTodo /> : null}
       <SourceFilter options={options} value={source} onChange={setSource} />
@@ -152,6 +153,11 @@ export function TodosView() {
                       ) : (
                         <ActionCard action={a} compact={a.status === "completed"} quiet row />
                       )}
+                      {agentOf(a.provenance?.via) ? (
+                        <div className="px-3 pb-1">
+                          <AgentChip profile={agentOf(a.provenance?.via)!} />
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

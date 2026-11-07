@@ -274,7 +274,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
   let title = g.subj.title;
   let areaTitle: string | null = g.area?.title ?? null;
   if (row.subjectType === "work_item") {
-    const ctx = await itemContext(user, row.subjectId, params);
+    const ctx = await itemContext(user, row.subjectId, { ...params, summarize: kind === "summarize" });
     title = ctx.detail.item.title;
     areaTitle = ctx.detail.area?.title ?? areaTitle;
     // Schedule estimation never gets calendar data or extra sources.
@@ -340,7 +340,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
       input,
       schema: OUTPUT_SCHEMAS[kind] as never,
       idempotencyKey: row.idempotencyKey,
-      timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind] * 1000,
+      timeoutMs: settings.timeoutsS[kind === "file" ? "triage" : kind === "summarize" ? "draft" : kind] * 1000,
       signal: AbortSignal.any([signal, stopGuard.signal]),
       adopt: adopt && row.hermesSessionId ? { sessionId: row.hermesSessionId, runId: row.hermesRunId } : undefined,
       onIds: (ids) => {
