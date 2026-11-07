@@ -166,7 +166,7 @@ describe("pure helpers", () => {
   });
   it("builds the fix prompt from reasons and note", () => {
     const p = fixPrompt({ reasons: ["didnt_do_it"], note: "Create the item", excerpt: "I'll look into it" });
-    expect(p).toContain("👎 Didn't do it");
+    expect(p).toContain("rated bad (Didn't do it)");
     expect(p).toContain("What went wrong: Create the item");
     expect(p).toContain("Do it now");
     expect(p).toContain("Please correct it");
@@ -187,7 +187,7 @@ describe("pure helpers", () => {
     });
     expect(buildTriagePayload([], null)).toBe("");
     const one = buildTriagePayload([e(1)], "2026-11-06T00:00:00Z");
-    expect(one).toContain("New 👎 feedback since 2026-11-06 (1):");
+    expect(one).toContain("New thumbs-down feedback since 2026-11-06 (1):");
     expect(one).toContain("[fb_1] 2026-11-07 13:00 UTC · Coordinator · @chiefofstaff · Home");
     expect(one).toContain("Owner note: multi line");
     expect(one).toContain("Tools used: a, b");

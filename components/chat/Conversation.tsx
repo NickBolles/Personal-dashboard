@@ -1125,7 +1125,7 @@ function MessageMeta({ time, onFork, who, text, rateId }: { time?: string; onFor
   const at = text.indexOf(CONTEXT_MARK);
   const body = at >= 0 ? text.slice(0, at).trim() : text;
   return (
-    <div className="msg-meta flex items-center gap-0.5 text-xs text-muted" data-testid="msg-meta">
+    <div className="msg-meta flex flex-wrap items-center gap-0.5 text-xs text-muted" data-testid="msg-meta">
       {time ? (
         <span className="px-1" data-dynamic>
           {time}

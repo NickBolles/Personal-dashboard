@@ -19,7 +19,7 @@ test("rate a reply 👎 with a reason, then Ask to fix sends a follow-up in the 
   await dialog.getByRole("button", { name: "Ask to fix…" }).click();
   const fix = page.getByRole("dialog", { name: "Ask to fix" });
   const text = fix.getByLabel("Message to send");
-  await expect(text).toHaveValue(/👎 Wrong/);
+  await expect(text).toHaveValue(/rated bad \(Wrong\)/);
   await expect(text).toHaveValue(/What went wrong: Quokkas live on Rottnest Island/);
   await fix.getByRole("button", { name: "Send", exact: true }).click();
   await expect(fix).toBeHidden();

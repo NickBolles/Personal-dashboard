@@ -146,7 +146,7 @@ export function reasonsText(reasons: readonly FeedbackReason[]) {
 export function fixPrompt(f: { reasons: readonly FeedbackReason[]; note: string; excerpt: string }) {
   const why = f.reasons.length ? reasonsText(f.reasons) : "Not right";
   const lines = [
-    `Feedback on your previous reply: 👎 ${why}.`,
+    `Feedback on your previous reply: rated bad (${why}).`,
     f.excerpt ? `Your reply began: "${excerptOf(f.excerpt, 160)}"` : "",
     f.note ? `What went wrong: ${f.note}` : "",
     reasonInstruction(f.reasons),
@@ -204,7 +204,9 @@ export function buildTriagePayload(entries: readonly TriageEntry[], since: strin
         .join("\n"),
     );
   const more = entries.length > TRIAGE_MAX_ENTRIES ? `\n(${entries.length - TRIAGE_MAX_ENTRIES} more wait for the next run.)` : "";
-  return [`New 👎 feedback${since ? ` since ${since.slice(0, 10)}` : ""} (${Math.min(entries.length, TRIAGE_MAX_ENTRIES)}):`, ...list].join("\n\n") + more;
+  return (
+    [`New thumbs-down feedback${since ? ` since ${since.slice(0, 10)}` : ""} (${Math.min(entries.length, TRIAGE_MAX_ENTRIES)}):`, ...list].join("\n\n") + more
+  );
 }
 
 /** Template seeded (disabled) for the owner; runs on the Chief of staff coordinator area. */
@@ -215,7 +217,7 @@ export const FEEDBACK_TRIAGE_TEMPLATE = {
   overnight: false,
   schedule: { freq: "daily" as const, time: "06:00", days: [] as number[] },
   prompt:
-    "Daily feedback triage. Below is the owner's new 👎 feedback on assistant replies. " +
+    "Daily feedback triage. Below is the owner's new thumbs-down feedback on assistant replies. " +
     "Cluster the entries by likely root cause (prompt/skill, tool or integration bug, UI, model choice, missing data). " +
     "Use read tools (e.g. jarvis_search) to find existing Jarvis items for each cluster. " +
     "Then propose: create_thread (or update_next_action on the existing item) per cluster, with the feedback ids and message links in the text, " +

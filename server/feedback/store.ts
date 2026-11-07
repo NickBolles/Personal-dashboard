@@ -258,7 +258,7 @@ export function feedbackItemText(
   const title = `Feedback: ${why}${r.excerpt ? ` · ${r.excerpt.slice(0, 60)}${r.excerpt.length > 60 ? "…" : ""}` : ""}`.slice(0, 200);
   const link = messageLink(config.publicOrigin ?? "", r.sessionId, r.messageId);
   const summary = [
-    `${r.rating === "down" ? "👎" : "👍"} ${why} on a reply from @${r.profile} (${r.surface}).`,
+    `${r.rating === "down" ? "Rated bad" : "Rated good"}: ${why}, on a reply from @${r.profile} (${r.surface}).`,
     r.note ? `Note: ${r.note}` : "",
     r.excerpt ? `Reply: "${r.excerpt}"` : "",
     `Message: ${link}`,

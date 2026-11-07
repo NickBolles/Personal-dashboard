@@ -86,7 +86,7 @@ export function FeedbackInbox() {
     <div className="space-y-3" data-testid="feedback-inbox">
       <PageHeader
         title="Feedback"
-        subtitle="Your ratings of agent replies. 👎 can be fixed in place, filed as an item, or picked up by the daily triage job."
+        subtitle="Your ratings of agent replies. Bad ones can be fixed in place, filed as an item, or picked up by the daily triage job."
         actions={
           <a href="/api/feedback/export" download className="k-btn k-btn-secondary k-btn-sm" data-testid="feedback-export">
             Export JSON
@@ -104,7 +104,7 @@ export function FeedbackInbox() {
           <option value="">All ratings</option>
           {FEEDBACK_RATINGS.map((r) => (
             <option key={r} value={r}>
-              {r === "up" ? "👍 Good" : "👎 Bad"}
+              {r === "up" ? "Good" : "Bad"}
             </option>
           ))}
         </ChipSelect>
@@ -171,7 +171,7 @@ export function FeedbackInbox() {
         ) : null}
         {data ? (
           <span className="ml-auto text-xs text-muted" data-testid="feedback-counts">
-            {data.counts.newDown} new 👎 · {data.counts.total} total
+            {data.counts.newDown} new bad · {data.counts.total} total
           </span>
         ) : null}
       </div>
@@ -180,7 +180,7 @@ export function FeedbackInbox() {
         <EmptyState title={data.counts.total ? "Nothing matches these filters" : "No feedback yet"}>
           {data.counts.total
             ? "Clear a filter to see more."
-            : "Rate any agent reply with 👍 or 👎 from its message actions (hover, or tap the message on a phone)."}
+            : "Rate any agent reply with the thumbs up or down in its message actions (hover, or tap the message on a phone)."}
         </EmptyState>
       ) : null}
       {data?.entries.length ? (
@@ -292,8 +292,8 @@ export function FeedbackSettingsCard() {
       <div className="min-w-0 flex-1">
         <h2 className="text-sm font-semibold">Feedback</h2>
         <p className="text-sm text-muted">
-          {q.data ? `${q.data.counts.newDown} new 👎 · ${q.data.counts.total} ratings.` : "Ratings of agent replies."} The “Daily feedback triage” job above
-          sends new 👎 to Chief of staff when you turn it on.
+          {q.data ? `${q.data.counts.newDown} new bad · ${q.data.counts.total} ratings.` : "Ratings of agent replies."} The “Daily feedback triage” job above
+          sends new bad ratings to Chief of staff when you turn it on.
         </p>
       </div>
       <ButtonLink href="/feedback" size="sm">
