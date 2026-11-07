@@ -556,7 +556,8 @@ describe("Work GitHub poller", () => {
     expect(pollerConfigured()).toBe(false);
   });
 
-  it("reads at most 50 links per tick with 4 in flight, throttles per link and applies merges once", async () => {
+  // 60 stubbed GitHub reads + their DB writes: well under 1 s alone, but over the 5 s default when the full suite loads the runner.
+  it("reads at most 50 links per tick with 4 in flight, throttles per link and applies merges once", { timeout: 30_000 }, async () => {
     __resetGithubBackoff();
     addConnection({ owner: "momentumbets", token: TOKEN_A });
     const u = me();

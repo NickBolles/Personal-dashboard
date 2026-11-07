@@ -808,6 +808,22 @@ describe("Home attention: Work source", () => {
     // Due on the earliest overdue date (end of that local day).
     expect(v.dueAt).toBe("2026-10-20T04:59:00.000Z");
     expect(workHomeActions([...rows].reverse(), vals, ctx)).toEqual(out);
+    // Person-created items carry no provenance.
+    expect(out.every((a) => a.provenance === undefined)).toBe(true);
+  });
+
+  it("#229: cards from agent-created items carry the item's provenance", () => {
+    const base = { title: "T", nextAction: "", updatedAt: "2026-10-22T10:00:00Z" };
+    const out = workHomeActions(
+      [
+        { ...base, id: "x", status: "in_progress", targetDate: "2026-10-20", createdVia: "agent:chiefofstaff" },
+        { ...base, id: "y", status: "in_progress", targetDate: "2026-10-20", createdVia: "job:nightly" },
+        { ...base, id: "z", status: "in_progress", targetDate: "2026-10-20", createdVia: null },
+      ],
+      [],
+      ctx,
+    );
+    expect(out.map((a) => a.provenance)).toEqual([{ via: "agent:chiefofstaff", agent: "chiefofstaff" }, { via: "job:nightly" }, undefined]);
   });
 
   it("appears on Home only for people with work.use", async () => {

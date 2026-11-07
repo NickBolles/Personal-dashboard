@@ -111,6 +111,30 @@ function ConfirmInner({
   );
 }
 
+type TokenRow = { entityId: string; state: string; stateToken: string };
+
+/**
+ * #239: after a write, the device's freshness token changes (it covers the
+ * controlled attributes). Patch the cached House lists with the read-back
+ * token right away, so a second slider change made before the refetch lands
+ * doesn't answer "state changed since you looked".
+ */
+export function withFreshToken<T>(data: T, entityId: string, token: string, state: string): T {
+  if (!data || typeof data !== "object") return data;
+  const patchList = (list: unknown) =>
+    Array.isArray(list) ? list.map((row: TokenRow) => (row && row.entityId === entityId ? { ...row, stateToken: token, state } : row)) : list;
+  const o = data as Record<string, unknown>;
+  let changed = false;
+  const out: Record<string, unknown> = { ...o };
+  for (const k of ["doors", "lights", "others", "controls"]) {
+    if (Array.isArray(o[k])) {
+      out[k] = patchList(o[k]);
+      changed = true;
+    }
+  }
+  return (changed ? out : data) as T;
+}
+
 /**
  * Runs Home Assistant actions with the House rules: low-risk taps run at once
  * (the tap is the confirmation), standard and high-risk ones open the confirm
@@ -131,6 +155,10 @@ export function useHaControl(opts: { onDone?: (r: HaControlResult, a: HaAction) 
         ...(v.highRiskConfirmed ? { highRiskConfirmed: true } : {}),
       }),
     onSuccess: (result, v) => {
+      if (result.stateToken) {
+        const token = result.stateToken;
+        qc.setQueriesData({ queryKey: ["ha"] }, (old: unknown) => withFreshToken(old, v.action.entityId, token, result.state));
+      }
       setLast({ action: v.action, result });
       opts.onDone?.(result, v.action);
     },

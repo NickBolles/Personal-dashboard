@@ -3,10 +3,20 @@ import { audit } from "@/server/audit";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { joinUrl } from "@/server/http/fetch";
 import { currentVia } from "@/server/work/actor";
-import { resolveIntegration } from "@/integrations/store";
-import { HA_DOMAIN_POLICY, actorMayExecute, allowedServicesFor, controlCap, domainOf, roleMayRun } from "@/lib/ha-policy";
+import { actorMayExecute, controlCap, domainOf, roleMayRun } from "@/lib/ha-policy";
 import { haConn, HomeAssistantClient, type HaState } from "./client";
-import { controlRules, controlServices, stateToken, type ControlService } from "./controls";
+import {
+  controlRules,
+  controlServices,
+  entityServices,
+  executeControl,
+  lightControlMode,
+  stateToken,
+  type ControlResult,
+  type ControlService,
+} from "./controls";
+
+export { lightControlMode };
 
 /**
  * Every Home Assistant device Jarvis shows on the House page, with the
@@ -86,22 +96,6 @@ export function deviceKind(s: HaState): DeviceKind | null {
   return DOMAIN_KIND[domain] ?? null;
 }
 
-export function lightControlMode(): "all" | "allowlist" | "none" {
-  const v = resolveIntegration("home_assistant").config.lightControl;
-  return v === "allowlist" || v === "none" ? v : "all";
-}
-
-function lightServices(entityId: string): string[] {
-  const mode = lightControlMode();
-  if (mode === "none") return [];
-  if (mode === "all") return Object.keys(HA_DOMAIN_POLICY.light!);
-  return allowedServicesFor(controlRules(), entityId);
-}
-
-function lightAllowed(entityId: string) {
-  return lightServices(entityId).length > 0;
-}
-
 const num = (v: unknown) => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? undefined : Number(v));
 
 export function toDevice(s: HaState, opts: { doorControls: boolean; lightControls: boolean; role?: string }, rules = controlRules()): DeviceView | null {
@@ -111,9 +105,7 @@ export function toDevice(s: HaState, opts: { doorControls: boolean; lightControl
   const may = cap === "home_assistant.control_doors" ? opts.doorControls : opts.lightControls;
   let names: string[] = [];
   if (may && kind !== "camera" && domainOf(s.entity_id) !== "binary_sensor") {
-    names = (kind === "light" ? lightServices(s.entity_id) : allowedServicesFor(rules, s.entity_id)).filter((svc) =>
-      roleMayRun(opts.role, s.entity_id, svc, String(s.attributes.device_class ?? "")),
-    );
+    names = entityServices(rules, s.entity_id).filter((svc) => roleMayRun(opts.role, s.entity_id, svc, String(s.attributes.device_class ?? "")));
   }
   const a = s.attributes;
   const b = num(a.brightness);
@@ -168,18 +160,26 @@ export async function listDevices(opts: { doors: boolean; lights: boolean; camer
   };
 }
 
-/** Turn a light on or off; success only once Home Assistant reads back the new state. (Android + older clients.) */
+/**
+ * Turn a light on or off (Android + older clients: POST /api/home-assistant/lights).
+ * Goes through the same gate as /api/home-assistant/control (executeControl):
+ * policy ∩ allowlist / Light switching, signed-in person only (agents propose),
+ * role check, freshness token, rate limit, audit, and success only after
+ * Home Assistant reads back the new state. The toggle tap is the confirmation
+ * (lights are low-risk); a client that sends the stateToken it showed gets the
+ * "changed since you looked" check against that, older clients against a fresh read.
+ */
 export async function switchLight(
   entityId: string,
   on: boolean,
   actor: string,
   correlationId: string,
-  opts: { readbackTimeoutMs?: number; pollMs?: number } = {},
-) {
+  opts: { readbackTimeoutMs?: number; pollMs?: number; role?: string; stateToken?: string } = {},
+): Promise<ControlResult> {
   if (!/^light\.[a-z0-9_]+$/.test(entityId)) throw new HttpError(400, "not_a_light", "That isn't a light.");
   const service = on ? "turn_on" : "turn_off";
   const base = { actor, action: `ha.${service}`, source: "home_assistant", sourceRecord: entityId, correlationId };
-  if (!lightAllowed(entityId)) {
+  if (!entityServices(controlRules(), entityId).includes(service)) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowed" } });
     throw new HttpError(403, "not_allowlisted", "Jarvis isn't allowed to switch that light (Settings → Connections → Home Assistant).");
   }
@@ -187,25 +187,15 @@ export async function switchLight(
     audit({ ...base, result: "rejected", detail: { reason: "agent_must_propose" } });
     throw new HttpError(403, "needs_owner", "Agents and scheduled jobs can't change devices; propose it and the owner confirms.");
   }
-  const conn = haConn();
-  const live = await HomeAssistantClient.state(conn, entityId);
+  const live = await HomeAssistantClient.state(haConn(), entityId);
   const want = on ? "on" : "off";
-  if (live.state === want) return { verified: true as const, state: live.state, message: `Already ${want}` };
+  if (live.state === want) return { verified: true, state: live.state, message: `Already ${want}`, stateToken: stateToken(live), undo: null };
   if (live.state === "unavailable") throw new HttpError(409, "unavailable", "That light isn't reporting right now.");
-  audit({ ...base, result: "pending", detail: { from: live.state } });
-  await HomeAssistantClient.callService(conn, "light", service, { entity_id: entityId });
-  const deadline = Date.now() + (opts.readbackTimeoutMs ?? 8_000);
-  let current = live;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, opts.pollMs ?? 400));
-    current = await HomeAssistantClient.state(conn, entityId);
-    if (current.state === want) {
-      audit({ ...base, result: "ok", detail: { from: live.state, to: current.state } });
-      return { verified: true as const, state: current.state, message: `Confirmed: ${current.state}` };
-    }
-  }
-  audit({ ...base, result: "pending", detail: { from: live.state, to: current.state, reason: "readback_timeout" } });
-  return { verified: false as const, state: current.state, message: `Sent, but Home Assistant still reports “${current.state}”.` };
+  return executeControl({ entityId, service, stateToken: opts.stateToken ?? stateToken(live), confirmed: true }, actor, correlationId, {
+    readbackTimeoutMs: opts.readbackTimeoutMs ?? 8_000,
+    pollMs: opts.pollMs ?? 400,
+    role: opts.role,
+  });
 }
 
 /** A fresh camera still, proxied so the Home Assistant token never reaches the browser. Never cached. */

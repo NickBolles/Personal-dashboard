@@ -11,7 +11,7 @@ import { createSession as createConversation, getSessionDetail, sessionAccess } 
 import { requireCap } from "@/server/access";
 import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
-import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision } from "@/lib/decisions";
+import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import {
   applyTemplate,
   areaValidationDefault,
@@ -514,10 +514,19 @@ export function createPath(user: CurrentUser, body: z.infer<typeof createPathSch
   return { item: toItem(ownedItem(user.id, id)), created: created.length };
 }
 
-export function updateItem(user: CurrentUser, id: string, body: z.infer<typeof updateItemSchema>, correlationId: string, out?: OpOut): WorkItem {
+export function updateItem(
+  user: CurrentUser,
+  id: string,
+  body: z.infer<typeof updateItemSchema>,
+  correlationId: string,
+  out?: OpOut,
+  /** server-built decision action (never from a request body) */
+  internal?: { decisionAction?: DecisionAction },
+): WorkItem {
   const { status, reason, settings, tags: rawTags, assignee: rawAssignee, decision: rawDecision, ...rest } = body;
   const fields: typeof rest & { tags?: string; assignee?: string | null; decision?: string | null } = { ...rest };
-  if (rawDecision !== undefined) fields.decision = rawDecision === null ? null : serialiseDecision(rawDecision, nowIso());
+  if (rawDecision !== undefined)
+    fields.decision = rawDecision === null ? null : serialiseDecision({ ...rawDecision, action: internal?.decisionAction }, nowIso());
   if (rawTags !== undefined) {
     const t = normaliseTags(rawTags);
     if (!t.ok) throw new HttpError(400, "tags", t.error);

@@ -12,6 +12,8 @@ import {
   controlCap,
   inverseOf,
   isHighRisk,
+  isPoweredOff,
+  isPoweredOn,
   serviceRisk,
 } from "@/lib/ha-policy";
 
@@ -150,5 +152,26 @@ describe("service data", () => {
     expect(() => cleanServiceData("climate.t", "set_temperature", {})).toThrow(/bad_data/);
     expect(() => cleanServiceData("climate.t", "set_hvac_mode", { hvac_mode: "sauna" })).toThrow(/bad_data/);
     expect(() => cleanServiceData("fan.b", "set_percentage", { percentage: "x" })).toThrow(/bad_data/);
+  });
+  it("#241: temperature / hvac_mode are required even when no data is sent", () => {
+    expect(() => cleanServiceData("climate.t", "set_temperature", undefined)).toThrow(/temperature is required/);
+    expect(() => cleanServiceData("climate.t", "set_hvac_mode", undefined)).toThrow(/hvac_mode/);
+    // optional payloads stay optional
+    expect(cleanServiceData("light.k", "turn_on", undefined)).toEqual({});
+    expect(cleanServiceData("media_player.s", "turn_off", undefined)).toEqual({});
+  });
+});
+
+describe("media player power (#246)", () => {
+  it("paused / idle / playing players are powered on; off / standby are off", () => {
+    for (const s of ["playing", "paused", "idle", "on", "buffering"]) expect(isPoweredOn("media_player.tv", s)).toBe(true);
+    for (const s of ["off", "standby", "unavailable", "unknown"]) expect(isPoweredOn("media_player.tv", s)).toBe(false);
+    expect(isPoweredOff("media_player.tv", "standby")).toBe(true);
+    expect(isPoweredOff("media_player.tv", "unavailable")).toBe(false);
+    expect(isPoweredOn("switch.x", "paused")).toBe(false);
+  });
+  it("turning off a paused player can be undone", () => {
+    expect(inverseOf("media_player.tv", "turn_off", { state: "paused" })).toEqual({ service: "turn_on" });
+    expect(inverseOf("media_player.tv", "turn_on", { state: "standby" })).toEqual({ service: "turn_off" });
   });
 });

@@ -112,9 +112,11 @@ export type ServiceData = Record<string, string | number>;
 export function cleanServiceData(entityId: string, service: string, data: Record<string, unknown> | undefined): ServiceData {
   const p = servicePolicy(entityId, service);
   if (!p) throw new Error("bad_data: service not allowed");
-  if (!p.data || !data) return {};
+  if (!p.data) return {};
+  // #241: a missing payload is still validated, so set_temperature / set_hvac_mode without a target fail before confirmation.
+  const d = data ?? {};
   const num = (k: string, lo: number, hi: number) => {
-    const v = data[k];
+    const v = d[k];
     if (v === undefined) return undefined;
     const n = Number(v);
     if (!Number.isFinite(n) || n < lo || n > hi) throw new Error(`bad_data: ${k} must be ${lo}–${hi}`);
@@ -139,12 +141,30 @@ export function cleanServiceData(entityId: string, service: string, data: Record
       return { temperature: Math.round(t * 2) / 2 };
     }
     case "hvac_mode": {
-      const m = data.hvac_mode;
+      const m = d.hvac_mode;
       if (typeof m !== "string" || !(HVAC_MODES as readonly string[]).includes(m)) throw new Error("bad_data: unknown hvac_mode");
       return { hvac_mode: m };
     }
   }
   return {};
+}
+
+/** States in which a media player is switched off (anything else, incl. paused/idle/playing, is powered on). */
+const MEDIA_OFF_STATES = ["off", "standby", "unavailable", "unknown"];
+
+/**
+ * #246: is this device powered on? Media players report playback (playing,
+ * paused, idle, buffering…) while on, so power is derived independently of playback.
+ */
+export function isPoweredOn(entityId: string, state: string): boolean {
+  if (domainOf(entityId) === "media_player") return !MEDIA_OFF_STATES.includes(state);
+  return state === "on";
+}
+
+/** Switched off (as opposed to unavailable/unknown, where Jarvis can't tell). */
+export function isPoweredOff(entityId: string, state: string): boolean {
+  if (domainOf(entityId) === "media_player") return state === "off" || state === "standby";
+  return state === "off";
 }
 
 /** What a device looked like before the call: enough to compute an Undo. */
@@ -177,10 +197,10 @@ export function inverseOf(entityId: string, service: string, prior: PriorState):
     return prior.percentage !== undefined ? { service: "set_percentage", data: { percentage: prior.percentage } } : null;
   }
   if (ON_OFF[service]) {
-    if (prior.state === "on" && service === "turn_off") {
+    if (isPoweredOn(entityId, prior.state) && service === "turn_off") {
       return domain === "light" && prior.brightnessPct ? { service: "turn_on", data: { brightness_pct: prior.brightnessPct } } : { service: "turn_on" };
     }
-    if (prior.state === "off" && service === "turn_on") return { service: "turn_off" };
+    if (isPoweredOff(entityId, prior.state) && service === "turn_on") return { service: "turn_off" };
     return null;
   }
   if (service === "open_cover" && (prior.state === "closed" || prior.state === "closing")) return { service: "close_cover" };
