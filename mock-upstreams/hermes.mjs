@@ -331,6 +331,13 @@ export function createHermes({ apiKey }) {
     await sleep(t);
     // Scripted keywords apply to what the person typed, not to context Jarvis attached.
     const said = input.split("\n\n---\nContext from Jarvis:")[0];
+    if (input.includes("SCHEDULED_PROPOSALS") || input.includes("SCHEDULED_SILENT")) {
+      const output = input.includes("SCHEDULED_SILENT")
+        ? "NOTHING_NEW"
+        : 'Morning brief: one capture is waiting and one project looks blocked.\n\n```jarvis-proposals\n[{"intent":"create_note","title":"Lantern check-in note","text":"Two captures look like they belong here.","why":"Overnight triage"},{"intent":"update_status","title":"Mark blocked","why":"No movement in 9 days"},{"intent":"deploy","why":"Ship it"}]\n```';
+      addMessage(run.session_id, { role: "assistant", content: output, finish_reason: "stop" });
+      return finish(run, "completed", { completed: true, partial: false, interrupted: false, output });
+    }
     const structured = typeof instructions === "string" ? instructions.match(/JARVIS_STRUCTURED_REQUEST source=(\w+)/)?.[1] : undefined;
     const aiKind = typeof instructions === "string" ? instructions.match(/JARVIS_AI_JOB kind=(\w+)/)?.[1] : undefined;
     if (aiKind) {
