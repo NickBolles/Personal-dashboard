@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { getOwner } from "@/server/auth";
@@ -49,7 +49,8 @@ export function approvalQueue(user: CurrentUser): HydratedRef {
   const surfaces = getDb()
     .select()
     .from(schema.uiSurfaces)
-    .where(eq(schema.uiSurfaces.userId, user.id))
+    // Filter to staged drafts in SQL first, so newer read-only surfaces never crowd them out of the limit.
+    .where(and(eq(schema.uiSurfaces.userId, user.id), sql`coalesce(json_extract(${schema.uiSurfaces.stateJson}, '$.pending'), 0) > 0`))
     .orderBy(desc(schema.uiSurfaces.updatedAt))
     .limit(100)
     .all();

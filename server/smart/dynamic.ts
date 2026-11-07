@@ -88,7 +88,11 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
   const events = visibleEvents(user, now)
     .filter(
       (e) =>
-        !e.allDay && e.endsAt && localDate(new Date(e.startsAt), ctx.timezone) >= today && localDate(new Date(e.startsAt), ctx.timezone) <= addDays(today, 1),
+        !e.allDay &&
+        e.endsAt &&
+        Date.parse(e.endsAt) > now.getTime() &&
+        localDate(new Date(e.startsAt), ctx.timezone) >= today &&
+        localDate(new Date(e.startsAt), ctx.timezone) <= addDays(today, 1),
     )
     .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   const pair = events.flatMap((a, i) =>
