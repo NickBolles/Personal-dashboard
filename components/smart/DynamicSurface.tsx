@@ -5,6 +5,7 @@ import { Button, Dialog } from "@/components/ui";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import type { ControlView } from "@/integrations/home-assistant/controls";
 import { SmartSurface } from "./SmartSurface";
+import { TodayChores } from "@/components/skylight/TodayChores";
 
 export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismiss: () => void }) {
   const [confirm, setConfirm] = useState<ControlView>();
@@ -28,7 +29,16 @@ export function DynamicSurface({ card, onDismiss }: { card: DynamicCard; onDismi
   };
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pb-3" data-testid="dynamic-card">
-      <SmartSurface key={card.id} spec={card.spec} sessionId={card.sessionId} blockIndex={card.blockIndex} dropped={0} />
+      {card.kind === "chores" ? (
+        // Live, completable rows (same row, grouping and motion as Today); the server's table is the fallback.
+        <TodayChores
+          id="tray-chores"
+          variant="card"
+          fallback={<SmartSurface key={card.id} spec={card.spec} sessionId={card.sessionId} blockIndex={card.blockIndex} dropped={0} />}
+        />
+      ) : (
+        <SmartSurface key={card.id} spec={card.spec} sessionId={card.sessionId} blockIndex={card.blockIndex} dropped={0} />
+      )}
       <footer className="flex flex-wrap items-center gap-2 border-t border-line py-2">
         <Button size="sm" variant="ghost" onClick={onDismiss}>
           Not now

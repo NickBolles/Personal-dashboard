@@ -21,6 +21,11 @@ import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
 import { useAccess } from "@/components/access";
 import { Skeleton } from "@/components/ui/kit";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
+import { useSource } from "@/components/useSource";
+import { TodayChores } from "@/components/skylight/TodayChores";
+import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
+import { useSkylightWriteState } from "@/components/skylight/writeStore";
+import { choreWrite, type SkylightExtra } from "@/components/skylight/model";
 
 const PROBLEM: SourceStatus["state"][] = ["stale", "error", "unauthorized", "refreshing"];
 
@@ -296,6 +301,21 @@ export function HomeView() {
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const att = data?.attention;
   const router = useRouter();
+  // Skylight chores in the ranked feed complete in place too (confirm card + Undo), never via /api/actions.
+  const { can } = useAccess();
+  const sky = useSource("skylight");
+  const skyWrite = useSkylightWrite();
+  const skyState = useSkylightWriteState();
+  const skyWritable = (sky.data?.data?.extra as SkylightExtra | undefined)?.writable === true && can("skylight.write");
+  const feed = (list: NextAction[]) => list.filter((a) => skyState[a.id]?.phase !== "done");
+  const card = (a: NextAction) => {
+    const op = skyWritable && a.source === "skylight" && a.status === "open" ? choreWrite(a, "chore.complete") : null;
+    return op ? (
+      <ActionCard action={{ ...a, primaryAction: { kind: "complete", label: "Done" } }} explain onComplete={() => skyWrite.request(op, a.id)} />
+    ) : (
+      <ActionCard action={a} explain />
+    );
+  };
 
   const later: Partial<Record<HomeSectionId, (d: HomePayload) => React.ReactNode>> = {
     later_today: (d) =>
@@ -305,9 +325,9 @@ export function HomeView() {
             Later today
           </SectionTitle>
           <ol className="jv-feed">
-            {d.later.laterToday.map((a) => (
+            {feed(d.later.laterToday).map((a) => (
               <li key={a.id} className="jv-rise">
-                <ActionCard action={a} explain />
+                {card(a)}
               </li>
             ))}
           </ol>
@@ -324,10 +344,8 @@ export function HomeView() {
             Next two weeks
           </SectionTitle>
           <ul className="jv-feed">
-            {d.later.upcoming.map((a) => (
-              <li key={a.id}>
-                <ActionCard action={a} explain />
-              </li>
+            {feed(d.later.upcoming).map((a) => (
+              <li key={a.id}>{card(a)}</li>
             ))}
           </ul>
         </section>
@@ -382,9 +400,9 @@ export function HomeView() {
               ) : data.now.length ? (
                 <>
                   <ol className="jv-feed">
-                    {data.now.map((a) => (
+                    {feed(data.now).map((a) => (
                       <li key={a.id} className="jv-rise">
-                        <ActionCard action={a} explain />
+                        {card(a)}
                       </li>
                     ))}
                   </ol>
@@ -417,6 +435,8 @@ export function HomeView() {
               )}
             </section>
           ) : null}
+
+          <TodayChores />
 
           {data?.assists?.length ? (
             <section aria-labelledby="assist-h" className="mb-5">
@@ -456,6 +476,7 @@ export function HomeView() {
           {data && visible("glance") ? <Glance data={data} /> : null}
         </aside>
       </div>
+      {skyWrite.node}
     </Page>
   );
 }

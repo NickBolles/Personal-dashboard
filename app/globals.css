@@ -3256,3 +3256,243 @@ button:active > .dock-orb {
     }
   }
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+ * Skylight rows everywhere (components/skylight): optimistic motion. Phases come from writeStore (data-phase).
+ * Every animation ≤250 ms with design tokens; the global prefers-reduced-motion rule makes them instant, and none of
+ * them blocks input (no pointer-events changes).
+ * ------------------------------------------------------------------------------------------------------------- */
+.sk-row {
+  position: relative;
+  touch-action: pan-y;
+  transform: translateX(var(--sk-dx, 0px));
+  transition: transform var(--d2) var(--ease);
+}
+.sk-row[data-swiping] {
+  transition: none;
+}
+/* Swipe reveal: a check plate behind the row grows with the gesture. */
+.sk-row[data-swipe]::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 calc(-1 * var(--sk-dx, 0px));
+  width: var(--sk-dx, 0px);
+  border-radius: 8px 0 0 8px;
+  background: color-mix(in srgb, var(--accent) calc(var(--sk-reveal, 0) * 22%), transparent);
+  pointer-events: none;
+}
+.sk-row[data-phase="pending"],
+.sk-row[data-phase="undoing"] {
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--accent) 9%, transparent) 50%, transparent 100%) 0 0 / 220% 100% no-repeat;
+  animation: sk-shimmer 1.1s linear infinite;
+}
+@keyframes sk-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+/* Tick draws itself (pending or done). */
+.sk-row .jv-tick {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 0;
+}
+.sk-row[data-phase] .jv-tick {
+  animation: sk-draw var(--d3) var(--ease) both;
+}
+@keyframes sk-draw {
+  from {
+    stroke-dashoffset: 24;
+  }
+}
+.sk-row[data-phase="pending"] h3,
+.sk-row[data-phase="leaving"] h3 {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted) 80%, transparent);
+  color: var(--muted);
+  transition: color var(--d2) var(--ease);
+}
+/* Landed: strike + fade, then the row's height collapses so the list closes up (siblings slide, no jump). */
+.sk-row[data-phase="leaving"] {
+  overflow: hidden;
+  animation: sk-leave 240ms var(--ease) both;
+}
+@keyframes sk-leave {
+  0% {
+    max-height: var(--sk-h, 3rem);
+    opacity: 1;
+  }
+  45% {
+    opacity: 0.35;
+    max-height: var(--sk-h, 3rem);
+  }
+  100% {
+    max-height: 0;
+    opacity: 0;
+  }
+}
+/* Arrives in Done (or back in its group after Undo): reverse of the collapse. */
+.sk-row[data-phase="done"],
+.sk-row[data-phase="restored"] {
+  overflow: hidden;
+  animation: sk-enter 240ms var(--ease) both;
+}
+@keyframes sk-enter {
+  from {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    max-height: var(--sk-h, 4rem);
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Rollback: a short horizontal shake, then the row is exactly as it was. */
+.sk-row[data-phase="failed"] {
+  animation: sk-shake 240ms var(--ease) both;
+}
+@keyframes sk-shake {
+  20% {
+    transform: translateX(-4px);
+  }
+  45% {
+    transform: translateX(4px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+.sk-undo-in {
+  animation: sk-undo-in var(--d3) var(--ease-pop) both;
+}
+@keyframes sk-undo-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+/* Groups: compact header with n/m progress and a thin bar; Overdue sits last. */
+.sk-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sk-compact {
+  gap: 0.25rem;
+}
+.sk-ghead {
+  display: flex;
+  min-height: 1.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  padding-inline: 0.25rem;
+}
+.sk-glabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sk-overdue .sk-glabel {
+  color: var(--danger);
+}
+.sk-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.sk-count {
+  display: inline-flex;
+  overflow: hidden;
+}
+.sk-count-n {
+  display: inline-block;
+  animation: sk-tick var(--d2) var(--ease) both;
+}
+@keyframes sk-tick {
+  from {
+    transform: translateY(70%);
+    opacity: 0;
+  }
+}
+.sk-bar {
+  position: relative;
+  display: inline-block;
+  width: 2.5rem;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+.sk-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--d3) var(--ease);
+}
+/* Cleared group / day: Lagoon check ring; one pulse when it was just cleared (no confetti). */
+.sk-ring {
+  position: relative;
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ai) 18%, transparent);
+  color: var(--ai);
+}
+.sk-ring-sm {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+.sk-ring.sk-celebrate,
+.sk-celebrate .sk-ring {
+  animation: sk-pop 240ms var(--ease-pop) both;
+}
+.sk-ring.sk-celebrate::after,
+.sk-celebrate .sk-ring::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid #4fd8c4;
+  border-radius: 999px;
+  animation: sk-ring 250ms var(--ease) both;
+  pointer-events: none;
+}
+@keyframes sk-pop {
+  from {
+    transform: scale(0.6);
+  }
+}
+@keyframes sk-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+.sk-day {
+  padding: 0.25rem 0.25rem 0.125rem;
+}

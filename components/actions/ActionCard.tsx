@@ -62,6 +62,7 @@ export function ActionCard({
   trailing,
   showSource,
   dueTone,
+  checked,
 }: {
   action: NextAction;
   compact?: boolean;
@@ -79,6 +80,8 @@ export function ActionCard({
   showSource?: boolean;
   /** Optional source-specific urgency colour; leave the shared due label unchanged. */
   dueTone?: "danger" | "warn";
+  /** Source-owned checkbox state (Skylight's optimistic writes): overrides the readback-only "done" state. */
+  checked?: boolean;
 }) {
   const router = useRouter();
   const online = useOnline();
@@ -126,17 +129,25 @@ export function ActionCard({
       <button
         type="button"
         role="checkbox"
-        aria-checked={done || compact ? true : false}
+        aria-checked={(checked ?? (done || compact)) ? true : false}
         aria-label={`Done: ${action.title}`}
-        disabled={!online || done || compact || m.isPending}
+        disabled={!online || done || compact || checked === true || m.isPending}
         title={!online ? "Unavailable offline" : undefined}
         onClick={() => run("complete")}
         className={cx("jv-check-btn", onComplete && "min-h-11 min-w-11 sm:min-h-9 sm:min-w-9")}
       >
         <span aria-hidden="true" className="jv-check-dot">
-          {done || compact ? (
+          {(checked ?? (done || compact)) ? (
             <svg className="jv-check h-3 w-3" viewBox="0 0 24 24">
-              <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                className="jv-tick"
+                d="M5 12.5l4.5 4.5L19 7.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           ) : null}
         </span>
