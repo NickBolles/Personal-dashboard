@@ -117,6 +117,14 @@
     stroke-dasharray: 6 4;
   }
 
+  .ar-graph-arrow path {
+    fill: var(--warn);
+  }
+
+  .ar-graph-arrow[data-kind="followup"] path {
+    fill: var(--info);
+  }
+
   .ar-graph-edge[data-kind="followup"] {
     stroke: var(--info);
     stroke-width: 1.75;

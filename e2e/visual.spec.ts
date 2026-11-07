@@ -1554,14 +1554,15 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
   for (const width of [640, 700, 768, 820, 899]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/more");
-    const tray = page.locator(".gc-tray");
+    // A hidden second tray can linger from a suspended render (seen in CI): only the visible one counts.
+    const tray = page.locator(".gc-tray").filter({ visible: true });
     await expect(tray).toBeVisible();
-    await expect(page.getByTestId("quick-actions-tray")).toBeVisible();
+    await expect(page.getByTestId("quick-actions-tray").filter({ visible: true })).toBeVisible();
     const boxes = await page.evaluate(() =>
       [".gc-tray", ".gc-tray-qa", ".gc-tablet-dock [data-command-dock], .gc-tablet-dock > *"].map((sel) => {
-        const el = document.querySelector(sel);
-        const r = el?.getBoundingClientRect();
-        return r && r.width ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+        const rects = [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
+        const r = rects.find((x) => x.width && x.height);
+        return r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
       }),
     );
     const [trayBox, chipsBox, dockBox] = boxes;

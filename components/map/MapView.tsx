@@ -427,7 +427,8 @@ function MapRow({
   const b = bucketOf(i);
   const agent = useAgentRuns().data?.items[i.id];
   const row = useRef<HTMLLIElement>(null);
-  const scrolled = useRef(false);
+  // Only a selection made while the board is open scrolls; mounting with one (tab switch) keeps the page still.
+  const scrolled = useRef(!!selected);
   useEffect(() => {
     if (selected && !scrolled.current) row.current?.scrollIntoView({ block: "nearest" });
     scrolled.current = !!selected;

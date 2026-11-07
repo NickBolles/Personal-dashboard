@@ -124,11 +124,16 @@ export function GraphTab({ items, centreId, onRecentre, onOpen }: GraphTabProps)
     return { nodes, relations };
   }, [normalized, byId, overview.data?.relations]);
   const relationIndex = useMemo(() => {
-    const index = new Map<string, RadialRelation[]>();
+    // Both ends list the link (incoming ones read in reverse), so the list fallback keeps every relation.
+    const index = new Map<string, { kind: RadialRelation["kind"]; other: string; incoming: boolean }[]>();
+    const add = (at: string, entry: { kind: RadialRelation["kind"]; other: string; incoming: boolean }) => {
+      const list = index.get(at);
+      if (list) list.push(entry);
+      else index.set(at, [entry]);
+    };
     for (const relation of graph.relations) {
-      const list = index.get(relation.from);
-      if (list) list.push(relation);
-      else index.set(relation.from, [relation]);
+      add(relation.from, { kind: relation.kind, other: relation.to, incoming: false });
+      add(relation.to, { kind: relation.kind, other: relation.from, incoming: true });
     }
     return index;
   }, [graph]);
@@ -148,10 +153,10 @@ export function GraphTab({ items, centreId, onRecentre, onOpen }: GraphTabProps)
           <span>{item.title}</span> <span className="ar-graph-muted">{STATUS_LABELS[item.status]}</span>
         </button>
         {(relationIndex.get(item.id) ?? []).map((relation, i) => (
-          <p className="ar-graph-list-relation" key={`${relation.kind}-${relation.to}-${i}`}>
-            {relation.kind === "depends" ? "depends on" : "follow-up of"}{" "}
-            <button type="button" onClick={() => onRecentre(relation.to)}>
-              {names.get(relation.to) ?? relation.to}
+          <p className="ar-graph-list-relation" key={`${relation.kind}-${relation.other}-${relation.incoming}-${i}`}>
+            {relation.kind === "depends" ? (relation.incoming ? "needed by" : "depends on") : relation.incoming ? "has follow-up" : "follow-up of"}{" "}
+            <button type="button" onClick={() => onRecentre(relation.other)}>
+              {names.get(relation.other) ?? relation.other}
             </button>
           </p>
         ))}
@@ -408,10 +413,36 @@ function GraphCanvas({
         }}
         onLostPointerCapture={endPointer}
       >
+        <defs>
+          {(["depends", "followup"] as const).map((kind) => (
+            // Arrowheads stop short of the 10px node dot so the direction (from → to) stays readable.
+            <marker
+              key={kind}
+              id={`ar-arrow-${kind}`}
+              className="ar-graph-arrow"
+              data-kind={kind}
+              viewBox="0 0 8 8"
+              refX={20}
+              refY={4}
+              markerWidth={8}
+              markerHeight={8}
+              markerUnits="userSpaceOnUse"
+              orient="auto"
+            >
+              <path d="M0,0 L8,4 L0,8 z" />
+            </marker>
+          ))}
+        </defs>
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <g transform={`translate(${padX} ${padY})`}>
             {layout.edges.map((edge, i) => (
-              <path key={`${edge.from}-${edge.to}-${edge.kind}-${i}`} className="ar-graph-edge" data-kind={edge.kind} d={edge.path} />
+              <path
+                key={`${edge.from}-${edge.to}-${edge.kind}-${i}`}
+                className="ar-graph-edge"
+                data-kind={edge.kind}
+                d={edge.path}
+                markerEnd={edge.kind === "contains" ? undefined : `url(#ar-arrow-${edge.kind})`}
+              />
             ))}
             {layout.nodes.map((node) => {
               const live = runs?.items[node.id]?.live;
