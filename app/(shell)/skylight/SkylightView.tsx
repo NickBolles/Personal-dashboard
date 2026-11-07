@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { CalendarEvent } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
@@ -13,6 +13,7 @@ import { EmptyState, SectionHeader, Segmented } from "@/components/ui/kit";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
 import { groupSkylightChores } from "@/components/skylight/grouping";
+import { SkylightChoreGroups, useOptimisticChores } from "@/components/skylight/SkylightChoreGroups";
 import { SkylightListCard } from "@/components/skylight/SkylightListCard";
 import { EventForm } from "@/components/skylight/EventForm";
 import { previousEvent } from "@/components/skylight/eventFields";
@@ -32,14 +33,13 @@ export function SkylightView() {
   const prefs = useQuery({ queryKey: ["preferences"], queryFn: () => api.get<{ timezone: string }>("/api/settings") });
   const timezone = prefs.data?.timezone || "America/Chicago";
   const events = [...(q.data?.data?.events ?? [])].sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const all = (q.data?.data?.actions ?? []).filter((a) => whose === "everyone" || a.assignee?.kind !== "other");
-  const done = all.filter((a) => a.status === "completed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const raw = q.data?.data?.actions;
+  const all = useMemo(() => (raw ?? []).filter((a) => whose === "everyone" || a.assignee?.kind !== "other"), [raw, whose]);
+  // Optimistic overlay (shared with the tray card): a just-completed chore leaves its group and enters Done at once.
+  const optimistic = useOptimisticChores(all, timezone).actions;
+  const done = optimistic.filter((a) => a.status === "completed").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   // Skylight's order: today by time of day, then later days, Overdue (past days) at the bottom.
-  const choreGroups = groupSkylightChores(all, { now, timezone });
-  const groups = [
-    ...choreGroups.map((g) => ({ id: `sk-${g.key}`, label: g.label, items: g.actions })),
-    { id: "sk-done", label: "Done this week", items: done },
-  ];
+  const choreGroups = groupSkylightChores(optimistic, { now, timezone });
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
@@ -77,27 +77,25 @@ export function SkylightView() {
               { value: "everyone", label: "Everyone" },
             ]}
           />
-          {!choreGroups.length ? <EmptyState title="No open chores." /> : null}
-          {groups.map((group) => {
-            const items = group.items;
-            return (
-              <section key={group.id} aria-labelledby={group.id} className="mt-4">
-                <SectionHeader id={group.id} label={group.label} count={items.length} />
-                {items.length ? (
-                  <ul className="jv-feed" data-testid={group.id === "sk-done" ? "skylight-done" : undefined}>
-                    {items.map((action) => (
-                      // Wrap only when the row can't fit (320 px at 200% text: checkbox + Claim/Reopen + ⋯).
-                      <li key={action.id} className="[&>.jv-trow]:flex-wrap">
-                        <SkylightActionRow action={action} writable={writable} request={write.request} timezone={timezone} management />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <EmptyState title={group.id === "sk-done" ? "No completed chores this week." : "No open chores."} />
-                )}
-              </section>
-            );
-          })}
+          {!choreGroups.length && !done.length ? <EmptyState title="No open chores." /> : null}
+          {/* Morning … Overdue with progress; rows complete in place (same row + motion as Today and the tray). */}
+          <div className="mt-4">
+            <SkylightChoreGroups actions={all} writable={writable} request={write.request} timezone={timezone} now={now} idPrefix="sk" level={2} />
+          </div>
+          <section aria-labelledby="sk-done" className="mt-4">
+            <SectionHeader id="sk-done" label="Done this week" count={done.length} />
+            {done.length ? (
+              <ul className="jv-feed" data-testid="skylight-done">
+                {done.map((action) => (
+                  <li key={action.id}>
+                    <SkylightActionRow action={action} writable={writable} request={write.request} timezone={timezone} management />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <EmptyState title="No completed chores this week." />
+            )}
+          </section>
           <section aria-labelledby="sk-lists" className="mt-6">
             <SectionHeader id="sk-lists" label="Lists" />
             <div className="grid min-w-0 gap-3 sm:grid-cols-2">
