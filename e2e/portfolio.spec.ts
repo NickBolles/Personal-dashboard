@@ -27,12 +27,18 @@ async function ensurePortfolioArea(page: Page): Promise<string | null> {
   return found ? null : await make(page, { kind: "area", title: "Portfolio" });
 }
 
-let createdPortfolio: string | null = null;
+/**
+ * Everything this spec creates is archived again (leaf first): specs share one server/DB, and a live
+ * in-progress "Numbat lantern" grew the work dashboard's Priorities widget (work.spec drag target
+ * slid under the phone tray) and the "Numbat range <nonce>" area card overflowed /areas at 320 px / 200 % text.
+ */
+let cleanup: string[] = [];
 test.afterEach(async ({ page }) => {
-  if (!createdPortfolio) return;
-  const r = await page.request.patch(`/api/work/items/${createdPortfolio}`, { data: { archived: true }, headers: { "x-jarvis-csrf": "1" } });
-  expect(r.ok(), await r.text()).toBeTruthy();
-  createdPortfolio = null;
+  for (const id of cleanup.reverse()) {
+    const r = await page.request.patch(`/api/work/items/${id}`, { data: { archived: true }, headers: { "x-jarvis-csrf": "1" } });
+    expect(r.ok(), await r.text()).toBeTruthy();
+  }
+  cleanup = [];
 });
 
 const views = (page: Page) => page.getByRole("tablist", { name: "Views" });
@@ -40,15 +46,19 @@ const views = (page: Page) => page.getByRole("tablist", { name: "Views" });
 test("portfolio tab: project lanes, then import a map with preview, undo and no duplicates", async ({ page }) => {
   await page.goto("/home");
   const nonce = Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+  const portfolio = await ensurePortfolioArea(page);
+  if (portfolio) cleanup.push(portfolio);
   const area = await make(page, { kind: "area", title: `Numbat range ${nonce}` });
+  cleanup.push(area);
   const project = await make(page, { kind: "project", title: `Numbat warren ${nonce}`, parentId: area });
+  cleanup.push(project);
   const item = await make(page, { kind: "thread", title: `Numbat lantern ${nonce}`, parentId: project });
+  cleanup.push(item);
   const r = await page.request.patch(`/api/work/items/${item}`, {
     data: { status: "in_progress", nextAction: "Trim the wick" },
     headers: { "x-jarvis-csrf": "1" },
   });
   expect(r.ok(), await r.text()).toBeTruthy();
-  createdPortfolio = await ensurePortfolioArea(page);
 
   await page.goto("/areas");
   await views(page).getByRole("tab", { name: "Portfolio", exact: true }).click();
