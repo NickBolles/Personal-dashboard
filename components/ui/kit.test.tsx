@@ -6,10 +6,38 @@ import * as ui from "./index";
 
 afterEach(cleanup);
 
-it("keeps legacy @/components/ui exports", () => {
-  for (const name of ["Button", "ButtonLink", "Card", "Badge", "Empty", "Dialog", "OverflowMenu", "ToastProvider", "useToast", "Kbd", "cx"]) {
+it("barrel exports the design-system library; superseded primitives only via ./legacy", async () => {
+  for (const name of [
+    "Button",
+    "ButtonLink",
+    "Card",
+    "Kbd",
+    "Menu",
+    "Pill",
+    "Input",
+    "Textarea",
+    "Tabs",
+    "EmptyState",
+    "IconButton",
+    "SelectPicker",
+    "MetaPicker",
+    "DuePicker",
+    "LoadingState",
+    "Dialog",
+    "ToastProvider",
+    "useToast",
+    "Field",
+    "ErrorNote",
+    "Page",
+    "PageHeader",
+    "cx",
+  ]) {
     expect(ui).toHaveProperty(name);
   }
+  expect(ui.Button).toBe(Button);
+  for (const name of ["Badge", "Empty", "OverflowMenu", "SectionLabel", "Spinner", "inputCls"]) expect(ui).not.toHaveProperty(name);
+  const legacy = await import("./legacy");
+  for (const name of ["Button", "ButtonLink", "Card", "Badge", "Empty", "OverflowMenu", "Spinner", "inputCls"]) expect(legacy).toHaveProperty(name);
 });
 
 it("Button: variant classes, loading disables, iconOnly keeps an accessible name", () => {
