@@ -335,15 +335,10 @@ details[open] > .mp-sum::before {
     gap: 4px;
     padding: 8px 10px;
   }
+  /* Keep the agents strip and the coordinator entry (one tap to an area's coordinator); drop the bar and meta line. */
   .mp-root .mp-card > .mp-bar,
-  .mp-root .mp-card > .mp-card-meta,
-  .mp-root .mp-card > .mp-card-agents,
-  .mp-root .mp-card ~ .mp-card-coord {
+  .mp-root .mp-card > .mp-card-meta {
     display: none;
-  }
-  .mp-root .mp-card-co > :first-child,
-  .mp-root .mp-card-co > .mp-counts {
-    padding-right: 0;
   }
 }
 .mp-cos {

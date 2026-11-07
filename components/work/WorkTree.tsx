@@ -474,13 +474,13 @@ export function WorkTree({
             </span>
           ) : null}
           {c.owner ? (
-            <span className="wk-tree-count" data-tone="wn">
-              {c.owner} need you
+            <span className="wk-tree-count" data-tone="wn" title={`${c.owner} need you`}>
+              {c.owner}
             </span>
           ) : null}
           {i.parentId === null && c.inflight ? (
-            <span className="wk-tree-count" data-tone="ac">
-              {c.inflight} in flight
+            <span className="wk-tree-count" data-tone="ac" title={`${c.inflight} in flight`}>
+              {c.inflight}
             </span>
           ) : null}
         </span>

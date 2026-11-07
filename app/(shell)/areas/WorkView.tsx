@@ -1,11 +1,11 @@
 "use client";
 
-import { ItemAgentPanel } from "@/components/agents/AgentRuns";
+import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { isFinanceAreaLike } from "@/lib/catch-up";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { daysBetween } from "@/lib/time";
@@ -232,6 +232,14 @@ export function WorkView({
   const list = items.data?.items ?? [];
   const current = view.kind === "item" && list.some((i) => i.id === view.id) ? view.id : null;
   const inboxCount = inbox.data?.count;
+  // Areas v2 (B): the side tree carries status context (needs-you / in-flight counts, agent dots; next actions
+  // only where the tree sits beside the page, ≥1024 — on phones it is a full-screen list and stays one line per row).
+  const phoneTree = usePhone();
+  const agentRuns = useAgentRuns().data;
+  const treeStatus = useMemo(
+    () => ({ showNext: !phoneTree, runs: Object.fromEntries(Object.entries(agentRuns?.items ?? {}).map(([id, r]) => [id, r.live])) }),
+    [agentRuns, phoneTree],
+  );
   // "+ New" creates where you are: inside the open area/project, or next to the open item.
   const open = current ? list.find((i) => i.id === current) : undefined;
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
@@ -423,6 +431,7 @@ export function WorkView({
             <WorkTree
               items={list}
               linked={items.data?.linkedConversations}
+              status={treeStatus}
               selected={current}
               onSelect={select}
               onOpenConversation={canChat ? openConversation : undefined}
