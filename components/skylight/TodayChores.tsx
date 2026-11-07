@@ -90,6 +90,7 @@ export function TodayChores({
     <section aria-labelledby={`${id}-h`} className="mb-5" data-testid="today-chores">
       <SectionLabel
         id={`${id}-h`}
+        className="flex-wrap"
         count={open ? String(open) : undefined}
         action={
           <span className="flex items-center gap-1">
