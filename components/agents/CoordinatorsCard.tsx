@@ -76,7 +76,7 @@ export function CoordinatorsCard() {
                 </div>
                 <div>
                   <dt className="text-xs text-muted">Mode</dt>
-                  <dd>Not configured — Propose / Act on low-risk policy is not stored yet.</dd>
+                  <dd>Per-area autonomy. Set Propose only or Act on low-risk in Area settings.</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted">AI job spend · today / 7 days</dt>

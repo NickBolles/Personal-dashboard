@@ -6,6 +6,7 @@ import { api } from "@/lib/client/api";
 import type { ActivityResponse } from "@/lib/activity";
 import { isStalled, liveOfAgentRun, type AgentRunsResponse } from "@/lib/agent-runs";
 import { useDecisions } from "@/components/map/Decisions";
+import { useAway } from "@/lib/client/away";
 import { isCoordinatorChange, priorityLine, stablePriority, type CoordinatorRun, type CoordinatorThings, type PriorityLine } from "@/lib/coordinator/things";
 
 const SEEN_KEY = "jarvis.gc.seen";
@@ -13,6 +14,7 @@ const MERGED_SEEN_KEY = "jarvis.gc.mergedSeen";
 
 export function useCoordinatorThings() {
   const decisions = useDecisions();
+  const away = useAway();
   const runs = useQuery({ queryKey: ["work", "agent-runs"], queryFn: () => api.get<AgentRunsResponse>("/api/work/agent-runs"), refetchInterval: 30_000 });
   const activity = useQuery({
     queryKey: ["activity", "chiefofstaff"],
@@ -78,7 +80,18 @@ export function useCoordinatorThings() {
     doneUnseen,
     changes: (activity.data?.items ?? []).filter((a) => isCoordinatorChange(a, now)),
   };
-  const next = priorityLine({ needsYou: things.needsYou, running: active.filter((r) => r.state === "running").length, failing: failing.length, doneUnseen });
+  const base = priorityLine({ needsYou: things.needsYou, running: active.filter((r) => r.state === "running").length, failing: failing.length, doneUnseen });
+  const digest = away.data;
+  const showAway = !!digest?.line && base.state !== "needs" && base.state !== "failing";
+  const next: PriorityLine = showAway
+    ? {
+        state: digest.counts.needsYou ? "needs" : digest.counts.failed ? "failing" : "done",
+        tone: digest.counts.needsYou ? "warn" : digest.counts.failed ? "bad" : "ai",
+        dot: digest.counts.failed ? "red" : digest.counts.needsYou ? "yellow" : null,
+        text: digest.line!,
+        count: digest.counts.ran,
+      }
+    : base;
   const line = useStableLine(next);
   const markSeen = () => {
     const at = Date.now();
@@ -91,7 +104,7 @@ export function useCoordinatorThings() {
       /* storage optional */
     }
   };
-  return { things, line, markSeen, error: decisions.error ?? runs.error ?? activity.error };
+  return { things, line, awayLine: showAway && line.text === digest?.line, markSeen, error: decisions.error ?? runs.error ?? activity.error };
 }
 
 export function useStableLine(next: PriorityLine): PriorityLine {

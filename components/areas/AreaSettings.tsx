@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { effectiveAutonomy } from "@/lib/away";
+import { Segmented } from "@/components/ui/kit";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { useAccess } from "@/components/access";
 import { Button, Dialog, Field, inputCls } from "@/components/ui";
@@ -32,9 +36,15 @@ const AI_POLICY_LABELS: Record<AreaSettings["aiPolicy"], string> = {
  * item PATCH (partial settings merge).
  */
 export function AreaSettingsDialog({ area, open, onClose }: { area: WorkItem; open: boolean; onClose: () => void }) {
+  const qc = useQueryClient();
   const canChat = useAccess().can("hermes.chat");
   const [f, setF] = useState<AreaSettings>({ ...DEFAULT_AREA_SETTINGS, ...(area.settings ?? {}) });
-  const save = useWorkMutation(() => api.patch(`/api/work/items/${encodeURIComponent(area.id)}`, { settings: f }), { ok: "Area settings saved" });
+  const save = useWorkMutation(() => api.patch(`/api/work/items/${encodeURIComponent(area.id)}`, { settings: f }), {
+    ok: "Area settings saved",
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["agent-schedules"] });
+    },
+  });
   const set = <K extends keyof AreaSettings>(k: K, v: AreaSettings[K]) => setF((x) => ({ ...x, [k]: v }));
   return (
     <Dialog
@@ -83,9 +93,11 @@ export function AreaSettingsDialog({ area, open, onClose }: { area: WorkItem; op
               </select>
             </Field>
           </div>
+          <AreaAutonomy area={{ ...area, settings: f }} value={f.autonomy} onChange={(value) => set("autonomy", value)} />
           {canChat ? (
             <fieldset className="space-y-3">
               <legend className="eyebrow mb-1">Agent</legend>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field
                   id="as-mode"
@@ -191,5 +203,49 @@ export function AreaSettingsDialog({ area, open, onClose }: { area: WorkItem; op
         </form>
       </div>
     </Dialog>
+  );
+}
+
+export function AreaAutonomy({
+  area,
+  value,
+  onChange,
+}: {
+  area: Pick<WorkItem, "title" | "settings" | "id">;
+  value: AreaSettings["autonomy"];
+  onChange: (value: AreaSettings["autonomy"]) => void;
+}) {
+  const off = effectiveAutonomy(area) === "off";
+  return (
+    <div className="min-w-0 space-y-1 [&_.k-seg]:flex-wrap [&_button]:min-h-11 sm:[&_button]:min-h-10 dense:[&_button]:min-h-6">
+      {off ? (
+        <p className="text-sm text-muted">AI off for this area</p>
+      ) : (
+        <>
+          <p className="text-sm font-medium">Autonomy</p>
+          <Segmented
+            label="Autonomy"
+            value={value}
+            onChange={onChange}
+            options={[
+              { value: "propose", label: "Propose only" },
+              { value: "low_risk", label: "Act on low-risk" },
+            ]}
+          />
+          <p className="text-xs text-muted">
+            {value === "propose"
+              ? "Scheduled runs only suggest; every change becomes a Needs-you decision."
+              : "Jarvis may add notes and threads, update next actions and file to Inbox, with Undo. Everything else asks you. Never settles, merges, deploys, spends or sends."}
+          </p>
+          {area.settings?.aiPolicy === "triage_only" ? <p className="text-xs text-muted">Triage-only policy limits scheduled runs to proposals.</p> : null}
+        </>
+      )}
+      <Link
+        href={`/settings/agents?area=${encodeURIComponent(area.id)}#schedules`}
+        className="inline-flex min-h-11 items-center text-xs text-accent hover:underline sm:min-h-10 dense:min-h-6"
+      >
+        Scheduled jobs
+      </Link>
+    </div>
   );
 }
