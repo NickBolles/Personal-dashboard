@@ -17,6 +17,10 @@ describe("outbound account number masking", () => {
     ["12345678 / 87654321", "••••5678 / ••••4321"],
     ["12345678, 87654321.", "••••5678, ••••4321."],
     ["2026-11-07 12345678", "2026-11-07 ••••5678"],
+    ["Account #123456789012", "Account #••••9012"],
+    ["account=123456789012", "account=••••9012"],
+    ["acct?123456789012&x", "acct?••••9012&x"],
+    ["ref@123456789012", "ref@••••9012"],
   ])("masks %s", (input, expected) => {
     expect(maskAccountNumbers(input)).toBe(expected);
     expect(maskAccountNumbers(expected)).toBe(expected);

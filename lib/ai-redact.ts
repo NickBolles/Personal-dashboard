@@ -16,7 +16,12 @@ function tokenAround(source: string, start: number, end: number) {
   return source.slice(a, b);
 }
 
-const inUrlOrPath = (token: string) => /:\/\/|^\/|\/\S|[?&=#]|@|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(token);
+/**
+ * Only real URLs, absolute/relative paths, e-mail addresses and UUIDs are
+ * exempt. Bare `#`, `=`, `?`, `&` or `@` are NOT: "Account #123456789012" and
+ * "account=123456789012" are ordinary financial text and must be masked.
+ */
+const inUrlOrPath = (token: string) => /:\/\/|^\/|\w\/\S|[\w.+-]+@[\w-]+\.[a-z]|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i.test(token);
 
 export function maskAccountNumbers(text: string): string {
   // IBANs may contain letters as well as digits, and may be grouped with spaces.

@@ -70,6 +70,16 @@ function ConfirmInner({
       title={`${action.label} ${action.name}?`}
       description={
         <>
+          {action.data && Object.keys(action.data).length ? (
+            <span className="block" data-ha-change>
+              Change to:{" "}
+              <strong>
+                {Object.entries(action.data)
+                  .map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`)
+                  .join(", ")}
+              </strong>
+            </span>
+          ) : null}
           Current state: <strong>{action.state}</strong>
           {action.observedAt ? ` (checked ${new Date(action.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})` : ""}. If it changed
           since then, Jarvis will stop and ask again.
