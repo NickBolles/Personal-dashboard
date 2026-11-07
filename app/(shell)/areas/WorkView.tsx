@@ -62,7 +62,7 @@ import { BoardTab } from "@/components/areas/BoardTab";
 import { GraphTab } from "@/components/areas/GraphTab";
 import { areasHref, parseTab, type AreaTab } from "@/lib/areas-view";
 import { CaptureDialog } from "@/components/work/inbox";
-import { ActionSheet, JobChip, ReportsSection, useAiMenuItems } from "@/components/work/ai/AiActions";
+import { ActionSheet, JobChip, ReportsSection, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
 import type { AiActionKind } from "@/lib/ai";
 import {
   areaValidationDefault,
@@ -956,11 +956,12 @@ function ItemDetail({
   );
   const close = () => setDialog(null);
   const [aiSheet, setAiSheet] = useState<AiActionKind | null>(
-    initialAction?.startsWith("ai:") && ["research", "plan", "schedule", "draft"].includes(initialAction.slice(3))
+    initialAction?.startsWith("ai:") && ["research", "plan", "schedule", "draft", "summarize"].includes(initialAction.slice(3))
       ? (initialAction.slice(3) as AiActionKind)
       : null,
   );
   const aiItems = useAiMenuItems(id, setAiSheet);
+  const summaryItem = useSummaryMenuItem(id, setAiSheet);
   const wide = useWide();
   const phone = usePhone();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -1048,6 +1049,7 @@ function ItemDetail({
       isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
       container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
       ...aiItems,
+      summaryItem,
       !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
       isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
       isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },

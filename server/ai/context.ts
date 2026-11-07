@@ -3,6 +3,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { getDetail } from "@/server/work/store";
 import type { ContextSource, WorkDetail } from "@/lib/work";
+import { areaPolicyFor } from "./jobs";
 
 /**
  * Allowlisted context for an AI job (spec §6.2). Never: conversation
@@ -23,7 +24,7 @@ export function clampContext(text: string, max = CONTEXT_MAX) {
   return text.length <= max ? text : text.slice(0, max - TRUNCATED.length) + TRUNCATED;
 }
 
-export function formatItemContext(d: WorkDetail, reports: { kind: string; summary: string }[], instructions?: string) {
+export function formatItemContext(d: WorkDetail, reports: { kind: string; summary: string }[], instructions?: string, summarize = false) {
   const it = d.item;
   const lines: string[] = [];
   lines.push(`Item: ${it.title} (${it.kind}, ${it.status})`);
@@ -34,6 +35,20 @@ export function formatItemContext(d: WorkDetail, reports: { kind: string; summar
   const untrusted: string[] = [];
   if (it.summary) untrusted.push(`Summary: ${it.summary}`);
   if (it.nextAction) untrusted.push(`Next action: ${it.nextAction}`);
+  if (summarize) {
+    const notes = d.children.filter((c) => c.kind === "note").slice(0, 6);
+    if (notes.length) untrusted.push("Notes:\n" + notes.map((n) => `- ${n.title}: ${n.summary.slice(0, 1200)}`).join("\n"));
+    const chats = d.links.filter((l) => l.kind === "chat_session").slice(-12);
+    if (chats.length) untrusted.push("Linked conversations (titles only):\n" + chats.map((l) => `- ${l.title || "(untitled conversation)"}`).join("\n"));
+    if (d.events.length)
+      untrusted.push(
+        "Recent activity:\n" +
+          d.events
+            .slice(0, 12)
+            .map((e) => `- ${e.at} ${e.kind}${e.toStatus ? ` → ${e.toStatus}` : ""}${e.reason ? `: ${e.reason.slice(0, 300)}` : ""}`)
+            .join("\n"),
+      );
+  }
   const p = d.packets[0]; // getDetail orders packets newest version first
   if (p)
     untrusted.push(
@@ -130,10 +145,12 @@ async function extraSources(user: { id: string; capabilities: Set<string>; role:
 export async function itemContext(
   user: { id: string; capabilities: Set<string>; role: string },
   itemId: string,
-  params: { instructions?: string; contextSources?: ContextSource[] },
+  params: { instructions?: string; contextSources?: ContextSource[]; summarize?: boolean },
 ) {
   const d = getDetail(user.id, itemId);
-  const base = formatItemContext(d, recentReports(user.id, itemId), params.instructions);
+  // Child notes/containers may have a stricter policy than their parent.
+  d.children = d.children.filter((c) => areaPolicyFor(user.id, c.id) === "allowed");
+  const base = formatItemContext(d, recentReports(user.id, itemId), params.instructions, params.summarize);
   const extra = await extraSources(user, params.contextSources);
   return { detail: d, text: clampContext([base, extra].filter(Boolean).join("\n\n")) };
 }

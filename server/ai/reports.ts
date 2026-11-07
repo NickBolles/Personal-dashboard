@@ -6,7 +6,8 @@ import { newId, getKey } from "@/server/crypto";
 import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
-import { createItem, getDetail } from "@/server/work/store";
+import { createItem, getDetail, type OpOut } from "@/server/work/store";
+import { withVia } from "@/server/work/actor";
 import type { AiJobKind, ReportApply, ReportSource, ReportView, ScheduleSlot } from "@/lib/ai";
 import { AI_KIND_LABEL } from "@/lib/ai";
 import { getPreferences } from "@/server/settings";
@@ -285,6 +286,33 @@ export async function applyReport(user: CurrentUser, id: string, a: ReportApply,
   if (r.subjectType !== "work_item") throw new HttpError(409, "file_first", "File the capture as an item first");
   const itemId = r.subjectId;
   getDetail(user.id, itemId); // ownership
+  if (a.what === "summary_note") {
+    if (r.kind !== "summarize") throw new HttpError(409, "not_summary", "Only a summary draft can be saved as a note");
+    const parent = getDetail(user.id, itemId).item;
+    if (parent.kind === "note" || parent.kind === "conversation")
+      throw new HttpError(409, "bad_parent", "Save the summary under an item, not a note or conversation");
+    const job = getDb()
+      .select()
+      .from(schema.aiJobs)
+      .where(and(eq(schema.aiJobs.id, r.jobId), eq(schema.aiJobs.userId, user.id)))
+      .get();
+    if (!job) throw new HttpError(404, "not_found", "Summary job not found");
+    const out: OpOut = {};
+    const note = withVia(`agent:${job.hermesProfile ?? "default"}`, () =>
+      createItem(user, { parentId: itemId, kind: "note", title: r.title, summary: r.bodyMd }, correlationId, out),
+    );
+    audit({
+      actor: user.id,
+      action: "ai.report.apply",
+      source: "ai",
+      sourceRecord: id,
+      result: "ok",
+      correlationId,
+      detail: { what: a.what, noteId: note.id },
+    });
+    return { item: note, op: out.op ?? null };
+  }
+  if (r.kind === "summarize") throw new HttpError(409, "summary_draft_only", "Summary drafts can only be saved as a note");
   const st = safeJson(r.structured) as {
     next_actions?: { title: string }[];
     steps?: { title: string; detail?: string; dependsOn?: number[] }[];

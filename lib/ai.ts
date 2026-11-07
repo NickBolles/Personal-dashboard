@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { CONTEXT_SOURCES } from "@/lib/work";
 
-export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft"] as const;
+export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft", "summarize"] as const;
 export type AiActionKind = (typeof AI_ACTION_KINDS)[number];
 /** `file`: on-demand filing suggestions for unfiled conversations (triage tier, hidden, no report). */
 export const AI_JOB_KINDS = [...AI_ACTION_KINDS, "triage", "investigate", "file"] as const;
@@ -48,6 +48,13 @@ export const AI_ACTIONS: Record<AiActionKind, { label: string; verb: string; ico
     description: "Estimates the effort; Jarvis finds free slots in your calendars (calendars never go to AI).",
   },
   draft: { label: "Draft it…", verb: "Drafting", icon: "✎", tier: "standard", description: "A draft you copy or continue in the conversation. Never sent." },
+  summarize: {
+    label: "Summarize",
+    verb: "Summarizing",
+    icon: "≡",
+    tier: "standard",
+    description: "A review-only summary of this item. Nothing is saved as a note until you choose Save as note.",
+  },
 };
 
 export const KIND_VERB: Record<AiJobKind, string> = {
@@ -55,6 +62,7 @@ export const KIND_VERB: Record<AiJobKind, string> = {
   plan: "Planning",
   schedule: "Finding a time",
   draft: "Drafting",
+  summarize: "Summarizing",
   triage: "Triaging",
   investigate: "Investigating",
   file: "Suggesting where to file",
@@ -65,6 +73,7 @@ export const AI_KIND_LABEL: Record<AiJobKind, string> = {
   plan: "Plan",
   schedule: "Schedule",
   draft: "Draft",
+  summarize: "Summary",
   triage: "Triage",
   investigate: "Investigation",
   file: "Filing suggestions",
@@ -131,6 +140,7 @@ export const reportPatchSchema = z
   .strict();
 
 export const reportApplySchema = z.discriminatedUnion("what", [
+  z.object({ what: z.literal("summary_note") }).strict(),
   z.object({ what: z.literal("next_action"), index: z.number().int().min(0).max(10) }).strict(),
   z.object({ what: z.literal("plan_children"), indexes: z.array(z.number().int().min(0).max(20)).max(20).optional() }).strict(),
   z.object({ what: z.literal("dates"), slot: z.number().int().min(0).max(5) }).strict(),
@@ -218,6 +228,13 @@ export const draftOutput = z
     notes: s(600).default(""),
   })
   .passthrough();
+/** A summary is a draft, not instructions for any other apply operation. */
+export const summarizeOutput = z.object({
+  title: s(120).min(1),
+  summary: s(600).default(""),
+  body_markdown: s(8000).min(1),
+  confidence: z.enum(["low", "medium", "high"]).default("medium"),
+});
 export const SUGGESTED_KINDS = ["task", "idea", "reference", "question", "bug", "home_issue", "purchase", "other"] as const;
 export const triageOutput = z
   .object({
@@ -254,6 +271,7 @@ export const OUTPUT_SCHEMAS = {
   plan: planOutput,
   schedule: scheduleOutput,
   draft: draftOutput,
+  summarize: summarizeOutput,
   triage: triageOutput,
   file: fileOutput,
 } as const;
