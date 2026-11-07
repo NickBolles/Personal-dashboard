@@ -6,12 +6,16 @@
  * re-centre never loses the tab. Pure and client-safe.
  */
 
-/** `chats` only exists for work items (leaves): it is their Chats section, folded into the one tab bar. */
-export const AREA_TABS = ["overview", "chats", "board", "activity", "graph"] as const;
+/**
+ * `chats` only exists for work items (leaves): it is their Chats section, folded into the one tab bar.
+ * `portfolio` only exists on the all-areas landing (Phase 4: replaces the published portfolio map).
+ */
+export const AREA_TABS = ["overview", "portfolio", "chats", "board", "activity", "graph"] as const;
 export type AreaTab = (typeof AREA_TABS)[number];
 
 export const AREA_TAB_LABELS: Record<AreaTab, string> = {
   overview: "Overview",
+  portfolio: "Portfolio",
   chats: "Chats",
   board: "Board",
   activity: "Activity",

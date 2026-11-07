@@ -1364,6 +1364,46 @@ for (const scheme of ["light", "dark"] as const) {
   }
 }
 
+/** Phase 4: the Portfolio tab (replaces the published portfolio map): lanes per project, release strip, Needs you. Element shot (tall page). */
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: portfolio (${scheme})`, async ({ page }, testInfo) => {
+    await freezeMiddayCT(page);
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.route(/\/api\/work\/overview(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemo }));
+    await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
+    await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: agentRunsDemo }));
+    await page.route(/\/api\/work\/portfolio(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { version: "b4c633fbd8d0edef0d20b1fbf887012c193f579e", startedAt: "2026-11-06T20:05:00.000Z", migrations: 39, migratedAt: null } }),
+    );
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
+    // 1000 px (foldable/tablet) on the desktop project as well as 1280.
+    const widths = testInfo.project.name === "desktop" ? [1280, 1000] : [0];
+    for (const w of widths) {
+      if (w) await page.setViewportSize({ width: w, height: 800 });
+      await page.goto("/areas?tab=portfolio");
+      const root = page.getByTestId("portfolio");
+      await expect(root.getByTestId("portfolio-rows")).toBeVisible();
+      await expect(root.getByTestId("portfolio-release")).toContainText("b4c633f");
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({
+        content: 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }',
+      });
+      await page.waitForTimeout(400);
+      await expectNoHorizontalOverflow(page);
+      await withoutTray(page, () =>
+        expect(root).toHaveScreenshot(`portfolio-${scheme}${w === 1000 ? "-1000" : ""}.png`, {
+          animations: "disabled",
+          mask: MASK.map((m) => root.locator(m)),
+        }),
+      );
+      await t.evaluate((el) => (el as Element).remove());
+    }
+  });
+}
+
 /** Work from Jarvis 2: the area coordinator pane (side pane on desktop, sheet on phones) after "Catch me up" (nothing sent). */
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: coordinator pane (${scheme})`, async ({ page }) => {
