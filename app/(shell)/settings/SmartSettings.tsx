@@ -36,8 +36,8 @@ export function SmartSettings() {
         <span>
           <span className="font-medium">Interactive replies from Hermes</span>
           <span id="smart-help" className="block text-sm text-muted">
-            Triage lists, choices and checklists you can act on. Nothing changes until you tap Apply, every change can be undone, and Finance is never sent to
-            AI. Also powers the Morning brief, Plan the week and PR review cards.
+            Triage lists, choices and checklists you can act on. Nothing changes until you tap Apply, every change can be undone, and excluded areas are never
+            sent to AI. Also powers the Morning brief, Plan the week and PR review cards.
           </span>
         </span>
       </label>

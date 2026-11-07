@@ -8,7 +8,6 @@ import { sessionAccess } from "@/integrations/hermes/service";
 import { localSessionDetail } from "@/server/assistant/local";
 import { resolveGithubRef } from "@/server/work/github-search";
 import { classifyUrl, linkFallbackTitle, type ExtractedLink, type LinkKind } from "@/lib/chat-links";
-import { isFinanceContext } from "@/lib/chat-context";
 
 export type PanelLink = {
   url: string;
@@ -87,10 +86,7 @@ export async function syncPanelLinks(user: CurrentUser & Parameters<typeof resol
   if (a === "write") {
     const fresh = seen
       .map((l) => ({ l, c: classifyUrl(l.url) }))
-      .filter(
-        (x): x is { l: ExtractedLink; c: NonNullable<ReturnType<typeof classifyUrl>> } =>
-          !!x.c && !existing.has(x.c.url) && !isFinanceContext({ url: x.c.url }),
-      )
+      .filter((x): x is { l: ExtractedLink; c: NonNullable<ReturnType<typeof classifyUrl>> } => !!x.c && !existing.has(x.c.url))
       .slice(0, Math.max(0, MAX_PER_SESSION - existing.size));
     for (const { l, c } of fresh) {
       const row = {

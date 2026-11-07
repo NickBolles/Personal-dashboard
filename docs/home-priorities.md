@@ -110,7 +110,7 @@ At most two, after Now. They're built only from:
   not from your calendar".
 
 "Help me triage" / "Brainstorm ideas" opens a new chat with a draft and a
-bounded context block (≤ 1500 characters, never finance). The draft says it's
+bounded context block (≤ 1500 characters; Finance eligible, credentials blocked and account numbers masked). The draft says it's
 read-only planning. Nothing runs until you press send. Home never waits on a
 model, and there's no background inference or schedule.
 
@@ -120,7 +120,7 @@ Hermes doesn't call Jarvis, and it never edits Jarvis code or settings. The
 authorized path is the person's own chat:
 
 1. In Settings → Home priorities, **Tune with Hermes** opens a chat with a
-   summary attached: budget, tiers, category weights (finance excluded),
+   summary attached: budget, tiers, category weights (Finance included),
    snooze/saved-date counts and up to 10 recent corrections.
 2. Hermes reads it and suggests concrete changes ("set Skylight to −1", "save
    Mar 3 as Cassidy's birthday, 45 days ahead").

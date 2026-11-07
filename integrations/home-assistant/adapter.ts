@@ -34,7 +34,7 @@ export function parseAllowlist(v: string | undefined): ControlRule[] {
           .filter(Boolean),
       };
     })
-    .filter((r) => /^[a-z_]+\.[a-z0-9_]+$/.test(r.entityId) && r.services.length);
+    .filter((r) => /^[a-z_]+\.([a-z0-9_]+|\*)$/.test(r.entityId) && r.services.length);
 }
 
 const minutesSince = (t: string | undefined, now: Date) => (t ? (now.getTime() - new Date(t).getTime()) / MINUTE : 0);

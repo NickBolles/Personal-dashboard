@@ -10,7 +10,7 @@ import { Card, ErrorNote } from "@/components/ui";
 import { EmptyState, ProgressBar, SectionHeader, Skeleton } from "@/components/ui/kit";
 import { AgentMark } from "@/components/brand/AgentMark";
 
-const LOCKED = ["Settle / archive / move", "Merges", "External writes", "Finance (never available to agents)"];
+const LOCKED = ["Settle / archive / move", "Merges", "External writes", "AI-excluded areas", "Credentials"];
 function Lock() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5 shrink-0">

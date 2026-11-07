@@ -5,7 +5,7 @@
  * the latest update. Pure and client-safe.
  */
 import { bucketOf, emptyCounts, type BucketCounts, type MapBucket } from "./map-rollup";
-import { isFinanceAreaLike } from "./catch-up";
+import { isFinanceAreaLike } from "./finance-area";
 import { isContainer, type WorkItem } from "./work";
 
 export const PORTFOLIO_LANES = ["owner", "inflight", "next", "live", "backlog"] as const satisfies readonly MapBucket[];

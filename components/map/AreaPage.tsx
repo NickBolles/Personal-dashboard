@@ -239,7 +239,7 @@ function CoordinatorBody({ area, chats, onNew, busy }: { area: { id: string; tit
 /**
  * The area coordinator: a persistent right column at ≥1280 px, a button that
  * opens the same content as a sheet below that (phones, foldables, tablets).
- * Callers never render it for finance areas (Finance never goes to AI).
+ * Callers hide it for AI-excluded areas.
  */
 export function AreaCoordinator({
   variant,

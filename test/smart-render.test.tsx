@@ -51,11 +51,11 @@ describe("smart renderer (web)", () => {
     const out = html("overdue-triage.json", {
       "todo:gt-1": { ref: "todo:gt-1", kind: "todo", title: "Return ladder", due: "2026-10-01", status: "open" },
       "todo:gt-2": { ref: "todo:gt-2", kind: "todo", title: "Pick up frame", due: "2026-10-20", status: "open" },
-      "todo:gt-3": { ref: "todo:gt-3", unavailable: "finance" },
+      "todo:gt-3": { ref: "todo:gt-3", unavailable: "ai_excluded" },
     });
     expect(out).toContain("Return ladder");
     expect(out).toContain("26 days late");
-    expect(out).toContain("Finance is never shown to AI");
+    expect(out).toContain("Areas excluded from AI are never sent");
     expect(out).toContain('aria-label="This week (Fri, Oct 30): Return ladder"');
   });
 

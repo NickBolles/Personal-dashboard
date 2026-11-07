@@ -16,5 +16,5 @@ What Jarvis keeps from quick captures, what leaves the box, and for how long. Ow
 ## What goes to AI (Hermes)
 
 - Only with Settings → AI → Enabled and the `work.ai` capability. Captures are triaged with a fast model and, when worthwhile, investigated; the text of the capture and its destination list are sent to Hermes.
-- Finance areas and finance- or credential-looking text are never sent (see [work.md](work.md#ai-actions-reports-and-capture-phase-5)).
+- Finance follows the same per-area AI policy as every area (owner-approved 2026-11-07). Excluded areas and their subtrees stay out; credentials/tokens/passwords are hard-blocked, and full account/card numbers are masked to last 4 before any model text leaves (see [work.md](work.md#ai-actions-reports-and-capture-phase-5)).
 - Images are listed to the model as "not analysed" until image input is wired into the runner.

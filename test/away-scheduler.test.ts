@@ -170,12 +170,20 @@ describe("schedule store and claims", () => {
     expect(rows()[0].profile).toBe("devchief");
     expect(() => patchJob(owner, j.id, { areaId: null }, "test")).toThrow("finish before changing its area");
   });
-  it("refuses sensitive prompts before session/context creation", async () => {
-    const j = job({ prompt: "Review my mortgage balance $1200" });
+  it("refuses credentials before session/context creation", async () => {
+    const j = job({ prompt: "password: hunter2hunter2" });
     await runSchedulePass(now, deps);
     expect(rows()[0].error).toBe("skipped_policy");
     await expect(runJobNow(owner, j.id, now, deps)).rejects.toMatchObject({ code: "ai_off" });
     expect(deps.createSession).not.toHaveBeenCalled();
+  });
+  it("runs Finance prompts and masks full account numbers", async () => {
+    updateItem(owner, areaId, { title: "Finance" }, "test");
+    const j = job({ prompt: "Review my mortgage balance $1200, account 123456789012." });
+    await runJobNow(owner, j.id, now, deps);
+    const request = vi.mocked(deps.startRun).mock.calls[0][1];
+    expect(request.input).toContain("••••9012");
+    expect(request.input).not.toContain("123456789012");
   });
   it("records missing or archived areas as policy skips and requires a coordinator", async () => {
     const j = job();
@@ -185,9 +193,9 @@ describe("schedule store and claims", () => {
     await runSchedulePass(now, deps);
     expect(rows()[0].error).toBe("skipped_policy");
   });
-  it("Finance and AI-excluded areas skip before any context or Hermes call", async () => {
+  it("AI-excluded areas skip before any context or Hermes call, regardless of title", async () => {
     const finance = createItem(owner, { kind: "area", title: "Finance" }, "test");
-    updateItem(owner, finance.id, { settings: { agentMode: "devchief", autonomy: "low_risk" } }, "test");
+    updateItem(owner, finance.id, { settings: { agentMode: "devchief", autonomy: "low_risk", aiPolicy: "excluded" } }, "test");
     const j = job({ areaId: finance.id });
     const context = vi.spyOn(deps, "coordinatorFor");
     await runSchedulePass(now, deps);
@@ -300,7 +308,14 @@ describe("reconciliation and digest", () => {
 describe("policy end to end", () => {
   it.each(PROPOSAL_INTENTS)("enforces low-risk and propose for %s without lifecycle changes", (intent) => {
     const target = createItem(owner, { kind: "thread", title: "Task", parentId: areaId }, "test");
-    const p: Proposal = { intent, itemId: target.id, title: "Proposal", text: "Next step", why: "Check" };
+    const p: Proposal = {
+      intent,
+      itemId: target.id,
+      title: "Proposal",
+      text: "Next step",
+      why: "Check",
+      ...(intent === "device_control" ? { device: { entityId: "lock.front_door_lock", service: "unlock" } } : {}),
+    };
     const low = applyProposals(owner, areaId, "Check", "devchief", [p]);
     expect(low.changes).toHaveLength(LOW_RISK_INTENTS.includes(intent) ? 1 : 0);
     expect(low.decisions).toHaveLength(!LOW_RISK_INTENTS.includes(intent) && !NEVER_INTENTS.includes(intent) ? 1 : 0);

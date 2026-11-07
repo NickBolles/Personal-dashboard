@@ -356,22 +356,21 @@ describe("capture tokens", () => {
 });
 
 describe("AI triage → investigate chain", () => {
-  it("finance captures are never sent to AI (zero Hermes calls) and say why; Send anyway is audited", async () => {
+  it("Finance captures reach AI without an override; credentials remain blocked", async () => {
     saveAiSettings({ enabled: true });
     const r = await (await req(captureRoute.POST, { json: { text: "Chase checking balance $4,210" } })).json();
-    expect(r.triage).toBe("skipped");
-    expect(r.reason).toBe("finance_detected");
+    expect(r.triage).toBe("queued");
     expect(r.entry.capture.sensitivity).toBe("finance");
     const cred = await (await req(captureRoute.POST, { json: { text: "password: hunter2hunter2" } })).json();
     expect(cred.reason).toBe("credentials_detected");
     await runnerTick();
     await drainRunner();
-    expect(HermesExecutionClient.start).not.toHaveBeenCalled();
+    expect(HermesExecutionClient.start).toHaveBeenCalled();
     // Credentials: no override.
     expect((await req(investigateRoute.POST, { params: { id: cred.entry.id }, json: { financeOverride: true } })).status).toBe(403);
-    // Finance heuristic: Send anyway (confirmed) is audited.
-    expect((await req(investigateRoute.POST, { params: { id: r.entry.id }, json: { financeOverride: true } })).status).toBe(202);
-    expect(recentAudit(100).some((a) => a.action === "ai.finance_override")).toBe(true);
+    // Legacy overrides remain accepted but have no effect and create no override audit.
+    expect((await req(investigateRoute.POST, { params: { id: r.entry.id }, json: { financeOverride: true } })).status).toBe(200); // existing auto-investigation reused
+    expect(recentAudit(100).some((a) => a.action === "ai.finance_override")).toBe(false);
   });
 
   it("triage suggests a destination, investigate writes a report, accept with suggestion re-points reports and attachments", async () => {

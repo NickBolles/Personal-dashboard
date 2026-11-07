@@ -4,7 +4,7 @@ import { Button, type MenuItem } from "@/components/ui";
 
 /** Shortcuts use the exact overflow handlers; they only open existing review dialogs. No new mutation path. */
 export function ItemAiChips({ aiActions, itemActions }: { aiActions: MenuItem[]; itemActions: MenuItem[] }) {
-  if (!aiActions.length) return null; // Existing API policy + capability gate, including the immutable Finance exclusion.
+  if (!aiActions.length) return null; // Existing API policy + capability gate, including per-area AI exclusions.
   const draft = aiActions.find((a) => /Draft it/.test(a.label));
   const actions = [
     draft ? { ...draft, label: "Draft next step" } : null,

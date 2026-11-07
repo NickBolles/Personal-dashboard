@@ -1,4 +1,6 @@
 import "server-only";
+import { maskAccountNumbers } from "@/lib/ai-redact";
+import { detectSensitivity } from "@/server/ai/rules";
 import { SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomeHealth, type NextAction } from "@/lib/contracts";
 import { adapterContext, cachedSource, getHome, homeScopedSkylight, scopeResult } from "@/server/sources";
 import { listControls } from "@/integrations/home-assistant/controls";
@@ -139,15 +141,13 @@ async function compass(user: Viewer) {
 
 async function overview(user: Viewer, tz: string) {
   const home = await getHome(user, { live: false });
-  // Finance never goes to the AI layer (docs/finance.md), not even card titles.
-  const shareable = (list: NextAction[]) => list.filter((a) => a.source !== "finance");
-  const now = shareable(home.now);
-  const laterToday = shareable(home.later.laterToday);
+  const now = home.now;
+  const laterToday = home.later.laterToday;
   const lines = ["Jarvis overview:"];
   lines.push(now.length ? "Now:" : "Now: nothing urgent.", ...now.map((a) => fmtAction(a, tz)));
   if (laterToday.length) lines.push("Later today:", ...laterToday.map((a) => fmtAction(a, tz)));
   if (home.glance.nextEvent) lines.push(`Next event: ${fmtEvent(home.glance.nextEvent, tz).slice(2)}`);
-  const degraded = home.sources.filter((s) => s.source !== "finance" && !["ok", "disabled", "unconfigured"].includes(s.state));
+  const degraded = home.sources.filter((s) => !["ok", "disabled", "unconfigured"].includes(s.state));
   if (degraded.length) lines.push(`Sources with problems: ${degraded.map((s) => `${s.label} (${s.state})`).join(", ")}`);
   return lines;
 }
@@ -167,12 +167,13 @@ export async function sourceContext(user: Viewer, source: ContextSource): Promis
             : source === "daily_compass"
               ? await compass(user)
               : await overview(user, tz);
-  return lines.join("\n");
+  return maskAccountNumbers(lines.filter((line) => detectSensitivity(line) !== "credentials").join("\n"));
 }
 
 /** Combined context for a message: each source block (only what this person may see), then any free-form context. */
 export async function buildContext(user: Viewer, sources: ContextSource[] | undefined, extra: string | undefined) {
   const blocks = await Promise.all([...new Set(sources ?? [])].map((s) => sourceContext(user, s)));
-  const text = [...blocks, ...(extra ? [extra] : [])].join("\n\n");
+  if (extra && detectSensitivity(extra) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
+  const text = maskAccountNumbers([...blocks, ...(extra ? [extra] : [])].join("\n\n"));
   return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n…(truncated)` : text;
 }

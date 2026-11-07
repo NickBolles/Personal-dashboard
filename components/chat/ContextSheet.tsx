@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { HomePayload, JarvisNotification } from "@/lib/contracts";
 import { encodeRef, type RefOptionsResponse } from "@/lib/references";
-import { flattenSections, isFinanceContext } from "@/lib/chat-context";
+import { flattenSections } from "@/lib/chat-context";
 import type { PanelLink } from "@/server/chat/links";
 import { Button, Spinner, cx } from "@/components/ui";
 
@@ -28,7 +28,7 @@ function useDebounced<T>(v: T, ms: number) {
  * (the @ sources), GitHub (# prefix), today's tasks/alerts and this chat's
  * artifacts. Keyboard-first: ↑↓ move, Enter toggles (multi-select), Esc closes.
  * Bottom sheet on phones, a centred panel above the composer on wider screens.
- * Finance is never offered.
+ * AI-excluded areas are never offered.
  */
 export function ContextSheet({
   open,
@@ -127,11 +127,10 @@ function Sheet({
           out.push({ key: `link:${l.url}`, section: "Artifacts in this chat", label: l.title, detail: l.slug, chip: { label: l.title, ref: l.url } });
       const actions = [...(home.data?.now ?? []), ...(home.data?.later.laterToday ?? []), ...(home.data?.later.upcoming ?? [])];
       for (const a of actions.slice(0, 20))
-        if (match(a.title) && !isFinanceContext({ type: a.source, label: a.title }))
+        if (match(a.title))
           out.push({ key: `task:${a.id}`, section: "Tasks", label: a.title, detail: a.source, chip: { label: a.title, ref: `${a.source}:${a.sourceId}` } });
       for (const n of (alerts.data?.notifications ?? []).slice(0, 10))
-        if (match(n.title) && !isFinanceContext({ id: n.id, label: n.title }))
-          out.push({ key: `alert:${n.id}`, section: "Alerts", label: n.title, chip: { label: n.title, ref: `alert:${n.id}` } });
+        if (match(n.title)) out.push({ key: `alert:${n.id}`, section: "Alerts", label: n.title, chip: { label: n.title, ref: `alert:${n.id}` } });
     }
     return out;
   }, [query, gh, ghq.data, refs.data, links.data, home.data, alerts.data, areaTitle]);
@@ -270,7 +269,7 @@ function Sheet({
           ) : null}
           {!loading && !rows.length ? (
             <li role="presentation" className="px-2 py-2 text-sm text-muted">
-              Nothing matches. Finance is never shared with the assistant.
+              Nothing matches. Areas excluded from AI are never sent.
             </li>
           ) : null}
         </ul>

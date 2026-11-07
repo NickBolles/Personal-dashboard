@@ -3,6 +3,7 @@
  * Settings → Connections forms. No secrets or server imports here.
  */
 import type { ActionSource } from "@/lib/contracts";
+import { HA_POLICY_DEFAULT_CONTROLS } from "@/lib/ha-policy";
 
 export type IntegrationKind = ActionSource;
 
@@ -48,10 +49,13 @@ export const HA_DEFAULT_WATCH = [
 ].join("\n");
 
 /**
- * Safe direction only (lock, close). Unlocking or opening from a phone is an
- * explicit opt-in: add ", unlock" / ", open_cover" yourself if you want it.
+ * Default allowed controls (owner decision 2026-11-07): every domain in the
+ * Home Assistant policy matrix (lib/ha-policy.ts) with its services. The policy
+ * still decides risk: locks, alarm panels and opening a garage are high-risk
+ * (explicit confirm, rate-limited, never by agents or scheduled jobs). A stored
+ * "Allowed controls" value in Settings → Connections replaces this default.
  */
-export const HA_DEFAULT_CONTROLS = ["lock.front_door_lock: lock", "cover.garage_door: close_cover", "cover.garage_door_2: close_cover"].join("\n");
+export const HA_DEFAULT_CONTROLS = HA_POLICY_DEFAULT_CONTROLS;
 
 /** Default structured requests Jarvis sends Hermes (Jarvis appends the JSON answer contract). */
 export const SKYLIGHT_DEFAULT_PROMPT =
@@ -291,7 +295,7 @@ export const INTEGRATIONS: IntegrationDef[] = [
         label: "Allowed controls",
         type: "textarea",
         default: HA_DEFAULT_CONTROLS,
-        help: "entity_id: service, service. Defaults are the safe direction only (lock, close_cover). Add unlock or open_cover only if you want them from your phone. Every control asks for confirmation against live state.",
+        help: "entity_id: service, service — or domain.*: service for every entity in a domain. Defaults cover lights, switches, fans, climate, media, scenes, scripts, vacuums, covers (incl. garage), locks and alarm panels. Only services in the Jarvis policy can run; locks, alarm and opening a garage are high-risk (explicit confirm, rate-limited). Every control is confirmed and read back.",
       },
       {
         key: "lightControl",

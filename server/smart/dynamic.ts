@@ -7,6 +7,7 @@ import { getSetting, setSetting } from "@/server/settings";
 import { adapterContext, cachedSource, scopeResult } from "@/server/sources";
 import { resolveIntegration } from "@/integrations/store";
 import { parseAllowlist } from "@/integrations/home-assistant/adapter";
+import { allowedServicesFor } from "@/lib/ha-policy";
 import { addDays, localDate, localMinutes } from "@/lib/time";
 import { CATALOG_ID, type UIElement, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
@@ -39,7 +40,7 @@ function single(type: UIElement["type"], props: Record<string, unknown>) {
   return spec({ r: element(type, props) });
 }
 
-/** Fixed templates, cached source reads only: no model, no provider writes, no Finance. */
+/** Fixed templates, cached source reads only: no model, no provider writes, no AI-excluded areas. */
 export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: string): DynamicResponse {
   if (getOwner()?.id !== user.id) throw new HttpError(403, "owner_only", "Only the owner can open these cards.");
   const ctx = adapterContext(now);
@@ -121,7 +122,7 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
       const mins = garage.since ? Math.floor((now.getTime() - Date.parse(garage.since)) / 60_000) : 0;
       if (mins < 30 && localMinutes(now, ctx.timezone) < 1260) continue;
       const rules = parseAllowlist(resolveIntegration("home_assistant").config.controlAllowlist);
-      const services = can(user, "home_assistant.control_doors") ? (rules.find((r) => r.entityId === garage.entityId)?.services ?? []) : [];
+      const services = can(user, "home_assistant.control_doors") ? allowedServicesFor(rules, garage.entityId) : [];
       add({
         id: `garage:${garage.entityId}:${today}`,
         kind: "garage",
@@ -132,7 +133,13 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
           title: "Garage door",
           text: `State: open · since ${garage.since ? new Date(garage.since).toLocaleTimeString("en-US", { timeZone: ctx.timezone, hour: "numeric", minute: "2-digit" }) : "unknown"} · ${garage.entityId}. ${services.includes("close_cover") ? "Closing requires confirmation." : "Close from Home Assistant."}`,
         }),
-        garage: { entityId: garage.entityId, closeAllowed: services.includes("close_cover"), undoAllowed: services.includes("open_cover") },
+        garage: {
+          entityId: garage.entityId,
+          name: garage.name,
+          closeAllowed: services.includes("close_cover"),
+          openAllowed: services.includes("open_cover"),
+          undoAllowed: services.includes("open_cover"),
+        },
         footer: { label: "Open Home Assistant controls", href: `/home-control?entity=${encodeURIComponent(garage.entityId)}` },
       });
       break;

@@ -7,6 +7,8 @@ import { hermesBrief, resetTuning, setCategoryWeight, tuningView } from "@/serve
 import { homeSelection, sourceVisible } from "@/server/sources";
 import { BUDGET } from "@/server/ranking/attention";
 import { can, type Capable } from "@/server/access";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 
 export const dynamic = "force-dynamic";
 
@@ -23,15 +25,16 @@ export const GET = api(async ({ user }) => {
     ...view,
     budget: BUDGET,
     tunable: categoriesFor(user).map((category) => ({ category, label: categoryLabel(category) })),
-    // Finance never goes to the AI layer (docs/finance.md): no finance weight, titles or corrections in the brief.
+    // Finance follows the same rule as any source; credentials never enter the brief.
     hermesBrief: can(user, "hermes.chat")
-      ? hermesBrief(
-          {
-            ...view,
-            categories: view.categories.filter((c) => c.category !== "source:finance"),
-            feedback: view.feedback.filter((f) => f.category !== "source:finance"),
-          },
-          BUDGET,
+      ? maskAccountNumbers(
+          hermesBrief(
+            {
+              ...view,
+              feedback: view.feedback.filter((f) => detectSensitivity(JSON.stringify(f)) !== "credentials"),
+            },
+            BUDGET,
+          ),
         )
       : undefined,
   };

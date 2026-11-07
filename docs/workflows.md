@@ -24,25 +24,25 @@ new row in `workflow_versions`.
 
 A definition is a JSON object, at most 32 KB. Unknown keys are rejected (every object is `strict`).
 
-| Key                  | Required | Notes                                                                                                                                                                                                                              |
-| -------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`             | yes      | Always `"jarvis-workflow@1"`.                                                                                                                                                                                                      |
-| `name`               | yes      | ≤ 60 chars.                                                                                                                                                                                                                        |
-| `slug`               | yes      | Lowercase id, also the palette command (`/slug`).                                                                                                                                                                                  |
-| `icon`               | yes      | One of `WORKFLOW_ICONS` (`book-open`, `notebook`, `list-checks`, `calendar`, …).                                                                                                                                                   |
-| `hue`, `description` | no       | Card accent token; description ≤ 280 chars.                                                                                                                                                                                        |
-| `routing`            | yes      | `{ area: "Faith" \| null, agentProfile?: string \| null, modelTier: "fast" \| "standard" \| "deep" }`. The area is matched by exact path; an unknown area falls back to Miscellaneous. Finance and AI-excluded areas are refused.  |
-| `instructions`       | yes      | ≤ 4000 chars, sent with every run started from the workflow.                                                                                                                                                                       |
-| `serviceTimes`       | no       | `HH:MM` list used by the `$serviceTime` default (D12 default 09:00 / 10:45).                                                                                                                                                       |
-| `defaultPlace`       | no       | Used by the `workflowPlace` default of a `place` field.                                                                                                                                                                            |
-| `capture`            | yes      | Named capture fields (≤ 40): a scalar type (`text`, `longtext`, `date`, `datetime`, `time`, `number`, `bool`, `scripture_ref`, `place`, `person`, `tags`; `?` = optional), `{ type: "object", fields }` or `{ type: "list", of }`. |
-| `start`              | no       | `{ prompt?, args? }`: chat title template and the positional palette args (field ids).                                                                                                                                             |
-| `forms`              | no       | `start` / `mid` / `end` forms: `{ title?, submit?, fields: [field \| "fieldId"], skipWhenComplete? }` (≤ 20 fields; mid/end can reuse start fields by id).                                                                         |
-| `quickAdd`           | no       | ≤ 8 `{ label, field, prefix? }` chips; `field` must be a list capture.                                                                                                                                                             |
-| `outputs`            | no       | `item` (`none`/`perRun`/`single`), `summary.instructions`, `exports` (`markdown`, `drive`, `items`).                                                                                                                               |
-| `triggers`           | no       | `palette` (`command` must be `/<slug>`), `share`, `areaPage`, `schedule` (`cron` + `remind`/`start`).                                                                                                                              |
-| `reflectionPrompts`  | no       | `off`, `onRequest`, `afterPoints`.                                                                                                                                                                                                 |
-| `policy`             | no       | Fixed in v1: `{ settle: "manual", aiContext: "workflow_only" }`.                                                                                                                                                                   |
+| Key                  | Required | Notes                                                                                                                                                                                                                                                    |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`             | yes      | Always `"jarvis-workflow@1"`.                                                                                                                                                                                                                            |
+| `name`               | yes      | ≤ 60 chars.                                                                                                                                                                                                                                              |
+| `slug`               | yes      | Lowercase id, also the palette command (`/slug`).                                                                                                                                                                                                        |
+| `icon`               | yes      | One of `WORKFLOW_ICONS` (`book-open`, `notebook`, `list-checks`, `calendar`, …).                                                                                                                                                                         |
+| `hue`, `description` | no       | Card accent token; description ≤ 280 chars.                                                                                                                                                                                                              |
+| `routing`            | yes      | `{ area: "Faith" \| null, agentProfile?: string \| null, modelTier: "fast" \| "standard" \| "deep" }`. The area is matched by exact path; an unknown area falls back to Miscellaneous. AI-excluded areas are refused; Finance is eligible like any area. |
+| `instructions`       | yes      | ≤ 4000 chars, sent with every run started from the workflow.                                                                                                                                                                                             |
+| `serviceTimes`       | no       | `HH:MM` list used by the `$serviceTime` default (D12 default 09:00 / 10:45).                                                                                                                                                                             |
+| `defaultPlace`       | no       | Used by the `workflowPlace` default of a `place` field.                                                                                                                                                                                                  |
+| `capture`            | yes      | Named capture fields (≤ 40): a scalar type (`text`, `longtext`, `date`, `datetime`, `time`, `number`, `bool`, `scripture_ref`, `place`, `person`, `tags`; `?` = optional), `{ type: "object", fields }` or `{ type: "list", of }`.                       |
+| `start`              | no       | `{ prompt?, args? }`: chat title template and the positional palette args (field ids).                                                                                                                                                                   |
+| `forms`              | no       | `start` / `mid` / `end` forms: `{ title?, submit?, fields: [field \| "fieldId"], skipWhenComplete? }` (≤ 20 fields; mid/end can reuse start fields by id).                                                                                               |
+| `quickAdd`           | no       | ≤ 8 `{ label, field, prefix? }` chips; `field` must be a list capture.                                                                                                                                                                                   |
+| `outputs`            | no       | `item` (`none`/`perRun`/`single`), `summary.instructions`, `exports` (`markdown`, `drive`, `items`).                                                                                                                                                     |
+| `triggers`           | no       | `palette` (`command` must be `/<slug>`), `share`, `areaPage`, `schedule` (`cron` + `remind`/`start`).                                                                                                                                                    |
+| `reflectionPrompts`  | no       | `off`, `onRequest`, `afterPoints`.                                                                                                                                                                                                                       |
+| `policy`             | no       | Fixed in v1: `{ settle: "manual", aiContext: "workflow_only" }`.                                                                                                                                                                                         |
 
 ### Form fields
 
@@ -143,7 +143,7 @@ Instructions still ride as run context (≤ 4000 chars) rather than a session sy
 
 **Gallery → New workflow** (`/workflows/new`) or a card's **Edit** (`/workflows/<slug>/edit`). Three panes on desktop
 (sections · editor · live preview), stacked on phones. Sections: Basics (name, `/command` slug kept in sync with the palette
-trigger, icon, area — Finance is refused inline), Instructions (token count, ≤ 4000 chars), Capture fields, Forms
+trigger, icon, area — AI-excluded areas are refused), Instructions (token count, ≤ 4000 chars), Capture fields, Forms
 (Start / Mid-run / End tabs; add a field from the 13-type palette, which also creates its `session.<id>` capture slot; reorder,
 remove, inspector for label/help/default/required/remember-last/palette arg), Layout and Outputs (catalog-only; W4). The
 preview shows the start form with Defaults / Empty / Errors. Validator issues show inline per section and block Save.
@@ -154,8 +154,8 @@ always a separate tap in the gallery.
 **Save chat as workflow** (conversation ⋯ menu) and **Describe it** (on `/workflows/new`) ask the Hermes subscription model
 (structured run, throwaway session, no provider keys) for a proposal: basics, instructions, capture fields and a start form,
 each shown in its own dashed card with **Keep / Edit / Drop**. The assembled draft is validated live (issues are flagged on
-the part that caused them) and **Save as draft** creates it as a draft — never active. Finance chats (filed under Finance,
-or carrying Finance context) are refused before any transcript leaves Jarvis (`403 finance_blocked`).
+the part that caused them) and **Save as draft** creates it as a draft — never active. Chats filed under AI-excluded
+areas are refused before any transcript leaves Jarvis (`403 ai_excluded_area`). Finance chats are allowed; credentials are blocked and account numbers masked to last 4.
 
 **Test a turn** (builder side panel) sends one message against the unsaved draft as a sandbox: the reply and the capture
 changes the model would make are shown, validated against the draft's capture schema, then discarded — no

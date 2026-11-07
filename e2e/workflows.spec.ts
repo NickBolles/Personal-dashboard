@@ -17,12 +17,12 @@ test("workflows: import as draft, export, turn on, start from the palette", asyn
   const card = page.getByTestId("workflow-card").filter({ hasText: "Sermon notebook" });
   await expect(card).toContainText("Draft");
 
-  // Re-import of the same file is a no-op; a Finance-targeted one is refused.
+  // Re-import of the same file is a no-op; an invalid definition is refused.
   await page
     .getByLabel("Workflow JSON file")
     .setInputFiles({ name: "sermon.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(fixture)) });
   await expect(page.getByRole("status")).toContainText("already here");
-  const bad = { ...fixture, slug: "moneynotes", triggers: [], routing: { area: "Finance", modelTier: "fast" } };
+  const bad = { ...fixture, slug: "moneynotes", instructions: "", triggers: [], routing: { area: "Finance", modelTier: "fast" } };
   await page.getByLabel("Workflow JSON file").setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(bad)) });
   await expect(page.getByRole("status")).toContainText("Not imported");
 

@@ -5,7 +5,7 @@ import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
 import { itemAgentChip } from "@/components/work/AgentChip";
-import { isFinanceAreaLike } from "@/lib/catch-up";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -1465,9 +1465,9 @@ function ContainerBody({
     .slice(0, 5);
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
   const newChat = useAskHermes();
-  // Finance never goes to AI: no coordinator for finance(-like) areas.
+  // Honour the area's AI policy, regardless of its name.
   const coord =
-    isArea && canChat && !isFinanceAreaLike(item)
+    isArea && canChat && item.settings?.aiPolicy !== "excluded"
       ? { area: { id: item.id, title: item.title }, chats: itemChatRows(d), onNew: () => newChat.start({ areaId: item.id }), busy: newChat.busy }
       : null;
   return (

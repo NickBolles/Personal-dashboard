@@ -1,7 +1,7 @@
 /**
  * Scoped agent tokens (docs/agent-tools.md): client-safe scope list, labels and the mint schema.
- * A token lets one Hermes profile act for the owner through Jarvis MCP (/api/mcp) only. Finance is
- * never a scope: no tool reads or writes it, and Finance / AI-excluded areas are invisible to agents.
+ * A token lets one Hermes profile act for the owner through Jarvis MCP (/api/mcp) only.
+ * AI-excluded subtrees are invisible. No scope maps to finance.* module capabilities.
  */
 import { z } from "zod";
 
@@ -9,7 +9,7 @@ export const AGENT_SCOPES = ["work.read", "work.write", "decisions.write", "runs
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 export const AGENT_SCOPE_LABELS: Record<AgentScope, { label: string; hint: string }> = {
-  "work.read": { label: "Read work", hint: "Areas, projects and items (never Finance or AI-excluded areas)" },
+  "work.read": { label: "Read work", hint: "Areas, projects and items (never AI-excluded areas or credentials)" },
   "work.write": { label: "Write work", hint: "Create items, update status / next action / fields, add notes and links (undoable)" },
   "decisions.write": { label: "Ask you", hint: "Raise a Needs-you decision; destructive changes become a proposal for you" },
   "runs.write": { label: "Record runs", hint: "Register agent runs and their progress on items" },

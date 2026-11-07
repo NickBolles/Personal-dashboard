@@ -128,13 +128,15 @@ it("never runs before confirmation and explains a 409", async () => {
   expect(api.post).toHaveBeenCalledWith("/api/agents/schedules/job_lantern/run", { confirm: true });
 });
 
-it("creates off by default, preserves multiline custom prompts and disables Finance", async () => {
+it("creates off by default, preserves multiline custom prompts and disables AI-excluded areas", async () => {
   render(<ScheduledJobsCard />, { wrapper });
   await screen.findByText("Lantern morning check");
   fireEvent.click(screen.getByRole("button", { name: "New job" }));
   const dialog = within(screen.getByRole("dialog"));
   expect((dialog.getByRole("switch", { name: "Job enabled" }) as HTMLInputElement).checked).toBe(false);
-  expect((dialog.getByRole("option", { name: "Finance (AI off)" }) as HTMLOptionElement).disabled).toBe(true);
+  expect((dialog.getByRole("option", { name: "Private journal (AI off)" }) as HTMLOptionElement).disabled).toBe(true);
+  // Owner decision 2026-11-07: Finance is a normal area for scheduled jobs (Propose only by default).
+  expect((dialog.getByRole("option", { name: "Finance" }) as HTMLOptionElement).disabled).toBe(false);
   fireEvent.change(dialog.getByLabelText("Job title"), { target: { value: "New check" } });
   fireEvent.change(dialog.getByLabelText("Job kind"), { target: { value: "triage" } });
   expect((dialog.getByLabelText("Job prompt") as HTMLTextAreaElement).value).toContain("Inbox");
@@ -229,14 +231,8 @@ it("dismisses optimistically across views and restores on failure", async () => 
   await waitFor(() => expect(screen.queryAllByTestId("while-away")).toHaveLength(0));
 });
 
-it.each(["Finance", "Financial planning", "Excluded workshop"])("locks autonomy for %s", (title) => {
-  render(
-    <AreaAutonomy
-      area={{ id: "a", title, settings: { ...DEFAULT_AREA_SETTINGS, aiPolicy: title === "Excluded workshop" ? "excluded" : "allowed" } }}
-      value="propose"
-      onChange={vi.fn()}
-    />,
-  );
+it.each(["Finance", "Financial planning", "Excluded workshop"])("locks autonomy when %s is AI-excluded", (title) => {
+  render(<AreaAutonomy area={{ id: "a", title, settings: { ...DEFAULT_AREA_SETTINGS, aiPolicy: "excluded" } }} value="propose" onChange={vi.fn()} />);
   expect(screen.getByText("AI off for this area")).toBeTruthy();
   expect(screen.queryByRole("radiogroup", { name: "Autonomy" })).toBeNull();
 });

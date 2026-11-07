@@ -20,7 +20,7 @@ import { NeedsYouSection, useDecisions } from "./Decisions";
 import { AgentLine, AgentsStrip, useAgentRuns } from "@/components/agents/AgentRuns";
 import { CoordinatorButton } from "@/components/agents/CoordinatorPane";
 import { activeInArea } from "@/lib/agent-runs";
-import { isFinanceAreaLike } from "@/lib/catch-up";
+
 import { itemAgentChip } from "@/components/work/AgentChip";
 
 export type MapLink = { kind: string; url: string; title: string | null };
@@ -208,7 +208,7 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
       {/* A real link (bookmarks, new tab); inside /areas it opens the area in place. */}
       <Link
         href={`/areas?item=${encodeURIComponent(r.id)}`}
-        className={isFinanceAreaLike(r) ? "mp-card" : "mp-card mp-card-co"}
+        className="mp-card mp-card-co"
         onClick={(e) => {
           if (!onOpen || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -249,9 +249,9 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
           </span>
         ) : null}
       </Link>
-      {/* Finance never goes to AI: no coordinator chat there. */}
+
       {/* ✦ icon in the card's top-right corner (N5); the card reserves room for it (.mp-card-co). */}
-      {isFinanceAreaLike(r) ? null : <CoordinatorButton areaId={r.id} areaTitle={r.title} className="mp-card-coord" />}
+      <CoordinatorButton areaId={r.id} areaTitle={r.title} className="mp-card-coord" />
     </li>
   );
 }
@@ -259,7 +259,7 @@ function AreaCard({ roll: r, onOpen }: { roll: AreaRollup; onOpen?: (id: string)
 /** The agent mode that makes an area's coordinator the primary one ("Chief of staff"). */
 export const CHIEF_OF_STAFF_MODE = "chiefofstaff";
 
-/** The area whose coordinator is the Chief of staff: a top-level, non-finance area with agent mode `chiefofstaff`. */
+/** The AI-eligible top-level area with agent mode `chiefofstaff`. */
 export function chiefOfStaffArea(items: WorkItem[]): WorkItem | null {
   return (
     items.find(
@@ -268,7 +268,7 @@ export function chiefOfStaffArea(items: WorkItem[]): WorkItem | null {
         i.parentId === null &&
         !i.archived &&
         (i.settings?.agentMode ?? "").trim().toLowerCase() === CHIEF_OF_STAFF_MODE &&
-        !isFinanceAreaLike(i),
+        i.settings?.aiPolicy !== "excluded",
     ) ?? null
   );
 }

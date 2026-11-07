@@ -1,6 +1,6 @@
 /**
  * Pure rules for AI jobs (phase 5): state machine, budget gate, lanes/tiers,
- * the finance/sensitivity guard, investigate decision, retry policy. No I/O,
+ * the area/sensitivity guard, investigate decision, retry policy. No I/O,
  * no imports beyond shared types, so it's exhaustively unit-tested
  * (server/ai/rules.test.ts).
  */
@@ -73,21 +73,13 @@ export function backoffMs(attempt: number) {
   return 30_000 * 2 ** Math.max(0, attempt);
 }
 
-// --- Finance & sensitivity guard (spec §5) ---
+// --- Area policy & sensitivity guard (spec §5) ---
 
 export type AreaRef = { title: string; systemKey?: string | null; aiPolicy?: AiPolicy | null } | null | undefined;
 
-/** Finance is always excluded, whatever the stored setting says (immutable here, not just in the UI). */
+/** Every area, including Finance, honours the owner's generic AI policy. */
 export function effectiveAreaPolicy(area: AreaRef): AiPolicy {
-  if (!area) return "allowed";
-  if (isFinanceArea(area)) return "excluded";
-  return area.aiPolicy ?? "allowed";
-}
-
-export function isFinanceArea(area: { title: string; systemKey?: string | null }) {
-  const key = (area.systemKey ?? "").toLowerCase();
-  const title = area.title.trim().toLowerCase();
-  return key === "finance" || title === "finance" || title === "finances" || /^financ(e|es|ial)\b/.test(title);
+  return area?.aiPolicy ?? "allowed";
 }
 
 const CARD = /\b(?:\d[ -]?){13,19}\b/;
@@ -138,22 +130,23 @@ export type GuardInput = {
   kind: AiJobKind;
   area: AreaRef;
   text: string;
-  /** owner pressed "Send anyway" on a heuristic finance match */
+  /** Accepted but ignored for compatibility with older clients. */
   financeOverride?: boolean;
 };
-export type GuardResult =
-  { ok: true } | { ok: false; code: "finance_excluded"; reason: "area_excluded" | "area_triage_only" | "finance_detected" | "credentials_detected" };
+export type GuardResult = { ok: true } | { ok: false; code: "finance_excluded"; reason: "area_excluded" | "area_triage_only" | "credentials_detected" };
 
 /** Run at enqueue AND at execution (an item can move between the two). */
-export function financeGuard(g: GuardInput): GuardResult {
+export function aiGuard(g: GuardInput): GuardResult {
   const policy = effectiveAreaPolicy(g.area);
   if (policy === "excluded") return { ok: false, code: "finance_excluded", reason: "area_excluded" };
   if (policy === "triage_only" && g.kind !== "triage") return { ok: false, code: "finance_excluded", reason: "area_triage_only" };
   const sens = detectSensitivity(g.text);
   if (sens === "credentials") return { ok: false, code: "finance_excluded", reason: "credentials_detected" };
-  if (sens === "finance" && !g.financeOverride) return { ok: false, code: "finance_excluded", reason: "finance_detected" };
   return { ok: true };
 }
+
+/** Compatibility alias for existing callers. */
+export const financeGuard = aiGuard;
 
 export type TriageResult = { shouldInvestigate: boolean; confidence: number; sensitivity: Sensitivity };
 export function shouldInvestigate(
@@ -165,7 +158,7 @@ export function shouldInvestigate(
   if (mode === "triage_only" || mode === "off") return false;
   if (s.capture.auto !== "triage_and_investigate") return false;
   if (areaPolicy !== "allowed") return false;
-  if (t.sensitivity === "finance" || t.sensitivity === "credentials") return false;
+  if (t.sensitivity === "credentials") return false;
   return t.shouldInvestigate && t.confidence >= s.capture.investigateMinConfidence;
 }
 
@@ -193,7 +186,7 @@ export function errorText(code: JobErrorCode, extra?: string) {
     bad_output: "Hermes couldn't complete it",
     upstream: "Hermes returned an error",
     cost_cap: "Stopped at the per-job cost cap",
-    finance_excluded: "Not sent to AI (finance or sensitive content)",
+    finance_excluded: "Not sent to AI (area excluded from AI or credentials detected)",
     hermes_unavailable: "Hermes isn't reachable",
     cancelled: "Cancelled",
     ai_disabled: "AI actions are turned off",

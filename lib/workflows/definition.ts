@@ -224,8 +224,6 @@ function bindOk(bind: string, def: WorkflowDefinition, paths: Set<string>) {
   return paths.has(bind) && def.capture[bind]?.type !== "object";
 }
 
-const FINANCE = /^\s*finance(\s*\/|$)/i;
-
 /**
  * Full validation: zod shape + size + cross-field rules (bind_unknown_path,
  * duplicate field ids, unknown field refs, args, quickAdd targets, layout via
@@ -248,8 +246,8 @@ export function validateDefinition(input: unknown, opts: { excludedAreas?: strin
   if (Object.keys(def.capture).length > 40 || paths.size > 80) issues.push({ path: "capture", code: "too_many_fields", message: "At most 40 capture fields" });
 
   const area = def.routing.area;
-  if (area && (FINANCE.test(area) || (opts.excludedAreas ?? []).some((x) => x.toLowerCase() === area.toLowerCase()))) {
-    issues.push({ path: "routing.area", code: "finance_excluded", message: "Workflows can't use Finance or AI-excluded areas" });
+  if (area && (opts.excludedAreas ?? []).some((x) => x.toLowerCase() === area.toLowerCase() || area.toLowerCase().startsWith(`${x.toLowerCase()}/`))) {
+    issues.push({ path: "routing.area", code: "finance_excluded", message: "Workflows can't use AI-excluded areas" });
   }
 
   const fieldIds = new Map<string, WorkflowField>();

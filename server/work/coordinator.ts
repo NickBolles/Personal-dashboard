@@ -6,7 +6,8 @@ import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { resolveAgent } from "@/server/agents/routing";
 import { conversationAgent } from "@/server/areas";
-import { buildCatchUpPrompt, isFinanceAreaLike } from "@/lib/catch-up";
+import { buildCatchUpPrompt } from "@/lib/catch-up";
+import { pathIndex } from "@/server/search-index";
 import { detectSensitivity } from "@/server/ai/rules";
 import type { AgentResolution } from "@/lib/agents";
 import { areaIndex } from "@/lib/map-rollup";
@@ -19,9 +20,7 @@ import { getSetting } from "@/server/settings";
 
 /** Only live, AI-eligible top-level areas may host the portfolio coordinator. */
 export function globalCoordinatorArea(user: CurrentUser): WorkItem | null {
-  const areas = listItems(user.id).filter(
-    (i) => i.kind === "area" && i.parentId === null && !i.archived && !isFinanceAreaLike(i) && i.settings?.aiPolicy !== "excluded",
-  );
+  const areas = listItems(user.id).filter((i) => i.kind === "area" && i.parentId === null && !i.archived && i.settings?.aiPolicy !== "excluded");
   const configured = getSetting<unknown>("global_coordinator_area_id");
   return (
     areas.find((a) => a.id === configured) ??
@@ -38,7 +37,7 @@ export type CoordinatorInfo = {
   /** the area's coordinator conversation: the latest conversation filed directly under the area */
   sessionId: string | null;
   sessionTitle: string | null;
-  /** Finance / AI-excluded areas: no AI context, no catch-up prompt */
+  /** AI-excluded areas: no AI context, no catch-up prompt */
   excluded: boolean;
   /** "Catch me up" text, shown in the composer; only sent when the owner taps Send */
   prompt: string | null;
@@ -58,7 +57,7 @@ export function coordinatorSessions(items: WorkItem[]): Map<string, string> {
   const out = new Map<string, string>();
   for (const a of items.filter((i) => i.parentId === null && !i.archived)) {
     const s = coordinatorSession(items, a.id);
-    if (s?.sessionId && !isFinanceAreaLike(a) && a.settings?.aiPolicy !== "excluded") out.set(a.id, s.sessionId);
+    if (s?.sessionId && a.settings?.aiPolicy !== "excluded") out.set(a.id, s.sessionId);
   }
   return out;
 }
@@ -68,7 +67,7 @@ export function coordinatorFor(user: CurrentUser, areaId: string): CoordinatorIn
   const items = listItems(user.id);
   const area = items.find((i) => i.id === areaId && i.parentId === null);
   if (!area) throw new HttpError(404, "not_found", "That area isn't here");
-  const excluded = isFinanceAreaLike(area) || area.settings?.aiPolicy === "excluded";
+  const excluded = area.settings?.aiPolicy === "excluded";
   const session = coordinatorSession(items, area.id);
   // An existing coordinator conversation answers on the profile it was created
   // on (#169); the area's current mode only decides for a new conversation.
@@ -77,31 +76,34 @@ export function coordinatorFor(user: CurrentUser, areaId: string): CoordinatorIn
     resolveAgent(area.settings?.agentMode ?? null, { id: area.id, title: area.title });
   if (excluded) return { area: { id: area.id, title: area.title }, agent, sessionId: null, sessionTitle: null, excluded, prompt: null };
   const areaOf = areaIndex(items);
-  const inArea = items.filter((i) => i.id !== area.id && areaOf.get(i.id) === area.id);
+  const index = pathIndex(items);
+  const inArea = items.filter((i) => i.id !== area.id && areaOf.get(i.id) === area.id && !index.aiExcluded(i.id));
   const ids = new Set(inArea.map((i) => i.id));
   const decisions = listDecisions(user, items)
     .entries.filter((d) => d.itemId && ids.has(d.itemId))
     .map((d) => ({ title: d.title, question: d.question }));
   let activity: { at: string; verb: string; title: string | null; actor: string }[] = [];
   try {
-    activity = listActivity(user, { item: area.id, descendants: true, limit: 12 }).items.map((a) => ({
-      at: a.at,
-      verb: a.verb,
-      title: a.object?.title ?? null,
-      actor: a.actor.name,
-    }));
+    activity = listActivity(user, { item: area.id, descendants: true, limit: 12 })
+      .items.filter((a) => !a.object?.id || !index.aiExcluded(a.object.id))
+      .map((a) => ({
+        at: a.at,
+        verb: a.verb,
+        title: a.object?.title ?? null,
+        actor: a.actor.name,
+      }));
   } catch {
     activity = [];
   }
   const runs = agentRuns(user, items);
-  const agents = runs.active.filter((a) => a.areaId === area.id);
+  const agents = runs.active.filter((a) => a.areaId === area.id && ids.has(a.itemId));
   const prompt = buildCatchUpPrompt({
     area: { ...area, aiPolicy: area.settings?.aiPolicy ?? null },
     items: inArea,
     decisions,
     activity,
     agents,
-    sensitive: (t) => detectSensitivity(t) !== "none",
+    sensitive: (t) => detectSensitivity(t) === "credentials",
   });
   return { area: { id: area.id, title: area.title }, agent, sessionId: session?.sessionId ?? null, sessionTitle: session?.title ?? null, excluded, prompt };
 }

@@ -19,14 +19,11 @@ describe("coordinator page context", () => {
       "Areas › Garage › Repairs › Fix door",
     );
   });
-  it.each(["/finance", "/finance/cards", "/finance/", "/Finance/funds"])("never attaches %s", (path) => expect(pageContext(path)).toBeNull());
+  it.each(["/finance", "/finance/cards", "/finance/", "/Finance/funds"])("allows %s", (path) => expect(pageContext(path)?.path).toBe(path));
   it.each([
-    { title: "Finance" },
-    { title: "Finances" },
-    { title: "Financial planning" },
-    { title: "Private", systemKey: "finance" },
+    { title: "Finance", aiPolicy: "excluded" },
     { title: "Private", aiPolicy: "excluded" },
-  ])("excludes Finance or AI-excluded areas %j", (area) => {
+  ])("excludes AI-excluded areas %j", (area) => {
     expect(pageContext("/areas", "item=door", { area, item: { id: "door", title: "Private" } })).toBeNull();
   });
   it("fails closed until item ancestry is resolved", () => {
@@ -39,6 +36,6 @@ describe("coordinator page context", () => {
     const context = pageContext("/areas", "item=door", { area: { title: "Garage\n[bad]" }, item: { id: "door", title: "Fix door" } });
     expect(withPageContext("Hello\nWorld", context)).toBe("[Viewing: Areas › Garage  bad › Fix door — /areas?item=door]\nHello\nWorld");
     expect(withPageContext("Hello", null)).toBe("Hello");
-    expect(withPageContext("Hello", pageContext("/finance"))).toBe("Hello");
+    expect(withPageContext("Hello", pageContext("/finance"))).toBe("[Viewing: Finance — /finance]\nHello");
   });
 });

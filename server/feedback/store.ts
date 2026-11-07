@@ -303,7 +303,7 @@ const miscId = (user: CurrentUser, tx: Parameters<typeof ownedItem>[2]) => ensur
 
 /* ---------------- triage (scheduled job kind "feedback") ---------------- */
 
-/** True when the area allows AI (Exclude-from-AI and Finance areas never reach triage). */
+/** True when the area allows AI (Exclude-from-AI areas never reach triage). */
 function aiAllowed(userId: string, areaId: string | null) {
   if (!areaId) return true;
   const a = areaOf(userId, areaId);

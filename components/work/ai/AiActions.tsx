@@ -29,7 +29,7 @@ import { SafeMarkdown, safeHref } from "./SafeMarkdown";
 /**
  * Phase 5 AI task actions in the item workspace: "✦ Get started" split button
  * + action sheet, the job chip, the Reports section and the report viewer.
- * Hidden without work.ai or when the area excludes AI (Finance); the API
+ * Hidden without work.ai or when the area excludes AI; the API
  * enforces both regardless.
  */
 
@@ -269,7 +269,7 @@ export function ActionSheet({
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-xs text-muted">Finance is never sent to AI.</p>
+            <p className="mt-1 text-xs text-muted">Areas excluded from AI are never sent.</p>
           </fieldset>
         ) : null}
       </div>

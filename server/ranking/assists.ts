@@ -70,8 +70,7 @@ function trim(s: string, n: number) {
 type Draft = Omit<AssistCard, "provenance" | "chat"> & { fp: string; sources: string[]; chat?: AssistCard["chat"]; order: number };
 
 function overdueTriage(input: AssistInput, today: string): Draft | undefined {
-  // Finance never goes to the AI layer and isn't a task list (docs/finance.md).
-  const list = input.overdue.filter((a) => a.source !== "finance" && a.dueAt);
+  const list = input.overdue.filter((a) => a.dueAt);
   if (list.length < TRIAGE_MIN) return undefined;
   const dueDate = (a: NextAction) => localDate(new Date(a.dueAt!), input.timezone);
   const sorted = [...list].sort((a, b) => (a.dueAt! < b.dueAt! ? 1 : a.dueAt! > b.dueAt! ? -1 : a.id < b.id ? -1 : 1));

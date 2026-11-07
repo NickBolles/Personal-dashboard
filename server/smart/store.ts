@@ -68,7 +68,7 @@ function areaOf(item: WorkItem, byId: Map<string, WorkItem>) {
   return cur && !cur.parentId ? cur : null;
 }
 
-/** True when an item lives under Finance (or an area that excludes AI): never hydrated or written from a smart surface. */
+/** True when an item lives under an AI exclusion: never hydrated or written from a smart surface. */
 export function itemExcluded(item: WorkItem, byId: Map<string, WorkItem>) {
   const seen = new Set<string>();
   for (let current: WorkItem | undefined = item; current && !seen.has(current.id); current = current.parentId ? byId.get(current.parentId) : undefined) {
@@ -111,7 +111,7 @@ export function lookup(user: CurrentUser): Lookup {
       const map = itemMap();
       const it = map.get(ref.slice("item:".length));
       if (!it || it.kind === "conversation") return { ref, unavailable: "unknown" };
-      if (itemExcluded(it, map)) return { ref, unavailable: "finance" };
+      if (itemExcluded(it, map)) return { ref, unavailable: "ai_excluded" };
       const area = areaOf(it, map);
       return {
         ref,

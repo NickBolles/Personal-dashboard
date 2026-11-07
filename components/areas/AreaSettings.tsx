@@ -83,7 +83,7 @@ export function AreaSettingsDialog({ area, open, onClose }: { area: WorkItem; op
                 ))}
               </select>
             </Field>
-            <Field id="as-ai" label="AI actions" hint="Excluded keeps this area out of AI actions. Finance is always excluded.">
+            <Field id="as-ai" label="AI actions" hint="Excluded keeps this area and its subtree out of AI actions, including Finance.">
               <select id="as-ai" className={inputCls} value={f.aiPolicy} onChange={(e) => set("aiPolicy", e.target.value as AreaSettings["aiPolicy"])}>
                 {AI_POLICIES.map((p) => (
                   <option key={p} value={p}>

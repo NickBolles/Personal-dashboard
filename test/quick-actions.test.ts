@@ -152,7 +152,7 @@ describe("quick actions", () => {
       expect((await collection.POST(req("/api/quick-actions", "POST", data), ctx())).status).toBe(400);
     }
   });
-  it("MCP lists the scoped tool and only proposes; Finance excluded; attributed to the agent", async () => {
+  it("MCP lists the scoped tool and only proposes; Finance allowed; attributed to the agent", async () => {
     const { token } = mintAgentToken(owner, { name: "Test", profile: "chief", scopes: ["work.write"] }, "qa");
     const agent = agentFromToken(token)!;
     const listed = await handleMcp(agent, { jsonrpc: "2.0", id: 1, method: "tools/list" }, "qa");
@@ -176,9 +176,9 @@ describe("quick actions", () => {
     expect(qa.list(owner.id).find((a) => a.id === id)?.status).toBe("proposed");
     expect((await call({ ...input, status: "active" })).isError).toBe(true);
     const finance = createItem(owner, { kind: "area", title: "Finance" }, "qa");
-    expect((await call({ ...input, scope: `area:${finance.id}` })).isError).toBe(true);
+    expect((await call({ ...input, scope: `area:${finance.id}` })).isError).not.toBe(true);
     expect((await call({ ...input, scope: "area:finance" })).isError).toBe(true);
-    expect((await call({ ...input, scope: "page:/finance/accounts" })).isError).toBe(true);
+    expect((await call({ ...input, scope: "page:/finance/accounts" })).isError).not.toBe(true);
     qa.accept(owner.id, id);
     expect(raw(id).status).toBe("active");
     const reader = { ...agent, scopes: ["work.read" as const] };

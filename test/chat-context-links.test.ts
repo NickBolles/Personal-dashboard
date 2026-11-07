@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalUrl, classifyUrl, extractLinks, findUrls, linkFallbackTitle } from "@/lib/chat-links";
-import { addPick, flattenSections, isFinanceContext, togglePick } from "@/lib/chat-context";
+import { addPick, flattenSections, togglePick } from "@/lib/chat-context";
 import type { TimelineItem } from "@/lib/hermes";
 
 describe("chat links: URL extraction", () => {
@@ -65,23 +65,19 @@ describe("chat links: URL extraction", () => {
   });
 });
 
-describe("chat context: finance block + picks", () => {
-  it("blocks finance references", () => {
-    expect(isFinanceContext({ type: "item", id: "abc", url: "/finance/accounts" })).toBe(true);
-    expect(isFinanceContext({ type: "finance", id: "x" })).toBe(true);
-    expect(isFinanceContext({ type: "file", id: "https://jarvis.nickbolles.com/api/finance/tx" })).toBe(true);
-    expect(isFinanceContext({ type: "item", id: "monarch:123" })).toBe(true);
-    expect(isFinanceContext({ type: "item", id: "abc", label: "Refinance thoughts" })).toBe(false);
+describe("chat context picks", () => {
+  it("offers Finance references without name-based filtering", () => {
+    expect(flattenSections([{ label: "Areas", options: [{ type: "area", id: "fin", label: "Finance" }] }])).toHaveLength(1);
   });
 
-  it("adds, dedupes, toggles and refuses finance", () => {
+  it("adds, dedupes, toggles and accepts finance", () => {
     let r = addPick([], { type: "area", id: "a1", label: "Home" });
     expect(r.list).toHaveLength(1);
     r = addPick(r.list, { type: "area", id: "a1", label: "Home" });
     expect(r.list).toHaveLength(1);
     const f = addPick(r.list, { type: "file", id: "/finance/x", label: "Budget" });
-    expect(f.blocked).toBe(true);
-    expect(f.list).toHaveLength(1);
+    expect(f.blocked).toBe(false);
+    expect(f.list).toHaveLength(2);
     expect(togglePick(r.list, { type: "area", id: "a1", label: "Home" }).list).toHaveLength(0);
   });
 

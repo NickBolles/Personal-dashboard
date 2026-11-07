@@ -145,16 +145,19 @@ describe("ai rules (pure)", () => {
     for (const t of SAFE) expect(detectSensitivity(t), t).toBe("none");
   });
 
-  it("finance guard: Finance area always excluded (immutable), credentials have no override", () => {
+  it("AI guard: Finance follows area policy, excluded areas and credentials have no override", () => {
     const fin = { title: "Finance", systemKey: null, aiPolicy: "allowed" as const };
-    expect(effectiveAreaPolicy(fin)).toBe("excluded");
-    expect(effectiveAreaPolicy({ title: "Finances 2026", aiPolicy: "allowed" })).toBe("excluded");
-    expect(effectiveAreaPolicy({ title: "Home", systemKey: "finance" })).toBe("excluded");
+    expect(effectiveAreaPolicy(fin)).toBe("allowed");
+    expect(effectiveAreaPolicy({ title: "Finances 2026", aiPolicy: "allowed" })).toBe("allowed");
+    expect(effectiveAreaPolicy({ title: "Home", systemKey: "finance" })).toBe("allowed");
     expect(effectiveAreaPolicy({ title: "Home", aiPolicy: "triage_only" })).toBe("triage_only");
     expect(effectiveAreaPolicy(null)).toBe("allowed");
-    expect(financeGuard({ kind: "research", area: fin, text: "Compare HYSA" })).toMatchObject({ ok: false, reason: "area_excluded" });
-    expect(financeGuard({ kind: "research", area: fin, text: "x", financeOverride: true })).toMatchObject({ ok: false, reason: "area_excluded" });
-    expect(financeGuard({ kind: "triage", area: null, text: "Chase checking balance $4,210" })).toMatchObject({ ok: false, reason: "finance_detected" });
+    expect(financeGuard({ kind: "research", area: fin, text: "Compare HYSA" })).toEqual({ ok: true });
+    expect(financeGuard({ kind: "research", area: { title: "Private", aiPolicy: "excluded" }, text: "x", financeOverride: true })).toMatchObject({
+      ok: false,
+      reason: "area_excluded",
+    });
+    expect(financeGuard({ kind: "triage", area: null, text: "Chase checking balance $4,210" })).toEqual({ ok: true });
     expect(financeGuard({ kind: "triage", area: null, text: "Chase checking balance $4,210", financeOverride: true })).toEqual({ ok: true });
     expect(financeGuard({ kind: "triage", area: null, text: "password: hunter2hunter2", financeOverride: true })).toMatchObject({
       ok: false,
@@ -176,7 +179,8 @@ describe("ai rules (pure)", () => {
     expect(shouldInvestigate(t, s)).toBe(true);
     expect(shouldInvestigate({ ...t, confidence: 0.59 }, s)).toBe(false);
     expect(shouldInvestigate({ ...t, shouldInvestigate: false }, s)).toBe(false);
-    expect(shouldInvestigate({ ...t, sensitivity: "finance" }, s)).toBe(false);
+    expect(shouldInvestigate({ ...t, sensitivity: "finance" }, s)).toBe(true);
+    expect(shouldInvestigate({ ...t, sensitivity: "credentials" }, s)).toBe(false);
     expect(shouldInvestigate(t, s, "triage_only")).toBe(false);
     expect(shouldInvestigate(t, s, "auto", "triage_only")).toBe(false);
     expect(shouldInvestigate(t, { capture: { ...s.capture, auto: "triage_only" } })).toBe(false);
@@ -267,7 +271,7 @@ describe("output schemas", () => {
   });
 });
 
-describe("finance never reaches the AI layer (static import graph)", () => {
+describe("credentials and integration isolation (static import graph)", () => {
   const root = path.resolve(__dirname, "..");
   const resolve = (from: string, spec: string) => {
     let base: string;
@@ -277,9 +281,11 @@ describe("finance never reaches the AI layer (static import graph)", () => {
     for (const c of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")]) if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
     return null;
   };
-  const FORBIDDEN = /[\\/](server|lib|integrations)[\\/](finance|monarch)[\\/]|[\\/]integrations[\\/]index\.ts$/;
+  // Transport-specific Hermes imports are allowed; integration registries and
+  // source workers that can expose integration credentials are not.
+  const FORBIDDEN = /[\\/](server|lib|integrations)[\\/](finance|monarch)[\\/]|[\\/]integrations[\\/]index\.ts$|[\\/]server[\\/](sources|worker)\.ts$/;
 
-  it("no module reachable from server/ai/** or integrations/hermes/jobs.ts is a finance module", () => {
+  it("AI jobs cannot statically reach credential-bearing integration registries or source workers", () => {
     const entries = [
       ...fs
         .readdirSync(path.join(root, "server/ai"))
@@ -301,7 +307,7 @@ describe("finance never reaches the AI layer (static import graph)", () => {
         const r = resolve(f, m[1] ?? m[2]!);
         if (r) stack.push(r);
       }
-      // Dynamic imports: only the allowlisted lazy boundaries (server/context.ts drops finance itself).
+      // Dynamic imports: only allowlisted lazy boundaries; integration credentials stay isolated.
       for (const m of src.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g)) {
         if (!["@/server/context", "@/integrations/home-assistant/client", "./jobs", "./settings"].includes(m[1]!))
           offenders.push(`${path.relative(root, f)} → import(${m[1]})`);
