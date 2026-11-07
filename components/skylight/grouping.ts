@@ -24,7 +24,11 @@ export type DueState = "late" | "overdue" | undefined;
 
 type Opts = { now: Date | number; timezone: string };
 
-const isOpenChore = (a: NextAction) => a.status === "open" && a.source === "skylight" && a.skylight?.kind === "chore";
+/**
+ * Open Skylight chore: direct-mode chores carry a `chore` ref; Hermes-mode chores (`mapHermesAnswer`) carry no ref
+ * at all and stay read-only (writes need the ref). List items (`list_item` ref) are not chores.
+ */
+export const isOpenChore = (a: NextAction) => a.status === "open" && a.source === "skylight" && (a.skylight === undefined || a.skylight.kind === "chore");
 
 /** Frame-local due day (YYYY-MM-DD); undated chores count as today. */
 export function choreDay(a: NextAction, { now, timezone }: Opts) {

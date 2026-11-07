@@ -8,7 +8,7 @@ import { useSource } from "@/components/useSource";
 import { useAccess } from "@/components/access";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
-import { groupSkylightChores } from "@/components/skylight/grouping";
+import { groupSkylightChores, isOpenChore } from "@/components/skylight/grouping";
 import type { SkylightExtra } from "@/components/skylight/model";
 import { SourceState } from "@/components/SourceState";
 import { ActionCard } from "@/components/actions/ActionCard";
@@ -52,7 +52,7 @@ export function TodosView() {
   );
   // Skylight chores follow Skylight's own order (time of day today, later days, past days last); everything else
   // keeps the due-state groups. Overdue — native and Skylight alike — sits at the bottom, above Completed.
-  const isChore = (a: NextAction) => a.source === "skylight" && a.skylight?.kind === "chore" && a.status === "open";
+  const isChore = isOpenChore;
   const chores = groupSkylightChores(actions, { now, timezone });
   const choreBucket = (key: string) => chores.find((c) => c.key === key)?.actions ?? [];
   const native = (title: string) => actions.filter((a) => !isChore(a) && GROUPS.find((g) => g.title === title)!.match(a));

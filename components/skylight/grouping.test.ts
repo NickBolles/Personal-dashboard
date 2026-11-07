@@ -114,6 +114,14 @@ describe("groupSkylightChores", () => {
       ),
     ).toEqual([]);
   });
+
+  it("keeps Hermes-mode chores (no Skylight ref) in their time-of-day bucket", () => {
+    const hermes: NextAction = { ...chore("Hermes 7am", "2026-11-04", "07:00"), skylight: undefined };
+    const groups = groupSkylightChores([hermes], opts);
+    expect(groups.map((g) => g.key)).toEqual(["morning"]);
+    expect(titles(groups[0].actions)).toEqual(["Hermes 7am"]);
+    expect(choreSuggestions(hermes, { now: now.getTime(), timezone: tz })).toEqual([]);
+  });
 });
 
 describe("dueState", () => {
