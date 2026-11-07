@@ -1804,9 +1804,10 @@ for (const scheme of ["light", "dark"] as const) {
       await expectNoHorizontalOverflow(page);
       const overlays = await page.addStyleTag({ content: `${HIDE_OVERLAYS} .gc-tray, .gc-tray-qa { visibility: hidden !important; }` });
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-      await expect(page).toHaveScreenshot(`skylight-grouping${path === "/todos" ? "-todos" : ""}-${scheme}.png`, {
-        fullPage: true,
-        mask: MASK.map((m) => page.locator(m)),
+      // The main column only: the sidebar/rail list other specs' chats, which this test doesn't own.
+      const main = page.locator("main#main");
+      await expect(main).toHaveScreenshot(`skylight-grouping${path === "/todos" ? "-todos" : ""}-${scheme}.png`, {
+        mask: MASK.map((m) => main.locator(m)),
       });
       await overlays.evaluate((el) => (el as Element).remove());
     }
