@@ -7,7 +7,8 @@ import type { HomePayload, JarvisNotification } from "@/lib/contracts";
 import { encodeRef, type RefOptionsResponse } from "@/lib/references";
 import { flattenSections } from "@/lib/chat-context";
 import type { PanelLink } from "@/server/chat/links";
-import { Button, Spinner, cx } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Button, Spinner } from "@/components/ui/legacy";
 
 /** A context chip above the composer. `token` (an @/# reference) is resolved server-side on send. */
 export type ContextChip = { label: string; ref: string; token?: string };

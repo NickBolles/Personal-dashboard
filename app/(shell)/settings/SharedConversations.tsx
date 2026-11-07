@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
-import { Button, Card, ErrorNote, Spinner, useToast } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
+import { ErrorNote, useToast, EmptyState } from "@/components/ui";
+import { Button, Card, Spinner } from "@/components/ui/legacy";
 
 type Shared = { conversations: { id: string; title: string; lastActiveAt: string | null }[]; unavailable: string[] };
 

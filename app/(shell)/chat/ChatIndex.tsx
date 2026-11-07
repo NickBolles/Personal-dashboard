@@ -6,7 +6,8 @@ import { SessionList } from "@/components/chat/SessionList";
 import { BackendSwitch } from "@/components/chat/backend";
 import { ConversationsView } from "@/components/areas/ConversationsView";
 import { useAccess } from "@/components/access";
-import { Kbd, Page, PageHeader } from "@/components/ui";
+import { Page, PageHeader } from "@/components/ui";
+import { Kbd } from "@/components/ui/legacy";
 import { useModKey } from "@/lib/client/platform";
 
 /** /chat: with Areas, the conversations view of the tree (All / Unfiled); otherwise the plain Hermes list. */

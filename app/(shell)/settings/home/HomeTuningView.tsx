@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { WEIGHT_LABELS } from "@/lib/attention";
-import { Button, ButtonLink, Card, Dialog, ErrorNote, Field, PageHeader, Spinner, cx, inputCls, useOnline, useToast } from "@/components/ui";
+import { Dialog, ErrorNote, Field, PageHeader, cx, useOnline, useToast } from "@/components/ui";
+import { Button, ButtonLink, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { chatHref } from "@/components/home/chat";
 
 type Tuning = {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ClarifyRequest } from "@/lib/hermes";
-import { Button, inputCls } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { AgentMark } from "@/components/brand/AgentMark";
 
 /**

@@ -8,7 +8,8 @@ import { api } from "@/lib/client/api";
 import { extractLinks } from "@/lib/chat-links";
 import type { TimelineItem } from "@/lib/hermes";
 import type { PanelLink } from "@/server/chat/links";
-import { Badge, Button, cx } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Badge, Button } from "@/components/ui/legacy";
 import type { ContextChip } from "./ContextSheet";
 
 export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readOnly: boolean) {

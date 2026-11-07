@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Spinner } from "@/components/ui";
+import { Spinner } from "@/components/ui/legacy";
 import { PlanView } from "./PlanView";
 
 export const metadata = { title: "Long-term plan" };

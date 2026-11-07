@@ -7,8 +7,8 @@ import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { CompassState } from "@/integrations/types";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, useOnline, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, useOnline, useToast, LoadingState } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty } from "@/components/ui/legacy";
 
 export function CompassView() {
   const router = useRouter();

@@ -6,8 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { EMPTY_AWAY, useAway } from "@/lib/client/away";
 import type { AwayDigest, AwayRun } from "@/lib/away";
-import { Button, Dot, Pill } from "@/components/ui/kit";
-import { useToast } from "@/components/ui";
+import { Button, Dot, Pill, useToast } from "@/components/ui";
 
 const linkCls = "inline-flex min-h-11 min-w-0 items-center text-[var(--ai)] underline-offset-2 hover:underline sm:min-h-10 dense:min-h-6";
 

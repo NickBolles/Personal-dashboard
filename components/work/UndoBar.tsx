@@ -2,7 +2,7 @@
 
 import { useEffect, type CSSProperties } from "react";
 import { api } from "@/lib/client/api";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { useWorkMutation } from "./common";
 
 export type UndoOp = { id: string; kind: string; label: string };

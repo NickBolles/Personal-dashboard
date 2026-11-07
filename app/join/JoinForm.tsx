@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
 import { ROLE_LABELS, type Role } from "@/lib/modules";
-import { Button, Field, inputCls } from "@/components/ui";
+import { Field } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 
 type Who = { name: string; username: string; role: Role };
 

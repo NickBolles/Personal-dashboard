@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 
 /** ContextSheet's bottom-sheet pattern, portalled beyond the chat query container. */
 export function ChatSheet({ children, onClose, full, onFull }: { children: ReactNode; onClose: () => void; full: boolean; onFull: () => void }) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { cx, inputCls } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { inputCls } from "@/components/ui/legacy";
 import { KIND_LABELS, STATUS_LABELS, isClosed, isContainer, rollup, type LinkedConversationRow, type WorkItem } from "@/lib/work";
 import { treeCounts } from "@/lib/areas-digest";
 import { ChatIcon } from "@/components/icons";

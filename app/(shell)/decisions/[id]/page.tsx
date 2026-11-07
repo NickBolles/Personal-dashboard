@@ -1,8 +1,7 @@
 import { requirePage } from "@/server/auth/page";
 import { decodeDecisionId, validDecisionId } from "@/lib/decision-route";
 import { DecisionDetail } from "@/components/decisions/DecisionDetail";
-import { Page, PageHeader } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
+import { Page, PageHeader, EmptyState } from "@/components/ui";
 
 export const metadata = { title: "Decision" };
 

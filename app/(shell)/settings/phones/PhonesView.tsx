@@ -6,8 +6,8 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { CaptureTokens } from "@/components/capture/CaptureTokens";
-import { Badge, Button, Card, Empty, ErrorNote, Field, PageHeader, inputCls, useNow, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, Field, PageHeader, useNow, useToast, LoadingState } from "@/components/ui";
+import { Badge, Button, Card, Empty, inputCls } from "@/components/ui/legacy";
 
 type Device = { id: string; name: string; platform: string; appVersion?: string; pushEnabled: boolean; createdAt: string; lastSeenAt: string };
 type Pairing = { code: string; expiresAt: string; server: string; uri: string; qrSvg: string };

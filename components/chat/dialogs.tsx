@@ -6,7 +6,8 @@ import { useEffect, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import type { RunView, SessionSummary, TimelineItem } from "@/lib/hermes";
-import { Button, Dialog, Field, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { Dialog, Field, cx, useToast } from "@/components/ui";
+import { Button, Spinner, inputCls } from "@/components/ui/legacy";
 
 export function RenameDialog({ open, onClose, session }: { open: boolean; onClose: () => void; session: SessionSummary }) {
   const [title, setTitle] = useState(session.title);

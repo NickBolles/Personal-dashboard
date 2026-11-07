@@ -7,7 +7,8 @@ import type { AccountSummary, FundSummary, ReserveResult } from "@/lib/finance/e
 import type { Fund, FundHolding, ReserveSettings } from "@/lib/finance/types";
 import type { AccountView } from "@/server/finance/accounts";
 import type { FlowRow } from "@/server/finance/funds";
-import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { ErrorNote, Field, PageHeader, useToast } from "@/components/ui";
+import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { Delta, Money, centsToInput, toCents } from "@/components/finance/money";
 

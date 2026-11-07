@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { Dialog, ErrorNote, Field, cx, useToast } from "@/components/ui";
+import { Badge, Button, OverflowMenu, Spinner, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";

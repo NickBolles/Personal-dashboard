@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui";
+import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { ReportViewer } from "@/components/work/ai/AiActions";

@@ -3,9 +3,7 @@
 import { useMemo, useState, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ChipButton } from "@/components/ui/kit";
-import { ErrorNote } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ChipButton, ErrorNote, LoadingState } from "@/components/ui";
 import { Branch, MAP_KEY, mapWorkItems, type MapResponse } from "@/components/map/MapView";
 import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import { ItemFilterBar, NO_FILTER, type ItemFilter } from "@/components/work/ItemMeta";

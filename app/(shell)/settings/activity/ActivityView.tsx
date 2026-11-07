@@ -2,9 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, ErrorNote, PageHeader } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, EmptyState, LoadingState } from "@/components/ui";
+import { Badge } from "@/components/ui/legacy";
 
 type Entry = {
   id: string;

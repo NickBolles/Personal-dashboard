@@ -7,3 +7,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## UI rules (all agents: Claude, Codex, Copilot, Hermes)
+
+Jarvis UI is built ONLY from the component library `@/components/ui` (docs/ui-library.md), which implements the design system (docs/design-system.md: Command Center + Tide/Lagoon tokens). `npm run lint` enforces this (`eslint-rules/jarvis-ui.mjs`); existing legacy call sites are baselined in `eslint-suppressions.json` and must only shrink.
+
+- Always import UI from `@/components/ui` (never `@/components/ui/kit`, `/legacy`, `/IconAction`). Never use native `<select>`, `<button>`, `<input>` (except file/hidden) or `<textarea>`: use `SelectPicker`/`MetaPicker`/`DuePicker`, `Button`/`IconButton`/`ChipButton`/`Menu`, `Field` + `Input`/`Textarea`, `Checkbox`/`Toggle`/`Segmented`, `Tabs`.
+- Tokens only: no hex colours, no Tailwind arbitrary values (`text-[13px]`); `x-[var(--token)]` is fine. Blue = you act, Lagoon teal (`--ai`) = agent, dashed teal = proposed.
+- Exactly one primary action per view (page, pane, dialog). Compact, dense, premium: no chonky inputs, no default browser styling, no wasted whitespace; use the built-in density tiers, never hand-rolled heights.
+- Writes are confirmed and undoable (confirm card + Undo); never auto-settle. Every module offers import/export.
+- A11y: targets ≥44px on phones / ≥40px desktop for nav and icon actions (≥24px anywhere); icon-only controls need a name; reflow at 320px and 200% text zoom; motion off under `prefers-reduced-motion`; no emoji in UI text. Foldable phone is the primary form factor (pickers = bottom sheets on phones).
+- Missing a component? Add it to `components/ui/` (tokens, `.k-*` styles, density tiers), export it from `components/ui/index.ts`, show it on `/dev/ui`, document it in docs/ui-library.md. Migrated legacy call sites? Run `npm run lint:prune` and commit the smaller `eslint-suppressions.json`. `npm run ui:baseline` shows what's left.

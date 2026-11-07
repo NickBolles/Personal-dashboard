@@ -3,7 +3,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { SmartSettings as Settings } from "@/lib/jarvis-ui/types";
-import { Card, useToast } from "@/components/ui";
+import { useToast } from "@/components/ui";
+import { Card } from "@/components/ui/legacy";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 
 /** Settings → Smart replies: interactive Hermes replies (jarvis-ui@1). Off by default; per person. */

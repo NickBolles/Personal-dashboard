@@ -18,7 +18,8 @@ import {
   type Issue,
   type ReserveSettings,
 } from "@/lib/finance/types";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, Spinner, cx, inputCls, useToast } from "@/components/ui";
+import { Dialog, ErrorNote, Field, PageHeader, cx, useToast } from "@/components/ui";
+import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { AlertIcon, CheckIcon } from "@/components/icons";
 import { Delta, Money, centsToInput, fmt, toCents, useHideAmounts } from "@/components/finance/money";
 import type { AccountView } from "@/server/finance/accounts";

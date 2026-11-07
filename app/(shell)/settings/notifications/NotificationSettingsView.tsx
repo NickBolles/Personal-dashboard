@@ -5,8 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { NOTIFICATION_CATEGORIES } from "@/lib/contracts";
 import { PushControls, QuietHours, usePreferences } from "@/components/NotificationSetup";
-import { Badge, Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, useToast, LoadingState } from "@/components/ui";
+import { Badge, Card } from "@/components/ui/legacy";
 
 export function NotificationSettingsView() {
   const qc = useQueryClient();

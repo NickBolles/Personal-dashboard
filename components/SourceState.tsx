@@ -2,7 +2,7 @@
 
 import type { SourceStatus } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
-import { Banner, ButtonLink, EmptyState } from "@/components/ui/kit";
+import { Banner, ButtonLink, EmptyState } from "@/components/ui";
 
 /**
  * Per-source state (design system §States): unknown is never rendered as empty.

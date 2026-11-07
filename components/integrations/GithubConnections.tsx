@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { fineGrainedTokenUrl, parseRepoList, type GithubSettingsResponse, type GithubTestResult, type PublicGithubConnection } from "@/lib/github";
-import { Badge, Button, Dialog, ErrorNote, Field, cx, inputCls, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { EmptyState } from "@/components/ui/kit";
+import { Dialog, ErrorNote, Field, cx, useToast, LoadingState, EmptyState } from "@/components/ui";
+import { Badge, Button, inputCls } from "@/components/ui/legacy";
 import { CheckIcon } from "@/components/icons";
 import { GithubAppSection } from "./GithubApp";
 

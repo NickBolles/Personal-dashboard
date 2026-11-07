@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui/kit";
+import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui";
 import {
   CHECKS_LABEL,
   DEPLOY_LABEL,

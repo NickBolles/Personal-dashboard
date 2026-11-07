@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, useToast } from "@/components/ui";
+import { useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { ACTIVE_JOB_STATES, type AiFilingState, type AiFilingSuggestion, type JobView } from "@/lib/ai";
 

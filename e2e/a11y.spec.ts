@@ -55,6 +55,7 @@ const PAGES = [
   "/settings/ai",
   "/settings/agents",
   "/settings/places",
+  "/dev/ui",
 ];
 
 for (const path of PAGES) {

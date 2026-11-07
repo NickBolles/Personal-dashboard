@@ -3,7 +3,8 @@
 import { useEffect, type CSSProperties } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, useOnline, useToast } from "@/components/ui";
+import { useOnline, useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { haptic, skylightWrites } from "./writeStore";
 
 const UNDO_VISIBLE_MS = 10_000;

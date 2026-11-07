@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, Dialog, Field, inputCls, useToast } from "@/components/ui";
+import { Dialog, Field, useToast } from "@/components/ui";
+import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
 import type { CaptureTokenView } from "@/lib/ai";
 
 /**

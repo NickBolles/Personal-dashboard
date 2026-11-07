@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { APP_CALLBACK_MESSAGES, APP_NAME_MAX, parseRepoList, type GithubSettingsResponse, type PublicGithubApp } from "@/lib/github";
-import { Badge, Button, ButtonLink, Dialog, Field, cx, inputCls, useToast } from "@/components/ui";
+import { Dialog, Field, cx, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, inputCls } from "@/components/ui/legacy";
 
 /**
  * Settings → Connections → GitHub → GitHub App (admin). "Create GitHub App"

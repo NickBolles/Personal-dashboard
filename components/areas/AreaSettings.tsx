@@ -3,11 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { effectiveAutonomy } from "@/lib/away";
-import { Segmented } from "@/components/ui/kit";
+import { Segmented, Dialog, Field } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { useAccess } from "@/components/access";
-import { Button, Dialog, Field, inputCls } from "@/components/ui";
 import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor } from "@/lib/item-tags";
 import { useWorkMutation } from "@/components/work/common";
 import {

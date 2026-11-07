@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, ErrorNote, Field, Spinner, inputCls, useToast } from "@/components/ui";
-import { SectionHeader } from "@/components/ui/kit";
+import { ErrorNote, Field, useToast, SectionHeader } from "@/components/ui";
+import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { AGENT_SCOPES, AGENT_SCOPE_LABELS, DEFAULT_AGENT_SCOPES, type AgentScope, type AgentTokenView, type MintedAgentToken } from "@/lib/agent-access";
 import { relativeTime } from "@/lib/time";
 

@@ -1,6 +1,5 @@
 "use client";
-import { ChipButton } from "@/components/ui/kit";
-import { cx } from "@/components/ui";
+import { ChipButton, cx } from "@/components/ui";
 import { contextualActions, fillQuickAction, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
 import { useQuickActions } from "./useQuickActions";
 import "./quick-actions.css";

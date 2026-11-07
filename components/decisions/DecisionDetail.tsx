@@ -3,8 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/lib/client/api";
 import type { DecisionEntry } from "@/lib/decisions";
-import { ButtonLink, Card, ErrorNote, Page, PageHeader } from "@/components/ui";
-import { EmptyState, Skeleton } from "@/components/ui/kit";
+import { ErrorNote, Page, PageHeader, EmptyState, Skeleton } from "@/components/ui";
+import { ButtonLink, Card } from "@/components/ui/legacy";
 import { DecisionAnswer } from "./DecisionAnswer";
 
 export function DecisionDetail({ id, initialChoice = "" }: { id: string; initialChoice?: string }) {

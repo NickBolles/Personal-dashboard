@@ -7,7 +7,8 @@ import { relativeTime } from "@/lib/time";
 import { ACCOUNT_KINDS, type AccountKind } from "@/lib/finance/types";
 import type { AccountView } from "@/server/finance/accounts";
 import type { FinanceOverview } from "@/server/finance/overview";
-import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { ErrorNote, Field, PageHeader, useToast } from "@/components/ui";
+import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { Money, toCents } from "@/components/finance/money";
 

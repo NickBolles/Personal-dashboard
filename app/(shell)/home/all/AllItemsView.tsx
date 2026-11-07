@@ -7,7 +7,8 @@ import type { AttentionBucket, HomeItemsPage } from "@/lib/contracts";
 import { api } from "@/lib/client/api";
 import { ActionCard } from "@/components/actions/ActionCard";
 import { SourceFilter } from "@/components/actions/SourceFilter";
-import { Button, Empty, ErrorNote, PageHeader, Spinner, cx } from "@/components/ui";
+import { ErrorNote, PageHeader, cx } from "@/components/ui";
+import { Button, Empty, Spinner } from "@/components/ui/legacy";
 
 const TABS: { id: AttentionBucket; label: string; hint: string }[] = [
   { id: "now", label: "Now", hint: "Up to three things that need you first. Safety alerts are always here." },

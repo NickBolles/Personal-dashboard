@@ -19,8 +19,8 @@ import {
   type JobKind,
   type ScheduledJob,
 } from "@/lib/away";
-import { Dialog, ErrorNote, Field, inputCls, OverflowMenu, useToast } from "@/components/ui";
-import { Button, Chip, ChipSelect, Dot, Pill, Segmented, Toast } from "@/components/ui/kit";
+import { Dialog, ErrorNote, Field, useToast, Button, Chip, ChipSelect, Dot, Pill, Segmented, Toast } from "@/components/ui";
+import { inputCls, OverflowMenu } from "@/components/ui/legacy";
 
 const endpoint = "/api/agents/schedules";
 const jobPath = (job: ScheduledJob) => `${endpoint}/${encodeURIComponent(job.id)}`;

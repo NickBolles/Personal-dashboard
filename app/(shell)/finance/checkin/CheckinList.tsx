@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
+import { ErrorNote, PageHeader, useToast } from "@/components/ui";
+import { Badge, Button, Spinner } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 
 type Row = { id: string; month: string; status: string; closedAt: string | null };

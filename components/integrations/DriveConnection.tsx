@@ -3,8 +3,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, ErrorNote, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, useToast, LoadingState } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 
 type DriveStatus = { available: boolean; configured: boolean; connected: boolean; connectedAt: string | null; scope: string; redirectPath: string };
 

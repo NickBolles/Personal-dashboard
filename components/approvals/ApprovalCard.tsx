@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApprovalRequest } from "@/lib/hermes";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { AgentMark } from "@/components/brand/AgentMark";
 
 type Choice = ApprovalRequest["choices"][number];

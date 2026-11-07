@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Spinner } from "@/components/ui";
+import { Card, Spinner } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { CaptureSheet } from "./CaptureSheet";
 import { deleteStaged, readStaged, type StagedShare } from "@/lib/client/capture-queue";

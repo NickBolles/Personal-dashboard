@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
-import { Button, ButtonLink, useNow } from "@/components/ui";
-import { Banner } from "@/components/ui/kit";
+import { useNow, Banner } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/ui/legacy";
 import { api } from "@/lib/client/api";
 import type { DecisionsResponse } from "@/lib/decisions";
 import { decisionHref } from "@/lib/decision-route";

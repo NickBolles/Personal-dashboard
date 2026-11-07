@@ -14,7 +14,9 @@ import {
   useId,
   useRef,
   useState,
+  type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
+  type TextareaHTMLAttributes,
   type CSSProperties,
   type InputHTMLAttributes,
   type KeyboardEvent,
@@ -77,9 +79,34 @@ export function Button({
   );
 }
 
-export function ButtonLink({ href, variant, size, icon, className, children }: ButtonOwnProps & { href: string; className?: string; children: ReactNode }) {
+export function ButtonLink({
+  href,
+  variant,
+  size,
+  icon,
+  className,
+  children,
+  external,
+  ...rest
+}: ButtonOwnProps & { href: string; className?: string; children: ReactNode; external?: boolean } & Omit<
+    AnchorHTMLAttributes<HTMLAnchorElement>,
+    "href" | "className" | "children"
+  >) {
+  if (external) {
+    return (
+      <a {...rest} href={href} target="_blank" rel="noreferrer noopener" className={buttonClass({ variant, size }, className)}>
+        {icon ? (
+          <span className="k-btn-glyph" aria-hidden>
+            {icon}
+          </span>
+        ) : null}
+        {children}
+        <span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    );
+  }
   return (
-    <Link href={href} className={buttonClass({ variant, size }, className)}>
+    <Link {...rest} href={href} className={buttonClass({ variant, size }, className)}>
       {icon ? (
         <span className="k-btn-glyph" aria-hidden>
           {icon}
@@ -475,6 +502,23 @@ export function Input({ icon, invalid, className, ...rest }: InputHTMLAttributes
       ) : null}
       <input {...rest} aria-invalid={invalid || rest["aria-invalid"] || undefined} />
     </span>
+  );
+}
+
+/** Multi-line text field with the same compact token styling as `Input` (pair it with `Field`). */
+export function Textarea({
+  invalid,
+  className,
+  rows = 3,
+  ...rest
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean; ref?: Ref<HTMLTextAreaElement> }) {
+  return (
+    <textarea
+      {...rest}
+      rows={rows}
+      aria-invalid={invalid || rest["aria-invalid"] || undefined}
+      className={cx("k-textarea", invalid && "k-input-bad", className)}
+    />
   );
 }
 

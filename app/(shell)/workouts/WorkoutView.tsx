@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/components/access";
-import { Badge, PageHeader } from "@/components/ui";
-import { Banner, Button, EmptyState, SectionHeader } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { PageHeader, Banner, Button, EmptyState, SectionHeader, LoadingState } from "@/components/ui";
+import { Badge } from "@/components/ui/legacy";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import {
   EQUIPMENT,

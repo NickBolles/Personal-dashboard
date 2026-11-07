@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { BACKEND_LABELS, CLAUDE_MODELS, EFFORTS, type AssistantStatus } from "@/lib/assistant";
-import { Badge, Button, Card, Field, inputCls, useToast } from "@/components/ui";
+import { Field, useToast } from "@/components/ui";
+import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
 
 /** Settings → Assistant: Hermes or Claude for new conversations; Claude model, effort and key (admin). */
 export function AssistantSettings() {

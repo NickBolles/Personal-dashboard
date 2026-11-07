@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, Card, Field, PageHeader, inputCls } from "@/components/ui";
+import { Field, PageHeader } from "@/components/ui";
+import { Button, Card, inputCls } from "@/components/ui/legacy";
 
 type Preview = {
   revision: string;

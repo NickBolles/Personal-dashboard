@@ -8,7 +8,8 @@ import { ONBOARDING_INTEGRATIONS, getIntegrationDef, type IntegrationKind, type 
 import { IntegrationForm, TestResults } from "@/components/integrations/IntegrationForm";
 import { PushControls, QuietHours } from "@/components/NotificationSetup";
 import { InstallPrompt } from "@/components/InstallPrompt";
-import { Badge, Button, Field, cx, inputCls, useToast } from "@/components/ui";
+import { Field, cx, useToast } from "@/components/ui";
+import { Badge, Button, inputCls } from "@/components/ui/legacy";
 import { CheckIcon } from "@/components/icons";
 
 type Step = { id: string; title: string; optional?: boolean };

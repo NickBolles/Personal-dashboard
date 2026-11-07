@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ToastProvider } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ToastProvider, LoadingState } from "@/components/ui";
 import { ActivityView } from "@/app/(shell)/settings/activity/ActivityView";
 import { BrainView } from "@/app/(shell)/brain/BrainView";
 import { PhonesView } from "@/app/(shell)/settings/phones/PhonesView";

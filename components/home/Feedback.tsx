@@ -4,7 +4,8 @@ import { useId, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { ATTENTION_VERSION, categoryLabel, type FeedbackVerdict } from "@/lib/attention";
-import { Button, Dialog, Field, cx, inputCls, useOnline, useToast } from "@/components/ui";
+import { Dialog, Field, cx, useOnline, useToast } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 
 /** What a person is reacting to, with what the card said (stored as provenance). */
 export type FeedbackTarget = {

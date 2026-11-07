@@ -6,7 +6,8 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import { api } from "@/lib/client/api";
 import type { SearchResponse, SearchResult } from "@/lib/search";
 import { moduleFor } from "@/lib/modules";
-import { cx, Spinner, useToast } from "@/components/ui";
+import { cx, useToast } from "@/components/ui";
+import { Spinner } from "@/components/ui/legacy";
 import { BoltIcon, ChevronIcon, SearchIcon } from "@/components/icons";
 import { matchCommands, NEW_CHAT_EVENT, useCommands, type Command } from "@/components/navigation/commands";
 import { useAccess } from "@/components/access";

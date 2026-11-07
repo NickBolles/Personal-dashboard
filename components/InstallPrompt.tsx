@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, Button } from "@/components/ui";
+import { Badge, Button } from "@/components/ui/legacy";
 import { isAndroidWrapper } from "@/lib/client/wrapper";
 
 type BIPEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };

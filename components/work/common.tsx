@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type ReactNode } from "react";
 import { AreasIcon, InboxIcon, SunIcon } from "@/components/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Badge, cx, useToast, type Tone } from "@/components/ui";
+import { cx, useToast } from "@/components/ui";
+import { Badge, type Tone } from "@/components/ui/legacy";
 import { api } from "@/lib/client/api";
 import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/work";
 

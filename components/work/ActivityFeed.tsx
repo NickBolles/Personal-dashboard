@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Empty, ErrorNote, Spinner, inputCls, useToast } from "@/components/ui";
+import { ErrorNote, useToast } from "@/components/ui";
+import { Button, Empty, Spinner, inputCls } from "@/components/ui/legacy";
 import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import {
   ACTIVITY_TYPES,

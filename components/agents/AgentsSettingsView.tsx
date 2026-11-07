@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, ErrorNote, Field, PageHeader, inputCls, useToast } from "@/components/ui";
-import { EmptyState, SectionHeader, Skeleton } from "@/components/ui/kit";
+import { ErrorNote, Field, PageHeader, useToast, EmptyState, SectionHeader, Skeleton } from "@/components/ui";
+import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
 import { AgentAccessCard } from "./AgentAccessCard";
 import { CoordinatorsCard } from "./CoordinatorsCard";
 import { ScheduledJobsCard } from "./ScheduledJobsCard";

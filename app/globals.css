@@ -2198,6 +2198,26 @@ button:active > .dock-orb {
     color: var(--t3);
     display: inline-flex;
   }
+  .k-textarea {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: var(--r2);
+    border: 1px solid var(--bdc);
+    background: var(--s2);
+    color: var(--t1);
+    font: 16px/1.45 var(--sans);
+    resize: vertical;
+  }
+  .k-textarea::placeholder {
+    color: var(--t3);
+  }
+  .k-textarea:focus {
+    outline: 0;
+    border-color: var(--ac);
+    box-shadow: 0 0 0 3px var(--acs);
+  }
   .k-prog {
     height: 6px;
     border-radius: 999px;
@@ -2656,6 +2676,9 @@ button:active > .dock-orb {
     .k-input input {
       font-size: 14px;
     }
+    .k-textarea {
+      font-size: 14px;
+    }
     .k-row {
       min-height: 40px;
     }
@@ -2693,6 +2716,9 @@ button:active > .dock-orb {
     }
     .k-input {
       min-height: 30px;
+    }
+    .k-textarea {
+      padding: 6px 10px;
     }
     .k-row {
       min-height: 36px;

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, ErrorNote, Field, OverflowMenu, Spinner, cx, inputCls, type MenuItem } from "@/components/ui";
+import { Dialog, ErrorNote, Field, cx } from "@/components/ui";
+import { Button, OverflowMenu, Spinner, inputCls, type MenuItem } from "@/components/ui/legacy";
 import type {
   ConversationIndexState,
   ConversationOption,

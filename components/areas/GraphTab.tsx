@@ -5,7 +5,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef, useState, type JSX, ty
 import { useQuery } from "@tanstack/react-query";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { MAP_KEY, type MapResponse } from "@/components/map/MapView";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { STATUS_VAR } from "@/components/work/WorkMap";
 import { api } from "@/lib/client/api";
 import { bucketOf, emptyCounts, MAP_BUCKET_LABELS, MAP_BUCKETS } from "@/lib/map-rollup";

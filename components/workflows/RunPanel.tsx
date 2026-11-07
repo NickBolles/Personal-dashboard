@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import type { ThingsTab } from "@/lib/chat/things";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, cx, useToast } from "@/components/ui";
+import { cx, useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { displayValue, type CaptureOp } from "@/lib/workflows/runs";
 import type { TimelineItem } from "@/lib/hermes";

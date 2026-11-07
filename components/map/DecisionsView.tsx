@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ErrorNote } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, LoadingState } from "@/components/ui";
 import { DecisionsList, useDecisions } from "./Decisions";
 
 export function DecisionsView() {

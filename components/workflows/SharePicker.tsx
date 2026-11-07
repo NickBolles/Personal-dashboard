@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { WORKFLOW_START_EVENT } from "./events";
 
 type Wf = { id: string; slug: string; name: string; status: string };

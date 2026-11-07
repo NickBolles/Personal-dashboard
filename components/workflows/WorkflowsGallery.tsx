@@ -3,8 +3,8 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, ButtonLink, Page, PageHeader, useToast } from "@/components/ui";
-import { Banner, ChipSelect, EmptyState, Skeleton } from "@/components/ui/kit";
+import { Page, PageHeader, useToast, Banner, ChipSelect, EmptyState, Skeleton } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/ui/legacy";
 
 type Summary = {
   id: string;

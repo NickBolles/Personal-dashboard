@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { getIntegrationDef, isFieldVisible, type FieldDef, type IntegrationKind, type PublicIntegration, type TestResult } from "@/integrations/registry";
-import { Badge, Button, ErrorNote, Field, cx, inputCls, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, Field, cx, useToast, LoadingState } from "@/components/ui";
+import { Badge, Button, inputCls } from "@/components/ui/legacy";
 import { CheckIcon } from "@/components/icons";
 
 type Preset = { config: Record<string, string>; secrets: Record<string, string> };

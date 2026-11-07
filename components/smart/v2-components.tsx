@@ -7,7 +7,8 @@ import { formIntents, ganttLayout, matrixIntent, matrixTotals, type FormValues }
 import { intentKey, intentTarget } from "@/lib/jarvis-ui/intents";
 import { isTask } from "@/lib/jarvis-ui/types";
 import { addDays } from "@/lib/time";
-import { Button, cx, inputCls } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { useSurface } from "./context";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;

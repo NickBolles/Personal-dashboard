@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useMemo, useState, type ReactNode } from "react";
-import { Button, Dialog, inputCls, cx } from "@/components/ui";
+import { Dialog, cx } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { formatDistance, matchSavedPlace, type FormValue, type SavedPlace } from "@/lib/workflows/runs";
 import { parseScriptureRef } from "@/lib/workflows/scripture";

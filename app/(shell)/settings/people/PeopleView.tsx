@@ -6,9 +6,8 @@ import { api } from "@/lib/client/api";
 import type { Person } from "@/lib/people";
 import { defaultCapabilities, MODULES, ROLE_LABELS, ROLES, type Role } from "@/lib/modules";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, Card, Dialog, ErrorNote, Field, PageHeader, inputCls, useToast } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { Dialog, ErrorNote, Field, PageHeader, useToast, EmptyState, LoadingState } from "@/components/ui";
+import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
 
 type Invite = { code: string; expiresAt: string };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, type MenuItem } from "@/components/ui";
+import { Button, type MenuItem } from "@/components/ui/legacy";
 
 /** Shortcuts use the exact overflow handlers; they only open existing review dialogs. No new mutation path. */
 export function ItemAiChips({ aiActions, itemActions }: { aiActions: MenuItem[]; itemActions: MenuItem[] }) {

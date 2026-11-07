@@ -37,7 +37,7 @@ import {
   TwoLineRow,
   type Agent,
   type KTone,
-} from "@/components/ui/kit";
+} from "@/components/ui";
 
 const TONES: KTone[] = ["neutral", "ok", "wn", "bad", "inf", "ac", "ai", "prop", "outline"];
 const AGENTS: Agent[] = ["cos", "mom", "dev", "lab", "jar"];

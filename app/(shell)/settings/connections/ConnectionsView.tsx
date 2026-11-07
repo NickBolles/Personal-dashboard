@@ -8,9 +8,8 @@ import { IntegrationForm } from "@/components/integrations/IntegrationForm";
 import { GithubConnections } from "@/components/integrations/GithubConnections";
 import { DriveConnection } from "@/components/integrations/DriveConnection";
 import { BiblePackSettings } from "@/components/integrations/BiblePackSettings";
-import { Badge, ErrorNote, PageHeader, cx } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { Skeleton } from "@/components/ui/kit";
+import { ErrorNote, PageHeader, cx, LoadingState, Skeleton } from "@/components/ui";
+import { Badge } from "@/components/ui/legacy";
 import { ChevronIcon } from "@/components/icons";
 
 export function ConnectionsView() {

@@ -6,12 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { JarvisNotification } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Empty, ErrorNote, OverflowMenu, Page, PageHeader, SourceBadge, cx, useToast, type Tone } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, Page, PageHeader, SourceBadge, cx, useToast, LoadingState, EmptyState, Segmented } from "@/components/ui";
+import { Badge, Button, Empty, OverflowMenu, type Tone } from "@/components/ui/legacy";
 import { AlertIcon, BellIcon } from "@/components/icons";
 import Link from "next/link";
 import { useAccess } from "@/components/access";
-import { EmptyState, Segmented } from "@/components/ui/kit";
 import type { DecisionsResponse } from "@/lib/decisions";
 import { decisionHref } from "@/lib/decision-route";
 

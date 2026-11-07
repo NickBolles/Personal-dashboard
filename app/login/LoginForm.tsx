@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, Field, inputCls } from "@/components/ui";
+import { Field } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 
 const LAST_NAME = "jarvis.lastUsername";
 

@@ -7,8 +7,8 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import type { PlanMode, PlanRow } from "@/lib/finance/plan";
 import type { PlanView as Plan, ActualView } from "@/server/finance/plan";
-import { Badge, Button, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls, useToast } from "@/components/ui";
-import { Button as KButton, SectionHeader } from "@/components/ui/kit";
+import { Dialog, ErrorNote, Field, PageHeader, cx, useToast, Button as KButton, SectionHeader } from "@/components/ui";
+import { Badge, Button, Empty, Spinner, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { Delta, Money, centsToInput, toCents } from "@/components/finance/money";
 

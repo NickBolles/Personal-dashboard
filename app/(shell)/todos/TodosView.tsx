@@ -17,9 +17,8 @@ import { AgentChip } from "@/components/work/AgentChip";
 import { agentOf } from "@/lib/activity";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
-import { Button, ErrorNote, Field, PageHeader, inputCls, useNow, useOnline, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { EmptyState, SectionHeader, Segmented } from "@/components/ui/kit";
+import { ErrorNote, Field, PageHeader, useNow, useOnline, useToast, LoadingState, EmptyState, SectionHeader, Segmented } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { parseTaskSegment, taskInSegment, type TaskSegment } from "@/lib/task-segments";
 
 const SEGMENT_EVENT = "jarvis:task-segment";
