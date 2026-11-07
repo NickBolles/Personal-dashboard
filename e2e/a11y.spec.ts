@@ -8,7 +8,7 @@ import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-dem
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { areasVisual, inboxVisual, itemDetailVisual } from "./fixtures/chat-alerts";
-import { skylightWriteVisual } from "./fixtures/skylight";
+import { skylightGroupingVisual, skylightWriteVisual } from "./fixtures/skylight";
 
 const PAGES = [
   "/home",
@@ -122,6 +122,34 @@ test("Skylight write dialogs: axe clean and reflow at 200% text zoom", async ({ 
   await page.getByRole("button", { name: "New event", exact: true }).click();
   await checkDialog();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+});
+
+test("Skylight grouped chores with suggested actions: axe clean, ≥40px targets and reflow at 200% text zoom", async ({ page }) => {
+  await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightGroupingVisual() }));
+  await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+  for (const path of ["/skylight", "/todos"]) {
+    await page.goto(path);
+    const overdue = page.getByRole("region", { name: /^Overdue/ });
+    await expect(overdue).toContainText("Visualsky descale the kettle", { timeout: 15_000 });
+    const results = await new AxeBuilder({ page: page as never }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target.join(" ")} ${n.any.map((a) => a.message).join("; ")}`).join(", ")}`),
+    ).toEqual([]);
+    const min = (page.viewportSize()?.width ?? 0) < 640 ? 44 : 40;
+    for (const b of await page
+      .getByRole("group", { name: /^Suggested actions/ })
+      .getByRole("button")
+      .all()) {
+      const box = await b.boundingBox();
+      expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(min - 0.5);
+    }
+    const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(200);
+    await expectNoHorizontalOverflow(page, { soft: true });
+    await zoom.evaluate((el) => (el as Element).remove());
+  }
 });
 
 test("200% text zoom at 1024 (sidebar + header dock) does not cause horizontal scrolling", async ({ page }) => {
