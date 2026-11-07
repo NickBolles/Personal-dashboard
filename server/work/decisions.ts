@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, like } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
@@ -41,6 +41,24 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
     const areaOf = areaIndex(items);
     const links = linksByItem(open.map((i) => i.id));
     const coord = coordinatorSessions(items);
+    const requests = new Map<string, { reason: string | null; via: string | null }>();
+    for (let n = 0; n < open.length; n += 500) {
+      const events = db
+        .select({ itemId: schema.workEvents.itemId, reason: schema.workEvents.reason, via: schema.workEvents.via })
+        .from(schema.workEvents)
+        .where(
+          and(
+            inArray(
+              schema.workEvents.itemId,
+              open.slice(n, n + 500).map((i) => i.id),
+            ),
+            like(schema.workEvents.reason, "Needs your decision:%"),
+          ),
+        )
+        .orderBy(desc(schema.workEvents.at))
+        .all();
+      for (const event of events) if (!requests.has(event.itemId)) requests.set(event.itemId, event);
+    }
     for (const i of open)
       entries.push({
         key: `item:${i.id}`,
@@ -54,6 +72,9 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         areaTitle: byId.get(areaOf.get(i.id) ?? "")?.title,
         sessionId: sessionFor(i, items, links),
         coordinatorSessionId: coord.get(areaOf.get(i.id) ?? "") ?? null,
+        ...(requests.get(i.id)?.reason === `Needs your decision: ${i.decision!.question}` && requests.get(i.id)?.via?.startsWith("agent:")
+          ? { askedBy: requests.get(i.id)!.via!.slice(6) }
+          : {}),
       });
   }
   if (can(user, "hermes.chat")) {

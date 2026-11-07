@@ -68,6 +68,8 @@ export type DecisionEntry = {
   sessionId?: string | null;
   /** the item's area coordinator conversation (answer can be posted there after confirm when the item has none) */
   coordinatorSessionId?: string | null;
+  /** Profile that raised this question, from its decision-request activity event (not the latest item editor). */
+  askedBy?: string;
 };
 
 export type DecisionsResponse = { entries: DecisionEntry[]; count: number };

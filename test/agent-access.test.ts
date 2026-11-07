@@ -220,6 +220,10 @@ describe("Jarvis MCP", () => {
     expect(cur.decision?.question).toMatch(/@chiefofstaff proposes: archive/);
     const decisions = await call(token, "jarvis_list_decisions");
     expect(decisions.value.decisions[0].itemId).toBe(item.id);
+    expect(listDecisions(owner).entries.find((e) => e.itemId === item.id)?.askedBy).toBe("chiefofstaff");
+    // Editing another field must not erase who raised the still-open question.
+    store.updateItem(owner, item.id, { nextAction: "Review the proposed archive" }, cid);
+    expect(listDecisions(owner).entries.find((e) => e.itemId === item.id)?.askedBy).toBe("chiefofstaff");
     expect((await call(token, "jarvis_raise_decision", { itemId: item.id, question: "Again?" })).value.error).toBe("decision_open");
   });
 

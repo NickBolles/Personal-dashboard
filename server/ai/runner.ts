@@ -1,4 +1,5 @@
 import "server-only";
+import { decisionHref } from "@/lib/decision-route";
 import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { userById } from "@/server/auth";
@@ -372,7 +373,7 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
             title: "Hermes needs approval",
             body: command ? `Hermes asked to run ${command}: approve in the conversation or cancel.` : "Approve in the conversation or cancel the job.",
             source: "hermes",
-            deepLink: `/chat/${encodeURIComponent(sessionId)}`,
+            deepLink: row.visibleSession ? decisionHref({ key: `approval:${runId}` }) : `/chat/${encodeURIComponent(sessionId)}`,
             dedupeKey: `ai:approval:${id}`,
           },
           row.userId,
