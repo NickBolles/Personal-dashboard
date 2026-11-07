@@ -156,7 +156,16 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
   const live = items.filter((i) => !i.archived);
   const byId = new Map(live.map((i) => [i.id, i]));
   const areaOf = areaIndex(live);
-  const work = live.filter((i) => i.kind !== "conversation" && i.parentId !== null);
+  // Scheduled coordinator runs are registered on areas, unlike MCP delegations on child items.
+  const scheduledAreas = new Set(
+    db
+      .select({ itemId: schema.agentRuns.itemId })
+      .from(schema.agentRuns)
+      .where(eq(schema.agentRuns.userId, user.id))
+      .all()
+      .map((r) => r.itemId),
+  );
+  const work = live.filter((i) => i.kind !== "conversation" && (i.parentId !== null || scheduledAreas.has(i.id)));
   const ids = work.map((i) => i.id);
   const links = linksByItem(ids);
   const sessions = sessionsByItem(live, links);

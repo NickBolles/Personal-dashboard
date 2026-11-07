@@ -12,6 +12,7 @@ import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
 import { AgentChip } from "@/components/agents/AgentChip";
+import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
 import { useToast } from "@/components/ui";
 import { OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
@@ -50,7 +51,7 @@ export function GlobalCoordinator() {
   const host = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const ids = useId();
-  const { things, line: priority, markSeen, error } = useCoordinatorThings();
+  const { things, line: priority, awayLine, markSeen, error } = useCoordinatorThings();
   const smart = useSmartSettings();
   const requestedCard = search.get("smartCard");
   const dynamic = useQuery({
@@ -63,7 +64,7 @@ export function GlobalCoordinator() {
   });
   const [activeCard, setActiveCard] = useState<DynamicCard>();
   const [snoozed, setSnoozed] = useState<string[]>([]);
-  const line = pickTrayLine(priority, dynamic.data?.cards ?? [], snoozed);
+  const line = pickTrayLine(priority, awayLine ? [] : (dynamic.data?.cards ?? []), snoozed);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("jarvis.smart.snoozed") ?? "null") as { day?: string; ids?: string[] } | null;
@@ -143,6 +144,7 @@ export function GlobalCoordinator() {
   const showPriority = () => {
     show();
     setActiveCard(line.card);
+    if (awayLine) setTab("chat");
   };
   const hide = () => {
     if (wide) {
@@ -264,7 +266,7 @@ export function GlobalCoordinator() {
         </button>
         {d ? <AgentChip agent={d.agent} prefix="Answers" /> : null}
       </header>
-      <p className="gc-priority" data-tone={line.tone} role="status">
+      <p className="gc-priority" data-tone={line.tone} data-dynamic={awayLine || undefined} role="status">
         {line.text}
         {line.card ? (
           <button type="button" className="gc-icon" onClick={showPriority}>
@@ -328,6 +330,11 @@ export function GlobalCoordinator() {
               hidden={tab !== t.id}
               tabIndex={0}
             >
+              {t.id === "chat" ? (
+                <div className="max-h-[45%] shrink-0 overflow-y-auto">
+                  <WhileAwayCard compact />
+                </div>
+              ) : null}
               {t.id === "chat" && d ? (
                 <CoordinatorThread
                   key={d.area.id}
@@ -524,7 +531,7 @@ export function GlobalCoordinator() {
                     "Chief of staff"
                   )}
                 </strong>
-                <span className="gc-priority" data-tone={line.tone}>
+                <span className="gc-priority" data-tone={line.tone} data-dynamic={awayLine || undefined}>
                   {line.card ? line.card.line.text : line.text}
                 </span>
               </span>

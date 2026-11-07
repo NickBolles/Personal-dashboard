@@ -96,6 +96,10 @@ export const MODULES: ModuleDef[] = [
     description: "Conversations, runs and approvals with your agent.",
     sources: ["hermes"],
     viewCapability: "hermes.chat",
+    apiRoutes: [
+      { prefix: "/api/agents/schedules", capability: "admin" },
+      { prefix: "/api/agents/away", capability: "admin" },
+    ],
     routes: [{ href: "/chat", label: "Hermes" }],
     capabilities: [
       { id: "hermes.chat", label: "Chat with Hermes", description: "Own private conversations; can share one with the household.", roles: ["adult"] },
