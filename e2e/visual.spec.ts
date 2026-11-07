@@ -1862,6 +1862,36 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+/** Areas v2: the Board and Graph tabs of the demo area (pane-only shots; selection kept by the tabs). */
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: areas v2 board + graph (${scheme})`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await openDemoArea(page);
+    const views = page.getByRole("tablist", { name: "Views" });
+    const panel = page.locator("#areas-tabpanel");
+    const shoot = async (name: string) => {
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+      await page.waitForTimeout(500);
+      await expectNoHorizontalOverflow(page);
+      await withoutTray(page, () => expect(panel).toHaveScreenshot(name, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) }));
+      await t.evaluate((el) => (el as Element).remove());
+    };
+    await views.getByRole("tab", { name: "Board", exact: true }).click();
+    await expect(page.getByTestId("map-tree")).toBeVisible();
+    await shoot(`areas-board-${scheme}.png`);
+    await views.getByRole("tab", { name: "Graph", exact: true }).click();
+    await expect(page.getByTestId("radial-graph").locator('[data-centre="true"]')).toBeVisible();
+    await shoot(`areas-graph-${scheme}.png`);
+    if (info.project.name === "desktop") {
+      // Foldable (unfolded, ~1000 px): the selected-node card stacks under the graph.
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await shoot(`areas-graph-fold-${scheme}.png`);
+    }
+  });
+}
+
 // Agent access (docs/agent-tools.md): Settings → Agents card with fixed tokens (one revoked), and Activity
 // rows an agent token made ("by @profile" chips). Every list stubbed so other specs' data never leaks in.
 for (const scheme of ["light", "dark"] as const) {

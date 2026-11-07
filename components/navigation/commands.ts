@@ -86,7 +86,7 @@ export function useCommands(): Command[] {
       work && { id: "work.timeline", label: "Go to Timeline", group: "Go to", keywords: "work timeline gantt dates", run: go("/areas/timeline") },
       work && { id: "work.dashboard", label: "Go to Dashboard", group: "Go to", keywords: "work dashboard widgets lanes", run: go("/areas/dashboard") },
       work && { id: "work.activity", label: "Go to Activity", group: "Go to", keywords: "work activity history changes log feed", run: go("/areas/activity") },
-      work && { id: "work.map", label: "Go to Dependency map", group: "Go to", keywords: "work map graph dependencies", run: go("/areas/map") },
+      work && { id: "work.map", label: "Go to Graph", group: "Go to", keywords: "work map graph dependencies dependency mind map radial", run: go("/areas?tab=graph") },
       work && {
         id: "work.capture",
         label: "Capture to Inbox",

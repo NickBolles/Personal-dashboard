@@ -427,7 +427,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
       <div>
         <MapCanvas nodes={d.graph.nodes} edges={d.graph.edges} interactive={false} height={200} label={`Map of ${d.graph.root?.title ?? "work"}`} />
         <p className="mt-2 text-sm">
-          <Link href={`/areas/map?root=${encodeURIComponent(d.graph.root?.id ?? "")}`} className="text-accent underline">
+          <Link href={d.graph.root ? `/areas?item=${encodeURIComponent(d.graph.root.id)}&tab=graph` : "/areas?tab=graph"} className="text-accent underline">
             Open the map<span className="sr-only"> of {d.graph.root?.title}</span>
           </Link>
           {d.graph.truncated ? <span className="text-xs text-muted"> · showing the first {d.graph.nodes.length} items</span> : null}
