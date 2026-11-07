@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ErrorNote } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { DecisionsList, useDecisions } from "./Decisions";
 
@@ -22,13 +21,8 @@ export function DecisionsView() {
       </header>
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data ? (
-        q.data.entries.length ? (
-          <DecisionsList entries={q.data.entries} />
-        ) : (
-          <div data-testid="decisions-empty">
-            <EmptyState title="Nothing needs you right now.">Decisions, approvals and proposals from your agents land here.</EmptyState>
-          </div>
-        )
+        // One list instance: its Undo bar and post offer must survive answering the last entry.
+        <DecisionsList entries={q.data.entries} emptyHint="Decisions, approvals and proposals from your agents land here." />
       ) : !q.error ? (
         <LoadingState label="Loading decisions…" />
       ) : null}
