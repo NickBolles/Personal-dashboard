@@ -1,10 +1,7 @@
-import { requirePage } from "@/server/auth/page";
-import { MapView } from "./MapView";
+import { redirect } from "next/navigation";
+import { legacyMapHref } from "@/lib/areas-view";
 
-export const metadata = { title: "Work map" };
-
-export default async function WorkMapPage({ searchParams }: { searchParams: Promise<{ root?: string }> }) {
-  await requirePage("work.use");
-  const { root } = await searchParams;
-  return <MapView initialRoot={typeof root === "string" ? root : undefined} />;
+/** The old org-chart dependency map is the Areas Graph tab now (radial, keeps the selection): keep bookmarks working. */
+export default async function WorkMapPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  redirect(legacyMapHref(await searchParams));
 }

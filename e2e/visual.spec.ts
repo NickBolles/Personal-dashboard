@@ -1559,14 +1559,15 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
   for (const width of [640, 700, 768, 820, 899]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/more");
-    const tray = page.locator(".gc-tray");
+    // A hidden second tray can linger from a suspended render (seen in CI): only the visible one counts.
+    const tray = page.locator(".gc-tray").filter({ visible: true });
     await expect(tray).toBeVisible();
-    await expect(page.getByTestId("quick-actions-tray")).toBeVisible();
+    await expect(page.getByTestId("quick-actions-tray").filter({ visible: true })).toBeVisible();
     const boxes = await page.evaluate(() =>
       [".gc-tray", ".gc-tray-qa", ".gc-tablet-dock [data-command-dock], .gc-tablet-dock > *"].map((sel) => {
-        const el = document.querySelector(sel);
-        const r = el?.getBoundingClientRect();
-        return r && r.width ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
+        const rects = [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect());
+        const r = rects.find((x) => x.width && x.height);
+        return r ? { left: r.left, right: r.right, top: r.top, bottom: r.bottom } : null;
       }),
     );
     const [trayBox, chipsBox, dockBox] = boxes;
@@ -1863,6 +1864,36 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByTestId("area-coordinator-sheet-open")).toBeVisible();
       await expect(page.getByTestId("area-coordinator")).toBeHidden();
       await shoot(`area-map-fold-${scheme}.png`);
+    }
+  });
+}
+
+/** Areas v2: the Board and Graph tabs of the demo area (pane-only shots; selection kept by the tabs). */
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: areas v2 board + graph (${scheme})`, async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await openDemoArea(page);
+    const views = page.getByRole("tablist", { name: "Views" });
+    const panel = page.locator("#areas-tabpanel");
+    const shoot = async (name: string) => {
+      await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
+      await page.waitForTimeout(500);
+      await expectNoHorizontalOverflow(page);
+      await withoutTray(page, () => expect(panel).toHaveScreenshot(name, { animations: "disabled", mask: MASK.map((m) => panel.locator(m)) }));
+      await t.evaluate((el) => (el as Element).remove());
+    };
+    await views.getByRole("tab", { name: "Board", exact: true }).click();
+    await expect(page.getByTestId("map-tree")).toBeVisible();
+    await shoot(`areas-board-${scheme}.png`);
+    await views.getByRole("tab", { name: "Graph", exact: true }).click();
+    await expect(page.getByTestId("radial-graph").locator('[data-centre="true"]')).toBeVisible();
+    await shoot(`areas-graph-${scheme}.png`);
+    if (info.project.name === "desktop") {
+      // Foldable (unfolded, ~1000 px): the selected-node card stacks under the graph.
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await shoot(`areas-graph-fold-${scheme}.png`);
     }
   });
 }

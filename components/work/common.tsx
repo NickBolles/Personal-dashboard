@@ -17,7 +17,6 @@ const SECTIONS: { key: AreasSection; href: string; label: string; icon?: Compone
   { key: "tree", href: "/areas?view=tree", label: "Areas", icon: AreasIcon },
   { key: "timeline", href: "/areas/timeline", label: "Timeline" },
   { key: "dashboard", href: "/areas/dashboard", label: "Dashboard" },
-  { key: "map", href: "/areas/map", label: "Dependency map" },
 ];
 const IN_PAGE = new Set<AreasSection>(["today", "tree"]);
 
@@ -30,7 +29,7 @@ export function WorkShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * The one Areas navigation row: Overview · Inbox · Areas │ Timeline · Dashboard · Dependency map.
+ * The one Areas navigation row: Overview · Inbox · Areas │ Timeline · Dashboard (Graph is a view tab now).
  * On /areas the first three switch in place (`onPick`, rendered as buttons);
  * everywhere else every entry is a link. Scrolls sideways on narrow phones.
  */

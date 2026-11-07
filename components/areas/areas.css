@@ -1,0 +1,56 @@
+/* Areas v2 view tabs (Overview · Board · Activity · Graph). Phones: one scroll strip, 44px targets. */
+@layer components {
+  .ar-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--line);
+    margin-inline: -2px;
+    padding-inline: 2px;
+  }
+  .ar-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .ar-tab {
+    flex: none;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: inset 0 -2px 0 transparent;
+    border-radius: 6px 6px 0 0;
+  }
+  .ar-tab:hover {
+    color: var(--text);
+  }
+  .ar-tab:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+  .ar-tab[aria-selected="true"] {
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+  @media (min-width: 640px) {
+    .ar-tab {
+      min-height: 40px;
+    }
+  }
+  @media (min-width: 1024px) and (pointer: fine) {
+    .ar-tab {
+      min-height: 34px;
+      padding: 0 10px;
+      font-size: 13px;
+    }
+  }
+  /* The swapped pane keeps the page height while its data loads, so switching never jumps the scroll. */
+  .ar-panel {
+    min-height: 50dvh;
+  }
+}

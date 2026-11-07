@@ -506,24 +506,23 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await page.getByRole("tab", { name: "Activity" }).click();
   await expect(page.getByRole("tabpanel")).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
 
-  // Map: read-only graph with relation and status filters, list alternative, click → item.
+  // Graph (Areas v2): the old /areas/map bookmark lands on the radial Graph tab with the root selected.
   await page.goto(`/areas/map?root=${ids.area}`);
-  await expect(page.getByRole("heading", { level: 1, name: "Map" })).toBeVisible();
-  const svg = page.getByRole("group", { name: "Work map: Momentum Bets" });
-  await expect(svg).toHaveAttribute("data-map-nodes", "6");
-  await expect(svg.locator('[data-edge="depends_on"]')).toHaveCount(1);
-  await page.getByLabel("Contains").uncheck();
-  await expect(svg.locator('[data-edge="tree"]')).toHaveCount(0);
-  await pickOption(page, /^Status:/, "Settled");
-  await expect(svg).toHaveAttribute("data-map-nodes", "0");
-  await pickOption(page, /^Status:/, "All statuses");
+  await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids.area}&tab=graph$`));
+  const graph = page.getByTestId("radial-graph");
+  await expect(graph).toBeVisible();
+  await expect(graph.locator(`[data-node-id="${ids.area}"][data-centre="true"]`)).toBeVisible();
   await page.getByRole("button", { name: "Zoom in" }).click();
-  await page.getByRole("button", { name: "Show as list" }).click();
-  await expect(page.getByRole("main")).toContainText("Depends on");
-  await page.getByRole("button", { name: "Show map" }).click();
   await page.getByRole("button", { name: "Fit" }).click();
-  await svg.getByRole("link", { name: /^V4 lessons,/ }).click();
-  await expect(page).toHaveURL(new RegExp(`/areas\\?item=${ids["V4 lessons"]}`));
+  // Keyboard/list fallback: the same nodes as buttons; picking one re-centres and stays on Graph.
+  await page.getByRole("button", { name: "Show as list" }).click();
+  await page
+    .getByTestId("graph-tab")
+    .getByRole("button", { name: /^V4 lessons/ })
+    .first()
+    .click();
+  await expect(page).toHaveURL(new RegExp(`item=${ids["V4 lessons"]}&tab=graph`));
+  await page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "V4 lessons" })).toBeVisible();
 });
 

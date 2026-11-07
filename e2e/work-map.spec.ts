@@ -46,6 +46,10 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   await expect(card).toContainText("1 Next");
   await expect(card).toContainText("1 Backlog");
 
+  // Areas v2: the drill-down is the Board tab (swapped in place, no navigation).
+  const tabs = page.getByRole("tablist", { name: "Views" });
+  await tabs.getByRole("tab", { name: "Board" }).click();
+  await expect(page).toHaveURL(/\/areas\?tab=board$/);
   // The area filter scopes the drill-down to that area (tapping the card opens the area itself).
   await pickOption(page, "Filter by area", `Pelican wharf ${nonce}`);
   const tree = page.getByTestId("map-tree");
@@ -62,7 +66,10 @@ test("map: area rollups, drill-down and filters", async ({ page }) => {
   // Inline status edit from a row (one Saved · Undo bar).
   await pickOption(page, `Status of Heron ledger ${nonce}`, "In progress");
   await expect(page.getByRole("status").filter({ hasText: "Saved" })).toBeVisible();
+  await tabs.getByRole("tab", { name: "Overview" }).click();
   await expect(card).toContainText("1 In flight");
+  await tabs.getByRole("tab", { name: "Board" }).click();
+  await pickOption(page, "Filter by area", `Pelican wharf ${nonce}`);
 
   // Search narrows (and opens the groups on the way).
   await page.getByLabel("Search the map").fill(`Osprey beacon ${nonce}`);

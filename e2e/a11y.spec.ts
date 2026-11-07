@@ -45,6 +45,7 @@ const PAGES = [
   "/areas/timeline",
   "/areas/dashboard",
   "/areas/map",
+  "/areas?tab=board",
   "/areas/activity",
   "/decisions",
   "/capture",
@@ -90,6 +91,8 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/workflows",
     "/areas/activity",
     "/areas",
+    "/areas?tab=graph",
+    "/areas?tab=board",
     "/decisions",
   ]) {
     await page.goto(path);

@@ -60,7 +60,7 @@ export const MODULES: ModuleDef[] = [
       { href: "/chat", label: "Conversations" },
       { href: "/areas/timeline", label: "Timeline" },
       { href: "/areas/dashboard", label: "Dashboard" },
-      { href: "/areas/map", label: "Dependency map" },
+      { href: "/areas?tab=graph", label: "Graph" },
       { href: "/areas/activity", label: "Activity" },
     ],
     capabilities: [
