@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { __setTestDatabase } from "@/server/db";
+import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import { createPerson } from "@/server/people";
 import { createItem, listItems, updateItem } from "@/server/work/store";
@@ -72,6 +72,18 @@ describe("deterministic owner dynamic cards", () => {
     await undoIntent(owner!, { surfaceId: surface.id, intentHash: result.results[0]!.intentHash }, "test");
     expect(listItems(owner!.id).some((i) => i.id === created.id)).toBe(false);
     expect(dynamicCards(owner!).cards.some((c) => c.kind === "weekly-review")).toBe(true);
+  });
+  it("polling the same cards writes no new surface rows (write only on change)", () => {
+    setup();
+    snapshots.ha.homeExceptions = [{ entityId: "cover.garage_door", state: "open", since: "2026-11-06T17:00:00Z" }];
+    const surfaces = () => getDb().select().from(schema.uiSurfaces).all().length;
+    expect(dynamicCards(owner!).cards.length).toBeGreaterThan(0);
+    const first = surfaces();
+    vi.setSystemTime(new Date("2026-11-06T19:01:00Z"));
+    dynamicCards(owner!);
+    vi.setSystemTime(new Date("2026-11-06T19:02:00Z"));
+    dynamicCards(owner!);
+    expect(surfaces()).toBe(first);
   });
   it("matrix and Gantt bind at server apply and restore prior values", async () => {
     const { item } = setup();
