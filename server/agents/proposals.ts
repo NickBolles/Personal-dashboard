@@ -7,9 +7,12 @@ import { areaIndex } from "@/lib/map-rollup";
 import { effectiveAutonomy, policyFor, type AwayRun, type Proposal } from "@/lib/away";
 import { agentItems, requestOwnerChange, TOOL_BY_NAME, type DESTRUCTIVE_OPS } from "@/server/agent-access/tools";
 import { withVia } from "@/server/work/actor";
-import { listItems } from "@/server/work/store";
+import { listItems, updateItem } from "@/server/work/store";
+import { DECISION_DETAIL_MAX } from "@/lib/decisions";
 import { capture } from "@/server/work/inbox";
 import type { AgentPrincipal } from "@/server/agent-access/tokens";
+
+const LIFECYCLE: readonly string[] = ["settle", "abandon", "supersede", "archive", "move"];
 
 export function applyProposals(user: CurrentUser, areaId: string, jobTitle: string, profile: string, proposals: Proposal[]) {
   const result: Pick<AwayRun, "changes" | "decisions" | "refused"> = { changes: [], decisions: [], refused: [] };
@@ -44,23 +47,50 @@ export function applyProposals(user: CurrentUser, areaId: string, jobTitle: stri
     }
     try {
       if (policy === "decision") {
-        const dest = target.decision ? items.find((i) => i.id === areaId) : target;
-        if (!dest || dest.decision) {
+        // Store on the target unless it can't hold a decision (one is already open, or it's a conversation);
+        // then fall back to the area, but keep naming the ORIGINAL target in the question (#230).
+        const dest = target.decision || target.kind === "conversation" ? area : target;
+        if (dest.decision) {
           refuse("a decision is already open");
           continue;
         }
-        const question = `${jobTitle}: ${label}${p.title ? ` · ${p.title}` : ""}${p.why ? `. ${p.why}` : ""}`.slice(0, 460);
-        if (["settle", "abandon", "supersede", "archive", "move"].includes(p.intent)) {
+        const elsewhere = dest.id !== target.id;
+        const lifecycle = LIFECYCLE.includes(p.intent);
+        const subject = lifecycle
+          ? `${label} “${target.title}”${p.title ? ` · ${p.title}` : ""}`
+          : `${label}${p.title ? ` · ${p.title}` : ""}${target.id !== areaId ? ` on “${target.title}”` : ""}`;
+        const note = elsewhere ? ` (asked here: “${target.title}” ${target.decision ? "already has an open decision" : "is a conversation"})` : "";
+        const question = `${jobTitle}: ${subject}${note}${p.why ? `. ${p.why}` : ""}`.slice(0, 460);
+        // The owner must see WHAT would be done: persist the proposed content with the decision (#230).
+        const detail = p.text ? [p.title, p.text].filter(Boolean).join("\n\n").slice(0, DECISION_DETAIL_MAX) : undefined;
+        if (lifecycle && !elsewhere) {
           // Shared proposal path never performs the requested operation.
           withVia(agent.via, () =>
-            requestOwnerChange(agent, { itemId: dest.id, op: p.intent as (typeof DESTRUCTIVE_OPS)[number], reason: question }, "scheduled-proposals", [
+            requestOwnerChange(agent, { itemId: dest.id, op: p.intent as (typeof DESTRUCTIVE_OPS)[number], reason: question, detail }, "scheduled-proposals", [
               "Do it",
               "Skip",
             ]),
           );
-        } else call("jarvis_raise_decision", { itemId: dest.id, question, choices: ["Do it", "Skip"] });
+        } else {
+          // Same as jarvis_raise_decision, plus the proposed content. A lifecycle request stored on the
+          // area is a plain question naming the target, so it never reads as "archive the area".
+          withVia(agent.via, () =>
+            updateItem(
+              user,
+              dest.id,
+              { decision: { question: `@${agent.profile}: ${question}`.slice(0, 500), choices: ["Do it", "Skip"], ...(detail ? { detail } : {}) } },
+              "scheduled-proposals",
+            ),
+          );
+        }
         const saved = listItems(user.id).find((i) => i.id === dest.id)!;
-        result.decisions.push({ itemId: dest.id, itemTitle: dest.title, question: saved.decision!.question, open: true });
+        result.decisions.push({
+          itemId: dest.id,
+          itemTitle: dest.title,
+          question: saved.decision!.question,
+          open: true,
+          ...(elsewhere ? { targetId: target.id, targetTitle: target.title } : {}),
+        });
       } else if (p.intent === "create_note" || p.intent === "create_thread") {
         if (!p.title) {
           refuse("missing title");

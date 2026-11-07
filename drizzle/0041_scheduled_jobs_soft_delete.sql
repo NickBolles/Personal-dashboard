@@ -1,0 +1,1 @@
+ALTER TABLE `scheduled_jobs` ADD `deleted_at` text;

@@ -111,11 +111,11 @@ const CLOSED = new Set(["settled", "abandoned", "superseded"]);
 /** Shared owner-change proposal path. Never performs the requested operation. */
 export function requestOwnerChange(
   agent: AgentPrincipal,
-  input: { itemId: string; op: (typeof DESTRUCTIVE_OPS)[number]; reason: string; targetId?: string },
+  input: { itemId: string; op: (typeof DESTRUCTIVE_OPS)[number]; reason: string; targetId?: string; detail?: string },
   correlationId: string,
   choices = ["Do it", "Not now"],
 ) {
-  const { itemId, op, reason, targetId } = input;
+  const { itemId, op, reason, targetId, detail } = input;
   const cur = visible(agent.user.id, itemId);
   if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
   const target = targetId ? visible(agent.user.id, targetId) : null;
@@ -123,7 +123,7 @@ export function requestOwnerChange(
   const item = updateItem(
     agent.user,
     itemId,
-    { decision: { question: `@${agent.profile} proposes: ${what}. ${reason}`.slice(0, 500), choices } },
+    { decision: { question: `@${agent.profile} proposes: ${what}. ${reason}`.slice(0, 500), choices, ...(detail ? { detail } : {}) } },
     correlationId,
   );
   return { item: brief(item), proposed: op, note: "The owner decides in Needs you; nothing was changed." };

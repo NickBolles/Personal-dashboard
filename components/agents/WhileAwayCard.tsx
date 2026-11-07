@@ -83,15 +83,26 @@ function RunRow({ run }: { run: AwayRun }) {
   const [expanded, setExpanded] = useState(false);
   const changesId = useId();
   const needs = run.decisions.filter((d) => d.open).length;
-  const tone = run.status === "failed" ? "bad" : needs ? "wn" : run.status === "skipped" ? "neutral" : "ai";
+  const waiting = !!run.waiting;
+  const tone = run.status === "failed" ? "bad" : needs || waiting ? "wn" : run.status === "skipped" ? "neutral" : "ai";
   return (
     <li className="min-w-0 px-3 py-2 text-[13px]" data-testid="away-run">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <Dot
           tone={tone}
-          live={run.status === "running"}
+          live={run.status === "running" && !waiting}
           label={
-            run.status === "failed" ? "Failed" : run.status === "running" ? "Running" : needs ? "Needs you" : run.status === "skipped" ? "Skipped" : "Done"
+            run.status === "failed"
+              ? "Failed"
+              : waiting
+                ? "Needs you"
+                : run.status === "running"
+                  ? "Running"
+                  : needs
+                    ? "Needs you"
+                    : run.status === "skipped"
+                      ? "Skipped"
+                      : "Done"
           }
         />
         <h3 className="min-w-0 font-semibold">{run.jobTitle}</h3>
@@ -101,7 +112,11 @@ function RunRow({ run }: { run: AwayRun }) {
         </time>
       </div>
       <p className={`mt-1 line-clamp-2 ${run.silent ? "text-muted" : run.status === "failed" ? "text-danger" : "text-text"}`}>
-        {run.silent ? "Nothing new" : run.error || run.summary || (run.status === "running" ? "Running now. Results will appear here." : "Report ready")}
+        {run.silent
+          ? "Nothing new"
+          : waiting
+            ? "Waiting for your approval. Open the report to answer it."
+            : run.error || run.summary || (run.status === "running" ? "Running now. Results will appear here." : "Report ready")}
       </p>
       <div className="flex flex-wrap items-center gap-x-3 text-xs">
         {run.sessionId ? (

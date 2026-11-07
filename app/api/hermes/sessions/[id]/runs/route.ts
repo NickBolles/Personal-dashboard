@@ -14,6 +14,7 @@ import { sessionProfile } from "@/integrations/hermes/service";
 import { isLocalSession } from "@/lib/assistant";
 import { CHAT_FILE_LIMITS } from "@/lib/chat-files";
 import { markFilesSent, prepareRunFiles } from "@/server/chat/files";
+import { filedChatContext } from "@/server/work/chat-context";
 
 const schema = z.object({
   input: z.string().min(1).max(50000),
@@ -65,7 +66,10 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
         ? [`Jarvis area: ${area!.area.title}.`, modeHint ? `Agent mode: ${modeHint}.` : "", s.instructions ?? ""].filter(Boolean).join(" ")
         : undefined;
     const smart = body.capabilities?.includes(SMART_CAPABILITY) && getSmartSettings(user.id).enabled ? smartInstructions() : undefined;
-    const instructions = [areaInstructions, smart].filter(Boolean).join("\n\n") || undefined;
+    // Every filed (non-Finance, non-excluded) conversation tells the agent where it is and what's open there,
+    // including chats already on the area's own profile, which used to get no area context at all.
+    const filed = local ? null : filedChatContext(user, params.id, onProfile);
+    const instructions = [areaInstructions, filed, smart].filter(Boolean).join("\n\n") || undefined;
     const run = await startRun(
       user,
       {

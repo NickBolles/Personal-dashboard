@@ -6,12 +6,15 @@
  */
 import { z } from "zod";
 
-export type ItemDecision = { question: string; choices: string[]; askedAt: string };
+/** `detail` = the full proposed content (e.g. a scheduled job's note body), shown with the question. */
+export type ItemDecision = { question: string; choices: string[]; askedAt: string; detail?: string };
+export const DECISION_DETAIL_MAX = 4000;
 
 export const decisionInputSchema = z
   .object({
     question: z.string().trim().min(1).max(500),
     choices: z.array(z.string().trim().min(1).max(120)).max(6).optional(),
+    detail: z.string().trim().max(DECISION_DETAIL_MAX).optional(),
   })
   .strict();
 
@@ -29,15 +32,17 @@ export function parseDecision(raw: string | null | undefined): ItemDecision | nu
     const v = JSON.parse(raw) as Partial<ItemDecision>;
     if (!v || typeof v.question !== "string" || !v.question.trim()) return null;
     const choices = Array.isArray(v.choices) ? v.choices.filter((c): c is string => typeof c === "string" && !!c.trim()) : [];
-    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "" };
+    const detail = typeof v.detail === "string" && v.detail.trim() ? { detail: v.detail.slice(0, DECISION_DETAIL_MAX) } : {};
+    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "", ...detail };
   } catch {
     return null;
   }
 }
 
-export function serialiseDecision(d: { question: string; choices?: string[] }, askedAt: string): string {
+export function serialiseDecision(d: { question: string; choices?: string[]; detail?: string }, askedAt: string): string {
   const choices = [...new Set((d.choices ?? []).map((c) => c.trim()).filter(Boolean))];
-  return JSON.stringify({ question: d.question.trim(), choices, askedAt });
+  const detail = d.detail?.trim().slice(0, DECISION_DETAIL_MAX);
+  return JSON.stringify({ question: d.question.trim(), choices, askedAt, ...(detail ? { detail } : {}) });
 }
 
 /** The line appended to the item's summary (and the activity reason) when a decision is answered. */
@@ -58,6 +63,8 @@ export type DecisionEntry = {
   kind: DecisionKind;
   title: string;
   question: string;
+  /** full proposed content behind an item decision (scheduled-job proposals), when there is one */
+  detail?: string;
   choices: string[];
   /** where answering happens for approvals/workflows (they keep their own flows) */
   href: string;

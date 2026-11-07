@@ -16,7 +16,7 @@ export const EMPTY_AWAY: AwayDigest = {
   runs: [],
   since: null,
   line: null,
-  counts: { ran: 0, failed: 0, changes: 0, needsYou: 0, running: 0 },
+  counts: { ran: 0, failed: 0, changes: 0, needsYou: 0, running: 0, waiting: 0 },
 };
 
 export function useAway() {

@@ -29,6 +29,7 @@ import {
   isSilentReport,
   MAX_CONSECUTIVE_FAILURES,
   RUN_TIMEOUT_MS,
+  WAITING_SUMMARY,
   type ScheduledJob,
   type AwayRun,
 } from "@/lib/away";
@@ -79,7 +80,7 @@ export function claimJobSlot(user: CurrentUser, job: JobRow, slot: string, now: 
     .run();
   return db.select().from(R).where(eq(R.id, id)).get()!;
 }
-function notification(user: CurrentUser, job: JobRow, row: RunRow, now: Date, deps: SchedulerDeps, body: string) {
+function notification(user: CurrentUser, job: JobRow, row: RunRow, now: Date, deps: SchedulerDeps, body: string, dedupe = `away:${row.id}`) {
   deps.notify(
     {
       type: "scheduled_job",
@@ -89,7 +90,7 @@ function notification(user: CurrentUser, job: JobRow, row: RunRow, now: Date, de
       body,
       source: "jarvis",
       deepLink: "/home",
-      dedupeKey: `away:${row.id}`,
+      dedupeKey: dedupe,
       scheduledFor: quietEnd(now, getPreferences(user.id).quietHours, job.tz).toISOString(),
     },
     user.id,
@@ -99,7 +100,7 @@ function fail(user: CurrentUser, row: RunRow, now: Date, error: string, deps: Sc
   getDb().transaction(() => {
     const live = getDb().select().from(R).where(eq(R.id, row.id)).get();
     if (live?.status !== "running") return;
-    const job = jobRow(user, row.jobId);
+    const job = jobRow(user, row.jobId, true);
     const failures = job.consecutiveFailures + 1;
     const disabled = failures >= MAX_CONSECUTIVE_FAILURES;
     const message = disabled ? "Switched off after 5 failures in a row" : error.slice(0, 600);
@@ -218,18 +219,24 @@ export async function reconcileScheduledRuns(user: CurrentUser, now = new Date()
       .where(and(eq(R.userId, user.id), eq(R.status, "running")))
       .all()) {
       if (now.getTime() - Date.parse(row.startedAt) > RUN_TIMEOUT_MS) {
-        fail(user, row, now, "Timed out", deps);
+        fail(user, row, now, row.summary === WAITING_SUMMARY ? "Timed out waiting for your approval" : "Timed out", deps);
         continue;
       }
       if (!row.hermesRunId) continue;
       try {
         const run = await deps.getRun(user, row.hermesRunId);
         if (run.pendingApproval || run.pendingClarify || run.status === "waiting_for_approval") {
-          getDb().update(R).set({ summary: "Waiting for you" }).where(eq(R.id, row.id)).run();
-          if (row.agentRunId) finishRegisteredRun(user, row.agentRunId, "waiting", "Waiting for you", now);
+          // Blocked on a prompt: show it as Needs you (digest + agent panel) and tell the owner once,
+          // instead of looking "running" until the 2 h timeout (#230).
+          if (row.summary !== WAITING_SUMMARY) {
+            getDb().update(R).set({ summary: WAITING_SUMMARY }).where(eq(R.id, row.id)).run();
+            notification(user, jobRow(user, row.jobId, true), row, now, deps, "Waiting for your approval in its conversation", `away-wait:${row.id}`);
+          }
+          if (row.agentRunId) finishRegisteredRun(user, row.agentRunId, "waiting", WAITING_SUMMARY, now);
           continue;
         }
         if (!["completed", "failed", "cancelled", "interrupted"].includes(run.status)) {
+          if (row.summary === WAITING_SUMMARY) getDb().update(R).set({ summary: null }).where(eq(R.id, row.id)).run();
           if (row.agentRunId) finishRegisteredRun(user, row.agentRunId, "running", "Running", now);
           continue;
         }
@@ -237,7 +244,7 @@ export async function reconcileScheduledRuns(user: CurrentUser, now = new Date()
           fail(user, row, now, run.error || "Run failed", deps);
           continue;
         }
-        const job = jobRow(user, row.jobId);
+        const job = jobRow(user, row.jobId, true);
         const area = areaFor(user, job);
         // A formerly eligible area may now be excluded. Never retrieve its transcript or apply output.
         if (!area || effectiveAutonomy(area) === "off") {
