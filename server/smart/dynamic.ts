@@ -78,7 +78,7 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
         spec: single("Callout", {
           tone: "warn",
           title: "Garage door",
-          text: `State: open · since ${garage.since ?? "unknown"} · ${garage.entityId}. ${services.includes("close_cover") ? "Closing requires confirmation." : "Close from Home Assistant."}`,
+          text: `State: open · since ${garage.since ? new Date(garage.since).toLocaleTimeString("en-US", { timeZone: ctx.timezone, hour: "numeric", minute: "2-digit" }) : "unknown"} · ${garage.entityId}. ${services.includes("close_cover") ? "Closing requires confirmation." : "Close from Home Assistant."}`,
         }),
         garage: { entityId: garage.entityId, closeAllowed: services.includes("close_cover"), undoAllowed: services.includes("open_cover") },
         footer: { label: "Open Home Assistant controls", href: `/home-control?entity=${encodeURIComponent(garage.entityId)}` },
