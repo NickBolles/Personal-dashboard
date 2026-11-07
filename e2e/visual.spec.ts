@@ -24,6 +24,7 @@ import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
 import { openPrismChat, stubPrismV2 } from "./fixtures/smart-v2";
 import { financeSnapshotFixture } from "../mock-upstreams/finance-snapshot.mjs";
 import { awayFixture, schedulesFixture } from "./fixtures/away";
+import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
 
@@ -2115,6 +2116,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await freezeMiddayCT(page);
     await stubPhase3Settings(page);
+    await page.route(/\/api\/feedback(\?.*)?$/, (route) => route.fulfill({ json: feedbackVisual() }));
     await page.goto("/settings/agents");
     await expect(page.getByRole("heading", { name: /^Coordinators/ })).toBeVisible();
     await expect(page.getByRole("progressbar", { name: "Shared daily AI job budget used", exact: true })).toBeVisible();
@@ -2244,4 +2246,46 @@ for (const scheme of ["light", "dark"] as const) {
       }
     });
   }
+}
+
+// Feedback loop: inbox (fixed fixtures) and the 👎 "What went wrong?" dialog, light + dark.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: feedback inbox and rate dialog (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await freezeMiddayCT(page);
+    await page.route(/\/api\/feedback(\?.*)?$/, (route) => {
+      const sid = new URL(route.request().url()).searchParams.get("sessionId");
+      return route.fulfill({ json: sid ? { ...feedbackVisual(), entries: [] } : feedbackVisual() });
+    });
+    await page.goto("/feedback");
+    const inbox = page.getByTestId("feedback-inbox");
+    await expect(inbox.getByTestId("feedback-row")).toHaveCount(3);
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await expectNoHorizontalOverflow(page);
+    // Element shots taller than the viewport draw masks off their rows: fit the viewport to the inbox first.
+    const size = page.viewportSize()!;
+    const h = Math.ceil((await inbox.boundingBox())!.height + 160);
+    if (h > size.height) await page.setViewportSize({ width: size.width, height: h });
+    await withoutTray(page, () =>
+      expect(inbox).toHaveScreenshot(`feedback-inbox-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => inbox.locator(m)) }),
+    );
+    await page.setViewportSize(size);
+    await page.goto("/chat/sess_morning");
+    const bubble = page.locator('[data-testid="msg-bubble"][data-who="assistant"]').first();
+    await expect(bubble).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await bubble.click({ position: { x: 4, y: 4 } });
+    await bubble
+      .locator("xpath=..")
+      .getByRole("button", { name: /^Bad response/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "What went wrong?" });
+    await dialog.getByRole("button", { name: "Wrong", exact: true }).click();
+    await dialog.getByLabel("Note (optional)").fill("Pickup moved to Wednesday");
+    await page.waitForTimeout(300);
+    await expect(dialog).toHaveScreenshot(`feedback-rate-dialog-${scheme}.png`, { animations: "disabled" });
+    await dialog.getByRole("button", { name: "Ask to fix…" }).click();
+    await expect(page.getByRole("dialog", { name: "Ask to fix" })).toHaveScreenshot(`feedback-ask-fix-${scheme}.png`, { animations: "disabled" });
+    await page.keyboard.press("Escape");
+  });
 }

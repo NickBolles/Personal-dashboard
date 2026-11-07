@@ -104,8 +104,9 @@ describe("schedule store and claims", () => {
     setSetting("global_coordinator_area_id", areaId);
     const a = listSchedules(owner, now);
     const b = listSchedules(owner, now);
-    expect(a.jobs).toHaveLength(2);
-    expect(b.jobs).toHaveLength(2);
+    expect(a.jobs).toHaveLength(3);
+    expect(b.jobs).toHaveLength(3);
+    expect(a.jobs.map((j) => j.templateKey)).toContain("daily-feedback-triage");
     expect(a.jobs.every((j) => !j.enabled && j.areaId === areaId && j.nextRunAt === null)).toBe(true);
   });
   it("claims a slot once, including concurrent callers", async () => {

@@ -24,6 +24,7 @@ import {
   type JobsExport,
 } from "@/lib/away";
 import { audit } from "@/server/audit";
+import { FEEDBACK_TRIAGE_TEMPLATE } from "@/lib/feedback";
 
 export const J = schema.scheduledJobs;
 export const R = schema.scheduledJobRuns;
@@ -164,9 +165,23 @@ export function seedJobs(user: CurrentUser, now = new Date()) {
     setSetting(key, true);
   });
 }
+/** "Daily feedback triage" (feedback loop): seeded disabled once, also on installs seeded before it existed. */
+export function seedFeedbackTemplate(user: CurrentUser, now = new Date()) {
+  assertAwayOwner(user);
+  getDb().transaction(() => {
+    const key = `feedback_template_seeded:${user.id}`;
+    if (getSetting(key)) return;
+    const { key: templateKey, ...t } = FEEDBACK_TRIAGE_TEMPLATE;
+    const exists = jobRows(user).some((r) => r.templateKey === templateKey);
+    if (!exists && jobRows(user).length < MAX_JOBS)
+      createJob(user, { ...t, areaId: globalCoordinatorArea(user)?.id ?? null, enabled: false }, "feedback-template", now, templateKey);
+    setSetting(key, true);
+  });
+}
 export function listSchedules(user: CurrentUser, now = new Date()) {
   assertAwayOwner(user);
   seedJobs(user, now);
+  seedFeedbackTemplate(user, now);
   return {
     jobs: jobRows(user).map((r) => jobView(user, r, now)),
     tz: scheduleTimezone(),
