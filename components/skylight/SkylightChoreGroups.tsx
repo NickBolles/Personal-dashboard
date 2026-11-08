@@ -6,7 +6,7 @@ import { localDate } from "@/lib/time";
 import { cx } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 import { SkylightActionRow } from "./SkylightActionRow";
-import { CHORE_BUCKETS, choreBucket, type ChoreBucket } from "./grouping";
+import { CHORE_BUCKETS, choreBucket, choreDay, choreTime, type ChoreBucket } from "./grouping";
 import type { SkylightRequest } from "./useSkylightWrite";
 import { applyOverlay, type WriteState } from "./writeState";
 import { skylightWrites, useSkylightWriteState } from "./writeStore";
@@ -29,7 +29,8 @@ export function choreSections(actions: NextAction[], opts: { now: Date | number;
   const chores = actions.filter(isChore);
   const doneToday = (a: NextAction) =>
     a.status === "completed" && (a.skylight?.kind !== "chore" || !a.skylight.completedOn || a.skylight.completedOn === today);
-  const order = (a: NextAction) => (a.skylight?.kind === "chore" ? `${a.skylight.instanceTime ?? a.skylight.startTime ?? "99:99"}` : "99:99");
+  // #240: day first (Next 7 days: tomorrow 18:00 before next week 08:00), then time of day.
+  const order = (a: NextAction) => `${choreDay(a, opts)} ${choreTime(a, opts.timezone) ?? "99:99"}`;
   return CHORE_BUCKETS.filter((b) => !opts.buckets || opts.buckets.includes(b.key))
     .map((b) => {
       const inBucket = chores.filter((a) => choreBucket({ ...a, status: "open" }, opts) === b.key);

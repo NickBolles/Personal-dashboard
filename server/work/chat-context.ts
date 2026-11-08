@@ -4,7 +4,7 @@ import { listItems } from "@/server/work/store";
 import { areaDefaultsFor } from "@/server/references";
 import { listAgentTokens } from "@/server/agent-access/tokens";
 import { detectSensitivity } from "@/server/ai/rules";
-import { isFinanceAreaLike } from "@/lib/finance-area";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import { STATUS_LABELS, isClosed, type WorkItem } from "@/lib/work";
 
 export const FILED_CONTEXT_LIMITS = { items: 40, chars: 4000 } as const;
@@ -16,7 +16,9 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
  * the open items under the conversation's project (ids + status, so "ready to settle" etc. are visible)
  * and whether this Hermes profile can use Jarvis item tools. Without it, a chat routed to its area's own
  * profile got NO area context at all (the "Agent mode" hint is skipped there) and the agent answered
- * "no scoped area reference or item-access tools". Never for Finance or AI-excluded areas.
+ * "no scoped area reference or item-access tools". Never for AI-excluded areas (Exclude from AI);
+ * Finance areas get it like any other area (owner decision 2026-11-07, #243), with account numbers
+ * masked and anything credential-like left out.
  */
 export function filedChatContext(user: CurrentUser, sessionId: string, profile: string | null): string | null {
   const where = areaDefaultsFor(user, sessionId);
@@ -24,14 +26,16 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
   const items = listItems(user.id);
   const byId = new Map(items.map((i) => [i.id, i]));
   const area = byId.get(where.area.id);
-  if (!area || isFinanceAreaLike(area) || area.settings?.aiPolicy === "excluded") return null;
+  if (!area || area.settings?.aiPolicy === "excluded") return null;
   const node = byId.get(where.nodeId);
   const scope = node?.kind === "conversation" ? (node.parentId ? byId.get(node.parentId) : undefined) : node;
   if (!scope) return null;
   const path: string[] = [];
-  for (let n: WorkItem | undefined = scope, i = 0; n && i < 100; n = n.parentId ? byId.get(n.parentId) : undefined, i++) path.unshift(n.title);
-  const safe = (...t: (string | null | undefined)[]) => detectSensitivity(t.filter(Boolean).join(" ")) === "none";
-  // Ancestor titles go to Hermes on every turn: a sensitive one (e.g. "Tax return") means no snapshot at all.
+  for (let n: WorkItem | undefined = scope, i = 0; n && i < 100; n = n.parentId ? byId.get(n.parentId) : undefined, i++)
+    path.unshift(maskAccountNumbers(n.title));
+  // Same rule as the rest of the AI layer since Finance is allowed: credentials never go out; account numbers are masked below.
+  const safe = (...t: (string | null | undefined)[]) => detectSensitivity(t.filter(Boolean).join(" ")) !== "credentials";
+  // Ancestor titles go to Hermes on every turn: a credential-like one means no snapshot at all.
   if (!safe(...path)) return null;
   // Descendants of the scope (breadth-first), open work only.
   const open: WorkItem[] = [];
@@ -56,7 +60,10 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
     ...(open.length ? [] : ["- none"]),
     ...open
       .slice(0, FILED_CONTEXT_LIMITS.items)
-      .map((i) => `- [${STATUS_LABELS[i.status]}] ${clip(i.title, 100)} (${i.kind}, id ${i.id})${i.nextAction ? ` — next: ${clip(i.nextAction, 100)}` : ""}`),
+      .map(
+        (i) =>
+          `- [${STATUS_LABELS[i.status]}] ${clip(maskAccountNumbers(i.title), 100)} (${i.kind}, id ${i.id})${i.nextAction ? ` — next: ${clip(maskAccountNumbers(i.nextAction), 100)}` : ""}`,
+      ),
   ];
   let text = lines.join("\n");
   if (text.length > FILED_CONTEXT_LIMITS.chars) text = `${text.slice(0, FILED_CONTEXT_LIMITS.chars - 1)}…`;

@@ -23,7 +23,7 @@ import {
   type ScheduleSlot,
   type UsageResponse,
 } from "@/lib/ai";
-import { CONTEXT_SOURCE_LABELS, CONTEXT_SOURCES, type ContextSource } from "@/lib/work";
+import { CONTEXT_SOURCE_LABELS, CONTEXT_SOURCES, type ContextSource, type WorkDetail } from "@/lib/work";
 import { SafeMarkdown, safeHref } from "./SafeMarkdown";
 
 /**
@@ -98,6 +98,13 @@ export function useAiMenuItems(itemId: string, onPick: (k: AiActionKind) => void
 export function useSummaryMenuItem(itemId: string, onPick: (k: AiActionKind) => void) {
   const can = useAccess().can("work.ai");
   const q = useItemAi(itemId, can);
+  // Share the workspace's detail query; these kinds cannot accept Save as note.
+  const detail = useQuery({
+    queryKey: ["work", "item", itemId],
+    queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(itemId)}`),
+    enabled: can,
+  });
+  if (!detail.isSuccess || detail.data?.item?.kind === "note" || detail.data?.item?.kind === "conversation") return null;
   if (!can || !q.data) return null;
   const { allowed, reason } = q.data.policy;
   return {

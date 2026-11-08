@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { newId } from "@/server/crypto";
@@ -12,6 +12,7 @@ import { areaDefaultsFor } from "@/server/references";
 import { areaOf } from "@/server/ai/jobs";
 import { detectSensitivity } from "@/server/ai/rules";
 import { ensureMiscellaneous, event, insertItem, listItems, ownedItem, recordOp, type OpOut } from "@/server/work/store";
+import { undoCheck } from "@/server/work/undo-rules";
 import {
   FEEDBACK_REASONS,
   FEEDBACK_STATUSES,
@@ -35,6 +36,33 @@ import {
 
 export const F = schema.messageFeedback;
 export type FeedbackRow = typeof F.$inferSelect;
+
+export type FeedbackUndo = { prev: FeedbackRow | null; next: FeedbackRow | null };
+const feedbackStack = (sessionId: string, messageId: string) => `feedback:${JSON.stringify([sessionId, messageId])}`;
+
+/** The existing Undo strip replays rating/reasons/note. Restore its full server
+ * snapshot only for the latest unexpired mutation, while the row is unchanged.
+ */
+function replayUndo(user: CurrentUser, body: ReturnType<typeof rateInputSchema.parse>, current: FeedbackRow | undefined, now: Date) {
+  const db = getDb();
+  const O = schema.workOps;
+  const op = db
+    .select()
+    .from(O)
+    .where(and(eq(O.userId, user.id), eq(O.itemId, feedbackStack(body.sessionId, body.messageId))))
+    .orderBy(desc(sql`rowid`))
+    .get();
+  if (!op || !undoCheck(op, op.id, now).ok) return null;
+  const { feedback } = JSON.parse(op.payload) as { feedback?: FeedbackUndo };
+  const prev = feedback?.prev;
+  if (!prev || prev.userId !== user.id || prev.rating !== body.rating || prev.note !== body.note) return null;
+  const reasons = body.rating === "up" ? [] : [...new Set(body.reasons)];
+  if (JSON.stringify([...parseStrings(prev.reasonsJson)].sort()) !== JSON.stringify([...reasons].sort())) return null;
+  if (feedback.next ? !current || Object.entries(feedback.next).some(([key, value]) => current[key as keyof FeedbackRow] !== value) : !!current) return null;
+  db.insert(F).values(prev).onConflictDoUpdate({ target: F.id, set: prev }).run();
+  db.update(O).set({ undoneAt: now.toISOString() }).where(eq(O.id, op.id)).run();
+  return prev.id;
+}
 
 export function feedbackId(raw: string) {
   let id: string;
@@ -120,64 +148,73 @@ function areaForSession(user: CurrentUser, sessionId: string) {
 
 /** Rate (or re-rate) one assistant message. One rating per (person, conversation, message). */
 export function rateMessage(user: CurrentUser, input: RateInput, correlationId: string, now = new Date()): Feedback {
-  const body = rateInputSchema.parse(input);
-  const at = now.toISOString();
-  const profile = isLocalSession(body.sessionId) ? "local" : (sessionProfile(body.sessionId) ?? "default");
-  const areaId = areaForSession(user, body.sessionId);
-  const reasons = body.rating === "up" ? [] : [...new Set(body.reasons)];
-  const values = {
-    surface: body.surface,
-    rating: body.rating,
-    reasonsJson: JSON.stringify(reasons),
-    note: body.note,
-    excerpt: excerptOf(body.text),
-    profile,
-    areaId,
-    model: body.model ?? null,
-    toolsJson: JSON.stringify([...new Set(body.tools)].slice(0, 30)),
-    updatedAt: at,
-  };
-  const db = getDb();
-  const existing = db
-    .select()
-    .from(F)
-    .where(and(eq(F.userId, user.id), eq(F.sessionId, body.sessionId), eq(F.messageId, body.messageId)))
-    .get();
-  let id: string;
-  if (existing) {
-    id = existing.id;
-    // A changed verdict is new feedback again; editing reasons/note keeps the review state.
-    const reset = existing.rating !== body.rating ? { status: "new", triagedAt: null, triageRunId: null } : {};
-    db.update(F)
-      .set({ ...values, ...reset, excerpt: values.excerpt || existing.excerpt, model: values.model ?? existing.model })
-      .where(eq(F.id, id))
-      .run();
-  } else {
-    id = newId("fb");
-    db.insert(F)
-      .values({ id, userId: user.id, sessionId: body.sessionId, messageId: body.messageId, ...values, status: "new", createdAt: at })
-      .run();
-  }
-  audit({
-    actor: user.id,
-    action: "feedback.rate",
-    source: "feedback",
-    sourceRecord: id,
-    result: "ok",
-    correlationId,
-    detail: { rating: body.rating, surface: body.surface, reasons: reasons.length },
+  return getDb().transaction(() => {
+    const body = rateInputSchema.parse(input);
+    const at = now.toISOString();
+    const profile = isLocalSession(body.sessionId) ? "local" : (sessionProfile(body.sessionId) ?? "default");
+    const areaId = areaForSession(user, body.sessionId);
+    const reasons = body.rating === "up" ? [] : [...new Set(body.reasons)];
+    const values = {
+      surface: body.surface,
+      rating: body.rating,
+      reasonsJson: JSON.stringify(reasons),
+      note: body.note,
+      excerpt: excerptOf(body.text),
+      profile,
+      areaId,
+      model: body.model ?? null,
+      toolsJson: JSON.stringify([...new Set(body.tools)].slice(0, 30)),
+      updatedAt: at,
+    };
+    const db = getDb();
+    const existing = db
+      .select()
+      .from(F)
+      .where(and(eq(F.userId, user.id), eq(F.sessionId, body.sessionId), eq(F.messageId, body.messageId)))
+      .get();
+    const restored = replayUndo(user, body, existing, now);
+    if (restored) return getFeedback(user, restored);
+    let id: string;
+    if (existing) {
+      id = existing.id;
+      // A changed verdict is new feedback again; editing reasons/note keeps the review state.
+      const reset = existing.rating !== body.rating ? { status: "new", triagedAt: null, triageRunId: null } : {};
+      db.update(F)
+        .set({ ...values, ...reset, excerpt: values.excerpt || existing.excerpt, model: values.model ?? existing.model })
+        .where(eq(F.id, id))
+        .run();
+    } else {
+      id = newId("fb");
+      db.insert(F)
+        .values({ id, userId: user.id, sessionId: body.sessionId, messageId: body.messageId, ...values, status: "new", createdAt: at })
+        .run();
+    }
+    const next = db.select().from(F).where(eq(F.id, id)).get()!;
+    recordOp(db, user.id, feedbackStack(body.sessionId, body.messageId), "edit", { feedback: { prev: existing ?? null, next } satisfies FeedbackUndo });
+    audit({
+      actor: user.id,
+      action: "feedback.rate",
+      source: "feedback",
+      sourceRecord: id,
+      result: "ok",
+      correlationId,
+      detail: { rating: body.rating, surface: body.surface, reasons: reasons.length },
+    });
+    return getFeedback(user, id);
   });
-  return getFeedback(user, id);
 }
 
 export function deleteFeedback(user: CurrentUser, id: string, correlationId: string) {
-  feedbackRow(user, id);
-  getDb()
-    .delete(F)
-    .where(and(eq(F.userId, user.id), eq(F.id, id)))
-    .run();
+  const out: OpOut = {};
+  getDb().transaction((tx) => {
+    const prev = feedbackRow(user, id);
+    tx.delete(F)
+      .where(and(eq(F.userId, user.id), eq(F.id, id)))
+      .run();
+    recordOp(tx, user.id, feedbackStack(prev.sessionId, prev.messageId), "edit", { feedback: { prev, next: null } satisfies FeedbackUndo }, out);
+  });
   audit({ actor: user.id, action: "feedback.delete", source: "feedback", sourceRecord: id, result: "ok", correlationId });
-  return { ok: true };
+  return { ok: true, op: out.op ?? null };
 }
 
 /** Status/note/reason edits from the inbox (each undoable by patching back). */
@@ -288,11 +325,12 @@ export function createItemFromFeedback(user: CurrentUser, id: string, correlatio
       nextAction: "Look at this feedback and decide on a fix",
     });
     event(tx, itemId, user.id, { kind: "created", to: "captured", reason: "From feedback" });
-    recordOp(tx, user.id, itemId, "create", {}, out);
     tx.update(F)
       .set({ itemId, status: r.status === "new" ? "triaged" : r.status, triagedAt: r.triagedAt ?? now.toISOString(), updatedAt: now.toISOString() })
       .where(eq(F.id, id))
       .run();
+    const next = tx.select().from(F).where(eq(F.id, id)).get()!;
+    recordOp(tx, user.id, itemId, "create", { feedbackCreate: { prev: r, next } satisfies FeedbackUndo }, out);
     return itemId;
   });
   audit({ actor: user.id, action: "feedback.create_item", source: "feedback", sourceRecord: id, result: "ok", correlationId, detail: { itemId } });

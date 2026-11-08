@@ -534,7 +534,9 @@ export const TOOLS: ToolDef[] = [
       if (cur.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask on the work item, not the conversation");
       if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
       const p = buildDeviceProposal({ entityId, service, data, reason }, agent.profile, agent.via, correlationId);
-      const item = updateItem(agent.user, itemId, { decision: { question: p.question, choices: p.choices } }, correlationId);
+      const item = updateItem(agent.user, itemId, { decision: { question: p.question, choices: p.choices } }, correlationId, undefined, {
+        decisionAction: { label: "Confirm on House", href: p.href },
+      });
       return { proposed: true, executed: false, risk: p.risk, confirmAt: p.href, item: brief(item) };
     },
   }),

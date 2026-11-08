@@ -22,11 +22,12 @@ function isTypingTarget(t: EventTarget | null) {
  */
 export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, bottomRef: RefObject<HTMLElement | null>, ready: boolean) {
   const follow = useRef(true);
+  // A message permalink holds its place through transcript growth and composer focus.
+  const anchor = useRef<string | null>(null);
   const [detached, setDetached] = useState(false);
   const last = useRef({ y: 0 });
 
   const setFollow = useCallback((on: boolean) => {
-    if (follow.current === on) return;
     follow.current = on;
     setDetached(!on);
   }, []);
@@ -40,8 +41,12 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
   );
 
   useEffect(() => {
+    const releaseAnchor = () => {
+      anchor.current = null;
+    };
     const up = () => setFollow(false);
     const onWheel = (e: WheelEvent) => {
+      if (e.deltaY) releaseAnchor();
       if (e.deltaY < 0) up();
     };
     let touchY: number | null = null;
@@ -50,16 +55,23 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
     };
     const onTouchMove = (e: TouchEvent) => {
       const y = e.touches[0]?.clientY;
+      if (touchY !== null && y !== undefined && Math.abs(y - touchY) > 8) releaseAnchor();
       // Finger moving down the screen scrolls the thread up.
       if (touchY !== null && y !== undefined && y - touchY > 8) up();
     };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
+      if (["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "].includes(e.key)) releaseAnchor();
       if (e.key === "PageUp" || e.key === "ArrowUp" || e.key === "Home" || (e.key === " " && e.shiftKey)) up();
     };
     const onScroll = () => {
       const y = window.scrollY;
       const max = document.documentElement.scrollHeight - window.innerHeight;
+      // scrollIntoView itself fires scroll; it must not unlock a permalink near the bottom.
+      if (anchor.current) {
+        last.current = { y };
+        return;
+      }
       // Scrollbar drags / emulated wheels can arrive with no wheel/touch event: any upward move that isn't
       // the browser clamping to a shrunken page (y pinned at the new max) is the person's intent.
       // Following only ever scrolls DOWN, so programmatic scrolls never trip this.
@@ -67,19 +79,70 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       else if (!follow.current && gap() <= REATTACH_GAP) setFollow(true);
       last.current = { y };
     };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.target === document.documentElement) releaseAnchor(); // scrollbar drag
+    };
     window.addEventListener("wheel", onWheel, { passive: true });
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pointerdown", onPointerDown, { passive: true });
     return () => {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("touchstart", onTouchStart);
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pointerdown", onPointerDown);
     };
   }, [setFollow]);
+
+  // Resolve only after the transcript mounts. Cached/partial transcripts may add the target later.
+  // Lock following before ResizeObserver can schedule a bottom scroll; state updates run in a frame.
+  useLayoutEffect(() => {
+    if (!ready) return;
+    let raf = 0;
+    let observer: MutationObserver | undefined;
+    const open = () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+      const hash = window.location.hash;
+      let id: string | null = null;
+      try {
+        if (hash.startsWith("#msg-")) id = decodeURIComponent(hash.slice(1));
+      } catch {
+        // A malformed fragment is not a message permalink.
+      }
+      anchor.current = id;
+      follow.current = !id;
+      let resolved = false;
+      const resolve = () => {
+        if (resolved || !id || anchor.current !== id) return;
+        const target = document.getElementById(id);
+        if (!target || !contentRef.current?.contains(target)) return;
+        resolved = true;
+        target.scrollIntoView({ block: "center" });
+        observer?.disconnect();
+      };
+      if (id && contentRef.current) {
+        observer = new MutationObserver(resolve);
+        observer.observe(contentRef.current, { childList: true, subtree: true });
+      }
+      raf = requestAnimationFrame(() => {
+        setFollow(follow.current);
+        if (id) resolve();
+        else if (follow.current) toBottom();
+      });
+    };
+    open();
+    window.addEventListener("hashchange", open);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+      window.removeEventListener("hashchange", open);
+    };
+  }, [contentRef, ready, setFollow, toBottom]);
 
   // Any size change of the thread while following → stay at the bottom (one scroll per frame at most).
   useLayoutEffect(() => {
@@ -100,18 +163,11 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
     };
   }, [contentRef, toBottom, ready]);
 
-  // First load lands on the latest message.
-  const first = useRef(true);
-  useEffect(() => {
-    if (ready && first.current) {
-      first.current = false;
-      requestAnimationFrame(() => toBottom());
-    }
-  }, [ready, toBottom]);
-
-  /** Explicit resume (Jump to latest, composer focus, keyboard opening). */
+  /** Composer focus/keyboard may follow, but only a send or explicit jump overrides a permalink. */
   const jumpToLatest = useCallback(
-    (smooth = false) => {
+    (smooth = false, sent = false) => {
+      if (anchor.current && !smooth && !sent) return;
+      anchor.current = null;
       setFollow(true);
       toBottom(smooth);
     },
