@@ -209,14 +209,19 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
   const [custom, setCustom] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
+  const pending = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(pending.current), []);
   const dates = quickDueDates(new Date());
+  // #231: a custom date parked when focus moved to a preset row; a preset discards it, dismissing saves it.
+  const draft = useRef<string | undefined>(undefined);
   const close = (refocus = true) => {
+    clearTimeout(pending.current);
+    pending.current = undefined;
+    draft.current = undefined;
     setOpen(false);
     setCustom(false);
     if (refocus) btn.current?.focus();
   };
-  const pending = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(pending.current), []);
   const flush = (raw: string) => {
     clearTimeout(pending.current);
     pending.current = undefined;
@@ -263,8 +268,17 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
           searchable={false}
           placeholder=""
           opener={btn}
-          onClose={close}
-          onToggle={(v) => (v === "custom" ? setCustom(true) : save(choices.find((o) => o.value === v)?.date ?? ""))}
+          onClose={(refocus) => {
+            const d = draft.current;
+            draft.current = undefined;
+            if (d) save(d);
+            else close(refocus);
+          }}
+          onToggle={(v) => {
+            if (v === "custom") return setCustom(true);
+            draft.current = undefined;
+            save(choices.find((o) => o.value === v)?.date ?? "");
+          }}
           footer={
             custom ? (
               <div className="p-2">
@@ -278,6 +292,7 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
                     // Keyboard edits change one segment at a time (each a valid date): save once editing pauses,
                     // or right away on Enter/blur, so the editor stays open between segments (#207).
                     const raw = e.target.value;
+                    draft.current = undefined;
                     if (pending.current) clearTimeout(pending.current);
                     pending.current = raw ? setTimeout(() => flush(raw), DUE_EDIT_SETTLE_MS) : undefined;
                   }}
@@ -287,6 +302,17 @@ export function DuePicker({ value, onSave, className }: { value: string | null; 
                     flush(e.currentTarget.value);
                   }}
                   onBlur={(e) => {
+                    // #231: focus moving to a preset inside this portalled picker must not commit the custom date
+                    // and unmount the picker before the preset's click (mousedown → blur → long press → click).
+                    // Pause the settle timer and park the edit: a preset discards it, dismissing the picker saves it.
+                    if (e.relatedTarget instanceof Node && e.currentTarget.closest('[role="dialog"]')?.contains(e.relatedTarget)) {
+                      if (pending.current) {
+                        clearTimeout(pending.current);
+                        pending.current = undefined;
+                        draft.current = e.currentTarget.value || undefined;
+                      }
+                      return;
+                    }
                     if (pending.current) flush(e.currentTarget.value);
                   }}
                 />

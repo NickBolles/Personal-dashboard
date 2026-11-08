@@ -93,7 +93,7 @@ export function CoordinatorThread({
     refetchInterval: (q) => (q.state.data?.session?.activeRun ? 3000 : false),
   });
   const send = useMutation({
-    mutationFn: async (input: string) => {
+    mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
       let target = sid;
       if (!target) {
         const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
@@ -101,15 +101,17 @@ export function CoordinatorThread({
         setSessionId(s.id);
       }
       await api.post(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
-        input: compact ? withPageContext(input, context) : input,
+        input: compact && !correction ? withPageContext(input, context) : input,
         idempotencyKey: newIdempotencyKey("coord"),
         capabilities: [SMART_CAPABILITY],
       });
       return target;
     },
-    onSuccess: (target) => {
-      setText("");
-      if (textarea.current && compact) textarea.current.style.height = "auto";
+    onSuccess: (target, { correction }) => {
+      if (!correction) {
+        setText("");
+        if (textarea.current && compact) textarea.current.style.height = "auto";
+      }
       toast("Sent to the coordinator");
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
@@ -118,7 +120,7 @@ export function CoordinatorThread({
     onError: (err) => toast(`Not sent: ${(err as Error).message}`, "danger"),
   });
   const submit = () => {
-    if (text.trim() && !send.isPending && !d.excluded) send.mutate(text.trim());
+    if (text.trim() && !send.isPending && !d.excluded) send.mutate({ input: text.trim() });
   };
   const timeline = detail.data?.timeline ?? [];
   const msgs = timeline.filter((t): t is Extract<TimelineItem, { kind: "user" | "assistant" }> => t.kind === "user" || t.kind === "assistant").slice(-6);
@@ -161,11 +163,11 @@ export function CoordinatorThread({
                             who="the coordinator's message"
                             model={detail.data?.session.model ?? null}
                             onAskFix={async (prompt) => {
-                              if (detail.data?.session.activeRun) {
+                              if (send.isPending || detail.data?.session.activeRun) {
                                 toast("Wait for the coordinator to finish, then ask again.", "warn");
                                 return false;
                               }
-                              await send.mutateAsync(prompt);
+                              await send.mutateAsync({ input: prompt, correction: true });
                               return true;
                             }}
                           />

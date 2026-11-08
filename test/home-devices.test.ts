@@ -94,9 +94,9 @@ describe("devices", () => {
     const body = (await r.json()) as { lights: { services: unknown[] }[]; cameras: unknown[] };
     expect(body.cameras.length).toBe(2);
     expect(body.lights[0]!.services.map((s) => (s as { service: string }).service)).toEqual(["turn_on", "turn_off", "toggle"]);
-    // A shared tablet keeps the safe direction: lock yes, unlock no.
+    // A shared tablet may lock and unlock (owner decision 2026-11-07), but never unlatch (lock.open).
     const doors = (body as unknown as { doors: { entityId: string; services: { service: string }[] }[] }).doors;
-    expect(doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock"]);
+    expect(doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock", "unlock"]);
   });
 
   it("camera stills are proxied, typed as images and never cached", async () => {

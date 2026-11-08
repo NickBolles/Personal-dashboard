@@ -71,6 +71,8 @@ import { undoPortfolioImport, type PortfolioImportPayload } from "./portfolio-un
 import { EDIT_UNDO_FIELDS, isUntouched, latestOp, TAG_OPS_ITEM, UNDO_LABELS, undoCheck, undoWindowFor, type UndoKind } from "./undo-rules";
 import { AUTO_SETTLE_UNDO_MS, settleDecision, settleSignals } from "./settle-rules";
 import { boundedAll } from "@/server/http/fetch";
+// Mirrors server/feedback/store FeedbackUndo; kept local so the AI import graph never reaches references → HA devices (test/ai-rules).
+type FeedbackUndo = { prev: typeof schema.messageFeedback.$inferSelect | null; next: typeof schema.messageFeedback.$inferSelect | null };
 
 /**
  * Work hub store (docs/work.md). Every read and write is scoped to the owner:
@@ -858,6 +860,31 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     );
     const check = undoCheck(op, latest?.id ?? null, now, undoWindowFor(op, AUTO_SETTLE_UNDO_MS));
     if (!check.ok) throw new HttpError(409, check.code, check.message);
+    const feedbackPayload = JSON.parse(op.payload) as { feedback?: FeedbackUndo; feedbackCreate?: FeedbackUndo };
+    const feedbackUndo = feedbackPayload.feedback ?? feedbackPayload.feedbackCreate;
+    if (feedbackUndo) {
+      const { prev, next } = feedbackUndo;
+      const F = schema.messageFeedback;
+      const id = next?.id ?? prev?.id;
+      if (!id || (prev && prev.userId !== user.id) || (next && next.userId !== user.id))
+        throw new HttpError(409, "superseded", "Feedback snapshot isn't owned by you");
+      const current = tx
+        .select()
+        .from(F)
+        .where(and(eq(F.id, id), eq(F.userId, user.id)))
+        .get();
+      if (next ? !current || Object.entries(next).some(([key, value]) => current[key as keyof typeof current] !== value) : !!current)
+        throw new HttpError(409, "superseded", "This feedback changed since, so undo isn't safe");
+      if (prev) tx.insert(F).values(prev).onConflictDoUpdate({ target: F.id, set: prev }).run();
+      else
+        tx.delete(F)
+          .where(and(eq(F.id, id), eq(F.userId, user.id)))
+          .run();
+      if (feedbackPayload.feedback) {
+        tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
+        return { itemId: op.itemId, kind: "edit" as UndoKind, outcome: "restored" as "restored" | "deleted" | "archived", feedback: true };
+      }
+    }
     if (op.kind === "quick_action") {
       // A non-item undo stack, like tags. All writes record a snapshot in this transaction.
       const payload = JSON.parse(op.payload) as { rows: (typeof schema.quickActions.$inferSelect)[] };
@@ -872,7 +899,23 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     }
     if (op.kind === "import") {
       // Portfolio map import: a non-item stack (item_id = IMPORT_OPS_ITEM); only the latest import can be undone.
-      const outcome = undoPortfolioImport(tx, user.id, JSON.parse(op.payload) as PortfolioImportPayload);
+      const payload = JSON.parse(op.payload) as PortfolioImportPayload;
+      const imported = new Set(payload.items);
+      // Mark externally referenced imports as touched before the normal archive/delete
+      // pass. Check both endpoints: incoming edges do not write events on the target.
+      const referenced = new Set<string>();
+      for (const edge of tx.select().from(schema.workDependencies).where(eq(schema.workDependencies.userId, user.id)).all()) {
+        if (!imported.has(edge.itemId)) referenced.add(edge.dependsOnId);
+        if (!imported.has(edge.dependsOnId)) referenced.add(edge.itemId);
+      }
+      for (const edge of tx.select().from(schema.workLineage).where(eq(schema.workLineage.userId, user.id)).all()) {
+        if (edge.parentId && !imported.has(edge.childId)) referenced.add(edge.parentId);
+        if (edge.parentId && !imported.has(edge.parentId)) referenced.add(edge.childId);
+      }
+      for (const id of payload.items) {
+        if (referenced.has(id)) event(tx, id, user.id, { kind: "undo", reason: "Retained imported item: another item references it" });
+      }
+      const outcome = undoPortfolioImport(tx, user.id, payload);
       tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
       return { itemId: op.itemId, kind: "import" as UndoKind, outcome: (outcome.archived ? "archived" : "deleted") as "restored" | "deleted" | "archived" };
     }
@@ -1056,7 +1099,11 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
   return {
     ...result,
     item:
-      result.outcome === "deleted" || result.itemId === TAG_OPS_ITEM || result.kind === "quick_action" || result.kind === "import"
+      result.outcome === "deleted" ||
+      result.itemId === TAG_OPS_ITEM ||
+      result.kind === "quick_action" ||
+      result.kind === "import" ||
+      ("feedback" in result && result.feedback)
         ? null
         : toItem(ownedItem(user.id, result.itemId)),
   };

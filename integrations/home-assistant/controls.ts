@@ -264,8 +264,8 @@ export async function executeControl(
   const dc = String(live.attributes.device_class ?? "");
   const risk = serviceRisk(req.entityId, req.service, dc);
   if (!roleMayRun(opts.role, req.entityId, req.service, dc)) {
-    audit({ ...base, result: "rejected", detail: { reason: "household_safe_direction_only" } });
-    throw new HttpError(403, "forbidden", "A shared household screen can only lock, close and arm. Sign in as yourself to do this.");
+    audit({ ...base, result: "rejected", detail: { reason: "household_tablet_not_allowed" } });
+    throw new HttpError(403, "forbidden", "A shared household screen can't do this (for example disarm the alarm). Sign in as yourself to do this.");
   }
   if (risk === "high" && !req.highRiskConfirmed) {
     audit({ ...base, result: "rejected", detail: { reason: "high_risk_confirmation_required" } });

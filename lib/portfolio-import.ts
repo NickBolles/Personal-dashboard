@@ -185,7 +185,15 @@ export function planLink(label: string, url: string): PlanLink | null {
   return { kind: "url", url: href, title };
 }
 
-const sameUrl = (a: string, b: string) => a.replace(/\/+$/, "").toLowerCase() === b.replace(/\/+$/, "").toLowerCase();
+const urlKey = (url: string) => {
+  try {
+    // URL normalises the scheme/host, but preserves case-sensitive paths and queries.
+    return new URL(url).toString();
+  } catch {
+    return url;
+  }
+};
+const sameUrl = (a: string, b: string) => urlKey(a) === urlKey(b);
 
 function firstSentence(s: string, max = 200): string {
   const t = s.replace(/\s+/g, " ").trim();
@@ -285,11 +293,12 @@ export function planPortfolioImport(
   };
 
   // 1. Board projects → containers.
-  const containerOf = new Map<string, { id?: string; key?: string; path: string; finance?: boolean }>();
+  const containerOf = new Map<string, { id?: string; key?: string; path: string; finance?: boolean; searchIds?: string[] }>();
   for (const p of map.projects) {
     const key = `project:${p.id}`;
     const path = targets[p.id];
-    const found = path ? findPath(path) : (portfolio && (kids.get(portfolio.id) ?? []).find((c) => titlesMatch(c.title, p.name))) || undefined;
+    const fallback = portfolio && (kids.get(portfolio.id) ?? []).find((c) => c.kind === "project" && titlesMatch(c.title, p.name));
+    const found = (path ? findPath(path) : undefined) ?? fallback;
     if (found && isFinance(found.id)) {
       containerOf.set(p.id, { path: pathOf(found.id), finance: true });
       entries.push({
@@ -305,7 +314,7 @@ export function planPortfolioImport(
       continue;
     }
     if (found) {
-      containerOf.set(p.id, { id: found.id, path: pathOf(found.id) });
+      containerOf.set(p.id, { id: found.id, path: pathOf(found.id), searchIds: [...new Set([found.id, ...(fallback ? [fallback.id] : [])])] });
       entries.push(updateOf(key, found, [], p.links, "project"));
       continue;
     }
@@ -366,7 +375,7 @@ export function planPortfolioImport(
     const aliasId = opts.aliases?.[n.t] ?? opts.aliases?.[title];
     const alias = aliasId ? byId.get(aliasId) : undefined;
     if (aliasId && !alias) notes.push(`Alias for "${title}" points at an item that isn't there (${aliasId}); matching by title instead.`);
-    const candidates = c.id ? subtreeOf(c.id) : [];
+    const candidates = (c.searchIds ?? (c.id ? [c.id] : [])).flatMap(subtreeOf);
     const matches = alias ? [alias] : candidates.filter((x) => titlesMatch(x.title, title));
     const exact = matches.filter((x) => normTitle(x.title) === normTitle(title));
     const match = alias ?? (exact.length === 1 ? exact[0] : matches.length === 1 ? matches[0] : undefined);
@@ -451,6 +460,28 @@ export function planPortfolioImport(
       links: links(o.l, []),
     });
   });
+
+  // Multiple board nodes/aliases can target one existing item. Apply one union,
+  // so the server records one pre-import tag snapshot and inserts each link once.
+  const updates = new Map<string, PlanEntry>();
+  for (const e of entries) {
+    if (!e.matchedId) continue;
+    const first = updates.get(e.matchedId);
+    if (!first) {
+      updates.set(e.matchedId, e);
+      continue;
+    }
+    first.links.push(...e.links.filter((l) => !first.links.some((have) => sameUrl(have.url, l.url))));
+    first.tags = [...new Set([...first.tags, ...e.tags])];
+    if (first.links.length || first.tags.length) {
+      first.action = "update";
+      first.reason = undefined;
+    }
+    e.action = "skip";
+    e.links = [];
+    e.tags = [];
+    e.reason = "same target as another board entry; merged";
+  }
 
   const counts = { create: 0, update: 0, unchanged: 0, skip: 0, links: 0 };
   for (const e of entries) {

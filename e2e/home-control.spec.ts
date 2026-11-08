@@ -154,3 +154,10 @@ test("ask Hermes about my home attaches a snapshot of what Jarvis sees", async (
   expect(context).toContain("Garage door (cover.garage_door)");
   expect(context).toContain("Health:");
 });
+
+test("a paused media player counts as powered on (#246)", async ({ page }) => {
+  await page.goto("/home-control");
+  const sw = page.getByRole("switch", { name: /^Living room speaker: on, turn off$/ });
+  await expect(sw).toBeVisible();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+});

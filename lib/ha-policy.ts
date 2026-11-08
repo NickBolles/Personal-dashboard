@@ -89,12 +89,15 @@ export const isHighRisk = (entityId: string, service: string, deviceClass?: stri
 export const SECURING_SERVICES = ["lock", "close_cover", "alarm_arm_home", "alarm_arm_away", "alarm_arm_night"];
 
 /**
- * A shared household tablet keeps the safe direction only: it may lock, close
- * and arm, never unlock, open a garage or disarm (those need a person's own sign-in).
+ * High-risk services a shared household tablet may run (owner decision 2026-11-07): open/close a garage and
+ * lock/unlock a door, plus arming. Still behind the explicit high-risk confirm card, readback, audit and the
+ * rate limit. Disarming the alarm and a lock's `open` (unlatch) stay blocked: those need a person's own sign-in.
  */
+export const TABLET_HIGH_RISK_SERVICES = [...SECURING_SERVICES, "unlock", "open_cover"];
+
 export function roleMayRun(role: string | null | undefined, entityId: string, service: string, deviceClass?: string | null) {
   if (role !== "household") return true;
-  return !isHighRisk(entityId, service, deviceClass) || SECURING_SERVICES.includes(service);
+  return !isHighRisk(entityId, service, deviceClass) || TABLET_HIGH_RISK_SERVICES.includes(service);
 }
 
 export function controlCap(entityId: string): "home_assistant.control_doors" | "home_assistant.control_lights" {

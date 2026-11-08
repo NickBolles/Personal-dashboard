@@ -14,6 +14,7 @@ import {
   isHighRisk,
   isPoweredOff,
   isPoweredOn,
+  roleMayRun,
   serviceRisk,
 } from "@/lib/ha-policy";
 
@@ -125,6 +126,26 @@ describe("inverse / Undo mapping", () => {
     expect(isHighRisk("cover.garage_door", undoClose.service)).toBe(true);
     const undoOpen = inverseOf("cover.garage_door", "open_cover", { state: "closed" })!;
     expect(isHighRisk("cover.garage_door", undoOpen.service)).toBe(false);
+  });
+});
+
+describe("shared household tablet (owner decision 2026-11-07)", () => {
+  it("may open/close garages and lock/unlock doors, never disarm or unlatch", () => {
+    const t = (e: string, svc: string, dc?: string) => roleMayRun("household", e, svc, dc);
+    expect(t("cover.garage_door", "open_cover")).toBe(true);
+    expect(t("cover.big_door", "open_cover", "garage")).toBe(true);
+    expect(t("cover.garage_door", "close_cover")).toBe(true);
+    expect(t("lock.front_door_lock", "lock")).toBe(true);
+    expect(t("lock.front_door_lock", "unlock")).toBe(true);
+    expect(t("lock.front_door_lock", "open")).toBe(false);
+    expect(t("alarm_control_panel.home", "alarm_arm_away")).toBe(true);
+    expect(t("alarm_control_panel.home", "alarm_disarm")).toBe(false);
+    expect(t("light.kitchen", "turn_on")).toBe(true);
+    // still high-risk: the tablet goes through the explicit confirm card like everyone else
+    expect(isHighRisk("cover.garage_door", "open_cover")).toBe(true);
+    expect(isHighRisk("lock.front_door_lock", "unlock")).toBe(true);
+    // signed-in people are unaffected
+    expect(roleMayRun("adult", "alarm_control_panel.home", "alarm_disarm")).toBe(true);
   });
 });
 
