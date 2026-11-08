@@ -2185,6 +2185,8 @@ button:active > .dock-orb {
   .k-input input {
     flex: 1;
     min-width: 0;
+    /* percentage width keeps the field compressible (no intrinsic min-content), like the old w-full inputs */
+    width: 100%;
     background: none;
     border: 0;
     outline: 0;
