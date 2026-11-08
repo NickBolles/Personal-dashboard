@@ -106,7 +106,8 @@ const SECRET_WORD = String.raw`(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[
  */
 const Q = "\"'`";
 const ASSIGNED = new RegExp(
-  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|\x60([^\x60\n]{1,256})\x60|[${Q}]?(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
+  // Quoted values honour backslash escapes (`"pa\"ss"` in pasted JSON is one value, not `pa\`).
+  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"((?:\\.|[^"\\\n]){1,256})"|'((?:\\.|[^'\\\n]){1,256})'|\x60((?:\\.|[^\x60\\\n]){1,256})\x60|[${Q}]?(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
   "gid",
 );
 /** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
@@ -132,11 +133,14 @@ const KEYLIKE = new RegExp(
 const URL_CREDS = /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:([^\s/@]+)@/gi;
 const PEM = /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*$)/g;
 
-/** Ids and placeholders that look like values but are never secrets. */
+/**
+ * Ids and placeholders that look like values but are never secrets. Only checked for values that
+ * follow a credential keyword or Bearer, so a bare UUID is NOT exempt here: `token=<uuid>` is a
+ * credential (UUIDs elsewhere in prose never match a credential pattern in the first place).
+ */
 const NOT_SECRET = [
   /^api_\d{6,}_[0-9a-f]{4,}$/i, // Hermes/Jarvis session ids (jarvis.nickbolles.com/chat/api_…)
   /^(?:wk|item|node)[_:-]/i, // Jarvis work item ids
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   /^https?:\/\//i,
   /^\$\{?[A-Z_][A-Z0-9_]*\}?$/, // ${VAR} / $VAR placeholders
   /^(?:process\.env|os\.environ|env)[.[]/, // code reading a secret, not the secret
@@ -172,11 +176,8 @@ const KEY_KINDS: [RegExp, string][] = [
  */
 export function findSecrets(text: string): SecretFinding[] {
   if (!text) return [];
-  const out: SecretFinding[] = [];
-  const add = (kind: string, start: number, end: number, hint: string) => {
-    if (out.some((f) => start < f.end && end > f.start)) return;
-    out.push({ kind, start, end, hint });
-  };
+  const all: SecretFinding[] = [];
+  const add = (kind: string, start: number, end: number, hint: string) => all.push({ kind, start, end, hint });
   for (const m of text.matchAll(PEM)) add("Private key", m.index!, m.index! + m[0].length, "-----BEGIN … PRIVATE KEY-----");
   for (const m of text.matchAll(KEYLIKE)) {
     const v = m[0];
@@ -210,7 +211,18 @@ export function findSecrets(text: string): SecretFinding[] {
     const start = m.index! + m[0].length - v.length;
     add("Credential", start, start + v.length, `${m[1]} …`);
   }
-  return out.sort((a, b) => a.start - b.start);
+  // Overlapping spans are UNIONED (never dropped): a key-shaped substring inside a quoted password
+  // must not leave the rest of the password unmasked. The widest finding names the merged span.
+  all.sort((a, b) => a.start - b.start || b.end - a.end);
+  const out: (SecretFinding & { width: number })[] = [];
+  for (const f of all) {
+    const prev = out[out.length - 1];
+    if (prev && f.start < prev.end) {
+      if (f.end - f.start > prev.width) Object.assign(prev, { kind: f.kind, hint: f.hint, width: f.end - f.start });
+      prev.end = Math.max(prev.end, f.end);
+    } else out.push({ ...f, width: f.end - f.start });
+  }
+  return out.map(({ kind, start, end, hint }) => ({ kind, start, end, hint }));
 }
 
 export const SECRET_MASK = "[secret removed]";

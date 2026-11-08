@@ -119,6 +119,35 @@ describe("mask vs block", () => {
     expect(maskSecrets("Login fails with password=hunter2.").text).toBe(`Login fails with password=${SECRET_MASK}.`);
   });
 
+  it("assigned UUIDs are credentials (Codex P1)", () => {
+    const UUID = "550e8400-e29b-41d4-a716-446655440000";
+    for (const t of [`Please debug using token=${UUID} on staging`, `password: ${UUID}`, j("Authorization: Bearer ", UUID)]) {
+      const m = maskSecrets(t);
+      expect(m.masked.length, t).toBe(1);
+      expect(m.text, t).not.toContain(UUID);
+    }
+    // A UUID in prose without a credential keyword is still fine.
+    expect(findSecrets(`Delivery ${UUID} failed`)).toEqual([]);
+  });
+
+  it("escaped quotes inside a quoted secret don't end it (Codex P1)", () => {
+    for (const t of [j('Please debug {"password": "', 'first\\"secondHalf9', '"} on staging'), j("set password='", "it\\'s secondHalf9", "' then retry")]) {
+      const m = maskSecrets(t);
+      expect(m.masked.length, t).toBe(1);
+      expect(m.text, t).not.toContain("secondHalf9");
+      expect(m.text, t).not.toContain("first");
+    }
+  });
+
+  it("overlapping findings are unioned so no part of the enclosing secret survives (Codex P1)", () => {
+    const t = j('test turn: password="prefix ', GHP, ' secondHalf9" ok');
+    const f = findSecrets(t);
+    expect(f.length).toBe(1);
+    const m = maskSecrets(t);
+    for (const part of ["prefix", GHP, "secondHalf9"]) expect(m.text, part).not.toContain(part);
+    expect(m.text).toBe(`test turn: password="${SECRET_MASK}" ok`);
+  });
+
   it("a non-Latin request plus a token is masked and sent, not refused (Codex P2)", () => {
     const m = maskSecrets(`请帮我调查部署失败的原因 ${GHP}`);
     expect(m.onlySecrets).toBe(false);
