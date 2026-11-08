@@ -149,6 +149,24 @@ describe("mask vs block", () => {
     expect(open.text).not.toContain("hunter2");
   });
 
+  it("credential URLs and multiline quoted secrets are masked (Codex P1)", () => {
+    const hook = j("https://discord.com/api/webhooks/", "123456789/abc123def456ghi789");
+    const m = maskSecrets(`Please debug using secret=${hook} on staging`);
+    expect(m.masked.length).toBe(1);
+    expect(m.text).not.toContain("abc123def456ghi789");
+    for (const t of [
+      j("const password = `", "first123\nsecondHalf9", "`;\nconsole.log(1)"),
+      j('password = """', "first123\nsecondHalf9", '"""\nprint(1)'),
+      j('{"password": "', "first123\\\nsecondHalf9", '"}'),
+    ]) {
+      const r = maskSecrets(t);
+      expect(r.masked.length, t).toBe(1);
+      expect(r.text, t).not.toContain("secondHalf9");
+      expect(r.text, t).not.toContain("first123");
+    }
+    expect(findSecrets("token: https://github.com/settings/tokens")).toEqual([]);
+  });
+
   it("overlapping findings are unioned so no part of the enclosing secret survives (Codex P1)", () => {
     const t = j('test turn: password="prefix ', GHP, ' secondHalf9" ok');
     const f = findSecrets(t);
