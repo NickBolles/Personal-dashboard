@@ -167,6 +167,30 @@ describe("mask vs block", () => {
     expect(findSecrets("token: https://github.com/settings/tokens")).toEqual([]);
   });
 
+  it("Basic auth headers and spaced quoted secrets are masked whole (Codex P1)", () => {
+    const basic = maskSecrets(j("Why does curl -H 'Authorization: Basic ", "dXNlcjpwYXNz", "' fail?"));
+    expect(basic.masked.length).toBe(1);
+    expect(basic.text).not.toContain("dXNlcjpwYXNz");
+    const spaced = maskSecrets(j('Please debug with password "', "abc123def456ghi789 secondHalf9", '" on staging'));
+    expect(spaced.masked.length).toBe(1);
+    expect(spaced.text).toBe(`Please debug with password "${SECRET_MASK}" on staging`);
+  });
+
+  it("server-built area context lines with credential words in item titles are not flagged (2026-11-07 prod cause)", () => {
+    // The real trigger: every Portfolio/coordinator chat prepends area context, and an open item
+    // titled "Rotate the Caskfolk DB password" made the OLD rule read "(thread" as a password value.
+    const lines = ["password", "token", "secret", "api key", "passcode", "API token", "client secret"].map(
+      (w) => `- [Captured] Rotate the Caskfolk DB ${w} (thread, id wk_1133c042-1337-4b22-b686-762ac2dc00b1)`,
+    );
+    const context = ["Area: Portfolio", "Open items:", ...lines].join("\n");
+    for (const t of [...lines, context, `${context}\n\nFix the issues blocking this. Chat`]) {
+      expect(detectSensitivity(t), t).not.toBe("credentials");
+      const m = maskSecrets(t);
+      expect(m.masked, t).toEqual([]);
+      expect(m.text, t).toBe(t);
+    }
+  });
+
   it("overlapping findings are unioned so no part of the enclosing secret survives (Codex P1)", () => {
     const t = j('test turn: password="prefix ', GHP, ' secondHalf9" ok');
     const f = findSecrets(t);

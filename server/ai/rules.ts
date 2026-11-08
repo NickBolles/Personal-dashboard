@@ -115,6 +115,7 @@ const ASSIGNED = new RegExp(
 /** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
 const SPACED = new RegExp(String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})\s+(?:is\s+|was\s+|of\s+)?["']?([A-Za-z0-9._~+/=-]{16,})`, "gi");
 const BEARER = /\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})/gi;
+const AUTH_HEADER = /(?<![A-Za-z0-9])(?:proxy-)?authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)\s+([A-Za-z0-9._~+/=-]{4,})/gi;
 const KEYLIKE = new RegExp(
   [
     String.raw`sk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}`,
@@ -202,6 +203,14 @@ export function findSecrets(text: string): SecretFinding[] {
     const sep = m[0].slice(m[1]!.length).match(/[:=]/)?.[0] ?? ":";
     add("Credential", start, start + v.length, `${m[1]}${sep} …`);
   }
+  for (const m of text.matchAll(AUTH_HEADER)) {
+    // An explicit `Authorization: Basic|Bearer <value>` header is a credential whatever its shape
+    // (`Basic dXNlcjpwYXNz` = user:pass is letters only and short).
+    const v = m[1]!;
+    if (notSecret(v)) continue;
+    const start = m.index! + m[0].length - v.length;
+    add("Bearer token", start, start + v.length, `${m[0].slice(0, m[0].length - v.length).trim()} …`);
+  }
   for (const m of text.matchAll(BEARER)) {
     const v = m[1]!;
     // "Basic auth-based login" / "bearer authentication" are prose; tokens have digits, base64 padding or length.
@@ -213,7 +222,14 @@ export function findSecrets(text: string): SecretFinding[] {
     const v = m[2]!;
     if (!tokenShaped(v)) continue;
     const start = m.index! + m[0].length - v.length;
-    add("Credential", start, start + v.length, `${m[1]} …`);
+    // `password "abc123… second half"`: a quoted value runs to its closing quote (or the end, fail closed).
+    const q = text[start - 1];
+    let end = start + v.length;
+    if (q === '"' || q === "'") {
+      const close = text.indexOf(q, end);
+      end = close === -1 ? text.length : close;
+    }
+    add("Credential", start, end, `${m[1]} …`);
   }
   // Overlapping spans are UNIONED (never dropped): a key-shaped substring inside a quoted password
   // must not leave the rest of the password unmasked. The widest finding names the merged span.
