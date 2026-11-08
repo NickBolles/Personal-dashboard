@@ -336,6 +336,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         void qc.invalidateQueries({ queryKey: ["chat-files", sessionId] });
       }
       announce(`Message sent. ${who} is responding.`);
+      jumpToLatest(false, true);
       const notice = maskedNotice(r);
       if (notice) toast(notice, "warn");
       run.start(r.runId);
@@ -352,6 +353,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     if (!run.state.runId) return false;
     try {
       await api.post(`/api/hermes/runs/${encodeURIComponent(run.state.runId)}/steer`, { input: text });
+      jumpToLatest(false, true);
       toast("Guidance queued for Hermes", "ok");
       return true;
     } catch (err) {
@@ -549,19 +551,37 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   });
 
   const toolMap = toolsByReply(detail?.timeline ?? NO_TIMELINE);
+  // Feedback is its own plain turn, never a submission of the staged composer.
+  const sendCorrection = async (prompt: string) => {
+    if (run.active) {
+      toast("Wait for the current reply to finish, then ask again.", "warn");
+      return false;
+    }
+    try {
+      const r = await api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/runs`, {
+        input: prompt,
+        idempotencyKey: newIdempotencyKey("fix"),
+        capabilities: [SMART_CAPABILITY],
+        ...model,
+      });
+      setPendingInput(prompt);
+      announce(`Message sent. ${who} is responding.`);
+      jumpToLatest(false, true);
+      run.start(r.runId);
+      refreshSessionLists(qc);
+      return true;
+    } catch (err) {
+      toast(`Correction not sent: ${(err as Error).message}`, "danger");
+      return false;
+    }
+  };
   const rateCtx: RateContext | null =
     detail && !detail.session.readOnly
       ? {
           sessionId,
           model: detail.session.model ?? null,
           toolsFor: (id) => toolMap.get(id) ?? [],
-          askFix: async (prompt) => {
-            if (run.active) {
-              toast("Wait for the current reply to finish, then ask again.", "warn");
-              return false;
-            }
-            return send(prompt, newIdempotencyKey("fix"));
-          },
+          askFix: sendCorrection,
         }
       : null;
 

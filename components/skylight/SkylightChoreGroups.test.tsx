@@ -82,6 +82,18 @@ it("buckets open chores with per-group progress, counting chores done today", ()
   ]);
 });
 
+it("#240: Next 7 days sorts by day, then time; Overdue most recent day first", () => {
+  const day = (n: number) => localDate(NOW + n * 86_400_000, TZ);
+  const on = (id: string, d: string, t: string) => chore(id, id, { skylight: { kind: "chore", choreId: id, categoryId: null, startDate: d, startTime: t } });
+  const s = choreSections([on("nextweek-0800", day(6), "08:00"), on("tomorrow-1800", day(1), "18:00"), on("in2-0700", day(2), "07:00")], {
+    now: NOW,
+    timezone: TZ,
+  });
+  expect(s.find((x) => x.key === "later")!.open.map((a) => a.id)).toEqual(["tomorrow-1800", "in2-0700", "nextweek-0800"]);
+  const o = choreSections([on("lastweek-1900", day(-6), "19:00"), on("yesterday-0700", day(-1), "07:00")], { now: NOW, timezone: TZ });
+  expect(o.find((x) => x.key === "overdue")!.open.map((a) => a.id)).toEqual(["yesterday-0700", "lastweek-1900"]);
+});
+
 it("completes from the row: pending shimmer → collapses → Done today, progress ticks, Undo restores", async () => {
   let finish!: (v: unknown) => void;
   vi.mocked(api.post)

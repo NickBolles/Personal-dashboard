@@ -1,8 +1,8 @@
 import "server-only";
 import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
-import { controlRules, serviceLabel } from "@/integrations/home-assistant/controls";
-import { allowedServicesFor, cleanServiceData, serviceRisk, servicePolicy, type ServiceData } from "@/lib/ha-policy";
+import { controlRules, entityServices, serviceLabel } from "@/integrations/home-assistant/controls";
+import { cleanServiceData, serviceRisk, servicePolicy, type ServiceData } from "@/lib/ha-policy";
 
 export type DeviceProposal = { entityId: string; service: string; data?: Record<string, unknown>; reason: string };
 
@@ -20,7 +20,7 @@ export function proposalHref(entityId: string, service: string, data?: ServiceDa
  */
 export function buildDeviceProposal(p: DeviceProposal, profile: string, actor: string, correlationId: string) {
   const base = { actor, action: `ha.propose.${p.service}`, source: "home_assistant", sourceRecord: p.entityId, correlationId };
-  if (!servicePolicy(p.entityId, p.service) || !allowedServicesFor(controlRules(), p.entityId).includes(p.service)) {
+  if (!servicePolicy(p.entityId, p.service) || !entityServices(controlRules(), p.entityId).includes(p.service)) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowlisted", via: `agent:${profile}` } });
     throw new HttpError(403, "not_allowlisted", "That device action isn't allowed in Jarvis");
   }
@@ -39,7 +39,7 @@ export function buildDeviceProposal(p: DeviceProposal, profile: string, actor: s
         .join(", ")})`
     : "";
   const question =
-    `@${profile} proposes a device change${risk === "high" ? " (HIGH-RISK)" : ""}: ${label} ${p.entityId}${detail}. Why: ${p.reason}. Confirm it on House: ${href}`.slice(
+    `@${profile} proposes a device change${risk === "high" ? " (HIGH-RISK)" : ""}: ${label} ${p.entityId}${detail}. Why: ${p.reason}. Confirm it on House.`.slice(
       0,
       500,
     );

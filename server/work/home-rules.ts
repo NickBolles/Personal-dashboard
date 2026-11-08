@@ -14,7 +14,14 @@ import type { AdapterContext } from "@/integrations/types";
  */
 export const WORK_STALE_MS = 15 * 60_000;
 
-type Row = { id: string; title: string; status: string; nextAction: string; targetDate: string | null; updatedAt: string };
+type Row = { id: string; title: string; status: string; nextAction: string; targetDate: string | null; updatedAt: string; createdVia?: string | null };
+
+/** #229: the item's recorded creator (work_items.created_via), like Jarvis-local todos, so /todos' AI segment sees agent-created work. */
+function provenanceOf(r: Row): Pick<NextAction, "provenance"> {
+  if (!r.createdVia) return {};
+  const agent = r.createdVia.startsWith("agent:") ? r.createdVia.slice(6) : "";
+  return { provenance: { via: r.createdVia, ...(agent ? { agent } : {}) } };
+}
 type Val = { itemId: string; metric: string; status: string; dueDate: string | null };
 
 export function workHomeActions(rows: Row[], vals: Val[], ctx: AdapterContext): NextAction[] {
@@ -40,6 +47,7 @@ export function workHomeActions(rows: Row[], vals: Val[], ctx: AdapterContext): 
             updatedAt: r.updatedAt,
             href,
             primaryAction: { kind: "open", label: "Record evidence" },
+            ...provenanceOf(r),
           }),
         );
       }
@@ -59,6 +67,7 @@ export function workHomeActions(rows: Row[], vals: Val[], ctx: AdapterContext): 
           updatedAt: r.updatedAt,
           href,
           primaryAction: { kind: "open", label: "Open" },
+          ...provenanceOf(r),
         }),
       );
     }

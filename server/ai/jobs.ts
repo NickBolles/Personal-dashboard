@@ -106,6 +106,15 @@ export function subjectText(userId: string, subjectType: string, subjectId: stri
 export function guardSubject(userId: string, kind: AiJobKind, subjectType: string, subjectId: string, financeOverride = false) {
   const subj = subjectText(userId, subjectType, subjectId);
   if (!subj) throw new HttpError(404, "not_found", "Not found");
+  if (kind === "summarize" && subjectType === "work_item") {
+    const item = getDb()
+      .select({ kind: schema.workItems.kind })
+      .from(schema.workItems)
+      .where(and(eq(schema.workItems.id, subjectId), eq(schema.workItems.userId, userId)))
+      .get();
+    if (item?.kind === "note" || item?.kind === "conversation")
+      throw new HttpError(409, "summary_no_destination", "Summarize needs an item that can hold a note, not a note or conversation.");
+  }
   let areaItem: string | null = subjectType === "work_item" ? subjectId : null;
   if (subjectType === "inbox") {
     const e = getDb().select().from(schema.workInbox).where(eq(schema.workInbox.id, subjectId)).get();

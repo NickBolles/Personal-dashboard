@@ -39,7 +39,7 @@ describe("filedChatContext", () => {
     expect(filedChatContext(owner, "api_settle", "devchief")).toContain("jarvis_request_change");
   });
 
-  it("returns nothing for unfiled chats and AI-excluded or Finance areas", () => {
+  it("returns nothing for unfiled chats and AI-excluded areas; Finance areas get context (#243)", () => {
     expect(filedChatContext(owner, "api_none", null)).toBeNull();
     const area = store.createItem(owner, { kind: "area", title: "Private" }, cid);
     store.updateItem(owner, area.id, { settings: { aiPolicy: "excluded" } }, cid);
@@ -47,10 +47,20 @@ describe("filedChatContext", () => {
     expect(filedChatContext(owner, "api_private", null)).toBeNull();
     const finance = store.createItem(owner, { kind: "area", title: "Finance" }, cid);
     store.placeConversation(owner, { sessionId: "api_fin", parentId: finance.id, title: "Budget" }, cid);
+    store.createItem(owner, { kind: "thread", title: "Pay card ending 4111111111111111", parentId: finance.id }, cid);
+    const fin = filedChatContext(owner, "api_fin", null);
+    expect(fin).toContain("filed in Jarvis under: Finance");
+    expect(fin).not.toContain("4111111111111111");
+    // Exclude from AI still wins on a Finance area.
+    store.updateItem(owner, finance.id, { settings: { aiPolicy: "excluded" } }, cid);
     expect(filedChatContext(owner, "api_fin", null)).toBeNull();
     const ok = store.createItem(owner, { kind: "area", title: "Home" }, cid);
     const taxes = store.createItem(owner, { kind: "project", title: "Tax return 2026", parentId: ok.id }, cid);
     store.placeConversation(owner, { sessionId: "api_tax", parentId: taxes.id, title: "Paperwork" }, cid);
-    expect(filedChatContext(owner, "api_tax", null)).toBeNull();
+    expect(filedChatContext(owner, "api_tax", null)).toContain("Tax return 2026");
+    // Credential-like ancestor titles still mean no snapshot.
+    const keys = store.createItem(owner, { kind: "project", title: "rotate api_key: abcdef123456", parentId: ok.id }, cid);
+    store.placeConversation(owner, { sessionId: "api_keys", parentId: keys.id, title: "Keys" }, cid);
+    expect(filedChatContext(owner, "api_keys", null)).toBeNull();
   });
 });
