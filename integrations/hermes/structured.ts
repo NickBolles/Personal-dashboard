@@ -1,5 +1,5 @@
 import "server-only";
-import { detectSensitivity } from "@/server/ai/rules";
+import { maskSecrets } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import crypto from "node:crypto";
 import { z } from "zod";
@@ -62,8 +62,10 @@ export { extractJson, parseStructured };
 /** Stop is asynchronous. Delete only after a separately observed terminal status. */
 export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
   const instructions = structuredInstructions(req.source, req.example);
-  if (detectSensitivity(`${req.task}\n${instructions}`) === "credentials")
-    throw new UpstreamError(req.label, "unsupported", "Credentials are never sent to AI");
+  // Summaries/triage/scheduled reads: secret values are replaced inline; a task that is nothing but a credential is refused.
+  const masked = maskSecrets(req.task);
+  if (masked.onlySecrets) throw new UpstreamError(req.label, "unsupported", "Credentials are never sent to AI");
+  if (masked.masked.length) req = { ...req, task: masked.text };
   const startedAt = Date.now();
   const budget = Math.min(120_000, Math.max(100, req.timeoutMs ?? 120_000));
   const deadline = startedAt + budget;

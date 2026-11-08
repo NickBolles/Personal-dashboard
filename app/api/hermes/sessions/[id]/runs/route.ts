@@ -15,7 +15,7 @@ import { isLocalSession } from "@/lib/assistant";
 import { CHAT_FILE_LIMITS } from "@/lib/chat-files";
 import { markFilesSent, prepareRunFiles } from "@/server/chat/files";
 import { areaPolicyFor } from "@/server/ai/jobs";
-import { detectSensitivity } from "@/server/ai/rules";
+import { credentialsMessage, maskSecrets } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { HttpError } from "@/server/http/errors";
 import { filedChatContext } from "@/server/work/chat-context";
@@ -60,8 +60,12 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
       .filter(Boolean)
       .join("\n\n");
     const rawInput = context ? `${body.input}\n\n---\nContext from Jarvis:\n${context}` : body.input;
-    if (detectSensitivity(rawInput) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
-    const input = maskAccountNumbers(rawInput);
+    // Credentials never reach AI: a message that IS a credential is refused (draft kept); otherwise
+    // each secret value is replaced inline and the rest is sent ("1 secret removed" in the reply).
+    const typed = maskSecrets(body.input);
+    if (typed.onlySecrets) throw new HttpError(403, "credentials_detected", credentialsMessage(typed.masked));
+    const cleanInput = maskSecrets(rawInput);
+    const input = maskAccountNumbers(cleanInput.text);
     const s = area?.settings;
     // The agent-mode hint is only for conversations NOT already running on that Hermes profile (Settings → Agents).
     const onProfile = isLocalSession(params.id) ? null : sessionProfile(params.id);
@@ -77,8 +81,7 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
     // including chats already on the area's own profile, which used to get no area context at all.
     const filed = local ? null : filedChatContext(user, params.id, onProfile);
     const rawInstructions = [areaInstructions, filed, smart].filter(Boolean).join("\n\n");
-    if (detectSensitivity(rawInstructions) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
-    const instructions = maskAccountNumbers(rawInstructions) || undefined;
+    const instructions = maskAccountNumbers(maskSecrets(rawInstructions).text) || undefined;
     const run = await startRun(
       user,
       {
@@ -95,7 +98,8 @@ export const POST = api<z.infer<typeof schema>, { id: string }>(
       correlationId,
     );
     if (files) markFilesSent(files.ids, run.runId);
-    return run;
+    // Tell the client what was removed (never the secret itself) so it can say so next to the message.
+    return cleanInput.masked.length ? { ...run, masked: cleanInput.masked.map((m) => m.hint) } : run;
   },
   { body: schema, cap: "hermes.chat" },
 );
