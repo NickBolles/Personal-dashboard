@@ -2000,7 +2000,10 @@ button:active > .dock-orb {
     cursor: pointer;
   }
   .k-check-in {
+    /* above the drawn box so the real input receives the pointer (Playwright check(), a11y tools) */
     position: absolute;
+    z-index: 1;
+    cursor: pointer;
     opacity: 0;
     width: 18px;
     height: 18px;
