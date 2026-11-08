@@ -16,7 +16,6 @@ import {
   useState,
   type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   type CSSProperties,
   type InputHTMLAttributes,
