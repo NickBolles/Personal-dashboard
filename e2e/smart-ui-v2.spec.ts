@@ -46,7 +46,10 @@ test("Prismv2 dynamic card sheet is WCAG 2.2 AA and reflows at 320px / 200% text
   await stubPrismV2(page);
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/more");
-  await page.getByRole("button", { name: "Chief of staff", exact: true }).click();
+  // Open the tray only once the dynamic line has loaded: an earlier tap opens the sheet on Chat.
+  const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+  await expect(tray).toContainText("Weekly review");
+  await tray.click();
   await expect(page.getByTestId("dynamic-card")).toBeVisible();
   const axe = await new AxeBuilder({ page: page as never }).include(".gc-sheet").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
