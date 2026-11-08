@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, like, or } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { areaDefaultsFor } from "@/server/references";
@@ -13,6 +13,11 @@ const MAX_PER_CALL = 20;
 
 const runState = (s: ExecState): "running" | "waiting" | "done" | "failed" | null =>
   s === "running" ? "running" : s === "waiting" ? "waiting" : s === "completed" ? "done" : s === "failed" || s === "cancelled" ? "failed" : null;
+
+const when = (iso: string | null | undefined, fallback: Date) => {
+  const t = iso ? Date.parse(iso) : NaN;
+  return Number.isFinite(t) && t <= fallback.getTime() ? new Date(t) : fallback;
+};
 
 /** The item a filed conversation works for: the item it sits under (an area for coordinator threads). */
 export function conversationItem(user: CurrentUser, sessionId: string): string | null {
@@ -33,7 +38,7 @@ export function conversationItem(user: CurrentUser, sessionId: string): string |
  * agent registered the same delegation/child itself, and state follows the execution record.
  */
 export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, profile: string | null, records: ExecutionRecord[], now = new Date()) {
-  const subs = records.filter((r) => r.source === "subagent").slice(0, MAX_PER_CALL);
+  const subs = records.filter((r) => r.source === "subagent");
   if (!subs.length) return 0;
   const itemId = conversationItem(user, parentSessionId);
   if (!itemId) return 0;
@@ -42,6 +47,8 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
   const who = profile ?? "default";
   let changed = 0;
   for (const r of subs) {
+    // The cap bounds WRITES per call, so records already mirrored never starve newer ones.
+    if (changed >= MAX_PER_CALL) break;
     const key = `${AUTO_RUN_PREFIX}${r.id}`.slice(0, 200);
     const own = db
       .select()
@@ -49,6 +56,9 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
       .where(and(eq(T.userId, user.id), eq(T.delegationId, key)))
       .get();
     const next = runState(r.state);
+    // Historical results keep their own times, so an old failure never looks newer than a later success.
+    const startedAt = when(r.startedAt, now);
+    const finishedAt = when(r.endedAt ?? r.updatedAt, now);
     if (own) {
       if (own.tokenId === null && next && own.state !== next && !(own.state === "done" || own.state === "failed")) {
         finishRegisteredRun(
@@ -56,7 +66,7 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
           own.id,
           next,
           (r.summary ?? r.error ?? (next === "done" ? "Finished" : next === "failed" ? "Failed" : "Running")).slice(0, 2000),
-          now,
+          next === "running" || next === "waiting" ? now : finishedAt,
         );
         changed++;
       }
@@ -72,13 +82,14 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
           eq(T.userId, user.id),
           or(
             r.delegationId ? eq(T.delegationId, r.delegationId) : undefined,
-            r.delegationId ? like(T.delegationId, `${r.delegationId}%`) : undefined,
+            r.delegationId ? eq(T.delegationId, `${r.delegationId}:${r.id}`) : undefined,
             r.childSessionId ? eq(T.hermesSessionId, r.childSessionId) : undefined,
           ),
         ),
       )
       .get();
-    if (theirs) continue;
+    // Unknown state: wait until the transcript says running/finished instead of guessing "running".
+    if (theirs || !next) continue;
     const { runId } = registerAgentRun(
       user,
       who,
@@ -91,10 +102,10 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
       },
       `exec:${parentSessionId}`.slice(0, 120),
       null,
-      now,
+      startedAt,
     );
     changed++;
-    if (next && next !== "running") finishRegisteredRun(user, runId, next, (r.summary ?? r.error ?? "").slice(0, 2000), now);
+    if (next !== "running") finishRegisteredRun(user, runId, next, (r.summary ?? r.error ?? "").slice(0, 2000), next === "waiting" ? now : finishedAt);
   }
   return changed;
 }

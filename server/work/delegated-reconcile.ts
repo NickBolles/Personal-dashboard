@@ -63,7 +63,12 @@ export function reconcileCandidates(now = new Date(), limit = RECONCILE_MAX_PER_
       : [];
     const bucket = Math.floor(now.getTime() / ACTIVE_RECHECK_MS);
     for (const r of active) {
-      if (picked.has(r.sessionId)) continue;
+      const hit = picked.get(r.sessionId);
+      // An in-flight child is re-read every bucket even when the parent's activity didn't move.
+      if (hit) {
+        if (!hit.marker.includes("|r:")) hit.marker = `${hit.marker}|r:${bucket}`;
+        continue;
+      }
       const at = Date.parse(r.updatedAt);
       picked.set(r.sessionId, { user, sessionId: r.sessionId, marker: `r:${bucket}`, at: Number.isFinite(at) ? at : since });
     }

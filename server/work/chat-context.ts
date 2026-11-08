@@ -11,7 +11,7 @@ export const FILED_CONTEXT_LIMITS = { items: 40, chars: 6000 } as const;
 
 /** Every filed chat with tools: delegations get registered on the item they serve. */
 export function delegationRule(scopeId: string, sessionId: string) {
-  return `If you dispatch sub-agents with delegate_task, register each one with jarvis_run_start (itemId = the item it serves, else ${scopeId}; delegationId = the delegation id; hermesSessionId = ${sessionId} unless you know the child's session) and close it with jarvis_run_update when its result arrives.`;
+  return `If you dispatch sub-agents with delegate_task, register each one with jarvis_run_start (itemId = the item it serves, else ${scopeId}; delegationId = <delegation id>:<subagent id> — one per child, never the bare batch id; hermesSessionId = ${sessionId} unless you know the child's session) and close it with jarvis_run_update when its result arrives.`;
 }
 
 /**
@@ -24,7 +24,7 @@ export function coordinatorBrief(areaTitle: string, scopeId: string, sessionId: 
     `You are the ${areaTitle} coordinator in Jarvis: you coordinate work, you don't just chat. For each request:`,
     "1. Plan: turn it into a short numbered plan (skip for simple questions).",
     tools
-      ? `2. Dispatch: run independent pieces in parallel with delegate_task. Register every sub-agent on the item it serves with jarvis_run_start (itemId; delegationId = the delegation id; hermesSessionId = ${sessionId} unless you know the child's) and update it with jarvis_run_update when it finishes or fails. Jarvis also lists sub-agents it sees in this conversation on ${scopeId}.`
+      ? `2. Dispatch: run independent pieces in parallel with delegate_task. Register every sub-agent on the item it serves with jarvis_run_start (itemId; delegationId = <delegation id>:<subagent id> — one per child, never the bare batch id; hermesSessionId = ${sessionId} unless you know the child's) and update it with jarvis_run_update when it finishes or fails. Jarvis also lists sub-agents it sees in this conversation on ${scopeId}.`
       : "2. Dispatch: run independent pieces in parallel with delegate_task.",
     '3. Control: when the owner writes "Steer <subagent id>: <message>" or "Stop <subagent id>", call delegate_task with action steer or stop for that sub-agent and confirm in one line.',
     tools

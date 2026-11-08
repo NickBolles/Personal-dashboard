@@ -92,6 +92,21 @@ describe("coordinator parity (server)", () => {
     expect(rows.map((r) => r.delegationId)).toEqual(["deleg_9"]);
   });
 
+  it("matches per-child registrations, waits on unknown children and caps writes, not records", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Shop" }, cid);
+    store.placeConversation(owner, { sessionId: "api_s", parentId: area.id, title: "Shop coordinator" }, cid);
+    registerAgentRun(owner, "devchief", { itemId: area.id, title: "Child a", delegationId: "deleg_9:a" }, cid);
+    expect(syncDelegatedRuns(owner, "api_s", "devchief", [sub("a", "running"), sub("b", "running"), sub("u", "unknown")])).toBe(1);
+    expect(
+      runsOf(area.id)
+        .map((r) => r.delegationId)
+        .sort(),
+    ).toEqual(["deleg_9:a", "sub:b"]);
+    const many = Array.from({ length: 25 }, (_, i) => sub(`m${i}`, "running"));
+    expect(syncDelegatedRuns(owner, "api_s", "devchief", many)).toBe(20);
+    expect(syncDelegatedRuns(owner, "api_s", "devchief", many)).toBe(5);
+  });
+
   it("background reconcile registers sub-agents of recent filed conversations without the chat open (bounded, idempotent)", async () => {
     __resetReconcile();
     const now = new Date("2026-11-07T18:00:00Z");
