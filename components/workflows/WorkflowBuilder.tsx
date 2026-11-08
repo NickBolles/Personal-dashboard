@@ -4,8 +4,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, Field, Page, PageHeader, cx, useToast, EmptyState, LoadingState } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Checkbox, ErrorNote, Field, IconButton, Input, Page, PageHeader, Select, Textarea, useToast, EmptyState, LoadingState } from "@/components/ui";
 import { FIELD_TYPES, MODEL_TIERS, WORKFLOW_ICONS, formFields, type WorkflowDefinition, type WorkflowField } from "@/lib/workflows/definition";
 import {
   BUILDER_SECTIONS,
@@ -103,7 +102,7 @@ function NewWorkflow({ fromChat }: { fromChat?: string }) {
         can("work.ai") ? (
           describe === "open" ? (
             <form
-              className="mb-4 space-y-2 rounded-[12px] border border-line p-3"
+              className="mb-4 space-y-2 rounded-xl border border-line p-3"
               aria-label="Describe it"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -111,13 +110,7 @@ function NewWorkflow({ fromChat }: { fromChat?: string }) {
               }}
             >
               <Field id="wf-describe" label="Describe the workflow" hint="What happens, what to capture, what to ask at the start.">
-                <textarea
-                  id="wf-describe"
-                  className={cx(inputCls, "min-h-24 w-full")}
-                  value={text}
-                  maxLength={2000}
-                  onChange={(e) => setText(e.target.value)}
-                />
+                <Textarea id="wf-describe" className="min-h-24 w-full min-w-0" value={text} maxLength={2000} onChange={(e) => setText(e.target.value)} />
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" variant="primary" disabled={text.trim().length < 10}>
@@ -200,7 +193,13 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
             <Button type="button" onClick={() => dispatch({ type: "undo" })} disabled={!state.past.length}>
               Undo
             </Button>
-            <Button type="button" variant="primary" onClick={() => void save()} disabled={saving || issueCount > 0 || (!!detail && !state.dirty)}>
+            <Button
+              type="button"
+              variant="primary"
+              className="whitespace-normal"
+              onClick={() => void save()}
+              disabled={saving || issueCount > 0 || (!!detail && !state.dirty)}
+            >
               {saving ? "Saving…" : detail ? "Save new version" : "Save draft"}
             </Button>
           </div>
@@ -210,16 +209,17 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
       <div className="grid grid-cols-1 gap-4 @min-[872px]:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
         <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 @min-[872px]:flex-col">
           {BUILDER_SECTIONS.map((s) => (
-            <button
+            <Button
               key={s}
               type="button"
-              className={`tap rounded-md px-3 py-2 text-left text-sm ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
+              variant="ghost"
+              className={`min-w-0 justify-start whitespace-normal text-left ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
               aria-current={state.section === s ? "step" : undefined}
               onClick={() => dispatch({ type: "section", section: s })}
             >
               {SECTION_LABEL[s]}
               {issues[s].length ? <span className="ml-1 text-danger">({issues[s].length})</span> : null}
-            </button>
+            </Button>
           ))}
         </nav>
 
@@ -238,9 +238,9 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
           {state.section === "basics" ? <Basics d={d} dispatch={dispatch} locked={!!detail} /> : null}
           {state.section === "instructions" ? (
             <Field id="wf-instructions" label="Instructions" hint={`${tokenCount(d.instructions)} tokens · ${d.instructions.length}/4000 characters`}>
-              <textarea
+              <Textarea
                 id="wf-instructions"
-                className={cx(inputCls, "min-h-48 w-full")}
+                className="min-h-48 w-full min-w-0"
                 value={d.instructions}
                 maxLength={4000}
                 onChange={(e) => dispatch({ type: "instructions", text: e.target.value })}
@@ -257,7 +257,7 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
           {state.section === "outputs" ? <p className="text-sm text-muted">Summary, exports and schedules arrive in the next update.</p> : null}
           <div className="mt-4 flex min-w-0 flex-wrap items-end gap-2 border-t border-line pt-3">
             <Field id="wf-note" label="Change note (optional)">
-              <input id="wf-note" className={cx(inputCls, "w-full")} value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
+              <Input id="wf-note" className="w-full min-w-0" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
             </Field>
           </div>
           {serverIssues.length ? (
@@ -285,18 +285,18 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <Field id="wf-name" label="Name">
-        <input
+        <Input
           id="wf-name"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.name}
           maxLength={60}
           onChange={(e) => dispatch({ type: "basics", patch: { name: e.target.value } })}
         />
       </Field>
       <Field id="wf-slug" label="Command" hint={locked ? "The /command can't change after the first save" : "Lowercase letters, digits and dashes"}>
-        <input
+        <Input
           id="wf-slug"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.slug}
           readOnly={locked}
           maxLength={40}
@@ -304,41 +304,41 @@ function Basics({ d, dispatch, locked }: { d: WorkflowDefinition; dispatch: Disp
         />
       </Field>
       <Field id="wf-icon" label="Icon">
-        <select
+        <Select
           id="wf-icon"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.icon}
           onChange={(e) => dispatch({ type: "basics", patch: { icon: e.target.value as WorkflowDefinition["icon"] } })}
         >
           {WORKFLOW_ICONS.map((i) => (
             <option key={i}>{i}</option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field id="wf-area" label="Area" hint="Path like Faith or Home/Chores; areas excluded from AI aren't allowed">
-        <input
+        <Input
           id="wf-area"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.routing.area ?? ""}
           onChange={(e) => dispatch({ type: "basics", patch: { area: e.target.value.trim() ? e.target.value : null } })}
         />
       </Field>
       <Field id="wf-tier" label="Model tier">
-        <select
+        <Select
           id="wf-tier"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.routing.modelTier}
           onChange={(e) => dispatch({ type: "basics", patch: { modelTier: e.target.value as WorkflowDefinition["routing"]["modelTier"] } })}
         >
           {MODEL_TIERS.map((t) => (
             <option key={t}>{t}</option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field id="wf-desc" label="Description">
-        <input
+        <Input
           id="wf-desc"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={d.description ?? ""}
           maxLength={280}
           onChange={(e) => dispatch({ type: "basics", patch: { description: e.target.value } })}
@@ -374,7 +374,7 @@ function Capture({ d, dispatch }: { d: WorkflowDefinition; dispatch: Dispatch })
         }}
       >
         <Field id="wf-cap-key" label="New list (e.g. quotes)">
-          <input id="wf-cap-key" className={inputCls} value={key} pattern="[a-z][A-Za-z0-9_]{0,39}" onChange={(e) => setKey(e.target.value)} />
+          <Input id="wf-cap-key" className="w-full min-w-0" value={key} pattern="[a-z][A-Za-z0-9_]{0,39}" onChange={(e) => setKey(e.target.value)} />
         </Field>
         <Button type="submit">Add list</Button>
       </form>
@@ -389,16 +389,17 @@ function Forms({ d, slot, selected, dispatch }: { d: WorkflowDefinition; slot: F
     <div className="space-y-3">
       <div role="tablist" aria-label="Form" className="flex flex-wrap gap-1">
         {(["start", "mid", "end"] as const).map((s) => (
-          <button
+          <Button
             key={s}
             role="tab"
             type="button"
+            variant="ghost"
             aria-selected={slot === s}
-            className={`tap rounded-md px-3 py-1 text-sm ${slot === s ? "bg-surface-2 font-semibold" : ""}`}
+            className={`whitespace-normal ${slot === s ? "bg-surface-2 font-semibold" : ""}`}
             onClick={() => dispatch({ type: "formSlot", slot: s })}
           >
             {s === "start" ? "Start" : s === "mid" ? "Mid-run" : "End"}
-          </button>
+          </Button>
         ))}
       </div>
       <ol className="space-y-1" aria-label="Form fields">
@@ -414,15 +415,24 @@ function Forms({ d, slot, selected, dispatch }: { d: WorkflowDefinition; slot: F
               >
                 {typeof f === "string" ? `↪ ${f}` : `${f.label} · ${f.type}`}
               </button>
-              <Button type="button" size="sm" aria-label={`Move ${fid} up`} onClick={() => dispatch({ type: "fieldMove", slot, id: fid, delta: -1 })}>
-                ↑
-              </Button>
-              <Button type="button" size="sm" aria-label={`Move ${fid} down`} onClick={() => dispatch({ type: "fieldMove", slot, id: fid, delta: 1 })}>
-                ↓
-              </Button>
-              <Button type="button" size="sm" aria-label={`Remove ${fid}`} onClick={() => dispatch({ type: "fieldRemove", slot, id: fid })}>
-                ✕
-              </Button>
+              <IconButton
+                type="button"
+                label={`Move ${fid} up`}
+                icon={<span aria-hidden="true">↑</span>}
+                onClick={() => dispatch({ type: "fieldMove", slot, id: fid, delta: -1 })}
+              />
+              <IconButton
+                type="button"
+                label={`Move ${fid} down`}
+                icon={<span aria-hidden="true">↓</span>}
+                onClick={() => dispatch({ type: "fieldMove", slot, id: fid, delta: 1 })}
+              />
+              <IconButton
+                type="button"
+                label={`Remove ${fid}`}
+                icon={<span aria-hidden="true">✕</span>}
+                onClick={() => dispatch({ type: "fieldRemove", slot, id: fid })}
+              />
             </li>
           );
         })}
@@ -453,27 +463,27 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
         </p>
       ) : null}
       <Field id="wf-f-label" label="Label">
-        <input
+        <Input
           id="wf-f-label"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={field.label}
           maxLength={80}
           onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { label: e.target.value } })}
         />
       </Field>
       <Field id="wf-f-help" label="Help text">
-        <input
+        <Input
           id="wf-f-help"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={field.help ?? ""}
           maxLength={200}
           onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { help: e.target.value || undefined } })}
         />
       </Field>
       <Field id="wf-f-default" label="Default">
-        <select
+        <Select
           id="wf-f-default"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={src.kind === "smart" ? src.source : src.kind}
           onChange={(e) => {
             const v = e.target.value;
@@ -490,44 +500,35 @@ function Inspector({ field, slot, d, dispatch }: { field: WorkflowField; slot: F
               Smart: {s.slice(1)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {src.kind === "literal" ? (
         <Field id="wf-f-literal" label="Fixed value">
-          <input
+          <Input
             id="wf-f-literal"
-            className={cx(inputCls, "w-full")}
+            className="w-full min-w-0"
             value={src.value}
             maxLength={200}
             onChange={(e) => setSrc({ kind: "literal", value: e.target.value })}
           />
         </Field>
       ) : null}
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={!!field.required}
-          onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { required: e.target.checked || undefined } })}
-        />
-        Required
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={remembers(field)}
-          onChange={(e) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { rememberLast: e.target.checked } })}
-        />
-        Remember last value
-      </label>
+      <Checkbox
+        label="Required"
+        checked={!!field.required}
+        onChange={(checked) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { required: checked || undefined } })}
+      />
+      <Checkbox
+        label="Remember last value"
+        checked={remembers(field)}
+        onChange={(checked) => dispatch({ type: "fieldUpdate", slot, id: field.id, patch: { rememberLast: checked } })}
+      />
       {slot === "start" ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={args.includes(field.id)}
-            onChange={(e) => dispatch({ type: "argsSet", ids: e.target.checked ? [...args, field.id] : args.filter((a) => a !== field.id) })}
-          />
-          Fill from palette text (/{d.slug} …)
-        </label>
+        <Checkbox
+          label={`Fill from palette text (/${d.slug} …)`}
+          checked={args.includes(field.id)}
+          onChange={(checked) => dispatch({ type: "argsSet", ids: checked ? [...args, field.id] : args.filter((a) => a !== field.id) })}
+        />
       ) : null}
     </fieldset>
   );
@@ -549,16 +550,17 @@ function Preview({ d, mode, onMode }: { d: WorkflowDefinition; mode: "defaults" 
         <h2 className="font-semibold">Preview</h2>
         <div role="radiogroup" aria-label="Preview state" className="flex flex-wrap gap-1">
           {(["defaults", "empty", "errors"] as const).map((m) => (
-            <button
+            <Button
               key={m}
               type="button"
+              variant="ghost"
               role="radio"
               aria-checked={mode === m}
-              className={`tap rounded-md px-2 text-sm ${mode === m ? "bg-surface-2 font-semibold" : ""}`}
+              className={`whitespace-normal ${mode === m ? "bg-surface-2 font-semibold" : ""}`}
               onClick={() => onMode(m)}
             >
               {m === "defaults" ? "Defaults" : m === "empty" ? "Empty" : "Errors"}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -659,7 +661,7 @@ function TestTurn({ d, blocked }: { d: WorkflowDefinition; blocked: boolean }) {
     }
   };
   return (
-    <section aria-labelledby="wf-test-h" className="min-w-0 rounded-[12px] border border-line p-3" data-testid="builder-test-turn">
+    <section aria-labelledby="wf-test-h" className="min-w-0 rounded-xl border border-line p-3" data-testid="builder-test-turn">
       <h2 id="wf-test-h" className="text-sm font-semibold">
         Test a turn
       </h2>
@@ -672,13 +674,7 @@ function TestTurn({ d, blocked }: { d: WorkflowDefinition; blocked: boolean }) {
         }}
       >
         <Field id="wf-test-msg" label="Message">
-          <textarea
-            id="wf-test-msg"
-            className={cx(inputCls, "min-h-20 w-full")}
-            value={message}
-            maxLength={2000}
-            onChange={(e) => setMessage(e.target.value)}
-          />
+          <Textarea id="wf-test-msg" className="min-h-20 w-full min-w-0" value={message} maxLength={2000} onChange={(e) => setMessage(e.target.value)} />
         </Field>
         <Button type="submit" size="sm" disabled={busy || blocked || !message.trim()}>
           {busy ? "Testing…" : "Test a turn"}

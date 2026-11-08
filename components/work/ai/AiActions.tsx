@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Dialog, Field, cx, useNow, useToast, Pill, ProposedBox } from "@/components/ui";
-import { Badge, Button, OverflowMenu, Spinner, inputCls } from "@/components/ui/legacy";
+import { Button, Checkbox, ChipButton, Dialog, Field, Input, KSpinner, Select, Textarea, cx, useNow, useToast, Pill, ProposedBox } from "@/components/ui";
+import { OverflowMenu } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { ModelCombobox, type ModelChoice } from "@/components/areas/ModelPicker";
 import { useWorkMutation } from "@/components/work/common";
@@ -64,8 +64,14 @@ export function GetStarted({ itemId, areaId, compact }: { itemId: string; areaId
   const [last] = useState<AiActionKind>(() => (typeof window === "undefined" ? "research" : readLast(areaId)));
   if (!can || !q.data?.policy.allowed) return null;
   return (
-    <div className="flex items-stretch" data-testid="ai-get-started">
-      <Button size="sm" variant="primary" className="rounded-r-none" onClick={() => setSheet(last)} title={AI_ACTIONS[last].description}>
+    <div className="flex min-w-0 flex-wrap items-stretch" data-testid="ai-get-started">
+      <Button
+        size="sm"
+        variant="primary"
+        className="min-w-0 max-w-full rounded-r-none whitespace-normal"
+        onClick={() => setSheet(last)}
+        title={AI_ACTIONS[last].description}
+      >
         <span aria-hidden="true">✦</span> {compact ? "Get started" : `Get started · ${AI_ACTIONS[last].label.replace("…", "")}`}
       </Button>
       <div className="ai-split-menu">
@@ -190,11 +196,17 @@ export function ActionSheet({
               </span>
             ) : null}
           </p>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <Button size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button size="sm" variant={overBudget ? "danger" : "primary"} busy={start.isPending} onClick={() => start.mutate(undefined)} data-testid="ai-start">
+            <Button
+              size="sm"
+              variant={overBudget ? "danger" : "primary"}
+              loading={start.isPending}
+              onClick={() => start.mutate(undefined)}
+              data-testid="ai-start"
+            >
               {overBudget ? "Run anyway" : "Start"}
             </Button>
           </div>
@@ -206,18 +218,18 @@ export function ActionSheet({
           <div className="flex flex-wrap items-center gap-2">
             <span className="wk-label">Tier</span>
             {(["standard", "deep"] as const).map((v) => (
-              <button
+              <ChipButton
                 key={v}
                 type="button"
                 aria-pressed={(v === "deep") === deep}
                 onClick={() => setDeep(v === "deep")}
                 className={cx(
-                  "tap rounded-full border px-3 py-1 text-xs",
+                  "max-w-full whitespace-normal rounded-full border px-3 py-1 text-xs",
                   (v === "deep") === deep ? "border-accent bg-accent-soft font-semibold" : "border-line",
                 )}
               >
                 {v === "deep" ? "Deep" : "Standard"}
-              </button>
+              </ChipButton>
             ))}
           </div>
         ) : (
@@ -225,9 +237,10 @@ export function ActionSheet({
         )}
         <ModelCombobox backend="hermes" value={model} onChange={setModel} defaultHint="tier default" />
         <Field id="ai-focus" label="Focus (optional)">
-          <textarea
+          <Textarea
             id="ai-focus"
-            className={`${inputCls} min-h-20`}
+            className="w-full min-w-0"
+            rows={2}
             maxLength={1000}
             value={focus}
             onChange={(e) => setFocus(e.target.value)}
@@ -237,20 +250,20 @@ export function ActionSheet({
         </Field>
         {action === "draft" ? (
           <Field id="ai-draft-kind" label="Kind">
-            <select id="ai-draft-kind" className={inputCls} value={draftKind} onChange={(e) => setDraftKind(e.target.value as typeof draftKind)}>
+            <Select id="ai-draft-kind" className="w-full min-w-0" value={draftKind} onChange={(e) => setDraftKind(e.target.value as typeof draftKind)}>
               {DRAFT_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {k.replace("_", " ")}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         {action === "schedule" ? (
           <Field id="ai-duration" label="Your duration guess (minutes, optional)">
-            <input
+            <Input
               id="ai-duration"
-              className={inputCls}
+              className="w-full min-w-0"
               inputMode="numeric"
               value={duration}
               onChange={(e) => setDuration(e.target.value.replace(/\D/g, "").slice(0, 4))}
@@ -262,18 +275,18 @@ export function ActionSheet({
             <legend className="wk-label pb-1">Context</legend>
             <div className="flex flex-wrap gap-1.5">
               {CONTEXT_SOURCES.map((s) => (
-                <button
+                <ChipButton
                   key={s}
                   type="button"
                   aria-pressed={sources.includes(s)}
                   onClick={() => setSources((l) => (l.includes(s) ? l.filter((x) => x !== s) : [...l, s]))}
                   className={cx(
-                    "tap rounded-full border px-3 py-1 text-xs",
+                    "max-w-full whitespace-normal rounded-full border px-3 py-1 text-xs",
                     sources.includes(s) ? "border-accent bg-accent-soft font-semibold" : "border-line",
                   )}
                 >
                   {CONTEXT_SOURCE_LABELS[s]}
-                </button>
+                </ChipButton>
               ))}
             </div>
             <p className="mt-1 text-xs text-muted">Areas excluded from AI are never sent.</p>
@@ -309,11 +322,11 @@ export function JobChip({ itemId }: { itemId: string }) {
     <div
       role="status"
       data-testid="ai-job-chip"
-      className="mt-2 flex flex-wrap items-center gap-2 rounded-[10px] border border-line bg-bg px-3 py-1.5 text-[13px]"
+      className="mt-2 flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line bg-bg px-3 py-1.5 text-sm wrap-anywhere"
     >
       {job.state === "queued" || job.state === "running" ? (
         <>
-          <Spinner />
+          <KSpinner />
           <span>
             {KIND_VERB[job.kind]}
             <span className="text-muted" data-dynamic>
@@ -359,7 +372,7 @@ export function JobChip({ itemId }: { itemId: string }) {
   );
 }
 
-const CONF_TONE = { low: "warn", medium: "neutral", high: "ok" } as const;
+const CONF_TONE = { low: "wn", medium: "neutral", high: "ok" } as const;
 
 function ago(iso: string) {
   const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
@@ -385,15 +398,23 @@ export function ReportsSection({ itemId, areaId }: { itemId: string; areaId: str
         onClick={() => setOpen(r.id)}
         data-testid="ai-report-row"
       >
-        <span className="flex w-full min-w-0 items-center gap-2">
+        <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
           {!r.readAt ? <span className="ai-unread-dot" aria-label="Unread" /> : null}
-          {r.kind === "summarize" ? <Pill tone="ai">Summary draft</Pill> : <Badge tone="accent">{AI_KIND_LABEL[r.kind]}</Badge>}
-          <span className="min-w-0 truncate text-[14px] font-medium">{r.title}</span>
-          <Badge tone={CONF_TONE[r.confidence]} dot>
+          {r.kind === "summarize" ? (
+            <Pill tone="ai" className="max-w-full whitespace-normal">
+              Summary draft
+            </Pill>
+          ) : (
+            <Pill tone="ai" className="max-w-full whitespace-normal">
+              {AI_KIND_LABEL[r.kind]}
+            </Pill>
+          )}
+          <span className="min-w-0 truncate text-sm font-medium">{r.title}</span>
+          <Pill tone={CONF_TONE[r.confidence]} className="pill-dot">
             {r.confidence}
-          </Badge>
+          </Pill>
         </span>
-        {r.summary ? <span className="line-clamp-2 text-[13px] text-muted">{r.summary}</span> : null}
+        {r.summary ? <span className="line-clamp-2 text-sm text-muted">{r.summary}</span> : null}
         <span className="text-xs text-muted" data-dynamic>
           {r.sourceCount} sources · {r.model ?? "default model"} · {usd2(r.costUsd)} · {ago(r.createdAt)}
         </span>
@@ -408,9 +429,15 @@ export function ReportsSection({ itemId, areaId }: { itemId: string; areaId: str
       <ul className="wk-rows">{current.map(row)}</ul>
       {older.length ? (
         <>
-          <button type="button" className="tap text-xs text-muted underline" aria-expanded={showOld} onClick={() => setShowOld((v) => !v)}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="max-w-full whitespace-normal text-xs text-muted underline"
+            aria-expanded={showOld}
+            onClick={() => setShowOld((v) => !v)}
+          >
             {showOld ? "Hide" : "Show"} {older.length} earlier report{older.length === 1 ? "" : "s"}
-          </button>
+          </Button>
           {showOld ? <ul className="wk-rows opacity-80">{older.map(row)}</ul> : null}
         </>
       ) : null}
@@ -489,7 +516,7 @@ export function ReportViewer({
             <div className="flex flex-wrap gap-1.5">
               {r.conversationId ? (
                 <a
-                  className="tap press inline-flex min-h-11 items-center rounded-[9px] border border-line px-3 text-sm"
+                  className="tap press inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-sm"
                   href={`/chat/${encodeURIComponent(r.conversationId)}`}
                 >
                   Continue in conversation
@@ -505,7 +532,7 @@ export function ReportViewer({
                       type="button"
                       size="sm"
                       variant="primary"
-                      busy={apply.isPending}
+                      loading={apply.isPending}
                       disabled={noteSaved}
                       onClick={() => apply.mutate({ what: "summary_note" })}
                     >
@@ -520,7 +547,7 @@ export function ReportViewer({
                 </Button>
               ) : null}
             </div>
-            <div className="flex gap-1.5" role="group" aria-label="Was this useful?">
+            <div className="flex min-w-0 flex-wrap gap-1.5" role="group" aria-label="Was this useful?">
               <Button size="sm" aria-pressed={r.feedback?.value === "useful"} onClick={() => patch.mutate({ feedback: { value: "useful" } })}>
                 Useful
               </Button>
@@ -533,22 +560,25 @@ export function ReportViewer({
       }
     >
       {!r ? (
-        <Spinner label="Loading report…" />
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading report…
+        </span>
       ) : (
-        <div className="space-y-4 text-[14px]" data-testid="ai-report-viewer">
+        <div className="min-w-0 space-y-4 text-sm wrap-anywhere" data-testid="ai-report-viewer">
           <div className="flex flex-wrap gap-1.5">
             <Button size="sm" variant="ghost" onClick={() => patch.mutate({ pinned: !r.pinnedAt })}>
               {r.pinnedAt ? "Unpin" : "Pin"}
             </Button>
             <a
-              className="tap press inline-flex min-h-11 items-center rounded-[9px] px-3 text-sm hover:bg-surface-2"
+              className="tap press inline-flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-surface-2"
               href={`/api/ai/reports/${r.id}/export?format=md`}
               download
             >
               Export .md
             </a>
             <a
-              className="tap press inline-flex min-h-11 items-center rounded-[9px] px-3 text-sm hover:bg-surface-2"
+              className="tap press inline-flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-surface-2"
               href={`/api/ai/reports/${r.id}/export?format=json`}
               download
             >
@@ -561,11 +591,11 @@ export function ReportViewer({
           {r.kind === "summarize" ? (
             <ProposedBox label="Summary draft · review before saving">
               <p className="mb-2 text-xs text-muted">Draft only. The item is unchanged until you choose Save as note.</p>
-              {r.summary ? <p className="mb-2 text-[15px]">{r.summary}</p> : null}
+              {r.summary ? <p className="mb-2 text-base">{r.summary}</p> : null}
               <SafeMarkdown text={r.bodyMd} sourceCount={0} />
             </ProposedBox>
           ) : r.summary ? (
-            <p className="text-[15px]">{r.summary}</p>
+            <p className="text-base">{r.summary}</p>
           ) : null}
           {st.next_actions?.length ? (
             <section aria-labelledby="ai-na">
@@ -580,7 +610,7 @@ export function ReportViewer({
                       {n.why ? <span className="block text-xs text-muted">{n.why}</span> : null}
                     </span>
                     {isItem ? (
-                      <Button size="sm" onClick={() => apply.mutate({ what: "next_action", index: i })}>
+                      <Button size="sm" className="max-w-full whitespace-normal" onClick={() => apply.mutate({ what: "next_action", index: i })}>
                         Use as next action
                       </Button>
                     ) : null}
@@ -597,19 +627,18 @@ export function ReportViewer({
               <ol className="space-y-1">
                 {steps.map((s, i) => (
                   <li key={i}>
-                    <label className="tap flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={sel.includes(i)}
-                        onChange={() => setPicked(sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i].sort((a, b) => a - b))}
-                      />
-                      <span>
-                        <strong>
-                          {i + 1}. {s.title}
-                        </strong>
-                        {s.detail ? <span className="block text-xs text-muted">{s.detail}</span> : null}
-                      </span>
-                    </label>
+                    <Checkbox
+                      checked={sel.includes(i)}
+                      onChange={() => setPicked(sel.includes(i) ? sel.filter((x) => x !== i) : [...sel, i].sort((a, b) => a - b))}
+                      label={
+                        <span>
+                          <strong>
+                            {i + 1}. {s.title}
+                          </strong>
+                          {s.detail ? <span className="block text-xs text-muted">{s.detail}</span> : null}
+                        </span>
+                      }
+                    />
                   </li>
                 ))}
               </ol>
@@ -617,9 +646,9 @@ export function ReportViewer({
                 <Button
                   size="sm"
                   variant="primary"
-                  className="mt-2"
+                  className="mt-2 max-w-full whitespace-normal"
                   disabled={!sel.length}
-                  busy={apply.isPending}
+                  loading={apply.isPending}
                   onClick={() => apply.mutate({ what: "plan_children", indexes: sel })}
                 >
                   Create {sel.length} child item{sel.length === 1 ? "" : "s"}
@@ -633,9 +662,9 @@ export function ReportViewer({
                 Suggested times {st.durationMinutes ? `(${st.durationMinutes} min)` : ""}
               </h4>
               {st.slots.length ? (
-                <ul className="grid gap-2 sm:grid-cols-3">
+                <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   {st.slots.map((s, i) => (
-                    <li key={i} className="rounded-[10px] border border-line p-2" data-testid="ai-slot">
+                    <li key={i} className="min-w-0 rounded-lg border border-line p-2" data-testid="ai-slot">
                       <p className="font-semibold" data-dynamic>
                         {new Date(s.start).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       </p>
@@ -658,7 +687,7 @@ export function ReportViewer({
               <h4 id="ai-opts" className="wk-label pb-1">
                 Options
               </h4>
-              <table className="w-full text-left text-[13px]">
+              <table className="w-full table-fixed text-left text-sm wrap-anywhere">
                 <thead>
                   <tr>
                     <th scope="col">Option</th>
@@ -701,7 +730,7 @@ export function ReportViewer({
                 {r.sources.map((s) => {
                   const href = s.url ? safeHref(s.url) : null;
                   return (
-                    <li key={s.idx} id={`report-source-${s.idx + 1}`} className="text-[13px]">
+                    <li key={s.idx} id={`report-source-${s.idx + 1}`} className="text-sm">
                       <span className="text-muted">{s.idx + 1}. </span>
                       {href ? (
                         <a href={href} target="_blank" rel="noopener noreferrer nofollow" className="underline">
@@ -719,7 +748,7 @@ export function ReportViewer({
             </section>
           ) : null}
           {st.open_questions?.length || st.assumptions?.length ? (
-            <section aria-labelledby="ai-oq" className="text-[13px]">
+            <section aria-labelledby="ai-oq" className="text-sm">
               <h4 id="ai-oq" className="wk-label pb-1">
                 Open questions & assumptions
               </h4>

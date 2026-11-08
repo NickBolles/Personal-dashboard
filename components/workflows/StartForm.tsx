@@ -1,8 +1,7 @@
 "use client";
 
 import { useId, useMemo, useState, type ReactNode } from "react";
-import { Dialog, cx } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Dialog, Input, Textarea } from "@/components/ui";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { formatDistance, matchSavedPlace, type FormValue, type SavedPlace } from "@/lib/workflows/runs";
 import { parseScriptureRef } from "@/lib/workflows/scripture";
@@ -90,11 +89,11 @@ function TextLike({ el, value, set, error, note, multiline, list }: FieldProps &
     "aria-describedby": describedBy(id, { help: p.help, note, error }),
     maxLength: p.maxLength,
     placeholder: p.placeholder,
-    className: cx(inputCls, "min-w-0"),
+    className: "w-full min-w-0",
   };
   return (
     <Shell {...{ id, label: p.label, required: p.required, help: p.help, note, error }}>
-      {multiline ? <textarea rows={3} {...common} /> : <input type="text" list={list} {...common} />}
+      {multiline ? <Textarea rows={3} {...common} /> : <Input type="text" list={list} {...common} />}
     </Shell>
   );
 }
@@ -129,19 +128,27 @@ function DateTimeField({ el, value, set, error, note, data }: FieldProps) {
   const quick = data.form.fields.find((f) => f.id === el.props.id)?.quickDates ?? [];
   return (
     <Shell {...{ id, label: p.label, required: p.required, help: p.help, note, error }}>
-      <input
+      <Input
         id={id}
         type={p.mode === "datetime" ? "datetime-local" : p.mode}
         value={show(value)}
         onChange={(e) => set(e.target.value)}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(id, { help: p.help, note, error })}
-        className={cx(inputCls, "min-w-0")}
+        className="w-full min-w-0"
       />
       {quick.length ? (
         <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${p.label} shortcuts`}>
           {quick.map((q) => (
-            <Button type="button" key={q.id} size="sm" variant="ghost" aria-pressed={value === q.value} onClick={() => set(q.value)}>
+            <Button
+              type="button"
+              key={q.id}
+              size="sm"
+              variant="ghost"
+              className="max-w-full whitespace-normal"
+              aria-pressed={value === q.value}
+              onClick={() => set(q.value)}
+            >
               {q.label}
             </Button>
           ))}
@@ -181,7 +188,7 @@ function PlaceField({ el, value, set, error, note, data }: FieldProps) {
   };
   return (
     <Shell {...{ id, label: p.label, required: p.required, help: p.help, note, error }}>
-      <input
+      <Input
         id={id}
         type="text"
         list={listId}
@@ -193,7 +200,7 @@ function PlaceField({ el, value, set, error, note, data }: FieldProps) {
         }}
         aria-invalid={error ? true : undefined}
         aria-describedby={[describedBy(id, { help: p.help, note, error }), status ? `${id}-geo` : ""].filter(Boolean).join(" ") || undefined}
-        className={cx(inputCls, "min-w-0")}
+        className="w-full min-w-0"
       />
       <datalist id={listId}>
         {options.map((o) => (
@@ -239,14 +246,14 @@ function ChoiceField({ el, value, set, error, note }: FieldProps) {
   return (
     <div className="min-w-0">
       <Shell {...{ id, label: p.label, required: p.required, help: p.help, note, error }}>
-        <input
+        <Input
           id={id}
           type="text"
           list={`${id}-opts`}
           value={show(value)}
           onChange={(e) => set(e.target.value)}
           aria-describedby={describedBy(id, { help: p.help, note, error })}
-          className={cx(inputCls, "min-w-0")}
+          className="w-full min-w-0"
         />
         <datalist id={`${id}-opts`}>
           {p.options.map((o) => (
@@ -275,13 +282,21 @@ function TagsField({ el, value, set, error, note }: FieldProps) {
       {tags.length ? (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((t) => (
-            <Button type="button" key={t} size="sm" variant="ghost" aria-label={`Remove tag ${t}`} onClick={() => set(tags.filter((x) => x !== t))}>
+            <Button
+              type="button"
+              key={t}
+              size="sm"
+              variant="ghost"
+              className="max-w-full whitespace-normal break-all"
+              aria-label={`Remove tag ${t}`}
+              onClick={() => set(tags.filter((x) => x !== t))}
+            >
               {t} ×
             </Button>
           ))}
         </div>
       ) : null}
-      <input
+      <Input
         id={id}
         type="text"
         value={draft}
@@ -293,7 +308,7 @@ function TagsField({ el, value, set, error, note }: FieldProps) {
           }
         }}
         onBlur={add}
-        className={cx(inputCls, "min-w-0")}
+        className="w-full min-w-0"
       />
     </Shell>
   );
@@ -304,7 +319,7 @@ function NumberField({ el, value, set, error, note }: FieldProps) {
   const p = el.props as { label: string; help?: string; min?: number; max?: number; step?: number };
   return (
     <Shell {...{ id, label: p.label, help: p.help, note, error }}>
-      <input
+      <Input
         id={id}
         type="number"
         inputMode="decimal"
@@ -313,7 +328,7 @@ function NumberField({ el, value, set, error, note }: FieldProps) {
         step={p.step}
         value={value === null || value === undefined ? "" : String(value)}
         onChange={(e) => set(e.target.value === "" ? null : Number(e.target.value))}
-        className={cx(inputCls, "min-w-0")}
+        className="w-full min-w-0"
       />
     </Shell>
   );
@@ -326,16 +341,9 @@ function ToggleField({ el, value, set }: FieldProps) {
       <label htmlFor={id} className="text-sm font-medium">
         {el.props.label as string}
       </label>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={value === true}
-        onClick={() => set(!value)}
-        className="min-h-11 min-w-11 rounded-full border border-line-strong px-2 text-sm"
-      >
+      <Button id={id} type="button" role="switch" aria-checked={value === true} onClick={() => set(!value)} className="shrink-0 whitespace-normal">
         {value ? "On" : "Off"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -394,7 +402,7 @@ export function StartFormDialog({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" type="submit" form={formId} busy={busy} data-testid="workflow-start-submit">
+          <Button variant="primary" type="submit" form={formId} loading={busy} className="min-w-0 whitespace-normal" data-testid="workflow-start-submit">
             {spec.props.submit as string}
           </Button>
         </>

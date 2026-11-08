@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Dialog, ErrorNote, Field, cx } from "@/components/ui";
-import { Button, OverflowMenu, Spinner, inputCls, type MenuItem } from "@/components/ui/legacy";
+import { Button, ChipButton, Dialog, ErrorNote, Field, Input, KSpinner, Select, cx } from "@/components/ui";
+import { OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import type {
   ConversationIndexState,
   ConversationOption,
@@ -52,9 +52,9 @@ export function FilingActions({
   inMisc?: boolean;
 }) {
   return (
-    <span className="flex shrink-0 items-center gap-0.5">
+    <span className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5">
       {top ? (
-        <button
+        <ChipButton
           type="button"
           className="wk-suggest"
           disabled={busy}
@@ -66,7 +66,7 @@ export function FilingActions({
             →
           </span>
           <span className="truncate">{top.title}</span>
-        </button>
+        </ChipButton>
       ) : (
         <Button size="sm" variant="ghost" onClick={onPick} aria-label={`File…: ${c.title}`}>
           File…
@@ -131,17 +131,22 @@ export function ConversationPicker({ onPick, busy, linkedHere }: { onPick: (c: C
   return (
     <div className="space-y-2">
       <Field id="cp-filter" label="Search conversations">
-        <input
+        <Input
           id="cp-filter"
           data-autofocus
           type="search"
-          className={inputCls}
+          className="w-full min-w-0"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Title or text…"
         />
       </Field>
-      {q.isPending ? <Spinner label="Loading conversations…" /> : null}
+      {q.isPending ? (
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading conversations…
+        </span>
+      ) : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data?.unavailable.length ? <p className="text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; the list may be incomplete.</p> : null}
       <UpdatingNote data={q.data} />
@@ -193,12 +198,12 @@ export function ConversationLinkDialog({ item, linkedHere, onClose }: { item: Wo
     >
       <div className="space-y-3">
         <Field id="lk-role" label="Role">
-          <select id="lk-role" className={inputCls} value={role} onChange={(e) => setRole(e.target.value as LinkRole)}>
+          <Select id="lk-role" className="w-full min-w-0" value={role} onChange={(e) => setRole(e.target.value as LinkRole)}>
             <option value="source">Source</option>
             <option value="implementation">Implementation</option>
             <option value="evidence">Evidence</option>
             <option value="reference">Reference</option>
-          </select>
+          </Select>
         </Field>
         <ConversationPicker linkedHere={linkedHere} busy={add.isPending} onPick={(c) => add.mutate(c.id)} />
         <details className="text-sm">
@@ -212,10 +217,10 @@ export function ConversationLinkDialog({ item, linkedHere, onClose }: { item: Wo
           >
             <div className="min-w-0 flex-1">
               <Field id="lk-paste" label="Conversation id or /chat link">
-                <input id="lk-paste" className={inputCls} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="/chat/…" />
+                <Input id="lk-paste" className="w-full min-w-0" value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="/chat/…" />
               </Field>
             </div>
-            <Button type="submit" size="sm" disabled={!paste.trim()} busy={add.isPending}>
+            <Button type="submit" size="sm" disabled={!paste.trim()} loading={add.isPending} className="max-w-full whitespace-normal">
               Link pasted
             </Button>
           </form>
@@ -249,7 +254,12 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
         </h2>
         {q.data ? <span className="text-xs text-muted tabular-nums">{q.data.total}</span> : null}
       </div>
-      {q.isPending ? <Spinner label="Loading conversations…" /> : null}
+      {q.isPending ? (
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading conversations…
+        </span>
+      ) : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data?.unavailable.length ? (
         <p className="mb-2 text-sm text-warn">{q.data.unavailable.join(", ")} didn&apos;t answer; this may be incomplete.</p>
@@ -262,7 +272,7 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
           return (
             <li key={c.id} className="flex items-center gap-2 py-1.5 max-[359px]:flex-wrap max-[359px]:justify-end max-[359px]:gap-y-0" data-unfiled={c.id}>
               <span className="min-w-0 flex-1 max-[359px]:basis-full">
-                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-[13.5px] font-medium hover:underline">
+                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-sm font-medium hover:underline">
                   {c.title}
                 </Link>
                 <span className="block truncate text-xs text-muted" data-dynamic>
@@ -282,7 +292,7 @@ export function UnfiledPanel({ items, dismissable }: { items: WorkItem[]; dismis
         })}
       </ul>
       {list.length > 5 ? (
-        <Button size="sm" variant="ghost" className="mt-2" onClick={() => setAll((a) => !a)} aria-expanded={all}>
+        <Button size="sm" variant="ghost" className="mt-2 max-w-full whitespace-normal" onClick={() => setAll((a) => !a)} aria-expanded={all}>
           {all ? "Show fewer" : `Show all ${list.length}`}
         </Button>
       ) : null}
@@ -324,7 +334,7 @@ export function FileUnderDialog({
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!dest} busy={busy} onClick={() => onFile(dest)}>
+          <Button variant="primary" disabled={!dest} loading={busy} onClick={() => onFile(dest)}>
             File here
           </Button>
         </>
@@ -332,14 +342,14 @@ export function FileUnderDialog({
     >
       {c.suggestions.length ? <p className="mb-2 text-sm text-muted">Suggested (title words match): {c.suggestions.map((s) => s.title).join(", ")}</p> : null}
       <Field id="fu-dest" label="Destination">
-        <select id="fu-dest" className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
+        <Select id="fu-dest" className="w-full min-w-0" value={dest} onChange={(e) => setDest(e.target.value)}>
           <option value="">Choose…</option>
           {options.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
     </Dialog>
   );

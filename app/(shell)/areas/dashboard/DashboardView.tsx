@@ -4,8 +4,23 @@ import Link from "next/link";
 import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Dialog, ErrorNote, Field, cx, PermissionLock } from "@/components/ui";
-import { Badge, Button, Empty, Spinner, inputCls } from "@/components/ui/legacy";
+import {
+  Button,
+  Checkbox,
+  ChipButton,
+  Dialog,
+  EmptyState,
+  ErrorNote,
+  Field,
+  IconButton,
+  Input,
+  KSpinner,
+  Pill,
+  Select,
+  Textarea,
+  cx,
+  PermissionLock,
+} from "@/components/ui";
 import { CustomHtmlWidget } from "@/components/work/CustomHtmlWidget";
 import { MapCanvas } from "@/components/work/WorkMap";
 import { fmtWhen } from "@/components/work/conversations";
@@ -70,11 +85,17 @@ export function DashboardView() {
         actions={
           <>
             {editing ? (
-              <Button size="sm" onClick={() => setAdding(true)}>
+              <Button size="sm" className="max-w-full whitespace-normal" onClick={() => setAdding(true)}>
                 Add widget
               </Button>
             ) : null}
-            <Button size="sm" variant={editing ? "primary" : "secondary"} aria-pressed={editing} onClick={() => setEditing((e) => !e)}>
+            <Button
+              size="sm"
+              className="max-w-full whitespace-normal"
+              variant={editing ? "primary" : "secondary"}
+              aria-pressed={editing}
+              onClick={() => setEditing((e) => !e)}
+            >
               {editing ? "Done editing" : "Edit dashboard"}
             </Button>
           </>
@@ -82,7 +103,10 @@ export function DashboardView() {
       />
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.isPending ? (
-        <Spinner label="Loading dashboard…" />
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading dashboard…
+        </span>
       ) : q.data ? (
         q.data.widgets.length ? (
           <ul className="grid grid-cols-1 gap-3 @min-[560px]:grid-cols-2 @min-[760px]:grid-cols-12">
@@ -102,7 +126,14 @@ export function DashboardView() {
             ))}
           </ul>
         ) : (
-          <Empty title="No widgets" action={<Button onClick={() => (setEditing(true), setAdding(true))}>Add widget</Button>} />
+          <EmptyState
+            title="No widgets"
+            action={
+              <Button className="max-w-full whitespace-normal" onClick={() => (setEditing(true), setAdding(true))}>
+                Add widget
+              </Button>
+            }
+          />
         )
       ) : null}
       {q.data && adding ? <WidgetDialog areas={q.data.areas} onClose={() => setAdding(false)} /> : null}
@@ -173,7 +204,7 @@ function WidgetCard({
         data-widget={w.kind}
       >
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h2 id={headingId} className="flex items-center gap-1 text-[14px] font-semibold">
+          <h2 id={headingId} className="flex min-w-0 items-center gap-1 text-sm font-semibold wrap-anywhere">
             {editing ? (
               <span
                 aria-hidden="true"
@@ -195,35 +226,38 @@ function WidgetCard({
             {w.title}
           </h2>
           {editing ? (
-            <div className="flex flex-wrap gap-1">
-              <div role="group" aria-label={`Size of ${w.title}`} className="inline-flex overflow-hidden rounded-xl border border-line-strong">
+            <div className="flex min-w-0 max-w-full flex-wrap gap-1">
+              <div
+                role="group"
+                aria-label={`Size of ${w.title}`}
+                className="inline-flex max-w-full flex-wrap overflow-hidden rounded-xl border border-line-strong"
+              >
                 {WIDGET_SIZES.map((sz) => (
-                  <button
+                  <ChipButton
                     key={sz}
                     type="button"
                     aria-pressed={w.size === sz}
                     onClick={() => resize.mutate(sz)}
                     title={SIZE_LABEL[sz]}
-                    className={cx(
-                      "min-h-11 min-w-9 px-2 text-xs font-medium",
-                      w.size === sz ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2",
-                    )}
+                    className={cx("px-2 text-xs font-medium", w.size === sz ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2")}
                   >
                     <span aria-hidden="true">{sz.toUpperCase()}</span>
                     <span className="sr-only">{SIZE_LABEL[sz]}</span>
-                  </button>
+                  </ChipButton>
                 ))}
               </div>
-              <Button size="sm" variant="ghost" disabled={first} onClick={() => move.mutate("up")} aria-label={`Move ${w.title} earlier`}>
-                ↑
-              </Button>
-              <Button size="sm" variant="ghost" disabled={last} onClick={() => move.mutate("down")} aria-label={`Move ${w.title} later`}>
-                ↓
-              </Button>
-              <Button size="sm" variant="ghost" onClick={onConfigure} aria-label={`Configure ${w.title}`}>
+              <IconButton disabled={first} onClick={() => move.mutate("up")} label={`Move ${w.title} earlier`} icon={<span aria-hidden="true">↑</span>} />
+              <IconButton disabled={last} onClick={() => move.mutate("down")} label={`Move ${w.title} later`} icon={<span aria-hidden="true">↓</span>} />
+              <Button size="sm" variant="ghost" className="max-w-full whitespace-normal" onClick={onConfigure} aria-label={`Configure ${w.title}`}>
                 Configure
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => remove.mutate(undefined)} aria-label={`Remove ${w.title}`}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="max-w-full whitespace-normal"
+                onClick={() => remove.mutate(undefined)}
+                aria-label={`Remove ${w.title}`}
+              >
                 Remove
               </Button>
             </div>
@@ -239,12 +273,18 @@ function UnfiledWidget() {
   const canChat = useAccess().can("hermes.chat");
   const q = useQuery({ queryKey: ["work", "unfiled"], queryFn: () => api.get<UnfiledResponse>("/api/work/conversations/unfiled"), enabled: canChat });
   if (!canChat) return <PermissionLock capability="hermes.chat" label="Chat" />;
-  if (q.isPending) return <Spinner label="Loading conversations…" />;
+  if (q.isPending)
+    return (
+      <span role="status" className="inline-flex items-center gap-2">
+        <KSpinner />
+        Loading conversations…
+      </span>
+    );
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const d = q.data;
   return (
     <div>
-      <p className="flex items-baseline gap-2">
+      <p className="flex flex-wrap items-baseline gap-2">
         <span className="text-2xl font-semibold tabular-nums">{d.total}</span>
         <span className="text-sm text-muted">not filed under any work</span>
       </p>
@@ -279,19 +319,19 @@ function StatusLanes({ lanes }: { lanes: Extract<DashboardWidget["data"], { kind
     <div>
       <div role="group" aria-label="Filter lanes" className="mb-2 flex flex-wrap gap-1">
         {lanes.map((l) => (
-          <button
+          <ChipButton
             key={l.status}
             type="button"
             aria-pressed={only === l.status}
             onClick={() => setOnly(only === l.status ? null : l.status)}
             className={cx(
-              "tap inline-flex min-h-9 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium",
+              "inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5 whitespace-normal rounded-full border px-2.5 text-xs font-medium",
               only === l.status ? "border-accent bg-accent-soft text-accent" : "border-line text-muted hover:bg-surface-2",
             )}
           >
             <StatusDot status={l.status} />
             {STATUS_LABELS[l.status]} <span className="tabular-nums">{l.count}</span>
-          </button>
+          </ChipButton>
         ))}
       </div>
       {shown.length ? (
@@ -337,12 +377,12 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
             <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               <Link
                 href={`/areas?item=${encodeURIComponent(i.id)}`}
-                className="flex min-w-0 items-center gap-2 text-[13.5px] font-medium break-words hover:underline"
+                className="flex min-w-0 items-center gap-2 text-sm font-medium break-words hover:underline"
               >
                 <StatusDot status={i.status} />
                 <span className="min-w-0">{i.title}</span>
               </Link>
-              <span className="flex items-center gap-2">
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
                 {i.targetDate && w.kind === "priorities" ? <span className="text-xs text-muted tabular-nums">Target {fmtDate(i.targetDate)}</span> : null}
                 <StatusBadge status={i.status} auto={i.settledKind === "auto"} />
               </span>
@@ -359,7 +399,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
   if (d.kind === "overdue")
     return (
       <div>
-        <p className="flex items-baseline gap-2">
+        <p className="flex flex-wrap items-baseline gap-2">
           <span className={cx("text-2xl font-semibold tabular-nums", d.count ? "text-danger" : "")} data-testid="overdue-count">
             {d.count}
           </span>
@@ -390,7 +430,7 @@ function WidgetBody({ w }: { w: DashboardWidget }) {
       <div>
         <p className="text-2xl font-semibold tabular-nums">{w.config.value || "—"}</p>
         {w.config.label ? <p className="text-sm text-muted">{w.config.label}</p> : null}
-        {w.config.target ? <Badge className="mt-2">Target {w.config.target}</Badge> : null}
+        {w.config.target ? <Pill className="mt-2 max-w-full whitespace-normal wrap-anywhere">Target {w.config.target}</Pill> : null}
         {href ? (
           <p className="mt-2 text-sm">
             {href.startsWith("/") ? (
@@ -483,7 +523,14 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" type="submit" form="widget-form" busy={save.isPending} disabled={htmlBytes > CUSTOM_HTML_MAX_BYTES}>
+          <Button
+            variant="primary"
+            type="submit"
+            form="widget-form"
+            loading={save.isPending}
+            disabled={htmlBytes > CUSTOM_HTML_MAX_BYTES}
+            className="max-w-full whitespace-normal"
+          >
             {widget ? "Save widget" : "Add widget"}
           </Button>
         </>
@@ -499,27 +546,27 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
       >
         {!widget ? (
           <Field id="wg-kind" label="Widget type">
-            <select id="wg-kind" data-autofocus className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as WidgetKind)}>
+            <Select id="wg-kind" data-autofocus className="w-full min-w-0" value={kind} onChange={(e) => setKind(e.target.value as WidgetKind)}>
               {WIDGET_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {WIDGET_LABELS[k]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field id="wg-title" label="Title">
-            <input id="wg-title" className={inputCls} value={title} placeholder={WIDGET_LABELS[kind]} onChange={(e) => setTitle(e.target.value)} />
+            <Input id="wg-title" className="w-full min-w-0" value={title} placeholder={WIDGET_LABELS[kind]} onChange={(e) => setTitle(e.target.value)} />
           </Field>
           <Field id="wg-size" label="Size">
-            <select id="wg-size" className={inputCls} value={size} onChange={(e) => setSize(e.target.value as WidgetSize)}>
+            <Select id="wg-size" className="w-full min-w-0" value={size} onChange={(e) => setSize(e.target.value as WidgetSize)}>
               {WIDGET_SIZES.map((s) => (
                 <option key={s} value={s}>
                   {SIZE_LABEL[s]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         {SCOPED.includes(kind) ? (
@@ -528,31 +575,31 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
             label="Area or project"
             hint={kind === "project_map" || kind === "map_snapshot" ? "Required for the map." : "Leave empty for all of your work."}
           >
-            <select id="wg-root" className={inputCls} value={c.rootId ?? ""} onChange={(e) => setC({ ...c, rootId: e.target.value || null })}>
+            <Select id="wg-root" className="w-full min-w-0" value={c.rootId ?? ""} onChange={(e) => setC({ ...c, rootId: e.target.value || null })}>
               <option value="">All work</option>
               {areas.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.title}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         {kind === "metric" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field id="wg-value" label="Value">
-              <input id="wg-value" className={inputCls} value={c.value ?? ""} onChange={(e) => setC({ ...c, value: e.target.value })} />
+              <Input id="wg-value" className="w-full min-w-0" value={c.value ?? ""} onChange={(e) => setC({ ...c, value: e.target.value })} />
             </Field>
             <Field id="wg-label" label="Label">
-              <input id="wg-label" className={inputCls} value={c.label ?? ""} onChange={(e) => setC({ ...c, label: e.target.value })} />
+              <Input id="wg-label" className="w-full min-w-0" value={c.label ?? ""} onChange={(e) => setC({ ...c, label: e.target.value })} />
             </Field>
             <Field id="wg-target" label="Target">
-              <input id="wg-target" className={inputCls} value={c.target ?? ""} onChange={(e) => setC({ ...c, target: e.target.value })} />
+              <Input id="wg-target" className="w-full min-w-0" value={c.target ?? ""} onChange={(e) => setC({ ...c, target: e.target.value })} />
             </Field>
             <Field id="wg-href" label="Link (optional)">
-              <input
+              <Input
                 id="wg-href"
-                className={inputCls}
+                className="w-full min-w-0"
                 value={c.href ?? ""}
                 onChange={(e) => setC({ ...c, href: e.target.value })}
                 placeholder="https://… or /work"
@@ -568,21 +615,25 @@ function WidgetDialog({ areas, widget, onClose }: { areas: DashboardResponse["ar
               hint={`Runs in a sandboxed frame with no network access, cookies or Jarvis APIs. ${Math.ceil(htmlBytes / 1024)} of 100 KB.`}
               error={htmlBytes > CUSTOM_HTML_MAX_BYTES ? "Too large: custom HTML is limited to 100 KB." : undefined}
             >
-              <textarea
+              <Textarea
                 id="wg-html"
                 spellCheck={false}
-                className={`${inputCls} min-h-48 font-mono text-sm`}
+                className="w-full min-w-0 font-mono text-sm"
+                rows={8}
                 value={c.html ?? ""}
                 onChange={(e) => setC({ ...c, html: e.target.value })}
               />
             </Field>
-            <label className="flex min-h-11 items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-1" checked={!!c.injectData} onChange={(e) => setC({ ...c, injectData: e.target.checked })} />
-              <span>
-                Send this widget a read-only snapshot of the chosen work (titles, statuses, dates, next actions) via <code>postMessage</code> (
-                <code>{'{ type: "jarvis.work.snapshot", data }'}</code>). No links or finance data.
-              </span>
-            </label>
+            <Checkbox
+              checked={!!c.injectData}
+              onChange={(injectData) => setC({ ...c, injectData })}
+              label={
+                <span className="min-w-0 wrap-anywhere">
+                  Send this widget a read-only snapshot of the chosen work (titles, statuses, dates, next actions) via <code>postMessage</code> (
+                  <code>{'{ type: "jarvis.work.snapshot", data }'}</code>). No links or finance data.
+                </span>
+              }
+            />
           </>
         ) : null}
       </form>

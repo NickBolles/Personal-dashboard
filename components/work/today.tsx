@@ -5,8 +5,7 @@ import { RowTitle } from "./InlineEdit";
 import { filterItems, ItemChips, ItemFilterBar, NO_FILTER, type ItemFilter } from "./ItemMeta";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, cx } from "@/components/ui";
-import { Button, ButtonLink, Spinner } from "@/components/ui/legacy";
+import { Button, ButtonLink, ErrorNote, KSpinner, cx } from "@/components/ui";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { InlineBrief } from "@/components/smart/InlineBrief";
 import { StatusBadge, StatusDot, useWorkMutation } from "@/components/work/common";
@@ -47,16 +46,13 @@ function fmtShort(d: string) {
  */
 export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
   return (
-    <ul
-      aria-label="Work at a glance"
-      className="scroll-x-clean grid auto-cols-[minmax(144px,1fr)] grid-flow-col gap-px rounded-[10px] border border-line bg-line"
-    >
+    <ul aria-label="Work at a glance" className="scroll-x-clean grid auto-cols-[minmax(144px,1fr)] grid-flow-col gap-px rounded-lg border border-line bg-line">
       {kpis.map((k) => {
         const body = (
           <>
             <span
               className={cx(
-                "block text-[19px] leading-6 font-semibold tracking-tight tabular-nums",
+                "block text-xl leading-6 font-semibold tracking-tight tabular-nums",
                 !!k.value && k.tone === "warn" && "text-warn",
                 !!k.value && k.tone === "danger" && "text-danger",
                 !!k.value && k.tone === "ok" && "text-ok",
@@ -65,7 +61,7 @@ export function KpiStrip({ kpis }: { kpis: Kpi[] }) {
             >
               {k.value ?? "—"}
             </span>
-            <span className="block truncate text-[11.5px] leading-4 text-muted">{k.label}</span>
+            <span className="block truncate text-xs leading-4 text-muted">{k.label}</span>
           </>
         );
         return (
@@ -112,13 +108,13 @@ function CardList({
     return (
       <section
         aria-labelledby={id}
-        className="flex min-w-0 items-baseline gap-2 self-start rounded-[10px] border border-dashed border-line px-3 py-2"
+        className="flex min-w-0 flex-wrap items-baseline gap-2 self-start rounded-lg border border-dashed border-line px-3 py-2"
         data-empty
       >
         <h3 id={id} className="wk-label shrink-0">
           {title}
         </h3>
-        <p className="min-w-0 truncate text-[12.5px] text-muted">{empty}</p>
+        <p className="min-w-0 truncate text-xs text-muted">{empty}</p>
       </section>
     );
   return (
@@ -132,13 +128,13 @@ function CardList({
       {cards.length ? (
         <ul className="wk-rows">
           {cards.map((c) => (
-            <li key={c.id} className={cx("wk-row-hover flex items-center gap-x-2.5 px-3 py-1.5", urgent && "border-l-[3px] border-l-warn pl-[9px]")}>
+            <li key={c.id} className={cx("wk-row-hover flex min-w-0 flex-wrap items-center gap-x-2.5 px-3 py-1.5", urgent && "border-l-4 border-l-warn pl-2")}>
               <StatusDot status={c.status} />
               <div className="min-w-0 flex-1">
                 <RowTitle
                   id={c.id}
                   title={c.title}
-                  className="tap min-w-0 text-left text-[14px] leading-snug font-semibold break-words hover:underline"
+                  className="tap min-w-0 text-left text-sm leading-snug font-semibold break-words hover:underline"
                   onOpen={() => onOpen(c.id)}
                 />
                 <p className="line-clamp-2 text-xs break-words text-muted">
@@ -147,12 +143,18 @@ function CardList({
                 <ItemChips tags={c.tags} assignee={c.assignee} />
               </div>
               {/* Phones: the dot carries the status; the pill joins it from 640px. The action stays on the right. */}
-              <span className="flex shrink-0 items-center gap-2 self-center">
+              <span className="flex min-w-0 max-w-full flex-wrap items-center gap-2 self-center">
                 <span className="hidden sm:inline-flex">
                   <StatusBadge status={c.status} />
                 </span>
                 <span className="sr-only sm:hidden">{STATUS_LABELS[c.status]}</span>
-                <Button size="sm" variant={urgent ? "primary" : "secondary"} onClick={() => onOpen(c.id, action.do)} aria-label={`${action.label}: ${c.title}`}>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="max-w-full whitespace-normal"
+                  onClick={() => onOpen(c.id, action.do)}
+                  aria-label={`${action.label}: ${c.title}`}
+                >
                   {action.label}
                 </Button>
               </span>
@@ -160,7 +162,7 @@ function CardList({
           ))}
         </ul>
       ) : (
-        <p className="px-3 py-2.5 text-[13px] text-muted">{empty}</p>
+        <p className="px-3 py-2.5 text-sm text-muted">{empty}</p>
       )}
     </section>
   );
@@ -195,7 +197,13 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
   const inbox = useInbox();
   const smart = useSmartSettings();
   useHashScroll(q.isSuccess);
-  if (q.isPending) return <Spinner label="Loading today…" />;
+  if (q.isPending)
+    return (
+      <span role="status" className="inline-flex items-center gap-2">
+        <KSpinner />
+        Loading today…
+      </span>
+    );
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const raw = q.data;
   const f = (cards: TodayCard[]) => filterItems(cards, filter);
@@ -220,7 +228,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         <h2 id="today-title" className="text-xl leading-tight font-semibold tracking-tight">
           Today
         </h2>
-        <p className="mt-0.5 text-[13.5px] text-muted">
+        <p className="mt-0.5 text-sm text-muted">
           {t.proofDue.length ? `${t.proofDue.length === 1 ? "One thing needs" : `${t.proofDue.length} things need`} proof` : "Nothing is waiting on proof"}
           {first ? `, and “${first.title}” is ready to continue.` : "."}
         </p>
@@ -229,7 +237,7 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
         <>
           <InlineBrief />
           <nav aria-label="Workflows" className="flex flex-wrap gap-1.5" data-testid="today-workflows">
-            <ButtonLink size="sm" href="/areas/plan">
+            <ButtonLink size="sm" href="/areas/plan" className="max-w-full whitespace-normal">
               Plan the week
             </ButtonLink>
           </nav>
@@ -263,8 +271,8 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
                       : `/inbox?entry=${encodeURIComponent(r.inboxId ?? "")}`
                   }
                 >
-                  <span className="truncate text-[14px] font-medium">✦ {r.title}</span>
-                  {r.summary ? <span className="line-clamp-1 text-[13px] text-muted">{r.summary}</span> : null}
+                  <span className="truncate text-sm font-medium">✦ {r.title}</span>
+                  {r.summary ? <span className="line-clamp-1 text-sm text-muted">{r.summary}</span> : null}
                 </a>
               </li>
             ))}
@@ -311,10 +319,10 @@ export function TodayView({ onOpen, onInbox }: { onOpen: (id: string, action?: s
       </div>
       {t.autoSettled?.length ? <AutoSettled cards={t.autoSettled} onOpen={onOpen} /> : null}
       {inboxCount ? (
-        <p className="text-[13px]">
-          <button type="button" className="tap text-accent underline" onClick={onInbox}>
+        <p className="text-sm">
+          <Button type="button" variant="ghost" className="max-w-full whitespace-normal text-accent underline" onClick={onInbox}>
             {inboxCount} waiting in the inbox
-          </button>
+          </Button>
         </p>
       ) : null}
     </section>
@@ -336,16 +344,21 @@ function AutoSettled({ cards, onOpen }: { cards: TodayResponse["autoSettled"]; o
         {cards.map((c) => (
           <li key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2">
             <div className="min-w-0 flex-1 basis-48">
-              <button type="button" className="tap min-w-0 text-left text-[14px] font-semibold break-words hover:underline" onClick={() => onOpen(c.id)}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="min-w-0 max-w-full whitespace-normal text-left text-sm font-semibold break-words hover:underline"
+                onClick={() => onOpen(c.id)}
+              >
                 {c.title}
-              </button>
+              </Button>
               <p className="text-xs break-words text-muted">{[c.path, c.detail].filter(Boolean).join(" · ")}</p>
             </div>
             {c.opId ? (
               <Button
                 size="sm"
                 onClick={() => undo.mutate(c.opId!)}
-                busy={undo.isPending && undo.variables === c.opId}
+                loading={undo.isPending && undo.variables === c.opId}
                 aria-label={`Undo automatic settle: ${c.title}`}
               >
                 Undo

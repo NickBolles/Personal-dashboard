@@ -7,8 +7,7 @@ import { formIntents, ganttLayout, matrixIntent, matrixTotals, type FormValues }
 import { intentKey, intentTarget } from "@/lib/jarvis-ui/intents";
 import { isTask } from "@/lib/jarvis-ui/types";
 import { addDays } from "@/lib/time";
-import { cx } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Input, Select, Textarea, cx } from "@/components/ui";
 import { useSurface } from "./context";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
@@ -179,8 +178,8 @@ export function Gantt({ element }: P<"Gantt">) {
             </div>
             <label className="sv-date">
               <span className="sr-only">Reschedule: {h.title}</span>
-              <input
-                className={inputCls}
+              <Input
+                className="w-full min-w-0"
                 type="date"
                 min={from > s.today ? from : s.today}
                 max={to < addDays(s.today, 365) ? to : addDays(s.today, 365)}
@@ -300,7 +299,7 @@ export function SmartForm({ element }: P<"Form">) {
     <section className="sv" aria-label={p.title}>
       <SmartHeader kind="Form" title={p.title} meta="Questionnaire" />
       <form
-        className="sv-form"
+        className="sv-form grid-cols-1"
         onSubmit={(e) => {
           e.preventDefault();
           if (p.fields.some((f) => f.required && (values[f.id] === undefined || values[f.id] === ""))) {
@@ -319,7 +318,13 @@ export function SmartForm({ element }: P<"Form">) {
         {p.fields.map((f) => {
           const id = `${uid}-${f.id}`;
           const proposed = f.proposed !== undefined && !edited.has(f.id);
-          const common = { id, disabled: s.readOnly, required: f.required, className: inputCls, "aria-describedby": proposed ? `${id}-provenance` : undefined };
+          const common = {
+            id,
+            disabled: s.readOnly,
+            required: f.required,
+            className: "w-full min-w-0",
+            "aria-describedby": proposed ? `${id}-provenance` : undefined,
+          };
           return (
             <div key={f.id} className={cx("sv-field", proposed && "sv-proposed")}>
               <label htmlFor={id}>
@@ -327,9 +332,9 @@ export function SmartForm({ element }: P<"Form">) {
                 {f.required ? " (required)" : ""}
               </label>
               {f.kind === "textarea" ? (
-                <textarea {...common} rows={3} maxLength={2000} value={String(values[f.id] ?? "")} onChange={(e) => set(f.id, e.target.value)} />
+                <Textarea {...common} rows={3} maxLength={2000} value={String(values[f.id] ?? "")} onChange={(e) => set(f.id, e.target.value)} />
               ) : f.kind === "choice" || f.kind === "scale" ? (
-                <select
+                <Select
                   {...common}
                   value={String(values[f.id] ?? "")}
                   onChange={(e) => set(f.id, f.kind === "scale" ? Number(e.target.value) : e.target.value)}
@@ -340,11 +345,11 @@ export function SmartForm({ element }: P<"Form">) {
                       {o.label}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : f.kind === "toggle" ? (
                 <input {...common} className="h-6 w-6" type="checkbox" checked={values[f.id] === true} onChange={(e) => set(f.id, e.target.checked)} />
               ) : (
-                <input {...common} type="text" maxLength={200} value={String(values[f.id] ?? "")} onChange={(e) => set(f.id, e.target.value)} />
+                <Input {...common} type="text" maxLength={200} value={String(values[f.id] ?? "")} onChange={(e) => set(f.id, e.target.value)} />
               )}
               {proposed ? (
                 <small id={`${id}-provenance`} className="text-ai">
@@ -354,7 +359,7 @@ export function SmartForm({ element }: P<"Form">) {
             </div>
           );
         })}
-        <Button type="submit" disabled={s.readOnly}>
+        <Button type="submit" className="max-w-full whitespace-normal" disabled={s.readOnly}>
           {p.submit.label}
         </Button>
         <p className="text-xs text-muted" role="status">

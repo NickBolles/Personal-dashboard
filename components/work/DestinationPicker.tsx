@@ -1,10 +1,8 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import { Dialog } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { AreaPickerDot, Button, Dialog, Input } from "@/components/ui";
 import { KIND_LABELS, type WorkItem } from "@/lib/work";
-import { AreaPickerDot } from "./MetaPicker";
 
 export type Destination = { id: string; title: string; path: string; kind: WorkItem["kind"] };
 
@@ -85,7 +83,7 @@ export function DestinationPicker({
   return (
     <Dialog open onClose={onClose} title={title} description={description} footer={<Button onClick={onClose}>Cancel</Button>}>
       <div className="space-y-2">
-        <input
+        <Input
           type="search"
           role="combobox"
           aria-label="Search destinations"
@@ -95,7 +93,7 @@ export function DestinationPicker({
           aria-autocomplete="list"
           data-autofocus
           autoComplete="off"
-          className={inputCls}
+          className="w-full min-w-0"
           placeholder="Search areas and projects…"
           value={q}
           onChange={(e) => {
@@ -144,7 +142,7 @@ export function DestinationPicker({
                   </span>
                 ) : null}
               </span>
-              {o.kind ? <span className="text-[11px] text-muted">{o.kind === "thread" ? "Item" : KIND_LABELS[o.kind]}</span> : null}
+              {o.kind ? <span className="text-xs text-muted">{o.kind === "thread" ? "Item" : KIND_LABELS[o.kind]}</span> : null}
             </li>
           ))}
         </ul>

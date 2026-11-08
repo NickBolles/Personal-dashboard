@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAccess } from "@/components/access";
-import { PageHeader, Banner, Button, EmptyState, SectionHeader, LoadingState } from "@/components/ui";
-import { Badge } from "@/components/ui/legacy";
+import { PageHeader, Banner, Button, Checkbox, ChipButton, Input, Select, Textarea, Pill, EmptyState, SectionHeader, LoadingState } from "@/components/ui";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import {
   EQUIPMENT,
@@ -19,9 +18,6 @@ import {
   type WorkoutSet,
 } from "@/lib/workouts";
 
-// Shared control language (ui.tsx): 9px radius, hairline borders, density from `.tap`.
-const button = "tap inline-flex items-center justify-center rounded-[9px] border px-3.5 text-sm font-medium transition-colors disabled:opacity-50";
-const field = "min-w-0 w-full rounded-[8px] border border-line-strong bg-surface px-3 py-2 tabular-nums sm:py-1.5";
 type Save = { id: string; version: number; requestId: string; session: WorkoutSession };
 function today() {
   const d = new Date();
@@ -173,13 +169,20 @@ export function WorkoutView() {
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:pt-5">
       <div className="[&>header]:mb-0">
-        <PageHeader title="Workouts" subtitle="Your training, simplified." actions={<Badge tone="accent">Private</Badge>} />
+        <PageHeader title="Workouts" subtitle="Your training, simplified." actions={<Pill tone="ac">Private</Pill>} />
       </div>
-      <nav aria-label="Workout views" className="seg flex w-full">
+      <nav aria-label="Workout views" className="seg flex w-full min-w-0 flex-wrap">
         {(["train", "history"] as const).map((t) => (
-          <button key={t} type="button" onClick={() => setTab(t)} aria-pressed={tab === t} className="seg-item flex-1">
+          <Button
+            key={t}
+            type="button"
+            variant="ghost"
+            onClick={() => setTab(t)}
+            aria-pressed={tab === t}
+            className="seg-item min-w-0 flex-1 whitespace-normal"
+          >
             {t === "train" ? "Train" : `History · ${history.length}`}
-          </button>
+          </Button>
         ))}
       </nav>
       <div aria-live="polite">
@@ -206,6 +209,7 @@ export function WorkoutView() {
                 )}
                 <Button
                   variant="ghost"
+                  className="max-w-full whitespace-normal"
                   disabled={busy}
                   onClick={() => {
                     if ((!dirty && !pending) || window.confirm("Reload server state? Unsaved edits will be lost.")) window.location.reload();
@@ -228,8 +232,8 @@ export function WorkoutView() {
         <>
           {draft ? (
             <section aria-label="Active workout" className="space-y-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 break-words">
                   <p className="text-xs font-semibold uppercase tracking-wider text-accent">In progress</p>
                   <h2 className="mt-1 text-xl font-semibold">{draft.session.title}</h2>
                   <p className="text-sm text-muted">
@@ -251,21 +255,21 @@ export function WorkoutView() {
                       <h3 className="mt-1 text-lg font-semibold tracking-tight">{e.name}</h3>
                       <RecordHint exercise={e} />
                     </div>
-                    <div className="grid grid-cols-[1.5rem_1fr_1fr_4rem] gap-2 text-xs text-muted" aria-hidden="true">
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 text-xs text-muted" aria-hidden="true">
                       <span>Set</span>
                       <span>{e.equipment === "bodyweight" ? "Load" : e.unit}</span>
                       <span>Reps</span>
                       <span>Save</span>
                     </div>
                     {e.sets.map((s, si) => (
-                      <div key={si} className="grid grid-cols-[1.5rem_1fr_1fr_4rem] items-center gap-2">
+                      <div key={si} className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
                         <span className="text-sm tabular-nums text-muted">{si + 1}</span>
                         {e.equipment === "bodyweight" ? (
-                          <span className="text-xs text-muted">Bodyweight</span>
+                          <span className="min-w-0 break-words text-xs text-muted">Bodyweight</span>
                         ) : (
-                          <input
+                          <Input
                             aria-label={`${e.name} set ${si + 1} weight`}
-                            className={field}
+                            className="w-full min-w-0 tabular-nums"
                             type="number"
                             inputMode="decimal"
                             min="0"
@@ -276,9 +280,9 @@ export function WorkoutView() {
                             onChange={(ev) => changeSet(ei, si, { weight: ev.target.value === "" ? undefined : Number(ev.target.value) })}
                           />
                         )}
-                        <input
+                        <Input
                           aria-label={`${e.name} set ${si + 1} reps`}
-                          className={field}
+                          className="w-full min-w-0 tabular-nums"
                           type="number"
                           inputMode="numeric"
                           min="1"
@@ -286,22 +290,22 @@ export function WorkoutView() {
                           value={s.reps ?? ""}
                           onChange={(ev) => changeSet(ei, si, { reps: ev.target.value === "" ? undefined : Number(ev.target.value) })}
                         />
-                        <button
+                        <Button
                           aria-label={`${s.done ? "Undo" : "Complete"} ${e.name} set ${si + 1}`}
                           aria-pressed={s.done}
-                          className={`${button} px-2 ${s.done ? "bg-ok-soft text-ok" : "bg-accent-soft text-accent"}`}
+                          className={`w-full min-w-0 whitespace-normal break-all ${s.done ? "bg-ok-soft text-ok" : "bg-accent-soft text-accent"}`}
                           onClick={() => changeSet(ei, si, { done: !s.done }, true)}
                         >
                           {s.done ? "✓" : "Done"}
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </article>
                 ))}
                 <label className="block text-sm">
                   Session notes
-                  <textarea
-                    className={`${field} mt-2`}
+                  <Textarea
+                    className="mt-2 w-full min-w-0 tabular-nums"
                     maxLength={8000}
                     value={draft.session.notes}
                     placeholder="How did it feel? Anything to change next time?"
@@ -316,12 +320,12 @@ export function WorkoutView() {
                   <Button variant="secondary" onClick={() => persist(draft.session)}>
                     Save edits
                   </Button>
-                  <Button variant="primary" className="flex-1" onClick={() => persist({ ...draft.session, status: "completed" })}>
+                  <Button variant="primary" className="min-w-0 flex-1 whitespace-normal" onClick={() => persist({ ...draft.session, status: "completed" })}>
                     Finish workout
                   </Button>
                   <Button
                     variant="ghost"
-                    className="w-full sm:w-auto"
+                    className="w-full whitespace-normal sm:w-auto"
                     onClick={() => {
                       if (window.confirm("Discard this workout? It will not count toward history or records.")) {
                         const saved = rows.find((r) => r.id === draft.id)!;
@@ -361,25 +365,17 @@ export function WorkoutView() {
                   onChange={(v) => setOptions({ ...options, equipment: toggle(options.equipment, v) })}
                 />
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <label className="flex min-h-11 items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 accent-accent"
-                      checked={options.neckFriendly}
-                      onChange={(e) => setOptions({ ...options, neckFriendly: e.target.checked })}
-                    />
-                    Neck-friendly selection
-                  </label>
-                  <label className="text-sm">
+                  <Checkbox
+                    label="Neck-friendly selection"
+                    checked={options.neckFriendly}
+                    onChange={(checked) => setOptions({ ...options, neckFriendly: checked })}
+                  />
+                  <label className="min-w-0 text-sm">
                     Load unit{" "}
-                    <select
-                      className="tap rounded-lg bg-surface-2 px-3"
-                      value={options.unit}
-                      onChange={(e) => setOptions({ ...options, unit: e.target.value as "lb" | "kg" })}
-                    >
+                    <Select className="w-full min-w-0" value={options.unit} onChange={(e) => setOptions({ ...options, unit: e.target.value as "lb" | "kg" })}>
                       <option value="lb">lb</option>
                       <option value="kg">kg</option>
-                    </select>
+                    </Select>
                   </label>
                 </div>
                 <div className="space-y-4 rounded-2xl bg-surface p-4 sm:p-5">
@@ -399,7 +395,7 @@ export function WorkoutView() {
                   {!plan.length && <EmptyState title="Select a focus and matching equipment. Core uses bodyweight." />}
                   <Button
                     variant="primary"
-                    className="w-full"
+                    className="w-full whitespace-normal"
                     disabled={!plan.length}
                     onClick={() =>
                       persist(
@@ -431,9 +427,9 @@ export function WorkoutView() {
             <SectionHeader label="Your training history" count={history.length} />
             <p className="mt-1 text-sm text-muted">Completed sessions, exactly as recorded.</p>
           </div>
-          <input
+          <Input
             aria-label="Search workout history"
-            className={field}
+            className="w-full min-w-0 tabular-nums"
             placeholder="Search sessions or exercises"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -545,16 +541,17 @@ function ChipGroup<T extends string | number>({
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{label}</legend>
       <div className="flex flex-wrap gap-2">
         {values.map((v) => (
-          <button
+          <ChipButton
             type="button"
             key={v}
             aria-pressed={selected.includes(v)}
-            className={`${button} capitalize ${selected.includes(v) ? "bg-accent-soft text-accent" : "bg-surface text-muted"}`}
+            active={selected.includes(v)}
+            className="max-w-full whitespace-normal capitalize"
             onClick={() => onChange(v)}
           >
             {v}
             {suffix}
-          </button>
+          </ChipButton>
         ))}
       </div>
     </fieldset>

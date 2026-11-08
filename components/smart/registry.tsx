@@ -6,8 +6,8 @@ import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog"
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
 import { isTask, type AppliedEntry, type HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
-import { cx } from "@/components/ui";
-import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
+import { Button, Checkbox, Pill, cx } from "@/components/ui";
+import { OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { InlineText, useSurface } from "./context";
 import { ApprovalChips, MetricGauge, PRCard, Sparkline, WeekPlan } from "./workflow-components";
 import { ApprovalQueue, BarChart, DecisionMatrix, Gantt, SmartForm, SmartHeader } from "./v2-components";
@@ -15,7 +15,7 @@ import { ApprovalQueue, BarChart, DecisionMatrix, Gantt, SmartForm, SmartHeader 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
 
 const SUGGESTION_LABEL: Record<RowAction, string> = { done: "Done", week: "This week", snooze: "Reschedule", drop: "Drop", promote: "Promote" };
-const BUCKET_TONE = { do_week: "accent", reschedule: "warn", snooze: "warn", drop: "neutral", keep: "neutral", done: "ok" } as const;
+const BUCKET_TONE = { do_week: "prop", reschedule: "wn", snooze: "wn", drop: "neutral", keep: "neutral", done: "ok" } as const;
 
 function fmtDay(d: string) {
   return new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -24,8 +24,8 @@ function fmtDay(d: string) {
 function DuePill({ due, today }: { due?: string; today: string }) {
   if (!due) return null;
   const late = daysBetween(due, today);
-  if (late > 0) return <Badge tone="danger">{late === 1 ? "1 day late" : `${late} days late`}</Badge>;
-  return <Badge tone={late === 0 ? "warn" : "neutral"}>{late === 0 ? "Today" : fmtDay(due)}</Badge>;
+  if (late > 0) return <Pill tone="bad">{late === 1 ? "1 day late" : `${late} days late`}</Pill>;
+  return <Pill tone={late === 0 ? "wn" : "neutral"}>{late === 0 ? "Today" : fmtDay(due)}</Pill>;
 }
 
 /** Undo is offered only when the server recorded a way to restore the previous state. */
@@ -67,7 +67,11 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
   const done = h && "done" in h && h.done;
   return (
     <li
-      className={cx("smart-row flex items-center gap-2 border-t border-line px-3 py-2", staged && "smart-pend", (applied || done) && "opacity-70")}
+      className={cx(
+        "smart-row flex min-w-0 flex-wrap items-center gap-2 border-t border-line px-3 py-2",
+        staged && "smart-pend",
+        (applied || done) && "opacity-70",
+      )}
       data-ref={row.ref}
     >
       <div className="min-w-0 flex-1">
@@ -89,24 +93,24 @@ function TaskRow({ list, row }: { list: PropsOf<"TaskList">; row: PropsOf<"TaskL
       {s.readOnly || unavailable ? null : done && !applied ? (
         <span className="shrink-0 text-xs text-muted">Already done</span>
       ) : applied ? (
-        <span className="flex shrink-0 items-center gap-1 text-xs">
+        <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
           <span className="text-ok">✓ {applied.message}</span>
           {canUndo(applied) ? (
-            <Button size="sm" variant="ghost" busy={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
+            <Button size="sm" variant="ghost" loading={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
               Undo
             </Button>
           ) : null}
         </span>
       ) : (
-        <span className="flex shrink-0 items-center gap-1">
+        <span className="flex min-w-0 flex-wrap items-center gap-1">
           {sug && sugIntent ? (
             <Button
               size="sm"
-              variant={isSug ? "primary" : "secondary"}
+              variant={isSug ? "agent" : "secondary"}
               aria-pressed={isSug}
               aria-label={`${SUGGESTION_LABEL[sug]}${sugIntent.kind === "todo.snooze" ? ` (${fmtDay(sugIntent.date)})` : ""}: ${name}`}
               onClick={() => s.stage(row.ref, isSug ? undefined : sugIntent)}
-              className={cx(!isSug && "border-dashed")}
+              className={cx("max-w-full whitespace-normal", !isSug && "border-dashed")}
             >
               {SUGGESTION_LABEL[sug]}
             </Button>
@@ -128,17 +132,18 @@ function TaskList({ element }: P<"TaskList">) {
     return sug && h && !("unavailable" in h) && !s.applied.get(r.ref) && !s.staged.get(r.ref);
   });
   return (
-    <section className="overflow-hidden rounded-[10px] border border-line" aria-label={list.title}>
+    <section className="overflow-hidden rounded-lg border border-line" aria-label={list.title}>
       <header className="svh">
         <span className="sv-tag">TaskList</span>
         <h3 className="flex-1 text-sm font-semibold">
           {list.title} <span className="text-muted">{list.rows.length}</span>
         </h3>
-        {list.bucket ? <Badge tone={BUCKET_TONE[list.bucket]}>{list.bucket.replace("_", " ")}</Badge> : null}
+        {list.bucket ? <Pill tone={BUCKET_TONE[list.bucket]}>{list.bucket.replace("_", " ")}</Pill> : null}
         {!s.readOnly && pending.length > 1 ? (
           <Button
             size="sm"
             variant="ghost"
+            className="max-w-full whitespace-normal"
             onClick={() => {
               for (const r of pending) s.stage(r.ref, rowIntent(list, r, suggestedAction(r)!, s.today));
             }}
@@ -165,14 +170,14 @@ function DecisionCard({ element }: P<"DecisionCard">) {
     (o) => o.intent && s.applied.get(intentTarget(o.intent)) && intentKey(s.applied.get(intentTarget(o.intent))!.intent as never) === intentKey(o.intent),
   );
   return (
-    <section className="rounded-[10px] border border-line p-3" aria-label={p.title}>
+    <section className="rounded-lg border border-line p-3" aria-label={p.title}>
       <SmartHeader kind="DecisionCard" title={p.title} />
       {p.context ? (
         <p className="mt-1 text-sm text-muted">
           <InlineText text={p.context} />
         </p>
       ) : null}
-      <div role="radiogroup" aria-label={p.title} className="mt-2 grid gap-1.5">
+      <div role="radiogroup" aria-label={p.title} className="mt-2 grid grid-cols-1 gap-1.5">
         {p.options.map((o) => {
           const on = Boolean((staged && o.intent && intentKey(staged) === intentKey(o.intent)) || appliedOpt === o);
           return (
@@ -184,24 +189,24 @@ function DecisionCard({ element }: P<"DecisionCard">) {
               disabled={s.readOnly || Boolean(appliedOpt) || !o.intent}
               onClick={() => s.stage(key, on ? undefined : o.intent)}
               className={cx(
-                "press min-h-11 rounded-[9px] border px-3 py-2 text-left sm:min-h-10",
+                "press min-h-11 rounded-lg border px-3 py-2 text-left sm:min-h-10",
                 on ? "border-accent bg-accent-soft" : "border-line bg-surface hover:bg-surface-2",
               )}
             >
-              <span className="font-medium">{o.label}</span> {o.recommended ? <Badge tone="ok">Recommended</Badge> : null}
+              <span className="font-medium">{o.label}</span> {o.recommended ? <Pill tone="prop">Recommended</Pill> : null}
               {o.consequence ? <span className="block text-xs text-muted">{o.consequence}</span> : null}
             </button>
           );
         })}
       </div>
       {appliedOpt ? (
-        <p className="mt-2 flex items-center gap-2 text-xs">
+        <p className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
           <span className="text-ok">✓ Recorded “{appliedOpt.label}”</span>
           {s.readOnly || !canUndo(s.applied.get(intentTarget(appliedOpt.intent!))!) ? null : (
             <Button
               size="sm"
               variant="ghost"
-              busy={s.undoing === s.applied.get(intentTarget(appliedOpt.intent!))!.intentHash}
+              loading={s.undoing === s.applied.get(intentTarget(appliedOpt.intent!))!.intentHash}
               onClick={() => s.undo(s.applied.get(intentTarget(appliedOpt.intent!))!)}
               aria-label={`Undo: ${appliedOpt.label}`}
             >
@@ -220,8 +225,8 @@ function Checklist({ element }: P<"Checklist">) {
   const id = (step: string) => `${p.title}::${step}`;
   const done = p.steps.filter((x) => s.checks.includes(id(x.id))).length;
   return (
-    <section className="rounded-[10px] border border-line" aria-label={p.title}>
-      <header className="flex items-center gap-2 px-3 pt-2">
+    <section className="rounded-lg border border-line" aria-label={p.title}>
+      <header className="flex min-w-0 flex-wrap items-center gap-2 px-3 pt-2">
         <span className="sv-tag">Checklist</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title}</h3>
         <span className="text-xs text-muted">
@@ -229,27 +234,33 @@ function Checklist({ element }: P<"Checklist">) {
         </span>
       </header>
       <div className="mx-3 my-2 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
-        <div className="h-full bg-ok transition-[width]" style={{ width: `${(done / p.steps.length) * 100}%` }} />
+        <div className="h-full bg-ok transition-all" style={{ width: `${(done / p.steps.length) * 100}%` }} />
       </div>
       <ul>
         {p.steps.map((step, i) => {
           const checked = s.checks.includes(id(step.id));
           return (
             <li key={step.id} className="border-t border-line">
-              <label className="flex min-h-11 cursor-pointer items-start gap-2.5 px-3 py-2 sm:min-h-10">
-                <input type="checkbox" className="mt-1 h-4 w-4" checked={checked} disabled={s.readOnly} onChange={() => s.toggleCheck(id(step.id))} />
-                <span className="min-w-0 flex-1">
-                  <span className={cx("font-medium", checked && "text-muted line-through")}>
-                    {i + 1}. {step.label}
-                  </span>{" "}
-                  {step.runBy === "you" ? <Badge tone="warn">You run</Badge> : step.runBy === "agent" ? <Badge tone="accent">Agent</Badge> : null}
-                  {step.detail ? (
-                    <span className="block text-xs text-muted">
-                      <InlineText text={step.detail} />
+              <div className="min-w-0 px-3 py-2">
+                <Checkbox
+                  checked={checked}
+                  disabled={s.readOnly}
+                  onChange={() => s.toggleCheck(id(step.id))}
+                  label={
+                    <span className="min-w-0 flex-1">
+                      <span className={cx("font-medium", checked && "text-muted line-through")}>
+                        {i + 1}. {step.label}
+                      </span>{" "}
+                      {step.runBy === "you" ? <Pill tone="wn">You run</Pill> : step.runBy === "agent" ? <Pill tone="ai">Agent</Pill> : null}
+                      {step.detail ? (
+                        <span className="block text-xs text-muted">
+                          <InlineText text={step.detail} />
+                        </span>
+                      ) : null}
                     </span>
-                  ) : null}
-                </span>
-              </label>
+                  }
+                />
+              </div>
             </li>
           );
         })}
@@ -265,7 +276,7 @@ function Gauge({ element }: P<"Gauge">) {
   const pct = Math.max(0, Math.min(1, p.value / p.max));
   const tone = pct >= 0.9 ? "bg-danger" : pct >= 0.7 ? "bg-warn" : "bg-ok";
   return (
-    <div className="rounded-[10px] border border-line px-3 py-2">
+    <div className="rounded-lg border border-line px-3 py-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">{p.label}</p>
       <p className="text-lg font-bold tabular-nums">
         {p.value}
@@ -295,7 +306,7 @@ function Table({ element }: P<"Table">) {
   const s = useSurface();
   return (
     <div className="relative">
-      <div className="overflow-x-auto rounded-[10px] border border-line">
+      <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full text-sm">
           <thead className="bg-surface-2 text-xs text-muted">
             <tr>
@@ -369,7 +380,7 @@ export const registry: ComponentRegistry = {
     <div
       role="note"
       className={cx(
-        "rounded-[10px] border px-3 py-2 text-sm",
+        "rounded-lg border px-3 py-2 text-sm",
         element.props.tone === "warn" ? "border-warn bg-warn-soft" : element.props.tone === "ok" ? "border-ok bg-ok-soft" : "border-line bg-surface-2",
       )}
     >

@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Dialog, Field } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Dialog, Field, Input, Select } from "@/components/ui";
+import { inputCls } from "@/components/ui/legacy";
 import { useWorkMutation } from "@/components/work/common";
 import { itemPaths } from "@/components/work/conversations";
 import { CREATABLE_KINDS, KIND_LABELS, defaultChildKind, parseQuickPath, type CreatableKind, type WorkItem } from "@/lib/work";
@@ -74,7 +74,7 @@ export function QuickAddDialog({
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" form="quick-add" type="submit" busy={create.isPending} disabled={!segs.length}>
+          <Button variant="primary" form="quick-add" type="submit" loading={create.isPending} disabled={!segs.length}>
             Create
           </Button>
         </>
@@ -89,13 +89,13 @@ export function QuickAddDialog({
         }}
       >
         <Field id="qa-title" label="Title" hint={effectiveKind === "area" ? undefined : PATH_HINT}>
-          <input id="qa-title" data-autofocus required autoComplete="off" className={inputCls} value={text} onChange={(e) => setText(e.target.value)} />
+          <Input id="qa-title" data-autofocus required autoComplete="off" className="w-full min-w-0" value={text} onChange={(e) => setText(e.target.value)} />
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field id="qa-kind" label="Kind">
-            <select
+            <Select
               id="qa-kind"
-              className={inputCls}
+              className="w-full min-w-0"
               value={effectiveKind}
               onChange={(e) => {
                 const k = e.target.value as CreatableKind;
@@ -109,12 +109,12 @@ export function QuickAddDialog({
                   {o.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field id="qa-parent" label="In">
-            <select
+            <Select
               id="qa-parent"
-              className={inputCls}
+              className="w-full min-w-0"
               value={effectiveKind === "area" ? "" : parentId}
               disabled={effectiveKind === "area"}
               onChange={(e) => {
@@ -129,11 +129,11 @@ export function QuickAddDialog({
                   {o.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </div>
         {segs.length > 1 ? (
-          <p className="text-[13px] text-muted" data-testid="qa-preview">
+          <p className="text-sm text-muted" data-testid="qa-preview">
             Creates {segs.slice(0, -1).join(" › ")} if missing, then <strong className="text-text">{segs.at(-1)}</strong>.
           </p>
         ) : null}
@@ -175,7 +175,7 @@ export function InlineAdd({
   const label = parent ? `Add to ${parent.title}` : "New area";
   return (
     <form
-      className="wk-inline-add"
+      className="wk-inline-add min-w-0 flex-wrap"
       aria-label={label}
       // Enter's implicit submit clicks the Add button; keep that click out of the tree row around us.
       onClick={(e) => e.stopPropagation()}
@@ -206,9 +206,9 @@ export function InlineAdd({
         }}
       />
       {opts.length > 1 ? (
-        <select
+        <Select
           aria-label="Kind"
-          className={inputCls}
+          className="min-w-0 max-w-full"
           value={kind}
           onChange={(e) => {
             setKind(e.target.value as CreatableKind);
@@ -220,9 +220,9 @@ export function InlineAdd({
               {o.label}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
-      <Button type="submit" size="sm" variant="primary" busy={create.isPending} disabled={!text.trim()}>
+      <Button type="submit" size="sm" variant="primary" loading={create.isPending} disabled={!text.trim()}>
         Add
       </Button>
     </form>

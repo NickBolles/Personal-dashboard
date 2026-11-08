@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, useToast } from "@/components/ui";
-import { Button, OverflowMenu, Spinner } from "@/components/ui/legacy";
+import { Button, ErrorNote, KSpinner, useToast } from "@/components/ui";
+import { OverflowMenu } from "@/components/ui/legacy";
 import { PlusIcon } from "@/components/icons";
 import { useWorkMutation } from "@/components/work/common";
 import { DestinationPicker } from "@/components/work/DestinationPicker";
@@ -40,12 +40,12 @@ export function NewMenu({
   return (
     <OverflowMenu
       label="New"
-      triggerClassName="press inline-flex min-h-11 items-center gap-1.5 rounded-[9px] bg-accent px-3 text-[13.5px] font-semibold text-accent-contrast hover:opacity-90"
+      triggerClassName="press inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-accent px-3 text-sm font-semibold text-accent-contrast hover:opacity-90"
       trigger={
         <>
           <PlusIcon className="h-4 w-4" />
           <span>{busy ? "Starting…" : "New"}</span>
-          <span aria-hidden="true" className="text-[10px] opacity-80">
+          <span aria-hidden="true" className="text-xs opacity-80">
             ▾
           </span>
         </>
@@ -117,14 +117,14 @@ export function AreasOverview({ items, onSelect, onNewArea }: { items: WorkItem[
     <div className="space-y-4">
       <section aria-labelledby="areas-overview" className="hidden lg:block">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <h2 id="areas-overview" className="text-[19px] leading-tight font-semibold tracking-tight">
+          <h2 id="areas-overview" className="text-xl leading-tight font-semibold tracking-tight">
             Areas
           </h2>
           <Button size="sm" onClick={onNewArea}>
             + Area
           </Button>
         </div>
-        <ul className="wk-node-rows overflow-hidden rounded-[10px] border border-line bg-surface">
+        <ul className="wk-node-rows overflow-hidden rounded-lg border border-line bg-surface">
           {areas.map((a) => {
             const r = rollup(items, a.id);
             return (
@@ -157,7 +157,7 @@ export function Progress({ done, total }: { done: number; total: number }) {
       <span className="wk-prog hidden sm:inline-block" aria-hidden="true">
         <i style={{ width: `${total ? Math.round((done / total) * 100) : 0}%` }} />
       </span>
-      <span className="w-9 text-right text-[11.5px] text-muted tabular-nums">{total ? `${done}/${total}` : "—"}</span>
+      <span className="w-9 text-right text-xs text-muted tabular-nums">{total ? `${done}/${total}` : "—"}</span>
     </span>
   );
 }
@@ -226,12 +226,12 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
     });
   return (
     <section aria-labelledby="unfiled-triage" className="wk-card min-w-0 px-3 pt-2.5 pb-2">
-      <div className="mb-1 flex items-center justify-between gap-2">
+      <div className="mb-1 flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h2 id="unfiled-triage" className="wk-label">
           Unfiled conversations{q.data ? ` · ${q.data.total}` : ""}
         </h2>
         {list.length ? (
-          <span className="flex items-center gap-1">
+          <span className="flex min-w-0 flex-wrap items-center gap-1">
             <SuggestWithAi allowed={aiAllowed} />
             <Button size="sm" variant="ghost" onClick={() => setPicked(picked.size === shown.length ? new Set() : new Set(shown.map((c) => c.id)))}>
               {picked.size && picked.size === shown.length ? "Select none" : "Select all"}
@@ -239,7 +239,12 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
           </span>
         ) : null}
       </div>
-      {q.isPending ? <Spinner label="Loading conversations…" /> : null}
+      {q.isPending ? (
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading conversations…
+        </span>
+      ) : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       <UpdatingNote data={q.data} className="mb-2" />
       {q.data && !list.length ? <p className="text-sm text-muted">Every recent conversation is filed.</p> : null}
@@ -247,10 +252,10 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
         {shown.map((c) => {
           const top = c.suggestions[0] as (UnfiledConversation["suggestions"][number] & { ai?: string }) | undefined;
           return (
-            <li key={c.id} className="flex items-center gap-2.5 py-1.5" data-unfiled-row={c.id}>
+            <li key={c.id} className="flex min-w-0 flex-wrap items-center gap-2.5 py-1.5" data-unfiled-row={c.id}>
               <input type="checkbox" className="h-4 w-4 shrink-0" aria-label={`Select ${c.title}`} checked={picked.has(c.id)} onChange={() => toggle(c.id)} />
               <span className="min-w-0 flex-1">
-                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-[13.5px] font-medium hover:underline">
+                <Link href={`/chat/${encodeURIComponent(c.id)}`} className="block truncate text-sm font-medium hover:underline">
                   {c.title}
                 </Link>
                 <span className="block truncate text-xs text-muted" data-dynamic>
@@ -275,7 +280,7 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
         })}
       </ul>
       {list.length > 8 ? (
-        <Button size="sm" variant="ghost" className="mt-1" onClick={() => setAll((a) => !a)} aria-expanded={all}>
+        <Button size="sm" variant="ghost" className="mt-1 max-w-full whitespace-normal" onClick={() => setAll((a) => !a)} aria-expanded={all}>
           {all ? "Show fewer" : `Show all ${list.length}`}
         </Button>
       ) : null}
@@ -289,7 +294,8 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
             size="sm"
             variant="primary"
             disabled={!withSuggestion.length}
-            busy={file.isPending}
+            loading={file.isPending}
+            className="max-w-full whitespace-normal"
             onClick={() => file.mutate(withSuggestion.map((c) => ({ sessionId: c.id, itemId: c.suggestions[0]!.id })))}
           >
             Accept suggestions{withSuggestion.length !== picked.size ? ` (${withSuggestion.length})` : ""}
@@ -308,7 +314,12 @@ export function UnfiledTriage({ items }: { items: WorkItem[] }) {
           onClose={() => setFiling(null)}
           onPick={(id) => file.mutate(filing.map((c) => ({ sessionId: c.id, itemId: id })))}
           extra={
-            <Button size="sm" variant="ghost" onClick={() => file.mutate(filing.map((c) => ({ sessionId: c.id, itemId: null })))}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="max-w-full whitespace-normal"
+              onClick={() => file.mutate(filing.map((c) => ({ sessionId: c.id, itemId: null })))}
+            >
               File in Miscellaneous
             </Button>
           }

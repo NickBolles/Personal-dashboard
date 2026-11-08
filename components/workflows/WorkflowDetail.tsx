@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { PageHeader, cx, useToast } from "@/components/ui";
-import { Button, ButtonLink } from "@/components/ui/legacy";
+import { Button, ButtonLink, ChipButton, PageHeader, useToast } from "@/components/ui";
 import type { HistoryRow } from "@/lib/workflows/outputs";
 import { WORKFLOW_START_EVENT } from "./events";
 
@@ -51,7 +50,7 @@ function StatsCard({ stats }: { stats: History["stats"] }) {
       <h3 className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted">Sessions per month</h3>
       <ol className="mt-1 grid grid-cols-12 items-end gap-1" aria-label="Sessions per month">
         {stats.perMonth.map((p) => (
-          <li key={p.month} className="flex min-w-0 flex-col items-center gap-0.5 text-[10px]">
+          <li key={p.month} className="flex min-w-0 flex-col items-center gap-0.5 text-xs">
             <span>{p.count}</span>
             <span className="w-full rounded-sm bg-accent/60" style={{ height: `${Math.round((p.count / max) * 48) + 2}px` }} aria-hidden />
             <span className="truncate text-muted">{monthLabel(p.month)}</span>
@@ -110,18 +109,16 @@ function SessionHistory({
             <div key={k} className="flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label={`Filter by ${label.toLowerCase()}`}>
               <span className="text-xs text-muted">{label}</span>
               {data.options[k].map((v) => (
-                <button
+                <ChipButton
                   key={v}
                   type="button"
                   aria-pressed={filter[k] === v}
+                  active={filter[k] === v}
                   onClick={() => setFilter({ ...filter, [k]: filter[k] === v ? undefined : v })}
-                  className={cx(
-                    "tap min-h-11 max-w-full truncate rounded-full border px-3 text-sm sm:min-h-9",
-                    filter[k] === v ? "border-accent bg-accent/10 font-medium" : "border-line-strong",
-                  )}
+                  className="max-w-full min-w-0 whitespace-normal break-words"
                 >
                   {v}
-                </button>
+                </ChipButton>
               ))}
             </div>
           ) : null,
@@ -276,7 +273,11 @@ export function WorkflowDetail({ slug }: { slug: string }) {
         actions={
           <div className="flex flex-wrap gap-2">
             {wf.status === "active" ? (
-              <Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { workflowId: wf.id } }))}>
+              <Button
+                variant="primary"
+                className="max-w-full min-w-0 whitespace-normal break-words"
+                onClick={() => window.dispatchEvent(new CustomEvent(WORKFLOW_START_EVENT, { detail: { workflowId: wf.id } }))}
+              >
                 Start {wf.name}
               </Button>
             ) : null}

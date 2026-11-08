@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, useToast } from "@/components/ui";
-import { Button, Empty, Spinner, inputCls } from "@/components/ui/legacy";
-import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
+import { AreaPickerDot, Button, EmptyState, ErrorNote, Input, KSpinner, SelectPicker, useToast } from "@/components/ui";
 import {
   ACTIVITY_TYPES,
   ACTIVITY_TYPE_LABELS,
@@ -122,7 +120,7 @@ export function ActivityFeed({
   const filtersId = `act-${compact ? "c" : "g"}`;
   const more = feed.hasNextPage ? (
     <div className="jv-activity-more">
-      <Button size="sm" busy={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()}>
+      <Button size="sm" loading={feed.isFetchingNextPage} onClick={() => feed.fetchNextPage()} className="max-w-full whitespace-normal">
         Load older
       </Button>
     </div>
@@ -141,10 +139,10 @@ export function ActivityFeed({
         <label htmlFor={`${filtersId}-q`} className="sr-only">
           Search activity
         </label>
-        <input
+        <Input
           id={`${filtersId}-q`}
           type="search"
-          className={`${inputCls.replace(/\bblock w-full\b/, "")} jv-activity-q`}
+          className="jv-activity-q w-full min-w-0"
           placeholder="Search activity"
           value={text}
           onChange={(e) => {
@@ -196,12 +194,15 @@ export function ActivityFeed({
       </form>
       {areas ? <ItemFilterBar rows={tagged} value={itemFilter} onChange={setItemFilter} idPrefix={`${filtersId}-meta`} className="mb-2" /> : null}
       {feed.isPending ? (
-        <Spinner label="Loading activity" />
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          Loading activity
+        </span>
       ) : feed.isError ? (
         <ErrorNote error={feed.error} retry={() => feed.refetch()} />
       ) : !items.length ? (
         <>
-          <Empty title={q || type || actor || area || itemFilter.tag || itemFilter.assignee ? "Nothing matches these filters" : "No activity yet"} />
+          <EmptyState title={q || type || actor || area || itemFilter.tag || itemFilter.assignee ? "Nothing matches these filters" : "No activity yet"} />
           {/* tag/assignee filters run on loaded pages: keep older pages reachable when this one has no match */}
           {more}
         </>
@@ -222,9 +223,14 @@ export function ActivityFeed({
                       {r.via ? <AgentChip profile={r.via} /> : <span className="jv-activity-actor">{r.actor.name}</span>} <span>{r.verb}</span>{" "}
                       {r.object && !(scope.item === r.object.id && !scope.descendants) ? (
                         onSelect ? (
-                          <button type="button" className="jv-activity-obj" onClick={() => onSelect(r.object!.id)}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="jv-activity-obj max-w-full whitespace-normal text-left"
+                            onClick={() => onSelect(r.object!.id)}
+                          >
                             {r.object.title}
-                          </button>
+                          </Button>
                         ) : (
                           <Link className="jv-activity-obj" href={`/areas?item=${encodeURIComponent(r.object.id)}`}>
                             {r.object.title}
@@ -238,7 +244,7 @@ export function ActivityFeed({
                         size="sm"
                         variant="ghost"
                         className="jv-activity-undo"
-                        busy={undoing === r.id}
+                        loading={undoing === r.id}
                         onClick={() => undo(r)}
                         aria-label={`Undo: ${r.verb}`}
                       >
