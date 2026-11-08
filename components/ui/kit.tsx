@@ -16,6 +16,7 @@ import {
   useState,
   type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
+  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
   type CSSProperties,
   type InputHTMLAttributes,
@@ -519,6 +520,24 @@ export function Textarea({
       aria-invalid={invalid || rest["aria-invalid"] || undefined}
       className={cx("k-textarea", invalid && "k-input-bad", className)}
     />
+  );
+}
+
+/**
+ * Form select with the same compact token styling as `Input` (pair it with `Field`). Native
+ * `<select>` underneath (phone OS picker, `selectOption` in e2e), for settings/data forms. For
+ * inline pickers on rows/headers (status, area, model) use `SelectPicker`.
+ */
+export function Select({
+  invalid,
+  className,
+  children,
+  ...rest
+}: SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean; ref?: Ref<HTMLSelectElement> }) {
+  return (
+    <select {...rest} aria-invalid={invalid || rest["aria-invalid"] || undefined} className={cx("k-select", invalid && "k-input-bad", className)}>
+      {children}
+    </select>
   );
 }
 

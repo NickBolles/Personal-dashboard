@@ -30,7 +30,7 @@ The library implements the design system in [design-system.md](design-system.md)
 | Choose many / labels / assignee         | `MetaPicker` (`multi`, `onToggle`, `onCreate`)                                                                                   | GitHub-label style.                                                                         |
 | Due date                                | `DuePicker` (`value`, `onSave`)                                                                                                  | Quick dates + calendar.                                                                     |
 | Filter chips in toolbars                | `ChipSelect` (transitional, native underneath — give data-listing chips a fixed width), `ChipInput`, `ChipButton`, `Segmented`   | Prefer `SelectPicker` for new code.                                                         |
-| Form field                              | `Field` (`id`, `label`, `hint`, `error`) wrapping `Input` / `Textarea` / `SelectPicker`                                          | `Input` has `icon`, `invalid`. Not `inputCls`.                                              |
+| Form field                              | `Field` (`id`, `label`, `hint`, `error`) wrapping `Input` / `Textarea` / `Select` / `SelectPicker`                               | `Input` has `icon`, `invalid`. Not `inputCls`.                                              |
 | Booleans                                | `Checkbox`, `Toggle`                                                                                                             | Optimistic toggles keep a local override until the response.                                |
 | Tabs                                    | `Tabs` (`tabs[{id,label,count?,href?}]`, `value`, `onChange`, `label`)                                                           | One tab bar per pane.                                                                       |
 | Dialog / sheet                          | `Dialog` (focus trap + restore); confirm writes with a confirm card                                                              | One primary inside.                                                                         |
@@ -44,7 +44,7 @@ The library implements the design system in [design-system.md](design-system.md)
 
 ## Superseded (lint-banned for new code, being migrated)
 
-`Button`/`ButtonLink`/`Card`/`Kbd` from `@/components/ui/legacy` → kit versions; `Badge` → `Pill`; `Empty` → `EmptyState`; `Spinner` → `KSpinner`/`LoadingState`; `OverflowMenu` → `Menu`; `SectionLabel` → `SectionHeader`; `inputCls` + raw inputs → `Field` + `Input`/`Textarea`; native `<select>` → `SelectPicker`. See `/opt/data/worktrees/jarvis-ui-standardize-AUDIT.md` (audit) for call sites.
+`Button`/`ButtonLink`/`Card`/`Kbd` from `@/components/ui/legacy` → kit versions; `Badge` → `Pill`; `Empty` → `EmptyState`; `Spinner` → `KSpinner`/`LoadingState`; `OverflowMenu` → `Menu`; `SectionLabel` → `SectionHeader`; `inputCls` + raw inputs → `Field` + `Input`/`Textarea`; native `<select>` → `Select` in forms (native underneath, `selectOption` keeps working), `SelectPicker` for inline row/header pickers. See `/opt/data/worktrees/jarvis-ui-standardize-AUDIT.md` (audit) for call sites.
 
 ## Justified exceptions
 

@@ -20,6 +20,7 @@ import {
   PageHeader,
   Pill,
   SectionHeader,
+  Select,
   SelectPicker,
   StatusPickerDot,
   Tabs,
@@ -143,6 +144,13 @@ export function LibraryGallery() {
             </Field>
             <Field id="ui-notes" label="Notes">
               <Textarea id="ui-notes" placeholder="Anything the agent should know" />
+            </Field>
+            <Field id="ui-cadence" label="Cadence" hint="Form select (native underneath).">
+              <Select id="ui-cadence" defaultValue="monthly">
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </Select>
             </Field>
           </div>
         </Block>

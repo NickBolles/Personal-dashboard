@@ -2218,6 +2218,32 @@ button:active > .dock-orb {
     border-color: var(--ac);
     box-shadow: 0 0 0 3px var(--acs);
   }
+  .k-select {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 32px 0 12px;
+    border-radius: var(--r2);
+    border: 1px solid var(--bdc);
+    background-color: var(--s2);
+    background-image: linear-gradient(45deg, transparent 50%, var(--t3) 50%), linear-gradient(135deg, var(--t3) 50%, transparent 50%);
+    background-position:
+      calc(100% - 16px) 50%,
+      calc(100% - 11px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+    color: var(--t1);
+    font: 16px var(--sans);
+    appearance: none;
+  }
+  .k-select:focus {
+    outline: 0;
+    border-color: var(--ac);
+    box-shadow: 0 0 0 3px var(--acs);
+  }
+  .k-select:disabled {
+    opacity: 0.6;
+  }
   .k-prog {
     height: 6px;
     border-radius: 999px;
@@ -2679,6 +2705,10 @@ button:active > .dock-orb {
     .k-textarea {
       font-size: 14px;
     }
+    .k-select {
+      min-height: 36px;
+      font-size: 14px;
+    }
     .k-row {
       min-height: 40px;
     }
@@ -2719,6 +2749,11 @@ button:active > .dock-orb {
     }
     .k-textarea {
       padding: 6px 10px;
+    }
+    .k-select {
+      min-height: 30px;
+      padding-left: 10px;
+      font-size: 13px;
     }
     .k-row {
       min-height: 36px;
