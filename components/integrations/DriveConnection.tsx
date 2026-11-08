@@ -3,8 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { ErrorNote, useToast, LoadingState } from "@/components/ui";
-import { Button } from "@/components/ui/legacy";
+import { Button, ErrorNote, useToast, LoadingState } from "@/components/ui";
 
 type DriveStatus = { available: boolean; configured: boolean; connected: boolean; connectedAt: string | null; scope: string; redirectPath: string };
 
@@ -58,7 +57,7 @@ export function DriveConnection() {
       ) : s.connected ? (
         <div className="flex flex-wrap items-center gap-2">
           <span data-testid="drive-connected">Connected{s.connectedAt ? ` · ${new Date(s.connectedAt).toLocaleDateString()}` : ""}</span>
-          <Button size="sm" variant="ghost" type="button" busy={busy} onClick={() => void disconnect()}>
+          <Button size="sm" variant="ghost" type="button" loading={busy} onClick={() => void disconnect()}>
             Disconnect Drive
           </Button>
         </div>

@@ -2,8 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, PageHeader, EmptyState, LoadingState } from "@/components/ui";
-import { Badge } from "@/components/ui/legacy";
+import { ErrorNote, PageHeader, EmptyState, LoadingState, Pill } from "@/components/ui";
 
 type Entry = {
   id: string;
@@ -20,7 +19,7 @@ type Entry = {
 export function ActivityView() {
   const q = useQuery({ queryKey: ["audit"], queryFn: () => api.get<{ entries: Entry[] }>("/api/audit") });
   return (
-    <div className="mx-auto w-full max-w-[1040px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-260 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Activity log" subtitle="Consequential actions with their upstream result and correlation ID." />
       {q.isLoading ? <LoadingState label="Loading…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
@@ -28,7 +27,7 @@ export function ActivityView() {
         {(q.data?.entries ?? []).map((e) => (
           <li key={e.id} className="p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={e.result === "ok" ? "ok" : e.result === "pending" ? "warn" : "danger"}>{e.result}</Badge>
+              <Pill tone={e.result === "ok" ? "ok" : e.result === "pending" ? "wn" : "bad"}>{e.result}</Pill>
               <span className="font-mono">{e.action}</span>
               {e.sourceRecord ? <span className="truncate text-muted">{e.sourceRecord}</span> : null}
             </div>

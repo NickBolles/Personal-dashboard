@@ -3,8 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { SmartSettings as Settings } from "@/lib/jarvis-ui/types";
-import { useToast } from "@/components/ui";
-import { Card } from "@/components/ui/legacy";
+import { Card, useToast } from "@/components/ui";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 
 /** Settings → Smart replies: interactive Hermes replies (jarvis-ui@1). Off by default; per person. */
@@ -26,6 +25,7 @@ export function SmartSettings() {
     <Card>
       <h2 className="eyebrow">Smart replies</h2>
       <label className="mt-2 flex min-h-11 cursor-pointer items-start gap-3 sm:min-h-10">
+        {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Checkbox cannot preserve aria-describedby. */}
         <input
           type="checkbox"
           className="mt-1 h-4 w-4"
@@ -43,6 +43,7 @@ export function SmartSettings() {
         </span>
       </label>
       <label className="mt-1 flex min-h-11 cursor-pointer items-start gap-3 pl-7 sm:min-h-10">
+        {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Checkbox cannot preserve aria-describedby. */}
         <input
           type="checkbox"
           className="mt-1 h-4 w-4"

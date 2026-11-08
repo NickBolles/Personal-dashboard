@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Field, PageHeader } from "@/components/ui";
-import { Button, Card, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Checkbox, Field, Input, PageHeader } from "@/components/ui";
 
 type Preview = {
   revision: string;
@@ -60,7 +59,7 @@ export function ConfigurationView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Configuration transfer" />
       <Link href="/settings" className="text-sm text-accent underline">
         Back to Settings
@@ -71,12 +70,11 @@ export function ConfigurationView() {
       </p>
       <Card>
         <Field id="config-password" label="File password" hint="At least 12 characters. Use a unique, strong password; encryption is always required.">
-          <input
+          <Input
             id="config-password"
             type="password"
             autoComplete="off"
             maxLength={1024}
-            className={inputCls}
             value={password}
             disabled={busy}
             onChange={(e) => {
@@ -90,21 +88,22 @@ export function ConfigurationView() {
         <h2 className="mb-3 font-semibold">Export configuration</h2>
         <div className="space-y-4">
           <Field id="config-confirm" label="Confirm export password">
-            <input
+            <Input
               id="config-confirm"
               type="password"
               autoComplete="off"
               maxLength={1024}
-              className={inputCls}
               value={confirmation}
               disabled={busy}
               onChange={(e) => setConfirmation(e.target.value)}
             />
           </Field>
-          <label className="flex min-h-11 items-start gap-3 text-sm">
-            <input type="checkbox" className="mt-1" checked={includeSecrets} disabled={busy} onChange={(e) => setIncludeSecrets(e.target.checked)} />
-            <span>Include stored integration secrets (optional). Anyone with this file and password can recover these credentials.</span>
-          </label>
+          <Checkbox
+            checked={includeSecrets}
+            disabled={busy}
+            onChange={setIncludeSecrets}
+            label={<span>Include stored integration secrets (optional). Anyone with this file and password can recover these credentials.</span>}
+          />
           <Button disabled={busy || password.length < 12 || !confirmation} onClick={download}>
             Download encrypted file
           </Button>
@@ -118,7 +117,7 @@ export function ConfigurationView() {
               id="config-file"
               type="file"
               accept=".json,application/json"
-              className={`${inputCls} min-w-0 max-w-full`}
+              className="k-input min-w-0 max-w-full"
               disabled={busy}
               onChange={(e) => {
                 const selected = e.target.files?.[0];
@@ -137,22 +136,20 @@ export function ConfigurationView() {
               }}
             />
           </Field>
-          <label className="flex min-h-11 items-start gap-3 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={replaceExisting}
-              disabled={busy}
-              onChange={(e) => {
-                setReplaceExisting(e.target.checked);
-                setPreview(undefined);
-              }}
-            />
-            <span>
-              Replace matching existing integrations. Unchecked preserves them. Replacement removes omitted fields and secrets, including credentials not
-              included in the file.
-            </span>
-          </label>
+          <Checkbox
+            checked={replaceExisting}
+            disabled={busy}
+            onChange={(checked) => {
+              setReplaceExisting(checked);
+              setPreview(undefined);
+            }}
+            label={
+              <span>
+                Replace matching existing integrations. Unchecked preserves them. Replacement removes omitted fields and secrets, including credentials not
+                included in the file.
+              </span>
+            }
+          />
           <p className="text-sm text-muted">
             Added or replaced integrations stay disabled and unverified. Environment overrides still win. Review and test connections before deliberately
             enabling them; import does not start scheduled work.

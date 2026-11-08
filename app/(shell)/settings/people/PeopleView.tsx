@@ -6,8 +6,7 @@ import { api } from "@/lib/client/api";
 import type { Person } from "@/lib/people";
 import { defaultCapabilities, MODULES, ROLE_LABELS, ROLES, type Role } from "@/lib/modules";
 import { relativeTime } from "@/lib/time";
-import { Dialog, ErrorNote, Field, PageHeader, useToast, EmptyState, LoadingState } from "@/components/ui";
-import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Checkbox, Dialog, ErrorNote, Field, Input, PageHeader, Pill, Select, useToast, EmptyState, LoadingState } from "@/components/ui";
 
 type Invite = { code: string; expiresAt: string };
 
@@ -89,10 +88,9 @@ function AddPerson({ onDone }: { onDone: () => void }) {
         }}
       >
         <Field id="np-name" label="Name">
-          <input
+          <Input
             id="np-name"
             required
-            className={inputCls}
             value={name}
             onChange={(e) => {
               setName(e.target.value);
@@ -101,20 +99,13 @@ function AddPerson({ onDone }: { onDone: () => void }) {
           />
         </Field>
         <Field id="np-user" label="Sign-in name" hint="What they type to sign in. Lowercase letters and numbers.">
-          <input
-            id="np-user"
-            required
-            autoCapitalize="none"
-            spellCheck={false}
-            className={inputCls}
-            value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase())}
-          />
+          <Input id="np-user" required autoCapitalize="none" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value.toLowerCase())} />
         </Field>
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Role</legend>
           {ROLES.map((r) => (
             <label key={r} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-line p-3 has-[:checked]:border-accent">
+              {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Segmented cannot preserve native radio name, labels and keyboard behavior. */}
               <input type="radio" name="np-role" className="mt-1" checked={role === r} onChange={() => setRole(r)} />
               <span>
                 <span className="block font-medium">{ROLE_LABELS[r].label}</span>
@@ -126,31 +117,32 @@ function AddPerson({ onDone }: { onDone: () => void }) {
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">How they sign in</legend>
           <label className="flex min-h-11 items-center gap-3">
+            {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Segmented cannot preserve the native np-mode radio group. */}
             <input type="radio" name="np-mode" checked={mode === "invite"} onChange={() => setMode("invite")} />
             Send an invite link (they choose a passcode)
           </label>
           <label className="flex min-h-11 items-center gap-3">
+            {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Segmented cannot preserve the native np-mode radio group. */}
             <input type="radio" name="np-mode" checked={mode === "pin"} onChange={() => setMode("pin")} />
             Set a {role === "household" ? "PIN" : "passcode"} now (e.g. on the kitchen tablet)
           </label>
         </fieldset>
         {mode === "pin" ? (
           <Field id="np-pin" label={role === "household" ? "PIN (4+ digits) or passcode" : "Passcode (6+ characters)"}>
-            <input
+            <Input
               id="np-pin"
               type="password"
               autoComplete="new-password"
               inputMode={role === "household" ? "numeric" : undefined}
               required
               minLength={role === "household" ? 4 : 6}
-              className={inputCls}
               value={pin}
               onChange={(e) => setPin(e.target.value)}
             />
           </Field>
         ) : null}
         <div className="flex gap-2">
-          <Button type="submit" variant="primary" busy={add.isPending}>
+          <Button type="submit" variant="primary" loading={add.isPending}>
             Add {name || "person"}
           </Button>
           <Button type="button" variant="ghost" onClick={onDone}>
@@ -183,28 +175,29 @@ function Capabilities({ person, onSave, busy }: { person: Person; onSave: (caps:
           <ul className="space-y-1">
             {m.capabilities.map((c) => (
               <li key={c.id}>
-                <label className="flex min-h-11 items-center gap-3">
-                  <input
-                    type="checkbox"
-                    disabled={admin}
-                    checked={caps.has(c.id)}
-                    onChange={(e) => {
-                      const next = new Set(caps);
-                      if (e.target.checked) next.add(c.id);
-                      else next.delete(c.id);
-                      setCaps(next);
-                    }}
-                  />
-                  <span className="min-w-0">
-                    <span className="block">{c.label}</span>
-                    {c.description ? <span className="block text-xs text-muted">{c.description}</span> : null}
-                  </span>
-                  {!admin && caps.has(c.id) !== defaults.has(c.id) ? (
-                    <Badge tone="accent" className="ml-auto shrink-0">
-                      Changed from {ROLE_LABELS[person.role].label.toLowerCase()} default
-                    </Badge>
-                  ) : null}
-                </label>
+                <Checkbox
+                  disabled={admin}
+                  checked={caps.has(c.id)}
+                  onChange={(checked) => {
+                    const next = new Set(caps);
+                    if (checked) next.add(c.id);
+                    else next.delete(c.id);
+                    setCaps(next);
+                  }}
+                  label={
+                    <>
+                      <span className="min-w-0">
+                        <span className="block">{c.label}</span>
+                        {c.description ? <span className="block text-xs text-muted">{c.description}</span> : null}
+                      </span>
+                      {!admin && caps.has(c.id) !== defaults.has(c.id) ? (
+                        <Pill tone="ac" className="ml-auto shrink-0">
+                          Changed from {ROLE_LABELS[person.role].label.toLowerCase()} default
+                        </Pill>
+                      ) : null}
+                    </>
+                  }
+                />
               </li>
             ))}
           </ul>
@@ -215,7 +208,7 @@ function Capabilities({ person, onSave, busy }: { person: Person; onSave: (caps:
           <Button
             variant="secondary"
             disabled={!changed}
-            busy={busy}
+            loading={busy}
             onClick={() => onSave(Object.fromEntries(MODULES.flatMap((m) => m.capabilities).map((c) => [c.id, caps.has(c.id)])))}
           >
             Save access
@@ -253,11 +246,11 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
   });
   const remove = useMutation({ mutationFn: () => api.del(`/api/people/${person.id}`), onSuccess: () => done(`${person.name} removed`), onError: fail });
   const status = person.disabled ? (
-    <Badge tone="danger">Disabled</Badge>
+    <Pill tone="bad">Disabled</Pill>
   ) : person.inviteExpiresAt ? (
-    <Badge tone="warn">Invite pending</Badge>
+    <Pill tone="wn">Invite pending</Pill>
   ) : !person.hasPasscode ? (
-    <Badge tone="warn">Can’t sign in yet</Badge>
+    <Pill tone="wn">Can’t sign in yet</Pill>
   ) : null;
   return (
     <li id={person.id} className="card p-4">
@@ -282,9 +275,8 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
       {open ? (
         <div className="mt-4 space-y-4">
           <Field id={`role-${person.id}`} label="Role" hint="Changing the role resets their access to that role's defaults.">
-            <select
+            <Select
               id={`role-${person.id}`}
-              className={inputCls}
               value={person.role}
               onChange={(e) => patch.mutate({ role: e.target.value }, { onSuccess: () => done("Role changed") })}
             >
@@ -293,7 +285,7 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
                   {ROLE_LABELS[r].label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Capabilities
             key={person.role + person.capabilities.join()}
@@ -302,7 +294,7 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
             onSave={(capabilities) => patch.mutate({ capabilities }, { onSuccess: () => done("Access saved") })}
           />
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-            <Button size="sm" busy={newInvite.isPending} onClick={() => newInvite.mutate()}>
+            <Button size="sm" loading={newInvite.isPending} onClick={() => newInvite.mutate()}>
               {person.hasPasscode ? "New invite link" : "Invite link"}
             </Button>
             <Button size="sm" onClick={() => setPinOpen(true)}>
@@ -337,7 +329,7 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
             <Button
               variant="primary"
               disabled={pin.length < (person.role === "household" ? 4 : 6)}
-              busy={patch.isPending}
+              loading={patch.isPending}
               onClick={() =>
                 patch.mutate(
                   { passcode: pin },
@@ -357,15 +349,7 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
         }
       >
         <Field id={`pin-${person.id}`} label={person.role === "household" ? "PIN (4+ digits) or passcode" : "Passcode (6+ characters)"}>
-          <input
-            id={`pin-${person.id}`}
-            data-autofocus
-            type="password"
-            autoComplete="new-password"
-            className={inputCls}
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-          />
+          <Input id={`pin-${person.id}`} data-autofocus type="password" autoComplete="new-password" value={pin} onChange={(e) => setPin(e.target.value)} />
         </Field>
       </Dialog>
       <Dialog
@@ -378,7 +362,7 @@ function PersonCard({ person, me }: { person: Person; me?: string }) {
             <Button variant="ghost" onClick={() => setConfirmRemove(false)}>
               Cancel
             </Button>
-            <Button variant="danger" busy={remove.isPending} onClick={() => remove.mutate()}>
+            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
               Remove
             </Button>
           </>
@@ -394,7 +378,7 @@ export function PeopleView() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => api.get<{ user: { id: string } }>("/api/auth/me") });
   const [adding, setAdding] = useState(false);
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader
         title="People"
         subtitle="Everyone has their own conversations, alerts and Home layout. Household things are shared by what you allow here."

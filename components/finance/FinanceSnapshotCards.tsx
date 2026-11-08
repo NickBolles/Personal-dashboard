@@ -1,7 +1,6 @@
 "use client";
 
-import { SectionHeader, Skeleton } from "@/components/ui";
-import { Card } from "@/components/ui/legacy";
+import { SectionHeader, Skeleton, Card } from "@/components/ui";
 import dynamic from "next/dynamic";
 import { Money, Delta, useHideAmounts } from "./money";
 import type { FinanceSnapshot } from "@/lib/finance/snapshot";

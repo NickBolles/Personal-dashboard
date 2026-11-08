@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Field } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Field, Input } from "@/components/ui";
 
 const LAST_NAME = "jarvis.lastUsername";
 
@@ -47,30 +46,28 @@ export function LoginForm({ next, askName }: { next: string; askName: boolean })
         </div>
         {askName && (
           <Field id="username" label="Your sign-in name" hint="Leave empty if you set up this Jarvis.">
-            <input
+            <Input
               id="username"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
-              className={inputCls}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
           </Field>
         )}
         <Field id="passcode" label={askName ? "Passcode or PIN" : "Passcode"} error={error}>
-          <input
+          <Input
             id="passcode"
             type="password"
             autoComplete="current-password"
             required
             autoFocus={!askName}
-            className={inputCls}
             value={passcode}
             onChange={(e) => setPasscode(e.target.value)}
           />
         </Field>
-        <Button type="submit" variant="primary" className="w-full" busy={busy}>
+        <Button type="submit" variant="primary" className="w-full" loading={busy}>
           Sign in
         </Button>
       </form>

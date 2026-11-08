@@ -7,8 +7,7 @@ import { relativeTime } from "@/lib/time";
 import { ACCOUNT_KINDS, type AccountKind } from "@/lib/finance/types";
 import type { AccountView } from "@/server/finance/accounts";
 import type { FinanceOverview } from "@/server/finance/overview";
-import { ErrorNote, Field, PageHeader, useToast } from "@/components/ui";
-import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
+import { ErrorNote, Field, PageHeader, useToast, Pill, Button, Card, KSpinner, Input, Select, Textarea } from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { Money, toCents } from "@/components/finance/money";
 
@@ -59,29 +58,29 @@ function AddAccount() {
       }}
     >
       <Field id="na-name" label="Name">
-        <input id="na-name" required className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Joint checking" />
+        <Input id="na-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Joint checking" />
       </Field>
       <Field id="na-kind" label="Kind">
-        <select id="na-kind" className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as AccountKind)}>
+        <Select id="na-kind" value={kind} onChange={(e) => setKind(e.target.value as AccountKind)}>
           {ACCOUNT_KINDS.map((k) => (
             <option key={k} value={k}>
               {KIND_LABEL[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {kind === "credit_card" ? (
         <Field id="na-basis" label="Pay by">
-          <select id="na-basis" className={inputCls} value={basis} onChange={(e) => setBasis(e.target.value)}>
+          <Select id="na-basis" value={basis} onChange={(e) => setBasis(e.target.value)}>
             <option value="">Choose (required to plan)</option>
             <option value="statement">Statement balance</option>
             <option value="current">Current balance</option>
-          </select>
+          </Select>
         </Field>
       ) : (
         <div />
       )}
-      <Button type="submit" variant="primary" busy={add.isPending}>
+      <Button type="submit" variant="primary" loading={add.isPending}>
         Add
       </Button>
     </form>
@@ -129,50 +128,26 @@ function BalanceEntry({ accounts }: { accounts: AccountView[] }) {
       }}
     >
       <Field id="bal-asof" label="True as of" hint="Leave empty if you're reading them right now.">
-        <input id="bal-asof" type="datetime-local" className={inputCls} value={asOf} onChange={(e) => setAsOf(e.target.value)} />
+        <Input id="bal-asof" type="datetime-local" value={asOf} onChange={(e) => setAsOf(e.target.value)} />
       </Field>
       <ul className="space-y-3">
         {accounts.map((a) => (
           <li key={a.id} className="grid items-end gap-2 sm:grid-cols-[1fr_160px]">
             <Field id={`bal-${a.id}`} label={`${a.name}${a.kind === "credit_card" ? " (amount owed)" : ""}`}>
-              <input
-                id={`bal-${a.id}`}
-                inputMode="decimal"
-                className={inputCls}
-                value={values[a.id]?.balance ?? ""}
-                onChange={(e) => set(a.id, { balance: e.target.value })}
-              />
+              <Input id={`bal-${a.id}`} inputMode="decimal" value={values[a.id]?.balance ?? ""} onChange={(e) => set(a.id, { balance: e.target.value })} />
             </Field>
             {a.kind === "credit_card" && a.cardBasis === "statement" ? (
               <details className="sm:col-span-2">
                 <summary className="min-h-11 cursor-pointer text-sm text-accent">Statement details for {a.name}</summary>
                 <div className="mt-2 grid gap-2 sm:grid-cols-3">
                   <Field id={`st-${a.id}`} label="Statement balance">
-                    <input
-                      id={`st-${a.id}`}
-                      inputMode="decimal"
-                      className={inputCls}
-                      value={values[a.id]?.st ?? ""}
-                      onChange={(e) => set(a.id, { st: e.target.value })}
-                    />
+                    <Input id={`st-${a.id}`} inputMode="decimal" value={values[a.id]?.st ?? ""} onChange={(e) => set(a.id, { st: e.target.value })} />
                   </Field>
                   <Field id={`pd-${a.id}`} label="Payments credited to it">
-                    <input
-                      id={`pd-${a.id}`}
-                      inputMode="decimal"
-                      className={inputCls}
-                      value={values[a.id]?.paid ?? ""}
-                      onChange={(e) => set(a.id, { paid: e.target.value })}
-                    />
+                    <Input id={`pd-${a.id}`} inputMode="decimal" value={values[a.id]?.paid ?? ""} onChange={(e) => set(a.id, { paid: e.target.value })} />
                   </Field>
                   <Field id={`du-${a.id}`} label="Due date">
-                    <input
-                      id={`du-${a.id}`}
-                      type="date"
-                      className={inputCls}
-                      value={values[a.id]?.due ?? ""}
-                      onChange={(e) => set(a.id, { due: e.target.value })}
-                    />
+                    <Input id={`du-${a.id}`} type="date" value={values[a.id]?.due ?? ""} onChange={(e) => set(a.id, { due: e.target.value })} />
                   </Field>
                 </div>
               </details>
@@ -180,7 +155,7 @@ function BalanceEntry({ accounts }: { accounts: AccountView[] }) {
           </li>
         ))}
       </ul>
-      <Button type="submit" variant="primary" busy={save.isPending}>
+      <Button type="submit" variant="primary" loading={save.isPending}>
         Save balances
       </Button>
     </form>
@@ -214,30 +189,29 @@ function CsvImport({ accounts }: { accounts: AccountView[] }) {
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id="csv-kind" label="What's in the file">
-          <select id="csv-kind" className={inputCls} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+          <Select id="csv-kind" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
             <option value="balances">Balances: account,balance,as_of[,statement_balance,payments_credited,due_date]</option>
             <option value="transactions">Transactions: date,amount,description[,pending]</option>
-          </select>
+          </Select>
         </Field>
         {kind === "transactions" ? (
           <Field id="csv-account" label="Account">
-            <select id="csv-account" required className={inputCls} value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <Select id="csv-account" required value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               <option value="">Choose…</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
       </div>
       <Field id="csv-file" label="CSV file">
-        <input
+        <Input
           id="csv-file"
           type="file"
           accept=".csv,text/csv"
-          className={inputCls}
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (f) setCsv(await f.text());
@@ -245,9 +219,9 @@ function CsvImport({ accounts }: { accounts: AccountView[] }) {
         />
       </Field>
       <Field id="csv-text" label="…or paste it">
-        <textarea id="csv-text" className={`${inputCls} h-28 font-mono text-xs`} value={csv} onChange={(e) => setCsv(e.target.value)} />
+        <Textarea id="csv-text" rows={2} className="h-28 font-mono text-xs" value={csv} onChange={(e) => setCsv(e.target.value)} />
       </Field>
-      <Button type="submit" busy={run.isPending} disabled={!csv.trim()}>
+      <Button type="submit" loading={run.isPending} disabled={!csv.trim()}>
         Import
       </Button>
     </form>
@@ -262,7 +236,7 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
       <th scope="row" className="px-3 py-2 text-left font-medium">
         {a.name}
         <div className="text-xs font-normal text-muted">{KIND_LABEL[a.kind]}</div>
-        {a.reserveAccount ? <Badge tone="accent">Reserve account</Badge> : null}
+        {a.reserveAccount ? <Pill tone="ac">Reserve account</Pill> : null}
       </th>
       <td className="px-3 py-2">
         {b ? (
@@ -280,16 +254,11 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
         {a.kind === "credit_card" ? (
           <label className="block text-sm">
             <span className="sr-only">Pay {a.name} by</span>
-            <select
-              disabled={!editable}
-              className="min-h-11 rounded-lg border border-line-strong bg-surface px-2"
-              value={a.cardBasis ?? ""}
-              onChange={(e) => patch.mutate({ cardBasis: e.target.value || null })}
-            >
+            <Select disabled={!editable} value={a.cardBasis ?? ""} onChange={(e) => patch.mutate({ cardBasis: e.target.value || null })}>
               <option value="">Basis not chosen</option>
               <option value="statement">Pay statement balance</option>
               <option value="current">Pay current balance</option>
-            </select>
+            </Select>
           </label>
         ) : null}
         {a.kind === "checking" && !a.reserveAccount && editable ? (
@@ -300,9 +269,9 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
         {monarch ? (
           <label className="block text-sm">
             <span className="sr-only">Monarch record for {a.name}</span>
-            <select
+            <Select
               disabled={!editable}
-              className="min-h-11 max-w-56 rounded-lg border border-line-strong bg-surface px-2"
+              className="max-w-56"
               value={a.externalId ?? ""}
               onChange={(e) => patch.mutate({ external: e.target.value ? { source: "monarch", externalId: e.target.value } : null })}
             >
@@ -314,7 +283,7 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
                     {x.name} ({x.type ?? "?"})
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
         ) : null}
         {editable ? (
@@ -352,13 +321,18 @@ export function AccountsView() {
         subtitle="Balances keep their source, as-of and fetch time. Unknown as-of stays unknown."
         actions={
           monarch && editable ? (
-            <Button busy={refresh.isPending} onClick={() => refresh.mutate(undefined)}>
+            <Button loading={refresh.isPending} onClick={() => refresh.mutate(undefined)}>
               Refresh from Monarch
             </Button>
           ) : null
         }
       />
-      {accounts.isPending ? <Spinner label="Loading accounts" /> : null}
+      {accounts.isPending ? (
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          <span>Loading accounts</span>
+        </span>
+      ) : null}
       {accounts.error ? <ErrorNote error={accounts.error} /> : null}
       {list.length ? (
         <div data-scroll-x tabIndex={0} role="region" aria-label="Scrollable table" className="card relative overflow-x-auto p-0">
@@ -413,11 +387,11 @@ export function AccountsView() {
                 <span>
                   {x.name} <span className="text-muted">({x.type ?? "?"})</span>{" "}
                   {x.mappedTo ? (
-                    <Badge tone="ok">Linked to {list.find((a) => a.id === x.mappedTo)?.name ?? "an account"}</Badge>
+                    <Pill tone="ok">Linked to {list.find((a) => a.id === x.mappedTo)?.name ?? "an account"}</Pill>
                   ) : x.ignored ? (
-                    <Badge>Duplicate</Badge>
+                    <Pill>Duplicate</Pill>
                   ) : (
-                    <Badge tone="warn">Not linked</Badge>
+                    <Pill tone="wn">Not linked</Pill>
                   )}
                 </span>
                 {editable && !x.mappedTo ? (

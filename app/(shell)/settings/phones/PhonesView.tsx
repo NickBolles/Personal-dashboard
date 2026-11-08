@@ -6,8 +6,7 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { CaptureTokens } from "@/components/capture/CaptureTokens";
-import { ErrorNote, Field, PageHeader, useNow, useToast, LoadingState } from "@/components/ui";
-import { Badge, Button, Card, Empty, inputCls } from "@/components/ui/legacy";
+import { Button, Card, EmptyState, ErrorNote, Field, PageHeader, Pill, Textarea, useNow, useToast, LoadingState } from "@/components/ui";
 
 type Device = { id: string; name: string; platform: string; appVersion?: string; pushEnabled: boolean; createdAt: string; lastSeenAt: string };
 type Pairing = { code: string; expiresAt: string; server: string; uri: string; qrSvg: string };
@@ -58,7 +57,7 @@ export function PhonesView() {
   const list = devices.data?.devices ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Phones" subtitle="The Jarvis Android app: pair it, see where you're signed in, set up notifications." />
 
       <Card>
@@ -93,7 +92,7 @@ export function PhonesView() {
           </div>
         ) : null}
         <div className="mt-4">
-          <Button variant={pairing && !expired ? "secondary" : "primary"} busy={showCode.isPending} onClick={() => showCode.mutate()}>
+          <Button variant={pairing && !expired ? "secondary" : "primary"} loading={showCode.isPending} onClick={() => showCode.mutate()}>
             {pairing ? "Show a new code" : "Show pairing code"}
           </Button>
         </div>
@@ -103,7 +102,7 @@ export function PhonesView() {
         <h2 className="mb-2 font-semibold">Paired phones</h2>
         {devices.isLoading ? <LoadingState label="Loading…" /> : null}
         {devices.error ? <ErrorNote error={devices.error} retry={() => devices.refetch()} /> : null}
-        {devices.data && !devices.error && !list.length ? <Empty title="No phones paired yet" /> : null}
+        {devices.data && !devices.error && !list.length ? <EmptyState title="No phones paired yet" /> : null}
         <ul className="divide-y divide-line">
           {list.map((d) => (
             <li key={d.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
@@ -115,8 +114,8 @@ export function PhonesView() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge tone={d.pushEnabled ? "ok" : "neutral"}>{d.pushEnabled ? "Notifications on" : "No notifications"}</Badge>
-                <Button size="sm" variant="ghost" busy={revoke.isPending && revoke.variables === d.id} onClick={() => revoke.mutate(d.id)}>
+                <Pill tone={d.pushEnabled ? "ok" : "neutral"}>{d.pushEnabled ? "Notifications on" : "No notifications"}</Pill>
+                <Button size="sm" variant="ghost" loading={revoke.isPending && revoke.variables === d.id} onClick={() => revoke.mutate(d.id)}>
                   Sign out<span className="sr-only"> {d.name}</span>
                 </Button>
               </div>
@@ -135,9 +134,9 @@ export function PhonesView() {
           settings → Service accounts. Paste both below. The app picks the settings up automatically.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
-          {push.data ? push.data.configured ? <Badge tone="ok">Configured · {push.data.projectId}</Badge> : <Badge tone="warn">Not configured</Badge> : null}
-          {push.data?.projectMismatch ? <Badge tone="danger">The two files are from different Firebase projects</Badge> : null}
-          {push.data?.fromEnv ? <Badge>Set by environment</Badge> : null}
+          {push.data ? push.data.configured ? <Pill tone="ok">Configured · {push.data.projectId}</Pill> : <Pill tone="wn">Not configured</Pill> : null}
+          {push.data?.projectMismatch ? <Pill tone="bad">The two files are from different Firebase projects</Pill> : null}
+          {push.data?.fromEnv ? <Pill>Set by environment</Pill> : null}
         </div>
         {!isAdmin ? <p className="mt-3 text-sm text-muted">Only an admin can change these.</p> : null}
         <form
@@ -149,23 +148,24 @@ export function PhonesView() {
           }}
         >
           <Field id="gs" label="google-services.json" hint={push.data?.clientConfig ? "Saved. Paste again to replace." : undefined}>
-            <textarea id="gs" className={`${inputCls} h-24 font-mono text-xs`} value={googleServices} onChange={(e) => setGoogleServices(e.target.value)} />
+            <Textarea id="gs" rows={2} className="h-24 font-mono text-xs" value={googleServices} onChange={(e) => setGoogleServices(e.target.value)} />
           </Field>
           <Field
             id="sa"
             label="Service-account key (JSON)"
             hint={push.data?.serviceAccount ? "Saved (encrypted). Paste again to replace." : "Stored encrypted on the Jarvis server; never sent to the phone."}
           >
-            <textarea
+            <Textarea
               id="sa"
-              className={`${inputCls} h-24 font-mono text-xs`}
+              rows={2}
+              className="h-24 font-mono text-xs"
               value={serviceAccount}
               onChange={(e) => setServiceAccount(e.target.value)}
               autoComplete="off"
               spellCheck={false}
             />
           </Field>
-          <Button type="submit" busy={savePush.isPending} disabled={!googleServices.trim() && !serviceAccount.trim()}>
+          <Button type="submit" loading={savePush.isPending} disabled={!googleServices.trim() && !serviceAccount.trim()}>
             Save Firebase settings
           </Button>
         </form>

@@ -3,8 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { ErrorNote, useToast, LoadingState } from "@/components/ui";
-import { Button } from "@/components/ui/legacy";
+import { Button, ErrorNote, useToast, LoadingState } from "@/components/ui";
 
 type Status = {
   installed: boolean;
@@ -57,7 +56,7 @@ export function BiblePackSettings() {
           <span data-testid="bible-installed">
             Downloaded · version {s.version} · {s.verses.toLocaleString()} verses
           </span>
-          <Button size="sm" variant="ghost" type="button" busy={busy} onClick={() => void run(() => api.del<Status>("/api/bible"), "Offline Bible removed")}>
+          <Button size="sm" variant="ghost" type="button" loading={busy} onClick={() => void run(() => api.del<Status>("/api/bible"), "Offline Bible removed")}>
             Remove
           </Button>
         </div>
@@ -72,7 +71,7 @@ export function BiblePackSettings() {
               size="sm"
               variant="primary"
               type="button"
-              busy={busy}
+              loading={busy}
               onClick={() => void run(() => api.post<Status>("/api/bible", { confirm: true }), "Offline Bible ready")}
             >
               Download

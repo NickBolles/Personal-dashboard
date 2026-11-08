@@ -8,8 +8,7 @@ import { IntegrationForm } from "@/components/integrations/IntegrationForm";
 import { GithubConnections } from "@/components/integrations/GithubConnections";
 import { DriveConnection } from "@/components/integrations/DriveConnection";
 import { BiblePackSettings } from "@/components/integrations/BiblePackSettings";
-import { ErrorNote, PageHeader, cx, LoadingState, Skeleton } from "@/components/ui";
-import { Badge } from "@/components/ui/legacy";
+import { Button, ErrorNote, PageHeader, Pill, cx, LoadingState, Skeleton } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 
 export function ConnectionsView() {
@@ -19,7 +18,7 @@ export function ConnectionsView() {
     typeof window !== "undefined" ? window.location.hash.slice(1) || (new URLSearchParams(window.location.search).has("github_app") ? "github" : null) : null,
   );
   return (
-    <div className="mx-auto w-full max-w-[880px] px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Connections" subtitle="Credentials stay on the Jarvis server, encrypted at rest." />
       {q.isPending ? <LoadingState label="Loading connections…" /> : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
@@ -30,7 +29,8 @@ export function ConnectionsView() {
           return (
             <li key={d.kind} id={d.kind} className="card">
               <h2>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   aria-expanded={isOpen}
                   aria-controls={`panel-${d.kind}`}
@@ -46,20 +46,20 @@ export function ConnectionsView() {
                       q.isPending ? (
                         <Skeleton w={48} h={20} />
                       ) : (
-                        <Badge>Unknown</Badge>
+                        <Pill>Unknown</Pill>
                       )
                     ) : !i?.enabled ? (
-                      <Badge>Off</Badge>
+                      <Pill>Off</Pill>
                     ) : i.lastTest?.ok ? (
-                      <Badge tone="ok">Verified</Badge>
+                      <Pill tone="ok">Verified</Pill>
                     ) : i.lastTest ? (
-                      <Badge tone="danger">Failing</Badge>
+                      <Pill tone="bad">Failing</Pill>
                     ) : (
-                      <Badge tone="warn">Untested</Badge>
+                      <Pill tone="wn">Untested</Pill>
                     )}
                     <ChevronIcon className={cx("h-5 w-5 transition-transform", isOpen && "rotate-90")} />
                   </span>
-                </button>
+                </Button>
               </h2>
               {isOpen ? (
                 <div id={`panel-${d.kind}`} className="border-t border-line p-3.5">
@@ -71,7 +71,8 @@ export function ConnectionsView() {
         })}
         <li id="github" className="card">
           <h2>
-            <button
+            <Button
+              variant="ghost"
               type="button"
               aria-expanded={open === "github"}
               aria-controls="panel-github"
@@ -83,7 +84,7 @@ export function ConnectionsView() {
                 <span className="block truncate text-sm text-muted">Read-only PR, CI and issue state for the Work hub: GitHub App or tokens</span>
               </span>
               <ChevronIcon className={cx("h-5 w-5 shrink-0 transition-transform", open === "github" && "rotate-90")} />
-            </button>
+            </Button>
           </h2>
           {open === "github" ? (
             <div id="panel-github" className="border-t border-line p-3.5">
@@ -127,7 +128,8 @@ function ExtraPanel({
   return (
     <li id={id} className="card">
       <h2>
-        <button
+        <Button
+          variant="ghost"
           type="button"
           aria-expanded={isOpen}
           aria-controls={`panel-${id}`}
@@ -139,7 +141,7 @@ function ExtraPanel({
             <span className="block truncate text-sm text-muted">{tagline}</span>
           </span>
           <ChevronIcon className={cx("h-5 w-5 shrink-0 transition-transform", isOpen && "rotate-90")} />
-        </button>
+        </Button>
       </h2>
       {isOpen ? (
         <div id={`panel-${id}`} className="border-t border-line p-3.5">

@@ -78,7 +78,7 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
       <div className="co-scrim" aria-hidden="true" onClick={onClose} />
       <div ref={ref} role="dialog" aria-modal="false" aria-labelledby={titleId} className="co-pane" data-testid="coordinator-pane">
         <div className="co-head">
-          <h2 id={titleId} className="min-w-0 flex-1 text-[15px] font-semibold [overflow-wrap:anywhere]">
+          <h2 id={titleId} className="min-w-0 flex-1 text-base font-semibold [overflow-wrap:anywhere]">
             {d ? `${d.area.title} coordinator` : "Coordinator"}
           </h2>
           <Button size="sm" variant="ghost" onClick={onClose} aria-label="Close coordinator chat">

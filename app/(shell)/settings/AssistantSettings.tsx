@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { BACKEND_LABELS, CLAUDE_MODELS, EFFORTS, type AssistantStatus } from "@/lib/assistant";
-import { Field, useToast } from "@/components/ui";
-import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Field, Input, Pill, Select, useToast } from "@/components/ui";
 
 /** Settings → Assistant: Hermes or Claude for new conversations; Claude model, effort and key (admin). */
 export function AssistantSettings() {
@@ -37,9 +36,9 @@ export function AssistantSettings() {
       <ul className="mt-2 flex flex-wrap gap-2">
         {s.backends.map((b) => (
           <li key={b.id}>
-            <Badge tone={b.available ? "ok" : "warn"}>
+            <Pill tone={b.available ? "ok" : "wn"}>
               {b.label}: {b.available ? "ready" : b.reason}
-            </Badge>
+            </Pill>
           </li>
         ))}
       </ul>
@@ -56,31 +55,31 @@ export function AssistantSettings() {
         }}
       >
         <Field id="as-default" label="New conversations go to">
-          <select id="as-default" className={inputCls} value={form.defaultBackend} onChange={(e) => setForm({ ...form, defaultBackend: e.target.value })}>
+          <Select id="as-default" value={form.defaultBackend} onChange={(e) => setForm({ ...form, defaultBackend: e.target.value })}>
             {s.backends.map((b) => (
               <option key={b.id} value={b.id}>
                 {BACKEND_LABELS[b.id].label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="as-model" label="Claude model">
-          <select id="as-model" className={inputCls} value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}>
+          <Select id="as-model" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}>
             {CLAUDE_MODELS.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="as-effort" label="Claude effort" hint="Low is quickest and fine for chat; higher thinks longer.">
-          <select id="as-effort" className={inputCls} value={form.effort} onChange={(e) => setForm({ ...form, effort: e.target.value })}>
+          <Select id="as-effort" value={form.effort} onChange={(e) => setForm({ ...form, effort: e.target.value })}>
             {EFFORTS.map((x) => (
               <option key={x} value={x}>
                 {x}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field
           id="as-key"
@@ -93,18 +92,17 @@ export function AssistantSettings() {
                 : "Stored encrypted on the server; never sent back to the browser."
           }
         >
-          <input
+          <Input
             id="as-key"
             type="password"
             autoComplete="off"
             spellCheck={false}
-            className={inputCls}
             value={form.apiKey}
             onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
           />
         </Field>
         <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <Button type="submit" variant="secondary" busy={save.isPending}>
+          <Button type="submit" variant="secondary" loading={save.isPending}>
             Save
           </Button>
           {s.claude.keySet ? (

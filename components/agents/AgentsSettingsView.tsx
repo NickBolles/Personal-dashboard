@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, Field, PageHeader, useToast, EmptyState, SectionHeader, Skeleton } from "@/components/ui";
-import { Badge, Button, Card, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Checkbox, ErrorNote, Field, Input, PageHeader, Pill, useToast, EmptyState, SectionHeader, Skeleton } from "@/components/ui";
 import { AgentAccessCard } from "./AgentAccessCard";
 import { CoordinatorsCard } from "./CoordinatorsCard";
 import { ScheduledJobsCard } from "./ScheduledJobsCard";
@@ -84,48 +83,44 @@ export function AgentsSettingsView() {
       <FeedbackSettingsCard />
       <Card>
         <div className="space-y-2">
-          <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
-              checked={pending.routing ?? s.routing}
-              disabled={busy}
-              onChange={(e) => void save({ routing: e.target.checked })}
-            />
-            <span>
-              <span className="font-semibold">Route areas to their Hermes profile</span>
-              <span className="block text-[13px] text-muted">
-                New chats, AI actions and AI jobs under an area run on its profile (inherited from parent items). Off: the profile name is only sent as a hint
-                to the default profile.
+          <Checkbox
+            checked={pending.routing ?? s.routing}
+            disabled={busy}
+            onChange={(checked) => void save({ routing: checked })}
+            label={
+              <span>
+                <span className="font-semibold">Route areas to their Hermes profile</span>
+                <span className="block text-sm text-muted">
+                  New chats, AI actions and AI jobs under an area run on its profile (inherited from parent items). Off: the profile name is only sent as a hint
+                  to the default profile.
+                </span>
               </span>
-            </span>
-          </label>
-          <label className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
-              checked={pending.aguiStream ?? s.aguiStream}
-              disabled={busy}
-              onChange={(e) => void save({ aguiStream: e.target.checked })}
-            />
-            <span>
-              <span className="font-semibold">Stream runs as AG-UI events</span>
-              <span className="block text-[13px] text-muted">
-                Chat runs reach the browser in the AG-UI protocol (preview for coordinators). The phone app is unaffected.
+            }
+          />
+          <Checkbox
+            checked={pending.aguiStream ?? s.aguiStream}
+            disabled={busy}
+            onChange={(checked) => void save({ aguiStream: checked })}
+            label={
+              <span>
+                <span className="font-semibold">Stream runs as AG-UI events</span>
+                <span className="block text-sm text-muted">
+                  Chat runs reach the browser in the AG-UI protocol (preview for coordinators). The phone app is unaffected.
+                </span>
               </span>
-            </span>
-          </label>
-          {!q.data.hermesConfigured ? <p className="text-[13px] text-danger">Hermes isn&apos;t configured yet (Settings → Connections).</p> : null}
+            }
+          />
+          {!q.data.hermesConfigured ? <p className="text-sm text-danger">Hermes isn&apos;t configured yet (Settings → Connections).</p> : null}
         </div>
       </Card>
       <Card>
         <SectionHeader label="Profile routes" count={q.data.routes.length} />
-        <p className="mb-2 text-[13px] text-muted">
+        <p className="mb-2 text-sm text-muted">
           Each profile needs its own Hermes API key. Put it in the Jarvis secrets env file as the variable below (it never goes in the database), then recreate
           the container.
         </p>
         {q.data.routes.length ? (
-          <ul className="mb-3 divide-y divide-line rounded-[10px] border border-line" aria-label="Profile routes">
+          <ul className="mb-3 divide-y divide-line rounded-lg border border-line" aria-label="Profile routes">
             {q.data.routes.map((r) => {
               const t = tests[r.profile];
               return (
@@ -135,16 +130,16 @@ export function AgentsSettingsView() {
                       <span aria-hidden="true">✦ </span>
                       {r.profile}
                     </span>
-                    <span className="block truncate text-[12.5px] text-muted" data-dynamic>
+                    <span className="block truncate text-xs text-muted" data-dynamic>
                       {r.effectiveBaseUrl ?? "—"} · key {r.keyEnv ?? "main Hermes key"}
                     </span>
                     {t ? (
-                      <span className={`block text-[12.5px] ${t.authorized ? "text-ok" : "text-danger"}`} role="status">
+                      <span className={`block text-xs ${t.authorized ? "text-ok" : "text-danger"}`} role="status">
                         {t.authorized ? "Connected" : t.served ? `Served, but the key was refused: ${t.message}` : `Not reachable: ${t.message}`}
                       </span>
                     ) : null}
                   </span>
-                  <Badge tone={r.keyPresent ? "ok" : "warn"}>{r.keyPresent ? "Key set" : "Key missing"}</Badge>
+                  <Pill tone={r.keyPresent ? "ok" : "wn"}>{r.keyPresent ? "Key set" : "Key missing"}</Pill>
                   <Button size="sm" variant="secondary" onClick={() => void test(r.profile)} aria-label={`Test ${r.profile}`}>
                     Test
                   </Button>
@@ -178,20 +173,11 @@ export function AgentsSettingsView() {
           }}
         >
           <Field id="ag-profile" label="Hermes profile">
-            <input
-              id="ag-profile"
-              className={inputCls}
-              value={profile}
-              onChange={(e) => setProfile(e.target.value)}
-              placeholder="momentumchief"
-              required
-              maxLength={64}
-            />
+            <Input id="ag-profile" value={profile} onChange={(e) => setProfile(e.target.value)} placeholder="momentumchief" required maxLength={64} />
           </Field>
           <Field id="ag-key" label="Key env var (optional)" hint={`Starts with ${KEY_ENV_PREFIX}. Blank: reuse the main Hermes key`}>
-            <input
+            <Input
               id="ag-key"
-              className={inputCls}
               value={keyEnv}
               onChange={(e) => setKeyEnv(e.target.value.toUpperCase())}
               placeholder={p ? suggestedKeyEnv(p) : `${KEY_ENV_PREFIX}MOMENTUMCHIEF`}
@@ -199,7 +185,7 @@ export function AgentsSettingsView() {
             />
           </Field>
           <Field id="ag-url" label="Base URL (optional)" hint="Blank: the Hermes connection URL + /p/<profile>">
-            <input id="ag-url" className={inputCls} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…" maxLength={300} />
+            <Input id="ag-url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…" maxLength={300} />
           </Field>
           <div className="sm:col-span-3">
             <Button type="submit" variant="primary" disabled={busy || !p}>

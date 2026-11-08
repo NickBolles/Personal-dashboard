@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { clearAllLocal } from "@/lib/client/idb";
-import { Field, Page, PageHeader, useToast, SectionHeader } from "@/components/ui";
-import { Button, Card, SectionLabel, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Field, Input, Page, PageHeader, Select, useToast, SectionHeader } from "@/components/ui";
 import { ChevronIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { AssistantSettings } from "./AssistantSettings";
@@ -65,7 +64,7 @@ export function SettingsView() {
           <div className="card mb-3 flex items-center gap-3 px-3 py-2.5" data-testid="settings-account">
             <span
               aria-hidden="true"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-accent-contrast"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-accent-contrast"
             >
               {(form?.displayName || me.data?.user.name || "?").trim().charAt(0).toUpperCase()}
             </span>
@@ -78,7 +77,7 @@ export function SettingsView() {
               </span>
             </span>
           </div>
-          <SectionLabel id="settings-sections-h">Sections</SectionLabel>
+          <SectionHeader id="settings-sections-h" label="Sections" />
           <ul className="card rows overflow-hidden p-0">
             {links.map((l) => (
               <li key={l.href}>
@@ -115,33 +114,30 @@ export function SettingsView() {
                 }}
               >
                 <Field id="s-name" label="Your name">
-                  <input id="s-name" className={inputCls} value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+                  <Input id="s-name" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
                 </Field>
                 {isAdmin ? (
                   <>
                     <Field id="s-tz" label="Timezone" hint="Used for due dates, check-in windows and quiet hours.">
-                      <input id="s-tz" className={inputCls} value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
+                      <Input id="s-tz" value={form.timezone} onChange={(e) => setForm({ ...form, timezone: e.target.value })} />
                     </Field>
                     <Field id="s-model" label="Default Hermes model (optional)" hint="Only sent when set; otherwise Hermes uses its own default.">
-                      <input
+                      <Input
                         id="s-model"
-                        className={inputCls}
                         value={form.hermes.defaultModel ?? ""}
                         onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultModel: e.target.value || undefined } })}
                       />
                     </Field>
                     <Field id="s-provider" label="Default Hermes provider (optional)">
-                      <input
+                      <Input
                         id="s-provider"
-                        className={inputCls}
                         value={form.hermes.defaultProvider ?? ""}
                         onChange={(e) => setForm({ ...form, hermes: { ...form.hermes, defaultProvider: e.target.value || undefined } })}
                       />
                     </Field>
                     <Field id="s-reasoning" label="Default reasoning effort" hint="Sent with chats on the default model, e.g. openai-codex + gpt-6.1-sol.">
-                      <select
+                      <Select
                         id="s-reasoning"
-                        className={inputCls}
                         value={form.hermes.defaultReasoning ?? ""}
                         onChange={(e) =>
                           setForm({
@@ -156,11 +152,11 @@ export function SettingsView() {
                             {r}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </Field>
                   </>
                 ) : null}
-                <Button type="submit" variant="primary" busy={save.isPending} className="justify-self-start sm:col-span-2">
+                <Button type="submit" variant="primary" loading={save.isPending} className="justify-self-start sm:col-span-2">
                   Save preferences
                 </Button>
               </form>
@@ -182,24 +178,16 @@ export function SettingsView() {
                 }}
               >
                 <Field id="p-cur" label="Current passcode">
-                  <input id="p-cur" type="password" autoComplete="current-password" className={inputCls} value={cur} onChange={(e) => setCur(e.target.value)} />
+                  <Input id="p-cur" type="password" autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} />
                 </Field>
                 <Field
                   id="p-new"
                   label={role === "household" ? "New PIN or passcode" : "New passcode"}
                   hint={`${role === "household" ? "At least 4 digits, or 6 characters." : "At least 6 characters."} Changing it signs out every device.`}
                 >
-                  <input
-                    id="p-new"
-                    type="password"
-                    minLength={minPass}
-                    autoComplete="new-password"
-                    className={inputCls}
-                    value={nxt}
-                    onChange={(e) => setNxt(e.target.value)}
-                  />
+                  <Input id="p-new" type="password" minLength={minPass} autoComplete="new-password" value={nxt} onChange={(e) => setNxt(e.target.value)} />
                 </Field>
-                <Button type="submit" busy={pass.isPending} disabled={!cur || nxt.length < minPass} className="justify-self-start sm:col-span-2">
+                <Button type="submit" loading={pass.isPending} disabled={!cur || nxt.length < minPass} className="justify-self-start sm:col-span-2">
                   Change passcode
                 </Button>
               </form>

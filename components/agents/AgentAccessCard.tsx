@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { ErrorNote, Field, useToast, SectionHeader } from "@/components/ui";
-import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
+import { Button, Card, Checkbox, ErrorNote, Field, Input, KSpinner, Pill, useToast, SectionHeader } from "@/components/ui";
 import { AGENT_SCOPES, AGENT_SCOPE_LABELS, DEFAULT_AGENT_SCOPES, type AgentScope, type AgentTokenView, type MintedAgentToken } from "@/lib/agent-access";
 import { relativeTime } from "@/lib/time";
 
@@ -72,19 +71,19 @@ export function AgentAccessCard() {
     <Card>
       <section aria-labelledby="agent-access-h" data-testid="agent-access">
         <SectionHeader label="Agent access" count={active.length} id="agent-access-h" />
-        <p className="mb-2 text-[13px] text-muted">
+        <p className="mb-2 text-sm text-muted">
           Lets a Hermes profile read and update your work through Jarvis MCP (<code>/api/mcp</code>). Its changes show &quot;by @profile&quot; and can be
           undone. Agents can&apos;t settle, archive, move or delete — they ask you. Areas excluded from AI are never available to agents. Credentials are never
           sent.
         </p>
         {minted ? (
-          <div className="mb-3 rounded-[10px] border border-line p-2.5" role="status" data-testid="agent-token-once">
-            <p className="text-[13px] font-semibold">Copy this token now — it won&apos;t be shown again.</p>
+          <div className="mb-3 rounded-lg border border-line p-2.5" role="status" data-testid="agent-token-once">
+            <p className="text-sm font-semibold">Copy this token now — it won&apos;t be shown again.</p>
             <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2">
-              <input
+              <Input
                 aria-label={`Agent token for ${minted.view.profile}`}
                 readOnly
-                className={`${inputCls} min-w-0 flex-1 font-mono text-[12px]`}
+                className="min-w-0 flex-1 font-mono text-xs"
                 value={minted.token}
                 onFocus={(e) => e.currentTarget.select()}
               />
@@ -98,17 +97,20 @@ export function AgentAccessCard() {
           </div>
         ) : null}
         {q.isPending ? (
-          <Spinner label="Loading agent tokens…" />
+          <span role="status">
+            <KSpinner />
+            Loading agent tokens…
+          </span>
         ) : q.error ? (
           <ErrorNote error={q.error} retry={() => q.refetch()} />
         ) : tokens.length ? (
           <ul className="mb-3 space-y-2" aria-label="Agent tokens">
             {tokens.map((t) => (
-              <li key={t.id} className="min-w-0 rounded-[10px] border border-line p-2.5 text-[13px]" data-testid="agent-token-row">
+              <li key={t.id} className="min-w-0 rounded-lg border border-line p-2.5 text-sm" data-testid="agent-token-row">
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="min-w-0 font-semibold [overflow-wrap:anywhere]">{t.name}</span>
                   <span className="jv-agent-chip">@{t.profile}</span>
-                  {t.revokedAt ? <Badge tone="neutral">Revoked</Badge> : null}
+                  {t.revokedAt ? <Pill tone="neutral">Revoked</Pill> : null}
                   <span className="font-mono text-xs text-muted">…{t.hint}</span>
                 </div>
                 <p className="mt-0.5 text-xs text-muted [overflow-wrap:anywhere]">{t.scopes.map((s) => AGENT_SCOPE_LABELS[s].label).join(" · ")}</p>
@@ -119,7 +121,7 @@ export function AgentAccessCard() {
                   confirm === t.id ? (
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       <span>Revoke {t.name}? The agent loses access at once.</span>
-                      <Button type="button" size="sm" variant="danger" busy={busy} onClick={() => void revoke(t)}>
+                      <Button type="button" size="sm" variant="danger" loading={busy} onClick={() => void revoke(t)}>
                         Revoke
                       </Button>
                       <Button type="button" size="sm" variant="ghost" onClick={() => setConfirm(null)}>
@@ -138,43 +140,35 @@ export function AgentAccessCard() {
             ))}
           </ul>
         ) : (
-          <p className="mb-3 text-[13px] text-muted">No agent tokens yet.</p>
+          <p className="mb-3 text-sm text-muted">No agent tokens yet.</p>
         )}
         <form className="grid grid-cols-1 gap-2 sm:grid-cols-2" onSubmit={mint} aria-label="Give an agent access">
           <Field id="at-name" label="Name">
-            <input id="at-name" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="Chief of staff" maxLength={60} />
+            <Input id="at-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Chief of staff" maxLength={60} />
           </Field>
           <Field id="at-profile" label="Hermes profile">
-            <input
-              id="at-profile"
-              className={inputCls}
-              value={profile}
-              onChange={(e) => setProfile(e.target.value)}
-              placeholder="chiefofstaff"
-              maxLength={32}
-            />
+            <Input id="at-profile" value={profile} onChange={(e) => setProfile(e.target.value)} placeholder="chiefofstaff" maxLength={32} />
           </Field>
           <fieldset className="sm:col-span-2">
-            <legend className="mb-1 text-[13px] font-semibold">Scopes</legend>
+            <legend className="mb-1 text-sm font-semibold">Scopes</legend>
             <div className="grid grid-cols-1 gap-1">
               {AGENT_SCOPES.map((s) => (
-                <label key={s} className="tap flex items-start gap-2.5 rounded-[10px] px-1 py-1 text-[14px] hover:bg-surface-2">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--accent)]"
-                    checked={scopes.includes(s)}
-                    onChange={(e) => setScopes((cur) => (e.target.checked ? [...cur, s] : cur.filter((x) => x !== s)))}
-                  />
-                  <span className="min-w-0">
-                    <span className="font-semibold">{AGENT_SCOPE_LABELS[s].label}</span>
-                    <span className="block text-[13px] text-muted">{AGENT_SCOPE_LABELS[s].hint}</span>
-                  </span>
-                </label>
+                <Checkbox
+                  key={s}
+                  checked={scopes.includes(s)}
+                  onChange={(checked) => setScopes((cur) => (checked ? [...cur, s] : cur.filter((x) => x !== s)))}
+                  label={
+                    <span className="min-w-0">
+                      <span className="font-semibold">{AGENT_SCOPE_LABELS[s].label}</span>
+                      <span className="block text-sm text-muted">{AGENT_SCOPE_LABELS[s].hint}</span>
+                    </span>
+                  }
+                />
               ))}
             </div>
           </fieldset>
           <div className="sm:col-span-2">
-            <Button type="submit" variant="primary" busy={busy} disabled={!name.trim() || !profile.trim() || !scopes.length}>
+            <Button type="submit" variant="primary" loading={busy} disabled={!name.trim() || !profile.trim() || !scopes.length}>
               Create token
             </Button>
           </div>

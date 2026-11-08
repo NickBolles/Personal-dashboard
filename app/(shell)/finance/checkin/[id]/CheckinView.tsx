@@ -18,8 +18,7 @@ import {
   type Issue,
   type ReserveSettings,
 } from "@/lib/finance/types";
-import { Dialog, ErrorNote, Field, PageHeader, cx, useToast } from "@/components/ui";
-import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
+import { Dialog, ErrorNote, Field, PageHeader, cx, useToast, Pill, Button, Card, KSpinner, Input, Select, Checkbox } from "@/components/ui";
 import { AlertIcon, CheckIcon } from "@/components/icons";
 import { Delta, Money, centsToInput, fmt, toCents, useHideAmounts } from "@/components/finance/money";
 import type { AccountView } from "@/server/finance/accounts";
@@ -74,21 +73,21 @@ function IssueList({ issues, checkinId, acknowledged, editable }: { issues: Issu
           return (
             <li key={key} className="flex flex-wrap items-start gap-2 text-sm">
               {i.blocking ? (
-                <Badge tone="danger">
+                <Pill tone="bad">
                   <AlertIcon className="h-3.5 w-3.5" /> Must fix
-                </Badge>
+                </Pill>
               ) : done ? (
-                <Badge tone="ok">
+                <Pill tone="ok">
                   <CheckIcon className="h-3.5 w-3.5" /> Acknowledged
-                </Badge>
+                </Pill>
               ) : (
-                <Badge tone="warn">
+                <Pill tone="wn">
                   <AlertIcon className="h-3.5 w-3.5" /> Warning
-                </Badge>
+                </Pill>
               )}
               <span className="min-w-0 flex-1">{i.message}</span>
               {!i.blocking && !done && editable ? (
-                <Button size="sm" busy={ack.isPending && ack.variables === key} onClick={() => ack.mutate(key)}>
+                <Button size="sm" loading={ack.isPending && ack.variables === key} onClick={() => ack.mutate(key)}>
                   Acknowledge
                 </Button>
               ) : null}
@@ -186,7 +185,7 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={save.isPending} onClick={() => save.mutate()}>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate()}>
             Save
           </Button>
         </>
@@ -194,49 +193,42 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id="ad-kind" label="Kind">
-          <select id="ad-kind" data-autofocus className={inputCls} value={d.kind} onChange={(e) => set({ kind: e.target.value as ActionKind })}>
+          <Select id="ad-kind" data-autofocus value={d.kind} onChange={(e) => set({ kind: e.target.value as ActionKind })}>
             {ACTION_KINDS.map((k) => (
               <option key={k} value={k}>
                 {ACTION_KIND_LABELS[k]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="ad-label" label="Label">
-          <input id="ad-label" className={inputCls} value={d.label} onChange={(e) => set({ label: e.target.value })} placeholder="Pay Visa" />
+          <Input id="ad-label" value={d.label} onChange={(e) => set({ label: e.target.value })} placeholder="Pay Visa" />
         </Field>
         <Field
           id="ad-amount"
           label="Amount"
           hint={d.kind === "adjustment" ? "Signed: negative reduces the account." : "Positive; the kind sets the direction."}
         >
-          <input
-            id="ad-amount"
-            inputMode="decimal"
-            className={inputCls}
-            value={d.amount}
-            onChange={(e) => set({ amount: e.target.value })}
-            placeholder="1500.00"
-          />
+          <Input id="ad-amount" inputMode="decimal" value={d.amount} onChange={(e) => set({ amount: e.target.value })} placeholder="1500.00" />
         </Field>
         <Field id="ad-date" label="Date" hint="Needed for the day-by-day cash check.">
-          <input id="ad-date" type="date" className={inputCls} value={d.date} onChange={(e) => set({ date: e.target.value })} />
+          <Input id="ad-date" type="date" value={d.date} onChange={(e) => set({ date: e.target.value })} />
         </Field>
         {needsFrom ? (
           <Field id="ad-from" label={d.kind === "external_outflow" ? "Account" : "From"}>
-            <select id="ad-from" className={inputCls} value={d.fromAccountId} onChange={(e) => set({ fromAccountId: e.target.value })}>
+            <Select id="ad-from" value={d.fromAccountId} onChange={(e) => set({ fromAccountId: e.target.value })}>
               <option value="">Choose…</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         {needsTo ? (
           <Field id="ad-to" label={INTERNAL_KINDS.includes(d.kind) ? "To" : "Account"}>
-            <select id="ad-to" className={inputCls} value={d.toAccountId} onChange={(e) => set({ toAccountId: e.target.value })}>
+            <Select id="ad-to" value={d.toAccountId} onChange={(e) => set({ toAccountId: e.target.value })}>
               <option value="">Choose…</option>
               {accounts
                 .filter((a) => d.kind !== "card_payment" || a.kind === "credit_card")
@@ -245,20 +237,20 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
                     {a.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         {d.kind === "card_payment" ? (
           <Field id="ad-basis" label="Card basis for this payment" hint="Defaults to the card's chosen basis.">
-            <select id="ad-basis" className={inputCls} value={d.cardBasis} onChange={(e) => set({ cardBasis: e.target.value })}>
+            <Select id="ad-basis" value={d.cardBasis} onChange={(e) => set({ cardBasis: e.target.value })}>
               <option value="">Card’s setting</option>
               <option value="statement">Statement balance</option>
               <option value="current">Current balance</option>
-            </select>
+            </Select>
           </Field>
         ) : null}
         <Field id="ad-fund" label="Purpose fund it draws on" hint="Independent of the account it's paid from.">
-          <select id="ad-fund" className={inputCls} value={d.fundId} onChange={(e) => set({ fundId: e.target.value })}>
+          <Select id="ad-fund" value={d.fundId} onChange={(e) => set({ fundId: e.target.value })}>
             <option value="">None</option>
             {data.funds
               .filter((f) => !f.archived)
@@ -268,17 +260,20 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
                   {f.protected ? " (protected)" : ""}
                 </option>
               ))}
-          </select>
+          </Select>
         </Field>
         {fund?.protected ? (
-          <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" checked={d.fundDecision} onChange={(e) => set({ fundDecision: e.target.checked })} />
-            We decided to use the protected {fund.name} fund for this
-          </label>
+          <div className="sm:col-span-2">
+            <Checkbox
+              checked={d.fundDecision}
+              onChange={(fundDecision) => set({ fundDecision })}
+              label={<>We decided to use the protected {fund.name} fund for this</>}
+            />
+          </div>
         ) : null}
         {schedule.length || d.flowId ? (
           <Field id="ad-flow" label="Covers a scheduled bill" hint="So it isn't counted in the reserve as well.">
-            <select id="ad-flow" className={inputCls} value={d.flowId} onChange={(e) => set({ flowId: e.target.value })}>
+            <Select id="ad-flow" value={d.flowId} onChange={(e) => set({ flowId: e.target.value })}>
               <option value="">No</option>
               {d.flowId && !schedule.some((s) => s.flowId === d.flowId) ? <option value={d.flowId}>{d.flowId}</option> : null}
               {schedule
@@ -288,23 +283,23 @@ function ActionDialog({ draft, onClose, data }: { draft: Draft | null; onClose: 
                     {s.label} · {s.date}
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         {data.planEvents.length ? (
           <Field id="ad-plan" label="Long-term plan event" hint="Marking it done records the actual.">
-            <select id="ad-plan" className={inputCls} value={d.planEventId} onChange={(e) => set({ planEventId: e.target.value })}>
+            <Select id="ad-plan" value={d.planEventId} onChange={(e) => set({ planEventId: e.target.value })}>
               <option value="">None</option>
               {data.planEvents.map((p) => (
                 <option key={p.eventId} value={p.eventId}>
                   {p.label} · {p.date}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         <Field id="ad-note" label="Note" hint={d.kind === "adjustment" ? "Required: what this corrects." : "e.g. “after paycheck”"}>
-          <input id="ad-note" className={inputCls} value={d.note} onChange={(e) => set({ note: e.target.value })} />
+          <Input id="ad-note" value={d.note} onChange={(e) => set({ note: e.target.value })} />
         </Field>
       </div>
     </Dialog>
@@ -353,9 +348,8 @@ function LegEditor({ action, data, editable }: { action: ActionView; data: Paylo
           {editable ? (
             <div className="mt-2 flex flex-wrap items-end gap-2">
               <Field id={`ev-${action.id}-${l.side}`} label="How you know">
-                <input
+                <Input
                   id={`ev-${action.id}-${l.side}`}
-                  className={inputCls}
                   value={evidence[l.side] ?? ""}
                   onChange={(e) => setEvidence((x) => ({ ...x, [l.side]: e.target.value }))}
                   placeholder="Card shows it on 10/02"
@@ -400,11 +394,11 @@ function ActionDetails({ action, data, onEdit, editable }: { action: ActionView;
       {editable ? (
         <div className="flex flex-wrap gap-2">
           {action.status !== "settled" ? (
-            <Button size="sm" variant="secondary" busy={patch.isPending} onClick={() => patch.mutate({ status: "settled" })}>
+            <Button size="sm" variant="secondary" loading={patch.isPending} onClick={() => patch.mutate({ status: "settled" })}>
               Mark done
             </Button>
           ) : (
-            <Button size="sm" busy={patch.isPending} onClick={() => patch.mutate({ status: "planned" })}>
+            <Button size="sm" loading={patch.isPending} onClick={() => patch.mutate({ status: "planned" })}>
               Not done after all
             </Button>
           )}
@@ -416,7 +410,7 @@ function ActionDetails({ action, data, onEdit, editable }: { action: ActionView;
               Skip this month
             </Button>
           ) : null}
-          <Button size="sm" variant="danger" busy={del.isPending} onClick={() => del.mutate()}>
+          <Button size="sm" variant="danger" loading={del.isPending} onClick={() => del.mutate()}>
             Delete
           </Button>
         </div>
@@ -428,10 +422,10 @@ function ActionDetails({ action, data, onEdit, editable }: { action: ActionView;
 function rowLabels(r: GridRow) {
   return (
     <>
-      {r.external ? <Badge>External</Badge> : null}
-      {r.inTransit ? <Badge tone="accent">In transit</Badge> : null}
-      {r.unknown ? <Badge tone="warn">Snapshot? confirm</Badge> : null}
-      {r.status === "settled" ? <Badge tone="ok">Done</Badge> : r.status === "initiated" ? <Badge tone="accent">In progress</Badge> : null}
+      {r.external ? <Pill>External</Pill> : null}
+      {r.inTransit ? <Pill tone="ac">In transit</Pill> : null}
+      {r.unknown ? <Pill tone="wn">Snapshot? confirm</Pill> : null}
+      {r.status === "settled" ? <Pill tone="ok">Done</Pill> : r.status === "initiated" ? <Pill tone="ac">In progress</Pill> : null}
     </>
   );
 }
@@ -443,10 +437,10 @@ function Grid({ data, onOpen }: { data: Payload; onOpen: (id: string) => void })
   const row = (g: GridRow, anticipated = false) => (
     <tr key={g.actionId} id={g.actionId} className={cx("border-t border-line", anticipated && "italic text-muted")}>
       <th scope="row" className="sticky left-0 z-10 min-w-48 bg-surface px-3 py-2 text-left font-normal">
-        <button type="button" className="text-left font-medium underline-offset-2 hover:underline" onClick={() => onOpen(g.actionId)}>
+        <Button type="button" variant="ghost" className="text-left font-medium underline-offset-2 hover:underline" onClick={() => onOpen(g.actionId)}>
           {g.label}
-        </button>
-        <div className="mt-1 flex flex-wrap gap-1">{anticipated ? <Badge>Anticipated</Badge> : rowLabels(g)}</div>
+        </Button>
+        <div className="mt-1 flex flex-wrap gap-1">{anticipated ? <Pill>Anticipated</Pill> : rowLabels(g)}</div>
         {g.unbalanced ? (
           <p role="alert" className="mt-1 text-xs text-danger">
             Not balanced: {g.unbalanced}
@@ -550,12 +544,12 @@ function Cards({ data, onOpen }: { data: Payload; onOpen: (id: string) => void }
   const name = (id: string) => data.accounts.find((a) => a.id === id)?.name ?? "?";
   const card = (g: GridRow, anticipated = false) => (
     <li key={g.actionId} id={`m-${g.actionId}`} className="card p-3">
-      <button type="button" className="w-full text-left" onClick={() => onOpen(g.actionId)}>
+      <Button type="button" variant="ghost" className="block w-full text-left whitespace-normal" onClick={() => onOpen(g.actionId)}>
         <span className="flex items-start justify-between gap-2">
           <span className="font-medium">{g.label}</span>
           <span className="text-sm text-muted">{g.date ?? "needs a date"}</span>
         </span>
-        <span className="mt-1 flex flex-wrap gap-1">{anticipated ? <Badge>Anticipated</Badge> : rowLabels(g)}</span>
+        <span className="mt-1 flex flex-wrap gap-1">{anticipated ? <Pill>Anticipated</Pill> : rowLabels(g)}</span>
         <ul className="mt-2 space-y-1 text-sm">
           {Object.entries(g.deltas).map(([id, v]) => (
             <li key={id} className="flex justify-between gap-2">
@@ -565,7 +559,7 @@ function Cards({ data, onOpen }: { data: Payload; onOpen: (id: string) => void }
           ))}
         </ul>
         {g.unbalanced ? <span className="mt-1 block text-xs text-danger">Not balanced: {g.unbalanced}</span> : null}
-      </button>
+      </Button>
     </li>
   );
   return (
@@ -577,7 +571,7 @@ function Cards({ data, onOpen }: { data: Payload; onOpen: (id: string) => void }
           <ul className="mt-2 space-y-2">{r.ifReceived.map((g) => card(g, true))}</ul>
         </>
       ) : null}
-      <div className="safe-bottom sticky bottom-[64px] z-20 mt-3 grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface/95 p-3 text-sm shadow backdrop-blur">
+      <div className="safe-bottom sticky bottom-16 z-20 mt-3 grid grid-cols-2 gap-2 rounded-xl border border-line bg-surface/95 p-3 text-sm shadow backdrop-blur">
         <div>
           <p className="text-muted">Net position</p>
           <Money value={r.ending.net} strong />
@@ -755,8 +749,8 @@ function Transactions({ data }: { data: Payload }) {
             <li key={t.id} className="py-2">
               <div className="flex flex-wrap justify-between gap-2">
                 <span>
-                  {t.date} · {name(t.accountId)} · {t.description || "—"} {t.pending ? <Badge tone="warn">Pending</Badge> : null}
-                  {t.ambiguous ? <Badge tone="warn">Overlaps another source</Badge> : null}
+                  {t.date} · {name(t.accountId)} · {t.description || "—"} {t.pending ? <Pill tone="wn">Pending</Pill> : null}
+                  {t.ambiguous ? <Pill tone="wn">Overlaps another source</Pill> : null}
                 </span>
                 <Delta value={t.amount} />
               </div>
@@ -770,17 +764,16 @@ function Transactions({ data }: { data: Payload }) {
                   <label className="sr-only" htmlFor={`inc-${t.id}`}>
                     Is it in the balance?
                   </label>
-                  <select
+                  <Select
                     id={`inc-${t.id}`}
-                    className="min-h-11 rounded-lg border border-line-strong bg-surface px-2"
                     value={choice[t.id] ?? p.proposedInclusion}
                     onChange={(e) => setChoice((c) => ({ ...c, [t.id]: e.target.value as Inclusion }))}
                   >
                     <option value="included">Already in the balance</option>
                     <option value="excluded">Not in the balance yet</option>
                     <option value="unknown">Not sure</option>
-                  </select>
-                  <Button size="sm" busy={confirm.isPending && confirm.variables?.transactionId === t.id} onClick={() => confirm.mutate(p)}>
+                  </Select>
+                  <Button size="sm" loading={confirm.isPending && confirm.variables?.transactionId === t.id} onClick={() => confirm.mutate(p)}>
                     Confirm match
                   </Button>
                 </div>
@@ -819,7 +812,13 @@ export function CheckinView({ id }: { id: string }) {
     onError: (e) => toast((e as Error).message, "danger"),
   });
   const openAction = useMemo(() => q.data?.checkin.actions.find((a) => a.id === open), [q.data, open]);
-  if (q.isPending) return <Spinner label="Loading check-in" />;
+  if (q.isPending)
+    return (
+      <span role="status" className="inline-flex items-center gap-2">
+        <KSpinner />
+        <span>Loading check-in</span>
+      </span>
+    );
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const data = q.data;
   const c = data.checkin;
@@ -827,19 +826,19 @@ export function CheckinView({ id }: { id: string }) {
   const editable = c.status === "draft";
   const month = new Date(`${c.month}-15T12:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
   const status = !editable ? (
-    <Badge tone="ok">Closed {c.closedAt ? relativeTime(c.closedAt) : ""}</Badge>
+    <Pill tone="ok">Closed {c.closedAt ? relativeTime(c.closedAt) : ""}</Pill>
   ) : r.blocking ? (
-    <Badge tone="danger">
+    <Pill tone="bad">
       <AlertIcon className="h-3.5 w-3.5" /> Needs attention ({r.issues.length})
-    </Badge>
+    </Pill>
   ) : r.canClose ? (
-    <Badge tone="ok">
+    <Pill tone="ok">
       <CheckIcon className="h-3.5 w-3.5" /> Ready to close
-    </Badge>
+    </Pill>
   ) : (
-    <Badge tone="warn">
+    <Pill tone="wn">
       Review {r.unacknowledged} warning{r.unacknowledged === 1 ? "" : "s"}
-    </Badge>
+    </Pill>
   );
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
@@ -849,14 +848,14 @@ export function CheckinView({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-2">
             {status}
             {c.snapshotAt ? <span>Balances snapshot {relativeTime(c.snapshotAt)}</span> : null}
-            {c.refreshRunning ? <Badge tone="accent">Refresh running…</Badge> : null}
+            {c.refreshRunning ? <Pill tone="ac">Refresh running…</Pill> : null}
           </span>
         }
         actions={
           editable ? (
             <>
               <Button onClick={() => setDraft(emptyDraft())}>Add action</Button>
-              <Button busy={snapshot.isPending} onClick={() => snapshot.mutate()} title="Use the newest balances">
+              <Button loading={snapshot.isPending} onClick={() => snapshot.mutate()} title="Use the newest balances">
                 Use latest balances
               </Button>
               <Button variant="primary" disabled={!r.canClose} onClick={() => setClosing(true)}>
@@ -902,7 +901,7 @@ export function CheckinView({ id }: { id: string }) {
                 {r.funds.map((f) => (
                   <li key={f.fundId} className="flex justify-between gap-2">
                     <span>
-                      {f.name} {f.protected ? <Badge>Protected</Badge> : null}
+                      {f.name} {f.protected ? <Pill>Protected</Pill> : null}
                     </span>
                     <span>
                       <Money value={f.available} /> {f.reserved ? <span className="text-muted">(after planned)</span> : null}
@@ -938,14 +937,14 @@ export function CheckinView({ id }: { id: string }) {
             <Button variant="ghost" onClick={() => setClosing(false)}>
               Cancel
             </Button>
-            <Button variant="primary" busy={close.isPending} onClick={() => close.mutate()}>
+            <Button variant="primary" loading={close.isPending} onClick={() => close.mutate()}>
               Close it
             </Button>
           </>
         }
       >
         <Field id="close-note" label="Note (optional)">
-          <input id="close-note" data-autofocus className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} />
+          <Input id="close-note" data-autofocus value={note} onChange={(e) => setNote(e.target.value)} />
         </Field>
       </Dialog>
     </div>

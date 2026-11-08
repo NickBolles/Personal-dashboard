@@ -66,56 +66,13 @@
       "count": 1
     }
   },
-  "app/(shell)/finance/FinanceOverviewView.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
   "app/(shell)/finance/accounts/AccountsView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 13
-    }
-  },
-  "app/(shell)/finance/checkin/CheckinList.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
     }
   },
   "app/(shell)/finance/checkin/[id]/CheckinView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 17
-    }
-  },
-  "app/(shell)/finance/funds/FundsView.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 15
-    }
-  },
-  "app/(shell)/finance/plan/PlanView.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 26
-    }
-  },
-  "app/(shell)/finance/plan/page.tsx": {
-    "jarvis-ui/no-legacy-imports": {
       "count": 1
     }
   },
@@ -162,120 +119,14 @@
       "count": 2
     }
   },
-  "app/(shell)/settings/AppearanceCard.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "app/(shell)/settings/AssistantSettings.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 4
-    }
-  },
   "app/(shell)/settings/SettingsShell.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 3
     }
   },
-  "app/(shell)/settings/SettingsView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 7
-    }
-  },
-  "app/(shell)/settings/SharedConversations.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "app/(shell)/settings/SmartSettings.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
-    }
-  },
-  "app/(shell)/settings/activity/ActivityView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "app/(shell)/settings/configuration/ConfigurationView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 4
-    }
-  },
-  "app/(shell)/settings/connections/ConnectionsView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 3
-    }
-  },
-  "app/(shell)/settings/home/HomeTuningView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 5
-    }
-  },
-  "app/(shell)/settings/notifications/NotificationSettingsView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
-    }
-  },
   "app/(shell)/settings/people/PeopleView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 9
-    }
-  },
-  "app/(shell)/settings/phones/PhonesView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
     }
   },
   "app/(shell)/skylight/SkylightView.tsx": {
@@ -302,25 +153,9 @@
       "count": 9
     }
   },
-  "app/join/JoinForm.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 3
-    }
-  },
   "app/layout.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
-    }
-  },
-  "app/login/LoginForm.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
     }
   },
   "app/offline/page.tsx": {
@@ -360,64 +195,8 @@
       "count": 1
     }
   },
-  "components/agents/AgentAccessCard.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 9
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 4
-    }
-  },
   "components/agents/AgentRuns.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 7
-    }
-  },
-  "components/agents/AgentsSettingsView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 9
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 5
-    }
-  },
-  "components/agents/ComposerTargetChip.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/agents/CoordinatorPane.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    }
-  },
-  "components/agents/CoordinatorsCard.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "components/agents/ScheduledJobsCard.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 7
-    }
-  },
-  "components/agents/WhileAwayCard.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
       "count": 1
     }
   },
@@ -735,16 +514,6 @@
       "count": 1
     }
   },
-  "components/finance/FinanceSnapshotCards.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "components/finance/money.tsx": {
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
   "components/home/AssistCard.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 2
@@ -778,40 +547,6 @@
     },
     "jarvis-ui/no-native-controls": {
       "count": 4
-    }
-  },
-  "components/integrations/BiblePackSettings.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "components/integrations/DriveConnection.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "components/integrations/GithubApp.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 9
-    }
-  },
-  "components/integrations/GithubConnections.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 8
-    }
-  },
-  "components/integrations/IntegrationForm.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 8
     }
   },
   "components/map/AreaPage.tsx": {
@@ -870,14 +605,6 @@
     },
     "jarvis-ui/no-native-controls": {
       "count": 6
-    }
-  },
-  "components/onboarding/OnboardingWizard.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 5
     }
   },
   "components/quick-actions/ManageQuickActions.tsx": {

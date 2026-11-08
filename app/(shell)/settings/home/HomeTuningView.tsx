@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { WEIGHT_LABELS } from "@/lib/attention";
-import { Dialog, ErrorNote, Field, PageHeader, cx, useOnline, useToast } from "@/components/ui";
-import { Button, ButtonLink, Card, Spinner, inputCls } from "@/components/ui/legacy";
+import { Button, ButtonLink, Card, Checkbox, Dialog, ErrorNote, Field, Input, KSpinner, PageHeader, Select, cx, useOnline, useToast } from "@/components/ui";
 import { chatHref } from "@/components/home/chat";
 
 type Tuning = {
@@ -75,10 +74,13 @@ export function HomeTuningView() {
   const weightOf = (c: string) => t?.categories.find((x) => x.category === c)?.weight ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Home priorities" subtitle="What Home shows first, and what you’ve told it. Only you see this page." />
       {!t ? (
-        <Spinner label="Loading…" />
+        <span role="status">
+          <KSpinner />
+          Loading…
+        </span>
       ) : (
         <>
           <Card>
@@ -108,7 +110,8 @@ export function HomeTuningView() {
                     <span className="font-medium">{c.label}</span>
                     <div role="radiogroup" aria-label={`${c.label} ranking`} className="flex flex-wrap gap-1">
                       {WEIGHTS.map((v) => (
-                        <button
+                        <Button
+                          variant="ghost"
                           key={v}
                           type="button"
                           role="radio"
@@ -121,7 +124,7 @@ export function HomeTuningView() {
                           )}
                         >
                           {WEIGHT_LABELS[String(v)]}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </li>
@@ -190,9 +193,8 @@ export function HomeTuningView() {
               }}
             >
               <Field id="ms-title" label="What">
-                <input
+                <Input
                   id="ms-title"
-                  className={inputCls}
                   maxLength={80}
                   required
                   placeholder="e.g. Cassidy’s birthday"
@@ -201,28 +203,22 @@ export function HomeTuningView() {
                 />
               </Field>
               <Field id="ms-date" label="Date">
-                <input id="ms-date" type="date" className={inputCls} required value={m.date} onChange={(e) => setM({ ...m, date: e.target.value })} />
+                <Input id="ms-date" type="date" required value={m.date} onChange={(e) => setM({ ...m, date: e.target.value })} />
               </Field>
               <Field id="ms-lead" label="Start suggesting">
-                <select id="ms-lead" className={inputCls} value={m.leadDays} onChange={(e) => setM({ ...m, leadDays: Number(e.target.value) })}>
+                <Select id="ms-lead" value={m.leadDays} onChange={(e) => setM({ ...m, leadDays: Number(e.target.value) })}>
                   {LEADS.map((d) => (
                     <option key={d} value={d}>
                       {d} days before
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
-              <label className="flex min-h-12 items-center gap-2 self-end text-sm">
-                <input
-                  type="checkbox"
-                  className="h-5 w-5 accent-[var(--accent)]"
-                  checked={m.yearly}
-                  onChange={(e) => setM({ ...m, yearly: e.target.checked })}
-                />
-                Every year
-              </label>
+              <div className="self-end">
+                <Checkbox checked={m.yearly} onChange={(checked) => setM({ ...m, yearly: checked })} label="Every year" />
+              </div>
               <div className="sm:col-span-2">
-                <Button type="submit" variant="primary" busy={addDate.isPending} disabled={!online || !m.title.trim() || !m.date}>
+                <Button type="submit" variant="primary" loading={addDate.isPending} disabled={!online || !m.title.trim() || !m.date}>
                   Save date
                 </Button>
               </div>
@@ -293,7 +289,7 @@ export function HomeTuningView() {
                 </Button>
                 <Button
                   variant="danger"
-                  busy={reset.isPending}
+                  loading={reset.isPending}
                   onClick={() => {
                     reset.mutate({ scope: "all" });
                     setResetOpen(false);

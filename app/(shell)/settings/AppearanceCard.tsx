@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SectionHeader, Segmented } from "@/components/ui";
-import { Card } from "@/components/ui/legacy";
+import { Card, SectionHeader, Segmented } from "@/components/ui";
 import { getThemePref, getDensityPref, setThemePref, setDensityPref, THEME_EVENT, type ThemePref, type DensityPref } from "@/lib/client/theme";
 
 export function AppearanceCard() {
