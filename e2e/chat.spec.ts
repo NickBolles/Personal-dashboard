@@ -39,6 +39,8 @@ test("queued acceptance survives reload and can be cancelled", async ({ page }, 
   await page.screenshot({ path: testInfo.outputPath("queued-request.png"), fullPage: true });
   await page.getByRole("button", { name: /Stop the run/ }).click();
   await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  // A detail refetch can still be inside route.fetch when the page closes.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("approval requested inline, answered, then run completes", async ({ page }) => {
