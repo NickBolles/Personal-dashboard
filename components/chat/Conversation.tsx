@@ -9,7 +9,7 @@ import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
 import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
-import { isTerminal, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
+import { isTerminal, maskedNotice, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
 import { Badge, Button, ErrorNote, OverflowMenu, Spinner, cx, useOnline, useToast, type Tone } from "@/components/ui";
 import { BrainIcon, ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon } from "@/components/icons";
@@ -222,6 +222,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     setPendingInput(first.input);
     first.run.then(
       (r) => {
+        const notice = maskedNotice(r);
+        if (notice) toast(notice, "warn");
         // The resume effect may already have picked this run up from a detail refetch.
         if (resumed.current !== r.runId) {
           resumed.current = r.runId;
@@ -335,6 +337,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       }
       announce(`Message sent. ${who} is responding.`);
       jumpToLatest(false, true);
+      const notice = maskedNotice(r);
+      if (notice) toast(notice, "warn");
       run.start(r.runId);
       refreshSessionLists(qc);
       return true;

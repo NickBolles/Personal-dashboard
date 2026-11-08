@@ -1,6 +1,6 @@
 import "server-only";
 import { maskAccountNumbers } from "@/lib/ai-redact";
-import { detectSensitivity } from "@/server/ai/rules";
+import { detectSensitivity, maskSecrets } from "@/server/ai/rules";
 import { SOURCE_LABELS, type ActionSource, type CalendarEvent, type HomeHealth, type NextAction } from "@/lib/contracts";
 import { adapterContext, cachedSource, getHome, homeScopedSkylight, scopeResult } from "@/server/sources";
 import { listControls } from "@/integrations/home-assistant/controls";
@@ -173,7 +173,8 @@ export async function sourceContext(user: Viewer, source: ContextSource): Promis
 /** Combined context for a message: each source block (only what this person may see), then any free-form context. */
 export async function buildContext(user: Viewer, sources: ContextSource[] | undefined, extra: string | undefined) {
   const blocks = await Promise.all([...new Set(sources ?? [])].map((s) => sourceContext(user, s)));
-  if (extra && detectSensitivity(extra) === "credentials") throw new HttpError(403, "credentials_detected", "Credentials are never sent to AI");
-  const text = maskAccountNumbers([...blocks, ...(extra ? [extra] : [])].join("\n\n"));
+  // Free-form context (chips, retry context, @ref snapshots) is masked like the message itself.
+  const cleanExtra = extra ? maskSecrets(extra).text : undefined;
+  const text = maskAccountNumbers([...blocks, ...(cleanExtra ? [cleanExtra] : [])].join("\n\n"));
   return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n…(truncated)` : text;
 }

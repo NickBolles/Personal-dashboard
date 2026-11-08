@@ -110,7 +110,17 @@ export type RunView = {
   pendingSteer?: string;
   pendingApproval?: ApprovalRequest;
   pendingClarify?: ClarifyRequest;
+  /** Secrets Jarvis removed from this message before it reached AI (hints like "password: …", never the value). */
+  masked?: string[];
 };
+
+/** "1 secret removed before sending (password: …)" for a run that had secrets masked, else null. */
+export function maskedNotice(r: { masked?: string[] } | null | undefined): string | null {
+  const m = r?.masked;
+  if (!m?.length) return null;
+  const parts = [...new Set(m)].slice(0, 3).join(", ");
+  return `${m.length === 1 ? "1 secret" : `${m.length} secrets`} removed before sending (${parts}). The AI never saw ${m.length === 1 ? "it" : "them"}.`;
+}
 
 export const TOOL_LABELS: Record<string, string> = {
   terminal: "Ran a command",

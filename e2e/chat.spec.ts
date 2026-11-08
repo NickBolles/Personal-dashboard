@@ -87,6 +87,25 @@ test("the Send button sends a multi-line message", async ({ page }) => {
   await expect(page.getByText(/Got it: "button first/)).toBeVisible({ timeout: 15_000 });
 });
 
+test("a message with a Jarvis chat URL and the word token sends (no false credential block)", async ({ page }) => {
+  await page.goto("/chat/sess_morning");
+  const composer = page.getByLabel("Message Hermes");
+  await composer.fill("Fix the issues blocking this. Chat token expired again https://jarvis.nickbolles.com/chat/api_1794067488_cb8ce8e2");
+  await composer.press("Control+Enter");
+  await expect(page.getByText(/Got it: "Fix the issues blocking this/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Credentials are never sent to AI")).toHaveCount(0);
+  await expect(composer).toHaveValue("");
+});
+
+test("a real secret inside a message is removed before sending, not blocked", async ({ page }) => {
+  await page.goto("/chat/sess_morning");
+  const composer = page.getByLabel("Message Hermes");
+  await composer.fill(["Deploy breaks with password=", "hunter2xyz", " on staging"].join(""));
+  await composer.press("Control+Enter");
+  await expect(page.getByText(/1 secret removed before sending \(password= …\)/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/Got it: "Deploy breaks with password=\[secret removed\]/)).toBeVisible({ timeout: 15_000 });
+});
+
 test("fork latest state leaves the original unchanged and links both ways", async ({ page }) => {
   await page.goto("/chat/sess_v5");
   await expect(page.getByText("Plan: compatibility audit")).toBeVisible();
