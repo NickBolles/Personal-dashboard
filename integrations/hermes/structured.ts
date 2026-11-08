@@ -6,6 +6,7 @@ import { z } from "zod";
 import { UpstreamError } from "@/server/http/errors";
 import { getSetting, setSetting } from "@/server/settings";
 import { processSingleton } from "@/server/singleton";
+import { withHermesLane } from "@/server/http/hermes-budget";
 import { HermesExecutionClient, HermesSessionClient, hermesConn } from "./client";
 import { RUN_TERMINAL } from "./types";
 import { extractJson, parseStructured, sleep, within } from "./jobs";
@@ -30,6 +31,16 @@ export function syncModel(settings = getAiSettings()) {
  */
 export const STRUCTURED_MARKER = "JARVIS_STRUCTURED_REQUEST";
 export const SYNC_SESSION_SOURCE = "jarvis-sync";
+
+/**
+ * Hermes titles are unique per profile (a reused title is 400 `invalid_title`), and a sync whose
+ * cleanup couldn't be confirmed keeps its session. With a fixed `jarvis-sync:<source>` title one
+ * retained session made every later sync of that source fail at create (Daily Compass, Nov 2026),
+ * so each sync session gets its own suffix.
+ */
+export function syncSessionTitle(source: string) {
+  return `${SYNC_SESSION_SOURCE}:${source}:${crypto.randomUUID().slice(0, 8)}`;
+}
 
 export type StructuredRequest<T> = {
   /** source key, e.g. "skylight" — used for the marker, session title and error labels */
@@ -60,7 +71,12 @@ export function structuredInstructions(source: string, example: unknown) {
 export { extractJson, parseStructured };
 
 /** Stop is asynchronous. Delete only after a separately observed terminal status. */
-export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
+export function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
+  // Syncs (Daily Compass, Skylight via Hermes) are background work unless a person asked for them.
+  return req.interactive ? runStructuredNow(req) : withHermesLane("background", () => runStructuredNow(req));
+}
+
+async function runStructuredNow<T>(req: StructuredRequest<T>): Promise<T> {
   const instructions = structuredInstructions(req.source, req.example);
   // Summaries/triage/scheduled reads: secret values are replaced inline; a task that is nothing but a credential is refused.
   const masked = maskSecrets(req.task);
@@ -91,7 +107,7 @@ export async function runStructured<T>(req: StructuredRequest<T>): Promise<T> {
     const { session } = await within(workDeadline, (signal) =>
       HermesSessionClient.create(
         conn,
-        { title: `${SYNC_SESSION_SOURCE}:${req.source}`, source: SYNC_SESSION_SOURCE, ...(model ? { model } : {}), ...(provider ? { provider } : {}) },
+        { title: syncSessionTitle(req.source), source: SYNC_SESSION_SOURCE, ...(model ? { model } : {}), ...(provider ? { provider } : {}) },
         signal,
       ),
     );

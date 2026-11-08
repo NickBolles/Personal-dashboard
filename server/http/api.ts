@@ -75,8 +75,21 @@ export function toErrorResponse(err: unknown, correlationId?: string) {
     );
   }
   if (err instanceof UpstreamError) {
-    const status = err.kind === "unauthorized" ? 502 : err.kind === "not_found" ? 404 : err.kind === "conflict" ? 409 : err.kind === "unsupported" ? 501 : 502;
-    return jsonError(status, err.message, `upstream_${err.kind}`, { source: err.source });
+    const status =
+      err.kind === "unauthorized"
+        ? 502
+        : err.kind === "not_found"
+          ? 404
+          : err.kind === "conflict"
+            ? 409
+            : err.kind === "unsupported"
+              ? 501
+              : err.kind === "busy"
+                ? 503
+                : 502;
+    const res = jsonError(status, err.message, `upstream_${err.kind}`, { source: err.source });
+    if (err.kind === "busy") res.headers.set("retry-after", "5");
+    return res;
   }
   console.error(`[jarvis] unhandled error ${correlationId ?? ""}`, err);
   return jsonError(500, "Something went wrong", "internal", { correlationId });
