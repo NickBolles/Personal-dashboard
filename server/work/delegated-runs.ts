@@ -58,11 +58,7 @@ export function linkChildSessions(subs: ExecutionRecord[]): ExecutionRecord[] {
     const b = ms(c.startedAt);
     return Number.isFinite(a) && Number.isFinite(b) && b >= a - 5_000 && b <= a + 120_000;
   };
-  for (const d of [...dispatch].sort((x, y) => (x.startedAt ?? "").localeCompare(y.startedAt ?? "") || x.id.localeCompare(y.id))) {
-    const free = orphans.filter((c) => !used.has(c.id) && near(d, c));
-    const byTitle = free.filter((c) => norm(c.title) && norm(c.title) === norm(d.title));
-    const c = byTitle.length === 1 ? byTitle[0] : free.length === 1 ? free[0] : undefined;
-    if (!c) continue;
+  const pair = (d: ExecutionRecord, c: ExecutionRecord) => {
     used.add(c.id);
     const ended = !!c.endedAt;
     merged.set(d.key, {
@@ -73,6 +69,23 @@ export function linkChildSessions(subs: ExecutionRecord[]): ExecutionRecord[] {
       error: ended && c.error ? c.error : d.error,
       updatedAt: (c.updatedAt ?? "") > (d.updatedAt ?? "") ? c.updatedAt : d.updatedAt,
     });
+  };
+  const ordered = [...dispatch].sort((x, y) => (x.startedAt ?? "").localeCompare(y.startedAt ?? "") || x.id.localeCompare(y.id));
+  // 1) Title matches first, across all dispatches, so a fallback can never take another task's child.
+  for (const d of ordered) {
+    const byTitle = orphans.filter((c) => !used.has(c.id) && near(d, c) && norm(c.title) && norm(c.title) === norm(d.title));
+    if (byTitle.length === 1) pair(d, byTitle[0]!);
+  }
+  // 2) Time-only fallback: exactly one unpaired dispatch and one free child in the window, and the
+  // child's title names no other dispatch.
+  const titles = new Set(dispatch.map((d) => norm(d.title)).filter(Boolean));
+  for (const d of ordered) {
+    if (merged.has(d.key)) continue;
+    const free = orphans.filter((c) => !used.has(c.id) && near(d, c) && !(norm(c.title) && titles.has(norm(c.title)) && norm(c.title) !== norm(d.title)));
+    if (free.length !== 1) continue;
+    const rivals = ordered.filter((o) => o !== d && !merged.has(o.key) && near(o, free[0]!));
+    if (rivals.length) continue;
+    pair(d, free[0]!);
   }
   return subs.filter((r) => !used.has(r.id) || !orphans.includes(r)).map((r) => merged.get(r.key) ?? r);
 }

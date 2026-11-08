@@ -238,4 +238,24 @@ describe("coordinator parity (server)", () => {
     );
     expect(runsOf(area.id).map((r) => [r.delegationId, r.state, r.finishedAt])).toEqual([["sub:api_m:sa-0-1df9", "done", "2026-11-08T03:27:10.000Z"]]);
   });
+
+  it("never lets a time-only fallback take another task's child session (title matches win)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Pairs" }, cid);
+    store.placeConversation(owner, { sessionId: "api_p", parentId: area.id, title: "Pairs coordinator" }, cid);
+    const at = "2026-11-08T02:55:00.000Z";
+    const a = sub("sa-0-x", "running", { delegationId: "deleg_p", subagentId: "sa-0-x", title: "Task A", startedAt: at });
+    const b = sub("sa-1-x", "running", { delegationId: "deleg_p", subagentId: "sa-1-x", title: "Task B", startedAt: at });
+    const childB = sub("child_b", "unknown", {
+      delegationId: null,
+      childSessionId: "child_b",
+      title: "Subagent: Task B",
+      startedAt: "2026-11-08T02:55:04.000Z",
+      endedAt: "2026-11-08T03:20:00.000Z",
+      updatedAt: "2026-11-08T03:20:00.000Z",
+    });
+    syncDelegatedRuns(owner, "api_p", "devchief", [a, b, childB], new Date("2026-11-08T04:00:00Z"));
+    const rows = runsOf(area.id);
+    expect(rows.find((r) => r.delegationId === "sub:api_p:sa-0-x")?.state).toBe("running");
+    expect(rows.find((r) => r.delegationId === "sub:api_p:sa-1-x")?.state).toBe("done");
+  });
 });
