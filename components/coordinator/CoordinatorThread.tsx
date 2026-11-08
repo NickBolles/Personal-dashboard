@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -11,7 +11,7 @@ import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button } from "@/components/ui/kit";
+import { Button, Dot, Input, type KTone } from "@/components/ui/kit";
 import { cx, inputCls, useToast } from "@/components/ui";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
@@ -19,6 +19,12 @@ import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
+import { ActionsTaken } from "@/components/chat/ActionsTaken";
+import { actionsByReply } from "@/lib/chat/actions";
+import { canControl, steerText, stopText } from "@/lib/coordinator/control";
+import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
+import type { ConversationListResponse } from "@/lib/work";
+import { relativeTime } from "@/lib/time";
 import "@/components/agents/agents.css";
 
 export type CoordinatorResponse = {
@@ -60,11 +66,13 @@ export function CoordinatorThread({
   const text = draft ?? localText;
   const setText = onDraft ?? setLocalText;
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [fresh, setFresh] = useState(false);
+  const [earlier, setEarlier] = useState(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!compact) textarea.current?.focus();
   }, [compact]);
-  const sid = sessionId ?? d.sessionId;
+  const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pathname = usePathname();
   const quickActions = useQuickActions(!d.excluded);
   const hasProposals = !!quickActions.data?.actions.some((a) => a.status === "proposed");
@@ -92,6 +100,26 @@ export function CoordinatorThread({
     enabled: !!sid && !d.excluded,
     refetchInterval: (q) => (q.state.data?.session?.activeRun ? 3000 : false),
   });
+  const execution = useQuery({
+    queryKey: ["session-exec", sid],
+    queryFn: () => api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sid!)}/execution`),
+    enabled: !!sid && !d.excluded,
+    refetchInterval: (q) => (detail.data?.session.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
+  });
+  const discussions = useQuery({
+    queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
+    queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
+    enabled: earlier && !d.excluded,
+  });
+  const postInput = (target: string, input: string, control = false): Promise<{ masked?: string[] } | null> => {
+    const active = detail.data?.session.activeRun;
+    if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
+    return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
+      input,
+      idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
+      capabilities: [SMART_CAPABILITY],
+    });
+  };
   const send = useMutation({
     mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
       let target = sid;
@@ -99,12 +127,9 @@ export function CoordinatorThread({
         const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
         target = s.id;
         setSessionId(s.id);
+        setFresh(false);
       }
-      const run = await api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
-        input: compact && !correction ? withPageContext(input, context) : input,
-        idempotencyKey: newIdempotencyKey("coord"),
-        capabilities: [SMART_CAPABILITY],
-      });
+      const run = await postInput(target, compact && !correction ? withPageContext(input, context) : input);
       return { target, notice: maskedNotice(run) };
     },
     onSuccess: ({ target, notice }, { correction }) => {
@@ -119,10 +144,43 @@ export function CoordinatorThread({
     },
     onError: (err) => toast(`Not sent: ${(err as Error).message}`, "danger"),
   });
+  const control = useMutation({
+    mutationFn: async (input: string) => {
+      if (!sid) throw new Error("No coordinator conversation");
+      return maskedNotice(await postInput(sid, input, true));
+    },
+    onSuccess: (notice) => {
+      if (notice) toast(notice, "warn");
+      else toast("Sent to the coordinator");
+      void qc.invalidateQueries({ queryKey: ["session", sid] });
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+      void refreshSessionLists(qc).catch(() => undefined);
+    },
+    onError: (err) => toast(`Not sent: ${(err as Error).message}`, "danger"),
+  });
+  const stop = useMutation({
+    mutationFn: async () => {
+      const runId = detail.data?.session.activeRun?.runId;
+      if (!runId) throw new Error("No active coordinator run");
+      await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/stop`);
+    },
+    onSuccess: () => {
+      toast("Stop requested");
+      void qc.invalidateQueries({ queryKey: ["session", sid] });
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+    },
+    onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
+  });
   const submit = () => {
     if (text.trim() && !send.isPending && !d.excluded) send.mutate({ input: text.trim() });
   };
   const timeline = detail.data?.timeline ?? [];
+  const replyActions = useMemo(
+    () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
+    [detail.data?.timeline],
+  );
+  const records = execution.data?.records?.filter((r) => r.source === "subagent" || r.source === "registered_run" || r.source === "jarvis_run") ?? [];
+  const previous = discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid).slice(0, 5) ?? [];
   const msgs = timeline.filter((t): t is Extract<TimelineItem, { kind: "user" | "assistant" }> => t.kind === "user" || t.kind === "assistant").slice(-6);
   const lastUser = timeline.filter((t) => t.kind === "user").at(-1);
   return (
@@ -134,6 +192,35 @@ export function CoordinatorThread({
           </p>
         ) : (
           <>
+            <details className="mb-2 text-xs" onToggle={(event) => setEarlier(event.currentTarget.open)}>
+              <summary className="min-h-6 cursor-pointer text-muted">Earlier</summary>
+              <div className="flex flex-wrap items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={send.isPending || control.isPending}
+                  onClick={() => {
+                    setSessionId(null);
+                    setFresh(true);
+                    requestAnimationFrame(() => textarea.current?.focus());
+                  }}
+                >
+                  New
+                </Button>
+                {discussions.isLoading ? <span className="text-muted">Loading discussions…</span> : null}
+                {discussions.error ? <span role="alert">Couldn&apos;t load earlier discussions.</span> : null}
+                {discussions.isSuccess && !previous.length ? <span className="text-muted">No earlier discussions.</span> : null}
+              </div>
+              <ul>
+                {previous.map((c) => (
+                  <li key={c.id}>
+                    <Link className="inline-flex min-h-11 max-w-full items-center text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(c.id)}`}>
+                      <span className="truncate">{c.title}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </details>
             {!sid ? (
               <div>
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
@@ -177,7 +264,10 @@ export function CoordinatorThread({
                       <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
                     )}
                     {m.kind === "assistant" ? (
-                      <Markdown text={m.text} />
+                      <>
+                        <Markdown text={m.text} />
+                        <ActionsTaken actions={replyActions.get(m.id) ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+                      </>
                     ) : (
                       <p className="whitespace-pre-wrap">{m.text.length > 600 ? `${m.text.slice(0, 600)}…` : m.text}</p>
                     )}
@@ -187,7 +277,44 @@ export function CoordinatorThread({
             ) : sid && detail.isSuccess ? (
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
-            {detail.data?.session?.activeRun ? <p className="mt-2 text-xs text-muted">The coordinator is working…</p> : null}
+            {detail.data?.session?.activeRun ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+                <Dot tone="ai" live label="Coordinator running" />
+                <span className="text-muted">Working…</span>
+                <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
+                  Stop
+                </Button>
+                <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
+                  Open
+                </Link>
+              </div>
+            ) : null}
+            <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+            {execution.error ? (
+              <p role="alert" className="mt-2 text-xs text-danger">
+                Couldn&apos;t load coordinator runs.
+              </p>
+            ) : null}
+            {execution.data?.sources?.some((source) => source.state !== "ok") ? (
+              <p className="mt-2 text-xs text-muted">Some run sources are unavailable or stale. Open the conversation for details.</p>
+            ) : null}
+            {records.length ? (
+              <section aria-label="Coordinator runs" className="mt-2 space-y-1">
+                {records.slice(0, 5).map((record) => (
+                  <CoordinatorRunCard
+                    key={`${sid}:${record.key}`}
+                    record={record}
+                    pending={control.isPending}
+                    onControl={(input) => control.mutateAsync(input)}
+                  />
+                ))}
+                {records.length > 5 && sid ? (
+                  <Link href={`/chat/${encodeURIComponent(sid)}?panel=running`} className="inline-flex min-h-11 items-center text-xs text-accent sm:min-h-10">
+                    {records.length - 5} more
+                  </Link>
+                ) : null}
+              </section>
+            ) : null}
             {sid ? (
               <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
                 Open full conversation
@@ -291,5 +418,92 @@ export function CoordinatorThread({
         </form>
       ) : null}
     </>
+  );
+}
+
+const RUN_TONE: Record<ExecutionRecord["state"], KTone> = {
+  running: "ai",
+  waiting: "wn",
+  completed: "ok",
+  failed: "bad",
+  cancelled: "neutral",
+  unknown: "neutral",
+};
+
+function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionRecord; pending: boolean; onControl: (input: string) => Promise<unknown> }) {
+  const [steering, setSteering] = useState(false);
+  const [guidance, setGuidance] = useState("");
+  const [confirmStop, setConfirmStop] = useState(false);
+  const controllable = record.source === "subagent" && canControl(record.id) && isActiveExec(record);
+  const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
+  return (
+    <article className="min-w-0 rounded-lg border border-line px-2 py-1" data-testid="coordinator-run-card" aria-label={record.title}>
+      <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
+        <Dot tone={RUN_TONE[record.state]} live={record.state === "running"} label={record.state} />
+        <span className="min-w-0 flex-1 truncate" title={record.title}>
+          {record.title}
+        </span>
+        {at ? (
+          <time dateTime={at} title={at} className="text-muted" data-dynamic>
+            {relativeTime(at)}
+          </time>
+        ) : null}
+        {record.href ? (
+          <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={record.href}>
+            Open
+          </Link>
+        ) : null}
+        {controllable ? (
+          <>
+            <Button size="sm" variant="ghost" disabled={pending} aria-expanded={steering} onClick={() => setSteering((value) => !value)}>
+              Steer
+            </Button>
+            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmStop((value) => !value)}>
+              {confirmStop ? "Cancel stop" : "Stop"}
+            </Button>
+            {confirmStop ? (
+              <Button
+                size="sm"
+                variant="danger"
+                loading={pending}
+                onClick={() =>
+                  void onControl(stopText(record.id))
+                    .then(() => setConfirmStop(false))
+                    .catch(() => undefined)
+                }
+              >
+                Stop? Yes
+              </Button>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+      {controllable && steering ? (
+        <form
+          className="mt-1 flex min-w-0 flex-wrap items-center gap-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!guidance.trim() || pending) return;
+            void onControl(steerText(record.id, guidance))
+              .then(() => {
+                setGuidance("");
+                setSteering(false);
+              })
+              .catch(() => undefined);
+          }}
+        >
+          <Input
+            aria-label={`Guidance for ${record.title}`}
+            className="min-w-0 flex-1"
+            value={guidance}
+            maxLength={2000}
+            onChange={(event) => setGuidance(event.target.value)}
+          />
+          <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
+            Send
+          </Button>
+        </form>
+      ) : null}
+    </article>
   );
 }

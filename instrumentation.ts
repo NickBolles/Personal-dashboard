@@ -34,6 +34,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] conversation warmer didn't start", (err as Error).message);
   }
+  // Coordinator parity: sub-agents of recently active filed conversations become item runs without the chat open.
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { reconcileDelegatedRuns } = await import("./server/work/delegated-reconcile");
+    registerDispatcherTask("coordinator_run_reconcile", 5 * 60_000, (now) => reconcileDelegatedRuns(now));
+  } catch (err) {
+    console.error("[jarvis] coordinator run reconcile didn't start", (err as Error).message);
+  }
   // Scheduled coordinator jobs run independently of the general worker in production.
   try {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");

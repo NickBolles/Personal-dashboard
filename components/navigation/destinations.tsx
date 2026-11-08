@@ -29,6 +29,8 @@ export type Dest = {
 
 const isAreas = (p: string) => p === "/areas" || p.startsWith("/areas/") || p === "/work" || p.startsWith("/work/");
 
+const RESUME: Dest = { key: "resume", href: "/resume", label: "In flight", icon: ChatIcon, match: (p) => p === "/resume", caps: ["work.use"] };
+
 /**
  * Primary destinations. Areas is one tree for work and conversations (phase 4):
  * people who organize work get Areas (which includes the conversations
@@ -49,6 +51,7 @@ export const PRIMARY: Dest[] = [
 ];
 
 export const DESTINATIONS: Dest[] = [
+  RESUME,
   {
     key: "workouts",
     href: "/workouts",

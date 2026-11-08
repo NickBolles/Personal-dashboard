@@ -109,6 +109,8 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
     .limit(EXECUTION_LIMIT)
     .all()
     .flatMap((r) => {
+      // Jarvis's own mirror of a sub-agent (server/work/delegated-runs.ts) is already shown as that sub-agent.
+      if (r.delegationId?.startsWith("sub:")) return [];
       const item = db
         .select()
         .from(schema.workItems)

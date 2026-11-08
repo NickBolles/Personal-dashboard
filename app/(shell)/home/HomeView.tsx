@@ -18,6 +18,7 @@ import { ChevronIcon } from "@/components/icons";
 import { NeedsYouSection } from "@/components/map/Decisions";
 import { AgentsRail } from "@/components/agents/AgentRuns";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
+import { PickUpStrip } from "@/components/resume/PickUpStrip";
 import { useAccess } from "@/components/access";
 import { Skeleton } from "@/components/ui/kit";
 import { sparkPoints, sum, type HomePulse, type PulseTrend } from "@/lib/pulse";
@@ -385,6 +386,7 @@ export function HomeView() {
 
       <div className="grid gap-x-6 @min-[780px]:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
+          {canWork ? <PickUpStrip /> : null}
           <WhileAwayCard />
           <NeedsYouSection id="today-needs-you-h" limit={3} />
           {visible("now") ? (
