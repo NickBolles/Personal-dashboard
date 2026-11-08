@@ -7,7 +7,33 @@ import { detectSensitivity } from "@/server/ai/rules";
 import { isFinanceAreaLike } from "@/lib/finance-area";
 import { STATUS_LABELS, isClosed, type WorkItem } from "@/lib/work";
 
-export const FILED_CONTEXT_LIMITS = { items: 40, chars: 4000 } as const;
+export const FILED_CONTEXT_LIMITS = { items: 40, chars: 6000 } as const;
+
+/** Every filed chat with tools: delegations get registered on the item they serve. */
+export function delegationRule(scopeId: string, sessionId: string) {
+  return `If you dispatch sub-agents with delegate_task, register each one with jarvis_run_start (itemId = the item it serves, else ${scopeId}; delegationId = the delegation id; hermesSessionId = ${sessionId} unless you know the child's session) and close it with jarvis_run_update when its result arrives.`;
+}
+
+/**
+ * The coordinator contract (board jarvis-coordinator-parity-20261107, 1A): area coordinators work like the
+ * Chief of staff bot chat — plan, dispatch in parallel, register and control runs, reconcile, report.
+ * Text only: no Hermes config. Owner-only actions stay owner-only.
+ */
+export function coordinatorBrief(areaTitle: string, scopeId: string, sessionId: string, tools: boolean): string[] {
+  return [
+    `You are the ${areaTitle} coordinator in Jarvis: you coordinate work, you don't just chat. For each request:`,
+    "1. Plan: turn it into a short numbered plan (skip for simple questions).",
+    tools
+      ? `2. Dispatch: run independent pieces in parallel with delegate_task. Register every sub-agent on the item it serves with jarvis_run_start (itemId; delegationId = the delegation id; hermesSessionId = ${sessionId} unless you know the child's) and update it with jarvis_run_update when it finishes or fails. Jarvis also lists sub-agents it sees in this conversation on ${scopeId}.`
+      : "2. Dispatch: run independent pieces in parallel with delegate_task.",
+    '3. Control: when the owner writes "Steer <subagent id>: <message>" or "Stop <subagent id>", call delegate_task with action steer or stop for that sub-agent and confirm in one line.',
+    tools
+      ? "4. Record: create or update Jarvis items for the work, link PRs and boards (jarvis_link), and raise a decision (jarvis_raise_decision) for anything only the owner can choose. Never settle, archive or move: use jarvis_request_change."
+      : "4. Record: list the exact item changes (item id + change) and decisions for the owner; never claim you changed anything.",
+    "5. Reconcile: when results arrive, merge them into one answer.",
+    'End every reply with three short lines: **Current state:** … **Next action:** … **Decisions:** … ("none" when there are none).',
+  ];
+}
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
@@ -47,11 +73,14 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
   }
   const profileName = profile ?? "default";
   const tools = listAgentTokens(user.id).some((t) => !t.revokedAt && t.profile === profileName);
+  // A conversation filed directly under an area is that area's coordinator thread (server/work/coordinator.ts).
+  const coordinator = node?.kind === "conversation" && scope.id === area.id;
   const lines = [
-    `This conversation is filed in Jarvis under: ${path.join(" › ")} (${scope.kind} id ${scope.id}).`,
+    `This conversation is filed in Jarvis under: ${path.join(" › ")} (${scope.kind} id ${scope.id}). Jarvis conversation id: ${sessionId}.`,
     tools
       ? "You can read more and act with the Jarvis tools (jarvis_get_item, jarvis_tree, jarvis_update_item …). Settling, archiving and moving are owner-only: use jarvis_request_change."
       : "You have no Jarvis item tools in this conversation: use the snapshot below to answer. To change items, list the exact changes (item id + change) for the owner to apply; never claim you changed anything. Settling is always the owner's call.",
+    ...(coordinator ? coordinatorBrief(area.title, scope.id, sessionId, tools) : tools ? [delegationRule(scope.id, sessionId)] : []),
     `Open items there (${open.length}${open.length > FILED_CONTEXT_LIMITS.items ? `, first ${FILED_CONTEXT_LIMITS.items}` : ""}):`,
     ...(open.length ? [] : ["- none"]),
     ...open

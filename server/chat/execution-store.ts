@@ -28,7 +28,17 @@ export function executionState(status: string | null | undefined): ExecState {
     case "interrupted":
       return "cancelled";
     case "running":
+    // Async delegate_task answers "queued"/"dispatched" at spawn: the child is on its way, not unknown.
+    case "queued":
+    case "dispatched":
+    case "pending":
+    case "started":
+    case "in_progress":
       return "running";
+    case "timeout":
+    case "timed_out":
+    case "rejected":
+      return "failed";
     case "waiting":
     case "waiting_for_approval":
       return "waiting";
