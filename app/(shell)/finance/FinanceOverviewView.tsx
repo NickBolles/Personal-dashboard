@@ -84,7 +84,7 @@ export function FinanceOverviewView() {
           Add checking, savings and cards, then set your checking cushion.
         </EmptyState>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <SectionHeader label="Where we stand" />
             {o.totals ? (
