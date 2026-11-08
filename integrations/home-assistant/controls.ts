@@ -7,6 +7,7 @@ import { resolveIntegration } from "@/integrations/store";
 import {
   ATTRIBUTE_READBACK,
   EXPECTED_RESULT,
+  HA_DOMAIN_POLICY,
   HIGH_RISK_RATE,
   NO_STATE_READBACK,
   WRITE_RATE,
@@ -15,6 +16,8 @@ import {
   cleanServiceData,
   domainOf,
   inverseOf,
+  isPoweredOff,
+  isPoweredOn,
   roleMayRun,
   servicePolicy,
   serviceRisk,
@@ -50,11 +53,51 @@ export const SERVICE_LABELS: Record<string, string> = {
 export const serviceLabel = (entityId: string, service: string) =>
   SERVICE_LABELS[service] ?? servicePolicy(entityId, service)?.label ?? service.replace(/_/g, " ");
 
-export function stateToken(s: Pick<HaState, "entity_id" | "state" | "last_changed">) {
-  return sha256(`${s.entity_id}|${s.state}|${s.last_changed ?? ""}`).slice(0, 16);
+/**
+ * Attributes Jarvis controls (sliders, steppers, mode pickers). #239: an
+ * attribute-only change (thermostat 68→75, dimmed light) keeps state and
+ * last_changed, so these are part of the freshness token. Readings that move
+ * on their own (current_temperature, media position) are left out on purpose:
+ * they would make every confirm card go stale.
+ */
+export const CONTROLLED_ATTRIBUTES = [
+  "brightness",
+  "temperature",
+  "target_temp_high",
+  "target_temp_low",
+  "hvac_mode",
+  "percentage",
+  "volume_level",
+  "is_volume_muted",
+] as const;
+
+export function stateToken(s: Pick<HaState, "entity_id" | "state" | "last_changed"> & { attributes?: HaState["attributes"] }) {
+  const a = s.attributes ?? {};
+  const attrs = CONTROLLED_ATTRIBUTES.map((k) => (a[k] === undefined || a[k] === null ? "" : String(a[k]))).join("|");
+  return sha256(`${s.entity_id}|${s.state}|${s.last_changed ?? ""}|${attrs}`).slice(0, 16);
 }
 
 export const controlRules = () => parseAllowlist(resolveIntegration("home_assistant").config.controlAllowlist);
+
+/** Settings → Connections → Home Assistant → Light switching: all lights, the allowlist only, or none. */
+export function lightControlMode(): "all" | "allowlist" | "none" {
+  const v = resolveIntegration("home_assistant").config.lightControl;
+  return v === "allowlist" || v === "none" ? v : "all";
+}
+
+/**
+ * Services Jarvis may call for one entity: the allowlist, except lights, which
+ * follow the Light switching setting (#237: "all" offers every light service
+ * even when the stored allowlist names only doors/locks). Always within the policy matrix.
+ */
+export function entityServices(rules: ReturnType<typeof controlRules>, entityId: string): string[] {
+  if (domainOf(entityId) === "light") {
+    const mode = lightControlMode();
+    if (mode === "none") return [];
+    if (mode === "all") return Object.keys(HA_DOMAIN_POLICY.light!);
+  }
+  return allowedServicesFor(rules, entityId);
+}
 
 export type ControlService = { service: string; label: string; wouldChange: boolean; risk: HaRisk };
 
@@ -70,12 +113,18 @@ export type ControlView = {
   services: ControlService[];
 };
 
+function wouldChange(entityId: string, service: string, state: string) {
+  if (service === "turn_on") return !isPoweredOn(entityId, state);
+  if (service === "turn_off") return !isPoweredOff(entityId, state);
+  return !(EXPECTED_RESULT[service] ?? []).includes(state);
+}
+
 export function controlServices(s: Pick<HaState, "state" | "attributes"> | undefined, entityId: string, services: string[]): ControlService[] {
   const dc = s ? String(s.attributes.device_class ?? "") : "";
   return services.map((service) => ({
     service,
     label: serviceLabel(entityId, service),
-    wouldChange: !(EXPECTED_RESULT[service] ?? []).includes(s?.state ?? ""),
+    wouldChange: wouldChange(entityId, service, s?.state ?? ""),
     risk: serviceRisk(entityId, service, dc),
   }));
 }
@@ -87,7 +136,7 @@ export async function listControls(role?: string): Promise<ControlView[]> {
   const states = await HomeAssistantClient.states(haConn());
   const observedAt = new Date().toISOString();
   const ids = new Set(rules.filter((r) => !r.entityId.endsWith(".*")).map((r) => r.entityId));
-  for (const s of states) if (SENSITIVE_DOMAINS.includes(domainOf(s.entity_id)) && allowedServicesFor(rules, s.entity_id).length) ids.add(s.entity_id);
+  for (const s of states) if (SENSITIVE_DOMAINS.includes(domainOf(s.entity_id)) && entityServices(rules, s.entity_id).length) ids.add(s.entity_id);
   return [...ids]
     .map((entityId) => {
       const s = states.find((x) => x.entity_id === entityId);
@@ -103,7 +152,7 @@ export async function listControls(role?: string): Promise<ControlView[]> {
         services: controlServices(
           s,
           entityId,
-          allowedServicesFor(rules, entityId).filter((svc) =>
+          entityServices(rules, entityId).filter((svc) =>
             roleMayRun(role, entityId, svc, s?.attributes.device_class ? String(s.attributes.device_class) : null),
           ),
         ),
@@ -171,6 +220,9 @@ function readbackOk(service: string, entityId: string, data: ServiceData, before
   const attr = ATTRIBUTE_READBACK[key];
   if (attr && Object.keys(data).length) return attr(now.attributes, data) && (EXPECTED_RESULT[service] ?? [now.state]).includes(now.state);
   if (service === "toggle") return now.state !== before.state;
+  // #246: a media player that turns on reports idle/paused/playing, not "on".
+  if (service === "turn_on" && domainOf(entityId) === "media_player") return isPoweredOn(entityId, now.state);
+  if (service === "turn_off" && domainOf(entityId) === "media_player") return isPoweredOff(entityId, now.state);
   const expected = EXPECTED_RESULT[service];
   return expected ? expected.includes(now.state) : now.state !== before.state || now.last_updated !== before.last_updated;
 }
@@ -191,7 +243,7 @@ export async function executeControl(
 ): Promise<ControlResult> {
   const base = { actor, action: `ha.${req.service}`, source: "home_assistant", sourceRecord: req.entityId, correlationId };
   const via = opts.via !== undefined ? opts.via : currentVia();
-  const allowed = Boolean(servicePolicy(req.entityId, req.service)) && allowedServicesFor(controlRules(), req.entityId).includes(req.service);
+  const allowed = Boolean(servicePolicy(req.entityId, req.service)) && entityServices(controlRules(), req.entityId).includes(req.service);
   if (!allowed) {
     audit({ ...base, result: "rejected", detail: { reason: "not_allowlisted" } });
     throw new HttpError(403, "not_allowlisted", "That control is not in the allowlist.");
@@ -212,8 +264,8 @@ export async function executeControl(
   const dc = String(live.attributes.device_class ?? "");
   const risk = serviceRisk(req.entityId, req.service, dc);
   if (!roleMayRun(opts.role, req.entityId, req.service, dc)) {
-    audit({ ...base, result: "rejected", detail: { reason: "household_safe_direction_only" } });
-    throw new HttpError(403, "forbidden", "A shared household screen can only lock, close and arm. Sign in as yourself to do this.");
+    audit({ ...base, result: "rejected", detail: { reason: "household_tablet_not_allowed" } });
+    throw new HttpError(403, "forbidden", "A shared household screen can't do this (for example disarm the alarm). Sign in as yourself to do this.");
   }
   if (risk === "high" && !req.highRiskConfirmed) {
     audit({ ...base, result: "rejected", detail: { reason: "high_risk_confirmation_required" } });

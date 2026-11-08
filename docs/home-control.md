@@ -39,7 +39,7 @@ The Settings → Connections → Home Assistant **Allowed controls** field accep
 
 - The confirm card names the device and its current state and needs an explicit tick ("I mean it: unlock Front door lock (now locked)") before the button enables; the server refuses without `highRiskConfirmed`.
 - Rate-limited: 6 per 10 minutes per person (plus 60 device writes per minute overall).
-- A shared household tablet keeps the safe direction only (lock, close, arm).
+- A shared household tablet may open and close a garage and lock and unlock a door (owner decision 2026-11-07), and arm the alarm, always through the same confirm card, readback, audit and rate limit. Disarming the alarm and a lock's Open (unlatch) stay blocked on the tablet: sign in as yourself.
 - Never "low-risk" for autonomy, never executed by scheduled jobs or agents.
 
 ## Agents and scheduled jobs

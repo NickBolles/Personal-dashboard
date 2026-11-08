@@ -12,7 +12,7 @@ import { Banner, ChipSelect, EmptyState, SectionHeader } from "@/components/ui/k
 import { SourceState } from "@/components/SourceState";
 import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, Spinner, cx, useNow, useOnline } from "@/components/ui";
 import { useHaControl, type HaAction } from "@/components/home/HaControls";
-import type { HaRisk } from "@/lib/ha-policy";
+import { isPoweredOn, type HaRisk } from "@/lib/ha-policy";
 import { groupByRoom, roomSlug } from "@/lib/house-rooms";
 
 type Control = {
@@ -415,7 +415,8 @@ function DoorTile({ x, focus }: { x: DeviceView; focus: boolean }) {
 
 /** Compact on/off switch (role=switch) for a device that has turn_on/turn_off (or toggle). */
 function PowerSwitch({ x, online, ctl }: { x: DeviceView; online: boolean; ctl: Ctl }) {
-  const on = x.state === "on" || x.state === "playing";
+  // #246: a paused or idle media player is still powered on (power is not playback).
+  const on = isPoweredOn(x.entityId, x.state);
   const svc = x.services.some((s) => s.service === (on ? "turn_off" : "turn_on")) ? (on ? "turn_off" : "turn_on") : "toggle";
   const act = actionFor(x, svc);
   if (!act) return null;
@@ -543,7 +544,8 @@ function DeviceTile({ x, focus, online, ctl }: { x: DeviceView; focus: boolean; 
         : x.kind === "scene" || x.kind === "script"
           ? KIND_LABEL[x.kind]
           : x.state;
-  const power = (x.kind === "switch" || x.kind === "toggle" || x.kind === "fan" || x.kind === "media") && (has("turn_on") || has("toggle"));
+  // #242: a turn_off-only allowlist (e.g. "switch.*: turn_off") still shows the switch so an on device can be turned off.
+  const power = (x.kind === "switch" || x.kind === "toggle" || x.kind === "fan" || x.kind === "media") && (has("turn_on") || has("turn_off") || has("toggle"));
   return (
     <li className={cx("card flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3 py-2", focus && "border-accent")} data-entity={x.entityId}>
       <span className="min-w-0">

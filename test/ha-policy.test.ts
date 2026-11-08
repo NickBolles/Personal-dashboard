@@ -12,6 +12,9 @@ import {
   controlCap,
   inverseOf,
   isHighRisk,
+  isPoweredOff,
+  isPoweredOn,
+  roleMayRun,
   serviceRisk,
 } from "@/lib/ha-policy";
 
@@ -126,6 +129,26 @@ describe("inverse / Undo mapping", () => {
   });
 });
 
+describe("shared household tablet (owner decision 2026-11-07)", () => {
+  it("may open/close garages and lock/unlock doors, never disarm or unlatch", () => {
+    const t = (e: string, svc: string, dc?: string) => roleMayRun("household", e, svc, dc);
+    expect(t("cover.garage_door", "open_cover")).toBe(true);
+    expect(t("cover.big_door", "open_cover", "garage")).toBe(true);
+    expect(t("cover.garage_door", "close_cover")).toBe(true);
+    expect(t("lock.front_door_lock", "lock")).toBe(true);
+    expect(t("lock.front_door_lock", "unlock")).toBe(true);
+    expect(t("lock.front_door_lock", "open")).toBe(false);
+    expect(t("alarm_control_panel.home", "alarm_arm_away")).toBe(true);
+    expect(t("alarm_control_panel.home", "alarm_disarm")).toBe(false);
+    expect(t("light.kitchen", "turn_on")).toBe(true);
+    // still high-risk: the tablet goes through the explicit confirm card like everyone else
+    expect(isHighRisk("cover.garage_door", "open_cover")).toBe(true);
+    expect(isHighRisk("lock.front_door_lock", "unlock")).toBe(true);
+    // signed-in people are unaffected
+    expect(roleMayRun("adult", "alarm_control_panel.home", "alarm_disarm")).toBe(true);
+  });
+});
+
 describe("high-risk gating", () => {
   it("only signed-in people execute; agents and scheduled jobs must propose", () => {
     expect(actorMayExecute(null)).toBe(true);
@@ -150,5 +173,26 @@ describe("service data", () => {
     expect(() => cleanServiceData("climate.t", "set_temperature", {})).toThrow(/bad_data/);
     expect(() => cleanServiceData("climate.t", "set_hvac_mode", { hvac_mode: "sauna" })).toThrow(/bad_data/);
     expect(() => cleanServiceData("fan.b", "set_percentage", { percentage: "x" })).toThrow(/bad_data/);
+  });
+  it("#241: temperature / hvac_mode are required even when no data is sent", () => {
+    expect(() => cleanServiceData("climate.t", "set_temperature", undefined)).toThrow(/temperature is required/);
+    expect(() => cleanServiceData("climate.t", "set_hvac_mode", undefined)).toThrow(/hvac_mode/);
+    // optional payloads stay optional
+    expect(cleanServiceData("light.k", "turn_on", undefined)).toEqual({});
+    expect(cleanServiceData("media_player.s", "turn_off", undefined)).toEqual({});
+  });
+});
+
+describe("media player power (#246)", () => {
+  it("paused / idle / playing players are powered on; off / standby are off", () => {
+    for (const s of ["playing", "paused", "idle", "on", "buffering"]) expect(isPoweredOn("media_player.tv", s)).toBe(true);
+    for (const s of ["off", "standby", "unavailable", "unknown"]) expect(isPoweredOn("media_player.tv", s)).toBe(false);
+    expect(isPoweredOff("media_player.tv", "standby")).toBe(true);
+    expect(isPoweredOff("media_player.tv", "unavailable")).toBe(false);
+    expect(isPoweredOn("switch.x", "paused")).toBe(false);
+  });
+  it("turning off a paused player can be undone", () => {
+    expect(inverseOf("media_player.tv", "turn_off", { state: "paused" })).toEqual({ service: "turn_on" });
+    expect(inverseOf("media_player.tv", "turn_on", { state: "standby" })).toEqual({ service: "turn_off" });
   });
 });

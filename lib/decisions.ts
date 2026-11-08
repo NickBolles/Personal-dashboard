@@ -6,8 +6,25 @@
  */
 import { z } from "zod";
 
+/**
+ * A server-built, tappable next step for a decision (e.g. an agent's device
+ * proposal → "Confirm on House"). Never accepted from request bodies: only
+ * Jarvis code sets it, and only same-origin paths survive parsing.
+ */
+export type DecisionAction = { label: string; href: string };
+
 /** `detail` = the full proposed content (e.g. a scheduled job's note body), shown with the question. */
-export type ItemDecision = { question: string; choices: string[]; askedAt: string; detail?: string };
+export type ItemDecision = { question: string; choices: string[]; askedAt: string; detail?: string; action?: DecisionAction };
+
+/** Same-origin app path only ("/x…", never "//host" or a scheme). */
+export const isAppPath = (href: unknown): href is string => typeof href === "string" && href.length <= 600 && /^\/(?![/\\])[^\s\\]*$/.test(href);
+
+function parseAction(v: unknown): DecisionAction | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const a = v as Partial<DecisionAction>;
+  if (typeof a.label !== "string" || !a.label.trim() || !isAppPath(a.href)) return undefined;
+  return { label: a.label.trim().slice(0, 60), href: a.href };
+}
 export const DECISION_DETAIL_MAX = 4000;
 
 export const decisionInputSchema = z
@@ -33,16 +50,18 @@ export function parseDecision(raw: string | null | undefined): ItemDecision | nu
     if (!v || typeof v.question !== "string" || !v.question.trim()) return null;
     const choices = Array.isArray(v.choices) ? v.choices.filter((c): c is string => typeof c === "string" && !!c.trim()) : [];
     const detail = typeof v.detail === "string" && v.detail.trim() ? { detail: v.detail.slice(0, DECISION_DETAIL_MAX) } : {};
-    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "", ...detail };
+    const action = parseAction(v.action);
+    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "", ...detail, ...(action ? { action } : {}) };
   } catch {
     return null;
   }
 }
 
-export function serialiseDecision(d: { question: string; choices?: string[]; detail?: string }, askedAt: string): string {
+export function serialiseDecision(d: { question: string; choices?: string[]; detail?: string; action?: DecisionAction }, askedAt: string): string {
   const choices = [...new Set((d.choices ?? []).map((c) => c.trim()).filter(Boolean))];
   const detail = d.detail?.trim().slice(0, DECISION_DETAIL_MAX);
-  return JSON.stringify({ question: d.question.trim(), choices, askedAt, ...(detail ? { detail } : {}) });
+  const action = parseAction(d.action);
+  return JSON.stringify({ question: d.question.trim(), choices, askedAt, ...(detail ? { detail } : {}), ...(action ? { action } : {}) });
 }
 
 /** The line appended to the item's summary (and the activity reason) when a decision is answered. */
@@ -68,6 +87,8 @@ export type DecisionEntry = {
   choices: string[];
   /** where answering happens for approvals/workflows (they keep their own flows) */
   href: string;
+  /** a server-built next step for an item decision (e.g. "Confirm on House" for a device proposal) */
+  action?: DecisionAction;
   at: string;
   itemId?: string;
   areaTitle?: string;

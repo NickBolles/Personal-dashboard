@@ -121,7 +121,7 @@ export function CoordinatorThread({
     });
   };
   const send = useMutation({
-    mutationFn: async (input: string) => {
+    mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
       let target = sid;
       if (!target) {
         const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
@@ -129,12 +129,14 @@ export function CoordinatorThread({
         setSessionId(s.id);
         setFresh(false);
       }
-      const run = await postInput(target, compact ? withPageContext(input, context) : input);
+      const run = await postInput(target, compact && !correction ? withPageContext(input, context) : input);
       return { target, notice: maskedNotice(run) };
     },
-    onSuccess: ({ target, notice }) => {
-      setText("");
-      if (textarea.current && compact) textarea.current.style.height = "auto";
+    onSuccess: ({ target, notice }, { correction }) => {
+      if (!correction) {
+        setText("");
+        if (textarea.current && compact) textarea.current.style.height = "auto";
+      }
       toast(notice ?? "Sent to the coordinator", notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
@@ -170,7 +172,7 @@ export function CoordinatorThread({
     onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
   });
   const submit = () => {
-    if (text.trim() && !send.isPending && !d.excluded) send.mutate(text.trim());
+    if (text.trim() && !send.isPending && !d.excluded) send.mutate({ input: text.trim() });
   };
   const timeline = detail.data?.timeline ?? [];
   const replyActions = useMemo(
@@ -248,11 +250,11 @@ export function CoordinatorThread({
                             who="the coordinator's message"
                             model={detail.data?.session.model ?? null}
                             onAskFix={async (prompt) => {
-                              if (detail.data?.session.activeRun) {
+                              if (send.isPending || detail.data?.session.activeRun) {
                                 toast("Wait for the coordinator to finish, then ask again.", "warn");
                                 return false;
                               }
-                              await send.mutateAsync(prompt);
+                              await send.mutateAsync({ input: prompt, correction: true });
                               return true;
                             }}
                           />

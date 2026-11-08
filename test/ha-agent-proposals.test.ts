@@ -12,6 +12,7 @@ import { __resetAgentRate, mintAgentToken } from "@/server/agent-access/tokens";
 import { executeControl } from "@/integrations/home-assistant/controls";
 import { withVia } from "@/server/work/actor";
 import { proposalHref } from "@/server/agent-access/ha-proposals";
+import { parseDecision, serialiseDecision } from "@/lib/decisions";
 import * as mcpRoute from "@/app/api/mcp/route";
 
 let owner: CurrentUser;
@@ -52,7 +53,19 @@ describe("agent device proposals", () => {
     expect(r.value).toMatchObject({ proposed: true, executed: false, risk: "high", confirmAt: "/home-control?entity=lock.front_door_lock&propose=unlock" });
     const d = store.listItems(owner.id).find((x) => x.id === item.id)?.decision;
     expect(d?.question).toMatch(/@chiefofstaff proposes a device change \(HIGH-RISK\): Unlock lock\.front_door_lock/);
-    expect(d?.question).toContain("/home-control?entity=lock.front_door_lock&propose=unlock");
+    // #238: the House link is a tappable decision action, not text inside the question.
+    expect(d?.action).toEqual({ label: "Confirm on House", href: "/home-control?entity=lock.front_door_lock&propose=unlock" });
+    expect(d?.question).not.toContain("/home-control");
+  });
+
+  it("decision actions only keep same-origin app paths (#238)", () => {
+    const at = "2026-11-07T00:00:00Z";
+    expect(parseDecision(serialiseDecision({ question: "q", action: { label: "Go", href: "/home-control?entity=x" } }, at))?.action).toEqual({
+      label: "Go",
+      href: "/home-control?entity=x",
+    });
+    for (const href of ["//evil.example/x", "https://evil.example", "javascript:alert(1)", "/\\evil", "/a b"])
+      expect(parseDecision(serialiseDecision({ question: "q", action: { label: "Go", href } }, at))?.action).toBeUndefined();
   });
 
   it("refuses services outside the policy and bad payloads", async () => {
