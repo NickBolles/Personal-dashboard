@@ -88,7 +88,7 @@ const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "he
  * upstreams date their seeds in the same timezone (mock-upstreams/util.mjs isoDate), so "Due today",
  * "N days overdue" and similar relative labels agree at any wall-clock time (no evening drift).
  */
-async function freezeMiddayCT(page: Page, opts: { always?: boolean } = {}) {
+async function freezeMiddayCT(page: Page) {
   const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   // 17:00 UTC is 12:00 CDT / 11:00 CST: midday either way, far from both date boundaries.
   // Never freeze AHEAD of the real clock: server data carries real fetchedAt/staleAfter (todos go
@@ -96,9 +96,7 @@ async function freezeMiddayCT(page: Page, opts: { always?: boolean } = {}) {
   // every card and rewraps rows (CI before ~noon CT). Same CT date either way, so relative day
   // labels ("Due today", "N days ago") don't change.
   const midday = Date.parse(`${ymd}T17:00:00.000Z`);
-  // `always`: for tests whose every data source is stubbed from the frozen clock (no server
-  // fetchedAt in the shot), freeze at midday even before noon so relative times are constant.
-  const frozen = opts.always ? midday : Math.min(Date.now(), midday);
+  const frozen = Math.min(Date.now(), midday);
   await page.clock.setFixedTime(new Date(frozen));
   return frozen;
 }
@@ -1887,10 +1885,7 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight everywhere (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-    // Every source here is stubbed from the browser clock, and the chores carry fixed times of day
-    // ("Due in N hours"/"Due N hours ago"): freeze at midday CT always, or the shots rewrap
-    // (826 vs 827 px) whenever CI runs before noon CT.
-    await freezeMiddayCT(page, { always: true });
+    await freezeMiddayCT(page);
     const fixture = skylightGroupingVisual(new Date(await page.evaluate(() => new Date().toISOString())));
     const day = localDate(new Date(await page.evaluate(() => new Date().toISOString())), "America/Chicago");
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
