@@ -61,6 +61,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           for (const s of Object.values(services)) s.reset();
           compass.completed.clear();
           control.fail.clear();
+          control.hermesBusy = null;
           return json(res, 200, { ok: true });
         }
         if (path === "/fail") {
@@ -73,6 +74,12 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           const body = await readBody(req);
           return json(res, 200, { added: services.google.addTasks([].concat(body.tasks ?? [])) });
         }
+        if (path === "/hermes-busy") {
+          // Next `count` matching Hermes requests answer 429 like Traefik's inFlightReq ("max connections reached: 10").
+          const body = await readBody(req);
+          control.hermesBusy = { count: Number(body.count ?? 0), method: body.method ?? null, path: body.path ?? null, hits: 0 };
+          return json(res, 200, control.hermesBusy);
+        }
         if (path === "/speed") {
           const body = await readBody(req);
           control.speed = Number(body.ms ?? control.speed);
@@ -83,6 +90,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
             haCalls: services.ha.state.calls,
             hermesStructuredRequests: services.hermes.state.structuredCount,
             hermesProfileRequests: services.hermes.state.profileRequests,
+            hermesBusy: control.hermesBusy ?? null,
             fcmMessages: services.fcm.state.messages,
             monarchRefreshes: services.monarch.state.refreshes,
             anthropicRequests: services.anthropic.state.requests,

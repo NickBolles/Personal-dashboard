@@ -68,7 +68,7 @@ export const config = {
   get timezone() {
     return process.env.TZ || "America/Chicago";
   },
-  /** Upper bound for concurrent Hermes SSE relays (kept below Hermes' own limit). */
+  /** Upper bound for relayed run streams in total (watchers of one run share one upstream; see docs/hermes-connection-budget.md). */
   get maxStreams() {
     return Number(process.env.JARVIS_MAX_STREAMS ?? 16);
   },

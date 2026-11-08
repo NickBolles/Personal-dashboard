@@ -5,6 +5,44 @@ test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
 });
 
+test("queued acceptance survives reload and can be cancelled", async ({ page }, testInfo) => {
+  let accepted = false;
+  let status = "queued";
+  const view = () => ({ runId: "queue-test", sessionId: "sess_morning", status });
+  await page.route("**/api/hermes/sessions/sess_morning/runs", (route) => {
+    accepted = true;
+    return route.fulfill({ status: 202, json: view() });
+  });
+  await page.route(/\/api\/hermes\/sessions\/sess_morning(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    if (accepted) data.session.activeRun = { runId: "queue-test", status };
+    await route.fulfill({ json: data });
+  });
+  await page.route("**/api/hermes/runs/queue-test**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/stop")) status = "cancelled";
+    if (path.endsWith("/events"))
+      return route.fulfill({
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify(status === "queued" ? { type: "run.queued" } : { type: "run.terminal", status: "cancelled", at: new Date().toISOString() })}\n\n`,
+      });
+    return route.fulfill({ json: view() });
+  });
+  await page.goto("/chat/sess_morning");
+  await page.getByLabel("Message Hermes").fill("Keep my queued request visible");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText(/Queued — waiting for an available agent slot/)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(/Queued — waiting for an available agent slot/)).toBeVisible();
+  await expect(page.getByText("Keep my queued request visible", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("queued-request.png"), fullPage: true });
+  await page.getByRole("button", { name: /Stop the run/ }).click();
+  await expect(page.getByText("Stopped", { exact: true })).toBeVisible();
+  // A detail refetch can still be inside route.fetch when the page closes.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("approval requested inline, answered, then run completes", async ({ page }) => {
   await startConversation(page, "please delete the build folder");
   const card = page.getByRole("group", { name: "Hermes needs your approval" });

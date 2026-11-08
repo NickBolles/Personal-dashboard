@@ -4,6 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { config } from "@/server/config";
 import { processSingleton } from "@/server/singleton";
+import { acquireHermesSlot, withHermesLane, type Slot } from "@/server/http/hermes-budget";
 import { HttpError, UpstreamError } from "@/server/http/errors";
 import { formatSse, SseParser } from "@/lib/sse";
 import { isTerminal, type RunEvent, type RunView, type SessionSummary } from "@/lib/hermes";
@@ -245,17 +246,21 @@ async function routedSessions(user: CurrentUser, opts: { page: number; includeAr
     .all();
   const hasMore = rows.length > ROUTED_LIST_LIMIT;
   rows.length = Math.min(rows.length, ROUTED_LIST_LIMIT);
-  const [got, children] = await Promise.all([
-    Promise.allSettled(
-      rows.map(async (r) => {
-        signal?.throwIfAborted();
-        return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
-      }),
-    ),
-    // #187: sub-agent children of routed chats live on their own profile, never in the default
-    // window, so fetch each listed profile's recent children once (cached) to count them.
-    Promise.all([...new Set(rows.map((r) => r.profile!))].map((p) => routedChildren(p, signal))).then((x) => x.flat()),
-  ]);
+  // Up to 30 GETs + one list per profile: background lane, so this fan-out never takes the
+  // connection slots a chat send needs (server/http/hermes-budget.ts).
+  const [got, children] = await withHermesLane("background", () =>
+    Promise.all([
+      Promise.allSettled(
+        rows.map(async (r) => {
+          signal?.throwIfAborted();
+          return (await HermesSessionClient.get(connForProfile(r.profile), r.sessionId)).session;
+        }),
+      ),
+      // #187: sub-agent children of routed chats live on their own profile, never in the default
+      // window, so fetch each listed profile's recent children once (cached) to count them.
+      Promise.all([...new Set(rows.map((r) => r.profile!))].map((p) => routedChildren(p, signal))).then((x) => x.flat()),
+    ]),
+  );
   // A deleted session (404) is simply gone; any other failure means that profile is
   // unreachable, so the caller reports a retryable partial list instead of a complete one.
   const unavailable = [
@@ -611,10 +616,14 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
   if (!/^[\x21-\x7e]{1,255}$/.test(r.idempotencyKey)) throw new HttpError(400, "bad_idempotency_key", "Invalid idempotency key");
   const existing = db().select().from(schema.runs).where(eq(schema.runs.idempotencyKey, r.idempotencyKey)).get();
   if (existing) {
+    if (existing.userId !== user.id || existing.sessionId !== r.sessionId) {
+      throw new HttpError(409, "idempotency_conflict", "Idempotency key belongs to another request");
+    }
     return { runId: existing.runId, sessionId: existing.sessionId, status: existing.status as RunView["status"] };
   }
   const profile = sessionProfile(r.sessionId);
   const res = await HermesExecutionClient.start(connForProfile(profile), r);
+  const status = res.status === "queued" ? "queued" : "running";
   db()
     .insert(schema.runs)
     .values({
@@ -623,7 +632,7 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
       userId: user.id,
       hermesProfile: profile,
       idempotencyKey: r.idempotencyKey,
-      status: "running",
+      status,
       inputPreview: r.input.slice(0, 140),
     })
     .onConflictDoNothing()
@@ -638,7 +647,7 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
     correlationId,
     detail: { runId: res.run_id },
   });
-  return { runId: res.run_id, sessionId: r.sessionId, status: "running" };
+  return { runId: res.run_id, sessionId: r.sessionId, status };
 }
 
 function updateRunRow(runId: string, patch: Partial<typeof schema.runs.$inferInsert>) {
@@ -837,12 +846,169 @@ export async function steerRun(user: CurrentUser, runId: string, input: string, 
 
 // --- SSE relay ---
 
-const streams = processSingleton("hermes_streams", () => ({ active: 0 }));
+type RelayEvent = { e: RunEvent; id?: number };
+type RelaySub = { push: (ev: RelayEvent) => void; end: () => void };
+/** One upstream event stream per run, shared by every tab/pane watching it (chat page, rail, tray, other devices). */
+type SharedRelay = {
+  runId: string;
+  /** Last-Event-ID the upstream was opened with (undefined = from the start). */
+  fromSeq: number | undefined;
+  buffer: RelayEvent[];
+  /** Buffer overflowed: late joiners can't be replayed from it, so they open their own relay. */
+  truncated: boolean;
+  subs: Set<RelaySub>;
+  /** Waiting for a connection-budget slot. */
+  waiting: boolean;
+  done: boolean;
+  abort: AbortController;
+};
+const RELAY_BUFFER_MAX = 20_000;
+const RELAY_MAX_RELAYS = 64;
+const relays = () => processSingleton("hermes_shared_relays", () => ({ byRun: new Map<string, SharedRelay>(), all: new Set<SharedRelay>() }));
+
+/** Test hook: open upstream relays and how many browser streams each serves. */
+export function __relayStats() {
+  return [...relays().all].map((r) => ({ runId: r.runId, subscribers: r.subs.size, waiting: r.waiting, done: r.done }));
+}
+
+function canJoin(r: SharedRelay, lastSeq: number | undefined) {
+  if (r.done || r.truncated) return false;
+  return r.fromSeq === undefined || (lastSeq !== undefined && lastSeq >= r.fromSeq);
+}
+
+/** Events a joiner that already saw up to `lastSeq` still needs. */
+function replayFrom(r: SharedRelay, lastSeq: number | undefined) {
+  if (lastSeq === undefined) return r.buffer;
+  const i = r.buffer.findIndex((b) => b.id !== undefined && b.id > lastSeq);
+  return i < 0 ? [] : r.buffer.slice(i);
+}
+
+function startRelay(row: typeof schema.runs.$inferSelect, runId: string, lastSeq: number | undefined): SharedRelay {
+  const r: SharedRelay = {
+    runId,
+    fromSeq: lastSeq,
+    buffer: [],
+    truncated: false,
+    subs: new Set(),
+    waiting: false,
+    done: false,
+    abort: new AbortController(),
+  };
+  const { byRun, all } = relays();
+  all.add(r);
+  // Index the most joinable relay: one streaming from the start can serve every later watcher.
+  const indexed = byRun.get(runId);
+  if (!indexed || indexed.done || (lastSeq === undefined && indexed.fromSeq !== undefined)) byRun.set(runId, r);
+  const broadcast = (ev: RelayEvent, keep = true) => {
+    if (keep) {
+      if (r.buffer.length < RELAY_BUFFER_MAX) r.buffer.push(ev);
+      else r.truncated = true;
+    }
+    for (const s of [...r.subs]) s.push(ev);
+  };
+  void (async () => {
+    let slot: Slot | undefined;
+    let sawTerminal = false;
+    try {
+      // Every relay holds an upstream connection for the whole run: wait for a budget slot
+      // instead of failing, and tell the watchers they're queued.
+      slot = await acquireHermesSlot("stream", {
+        signal: r.abort.signal,
+        onQueued: () => {
+          r.waiting = true;
+          broadcast({ e: { type: "run.queued", reason: "connections" } }, false);
+        },
+      });
+      r.waiting = false;
+      const res = await HermesExecutionClient.events(connForRun(row), runId, lastSeq !== undefined ? String(lastSeq) : undefined, r.abort.signal);
+      if (!res.body) throw new UpstreamError("Hermes", "bad_response", "Hermes returned an empty event stream");
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      const parser = new SseParser();
+      for (;;) {
+        const { value, done } = await reader.read();
+        const frames = done ? parser.end() : parser.push(value);
+        for (const f of frames) {
+          let raw: unknown;
+          try {
+            raw = JSON.parse(f.data);
+          } catch {
+            continue;
+          }
+          const parsed = runEventSchema.safeParse(raw);
+          if (!parsed.success) continue;
+          const ev = normalizeRunEvent(parsed.data as never);
+          if (ev.type === "subagent.started" || ev.type === "subagent.completed") {
+            const id = ev.id ?? ev.childSessionId ?? (ev.delegationId && ev.taskIndex !== undefined ? `${ev.delegationId}:${ev.taskIndex}` : undefined);
+            if (id) {
+              const parentSessionId = executionParent(row.sessionId, ev.parentId);
+              const state = ev.type === "subagent.started" ? "running" : executionCompletionState(ev.status);
+              upsertExecution(
+                parentSessionId,
+                {
+                  key: `subagent:${id}`,
+                  source: "subagent",
+                  id,
+                  subagentId: ev.id,
+                  observedCompletion: ev.type === "subagent.completed",
+                  childSessionId: ev.childSessionId,
+                  delegationId: ev.delegationId,
+                  taskIndex: ev.taskIndex,
+                  title: ev.goal ?? "Subagent",
+                  state,
+                  startedAt: ev.type === "subagent.started" ? ev.at : undefined,
+                  endedAt: ["completed", "failed", "cancelled"].includes(state) ? ev.at : undefined,
+                  updatedAt: ev.at,
+                  summary: ev.type === "subagent.completed" ? ev.summary : undefined,
+                },
+                sessionProfile(parentSessionId),
+              );
+            }
+          }
+          if (ev.type === "approval.requested") {
+            updateRunRow(runId, {
+              status: "waiting_for_approval",
+              pendingApproval: JSON.stringify({ requestId: ev.requestId, command: ev.command, description: ev.description, choices: ev.choices }),
+            });
+          } else if (ev.type === "approval.resolved") {
+            updateRunRow(runId, { status: "running", pendingApproval: null });
+          } else if (ev.type === "run.terminal") {
+            sawTerminal = true;
+            // Someone watched it finish live, so no "background work completed" alert is needed.
+            updateRunRow(runId, {
+              status: ev.status,
+              pendingApproval: null,
+              completedAt: new Date().toISOString(),
+              notifiedCompletion: r.subs.size > 0,
+            });
+          }
+          broadcast({ e: ev, id: parsed.data.seq ?? (f.id !== undefined ? Number(f.id) : undefined) });
+        }
+        if (done) break;
+      }
+      if (!sawTerminal) broadcast({ e: { type: "stream.closed", reason: "upstream_closed" } });
+    } catch (err) {
+      if (!r.abort.signal.aborted) broadcast({ e: { type: "stream.closed", reason: "error", message: (err as Error).message } });
+    } finally {
+      slot?.release();
+      r.done = true;
+      all.delete(r);
+      if (byRun.get(runId) === r) byRun.delete(runId);
+      for (const s of [...r.subs]) s.end();
+      r.subs.clear();
+    }
+  })();
+  return r;
+}
 
 /**
  * Relay /v1/runs/:id/events through the BFF as normalized Jarvis events.
  * The upstream key never reaches the browser. When the upstream stream ends
  * without a terminal event we emit `stream.closed` so the client reconciles.
+ *
+ * Connection budget: every browser stream watching the same run shares ONE upstream
+ * stream (late joiners are replayed from its buffer), relays wait for a `stream` slot in
+ * the Hermes budget (`run.queued` reason "connections" meanwhile) instead of failing,
+ * and the upstream closes as soon as its last watcher leaves.
  */
 export function relayRunEvents(
   user: CurrentUser,
@@ -857,125 +1023,73 @@ export function relayRunEvents(
     opts.format === "agui"
       ? new HermesAguiTranslator({ threadId: row.sessionId, hermesRunId: runId, resumeFromSeq: lastSeq !== undefined ? Number(lastSeq) : undefined })
       : null;
-  if (streams.active >= config.maxStreams) throw new HttpError(429, "too_many_streams", "Too many open streams");
-  streams.active++;
-  const upstreamAbort = new AbortController();
-  const onClientAbort = () => upstreamAbort.abort();
-  clientSignal.addEventListener("abort", onClientAbort);
+  const seq = lastSeq !== undefined ? Number(lastSeq) : undefined;
+  const existing = relays().byRun.get(runId);
+  const shared = existing && canJoin(existing, seq) ? existing : undefined;
+  if (!shared && relays().all.size >= Math.max(config.maxStreams, RELAY_MAX_RELAYS)) {
+    throw new HttpError(429, "too_many_streams", "Too many open streams");
+  }
   const encoder = new TextEncoder();
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    streams.active--;
-    clientSignal.removeEventListener("abort", onClientAbort);
-  };
+  let finishRef = () => {};
 
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      // If the browser is gone, stop relaying and free the slot even if the abort signal never fires.
-      const write = (chunk: string) => {
-        try {
-          controller.enqueue(encoder.encode(chunk));
-          return true;
-        } catch {
-          upstreamAbort.abort();
-          release();
-          return false;
+    start(controller) {
+      let closed = false;
+      // Filled in below; `finish` can run before that (the browser left during the first write).
+      const link: { relay?: SharedRelay; sub?: RelaySub; keepalive?: ReturnType<typeof setInterval> } = {};
+      const finish = () => {
+        if (closed) return;
+        closed = true;
+        if (link.keepalive) clearInterval(link.keepalive);
+        clientSignal.removeEventListener("abort", finish);
+        const { relay, sub } = link;
+        if (relay && sub) {
+          relay.subs.delete(sub);
+          // Last watcher gone: free the upstream connection now.
+          if (relay.subs.size === 0 && !relay.done) relay.abort.abort();
         }
-      };
-      const send = (e: RunEvent, id?: number) => {
-        if (!agui) return write(formatSse(e, id !== undefined ? { id } : {}));
-        for (const a of agui.push(e)) if (!write(formatSse(a, id !== undefined ? { id } : {}))) return false;
-        return true;
-      };
-      write(": relay open\n\nretry: 2000\n\n");
-      const keepalive = setInterval(() => write(": keepalive\n\n"), 15_000);
-      let sawTerminal = false;
-      try {
-        const res = await HermesExecutionClient.events(connForRun(row), runId, lastSeq, upstreamAbort.signal);
-        if (!res.body) throw new UpstreamError("Hermes", "bad_response", "Hermes returned an empty event stream");
-        const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-        const parser = new SseParser();
-        for (;;) {
-          const { value, done } = await reader.read();
-          const frames = done ? parser.end() : parser.push(value);
-          for (const f of frames) {
-            let raw: unknown;
-            try {
-              raw = JSON.parse(f.data);
-            } catch {
-              continue;
-            }
-            const parsed = runEventSchema.safeParse(raw);
-            if (!parsed.success) continue;
-            const ev = normalizeRunEvent(parsed.data as never);
-            if (ev.type === "subagent.started" || ev.type === "subagent.completed") {
-              const id = ev.id ?? ev.childSessionId ?? (ev.delegationId && ev.taskIndex !== undefined ? `${ev.delegationId}:${ev.taskIndex}` : undefined);
-              if (id) {
-                const parentSessionId = executionParent(row.sessionId, ev.parentId);
-                const state = ev.type === "subagent.started" ? "running" : executionCompletionState(ev.status);
-                upsertExecution(
-                  parentSessionId,
-                  {
-                    key: `subagent:${id}`,
-                    source: "subagent",
-                    id,
-                    subagentId: ev.id,
-                    observedCompletion: ev.type === "subagent.completed",
-                    childSessionId: ev.childSessionId,
-                    delegationId: ev.delegationId,
-                    taskIndex: ev.taskIndex,
-                    title: ev.goal ?? "Subagent",
-                    state,
-                    startedAt: ev.type === "subagent.started" ? ev.at : undefined,
-                    endedAt: ["completed", "failed", "cancelled"].includes(state) ? ev.at : undefined,
-                    updatedAt: ev.at,
-                    summary: ev.type === "subagent.completed" ? ev.summary : undefined,
-                  },
-                  sessionProfile(parentSessionId),
-                );
-              }
-            }
-            if (ev.type === "approval.requested") {
-              updateRunRow(runId, {
-                status: "waiting_for_approval",
-                pendingApproval: JSON.stringify({ requestId: ev.requestId, command: ev.command, description: ev.description, choices: ev.choices }),
-              });
-            } else if (ev.type === "approval.resolved") {
-              updateRunRow(runId, { status: "running", pendingApproval: null });
-            } else if (ev.type === "run.terminal") {
-              sawTerminal = true;
-              // The user watched it finish live, so no "background work completed" alert is needed.
-              updateRunRow(runId, {
-                status: ev.status,
-                pendingApproval: null,
-                completedAt: new Date().toISOString(),
-                notifiedCompletion: !clientSignal.aborted,
-              });
-            }
-            send(ev, parsed.data.seq ?? (f.id !== undefined ? Number(f.id) : undefined));
-          }
-          if (done) break;
-        }
-        if (!sawTerminal) send({ type: "stream.closed", reason: "upstream_closed" });
-      } catch (err) {
-        if (!clientSignal.aborted) {
-          send({ type: "stream.closed", reason: "error", message: (err as Error).message });
-        }
-      } finally {
-        clearInterval(keepalive);
-        release();
         try {
           controller.close();
         } catch {
           /* already closed */
         }
-      }
+      };
+      const write = (chunk: string) => {
+        if (closed) return false;
+        try {
+          controller.enqueue(encoder.encode(chunk));
+          return true;
+        } catch {
+          // The browser is gone: stop relaying and free the slot even if the abort signal never fires.
+          finish();
+          return false;
+        }
+      };
+      // This watcher's own cursor: a shared relay may still be behind what it already saw.
+      let cursor = seq;
+      const send = ({ e, id }: RelayEvent) => {
+        if (id !== undefined && cursor !== undefined && id <= cursor) return true;
+        if (id !== undefined) cursor = id;
+        if (!agui) return write(formatSse(e, id !== undefined ? { id } : {}));
+        for (const a of agui.push(e)) if (!write(formatSse(a, id !== undefined ? { id } : {}))) return false;
+        return true;
+      };
+      finishRef = finish;
+      if (!write(": relay open\n\nretry: 2000\n\n") || clientSignal.aborted) return finish();
+      link.keepalive = setInterval(() => write(": keepalive\n\n"), 15_000);
+      clientSignal.addEventListener("abort", finish);
+      const sub: RelaySub = { push: (ev) => void send(ev), end: finish };
+      const r = shared ?? startRelay(row, runId, seq);
+      link.relay = r;
+      link.sub = sub;
+      if (r.done) return finish();
+      // Subscribe first (finish() then unsubscribes and frees the upstream if a write fails below).
+      r.subs.add(sub);
+      for (const ev of shared ? replayFrom(shared, seq) : []) if (!send(ev)) return;
+      if (r.waiting) send({ e: { type: "run.queued", reason: "connections" } });
     },
     cancel() {
-      upstreamAbort.abort();
-      release();
+      finishRef();
     },
   });
 }

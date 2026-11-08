@@ -18,7 +18,7 @@ import { MARKDOWN_FIXTURE } from "../lib/markdown-fixture";
 import { forceSourceState, SOURCE_STATES } from "./fixtures/states";
 import { mapDemo, mapDemoAreaDetail, mapDemoDecisions } from "./fixtures/map-demo";
 import { agentRunsDemo, coordinatorDemo } from "./fixtures/agents-demo";
-import { skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
+import { SKYLIGHT_VISUAL_NOW, skylightGroupingVisual, skylightVisual, skylightWriteVisual } from "./fixtures/skylight";
 import { noticesVisual } from "./fixtures/coordinator-chat";
 import { phase3Coordinators, stubPhase3Settings } from "./fixtures/phase3-gaps";
 import { openPrismChat, stubPrismV2 } from "./fixtures/smart-v2";
@@ -99,6 +99,18 @@ async function freezeMiddayCT(page: Page) {
   const frozen = Math.min(Date.now(), midday);
   await page.clock.setFixedTime(new Date(frozen));
   return frozen;
+}
+
+/**
+ * Skylight visuals are fixture-owned (source, settings and writes are stubbed), so they pin the browser
+ * clock to ONE fixed instant (12:00 CDT on a fixed date) and build the fixture from it. Relative due
+ * texts ("Due in 2 hours", "Was due …") and row wrapping then never change with the time of day.
+ */
+async function freezeSkylightClock(page: Page) {
+  const now = new Date(SKYLIGHT_VISUAL_NOW);
+  await page.clock.setFixedTime(now);
+  await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
+  return now;
 }
 
 for (const [name, path] of [
@@ -1805,10 +1817,8 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight write (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await freezeMiddayCT(page);
-    const fixture = skylightWriteVisual(new Date(await page.evaluate(() => new Date().toISOString())));
+    const fixture = skylightWriteVisual(await freezeSkylightClock(page));
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
-    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
     await page.goto("/skylight");
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
     await expect(page.getByRole("radio", { name: "Mine", exact: true })).toBeChecked();
@@ -1832,8 +1842,8 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight done today (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await freezeMiddayCT(page);
-    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual() }));
+    const now = await freezeSkylightClock(page);
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual(now) }));
     await page.goto("/skylight");
     await page.locator("h1").first().waitFor();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
@@ -1850,8 +1860,7 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight grouping (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await freezeMiddayCT(page);
-    const fixture = skylightGroupingVisual(new Date(await page.evaluate(() => new Date().toISOString())));
+    const fixture = skylightGroupingVisual(await freezeSkylightClock(page));
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
     await page.route(/\/api\/sources\/todos(?:\?.*)?$/, (route) =>
       route.fulfill({
@@ -1861,7 +1870,6 @@ for (const scheme of ["light", "dark"] as const) {
         },
       }),
     );
-    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
     for (const path of ["/skylight", "/todos"] as const) {
       await page.goto(path);
       await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
@@ -1886,11 +1894,10 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: skylight everywhere (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-    await freezeMiddayCT(page);
-    const fixture = skylightGroupingVisual(new Date(await page.evaluate(() => new Date().toISOString())));
-    const day = localDate(new Date(await page.evaluate(() => new Date().toISOString())), "America/Chicago");
+    const now = await freezeSkylightClock(page);
+    const fixture = skylightGroupingVisual(now);
+    const day = localDate(now, "America/Chicago");
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
-    await page.route(/\/api\/settings$/, (route) => route.fulfill({ json: { timezone: "America/Chicago" } }));
     // Never reaches the mock (or real Skylight): a fixed verified answer for the final-state shot.
     await page.route(/\/api\/skylight\/write$/, (route) => route.fulfill({ json: { ok: true, writeId: "vis-write", undoable: true, message: "Verified" } }));
     await page.goto("/home");
