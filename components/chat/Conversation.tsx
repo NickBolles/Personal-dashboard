@@ -3,7 +3,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
@@ -62,6 +62,8 @@ import { ClarifyCard } from "@/components/approvals/ClarifyCard";
 import { CompactionDivider, NoticeCard } from "./Notice";
 import { parseNotice } from "@/lib/chat-notices";
 import { RateMessage } from "@/components/feedback/RateMessage";
+import { actionsByReply } from "@/lib/chat/actions";
+import { ActionsTaken, OPEN_CHAT_RUNNING } from "./ActionsTaken";
 
 /** GET /api/hermes/sessions/:id/area */
 type AreaContext =
@@ -148,6 +150,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const { toast, announce } = useToast();
   const { can } = useAccess();
   const { detail, error, refetch, fromCache, isLoading, isFetching } = useSessionDetail(sessionId);
+  const replyActions = useMemo(
+    () => new Map(actionsByReply(detail?.timeline ?? NO_TIMELINE).map((group) => [group.replyId, group.actions])),
+    [detail?.timeline],
+  );
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
   const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
@@ -286,6 +292,22 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     surface.show(tab);
     chatThings.markSeen(tab);
   };
+  const runningLinkHandled = useRef<string | null>(null);
+  useEffect(() => {
+    const showRunning = () => {
+      surface.show("Running");
+      chatThings.markSeen("Running");
+    };
+    const onRunning = (event: Event) => {
+      if ((event as CustomEvent<{ sessionId: string }>).detail?.sessionId === sessionId) showRunning();
+    };
+    window.addEventListener(OPEN_CHAT_RUNNING, onRunning);
+    if (detail && runningLinkHandled.current !== sessionId) {
+      runningLinkHandled.current = sessionId;
+      if (new URLSearchParams(window.location.search).get("panel") === "running") showRunning();
+    }
+    return () => window.removeEventListener(OPEN_CHAT_RUNNING, onRunning);
+  }, [sessionId, detail, surface, chatThings]);
   const onCaptured = useCallback(
     (r: { applied: string[]; dropped: number; proposed: number }) => {
       if (r.dropped) toast(r.dropped === 1 ? "1 note not filed" : `${r.dropped} notes not filed`, "warn");
@@ -752,6 +774,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                               key={item.id}
                               item={item}
                               stepSec={stepSec}
+                              actions={item.kind === "assistant" ? <ActionsTaken actions={replyActions.get(item.id) ?? []} sessionId={sessionId} /> : undefined}
                               onFork={() => {
                                 setForkFrom(item);
                                 setDialog("fork");
@@ -784,6 +807,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                         ) : null}
                       </ol>
                       {showLive ? <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} /> : null}
+                      <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sessionId} />
                       <div ref={bottomRef} />
                     </div>
 
@@ -1038,7 +1062,7 @@ function useMetaToggle() {
   return { meta, setMeta, onClick };
 }
 
-function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: () => void; stepSec?: number }) {
+function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; onFork: () => void; stepSec?: number; actions?: ReactNode }) {
   const who = useContext(AssistantName);
   const { meta, setMeta, onClick } = useMetaToggle();
   const time = item.at ? formatTime(item.at) : undefined;
@@ -1093,6 +1117,7 @@ function TimelineRow({ item, onFork, stepSec }: { item: TimelineItem; onFork: ()
           <span className="sr-only">{who} said: </span>
           <AssistantText text={item.text} />
         </div>
+        {actions}
         <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} rateId={item.id} />
       </li>
     );

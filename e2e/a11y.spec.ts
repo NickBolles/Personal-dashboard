@@ -51,6 +51,7 @@ const PAGES = [
   "/areas?tab=portfolio",
   "/areas/activity",
   "/decisions",
+  "/resume",
   "/capture",
   "/settings/ai",
   "/settings/agents",
@@ -104,6 +105,7 @@ test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
     "/areas?tab=board",
     "/areas?tab=portfolio",
     "/decisions",
+    "/resume",
   ]) {
     await page.goto(path);
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });

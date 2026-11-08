@@ -8,6 +8,7 @@ import { assertSessionId, sessionProfile } from "@/integrations/hermes/service";
 import { mergeExecutionRecords, type ChatExecutionResponse, type ExecutionRecord, type ExecSourceStatus } from "@/lib/chat-execution";
 import { executionRuns } from "@/server/work/agent-runs";
 import { backfillExecutions } from "./execution-backfill";
+import { syncDelegatedRuns } from "@/server/work/delegated-runs";
 import { EXECUTION_LIMIT, executionRecords, executionText } from "./execution-store";
 
 export async function chatExecution(user: CurrentUser, id: string): Promise<ChatExecutionResponse> {
@@ -36,6 +37,12 @@ export async function chatExecution(user: CurrentUser, id: string): Promise<Chat
     });
   }
   const persisted = executionRecords(id).filter((r) => !r.childSessionId || sessionAccess(user, r.childSessionId));
+  try {
+    // Coordinator parity: sub-agents of a filed conversation become agent runs on its item.
+    syncDelegatedRuns(user, id, sessionProfile(id), persisted);
+  } catch {
+    // best effort: the execution view never fails because of the item mirror
+  }
   sources.push({ source: "relations", state: "ok", at: fetchedAt, detail: "Latest 200 persisted execution records; older records remain stored." });
   // No parent-filtered inventory exists in the inspected Hermes API. Do not claim an empty/complete inventory.
   sources.push({

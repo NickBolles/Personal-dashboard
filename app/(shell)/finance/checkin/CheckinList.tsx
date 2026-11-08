@@ -20,7 +20,7 @@ export function StartCheckinButton({ month, label }: { month: string; label?: st
   });
   if (!can("finance.edit")) return null;
   return (
-    <Button variant="primary" loading={start.isPending} onClick={() => start.mutate()}>
+    <Button variant="primary" className="whitespace-normal" loading={start.isPending} onClick={() => start.mutate()}>
       {label ?? "Start check-in"}
     </Button>
   );

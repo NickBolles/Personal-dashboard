@@ -2224,6 +2224,8 @@ button:active > .dock-orb {
   .k-select {
     display: block;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     min-height: 44px;
     padding: 0 32px 0 12px;
     border-radius: var(--r2);
@@ -2246,6 +2248,11 @@ button:active > .dock-orb {
   }
   .k-select:disabled {
     opacity: 0.6;
+  }
+  /* after the textarea/select bases so the invalid border wins (equal specificity) */
+  .k-textarea.k-input-bad,
+  .k-select.k-input-bad {
+    border-color: var(--bad);
   }
   .k-prog {
     height: 6px;

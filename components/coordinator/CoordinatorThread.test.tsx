@@ -7,7 +7,7 @@ import { api } from "@/lib/client/api";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/areas" }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/areas", useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/lib/client/session-lists", () => ({ refreshSessionLists: vi.fn(async () => undefined) }));
 vi.mock("@/components/quick-actions/useQuickActions", () => ({ useQuickActions: () => ({ data: { actions: [] } }) }));
 vi.mock("@/components/quick-actions/QuickActionChips", () => ({ QuickActionChips: () => null }));

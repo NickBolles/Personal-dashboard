@@ -48,7 +48,7 @@ export function FinanceOverviewView() {
         actions={
           can("finance.edit") && o.setup.accounts ? (
             o.setup.balanceSource === "monarch" ? (
-              <Button loading={refresh.isPending} onClick={() => refresh.mutate()}>
+              <Button className="whitespace-normal" loading={refresh.isPending} onClick={() => refresh.mutate()}>
                 Refresh balances
               </Button>
             ) : (

@@ -262,7 +262,7 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
           </label>
         ) : null}
         {a.kind === "checking" && !a.reserveAccount && editable ? (
-          <Button size="sm" onClick={() => patch.mutate({ reserveAccount: true })}>
+          <Button size="sm" className="whitespace-normal" onClick={() => patch.mutate({ reserveAccount: true })}>
             Make reserve account
           </Button>
         ) : null}
@@ -287,7 +287,7 @@ function AccountRow({ a, external, monarch, editable }: { a: AccountView; extern
           </label>
         ) : null}
         {editable ? (
-          <Button size="sm" variant="ghost" onClick={() => patch.mutate({ archived: true })}>
+          <Button size="sm" variant="ghost" className="whitespace-normal" onClick={() => patch.mutate({ archived: true })}>
             Archive
           </Button>
         ) : null}

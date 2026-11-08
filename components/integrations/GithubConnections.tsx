@@ -295,7 +295,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
       </p>
       <Field id="gh-webhook-url" label="Payload URL">
         <div className="flex gap-2">
-          <Input id="gh-webhook-url" readOnly className="w-full font-mono text-xs" value={url} />
+          <Input id="gh-webhook-url" readOnly className="w-full min-w-0 font-mono text-xs" value={url} />
           <Button size="sm" onClick={() => copy(url, "URL")}>
             Copy
           </Button>
@@ -308,7 +308,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
             <label htmlFor="gh-secret" className="sr-only">
               Webhook secret
             </label>
-            <Input id="gh-secret" readOnly className="w-full font-mono text-xs" value={revealed} data-testid="gh-secret" />
+            <Input id="gh-secret" readOnly className="w-full min-w-0 font-mono text-xs" value={revealed} data-testid="gh-secret" />
             <Button size="sm" onClick={() => copy(revealed, "Secret")}>
               Copy
             </Button>
