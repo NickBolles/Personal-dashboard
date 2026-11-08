@@ -8,7 +8,7 @@ import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
-import type { SessionSummary, TimelineItem } from "@/lib/hermes";
+import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
 import { RateMessage } from "@/components/feedback/RateMessage";
 import { Button, Dot, Input, type KTone } from "@/components/ui/kit";
@@ -111,10 +111,10 @@ export function CoordinatorThread({
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
     enabled: earlier && !d.excluded,
   });
-  const postInput = (target: string, input: string, control = false) => {
+  const postInput = (target: string, input: string, control = false): Promise<{ masked?: string[] } | null> => {
     const active = detail.data?.session.activeRun;
-    if (control && active) return api.post(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
-    return api.post(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
+    if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
+    return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
       idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
@@ -129,13 +129,13 @@ export function CoordinatorThread({
         setSessionId(s.id);
         setFresh(false);
       }
-      await postInput(target, compact ? withPageContext(input, context) : input);
-      return target;
+      const run = await postInput(target, compact ? withPageContext(input, context) : input);
+      return { target, notice: maskedNotice(run) };
     },
-    onSuccess: (target) => {
+    onSuccess: ({ target, notice }) => {
       setText("");
       if (textarea.current && compact) textarea.current.style.height = "auto";
-      toast("Sent to the coordinator");
+      toast(notice ?? "Sent to the coordinator", notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -145,10 +145,11 @@ export function CoordinatorThread({
   const control = useMutation({
     mutationFn: async (input: string) => {
       if (!sid) throw new Error("No coordinator conversation");
-      await postInput(sid, input, true);
+      return maskedNotice(await postInput(sid, input, true));
     },
-    onSuccess: () => {
-      toast("Sent to the coordinator");
+    onSuccess: (notice) => {
+      if (notice) toast(notice, "warn");
+      else toast("Sent to the coordinator");
       void qc.invalidateQueries({ queryKey: ["session", sid] });
       void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
       void refreshSessionLists(qc).catch(() => undefined);

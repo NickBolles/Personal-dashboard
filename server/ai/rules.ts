@@ -90,18 +90,210 @@ const FIN_WORDS =
   /\b(balance|balances|statement|checking|savings|monarch|401k|401\(k\)|ira|roth|mortgage|tax|taxes|irs|w-?2|1099|paycheck|salary|brokerage|credit card|debit|chase|amex|american express|wells fargo|bank of america|citi|capital one|fidelity|vanguard|schwab|venmo|zelle|paypal|loan|apr|net worth|budget)\b/i;
 const FIN_STRONG = /\b(monarch|401k|401\(k\)|roth ira|net worth|routing number|account number|bank statement|tax return)\b/i;
 
-const SECRETISH = /(api[_-]?key|token|secret|password|passwd|passcode|authorization)([\s"':=]+)(?:(bearer|basic)\s+)?([^\s"',]{6,})/i;
-const BEARER = /\bbearer\s+[A-Za-z0-9._~+/=-]{8,}/i;
-const KEYLIKE =
-  /\b(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|jdv_[A-Za-z0-9_-]{16,}|jcap_[A-Za-z0-9_-]{16,})\b/;
-const PEM = /-----BEGIN [A-Z ]*PRIVATE KEY-----/;
+// --- Credentials (never sent to AI) ---
+//
+// A keyword alone is NOT a credential: "token expired", "Rotate the agent token before Friday",
+// "Authorization header missing" are ordinary prose. The old rule (keyword + whitespace + any 6-char
+// word) blocked such chat messages outright ("Credentials are never sent to AI", 2026-11-07). Now a
+// keyword counts only when it is ASSIGNED a value (`password: hunter2`, `token=…`, `"api_key": "…"`)
+// or followed by a token-shaped value (letters AND digits, 16+ chars). Known key formats, JWTs, Bearer
+// headers, URL user:pass and PEM private keys are caught anywhere. Jarvis/Hermes ids and URLs are not secrets.
+
+const SECRET_WORD = String.raw`(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[_-]?(?:access[_-]?)?key|client[_-]?secret|(?:auth|access|refresh|bearer|session|bot|api)[_-]?token|token|secret|password|passwd|pwd|passcode|passphrase|authorization)`;
+/**
+ * `password: x`, `token=x`, `"api_key": "x"`, `Authorization: Bearer x` (value checked by `assignedValue`).
+ * A quoted value runs to its closing quote, so `password="hunter2,second half"` is masked whole.
+ */
+const Q = "\"'`";
+const ASSIGNED = new RegExp(
+  // Quoted values honour backslash escapes (`"pa\"ss"` in pasted JSON is one value, not `pa\`), have
+  // no length cap, run across lines to the closing delimiter (template literals, """…"""), and a
+  // quote that never closes fails closed: the rest of the text is the value.
+  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"""([\s\S]*?)"""|'''([\s\S]*?)'''|"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'|\x60((?:\\[\s\S]|[^\x60\\])*)\x60|[${Q}]([\s\S]+)|(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
+  "gid",
+);
+/** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
+const SPACED = new RegExp(String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})\s+(?:is\s+|was\s+|of\s+)?["']?([A-Za-z0-9._~+/=-]{16,})`, "gi");
+const BEARER = /\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})/gi;
+const AUTH_HEADER = /(?<![A-Za-z0-9])(?:proxy-)?authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)\s+([A-Za-z0-9._~+/=-]{4,})/gi;
+const KEYLIKE = new RegExp(
+  [
+    String.raw`sk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}`,
+    String.raw`(?:rk|pk)_live_[A-Za-z0-9]{16,}`,
+    String.raw`gh[pousr]_[A-Za-z0-9]{20,}`,
+    String.raw`github_pat_[A-Za-z0-9_]{20,}`,
+    String.raw`glpat-[A-Za-z0-9_-]{20,}`,
+    String.raw`xox[abprs]-[A-Za-z0-9-]{10,}`,
+    String.raw`(?:AKIA|ASIA)[0-9A-Z]{16}`,
+    String.raw`AIza[0-9A-Za-z_-]{35}`,
+    String.raw`(?:jdv|jcap|jva)_[A-Za-z0-9_-]{16,}`,
+    String.raw`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`,
+  ]
+    .map((p) => `(?<![A-Za-z0-9_-])${p}`)
+    .join("|"),
+  "g",
+);
+const URL_CREDS = /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:([^\s/@]+)@/gi;
+const PEM = /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----|[\s\S]*$)/g;
+
+/**
+ * Ids and placeholders that look like values but are never secrets. Only checked for values that
+ * follow a credential keyword or Bearer, so a bare UUID is NOT exempt here: `token=<uuid>` is a
+ * credential (UUIDs elsewhere in prose never match a credential pattern in the first place).
+ */
+const NOT_SECRET = [
+  /^api_\d{6,}_[0-9a-f]{4,}$/i, // Hermes/Jarvis session ids (jarvis.nickbolles.com/chat/api_…)
+  /^(?:wk|item|node)[_:-]/i, // Jarvis work item ids
+  // Only Jarvis/artifacts pages and plain GitHub pages (no query): any other URL after a credential
+  // keyword (`secret=https://discord.com/api/webhooks/…`, `?token=` links) can BE the credential.
+  /^https?:\/\/(?:(?:jarvis|artifacts)\.nickbolles\.com|github\.com)(?:\/[^\s?#]*)?$/i,
+  /^\$\{?[A-Z_][A-Z0-9_]*\}?$/, // ${VAR} / $VAR placeholders
+  /^(?:process\.env|os\.environ|env)[.[]/, // code reading a secret, not the secret
+  /^<[^>]*>?$/,
+  /^\[secret removed\]$/, // already masked
+  /^(?:\*{3,}|x{4,}|\.{3,}|…|•+\d*|redacted|null|none|undefined|true|false|required|optional|set|unset|missing|expired|invalid|revoked|here)$/i,
+];
+const notSecret = (v: string) => NOT_SECRET.some((r) => r.test(v));
+/** Assigned values: 6+ chars with a digit/symbol, or a 16+ letter passphrase. Plain words ("expired") aren't secrets. */
+const assignedValue = (v: string) => !notSecret(v) && v.length >= 6 && (/[\d_\-+/=.~!@#$%^&*]/.test(v) ? /[A-Za-z0-9]/.test(v) : v.length >= 16);
+/** Unassigned values must look like a generated token: letters AND digits, 16+ chars. */
+const tokenShaped = (v: string) => !notSecret(v) && v.length >= 16 && /[A-Za-z]/.test(v) && /\d/.test(v);
+
+export type SecretFinding = { kind: string; start: number; end: number; hint: string };
+
+const KEY_KINDS: [RegExp, string][] = [
+  [/^sk-ant-/, "Anthropic key"],
+  [/^sk-/, "API key"],
+  [/^(?:rk|pk)_live_/, "Stripe key"],
+  [/^gh[pousr]_|^github_pat_/, "GitHub token"],
+  [/^glpat-/, "GitLab token"],
+  [/^xox/, "Slack token"],
+  [/^(?:AKIA|ASIA)/, "AWS key"],
+  [/^AIza/, "Google API key"],
+  [/^(?:jdv|jcap|jva)_/, "Jarvis token"],
+  [/^eyJ/, "JWT"],
+];
+
+/**
+ * Every credential-looking span in `text`. `start`/`end` cover only the secret VALUE (the keyword
+ * stays readable after masking); `hint` names the part for the owner without echoing the secret
+ * (keyword or key prefix + "…").
+ */
+export function findSecrets(text: string): SecretFinding[] {
+  if (!text) return [];
+  const all: SecretFinding[] = [];
+  const add = (kind: string, start: number, end: number, hint: string) => all.push({ kind, start, end, hint });
+  for (const m of text.matchAll(PEM)) add("Private key", m.index!, m.index! + m[0].length, "-----BEGIN … PRIVATE KEY-----");
+  for (const m of text.matchAll(KEYLIKE)) {
+    const v = m[0];
+    const kind = KEY_KINDS.find(([r]) => r.test(v))?.[1] ?? "API key";
+    add(kind, m.index!, m.index! + v.length, `${v.slice(0, v.startsWith("eyJ") ? 3 : Math.min(v.indexOf("_") + 1 || 4, 8))}…`);
+  }
+  for (const m of text.matchAll(URL_CREDS)) {
+    const start = m.index! + m[0].length - 1 - m[1]!.length;
+    add("Password in a URL", start, start + m[1]!.length, `${m[0].slice(0, m[0].indexOf("://") + 3)}user:…@`);
+  }
+  for (const m of text.matchAll(ASSIGNED)) {
+    const g = [2, 3, 4, 5, 6, 7, 8].find((i) => m[i] !== undefined);
+    if (!g || !m.indices?.[g]) continue;
+    // Unquoted: trailing sentence punctuation isn't part of the value; commas INSIDE it are (masked whole).
+    const v = g === 8 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
+    if (!assignedValue(v)) continue;
+    const start = m.indices[g]![0];
+    const sep = m[0].slice(m[1]!.length).match(/[:=]/)?.[0] ?? ":";
+    add("Credential", start, start + v.length, `${m[1]}${sep} …`);
+  }
+  for (const m of text.matchAll(AUTH_HEADER)) {
+    // An explicit `Authorization: Basic|Bearer <value>` header is a credential whatever its shape
+    // (`Basic dXNlcjpwYXNz` = user:pass is letters only and short).
+    const v = m[1]!;
+    if (notSecret(v)) continue;
+    const start = m.index! + m[0].length - v.length;
+    add("Bearer token", start, start + v.length, `${m[0].slice(0, m[0].length - v.length).trim()} …`);
+  }
+  for (const m of text.matchAll(BEARER)) {
+    const v = m[1]!;
+    // "Basic auth-based login" / "bearer authentication" are prose; tokens have digits, base64 padding or length.
+    if (!(v.length >= 20 || (/\d/.test(v) && /[A-Za-z]/.test(v)) || /[+/=]/.test(v)) || notSecret(v)) continue;
+    const start = m.index! + m[0].length - v.length;
+    add("Bearer token", start, start + v.length, `${m[0].slice(0, m[0].length - v.length).trim()} …`);
+  }
+  for (const m of text.matchAll(SPACED)) {
+    const v = m[2]!;
+    if (!tokenShaped(v)) continue;
+    const start = m.index! + m[0].length - v.length;
+    // `password "abc123… second half"`: a quoted value runs to its closing quote (or the end, fail closed).
+    const q = text[start - 1];
+    let end = start + v.length;
+    if (q === '"' || q === "'") {
+      let i = end;
+      while (i < text.length && text[i] !== q) i += text[i] === "\\" ? 2 : 1;
+      end = Math.min(i, text.length);
+    }
+    add("Credential", start, end, `${m[1]} …`);
+  }
+  // Overlapping spans are UNIONED (never dropped): a key-shaped substring inside a quoted password
+  // must not leave the rest of the password unmasked. The widest finding names the merged span.
+  all.sort((a, b) => a.start - b.start || b.end - a.end);
+  const out: (SecretFinding & { width: number })[] = [];
+  for (const f of all) {
+    const prev = out[out.length - 1];
+    if (prev && f.start < prev.end) {
+      if (f.end - f.start > prev.width) Object.assign(prev, { kind: f.kind, hint: f.hint, width: f.end - f.start });
+      prev.end = Math.max(prev.end, f.end);
+    } else out.push({ ...f, width: f.end - f.start });
+  }
+  return out.map(({ kind, start, end, hint }) => ({ kind, start, end, hint }));
+}
+
+export const SECRET_MASK = "[secret removed]";
+
+export type MaskedSecrets = {
+  text: string;
+  /** What was removed, for the owner ("password: …", "ghp_…"); never the secret itself. */
+  masked: { kind: string; hint: string }[];
+  /** Nothing meaningful is left once the secrets are removed: the message IS a credential. */
+  onlySecrets: boolean;
+};
+
+/** Replace each credential value with `[secret removed]`; the rest of the text goes through unchanged. */
+export function maskSecrets(text: string): MaskedSecrets {
+  const found = findSecrets(text);
+  if (!found.length) return { text, masked: [], onlySecrets: false };
+  let out = "";
+  let last = 0;
+  for (const f of found) {
+    out += text.slice(last, f.start) + SECRET_MASK;
+    last = f.end;
+  }
+  out += text.slice(last);
+  let rest = "";
+  last = 0;
+  for (const f of found) {
+    rest += ` ${text.slice(last, f.start)}`;
+    last = f.end;
+  }
+  rest += text.slice(last);
+  // What's left besides the keywords themselves ("password:", "Authorization: Bearer"), in any script
+  // (a Chinese request plus a token is a request, not a bare credential).
+  const letters = rest
+    .replace(new RegExp(String.raw`\b${SECRET_WORD}\b|\b(?:bearer|basic|is|my|the|here|it|this|use)\b`, "gi"), " ")
+    .match(new RegExp("\\p{L}", "gu"));
+  return { text: out, masked: found.map(({ kind, hint }) => ({ kind, hint })), onlySecrets: (letters?.length ?? 0) < 6 };
+}
+
+/** The owner-facing refusal: names the flagged part (never the secret) so the owner can edit it out; the draft stays. */
+export function credentialsMessage(masked: { hint: string }[], what = "message") {
+  const parts = [...new Set(masked.map((m) => m.hint))].slice(0, 3).join(", ");
+  return `Credentials are never sent to AI: this ${what} is only a secret${parts ? ` (${parts})` : ""}. Edit it to describe what you need and send again.`;
+}
 
 export type Sensitivity = "none" | "personal" | "finance" | "credentials";
 
 /** Conservative text heuristic: false positives only cost a manual filing. */
 export function detectSensitivity(text: string): Sensitivity {
   if (!text) return "none";
-  if (SECRETISH.test(text) || BEARER.test(text) || KEYLIKE.test(text) || PEM.test(text)) return "credentials";
+  if (findSecrets(text).length) return "credentials";
   if (CARD.test(text.replace(/\b\d{4}-\d{2}-\d{2}\b/g, "")) && luhnAny(text)) return "finance";
   if (IBAN.test(text) || ROUTING.test(text) || FIN_STRONG.test(text)) return "finance";
   if (AMOUNT.test(text) && FIN_WORDS.test(text)) return "finance";
