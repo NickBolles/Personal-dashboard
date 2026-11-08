@@ -611,10 +611,14 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
   if (!/^[\x21-\x7e]{1,255}$/.test(r.idempotencyKey)) throw new HttpError(400, "bad_idempotency_key", "Invalid idempotency key");
   const existing = db().select().from(schema.runs).where(eq(schema.runs.idempotencyKey, r.idempotencyKey)).get();
   if (existing) {
+    if (existing.userId !== user.id || existing.sessionId !== r.sessionId) {
+      throw new HttpError(409, "idempotency_conflict", "Idempotency key belongs to another request");
+    }
     return { runId: existing.runId, sessionId: existing.sessionId, status: existing.status as RunView["status"] };
   }
   const profile = sessionProfile(r.sessionId);
   const res = await HermesExecutionClient.start(connForProfile(profile), r);
+  const status = res.status === "queued" ? "queued" : "running";
   db()
     .insert(schema.runs)
     .values({
@@ -623,7 +627,7 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
       userId: user.id,
       hermesProfile: profile,
       idempotencyKey: r.idempotencyKey,
-      status: "running",
+      status,
       inputPreview: r.input.slice(0, 140),
     })
     .onConflictDoNothing()
@@ -638,7 +642,7 @@ export async function startRun(user: CurrentUser, r: StartRunRequest, correlatio
     correlationId,
     detail: { runId: res.run_id },
   });
-  return { runId: res.run_id, sessionId: r.sessionId, status: "running" };
+  return { runId: res.run_id, sessionId: r.sessionId, status };
 }
 
 function updateRunRow(runId: string, patch: Partial<typeof schema.runs.$inferInsert>) {

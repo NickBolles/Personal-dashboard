@@ -202,9 +202,13 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     const active = detail?.session.activeRun?.runId ?? initialRunId;
     if (active && resumed.current !== active && run.state.runId !== active) {
       resumed.current = active;
-      run.start(active, detail?.session.activeRun?.status === "waiting_for_approval" ? "waiting_for_approval" : "running");
+      const phase = detail?.session.activeRun?.status;
+      run.start(active, phase === "queued" ? "queued" : phase === "waiting_for_approval" ? "waiting_for_approval" : "running");
+      void kvGet<{ runId: string; input: string }>(`accepted:${sessionId}`).then((saved) => {
+        if (saved?.runId === active && resumed.current === active) setPendingInput(saved.input);
+      });
     }
-  }, [detail?.session.activeRun?.runId, detail?.session.activeRun?.status, initialRunId, run]);
+  }, [detail?.session.activeRun?.runId, detail?.session.activeRun?.status, initialRunId, run, sessionId]);
 
   useEffect(() => {
     kvGet<{ model?: string; provider?: string }>(`model:${sessionId}`).then((m) => m && setModel(m));
@@ -224,10 +228,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       (r) => {
         const notice = maskedNotice(r);
         if (notice) toast(notice, "warn");
+        void kvSet(`accepted:${sessionId}`, { runId: r.runId, input: first.input });
         // The resume effect may already have picked this run up from a detail refetch.
         if (resumed.current !== r.runId) {
           resumed.current = r.runId;
-          run.start(r.runId);
+          run.start(r.runId, r.status);
         }
         refreshSessionLists(qc);
       },
@@ -329,16 +334,18 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
         ...model,
       });
       await kvDel(`pending:${sessionId}`);
+      await kvSet(`accepted:${sessionId}`, { runId: r.runId, input: text });
       retryContext.current = undefined;
       setContext([]);
       if (attachments.drafts.length) {
         attachments.clear();
         void qc.invalidateQueries({ queryKey: ["chat-files", sessionId] });
       }
-      announce(`Message sent. ${who} is responding.`);
+      announce(r.status === "queued" ? "Message queued. Waiting for an available agent slot." : `Message sent. ${who} is responding.`);
       const notice = maskedNotice(r);
       if (notice) toast(notice, "warn");
-      run.start(r.runId);
+      resumed.current = r.runId;
+      run.start(r.runId, r.status);
       refreshSessionLists(qc);
       return true;
     } catch (err) {
@@ -1224,11 +1231,18 @@ function LiveRun({
         <ClarifyCard key={state.clarify.requestId} clarify={state.clarify} agent={who} onAnswer={onClarify} />
       ) : null}
 
-      {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval") ? (
+      {state.phase === "queued" ? (
+        <p role="status" className="text-sm text-muted">
+          Queued — waiting for an available agent slot. You can leave this chat; the server will start it automatically.
+        </p>
+      ) : null}
+      {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
           <span className="sr-only">{who} is saying: </span>
           {text ? <AssistantText text={text} live={!isTerminal(state.phase)} /> : null}
-          {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" ? <span className="chat-caret" aria-hidden="true" /> : null}
+          {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued" ? (
+            <span className="chat-caret" aria-hidden="true" />
+          ) : null}
         </div>
       ) : null}
 
