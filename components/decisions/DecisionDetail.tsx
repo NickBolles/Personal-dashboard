@@ -54,7 +54,12 @@ export function DecisionDetail({ id, initialChoice = "" }: { id: string; initial
               </div>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <ButtonLink href={e.href} size="sm">
+              {e.action ? (
+                <ButtonLink href={e.action.href} size="sm" variant="primary" data-testid="decision-action">
+                  {e.action.label}
+                </ButtonLink>
+              ) : null}
+              <ButtonLink href={e.href} size="sm" {...(e.action ? { variant: "secondary" as const } : {})}>
                 {e.kind === "item"
                   ? "Open item"
                   : e.kind === "approval"

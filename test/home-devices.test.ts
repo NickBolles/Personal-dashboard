@@ -13,6 +13,7 @@ import { createPerson } from "@/server/people";
 import { saveIntegration } from "@/integrations/store";
 import { demoPresets } from "@/integrations/demo";
 import { listDevices, switchLight } from "@/integrations/home-assistant/devices";
+import { stateToken } from "@/integrations/home-assistant/controls";
 import * as devicesRoute from "@/app/api/home-assistant/devices/route";
 import * as lightsRoute from "@/app/api/home-assistant/lights/route";
 import * as cameraRoute from "@/app/api/home-assistant/cameras/[entityId]/route";
@@ -93,9 +94,9 @@ describe("devices", () => {
     const body = (await r.json()) as { lights: { services: unknown[] }[]; cameras: unknown[] };
     expect(body.cameras.length).toBe(2);
     expect(body.lights[0]!.services.map((s) => (s as { service: string }).service)).toEqual(["turn_on", "turn_off", "toggle"]);
-    // A shared tablet keeps the safe direction: lock yes, unlock no.
+    // A shared tablet may lock and unlock (owner decision 2026-11-07), but never unlatch (lock.open).
     const doors = (body as unknown as { doors: { entityId: string; services: { service: string }[] }[] }).doors;
-    expect(doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock"]);
+    expect(doors.find((x) => x.entityId === "lock.front_door_lock")!.services.map((s) => s.service)).toEqual(["lock", "unlock"]);
   });
 
   it("camera stills are proxied, typed as images and never cached", async () => {
@@ -131,6 +132,66 @@ describe("lights", () => {
     saveIntegration("home_assistant", { config: { ...ha.config, lightControl: "none" } });
     await expect(switchLight("light.porch", false, owner, "c3")).rejects.toThrow(/isn't allowed/);
     saveIntegration("home_assistant", { config: { ...ha.config, lightControl: "all" } });
+  });
+
+  it("legacy lights route uses the control gate: freshness token, audit, readback (Android)", async () => {
+    const { getDb } = await import("@/server/db");
+    const { sql } = await import("drizzle-orm");
+    const before = (await mockState()).haCalls.length;
+    // A stale token from the client is refused before anything is called.
+    const stale = await call(lightsRoute.POST, "/api/home-assistant/lights", owner, "POST", {
+      entityId: "light.living_room",
+      on: true,
+      stateToken: "deadbeef",
+    });
+    expect(stale.status).toBe(409);
+    expect((await mockState()).haCalls.length).toBe(before);
+    const r = await call(lightsRoute.POST, "/api/home-assistant/lights", owner, "POST", { entityId: "light.living_room", on: true });
+    expect(r.status).toBe(200);
+    const body = (await r.json()) as { verified: boolean; stateToken?: string; undo?: { service: string } | null };
+    expect(body.verified).toBe(true);
+    expect(body.stateToken).toBeTruthy();
+    const rows = getDb().all<{ result: string }>(sql`select result from audit_log where action = 'ha.turn_on' and source_record = 'light.living_room'`);
+    expect(rows.map((x) => x.result)).toEqual(expect.arrayContaining(["rejected", "pending", "ok"]));
+    // A household tablet keeps working for lights (low-risk), and a kid still gets 403.
+    expect((await call(lightsRoute.POST, "/api/home-assistant/lights", kid, "POST", { entityId: "light.living_room", on: false })).status).toBe(403);
+  });
+
+  it("#239: the freshness token covers controlled attributes but not live readings", () => {
+    const s = { entity_id: "climate.hall", state: "heat", last_changed: "2026-11-07T10:00:00Z", attributes: { temperature: 68, current_temperature: 66 } };
+    const t = stateToken(s);
+    expect(stateToken({ ...s, attributes: { ...s.attributes, temperature: 75 } })).not.toBe(t);
+    expect(stateToken({ ...s, attributes: { ...s.attributes, current_temperature: 67 } })).toBe(t);
+    const l = { entity_id: "light.k", state: "on", last_changed: "x", attributes: { brightness: 100 } };
+    expect(stateToken({ ...l, attributes: { brightness: 200 } })).not.toBe(stateToken(l));
+  });
+
+  it("#237: Light switching = all lets /control switch lights the allowlist doesn't name", async () => {
+    const ha = demoPresets()!.home_assistant!;
+    saveIntegration("home_assistant", { config: { ...ha.config, lightControl: "all", controlAllowlist: "lock.*: lock, unlock" } });
+    try {
+      const d = await listDevices({ doors: true, lights: true, cameras: false, doorControls: true, lightControls: true });
+      const porch = d.lights.find((l) => l.entityId === "light.porch")!;
+      expect(porch.services.map((s) => s.service)).toContain("turn_off");
+      const svc = porch.state === "on" ? "turn_off" : "turn_on";
+      const r = await call(controlRoute.POST, "/api/home-assistant/control", owner, "POST", {
+        entityId: "light.porch",
+        service: svc,
+        stateToken: porch.stateToken,
+        confirmed: true,
+      });
+      expect(r.status).toBe(200);
+      saveIntegration("home_assistant", { config: { ...ha.config, lightControl: "none", controlAllowlist: "light.*: turn_on, turn_off" } });
+      const none = await call(controlRoute.POST, "/api/home-assistant/control", owner, "POST", {
+        entityId: "light.porch",
+        service: "turn_on",
+        stateToken: porch.stateToken,
+        confirmed: true,
+      });
+      expect(none.status).toBe(403);
+    } finally {
+      saveIntegration("home_assistant", { config: { ...ha.config, lightControl: "all" } });
+    }
   });
 
   it("door controls need the door capability even with light control", async () => {

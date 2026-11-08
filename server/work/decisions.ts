@@ -66,6 +66,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         title: i.title,
         question: i.decision!.question,
         ...(i.decision!.detail ? { detail: i.decision!.detail } : {}),
+        ...(i.decision!.action ? { action: i.decision!.action } : {}),
         choices: i.decision!.choices,
         href: `/areas?item=${encodeURIComponent(i.id)}`,
         at: i.decision!.askedAt || i.updatedAt,
