@@ -3,6 +3,7 @@ import { buildRunInput } from "@/lib/chat-files";
 import { z } from "zod";
 import { UpstreamError } from "@/server/http/errors";
 import { upstream, type UpstreamRequest } from "@/server/http/fetch";
+import { acquireHermesSlot, busyBackoffMs, busyRetries, currentHermesLane, isBusyStatus, type HermesLane } from "@/server/http/hermes-budget";
 import { resolveIntegration } from "@/integrations/store";
 import {
   capabilitiesSchema,
@@ -44,7 +45,55 @@ export function hermesConn(purpose?: "admin-connection-test"): HermesConn {
   return { baseUrl: r.config.baseUrl, apiKey: r.secrets.apiKey };
 }
 
-function call<T>(conn: HermesConn, req: Omit<UpstreamRequest, "source" | "baseUrl">, schema?: z.ZodType<T>) {
+type CallRequest = Omit<UpstreamRequest, "source" | "baseUrl"> & {
+  /** Budget lane; defaults to the surrounding `withHermesLane` (else interactive). */
+  lane?: HermesLane;
+  /** The caller already holds a budget slot for this request (SSE relays). */
+  holdsSlot?: boolean;
+};
+
+export const HERMES_BUSY_MESSAGE = "Hermes is busy right now (too many requests at once). Jarvis kept trying for a few seconds; try again in a moment.";
+
+function sleepFor(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const t = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Every Hermes request: take a connection-budget slot (server/http/hermes-budget.ts), then retry a
+ * 429 (proxy "max connections reached" / Hermes "too many concurrent runs" = not admitted, nothing
+ * ran) with backoff. Out of retries it fails as `busy` (HTTP 503 with a plain message), never as a
+ * raw "Hermes returned 429".
+ */
+async function call<T>(conn: HermesConn, req: CallRequest, schema?: z.ZodType<T>): Promise<T> {
+  const { lane: askedLane, holdsSlot, ...rest } = req;
+  const lane = askedLane ?? currentHermesLane();
+  const retries = busyRetries(lane);
+  for (let attempt = 0; ; attempt++) {
+    const slot = holdsSlot ? null : await acquireHermesSlot(lane === "stream" ? "interactive" : lane, { signal: req.signal });
+    try {
+      return await callOnce<T>(conn, rest, schema);
+    } catch (err) {
+      if (!(err instanceof UpstreamError) || !isBusyStatus(err.status)) throw err;
+      if (attempt >= retries || req.signal?.aborted) throw new UpstreamError("Hermes", "busy", HERMES_BUSY_MESSAGE, 429);
+    } finally {
+      slot?.release();
+    }
+    await sleepFor(busyBackoffMs(attempt), req.signal);
+  }
+}
+
+function callOnce<T>(conn: HermesConn, req: Omit<UpstreamRequest, "source" | "baseUrl">, schema?: z.ZodType<T>) {
   return upstream<unknown>({
     source: "Hermes",
     baseUrl: conn.baseUrl,
@@ -166,6 +215,8 @@ export const HermesExecutionClient = {
       raw: true,
       signal,
       timeoutMs: 24 * 60 * 60 * 1000,
+      // relayRunEvents holds a `stream` slot for the life of the stream.
+      holdsSlot: true,
     }),
   stop: (c: HermesConn, runId: string, signal?: AbortSignal) =>
     call(
