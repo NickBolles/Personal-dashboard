@@ -7,7 +7,15 @@ import type { ActivityResponse } from "@/lib/activity";
 import { isStalled, liveOfAgentRun, type AgentRunsResponse } from "@/lib/agent-runs";
 import { useDecisions } from "@/components/map/Decisions";
 import { useAway } from "@/lib/client/away";
-import { isCoordinatorChange, priorityLine, stablePriority, type CoordinatorRun, type CoordinatorThings, type PriorityLine } from "@/lib/coordinator/things";
+import {
+  failureStillCounts,
+  isCoordinatorChange,
+  priorityLine,
+  stablePriority,
+  type CoordinatorRun,
+  type CoordinatorThings,
+  type PriorityLine,
+} from "@/lib/coordinator/things";
 
 const SEEN_KEY = "jarvis.gc.seen";
 const MERGED_SEEN_KEY = "jarvis.gc.mergedSeen";
@@ -41,13 +49,14 @@ export function useCoordinatorThings() {
   const failing: CoordinatorRun[] = [];
   let doneUnseen = 0;
   const mergedIds: string[] = [];
+  const failingPrs = new Set<string>();
   for (const item of Object.values(runs.data?.items ?? {})) {
     const external = item.agentRuns ?? [];
     for (const run of external) {
       const state = isStalled(run, now) ? "stalled" : run.state;
       if (state !== "done") {
         const row: CoordinatorRun = { id: run.id, itemId: item.itemId, title: run.title, state, at: run.updatedAt };
-        if (state === "failed" || state === "stalled") failing.push(row);
+        if (state === "stalled" || (state === "failed" && failureStillCounts(run, external, now))) failing.push(row);
         active.push(row);
       }
       if (state === "done" && Date.parse(run.updatedAt) > seen) doneUnseen++;
@@ -62,7 +71,10 @@ export function useCoordinatorThings() {
       }
       if (state === "finished" && Date.parse(item.liveAt ?? "") > seen) doneUnseen++;
     }
-    if (item.prs.some((p) => p.checks === "failure") && !failing.some((r) => r.itemId === item.itemId)) {
+    // Only OPEN PRs with failing checks count (a merged/closed PR's checks are a stale snapshot), once per PR.
+    const redPrs = item.prs.filter((p) => p.state === "open" && p.checks === "failure" && !failingPrs.has(p.url ?? p.ref));
+    for (const p of redPrs) failingPrs.add(p.url ?? p.ref);
+    if (redPrs.length && !failing.some((r) => r.itemId === item.itemId)) {
       const row: CoordinatorRun = { id: `ci:${item.itemId}`, itemId: item.itemId, title: `${item.title} · CI failing`, state: "failed", at: item.liveAt };
       failing.push(row);
       active.push(row);

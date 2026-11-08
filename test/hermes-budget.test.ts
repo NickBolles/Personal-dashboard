@@ -5,7 +5,7 @@ import { saveIntegration } from "@/integrations/store";
 import { HermesExecutionClient, HermesSessionClient, hermesConn, HERMES_BUSY_MESSAGE } from "@/integrations/hermes/client";
 import { __relayStats, relayRunEvents } from "@/integrations/hermes/service";
 import { syncSessionTitle } from "@/integrations/hermes/structured";
-import { __resetHermesBudget, acquireHermesSlot, busyBackoffMs, hermesBudgetStats, withHermesLane } from "@/server/http/hermes-budget";
+import { __resetHermesBudget, acquireHermesSlot, budgetLimits, busyBackoffMs, hermesBudgetStats, withHermesLane } from "@/server/http/hermes-budget";
 import { UpstreamError } from "@/server/http/errors";
 
 vi.mock("@/server/agents/routing", async (original) => ({
@@ -247,4 +247,25 @@ it("gives every sync session its own title (a retained one can't block the next 
   const a = syncSessionTitle("daily_compass");
   expect(a).toMatch(/^jarvis-sync:daily_compass:[0-9a-f]{8}$/);
   expect(syncSessionTitle("daily_compass")).not.toBe(a);
+});
+
+describe("budget defaults", () => {
+  const KEYS = ["JARVIS_HERMES_MAX_CONNECTIONS", "JARVIS_MAX_STREAMS", "JARVIS_HERMES_RESERVED_INTERACTIVE"];
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  it("defaults to 24 in flight, 12 streams, 2 reserved for people (proxy allows 64)", () => {
+    for (const k of KEYS) vi.stubEnv(k, "");
+    expect(budgetLimits()).toMatchObject({ max: 24, maxStreams: 12, reserve: 2 });
+  });
+  it("keeps stream admission below the connection limit so control calls get through (#253)", () => {
+    vi.stubEnv("JARVIS_HERMES_MAX_CONNECTIONS", "8");
+    vi.stubEnv("JARVIS_MAX_STREAMS", "8");
+    vi.stubEnv("JARVIS_HERMES_RESERVED_INTERACTIVE", "2");
+    expect(budgetLimits()).toMatchObject({ max: 8, maxStreams: 6, reserve: 2 });
+    vi.stubEnv("JARVIS_HERMES_RESERVED_INTERACTIVE", "0");
+    expect(budgetLimits().maxStreams).toBe(7);
+    vi.stubEnv("JARVIS_HERMES_MAX_CONNECTIONS", "1");
+    expect(budgetLimits().maxStreams).toBe(1);
+  });
 });

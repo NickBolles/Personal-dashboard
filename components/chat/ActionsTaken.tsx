@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChipButton, Menu, cx, useToast, type KMenuItem } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import type { ChatAction } from "@/lib/chat/actions";
+import { focusTarget, type ChatAction } from "@/lib/chat/actions";
 
 /** Bridge to Conversation's existing tray callback, scoped so the global rail cannot open another chat. */
 export const OPEN_CHAT_RUNNING = "jarvis:chat-running";
@@ -55,7 +55,7 @@ export function ActionsTaken({
     onError: (err) => toast(`Not undone: ${(err as Error).message}`, "danger"),
   });
   const focus = useMutation({
-    mutationFn: (a: ChatAction) => api.post<{ id: string }>("/api/hermes/sessions", { title: `Focus: ${a.title ?? a.label}`, areaId: a.itemId }),
+    mutationFn: (a: ChatAction) => api.post<{ id: string }>("/api/hermes/sessions", { title: `Focus: ${a.title ?? a.label}`, areaId: focusTarget(a) }),
     onSuccess: (session) => {
       void refreshSessionLists(qc).catch(() => undefined);
       router.push(`/chat/${encodeURIComponent(session.id)}`);
@@ -85,7 +85,7 @@ export function ActionsTaken({
           },
         },
         ...(action.undoOpId ? [{ label: "Undo", disabled: undo.isPending || undone.has(action.undoOpId), onSelect: () => undo.mutate(action.undoOpId!) }] : []),
-        ...(action.itemId ? [{ label: "Focus", disabled: focus.isPending, onSelect: () => focus.mutate(action) }] : []),
+        ...(focusTarget(action) ? [{ label: "Focus", disabled: focus.isPending, onSelect: () => focus.mutate(action) }] : []),
       ]
     : [];
   return (

@@ -4,6 +4,7 @@ import { getDb, schema } from "@/server/db";
 import { userById, type CurrentUser } from "@/server/auth";
 import { processSingleton } from "@/server/singleton";
 import { readIndex } from "./conversation-index";
+import { takeCapped } from "./delegated-runs";
 
 /**
  * Background reconcile for coordinator parity: sub-agents become agent runs on their item even when nobody
@@ -11,12 +12,17 @@ import { readIndex } from "./conversation-index";
  * person's conversation index) plus filed conversations that still have an in-flight child, and runs the same
  * bounded transcript parse + mirror the chat page's execution panel runs (server/chat/execution.ts).
  * Bounded (≤20 sessions per tick, one at a time), idempotent (delegated-runs dedupes by delegation id) and
- * skips a session whose activity marker hasn't moved since its last pass.
+ * skips a session whose activity marker hasn't moved since its last pass, unless its mirror hit the write cap.
  */
 export const RECONCILE_WINDOW_MS = 24 * 60 * 60_000;
 export const RECONCILE_MAX_PER_TICK = 20;
 /** an in-flight child with no new parent activity is re-read at most this often */
 const ACTIVE_RECHECK_MS = 15 * 60_000;
+/**
+ * In-flight children stay eligible for the bounded recheck this long after their last update, even once the
+ * parent left the 24 h activity window (that window gates recent-parent discovery only).
+ */
+export const ACTIVE_CHILD_WINDOW_MS = 7 * 24 * 60 * 60_000;
 
 type Candidate = { user: CurrentUser; sessionId: string; marker: string; at: number };
 type State = { seen: Map<string, string>; busy: boolean };
@@ -56,7 +62,7 @@ export function reconcileCandidates(now = new Date(), limit = RECONCILE_MAX_PER_
             and(
               inArray(schema.chatExecRecords.parentSessionId, ids.slice(0, 500)),
               inArray(schema.chatExecRecords.state, [...ACTIVE_STATES]),
-              gte(schema.chatExecRecords.updatedAt, new Date(since).toISOString()),
+              gte(schema.chatExecRecords.updatedAt, new Date(now.getTime() - ACTIVE_CHILD_WINDOW_MS).toISOString()),
             ),
           )
           .all()
@@ -100,6 +106,8 @@ export function reconcileDelegatedRuns(
         } catch {
           // best effort (session gone, Hermes down): the page read retries it on open
         }
+        // The mirror stopped at its per-call write cap: requeue the session for the next tick.
+        if (takeCapped(c.user.id, c.sessionId)) s.seen.delete(`${c.user.id}:${c.sessionId}`);
       }
       if (s.seen.size > 2000) for (const k of [...s.seen.keys()].slice(0, s.seen.size - 2000)) s.seen.delete(k);
     } finally {

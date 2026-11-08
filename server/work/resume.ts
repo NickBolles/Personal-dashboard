@@ -4,7 +4,7 @@ import { can } from "@/server/access";
 import { listItems } from "./store";
 import { agentRuns } from "./agent-runs";
 import { conversationList } from "./conversations";
-import { FAILED_DOT_MS, stalledRuns } from "@/lib/agent-runs";
+import { decidingRun, FAILED_DOT_MS, stalledRuns } from "@/lib/agent-runs";
 import { RESUME_LIMITS, type ResumeConversationRow, type ResumeResponse, type ResumeRunRow } from "@/lib/resume";
 import type { WorkItem } from "@/lib/work";
 
@@ -26,7 +26,7 @@ export async function resumeHub(user: CurrentUser, opts: { revalidate?: boolean 
     .filter((r) => r.live === "running" || r.live === "waiting" || (r.live === "failed" && r.liveAt && now - Date.parse(r.liveAt) < FAILED_DOT_MS))
     .filter((r) => byId.has(r.itemId) && !byId.get(r.itemId)!.archived)
     .map((r) => {
-      const latest = r.agentRuns?.[0];
+      const latest = decidingRun(r.agentRuns);
       const sessionId = r.sessionId ?? latest?.hermesSessionId ?? null;
       return {
         kind: "run" as const,

@@ -1,6 +1,16 @@
 import type { ActivityItem } from "@/lib/activity";
 import type { DecisionEntry } from "@/lib/decisions";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
+import type { ExternalRun } from "@/lib/agent-runs";
+
+/** A failed run stops counting as "needs attention" after this long, or once a later run on the item finished. */
+export const FAILED_ATTENTION_MS = 3 * 24 * 3_600_000;
+
+export function failureStillCounts(run: ExternalRun, siblings: readonly ExternalRun[], now: number) {
+  const at = Date.parse(run.updatedAt);
+  if (now && Number.isFinite(at) && now - at > FAILED_ATTENTION_MS) return false;
+  return !siblings.some((o) => o.id !== run.id && o.state === "done" && o.updatedAt > run.updatedAt);
+}
 
 export type CoordinatorRun = { id: string; itemId: string; title: string; state: "running" | "stalled" | "failed" | "waiting"; at: string | null };
 
