@@ -139,6 +139,60 @@ describe("mask vs block", () => {
     }
   });
 
+  it("long quoted secrets are masked whole and an unclosed quote fails closed (Codex P1)", () => {
+    const long = j('test turn: password="', "a1".repeat(130), ' secondHalf9" ok');
+    const m = maskSecrets(long);
+    expect(m.masked.length).toBe(1);
+    expect(m.text).toBe(`test turn: password="${SECRET_MASK}" ok`);
+    const open = maskSecrets(j('debug password="', "hunter2 secondHalf9"));
+    expect(open.text).not.toContain("secondHalf9");
+    expect(open.text).not.toContain("hunter2");
+  });
+
+  it("credential URLs and multiline quoted secrets are masked (Codex P1)", () => {
+    const hook = j("https://discord.com/api/webhooks/", "123456789/abc123def456ghi789");
+    const m = maskSecrets(`Please debug using secret=${hook} on staging`);
+    expect(m.masked.length).toBe(1);
+    expect(m.text).not.toContain("abc123def456ghi789");
+    for (const t of [
+      j("const password = `", "first123\nsecondHalf9", "`;\nconsole.log(1)"),
+      j('password = """', "first123\nsecondHalf9", '"""\nprint(1)'),
+      j('{"password": "', "first123\\\nsecondHalf9", '"}'),
+    ]) {
+      const r = maskSecrets(t);
+      expect(r.masked.length, t).toBe(1);
+      expect(r.text, t).not.toContain("secondHalf9");
+      expect(r.text, t).not.toContain("first123");
+    }
+    expect(findSecrets("token: https://github.com/settings/tokens")).toEqual([]);
+  });
+
+  it("Basic auth headers and spaced quoted secrets are masked whole (Codex P1)", () => {
+    const basic = maskSecrets(j("Why does curl -H 'Authorization: Basic ", "dXNlcjpwYXNz", "' fail?"));
+    expect(basic.masked.length).toBe(1);
+    expect(basic.text).not.toContain("dXNlcjpwYXNz");
+    const spaced = maskSecrets(j('Please debug with password "', "abc123def456ghi789 secondHalf9", '" on staging'));
+    expect(spaced.masked.length).toBe(1);
+    expect(spaced.text).toBe(`Please debug with password "${SECRET_MASK}" on staging`);
+    const esc = maskSecrets(j('Please debug with password "', 'abc123def456ghi789\\"secondHalf9', '" on staging'));
+    expect(esc.text).toBe(`Please debug with password "${SECRET_MASK}" on staging`);
+  });
+
+  it("server-built area context lines with credential words in item titles are not flagged (2026-11-07 prod cause)", () => {
+    // The real trigger: every Portfolio/coordinator chat prepends area context, and an open item
+    // titled "Rotate the Caskfolk DB password" made the OLD rule read "(thread" as a password value.
+    const lines = ["password", "token", "secret", "api key", "passcode", "API token", "client secret"].map(
+      (w) => `- [Captured] Rotate the Caskfolk DB ${w} (thread, id wk_1133c042-1337-4b22-b686-762ac2dc00b1)`,
+    );
+    const context = ["Area: Portfolio", "Open items:", ...lines].join("\n");
+    for (const t of [...lines, context, `${context}\n\nFix the issues blocking this. Chat`]) {
+      expect(detectSensitivity(t), t).not.toBe("credentials");
+      const m = maskSecrets(t);
+      expect(m.masked, t).toEqual([]);
+      expect(m.text, t).toBe(t);
+    }
+  });
+
   it("overlapping findings are unioned so no part of the enclosing secret survives (Codex P1)", () => {
     const t = j('test turn: password="prefix ', GHP, ' secondHalf9" ok');
     const f = findSecrets(t);

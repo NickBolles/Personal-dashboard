@@ -106,13 +106,16 @@ const SECRET_WORD = String.raw`(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[
  */
 const Q = "\"'`";
 const ASSIGNED = new RegExp(
-  // Quoted values honour backslash escapes (`"pa\"ss"` in pasted JSON is one value, not `pa\`).
-  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"((?:\\.|[^"\\\n]){1,256})"|'((?:\\.|[^'\\\n]){1,256})'|\x60((?:\\.|[^\x60\\\n]){1,256})\x60|[${Q}]?(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
+  // Quoted values honour backslash escapes (`"pa\"ss"` in pasted JSON is one value, not `pa\`), have
+  // no length cap, run across lines to the closing delimiter (template literals, """…"""), and a
+  // quote that never closes fails closed: the rest of the text is the value.
+  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"""([\s\S]*?)"""|'''([\s\S]*?)'''|"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'|\x60((?:\\[\s\S]|[^\x60\\])*)\x60|[${Q}]([\s\S]+)|(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
   "gid",
 );
 /** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
 const SPACED = new RegExp(String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})\s+(?:is\s+|was\s+|of\s+)?["']?([A-Za-z0-9._~+/=-]{16,})`, "gi");
 const BEARER = /\b(?:bearer|basic)\s+([A-Za-z0-9._~+/=-]{8,})/gi;
+const AUTH_HEADER = /(?<![A-Za-z0-9])(?:proxy-)?authorization["']?\s*[:=]\s*["']?(?:bearer|basic|token)\s+([A-Za-z0-9._~+/=-]{4,})/gi;
 const KEYLIKE = new RegExp(
   [
     String.raw`sk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}`,
@@ -141,7 +144,9 @@ const PEM = /-----BEGIN [A-Z ]*PRIVATE KEY-----(?:[\s\S]*?-----END [A-Z ]*PRIVAT
 const NOT_SECRET = [
   /^api_\d{6,}_[0-9a-f]{4,}$/i, // Hermes/Jarvis session ids (jarvis.nickbolles.com/chat/api_…)
   /^(?:wk|item|node)[_:-]/i, // Jarvis work item ids
-  /^https?:\/\//i,
+  // Only Jarvis/artifacts pages and plain GitHub pages (no query): any other URL after a credential
+  // keyword (`secret=https://discord.com/api/webhooks/…`, `?token=` links) can BE the credential.
+  /^https?:\/\/(?:(?:jarvis|artifacts)\.nickbolles\.com|github\.com)(?:\/[^\s?#]*)?$/i,
   /^\$\{?[A-Z_][A-Z0-9_]*\}?$/, // ${VAR} / $VAR placeholders
   /^(?:process\.env|os\.environ|env)[.[]/, // code reading a secret, not the secret
   /^<[^>]*>?$/,
@@ -189,14 +194,22 @@ export function findSecrets(text: string): SecretFinding[] {
     add("Password in a URL", start, start + m[1]!.length, `${m[0].slice(0, m[0].indexOf("://") + 3)}user:…@`);
   }
   for (const m of text.matchAll(ASSIGNED)) {
-    const g = [2, 3, 4, 5].find((i) => m[i] !== undefined);
+    const g = [2, 3, 4, 5, 6, 7, 8].find((i) => m[i] !== undefined);
     if (!g || !m.indices?.[g]) continue;
     // Unquoted: trailing sentence punctuation isn't part of the value; commas INSIDE it are (masked whole).
-    const v = g === 5 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
+    const v = g === 8 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
     if (!assignedValue(v)) continue;
     const start = m.indices[g]![0];
     const sep = m[0].slice(m[1]!.length).match(/[:=]/)?.[0] ?? ":";
     add("Credential", start, start + v.length, `${m[1]}${sep} …`);
+  }
+  for (const m of text.matchAll(AUTH_HEADER)) {
+    // An explicit `Authorization: Basic|Bearer <value>` header is a credential whatever its shape
+    // (`Basic dXNlcjpwYXNz` = user:pass is letters only and short).
+    const v = m[1]!;
+    if (notSecret(v)) continue;
+    const start = m.index! + m[0].length - v.length;
+    add("Bearer token", start, start + v.length, `${m[0].slice(0, m[0].length - v.length).trim()} …`);
   }
   for (const m of text.matchAll(BEARER)) {
     const v = m[1]!;
@@ -209,7 +222,15 @@ export function findSecrets(text: string): SecretFinding[] {
     const v = m[2]!;
     if (!tokenShaped(v)) continue;
     const start = m.index! + m[0].length - v.length;
-    add("Credential", start, start + v.length, `${m[1]} …`);
+    // `password "abc123… second half"`: a quoted value runs to its closing quote (or the end, fail closed).
+    const q = text[start - 1];
+    let end = start + v.length;
+    if (q === '"' || q === "'") {
+      let i = end;
+      while (i < text.length && text[i] !== q) i += text[i] === "\\" ? 2 : 1;
+      end = Math.min(i, text.length);
+    }
+    add("Credential", start, end, `${m[1]} …`);
   }
   // Overlapping spans are UNIONED (never dropped): a key-shaped substring inside a quoted password
   // must not leave the rest of the password unmasked. The widest finding names the merged span.
