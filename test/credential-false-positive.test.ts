@@ -139,6 +139,16 @@ describe("mask vs block", () => {
     }
   });
 
+  it("long quoted secrets are masked whole and an unclosed quote fails closed (Codex P1)", () => {
+    const long = j('test turn: password="', "a1".repeat(130), ' secondHalf9" ok');
+    const m = maskSecrets(long);
+    expect(m.masked.length).toBe(1);
+    expect(m.text).toBe(`test turn: password="${SECRET_MASK}" ok`);
+    const open = maskSecrets(j('debug password="', "hunter2 secondHalf9"));
+    expect(open.text).not.toContain("secondHalf9");
+    expect(open.text).not.toContain("hunter2");
+  });
+
   it("overlapping findings are unioned so no part of the enclosing secret survives (Codex P1)", () => {
     const t = j('test turn: password="prefix ', GHP, ' secondHalf9" ok');
     const f = findSecrets(t);

@@ -107,7 +107,9 @@ const SECRET_WORD = String.raw`(?:api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[
 const Q = "\"'`";
 const ASSIGNED = new RegExp(
   // Quoted values honour backslash escapes (`"pa\"ss"` in pasted JSON is one value, not `pa\`).
-  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"((?:\\.|[^"\\\n]){1,256})"|'((?:\\.|[^'\\\n]){1,256})'|\x60((?:\\.|[^\x60\\\n]){1,256})\x60|[${Q}]?(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
+  // No length cap (a long quoted password must not fall back to masking its first word), and a quote
+  // that never closes on the line fails closed: the rest of the line is the value.
+  String.raw`(?<![A-Za-z0-9])(${SECRET_WORD})["']?\s*[:=]\s*(?:"((?:\\.|[^"\\\n])+)"|'((?:\\.|[^'\\\n])+)'|\x60((?:\\.|[^\x60\\\n])+)\x60|[${Q}]([^\n]+)|(?:(?:bearer|basic|token)\s+)?([^\s${Q}]+))`,
   "gid",
 );
 /** `token abc123…` / `password is X9f…`: only token-shaped values (checked by `tokenShaped`). */
@@ -189,10 +191,10 @@ export function findSecrets(text: string): SecretFinding[] {
     add("Password in a URL", start, start + m[1]!.length, `${m[0].slice(0, m[0].indexOf("://") + 3)}user:…@`);
   }
   for (const m of text.matchAll(ASSIGNED)) {
-    const g = [2, 3, 4, 5].find((i) => m[i] !== undefined);
+    const g = [2, 3, 4, 5, 6].find((i) => m[i] !== undefined);
     if (!g || !m.indices?.[g]) continue;
     // Unquoted: trailing sentence punctuation isn't part of the value; commas INSIDE it are (masked whole).
-    const v = g === 5 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
+    const v = g === 6 ? m[g]!.replace(/[.,;:)}\]]+$/, "") : m[g]!;
     if (!assignedValue(v)) continue;
     const start = m.indices[g]![0];
     const sep = m[0].slice(m[1]!.length).match(/[:=]/)?.[0] ?? ":";
