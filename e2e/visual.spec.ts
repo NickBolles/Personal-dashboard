@@ -2303,9 +2303,10 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 test("visual: resume hub", async ({ page }) => {
-  await freezeMiddayCT(page);
-  const todayCT = localDate(new Date(), "America/Chicago");
-  const at = `${todayCT}T14:05:00Z`;
+  // Row times sit 5 minutes before the frozen browser clock, so the relative label ("5 min ago")
+  // and its width are the same at any hour (a fixed wall time read "in 8 hours" before 08:05 CT).
+  const frozen = await freezeMiddayCT(page);
+  const at = new Date(frozen - 5 * 60_000).toISOString();
   const run = { kind: "run" as const, path: "General Dev › Jarvis › Resume hub", approval: false, stalled: false, who: "@devchief", at };
   const conversation = {
     kind: "conversation" as const,
