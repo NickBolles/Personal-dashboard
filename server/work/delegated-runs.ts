@@ -62,6 +62,7 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
       }
       continue;
     }
+    if (!(r.delegationId || r.childSessionId)) continue;
     // The agent registered it itself (same delegation or child session): don't double count.
     const theirs = db
       .select({ id: T.id })
@@ -77,7 +78,7 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
         ),
       )
       .get();
-    if (theirs || !(r.delegationId || r.childSessionId)) continue;
+    if (theirs) continue;
     const { runId } = registerAgentRun(
       user,
       who,

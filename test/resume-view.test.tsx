@@ -125,7 +125,8 @@ it("hides empty sections and zero counts, showing only New chat on an empty hub"
   expect(screen.getByText("New chats and agent runs show up here.")).toBeTruthy();
   expect(screen.queryAllByRole("heading", { level: 2 })).toHaveLength(0);
   expect(screen.queryByText("0")).toBeNull();
-  expect(screen.getAllByRole("link")).toHaveLength(1);
+  expect(screen.getAllByRole("link").map((l) => l.textContent)).toEqual(["All conversations", "New chat"]);
+  expect(screen.getByRole("link", { name: "All conversations" }).getAttribute("href")).toBe("/chat");
   expect(screen.getByRole("link", { name: "New chat" }).getAttribute("href")).toBe("/chat");
 });
 

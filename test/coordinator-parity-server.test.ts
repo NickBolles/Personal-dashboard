@@ -1,5 +1,5 @@
 /** Coordinator parity server side: coordinator brief in filed context + sub-agents mirrored as agent runs. */
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser, type CurrentUser } from "@/server/auth";
@@ -8,7 +8,9 @@ import { mintAgentToken } from "@/server/agent-access/tokens";
 import { filedChatContext } from "@/server/work/chat-context";
 import { syncDelegatedRuns } from "@/server/work/delegated-runs";
 import { registerAgentRun } from "@/server/work/registered-runs";
-import { executionState } from "@/server/chat/execution-store";
+import { executionRecords, executionState, upsertExecution } from "@/server/chat/execution-store";
+import { writeIndex } from "@/server/work/conversation-index";
+import { __resetReconcile, RECONCILE_MAX_PER_TICK, reconcileDelegatedRuns } from "@/server/work/delegated-reconcile";
 import type { ExecutionRecord } from "@/lib/chat-execution";
 
 const cid = "test";
@@ -88,5 +90,38 @@ describe("coordinator parity (server)", () => {
       .where(and(eq(schema.agentRuns.itemId, area.id)))
       .all();
     expect(rows.map((r) => r.delegationId)).toEqual(["deleg_9"]);
+  });
+
+  it("background reconcile registers sub-agents of recent filed conversations without the chat open (bounded, idempotent)", async () => {
+    __resetReconcile();
+    const now = new Date("2026-11-07T18:00:00Z");
+    const area = store.createItem(owner, { kind: "area", title: "Lab" }, cid);
+    for (let i = 0; i < 25; i++) store.placeConversation(owner, { sessionId: `api_r${i}`, parentId: area.id, title: `Lab chat ${i}` }, cid);
+    store.placeConversation(owner, { sessionId: "api_old", parentId: area.id, title: "Old chat" }, cid);
+    const recent = (i: number) => new Date(now.getTime() - (i + 1) * 60_000).toISOString();
+    writeIndex(
+      owner.id,
+      [
+        ...Array.from({ length: 25 }, (_, i) => ({ id: `api_r${i}`, title: `Lab chat ${i}`, lastActiveAt: recent(i), pinned: false, archived: false })),
+        { id: "api_old", title: "Old chat", lastActiveAt: new Date(now.getTime() - 30 * 3600_000).toISOString(), pinned: false, archived: false },
+        { id: "api_unfiled", title: "Unfiled", lastActiveAt: recent(0), pinned: false, archived: false },
+      ],
+      true,
+      now,
+    );
+    upsertExecution("api_r0", sub("bg1", "running", { delegationId: "deleg_bg" }), null);
+    const read = vi.fn(async (u: CurrentUser, sid: string) => syncDelegatedRuns(u, sid, "devchief", executionRecords(sid)));
+    const first = reconcileDelegatedRuns(now, read);
+    expect(first.queued).toBe(RECONCILE_MAX_PER_TICK);
+    await first.done;
+    expect(read.mock.calls.map((c) => c[1])).not.toContain("api_old");
+    expect(read.mock.calls.map((c) => c[1])).not.toContain("api_unfiled");
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:bg1", "running"]]);
+    // next tick: only the 5 not yet read; then nothing until activity moves
+    const second = reconcileDelegatedRuns(now, read);
+    expect(second.queued).toBe(5);
+    await second.done;
+    expect(reconcileDelegatedRuns(now, read).queued).toBe(0);
+    expect(runsOf(area.id).length).toBe(1);
   });
 });

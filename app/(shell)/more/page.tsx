@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { allowed, DESTINATIONS } from "@/components/navigation/destinations";
 import { requirePage } from "@/server/auth/page";
-import { GearIcon, TodoIcon } from "@/components/icons";
+import { ChatIcon, GearIcon, TodoIcon } from "@/components/icons";
 import { Page, PageHeader } from "@/components/ui";
 
 export const metadata = { title: "More" };
@@ -13,7 +13,9 @@ export default async function MorePage() {
   // Inbox has no bottom-bar slot on phones (orb "Go to" petal + here). Areas lives in PRIMARY, not
   // DESTINATIONS, so gate on the capability itself (#95).
   const inbox = caps.includes("work.use") ? [{ key: "inbox", href: "/inbox", label: "Inbox", icon: TodoIcon }] : [];
-  const items = [...inbox, ...dests, { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
+  // The Hermes chat list has no bottom-bar slot for people with Areas: keep every conversation findable here.
+  const chats = caps.includes("work.use") && caps.includes("hermes.chat") ? [{ key: "chat", href: "/chat", label: "Conversations", icon: ChatIcon }] : [];
+  const items = [...inbox, ...chats, ...dests, { key: "settings", href: "/settings", label: "Settings", icon: GearIcon }];
   return (
     <Page width="medium" className="@container">
       <PageHeader title="More" subtitle="Every space you can open." />

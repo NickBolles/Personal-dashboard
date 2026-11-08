@@ -141,6 +141,9 @@ export function ResumeView() {
           <p className="eyebrow">Resume hub</p>
           <h1 className="text-xl leading-tight font-semibold tracking-tight">In flight</h1>
         </div>
+        <ButtonLink href="/chat" size="sm" variant="ghost" className="min-h-11 sm:min-h-9">
+          All conversations
+        </ButtonLink>
       </header>
       <div className="mb-3 min-w-0 [&_.k-seg]:max-w-full [&_.k-seg]:flex-wrap [&_.k-seg-i]:min-h-11 [&_.k-seg-i]:text-sm sm:[&_.k-seg-i]:min-h-10">
         <Segmented
