@@ -174,6 +174,8 @@ describe("mask vs block", () => {
     const spaced = maskSecrets(j('Please debug with password "', "abc123def456ghi789 secondHalf9", '" on staging'));
     expect(spaced.masked.length).toBe(1);
     expect(spaced.text).toBe(`Please debug with password "${SECRET_MASK}" on staging`);
+    const esc = maskSecrets(j('Please debug with password "', 'abc123def456ghi789\\"secondHalf9', '" on staging'));
+    expect(esc.text).toBe(`Please debug with password "${SECRET_MASK}" on staging`);
   });
 
   it("server-built area context lines with credential words in item titles are not flagged (2026-11-07 prod cause)", () => {

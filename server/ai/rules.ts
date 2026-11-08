@@ -226,8 +226,9 @@ export function findSecrets(text: string): SecretFinding[] {
     const q = text[start - 1];
     let end = start + v.length;
     if (q === '"' || q === "'") {
-      const close = text.indexOf(q, end);
-      end = close === -1 ? text.length : close;
+      let i = end;
+      while (i < text.length && text[i] !== q) i += text[i] === "\\" ? 2 : 1;
+      end = Math.min(i, text.length);
     }
     add("Credential", start, end, `${m[1]} …`);
   }
