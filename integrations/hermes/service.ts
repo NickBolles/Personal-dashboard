@@ -896,7 +896,9 @@ function startRelay(row: typeof schema.runs.$inferSelect, runId: string, lastSeq
   };
   const { byRun, all } = relays();
   all.add(r);
-  if (!byRun.get(runId) || byRun.get(runId)!.done) byRun.set(runId, r);
+  // Index the most joinable relay: one streaming from the start can serve every later watcher.
+  const indexed = byRun.get(runId);
+  if (!indexed || indexed.done || (lastSeq === undefined && indexed.fromSeq !== undefined)) byRun.set(runId, r);
   const broadcast = (ev: RelayEvent, keep = true) => {
     if (keep) {
       if (r.buffer.length < RELAY_BUFFER_MAX) r.buffer.push(ev);
@@ -1063,7 +1065,11 @@ export function relayRunEvents(
           return false;
         }
       };
+      // This watcher's own cursor: a shared relay may still be behind what it already saw.
+      let cursor = seq;
       const send = ({ e, id }: RelayEvent) => {
+        if (id !== undefined && cursor !== undefined && id <= cursor) return true;
+        if (id !== undefined) cursor = id;
         if (!agui) return write(formatSse(e, id !== undefined ? { id } : {}));
         for (const a of agui.push(e)) if (!write(formatSse(a, id !== undefined ? { id } : {}))) return false;
         return true;

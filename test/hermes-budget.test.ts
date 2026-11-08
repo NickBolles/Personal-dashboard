@@ -189,6 +189,25 @@ describe("shared run relays", () => {
     expect(hermesBudgetStats().streams).toBe(0);
   });
 
+  it("never re-sends a joiner events at or before its own cursor", async () => {
+    const up = upstreamBody();
+    vi.spyOn(HermesExecutionClient, "events").mockResolvedValue(up.res);
+    const me = userById(owner)!;
+    const a = relayRunEvents(me, "run-a", undefined, new AbortController().signal).pipeThrough(decoder()).getReader();
+    await flush();
+    up.send({ event: "message.delta", delta: "zero", seq: 0 });
+    await readUntil(a, "zero");
+    // This watcher already saw up to seq 2 (e.g. from an earlier relay); the shared one is at 0.
+    const b = relayRunEvents(me, "run-a", "2", new AbortController().signal).pipeThrough(decoder()).getReader();
+    up.send({ event: "message.delta", delta: "one", seq: 1 });
+    up.send({ event: "message.delta", delta: "two", seq: 2 });
+    up.send({ event: "message.delta", delta: "three", seq: 3 });
+    const bText = await readUntil(b, "three");
+    expect(bText).not.toContain('"one"');
+    expect(bText).not.toContain('"two"');
+    up.end();
+  });
+
   it("queues a relay when the stream budget is full, then streams it", async () => {
     __resetHermesBudget({ max: 4, maxStreams: 1, reserve: 1, ratePerSec: 1000, burst: 1000 });
     const first = upstreamBody();
