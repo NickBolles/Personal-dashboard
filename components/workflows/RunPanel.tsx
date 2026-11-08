@@ -4,8 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import type { ThingsTab } from "@/lib/chat/things";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx, useToast } from "@/components/ui";
-import { Button } from "@/components/ui/legacy";
+import { Button, ChipButton, IconButton, useToast } from "@/components/ui";
 import type { RunElement } from "@/lib/workflows/run-catalog";
 import { displayValue, type CaptureOp } from "@/lib/workflows/runs";
 import type { TimelineItem } from "@/lib/hermes";
@@ -283,7 +282,7 @@ export function RunPanel({
                 </Button>
               </div>
             ))}
-            <Button size="sm" variant="ghost" onClick={() => void proposals([], true)}>
+            <Button size="sm" variant="ghost" className="max-w-full whitespace-normal" onClick={() => void proposals([], true)}>
               Clear suggestions
             </Button>
           </div>
@@ -291,19 +290,17 @@ export function RunPanel({
         {live && chips.length && (!section || section === "Notes") ? (
           <div className="wf-chips mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Next note goes to">
             {chips.map((c) => (
-              <button
+              <ChipButton
                 key={c.field}
                 type="button"
                 aria-pressed={target === c.field}
+                active={target === c.field}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onTarget(target === c.field ? null : c.field)}
-                className={cx(
-                  "tap min-h-11 rounded-full border px-3 text-sm sm:min-h-9",
-                  target === c.field ? "border-accent bg-accent/10 font-medium" : "border-line-strong",
-                )}
+                className="max-w-full min-w-0 whitespace-normal"
               >
                 {c.label}
-              </button>
+              </ChipButton>
             ))}
             <ReflectionPrompt sessionId={sessionId} run={out} />
           </div>
@@ -365,14 +362,12 @@ export function RunPanel({
                             <span className="min-w-0 flex-1 break-words">{displayValue(v)}</span>
                           )}
                           {live ? (
-                            <button
+                            <IconButton
                               type="button"
-                              className="tap shrink-0 text-xs text-muted"
-                              aria-label={`Remove from ${s.title}`}
+                              label={`Remove from ${s.title}`}
+                              icon={<span aria-hidden="true">×</span>}
                               onClick={() => void remove(s.bind, i)}
-                            >
-                              ×
-                            </button>
+                            />
                           ) : null}
                         </li>
                       ))}

@@ -100,6 +100,10 @@ export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt">, now: numb
   const t = Date.parse(r.updatedAt);
   return Number.isFinite(t) && now - t > STALL_AFTER_MIN * 60_000;
 }
+/** The run that decides an item's row (waiting > running > newest), not just the newest one (#251). */
+export const decidingRun = (runs: readonly ExternalRun[] | undefined): ExternalRun | undefined =>
+  runs?.find((r) => r.state === "waiting") ?? runs?.find((r) => r.state === "running") ?? runs?.[0];
+
 export const stalledRuns = (i: Pick<ItemAgentInfo, "agentRuns">, now: number = Date.now()) => (i.agentRuns ?? []).filter((r) => isStalled(r, now));
 
 /** children_json → RunChild[] (bad rows dropped). */

@@ -44,6 +44,8 @@ export type ExecutionRecord = {
   /** Hermes profile the child session lives on (null = default profile). */
   childProfile?: string | null;
   delegationId?: string | null;
+  /** Hermes' own sub-agent handle (`delegate_task` subagent_id) when known; steer/stop must use it. */
+  subagentId?: string | null;
   /** Internal Jarvis link (child chat or work item); null when not navigable. */
   href?: string | null;
   links?: ExecLink[];

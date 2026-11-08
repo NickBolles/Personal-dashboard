@@ -285,6 +285,8 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
   }, []);
 
   const connectRef = useRef<() => void>(() => {});
+  /** Starts the hidden-tab grace timer; called when a stream opens in a tab that is already hidden (#253). */
+  const armHidden = useRef<() => void>(() => {});
 
   const scheduleReconnect = useCallback(() => {
     const n = conn.current.attempts;
@@ -319,6 +321,9 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
     const q = c.lastSeq !== undefined ? `?format=agui&lastSeq=${c.lastSeq}` : "?format=agui";
     const source = new EventSource(`/api/hermes/runs/${encodeURIComponent(c.runId)}/events${q}`);
     es.current = source;
+    // A chat opened straight into a background tab (Ctrl/Cmd-click) never sees a
+    // visibilitychange, so start the hidden-tab release here too.
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") armHidden.current();
     source.onmessage = (msg) => {
       let raw: unknown;
       try {
@@ -420,7 +425,13 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       });
     };
     document.addEventListener("visibilitychange", onVisibility);
+    armHidden.current = () => {
+      if (document.visibilityState === "hidden") onVisibility();
+    };
+    // A stream may already be open (connected before this effect ran) in a hidden tab.
+    if (document.visibilityState === "hidden") onVisibility();
     return () => {
+      armHidden.current = () => {};
       window.removeEventListener("online", on);
       document.removeEventListener("visibilitychange", onVisibility);
       if (hideTimer) clearTimeout(hideTimer);

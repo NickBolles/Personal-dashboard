@@ -1,11 +1,11 @@
 # Hermes connection budget
 
 Production reaches Hermes through Traefik (`hermes-api.ai.nickbolles.com`). Its router has an
-`inFlightReq` middleware with `amount: 10` and no `sourceCriterion`, so the limit is **10
-requests in flight for the whole host**, shared by every client. It also has a `rateLimit` of
-10 req/s (burst 20) per client IP; every LAN client arrives as the router's hairpin address. Above
-either limit Traefik answers `429 max connections reached: 10` (or `Too Many Requests`) before
-Hermes sees the request.
+`inFlightReq` middleware with no `sourceCriterion`, so the limit is shared by every client: it was
+**10 requests in flight** until 2026-11-08, now **64**. Its `rateLimit` is per client IP (every LAN
+client arrives as the router's hairpin address): 10 req/s (burst 20) until 2026-11-08, now 50 req/s
+(burst 200). Above either limit Traefik answers `429 max connections reached: N` (or `Too Many
+Requests`) before Hermes sees the request.
 
 Two things used to break chat sends (Nov 2026):
 
@@ -23,10 +23,15 @@ Two things used to break chat sends (Nov 2026):
 
 | Setting                                 | Default | Meaning                                                          |
 | --------------------------------------- | ------- | ---------------------------------------------------------------- |
-| `JARVIS_HERMES_MAX_CONNECTIONS`         | 8       | Requests in flight to Hermes at once (keep below the proxy's 10) |
-| `JARVIS_MAX_STREAMS`                    | max / 2 | Of those, run event streams                                      |
+| `JARVIS_HERMES_MAX_CONNECTIONS`         | 24      | Requests in flight to Hermes at once (well below the proxy's 64) |
+| `JARVIS_MAX_STREAMS`                    | 12      | Of those, run event streams (max / 2 when max is overridden)     |
 | `JARVIS_HERMES_RESERVED_INTERACTIVE`    | 2       | Slots background work never takes, so a send always finds room   |
-| `JARVIS_HERMES_RATE_PER_SEC` / `_BURST` | 8 / 16  | Token bucket under the proxy's rate limit                        |
+| `JARVIS_HERMES_RATE_PER_SEC` / `_BURST` | 20 / 40 | Token bucket under the proxy's rate limit (50/s, burst 200)      |
+
+The defaults are constants in `server/http/hermes-budget.ts` (prod sets none of these). Streams are
+always clamped below the connection limit (at least `max(1, reserve)` slots stay free of them), so
+Stop, approvals and status calls get through even when `JARVIS_MAX_STREAMS` is set too high. Blank
+values count as unset.
 
 - **Lanes.** `interactive` (default: anything a person triggers) is served first, then `stream`,
   then `background`. Dispatcher ticks (index warmer, scheduled jobs, reminders), Hermes-backed

@@ -66,15 +66,15 @@ describe("coordinator parity (server)", () => {
     expect(syncDelegatedRuns(owner, "api_g", "homelabchief", [sub("s1", "running"), sub("s2", "completed", { summary: "Shelves ordered" })])).toBe(2);
     let rows = runsOf(project.id);
     expect(rows.map((r) => [r.delegationId, r.state, r.profile]).sort()).toEqual([
-      ["sub:s1", "running", "homelabchief"],
-      ["sub:s2", "done", "homelabchief"],
+      ["sub:api_g:s1", "running", "homelabchief"],
+      ["sub:api_g:s2", "done", "homelabchief"],
     ]);
     // replay: nothing new
     expect(syncDelegatedRuns(owner, "api_g", "homelabchief", [sub("s1", "running"), sub("s2", "completed")])).toBe(0);
     // s1 finishes
     expect(syncDelegatedRuns(owner, "api_g", "homelabchief", [sub("s1", "failed", { error: "boom" })])).toBe(1);
     rows = runsOf(project.id);
-    expect(rows.find((r) => r.delegationId === "sub:s1")?.state).toBe("failed");
+    expect(rows.find((r) => r.delegationId === "sub:api_g:s1")?.state).toBe("failed");
     expect(rows.length).toBe(2);
   });
 
@@ -101,7 +101,7 @@ describe("coordinator parity (server)", () => {
       runsOf(area.id)
         .map((r) => r.delegationId)
         .sort(),
-    ).toEqual(["deleg_9:a", "sub:b"]);
+    ).toEqual(["deleg_9:a", "sub:api_s:b"]);
     const many = Array.from({ length: 25 }, (_, i) => sub(`m${i}`, "running"));
     expect(syncDelegatedRuns(owner, "api_s", "devchief", many)).toBe(20);
     expect(syncDelegatedRuns(owner, "api_s", "devchief", many)).toBe(5);
@@ -131,12 +131,131 @@ describe("coordinator parity (server)", () => {
     await first.done;
     expect(read.mock.calls.map((c) => c[1])).not.toContain("api_old");
     expect(read.mock.calls.map((c) => c[1])).not.toContain("api_unfiled");
-    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:bg1", "running"]]);
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:api_r0:bg1", "running"]]);
     // next tick: only the 5 not yet read; then nothing until activity moves
     const second = reconcileDelegatedRuns(now, read);
     expect(second.queued).toBe(5);
     await second.done;
     expect(reconcileDelegatedRuns(now, read).queued).toBe(0);
     expect(runsOf(area.id).length).toBe(1);
+  });
+
+  it("dedupes a jarvis_run_start that arrives after the mirror, mirrors handle-only children, carries heartbeats (#251)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Dock" }, cid);
+    store.placeConversation(owner, { sessionId: "api_d", parentId: area.id, title: "Dock coordinator" }, cid);
+    expect(
+      syncDelegatedRuns(
+        owner,
+        "api_d",
+        "devchief",
+        [sub("c1", "running", { childSessionId: "child_1", updatedAt: "2026-11-07T10:00:00.000Z" })],
+        new Date("2026-11-07T10:00:00Z"),
+      ),
+    ).toBe(1);
+    // heartbeat: same state, newer child activity → updated_at moves (no Stalled while alive)
+    expect(
+      syncDelegatedRuns(
+        owner,
+        "api_d",
+        "devchief",
+        [sub("c1", "running", { childSessionId: "child_1", updatedAt: "2026-11-07T11:00:00.000Z" })],
+        new Date("2026-11-07T11:05:00Z"),
+      ),
+    ).toBe(1);
+    expect(runsOf(area.id)[0]!.updatedAt).toBe("2026-11-07T11:00:00.000Z");
+    // the agent registers the same child itself afterwards → the automatic mirror goes away
+    registerAgentRun(owner, "devchief", { itemId: area.id, title: "Mine", hermesSessionId: "child_1" }, cid, "tok_1");
+    syncDelegatedRuns(owner, "api_d", "devchief", [sub("c1", "running", { childSessionId: "child_1" })]);
+    expect(runsOf(area.id).map((r) => r.delegationId)).toEqual([null]);
+    // a child known only by its sub-agent handle is mirrored too
+    expect(syncDelegatedRuns(owner, "api_d", "devchief", [sub("sa_1", "running", { delegationId: null, subagentId: "sa_1" })])).toBe(1);
+    expect(runsOf(area.id).some((r) => r.delegationId === "sub:api_d:sa_1")).toBe(true);
+  });
+
+  it("namespaces mirror keys by parent conversation and adopts pre-#251 keys", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Yard" }, cid);
+    const other = store.createItem(owner, { kind: "area", title: "Barn" }, cid);
+    store.placeConversation(owner, { sessionId: "api_y1", parentId: area.id, title: "Yard 1" }, cid);
+    store.placeConversation(owner, { sessionId: "api_y2", parentId: other.id, title: "Barn 1" }, cid);
+    registerAgentRun(owner, "devchief", { itemId: area.id, title: "Old mirror", delegationId: "sub:same" }, cid);
+    expect(syncDelegatedRuns(owner, "api_y1", "devchief", [sub("same", "completed")])).toBe(1);
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:api_y1:same", "done"]]);
+    expect(syncDelegatedRuns(owner, "api_y2", "devchief", [sub("same", "running")])).toBe(1);
+    expect(runsOf(other.id).map((r) => r.delegationId)).toEqual(["sub:api_y2:same"]);
+  });
+
+  it("reconcile requeues a session whose mirror hit the write cap and rechecks in-flight children older than 24 h", async () => {
+    __resetReconcile();
+    const now = new Date("2026-11-07T18:00:00Z");
+    const area = store.createItem(owner, { kind: "area", title: "Mill" }, cid);
+    store.placeConversation(owner, { sessionId: "api_cap", parentId: area.id, title: "Mill chat" }, cid);
+    store.placeConversation(owner, { sessionId: "api_long", parentId: area.id, title: "Long chat" }, cid);
+    writeIndex(
+      owner.id,
+      [{ id: "api_cap", title: "Mill chat", lastActiveAt: new Date(now.getTime() - 60_000).toISOString(), pinned: false, archived: false }],
+      true,
+      now,
+    );
+    for (let i = 0; i < 25; i++) upsertExecution("api_cap", sub(`k${i}`, "completed", { delegationId: `deleg_k${i}` }), null);
+    upsertExecution("api_long", sub("old1", "running", { delegationId: "deleg_old", updatedAt: new Date(now.getTime() - 48 * 3600_000).toISOString() }), null);
+    const read = vi.fn(async (u: CurrentUser, sid: string) => syncDelegatedRuns(u, sid, "devchief", executionRecords(sid)));
+    await reconcileDelegatedRuns(now, read).done;
+    expect(read.mock.calls.map((c) => c[1]).sort()).toEqual(["api_cap", "api_long"]);
+    expect(runsOf(area.id).filter((r) => r.delegationId?.startsWith("sub:api_cap:")).length).toBe(20);
+    const again = reconcileDelegatedRuns(now, read);
+    expect(again.queued).toBe(1);
+    await again.done;
+    expect(runsOf(area.id).filter((r) => r.delegationId?.startsWith("sub:api_cap:")).length).toBe(25);
+  });
+
+  it("closes a dispatch record through its ended child session (mirror no longer stuck running)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Momentum" }, cid);
+    store.placeConversation(owner, { sessionId: "api_m", parentId: area.id, title: "Momentum coordinator" }, cid);
+    const dispatch = sub("sa-0-1df9", "running", {
+      delegationId: "deleg_9d9c",
+      subagentId: "sa-0-1df9",
+      title: "Write the bet",
+      startedAt: "2026-11-08T02:55:00.000Z",
+      updatedAt: "2026-11-08T02:55:02.000Z",
+    });
+    const child = (extra: Partial<ExecutionRecord> = {}) =>
+      sub("20261107_185502_8edf29", "unknown", {
+        delegationId: null,
+        childSessionId: "20261107_185502_8edf29",
+        title: "Subagent: Write the bet",
+        startedAt: "2026-11-08T02:55:03.000Z",
+        updatedAt: "2026-11-08T03:10:00.000Z",
+        ...extra,
+      });
+    expect(syncDelegatedRuns(owner, "api_m", "momentumchief", [dispatch, child()], new Date("2026-11-08T03:11:00Z"))).toBe(1);
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:api_m:sa-0-1df9", "running"]]);
+    syncDelegatedRuns(
+      owner,
+      "api_m",
+      "momentumchief",
+      [dispatch, child({ endedAt: "2026-11-08T03:27:10.000Z", updatedAt: "2026-11-08T03:27:10.000Z" })],
+      new Date("2026-11-08T04:00:00Z"),
+    );
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state, r.finishedAt])).toEqual([["sub:api_m:sa-0-1df9", "done", "2026-11-08T03:27:10.000Z"]]);
+  });
+
+  it("never lets a time-only fallback take another task's child session (title matches win)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Pairs" }, cid);
+    store.placeConversation(owner, { sessionId: "api_p", parentId: area.id, title: "Pairs coordinator" }, cid);
+    const at = "2026-11-08T02:55:00.000Z";
+    const a = sub("sa-0-x", "running", { delegationId: "deleg_p", subagentId: "sa-0-x", title: "Task A", startedAt: at });
+    const b = sub("sa-1-x", "running", { delegationId: "deleg_p", subagentId: "sa-1-x", title: "Task B", startedAt: at });
+    const childB = sub("child_b", "unknown", {
+      delegationId: null,
+      childSessionId: "child_b",
+      title: "Subagent: Task B",
+      startedAt: "2026-11-08T02:55:04.000Z",
+      endedAt: "2026-11-08T03:20:00.000Z",
+      updatedAt: "2026-11-08T03:20:00.000Z",
+    });
+    syncDelegatedRuns(owner, "api_p", "devchief", [a, b, childB], new Date("2026-11-08T04:00:00Z"));
+    const rows = runsOf(area.id);
+    expect(rows.find((r) => r.delegationId === "sub:api_p:sa-0-x")?.state).toBe("running");
+    expect(rows.find((r) => r.delegationId === "sub:api_p:sa-1-x")?.state).toBe("done");
   });
 });

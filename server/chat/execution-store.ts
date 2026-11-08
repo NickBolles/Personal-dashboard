@@ -68,6 +68,7 @@ function record(row: typeof T.$inferSelect): ExecutionRecord {
     childSessionId: row.childSessionId,
     childProfile: row.childProfile,
     delegationId: row.delegationId,
+    subagentId: row.subagentId,
     step: row.step,
     summary: row.summary,
     error: row.error,
@@ -159,7 +160,7 @@ function inheritChild(parentId: string, childId: string, profile: string | null)
   return true;
 }
 
-export type ExecutionInput = ExecutionRecord & { taskIndex?: number; subagentId?: string; observedCompletion?: boolean };
+export type ExecutionInput = ExecutionRecord & { taskIndex?: number; observedCompletion?: boolean };
 /** One synchronous transaction; replay is idempotent and a late start never erases a terminal result. */
 export function upsertExecution(parentSessionId: string, input: ExecutionInput, profile: string | null): ExecutionRecord {
   return getDb().transaction((db) => {

@@ -434,7 +434,10 @@ function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionR
   const [steering, setSteering] = useState(false);
   const [guidance, setGuidance] = useState("");
   const [confirmStop, setConfirmStop] = useState(false);
-  const controllable = record.source === "subagent" && canControl(record.id) && isActiveExec(record);
+  // A child discovered through the session list first keeps its child-session id as record id;
+  // the coordinator steers/stops by Hermes' sub-agent handle (#251).
+  const handle = record.subagentId ?? record.id;
+  const controllable = record.source === "subagent" && canControl(handle) && isActiveExec(record);
   const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
   return (
     <article className="min-w-0 rounded-lg border border-line px-2 py-1" data-testid="coordinator-run-card" aria-label={record.title}>
@@ -467,7 +470,7 @@ function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionR
                 variant="danger"
                 loading={pending}
                 onClick={() =>
-                  void onControl(stopText(record.id))
+                  void onControl(stopText(handle))
                     .then(() => setConfirmStop(false))
                     .catch(() => undefined)
                 }
@@ -484,7 +487,7 @@ function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionR
           onSubmit={(event) => {
             event.preventDefault();
             if (!guidance.trim() || pending) return;
-            void onControl(steerText(record.id, guidance))
+            void onControl(steerText(handle, guidance))
               .then(() => {
                 setGuidance("");
                 setSteering(false);

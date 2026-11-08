@@ -563,7 +563,11 @@ test("work dashboard: resize, drag reorder and the new widgets", async ({ page }
   const order = async () => ((await (await page.request.get("/api/work/dashboard")).json()) as { widgets: { title: string }[] }).widgets.map((w) => w.title);
   const before = await order();
   await page.evaluate(() => window.scrollTo(0, 0));
+  // The edit controls wrap to two rows on phones, which puts the second widget's handle under the fixed
+  // Chief of staff tray at scroll 0; the pointer would grab the tray instead of the handle.
+  const hideTray = await page.addStyleTag({ content: ".gc-tray, .gc-tray-qa { visibility: hidden !important; }" });
   await dragTo(page, page.locator('li[data-widget-index="1"] [data-widget-handle]'), page.locator('li[data-widget-index="0"]'), { x: 0.5, y: 0.3 });
+  await hideTray.evaluate((el) => (el as Element).remove());
   await expect.poll(async () => (await order())[0]).toBe(before[1]);
   expect((await order())[1]).toBe(before[0]);
   await expectNoHorizontalOverflow(page);

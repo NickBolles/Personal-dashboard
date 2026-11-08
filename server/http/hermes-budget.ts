@@ -5,11 +5,11 @@ import { processSingleton } from "@/server/singleton";
  * Hermes connection budget (one per Jarvis process).
  *
  * Production reaches Hermes through Traefik (`hermes-api.ai.nickbolles.com`), whose
- * `inFlightReq` middleware allows 10 requests in flight for the whole host and whose
- * `rateLimit` allows ~10 req/s (burst 20). Anything above answers 429 "max connections
- * reached: 10" before Hermes sees it. Long SSE relays hold a slot for the whole run, and
- * the conversation-index warmer used to fan out ~35 requests at once every few minutes,
- * so a chat send landing in that second failed.
+ * `inFlightReq` middleware allows 64 requests in flight for the whole host (raised from 10 on
+ * 2026-11-08) and whose `rateLimit` allows ~50 req/s (burst 200). Anything above answers 429
+ * "max connections reached" before Hermes sees it. Long SSE relays hold a slot for the whole
+ * run, and the conversation-index warmer used to fan out ~35 requests at once every few
+ * minutes, so a chat send landing in that second failed.
  *
  * Every Hermes request takes a slot here first:
  * - `interactive`: user-facing requests (create a chat, send, approve, stop). Served first.
@@ -23,18 +23,34 @@ export type HermesLane = "interactive" | "stream" | "background";
 export type BudgetLimits = { max: number; maxStreams: number; reserve: number; ratePerSec: number; burst: number };
 
 function envInt(name: string, fallback: number, min: number) {
-  const n = Number(process.env[name]);
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback; // unset or blank (Number("") would be 0)
+  const n = Number(raw);
   return Number.isFinite(n) && n >= min ? Math.floor(n) : fallback;
 }
 
+/**
+ * Defaults (constants; env overrides stay for emergencies). 24 in flight keeps well under the
+ * proxy's 64; half of them may be run streams; 2 are kept for people (background work never
+ * takes them).
+ */
+export const DEFAULT_MAX_CONNECTIONS = 24;
+export const DEFAULT_MAX_STREAMS = 12;
+export const DEFAULT_RESERVED_INTERACTIVE = 2;
+
 export function budgetLimits(): BudgetLimits {
-  const max = envInt("JARVIS_HERMES_MAX_CONNECTIONS", 8, 1);
+  const max = envInt("JARVIS_HERMES_MAX_CONNECTIONS", DEFAULT_MAX_CONNECTIONS, 1);
+  const reserve = Math.min(max - 1, envInt("JARVIS_HERMES_RESERVED_INTERACTIVE", DEFAULT_RESERVED_INTERACTIVE, 0));
+  const wantStreams = envInt("JARVIS_MAX_STREAMS", max === DEFAULT_MAX_CONNECTIONS ? DEFAULT_MAX_STREAMS : Math.max(1, Math.floor(max / 2)), 1);
   return {
     max,
-    maxStreams: Math.min(max, envInt("JARVIS_MAX_STREAMS", Math.max(1, Math.floor(max / 2)), 1)),
-    reserve: Math.min(max - 1, envInt("JARVIS_HERMES_RESERVED_INTERACTIVE", 2, 0)),
-    ratePerSec: envInt("JARVIS_HERMES_RATE_PER_SEC", 8, 1),
-    burst: envInt("JARVIS_HERMES_RATE_BURST", 16, 1),
+    // Streams hold a slot for the whole run: keep at least one slot (or the interactive
+    // reserve, if larger) free of them so Stop/approve/status calls always get through, even
+    // when JARVIS_MAX_STREAMS >= the connection limit (#251). One stream is always allowed.
+    maxStreams: Math.max(1, Math.min(wantStreams, max - Math.max(1, reserve))),
+    reserve,
+    ratePerSec: envInt("JARVIS_HERMES_RATE_PER_SEC", 20, 1),
+    burst: envInt("JARVIS_HERMES_RATE_BURST", 40, 1),
   };
 }
 

@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, type ComponentType, type ReactNode } from "react";
 import { AreasIcon, InboxIcon, SunIcon } from "@/components/icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { cx, useToast } from "@/components/ui";
-import { Badge, type Tone } from "@/components/ui/legacy";
+import { Button, Pill, cx, useToast } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import { STATUS_LABELS, type GithubRefreshResult, type WorkStatus } from "@/lib/work";
 
@@ -65,9 +64,15 @@ export function AreasNav({
           return (
             <li key={s.key} className={n === 3 ? "wk-nav-sep" : undefined}>
               {onPick && IN_PAGE.has(s.key) ? (
-                <button type="button" className="wk-nav-item" aria-current={active === s.key ? "page" : undefined} onClick={() => onPick(s.key as "today")}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="wk-nav-item"
+                  aria-current={active === s.key ? "page" : undefined}
+                  onClick={() => onPick(s.key as "today")}
+                >
                   {body}
-                </button>
+                </Button>
               ) : (
                 <Link href={s.href} className="wk-nav-item" aria-current={active === s.key ? "page" : undefined}>
                   {body}
@@ -93,7 +98,7 @@ export function WorkPageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?
         <div className="min-w-0">
           {eyebrow ? <p className="wk-eyebrow">{eyebrow}</p> : null}
           <h1 className="text-xl leading-tight font-semibold tracking-tight">{title}</h1>
-          {subtitle ? <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-0.5 text-sm text-muted">{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
@@ -128,7 +133,7 @@ export function Block({
   );
 }
 
-export const STATUS_TONE: Record<WorkStatus, Tone> = {
+export const STATUS_TONE: Record<WorkStatus, NonNullable<Parameters<ReturnType<typeof useToast>["toast"]>[1]>> = {
   captured: "neutral",
   exploring: "neutral",
   ready: "accent",
@@ -171,7 +176,7 @@ export function StatusBadge({ status, auto }: { status: WorkStatus; auto?: boole
         {STATUS_LABELS[status]}
       </span>
       {/* Settled by an area's auto_after_quiet policy (or before phase 3). */}
-      {auto && status === "settled" ? <Badge tone="neutral">Auto-settled</Badge> : null}
+      {auto && status === "settled" ? <Pill tone="neutral">Auto-settled</Pill> : null}
     </span>
   );
 }

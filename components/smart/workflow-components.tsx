@@ -8,8 +8,8 @@ import { blockFits, blockMoveIntent, chipIntent, DAY_END, DAY_START, fmtMinutes,
 import { calendarRef } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
-import { cx } from "@/components/ui";
-import { Badge, Button, ButtonLink, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
+import { Button, ButtonLink, ChipButton, Pill, cx } from "@/components/ui";
+import { OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { InlineText, useSurface } from "./context";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
@@ -33,8 +33,8 @@ function unavailableText(h: HydratedRef | undefined, hydrating: boolean) {
 function DuePill({ due, today }: { due?: string; today: string }) {
   if (!due) return null;
   const late = daysBetween(due, today);
-  if (late > 0) return <Badge tone="danger">{late === 1 ? "1 day late" : `${late} days late`}</Badge>;
-  return <Badge tone={late === 0 ? "warn" : "neutral"}>{late === 0 ? "Today" : fmtDay(due)}</Badge>;
+  if (late > 0) return <Pill tone="bad">{late === 1 ? "1 day late" : `${late} days late`}</Pill>;
+  return <Pill tone={late === 0 ? "wn" : "neutral"}>{late === 0 ? "Today" : fmtDay(due)}</Pill>;
 }
 
 // --- metrics ---
@@ -52,7 +52,7 @@ export function MetricGauge({ metric, label }: { metric: string; label?: string 
   const name = label ?? m?.label ?? "Metric";
   if (!m) {
     return (
-      <div className="min-w-[9rem] flex-1 rounded-[10px] border border-line px-3 py-2">
+      <div className="min-w-0 flex-1 basis-36 rounded-lg border border-line px-3 py-2">
         <p className="text-xs font-semibold tracking-wide text-muted uppercase">{name}</p>
         <p className="text-xs text-muted">{unavailableText(s.refs[metric], s.hydrating)}</p>
       </div>
@@ -62,7 +62,7 @@ export function MetricGauge({ metric, label }: { metric: string; label?: string 
   const pct = max > 0 && m.value != null ? Math.max(0, Math.min(1, m.value / max)) : 0;
   const tone = pct >= 0.9 ? "bg-danger" : pct >= 0.7 ? "bg-warn" : "bg-ok";
   return (
-    <div className="min-w-[9rem] flex-1 rounded-[10px] border border-line px-3 py-2" data-metric={metric}>
+    <div className="min-w-0 flex-1 basis-36 rounded-lg border border-line px-3 py-2" data-metric={metric}>
       <p className="text-xs font-semibold tracking-wide text-muted uppercase">{name}</p>
       <p className="text-lg font-bold tabular-nums" data-dynamic>
         {metricValue(m)}
@@ -106,7 +106,7 @@ export function Sparkline({ element }: P<"Sparkline">) {
   const pts = series.map((x, i) => `${((i / Math.max(1, series.length - 1)) * w).toFixed(1)},${(h - 2 - (x.value / max) * (h - 4)).toFixed(1)}`).join(" ");
   const fmt = (v: number) => (m?.unit === "usd" ? fmtUsd(v) : String(v));
   return (
-    <div className="min-w-[9rem] flex-1 rounded-[10px] border border-line px-3 py-2" data-metric={ref}>
+    <div className="min-w-0 flex-1 basis-36 rounded-lg border border-line px-3 py-2" data-metric={ref}>
       <p className="text-xs font-semibold tracking-wide text-muted uppercase">{name}</p>
       {m && series.length ? (
         <>
@@ -176,24 +176,24 @@ function BriefRow({ row }: { row: PropsOf<"ApprovalChips">["rows"][number] }) {
         ) : null}
       </div>
       {s.readOnly || !h ? null : applied ? (
-        <span className="flex shrink-0 items-center gap-1 text-xs">
+        <span className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
           <span className="text-ok">✓ {applied.message}</span>
           {canUndo(applied) ? (
-            <Button size="sm" variant="ghost" busy={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
+            <Button size="sm" variant="ghost" loading={s.undoing === applied.intentHash} onClick={() => s.undo(applied)} aria-label={`Undo: ${name}`}>
               Undo
             </Button>
           ) : null}
         </span>
       ) : (
-        <span role="group" aria-label={`Plan for ${name}`} className="seg shrink-0">
+        <span role="group" aria-label={`Plan for ${name}`} className="seg min-w-0 flex-wrap">
           {CHIPS.map((c) => {
             const intent = chipIntent(row.ref, c.id, s.today, h.due);
             const noop = c.id !== "skip" && !intent;
             return (
-              <button
+              <ChipButton
                 key={c.id}
                 type="button"
-                className="seg-item"
+                className="seg-item max-w-full whitespace-normal"
                 aria-pressed={chosen === c.id}
                 disabled={noop}
                 title={noop ? (c.id === "today" ? "Already due today" : "Already due tomorrow") : undefined}
@@ -209,7 +209,7 @@ function BriefRow({ row }: { row: PropsOf<"ApprovalChips">["rows"][number] }) {
                 }}
               >
                 {c.label}
-              </button>
+              </ChipButton>
             );
           })}
         </span>
@@ -221,7 +221,7 @@ function BriefRow({ row }: { row: PropsOf<"ApprovalChips">["rows"][number] }) {
 export function ApprovalChips({ element }: P<"ApprovalChips">) {
   const p = element.props;
   return (
-    <section className="overflow-hidden rounded-[10px] border border-line" aria-label={p.title}>
+    <section className="overflow-hidden rounded-lg border border-line" aria-label={p.title}>
       <header className="svh">
         <span className="sv-tag">ApprovalChips</span>
         <h3 className="flex-1 text-sm font-semibold">
@@ -378,8 +378,8 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
           setDrag(null);
         }}
         className={cx(
-          "flex touch-none items-start gap-1 overflow-hidden rounded-[7px] border px-1.5 py-1 text-xs select-none",
-          inGrid ? "absolute right-1 left-1" : "w-44",
+          "flex touch-none items-start gap-1 overflow-hidden rounded-md border px-1.5 py-1 text-xs select-none",
+          inGrid ? "absolute right-1 left-1" : "w-44 max-w-full",
           staged ? "border-accent bg-accent-soft" : proposed ? "border-dashed border-accent/70 bg-surface" : "border-line-strong bg-surface-2",
           drag?.ref === b.ref && "opacity-30",
           !s.readOnly && h && "cursor-grab",
@@ -404,7 +404,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
   const unscheduled = p.blocks.filter((b) => !pos(b).day);
   const ghost = drag ? p.blocks.find((b) => b.ref === drag.ref) : undefined;
   return (
-    <section className="overflow-hidden rounded-[10px] border border-line" aria-label={p.title ?? `Week of ${fmtDay(p.weekOf)}`} data-testid="week-plan">
+    <section className="min-w-0 overflow-hidden rounded-lg border border-line" aria-label={p.title ?? `Week of ${fmtDay(p.weekOf)}`} data-testid="week-plan">
       <header className="svh">
         <span className="sv-tag">WeekPlan</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title ?? `Week of ${fmtDay(p.weekOf)}`}</h3>
@@ -412,7 +412,12 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
           {scheduled.length} scheduled · {Math.round((totalMin / 60) * 10) / 10} h of {capacity / 60} h
         </span>
         {!s.readOnly && pending.length ? (
-          <Button size="sm" variant="ghost" onClick={() => pending.forEach((b) => s.stage(b.ref, blockMoveIntent(b.ref, pos(b).day!)))}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="max-w-full whitespace-normal"
+            onClick={() => pending.forEach((b) => s.stage(b.ref, blockMoveIntent(b.ref, pos(b).day!)))}
+          >
             Accept plan ({pending.length} {pending.length === 1 ? "move" : "moves"})
           </Button>
         ) : null}
@@ -420,6 +425,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
           <Button
             size="sm"
             variant="ghost"
+            className="max-w-full whitespace-normal"
             onClick={() =>
               calCandidates.forEach((b) =>
                 s.stage(`cal:${b.ref}`, { kind: "calendar.block", ref: b.ref, date: pos(b).day!, start: pos(b).start!, minutes: b.minutes }),
@@ -480,7 +486,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
             })}
             <div className="relative" style={{ height: (GRID_END - GRID_START) * PX_PER_MIN }} aria-hidden="true">
               {Array.from({ length: (GRID_END - GRID_START) / 60 }, (_, i) => (
-                <span key={i} className="absolute right-1 text-[10px] text-muted" style={{ top: i * 60 * PX_PER_MIN }}>
+                <span key={i} className="absolute right-1 text-xs text-muted" style={{ top: i * 60 * PX_PER_MIN }}>
                   {((GRID_START / 60 + i + 11) % 12) + 1}
                   {GRID_START / 60 + i >= 12 ? "p" : "a"}
                 </span>
@@ -507,7 +513,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
                     return (
                       <div
                         key={e.id}
-                        className="absolute right-1 left-1 overflow-hidden rounded-[7px] border border-dashed border-line-strong bg-surface px-1.5 py-0.5 text-xs text-muted"
+                        className="absolute right-1 left-1 overflow-hidden rounded-md border border-dashed border-line-strong bg-surface px-1.5 py-0.5 text-xs text-muted"
                         style={{ top: (st - GRID_START) * PX_PER_MIN, height: Math.max(18, (en - st) * PX_PER_MIN - 2) }}
                         data-testid="plan-fixed"
                       >
@@ -542,7 +548,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
       {ghost && drag ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed z-50 rounded-[7px] border border-accent bg-accent-soft px-1.5 py-1 text-xs shadow-lg"
+          className="pointer-events-none fixed z-50 rounded-md border border-accent bg-accent-soft px-1.5 py-1 text-xs shadow-lg"
           style={{ left: drag.x - drag.w / 2, top: drag.y - drag.dy, width: drag.w, height: drag.h }}
         >
           {titleOf(ghost.ref) ?? ""}
@@ -564,7 +570,7 @@ export function PRCard({ element }: P<"PRCard">) {
   const [all, setAll] = useState(false);
   if (!pr) {
     return (
-      <section className="rounded-[10px] border border-line px-3 py-2" aria-label="Pull request">
+      <section className="rounded-lg border border-line px-3 py-2" aria-label="Pull request">
         <p className="font-medium">{ref.slice(3)}</p>
         <p className="text-xs text-muted">{unavailableText(s.refs[ref], s.hydrating)}</p>
       </section>
@@ -574,7 +580,7 @@ export function PRCard({ element }: P<"PRCard">) {
   const open = pr.state === "open";
   const shown = all ? pr.checks : pr.checks.slice(0, 6);
   return (
-    <section className="overflow-hidden rounded-[10px] border border-line" aria-label={`Pull request #${pr.number}: ${pr.title}`} data-testid="pr-card">
+    <section className="overflow-hidden rounded-lg border border-line" aria-label={`Pull request #${pr.number}: ${pr.title}`} data-testid="pr-card">
       <header className="svh">
         <span className="sv-tag">PRCard</span>
         <h3 className="min-w-0 flex-1 text-sm font-semibold">
@@ -582,14 +588,14 @@ export function PRCard({ element }: P<"PRCard">) {
         </h3>
         {open ? (
           r.blockers.length ? (
-            <Badge tone="warn">
+            <Pill tone="wn">
               {r.blockers.length} {r.blockers.length === 1 ? "blocker" : "blockers"}
-            </Badge>
+            </Pill>
           ) : (
-            <Badge tone="ok">Ready to merge</Badge>
+            <Pill tone="ok">Ready to merge</Pill>
           )
         ) : (
-          <Badge tone={pr.state === "merged" ? "ok" : "neutral"}>{pr.state}</Badge>
+          <Pill tone={pr.state === "merged" ? "ok" : "neutral"}>{pr.state}</Pill>
         )}
       </header>
       <p className="px-3 pt-1.5 text-xs text-muted" data-dynamic>
@@ -633,7 +639,7 @@ export function PRCard({ element }: P<"PRCard">) {
         {!pr.checks.length ? <li className="border-t border-line px-3 py-1 text-xs text-muted">No checks reported for the head commit.</li> : null}
       </ul>
       {pr.checks.length > 6 ? (
-        <Button size="sm" variant="ghost" className="mx-2" onClick={() => setAll((a) => !a)} aria-expanded={all}>
+        <Button size="sm" variant="ghost" className="mx-2 whitespace-normal" onClick={() => setAll((a) => !a)} aria-expanded={all}>
           {all ? "Fewer checks" : `All ${pr.checks.length} checks`}
         </Button>
       ) : null}
@@ -641,9 +647,13 @@ export function PRCard({ element }: P<"PRCard">) {
         <span className="text-muted">Reviews:</span>
         {pr.reviews.length ? (
           pr.reviews.map((rv) => (
-            <Badge key={rv.who} tone={rv.state === "approved" ? "ok" : rv.state === "changes_requested" ? "danger" : "neutral"}>
+            <Pill
+              key={rv.who}
+              tone={rv.state === "approved" ? "ok" : rv.state === "changes_requested" ? "bad" : "neutral"}
+              className="max-w-full whitespace-normal break-words"
+            >
               {rv.who} · {rv.state === "approved" ? "approved" : rv.state === "changes_requested" ? "changes requested" : "commented"}
-            </Badge>
+            </Pill>
           ))
         ) : (
           <span>none yet</span>
@@ -657,11 +667,11 @@ export function PRCard({ element }: P<"PRCard">) {
       <footer className="flex flex-wrap items-center gap-2 border-t border-line-strong px-3 py-2">
         <p className="min-w-0 flex-1 text-xs text-muted">{open ? "Merging happens on GitHub. Jarvis never merges." : "Read from GitHub just now."}</p>
         {pr.itemHref ? (
-          <Link href={pr.itemHref} className="tap inline-flex items-center px-1 text-[13px] text-accent hover:underline">
+          <Link href={pr.itemHref} className="tap inline-flex items-center px-1 text-sm text-accent hover:underline">
             Open item
           </Link>
         ) : null}
-        <ButtonLink href={pr.url} external size="sm">
+        <ButtonLink href={pr.url} external size="sm" className="max-w-full whitespace-normal">
           {open ? "Open on GitHub to merge ↗" : "Open on GitHub ↗"}
         </ButtonLink>
       </footer>

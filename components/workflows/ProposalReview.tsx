@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Field, cx, useToast } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Field, Textarea, cx, useToast } from "@/components/ui";
 import { PROPOSAL_PARTS, proposalSchema, validateProposal, type PartDecision, type ProposalPart, type WorkflowProposal } from "@/lib/workflows/proposal";
 
 const PART_LABEL: Record<ProposalPart, string> = {
@@ -119,7 +118,7 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
             <li
               key={p}
               aria-label={PART_LABEL[p]}
-              className={cx("min-w-0 rounded-[12px] border border-dashed border-accent p-3", dropped && "opacity-60")}
+              className={cx("min-w-0 rounded-xl border border-dashed border-[var(--aib)] p-3", dropped && "opacity-60")}
               data-part={p}
             >
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -142,15 +141,15 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
               {editing === p ? (
                 <div className="mt-2 space-y-2">
                   <Field id={`wf-review-${p}`} label={`Edit ${PART_LABEL[p].toLowerCase()}`} error={editError ?? undefined}>
-                    <textarea
+                    <Textarea
                       id={`wf-review-${p}`}
-                      className={cx(inputCls, "min-h-32 w-full font-mono text-xs")}
+                      className="min-h-32 w-full min-w-0 font-mono text-xs"
                       value={text}
                       onChange={(e) => setText(e.target.value)}
                     />
                   </Field>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="primary" onClick={applyEdit}>
+                    <Button type="button" size="sm" onClick={applyEdit}>
                       Apply
                     </Button>
                     <Button type="button" size="sm" onClick={() => setEditing(null)}>
@@ -180,7 +179,7 @@ export function ProposalReview({ proposal: initial, onCancel }: { proposal: Work
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="primary" onClick={() => void save()} disabled={!result.ok || saving || !!editing}>
+        <Button type="button" variant="primary" className="whitespace-normal" onClick={() => void save()} disabled={!result.ok || saving || !!editing}>
           {saving ? "Saving…" : "Save as draft"}
         </Button>
         {onCancel ? (

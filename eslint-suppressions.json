@@ -26,17 +26,6 @@
       "count": 1
     }
   },
-  "app/(shell)/areas/dashboard/DashboardView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 12
-    }
-  },
   "app/(shell)/areas/timeline/TimelineView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 2
@@ -144,13 +133,7 @@
   },
   "app/(shell)/workouts/WorkoutView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 4
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 9
+      "count": 2
     }
   },
   "app/layout.tsx": {
@@ -716,11 +699,6 @@
       "count": 1
     }
   },
-  "components/smart/WorkflowPage.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 3
-    }
-  },
   "components/smart/WorkflowSurface.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
@@ -730,52 +708,29 @@
     }
   },
   "components/smart/registry.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 8
-    },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 2
+      "count": 1
     }
   },
   "components/smart/v2-components.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
     "jarvis-ui/no-native-controls": {
-      "count": 6
+      "count": 2
     }
   },
   "components/smart/workflow-components.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 13
+      "count": 1
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/work/ActivityFeed.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
     }
   },
   "components/work/AdoptDialog.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 3
     }
   },
   "components/work/ContinueDialog.tsx": {
@@ -788,12 +743,6 @@
   },
   "components/work/DestinationPicker.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
       "count": 1
     }
   },
@@ -835,14 +784,11 @@
     }
   },
   "components/work/QuickAdd.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 5
+      "count": 1
     }
   },
   "components/work/TagsSettingsView.tsx": {
@@ -875,25 +821,11 @@
     }
   },
   "components/work/ai/AiActions.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 13
-    },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 8
-    }
-  },
-  "components/work/ai/AiSettingsView.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 16
-    },
-    "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 12
     }
   },
   "components/work/ai/SuggestFiling.tsx": {
@@ -901,43 +833,23 @@
       "count": 1
     }
   },
-  "components/work/common.tsx": {
+  "components/work/conversations.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 1
+      "count": 2
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
     }
   },
-  "components/work/conversations.tsx": {
+  "components/work/inbox.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 3
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 5
-    }
-  },
-  "components/work/inbox.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 23
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 5
     }
   },
   "components/work/structure.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 6
-    },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
@@ -947,13 +859,10 @@
   },
   "components/work/today.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 13
-    },
-    "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 3
+      "count": 1
     }
   },
   "components/workflows/PassageText.tsx": {
@@ -966,27 +875,10 @@
   },
   "components/workflows/ProposalReview.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
       "count": 1
     }
   },
   "components/workflows/RunOutputs.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 11
-    }
-  },
-  "components/workflows/RunPanel.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
     "jarvis-ui/no-native-controls": {
       "count": 2
     }
@@ -1001,34 +893,14 @@
       "count": 1
     }
   },
-  "components/workflows/StartForm.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 8
-    }
-  },
   "components/workflows/WorkflowBuilder.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
     "jarvis-ui/no-native-controls": {
-      "count": 22
+      "count": 1
     }
   },
   "components/workflows/WorkflowDetail.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
     "jarvis-ui/no-native-controls": {
-      "count": 2
+      "count": 1
     }
   },
   "components/workflows/WorkflowsGallery.tsx": {

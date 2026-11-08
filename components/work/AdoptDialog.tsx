@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { Dialog, ErrorNote, Field, useToast } from "@/components/ui";
-import { Button, Spinner, inputCls } from "@/components/ui/legacy";
+import { Button, Dialog, ErrorNote, Field, Input, KSpinner, Select, useToast } from "@/components/ui";
 import { fmtWhen } from "@/components/work/conversations";
 import type { WorkItem } from "@/lib/work";
 
@@ -68,14 +67,14 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
             <Button onClick={() => setPicked(null)} disabled={busy}>
               Back
             </Button>
-            <Button variant="primary" busy={busy} disabled={unresolved} onClick={() => void adopt()} data-autofocus>
+            <Button variant="primary" loading={busy} disabled={unresolved} onClick={() => void adopt()} data-autofocus className="max-w-full whitespace-normal">
               Adopt and file
             </Button>
           </>
         }
       >
-        <p className="text-sm font-medium [overflow-wrap:anywhere]">{picked.title}</p>
-        <p className="mt-0.5 font-mono text-xs text-muted [overflow-wrap:anywhere]">{picked.id}</p>
+        <p className="text-sm font-medium wrap-anywhere">{picked.title}</p>
+        <p className="mt-0.5 font-mono text-xs text-muted wrap-anywhere">{picked.id}</p>
         {error ? (
           <div className="mt-2">
             <ErrorNote error={error} />
@@ -95,18 +94,18 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
     >
       <div className="space-y-3">
         <Field id="adopt-profile" label="Agent">
-          <select id="adopt-profile" className={inputCls} value={profile ?? current ?? "default"} onChange={(e) => setProfile(e.target.value)}>
+          <Select id="adopt-profile" className="w-full min-w-0" value={profile ?? current ?? "default"} onChange={(e) => setProfile(e.target.value)}>
             <option value="default">Default (Hermes)</option>
             {[...new Set([...(list.data?.profiles ?? []), ...(current ? [current] : [])])].map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {list.isPending ? (
           <p className="flex items-center gap-2 text-sm text-muted">
-            <Spinner /> Loading chats…
+            <KSpinner /> Loading chats…
           </p>
         ) : list.isError ? (
           <ErrorNote error={list.error} />
@@ -114,17 +113,18 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
           <ul className="max-h-[50vh] divide-y divide-line overflow-auto rounded-lg border border-line" aria-label="Chats to adopt">
             {list.data.sessions.map((s) => (
               <li key={s.id}>
-                <button
+                <Button
                   type="button"
-                  className="flex min-h-11 w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-2"
+                  variant="ghost"
+                  className="w-full min-w-0 flex-wrap gap-2 whitespace-normal text-left"
                   onClick={() => setPicked({ id: s.id, title: s.title })}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.title}</span>
-                  <span className="shrink-0 text-xs text-muted" data-dynamic>
+                  <span className="min-w-0 text-xs text-muted wrap-anywhere" data-dynamic>
                     {s.messageCount ? `${s.messageCount} msgs · ` : ""}
                     {fmtWhen(s.lastActiveAt)}
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -141,7 +141,7 @@ export function AdoptDialog({ item, onClose, onDone }: { item: WorkItem; onClose
         >
           <div className="min-w-0 flex-1 basis-48">
             <Field id="adopt-id" label="Or paste a session id">
-              <input id="adopt-id" className={inputCls} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="20261103_…" />
+              <Input id="adopt-id" className="w-full min-w-0" value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="20261103_…" />
             </Field>
           </div>
           <Button type="submit" size="sm" disabled={!paste.trim() || unresolved}>

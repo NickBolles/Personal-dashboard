@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { api } from "@/lib/client/api";
-import { Dialog, ErrorNote, Field, cx, useToast } from "@/components/ui";
-import { Badge, Button, OverflowMenu, Spinner, inputCls } from "@/components/ui/legacy";
+import { Button, Dialog, ErrorNote, Field, IconButton, Input, KSpinner, Pill, Select, Textarea, cx, useToast } from "@/components/ui";
+import { OverflowMenu } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { useWorkMutation } from "@/components/work/common";
 import { UnfiledPanel, fmtWhen, itemPaths } from "@/components/work/conversations";
@@ -54,11 +54,11 @@ export function CaptureForm({
           <label htmlFor="capture-text" className="wk-label mb-1 block">
             Capture to inbox
           </label>
-          <textarea
+          <Textarea
             id="capture-text"
             aria-describedby="capture-text-hint"
             rows={1}
-            className={`${inputCls} min-h-11 resize-y text-base sm:min-h-10`}
+            className="w-full min-w-0 resize-y text-base"
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -73,7 +73,7 @@ export function CaptureForm({
             First line becomes the title. File it later.
           </p>
         </div>
-        <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} busy={save.isPending}>
+        <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} loading={save.isPending}>
           Capture
         </Button>
       </form>
@@ -232,7 +232,7 @@ export function InboxView({
     return () => document.removeEventListener("keydown", on);
   }, []);
   return (
-    <section ref={sectionRef} aria-labelledby="inbox-title" className="@container/inbox space-y-3" data-testid="work-inbox">
+    <section ref={sectionRef} aria-labelledby="inbox-title" className="@container/inbox min-w-0 space-y-3 wrap-anywhere" data-testid="work-inbox">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <p className="wk-eyebrow">Triage</p>
@@ -241,9 +241,9 @@ export function InboxView({
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {q.data ? <span className="text-[13px] text-muted tabular-nums">{q.data.count} waiting</span> : null}
+          {q.data ? <span className="text-sm text-muted tabular-nums">{q.data.count} waiting</span> : null}
           {!focus && suggested.length > 1 ? (
-            <Button size="sm" onClick={() => bulkAccept.mutate(suggested)} busy={bulkAccept.isPending}>
+            <Button size="sm" className="max-w-full whitespace-normal" onClick={() => bulkAccept.mutate(suggested)} loading={bulkAccept.isPending}>
               Accept {suggested.length} suggestions
             </Button>
           ) : null}
@@ -251,6 +251,7 @@ export function InboxView({
             <Button
               size="sm"
               variant={suggested.length > 1 ? "ghost" : undefined}
+              className="max-w-full whitespace-normal"
               onClick={() => setFocus({ total: entries.length, done: 0, skipped: [], handled: [] })}
             >
               Triage one at a time
@@ -260,14 +261,12 @@ export function InboxView({
       </div>
       {bulkUndo ? (
         <div role="status" className="wk-card flex flex-wrap items-center justify-between gap-2 px-3 py-2" data-testid="inbox-bulk-undo">
-          <span className="text-[13px]">Filed {bulkUndo.length} under their suggestions.</span>
+          <span className="text-sm">Filed {bulkUndo.length} under their suggestions.</span>
           <span className="flex items-center gap-1">
-            <Button size="sm" variant="primary" busy={undoBulk.isPending} onClick={() => undoBulk.mutate(bulkUndo)}>
+            <Button size="sm" variant="primary" loading={undoBulk.isPending} onClick={() => undoBulk.mutate(bulkUndo)}>
               Undo
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setBulkUndo(null)} aria-label="Dismiss undo">
-              ✕
-            </Button>
+            <IconButton onClick={() => setBulkUndo(null)} label="Dismiss undo" icon={<span aria-hidden="true">✕</span>} />
           </span>
         </div>
       ) : null}
@@ -299,7 +298,10 @@ export function InboxView({
               </div>
               {q.isPending ? (
                 <div className="p-3">
-                  <Spinner label="Loading inbox…" />
+                  <span role="status" className="inline-flex items-center gap-2">
+                    <KSpinner />
+                    Loading inbox…
+                  </span>
                 </div>
               ) : null}
               {q.error ? (
@@ -308,7 +310,7 @@ export function InboxView({
                 </div>
               ) : null}
               {q.data && !entries.length ? (
-                <p className="px-3 py-2.5 text-[13px] text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p>
+                <p className="px-3 py-2.5 text-sm text-muted">Nothing waiting. Issues assigned to you on GitHub land here.</p>
               ) : null}
               <ul className="wk-rows" ref={listRef}>
                 {entries.map((e) => (
@@ -324,30 +326,31 @@ export function InboxView({
                     <span
                       aria-hidden="true"
                       className={cx(
-                        "mt-0.5 inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md font-mono text-[10px] font-bold",
+                        "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md font-mono text-xs font-bold",
                         e.source === "github_issue" ? "bg-text text-bg" : "bg-surface-2 text-muted ring-1 ring-line",
                       )}
                     >
                       {e.source === "github_issue" ? "GH" : "CA"}
                     </span>
                     <div className="min-w-0 flex-1 max-[359px]:basis-[calc(100%-32px)]">
-                      <p className="line-clamp-2 text-[14px] leading-snug font-semibold break-words @min-[560px]/inbox:line-clamp-none">
+                      <p className="line-clamp-2 text-sm leading-snug font-semibold break-words @min-[560px]/inbox:line-clamp-none">
                         {twoPane ? (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
                             data-inbox-pick={e.id}
                             aria-current={sel?.id === e.id ? "true" : undefined}
-                            className="text-left hover:underline focus-visible:underline"
+                            className="min-w-0 max-w-full whitespace-normal text-left hover:underline focus-visible:underline"
                             onClick={() => setPicked(e.id)}
                             onFocus={() => setPicked(e.id)}
                           >
                             {e.title}
-                          </button>
+                          </Button>
                         ) : (
                           e.title
                         )}
                       </p>
-                      {e.note ? <p className="text-[13px] break-words whitespace-pre-wrap text-muted @min-[560px]/inbox:line-clamp-1">{e.note}</p> : null}
+                      {e.note ? <p className="text-sm break-words whitespace-pre-wrap text-muted @min-[560px]/inbox:line-clamp-1">{e.note}</p> : null}
                       <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted">
                         <span className="font-medium text-text/80">{SOURCE[e.source]}</span>
                         {e.repo ? (
@@ -368,13 +371,13 @@ export function InboxView({
                     </div>
                     {/* Narrow containers: one visible action (File/Accept) + ⋯ (Dismiss). >=560 the preview pane holds the actions. */}
                     {twoPane ? null : (
-                      <div className="flex shrink-0 items-center gap-0.5 max-[359px]:ml-[32px] max-[359px]:w-[calc(100%-32px)] max-[359px]:justify-end">
+                      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-0.5 max-[359px]:ml-8 max-[359px]:w-[calc(100%-32px)] max-[359px]:justify-end">
                         {e.url ? (
                           <a
                             href={e.url}
                             target="_blank"
                             rel="noreferrer noopener"
-                            className="tap inline-flex min-h-11 items-center px-2 text-[13px] text-accent hover:underline sm:min-h-9"
+                            className="tap inline-flex min-h-11 items-center px-2 text-sm text-accent hover:underline sm:min-h-10"
                           >
                             Open<span className="sr-only">: {e.title} on GitHub (opens in a new tab)</span>
                           </a>
@@ -454,7 +457,7 @@ function FocusTriage({
   onExit: () => void;
   onOpenItem: (id: string) => void;
 }) {
-  const kbd = "ml-1.5 rounded border border-line px-1 font-mono text-[10px] text-muted";
+  const kbd = "ml-1.5 rounded border border-line px-1 font-mono text-xs text-muted";
   const s = e?.capture?.suggestion;
   return (
     <section aria-label="Triage one at a time" className="wk-card min-w-0 p-4 sm:p-6" data-testid="inbox-focus">
@@ -483,21 +486,29 @@ function FocusTriage({
           <p data-dynamic className="mt-0.5 text-xs text-muted">
             {fmtWhen(e.createdAt)} · Why: {e.reason}
           </p>
-          {e.note ? <p className="mt-2 text-[14px] break-words whitespace-pre-wrap">{e.note}</p> : null}
+          {e.note ? <p className="mt-2 text-sm break-words whitespace-pre-wrap">{e.note}</p> : null}
           {s ? (
-            <div className="mt-3 rounded-[8px] border border-line bg-surface-2 px-3 py-2" data-testid="inbox-suggestion">
+            <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2" data-testid="inbox-suggestion">
               <p className="wk-label">Suggested destination</p>
-              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[13px]">
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="font-medium break-words">{s.path || s.title}</span>
-                {s.confidence != null ? <Badge tone="accent">{Math.round(s.confidence * 100)}%</Badge> : null}
+                {s.confidence != null ? <Pill tone="ai">{Math.round(s.confidence * 100)}%</Pill> : null}
               </p>
               {s.reason ? <p className="mt-0.5 text-xs text-muted">{s.reason}</p> : null}
             </div>
           ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-1.5">
-            <Button size="sm" variant="primary" onClick={onPrimary} busy={busy} aria-keyshortcuts="Enter" data-inbox-focus="">
+            <Button
+              size="sm"
+              variant="primary"
+              className="max-w-full whitespace-normal"
+              onClick={onPrimary}
+              loading={busy}
+              aria-keyshortcuts="Enter"
+              data-inbox-focus=""
+            >
               {s ? "File here" : e.source === "github_issue" ? "Accept…" : "File…"}
-              <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-[10px] opacity-75">Enter</kbd>
+              <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-xs opacity-75">Enter</kbd>
             </Button>
             {s ? (
               <Button size="sm" onClick={onChoose} aria-keyshortcuts="M">
@@ -518,7 +529,7 @@ function FocusTriage({
           ) : null}
         </div>
       ) : (
-        <p className="mt-4 text-[14px] text-muted">Inbox triaged. Skipped entries are still in the list.</p>
+        <p className="mt-4 text-sm text-muted">Inbox triaged. Skipped entries are still in the list.</p>
       )}
     </section>
   );
@@ -541,7 +552,7 @@ function InboxPreview({
   onOpenItem: (id: string) => void;
 }) {
   const s = e.capture?.suggestion;
-  const kbd = "ml-1.5 rounded border border-line px-1 font-mono text-[10px] text-muted";
+  const kbd = "ml-1.5 rounded border border-line px-1 font-mono text-xs text-muted";
   return (
     <aside aria-label="Inbox preview" className="wk-card min-w-0 self-start p-4" data-testid="inbox-preview">
       <p className="wk-eyebrow">
@@ -552,25 +563,25 @@ function InboxPreview({
           </span>
         ) : null}
       </p>
-      <h3 className="mt-0.5 text-[15px] leading-snug font-semibold break-words">{e.title}</h3>
+      <h3 className="mt-0.5 text-base leading-snug font-semibold break-words">{e.title}</h3>
       <p data-dynamic className="mt-0.5 text-xs text-muted">
         {fmtWhen(e.createdAt)} · Why: {e.reason}
       </p>
-      {e.note ? <p className="mt-2 text-[13px] break-words whitespace-pre-wrap">{e.note}</p> : null}
+      {e.note ? <p className="mt-2 text-sm break-words whitespace-pre-wrap">{e.note}</p> : null}
       {s ? (
-        <div className="mt-3 rounded-[8px] border border-line bg-surface-2 px-3 py-2" data-testid="inbox-suggestion">
+        <div className="mt-3 rounded-lg border border-line bg-surface-2 px-3 py-2" data-testid="inbox-suggestion">
           <p className="wk-label">Suggested destination</p>
-          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[13px]">
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-sm">
             <span className="font-medium">{s.path || s.title}</span>
-            {s.confidence != null ? <Badge tone="accent">{Math.round(s.confidence * 100)}%</Badge> : null}
+            {s.confidence != null ? <Pill tone="ai">{Math.round(s.confidence * 100)}%</Pill> : null}
           </p>
           {s.reason ? <p className="mt-0.5 text-xs text-muted">{s.reason}</p> : null}
         </div>
       ) : null}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <Button size="sm" variant="primary" onClick={onPrimary} busy={busy} aria-keyshortcuts="Enter">
+        <Button size="sm" variant="primary" className="max-w-full whitespace-normal" onClick={onPrimary} loading={busy} aria-keyshortcuts="Enter">
           {s ? "File here" : e.source === "github_issue" ? "Accept…" : "File…"}
-          <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-[10px] opacity-75">Enter</kbd>
+          <kbd className="ml-1.5 rounded border border-current px-1 font-mono text-xs opacity-75">Enter</kbd>
         </Button>
         {s ? (
           <Button size="sm" onClick={onChoose} aria-keyshortcuts="M">
@@ -585,7 +596,7 @@ function InboxPreview({
             href={e.url}
             target="_blank"
             rel="noreferrer noopener"
-            className="tap inline-flex min-h-9 items-center px-2 text-[13px] text-accent hover:underline"
+            className="tap inline-flex min-h-11 items-center px-2 text-sm text-accent hover:underline sm:min-h-10"
           >
             Open on GitHub<span className="sr-only"> (opens in a new tab)</span>
           </a>
@@ -625,7 +636,7 @@ function AcceptDialog({ entry, items, onClose, onAccepted }: { entry: InboxEntry
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" type="submit" form="accept-form" busy={accept.isPending}>
+          <Button variant="primary" type="submit" form="accept-form" loading={accept.isPending}>
             {entry.source === "github_issue" ? "Accept" : "File"}
           </Button>
         </>
@@ -640,23 +651,23 @@ function AcceptDialog({ entry, items, onClose, onAccepted }: { entry: InboxEntry
         }}
       >
         <Field id="acc-title" label="Title">
-          <input id="acc-title" data-autofocus required className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input id="acc-title" data-autofocus required className="w-full min-w-0" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <Field id="acc-dest" label="File under">
-          <select id="acc-dest" className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
+          <Select id="acc-dest" className="w-full min-w-0" value={dest} onChange={(e) => setDest(e.target.value)}>
             {options.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {entry.source === "github_issue" ? (
           <Field id="acc-role" label="The issue is">
-            <select id="acc-role" className={inputCls} value={role} onChange={(e) => setRole(e.target.value as "reference" | "implementation")}>
+            <Select id="acc-role" className="w-full min-w-0" value={role} onChange={(e) => setRole(e.target.value as "reference" | "implementation")}>
               <option value="reference">Reference</option>
               <option value="implementation">Implementation</option>
-            </select>
+            </Select>
           </Field>
         ) : null}
       </form>

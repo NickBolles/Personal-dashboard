@@ -34,6 +34,11 @@ export type ChatAction = {
   /** object title when known (item title, link title, goal) */
   title: string | null;
   itemId: string | null;
+  /**
+   * Item a "Focus" chat can be started on (an area/project/item, never a note). For a note
+   * chip this is the item the note was added to; null when there is nothing focusable.
+   */
+  focusId?: string | null;
   runId: string | null;
   undoOpId: string | null;
   /** internal jump link (/areas?item=…) or the https URL that was linked */
@@ -138,6 +143,9 @@ function parseArgs(input: string | undefined): Obj {
   }
 }
 
+/** The item a "Focus" chat starts on for this chip (notes focus their parent item), or null. */
+export const focusTarget = (a: Pick<ChatAction, "itemId" | "focusId">): string | null => (a.focusId === undefined ? a.itemId : a.focusId);
+
 const itemHref = (id: string | null) => (id ? `/areas?item=${encodeURIComponent(id)}` : null);
 
 /** One tool step → zero or one action. Errors and unknown tools give null. */
@@ -180,6 +188,10 @@ export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): C
     [str(item.id), str(res.itemId), str(decision.itemId), str(args.itemId), kind === "created" ? null : str(args.id)].find(
       (v): v is string => !!v && ITEM_ID.test(v),
     ) ?? null;
+  // A note is not a valid chat focus (the server rejects it as `note_parent`): focus the item
+  // it was added to instead.
+  const noteParent = str(args.itemId);
+  const focusId = kind === "note" ? (noteParent && ITEM_ID.test(noteParent) && noteParent !== itemId ? noteParent : null) : itemId;
   const undo = str(res.undoOpId);
   const run = str(res.runId) ?? str(args.runId);
   const linkUrl = str(link.url) ?? str(args.url);
@@ -197,6 +209,7 @@ export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): C
     label: ACTION_LABEL[kind],
     title: title ? title.slice(0, 200) : null,
     itemId,
+    focusId,
     runId: run && RUN_ID.test(run) ? run : null,
     undoOpId: undo && OP_ID.test(undo) ? undo : null,
     href,

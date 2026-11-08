@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Dialog, cx, useToast } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import { Button, Dialog, Input, Select, Textarea, useToast } from "@/components/ui";
 import { displayValue } from "@/lib/workflows/runs";
 import type { RunPanelView } from "./RunPanel";
 
@@ -89,16 +88,24 @@ function TypedField({ f, value, set, error, multiline }: { f: Field; value: unkn
         {tags.length ? (
           <div className="mb-1 flex flex-wrap gap-1.5">
             {tags.map((t) => (
-              <Button type="button" key={t} size="sm" variant="ghost" aria-label={`Remove tag ${t}`} onClick={() => set(tags.filter((x) => x !== t))}>
+              <Button
+                type="button"
+                key={t}
+                size="sm"
+                variant="ghost"
+                className="max-w-full whitespace-normal break-all"
+                aria-label={`Remove tag ${t}`}
+                onClick={() => set(tags.filter((x) => x !== t))}
+              >
                 {t} ×
               </Button>
             ))}
           </div>
         ) : null}
-        <input
+        <Input
           id={id}
           type="text"
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={draft}
           placeholder="Type a tag, then Enter"
           aria-describedby={errId}
@@ -120,8 +127,8 @@ function TypedField({ f, value, set, error, multiline }: { f: Field; value: unkn
     <label className="block text-sm">
       <span className="mb-1 block font-medium">{f.label}</span>
       {f.type === "number" ? (
-        <input
-          className={cx(inputCls, "w-full")}
+        <Input
+          className="w-full min-w-0"
           type="number"
           inputMode="decimal"
           min={f.min}
@@ -133,18 +140,18 @@ function TypedField({ f, value, set, error, multiline }: { f: Field; value: unkn
           onChange={(e) => set(e.target.value === "" ? null : Number(e.target.value))}
         />
       ) : multiline || f.type === "longtext" ? (
-        <textarea
+        <Textarea
           rows={3}
           maxLength={f.maxLength ?? 4000}
-          className={cx(inputCls, "w-full")}
+          className="w-full min-w-0"
           value={typeof value === "string" ? value : ""}
           aria-invalid={error ? true : undefined}
           aria-describedby={errId}
           onChange={(e) => set(e.target.value)}
         />
       ) : (
-        <input
-          className={cx(inputCls, "w-full")}
+        <Input
+          className="w-full min-w-0"
           type={f.type === "datetime" ? "datetime-local" : f.type === "date" ? "date" : "text"}
           maxLength={f.maxLength}
           value={typeof value === "string" ? value : ""}
@@ -195,7 +202,7 @@ export function EditSessionDialog({ sessionId, run, onClose }: { sessionId: stri
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form={formId} variant="primary" busy={busy} data-testid="workflow-edit-save">
+          <Button type="submit" form={formId} variant="primary" loading={busy} data-testid="workflow-edit-save">
             Save
           </Button>
         </>
@@ -260,10 +267,10 @@ export function EndSessionDialog({ sessionId, run, onClose }: { sessionId: strin
       title="Before you go"
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="ghost" className="min-w-0 whitespace-normal" onClick={onClose}>
             Keep taking notes
           </Button>
-          <Button type="submit" form={formId} variant="primary" busy={busy} data-testid="workflow-end-submit">
+          <Button type="submit" form={formId} variant="primary" loading={busy} className="min-w-0 whitespace-normal" data-testid="workflow-end-submit">
             End session
           </Button>
         </>
@@ -345,20 +352,26 @@ export function SummaryCard({ sessionId, run }: { sessionId: string; run: RunOut
           </Button>
         </div>
       ) : editing ? (
-        <div className="mt-2 space-y-2 rounded-lg border border-dashed border-accent p-2">
+        <div className="mt-2 space-y-2 rounded-lg border border-dashed border-[var(--aib)] p-2">
           <label className="block text-sm">
             <span className="mb-1 block text-xs text-muted">{state === "proposed" ? "Suggested summary — check it before saving" : "Summary"}</span>
-            <textarea
+            <Textarea
               rows={5}
               maxLength={4000}
-              className={cx(inputCls, "w-full")}
+              className="w-full min-w-0"
               value={text ?? run.summary ?? ""}
               onChange={(e) => setText(e.target.value)}
               data-testid="workflow-summary-text"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="primary" busy={busy === "save"} onClick={() => void save((text ?? run.summary ?? "").trim() || null)}>
+            <Button
+              size="sm"
+              variant="primary"
+              loading={busy === "save"}
+              className="max-w-full whitespace-normal"
+              onClick={() => void save((text ?? run.summary ?? "").trim() || null)}
+            >
               Accept summary
             </Button>
             <Button size="sm" variant="ghost" onClick={() => void save(null)}>
@@ -368,7 +381,13 @@ export function SummaryCard({ sessionId, run }: { sessionId: string; run: RunOut
         </div>
       ) : (
         <div className="mt-2">
-          <Button size="sm" busy={busy === "draft"} onClick={() => void draft()} data-testid="workflow-summary-draft">
+          <Button
+            size="sm"
+            loading={busy === "draft"}
+            className="max-w-full whitespace-normal"
+            onClick={() => void draft()}
+            data-testid="workflow-summary-draft"
+          >
             Draft a summary
           </Button>
           <p className="mt-1 text-xs text-muted">Jarvis suggests one from your notes; nothing is saved until you accept it.</p>
@@ -431,14 +450,14 @@ export function ExportBar({ sessionId, run }: { sessionId: string; run: RunOutpu
   return (
     <section className="rounded-lg border border-line p-3" aria-label="Export" data-testid="workflow-export">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="primary" busy={busy} onClick={() => void download()}>
+        <Button size="sm" variant="primary" loading={busy} className="max-w-full whitespace-normal" onClick={() => void download()}>
           Download Markdown
         </Button>
         <Button size="sm" onClick={() => void copy()}>
           Copy
         </Button>
         {driveOn && drive.data?.connected ? (
-          <Button size="sm" busy={planBusy} onClick={() => void openPlan()} data-testid="workflow-drive-open">
+          <Button size="sm" loading={planBusy} className="max-w-full whitespace-normal" onClick={() => void openPlan()} data-testid="workflow-drive-open">
             Save to Drive · asks first
           </Button>
         ) : null}
@@ -498,7 +517,14 @@ function DriveConfirm({ sessionId, run, plan, onClose }: { sessionId: string; ru
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" variant="primary" busy={busy} onClick={() => void save()} data-testid="workflow-drive-save">
+          <Button
+            type="button"
+            variant="primary"
+            loading={busy}
+            className="min-w-0 whitespace-normal"
+            onClick={() => void save()}
+            data-testid="workflow-drive-save"
+          >
             Save to Drive
           </Button>
         </>
@@ -621,7 +647,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
               <Button type="button" variant="ghost" onClick={() => setConfirming(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" busy={busy} disabled={!parent} onClick={() => void create()} data-testid="workflow-actions-confirm">
+              <Button variant="primary" loading={busy} disabled={!parent} onClick={() => void create()} data-testid="workflow-actions-confirm">
                 Create
               </Button>
             </>
@@ -637,7 +663,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
             </ul>
             <label className="block">
               <span className="mb-1 block">Destination</span>
-              <select className={cx(inputCls, "w-full")} value={parent} onChange={(e) => setParent(e.target.value)} data-testid="workflow-actions-parent">
+              <Select className="w-full min-w-0" value={parent} onChange={(e) => setParent(e.target.value)} data-testid="workflow-actions-parent">
                 {!parent ? <option value="">Pick an area</option> : null}
                 {run.areaId && !(areas.data ?? []).some((a) => a.id === run.areaId) ? <option value={run.areaId}>{run.areaTitle ?? "This area"}</option> : null}
                 {(areas.data ?? []).map((a) => (
@@ -645,11 +671,11 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
                     {a.title}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="block">
               <span className="mb-1 block">Due (optional)</span>
-              <input type="date" className={cx(inputCls, "w-full")} value={due} onChange={(e) => setDue(e.target.value)} />
+              <Input type="date" className="w-full min-w-0" value={due} onChange={(e) => setDue(e.target.value)} />
             </label>
           </div>
         </Dialog>
@@ -693,19 +719,20 @@ export function ReflectionPrompt({ sessionId, run }: { sessionId: string; run: R
   };
   if (!prompt)
     return (
-      <button
+      <Button
         type="button"
-        className="tap min-h-11 rounded-full border border-dashed border-accent px-3 text-sm sm:min-h-9"
+        variant="agent"
+        className="max-w-full whitespace-normal border-dashed"
         onClick={() => void ask()}
         disabled={busy}
         data-testid="workflow-prompt-me"
       >
         {busy ? "Thinking…" : "Prompt me"}
-      </button>
+      </Button>
     );
   return (
     <div
-      className="mt-2 rounded-lg border border-dashed border-accent p-2 text-sm"
+      className="mt-2 rounded-lg border border-dashed border-[var(--aib)] p-2 text-sm"
       role="group"
       aria-label="Reflection prompt"
       data-testid="workflow-reflection"
@@ -713,7 +740,7 @@ export function ReflectionPrompt({ sessionId, run }: { sessionId: string; run: R
       <p className="break-words">{prompt}</p>
       <label className="mt-2 block">
         <span className="sr-only">Your answer</span>
-        <textarea rows={2} className={cx(inputCls, "w-full")} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+        <Textarea rows={2} className="w-full min-w-0" value={answer} onChange={(e) => setAnswer(e.target.value)} />
       </label>
       <div className="mt-1 flex flex-wrap gap-2">
         <Button size="sm" variant="primary" disabled={!answer.trim()} onClick={() => void file()}>
