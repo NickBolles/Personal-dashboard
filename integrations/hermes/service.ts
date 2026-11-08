@@ -200,9 +200,13 @@ export async function listSessionPage(user: CurrentUser, opts: SessionListOption
         id: s.id,
         childSessionId: s.id,
         title: s.title,
+        // The list never says how a child ended, so the state stays unknown (no guessed mirror). An ended
+        // child session still records WHEN it ended, which delegated-runs uses to close the matching
+        // dispatch record (runs-attention review: mirrors stuck "running" forever).
         state: "unknown",
         startedAt: s.startedAt,
         updatedAt: s.lastActiveAt,
+        ...(s.endReason ? { endedAt: s.lastActiveAt, ...(s.endReason === "agent_close" ? {} : { error: `Ended: ${s.endReason}` }) } : {}),
       },
       sessionProfile(s.parentSessionId),
     );

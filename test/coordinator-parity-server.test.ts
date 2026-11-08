@@ -207,4 +207,35 @@ describe("coordinator parity (server)", () => {
     await again.done;
     expect(runsOf(area.id).filter((r) => r.delegationId?.startsWith("sub:api_cap:")).length).toBe(25);
   });
+
+  it("closes a dispatch record through its ended child session (mirror no longer stuck running)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Momentum" }, cid);
+    store.placeConversation(owner, { sessionId: "api_m", parentId: area.id, title: "Momentum coordinator" }, cid);
+    const dispatch = sub("sa-0-1df9", "running", {
+      delegationId: "deleg_9d9c",
+      subagentId: "sa-0-1df9",
+      title: "Write the bet",
+      startedAt: "2026-11-08T02:55:00.000Z",
+      updatedAt: "2026-11-08T02:55:02.000Z",
+    });
+    const child = (extra: Partial<ExecutionRecord> = {}) =>
+      sub("20261107_185502_8edf29", "unknown", {
+        delegationId: null,
+        childSessionId: "20261107_185502_8edf29",
+        title: "Subagent: Write the bet",
+        startedAt: "2026-11-08T02:55:03.000Z",
+        updatedAt: "2026-11-08T03:10:00.000Z",
+        ...extra,
+      });
+    expect(syncDelegatedRuns(owner, "api_m", "momentumchief", [dispatch, child()], new Date("2026-11-08T03:11:00Z"))).toBe(1);
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state])).toEqual([["sub:api_m:sa-0-1df9", "running"]]);
+    syncDelegatedRuns(
+      owner,
+      "api_m",
+      "momentumchief",
+      [dispatch, child({ endedAt: "2026-11-08T03:27:10.000Z", updatedAt: "2026-11-08T03:27:10.000Z" })],
+      new Date("2026-11-08T04:00:00Z"),
+    );
+    expect(runsOf(area.id).map((r) => [r.delegationId, r.state, r.finishedAt])).toEqual([["sub:api_m:sa-0-1df9", "done", "2026-11-08T03:27:10.000Z"]]);
+  });
 });

@@ -32,6 +32,51 @@ export function conversationItem(user: CurrentUser, sessionId: string): string |
   return target.id;
 }
 
+const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+const norm = (t: string | null | undefined) =>
+  (t ?? "")
+    .replace(/^subagent:\s*/i, "")
+    .trim()
+    .toLowerCase();
+
+/**
+ * A background delegate_task saves one record per sub-agent (`sa-…` handle, state running) and Hermes' session
+ * list later reports each child SESSION as its own record (child session id, no delegation/handle, state unknown,
+ * `endedAt` once it closed). Nothing else ties the two together, so the dispatch record never finished and its
+ * mirror showed Stalled forever. Pair them (same parent; same goal title, else the only child session that
+ * started within 2 min of the dispatch) and let the child session's liveness/end close the dispatch record.
+ */
+export function linkChildSessions(subs: ExecutionRecord[]): ExecutionRecord[] {
+  const dispatch = subs.filter((r) => !r.childSessionId && (r.subagentId || r.delegationId) && !TERMINAL.has(r.state));
+  const orphans = subs.filter((r) => r.childSessionId && r.id === r.childSessionId && !r.delegationId && !r.subagentId);
+  if (!dispatch.length || !orphans.length) return subs;
+  const used = new Set<string>();
+  const merged = new Map<string, ExecutionRecord>();
+  const near = (d: ExecutionRecord, c: ExecutionRecord) => {
+    const a = ms(d.startedAt);
+    const b = ms(c.startedAt);
+    return Number.isFinite(a) && Number.isFinite(b) && b >= a - 5_000 && b <= a + 120_000;
+  };
+  for (const d of [...dispatch].sort((x, y) => (x.startedAt ?? "").localeCompare(y.startedAt ?? "") || x.id.localeCompare(y.id))) {
+    const free = orphans.filter((c) => !used.has(c.id) && near(d, c));
+    const byTitle = free.filter((c) => norm(c.title) && norm(c.title) === norm(d.title));
+    const c = byTitle.length === 1 ? byTitle[0] : free.length === 1 ? free[0] : undefined;
+    if (!c) continue;
+    used.add(c.id);
+    const ended = !!c.endedAt;
+    merged.set(d.key, {
+      ...d,
+      childSessionId: c.childSessionId,
+      state: ended ? (c.error ? "failed" : "completed") : d.state,
+      endedAt: ended ? c.endedAt : d.endedAt,
+      error: ended && c.error ? c.error : d.error,
+      updatedAt: (c.updatedAt ?? "") > (d.updatedAt ?? "") ? c.updatedAt : d.updatedAt,
+    });
+  }
+  return subs.filter((r) => !used.has(r.id) || !orphans.includes(r)).map((r) => merged.get(r.key) ?? r);
+}
+
 /** Sessions whose last sync stopped at the write cap with records left over (the reconcile requeues them). */
 const capped = () => processSingleton<Set<string>>("delegated_runs_capped", () => new Set());
 /** True once per session whose last `syncDelegatedRuns` hit the write cap; clears the flag. */
@@ -51,7 +96,7 @@ export const mirrorKey = (parentSessionId: string, recordId: string) => `${AUTO_
  * and state + liveness follow the execution record.
  */
 export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, profile: string | null, records: ExecutionRecord[], now = new Date()) {
-  const subs = records.filter((r) => r.source === "subagent");
+  const subs = linkChildSessions(records.filter((r) => r.source === "subagent"));
   capped().delete(`${user.id}:${parentSessionId}`);
   if (!subs.length) return 0;
   const itemId = conversationItem(user, parentSessionId);
