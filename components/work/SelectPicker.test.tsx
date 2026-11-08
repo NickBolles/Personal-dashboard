@@ -269,3 +269,68 @@ it("due picker saves a typed date right away on Enter", () => {
   expect(onSave).toHaveBeenCalledTimes(1);
   expect(onSave).toHaveBeenCalledWith("2027-03-04");
 });
+
+it.each(["Today", "Tomorrow", "Next week", "Clear due date"])("due preset %s wins over a pending custom date on internal blur", (label) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 10, 7, 12));
+  const onSave = vi.fn();
+  render(<DuePicker value="2026-11-21" onSave={onSave} />);
+  fireEvent.click(screen.getByRole("button", { name: /^Due date:/ }));
+  fireEvent.click(screen.getByRole("option", { name: "Pick a date…" }));
+  const date = screen.getByLabelText("Due date", { exact: true, selector: "input" });
+  const preset = screen.getByRole("option", { name: label });
+  fireEvent.change(date, { target: { value: "2027-03-04" } });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS - 100));
+  fireEvent.blur(date, { relatedTarget: preset });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS));
+  expect(onSave).not.toHaveBeenCalled();
+  expect(preset.isConnected).toBe(true);
+  fireEvent.click(preset);
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS));
+  const dates = quickDueDates(new Date());
+  const expected: Record<string, string | null> = { Today: dates.today, Tomorrow: dates.tomorrow, "Next week": dates.nextWeek, "Clear due date": null };
+  expect(onSave).toHaveBeenCalledExactlyOnceWith(expected[label]);
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("due presets cancel the pending custom timer even without a blur", () => {
+  vi.useFakeTimers();
+  const onSave = vi.fn();
+  render(<DuePicker value={null} onSave={onSave} />);
+  fireEvent.click(screen.getByRole("button", { name: /^Due date:/ }));
+  fireEvent.click(screen.getByRole("option", { name: "Pick a date…" }));
+  fireEvent.change(screen.getByLabelText("Due date", { selector: "input" }), { target: { value: "2027-03-04" } });
+  fireEvent.click(screen.getByRole("option", { name: "Tomorrow" }));
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith(quickDueDates(new Date()).tomorrow);
+});
+
+it("due picker still flushes a custom date when focus leaves the picker", () => {
+  vi.useFakeTimers();
+  const onSave = vi.fn();
+  render(<DuePicker value={null} onSave={onSave} />);
+  fireEvent.click(screen.getByRole("button", { name: /^Due date:/ }));
+  fireEvent.click(screen.getByRole("option", { name: "Pick a date…" }));
+  const date = screen.getByLabelText("Due date", { selector: "input" });
+  fireEvent.change(date, { target: { value: "2027-03-04" } });
+  fireEvent.blur(date, { relatedTarget: document.body });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith("2027-03-04");
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("due picker saves a parked custom date when dismissed after focusing a preset", () => {
+  vi.useFakeTimers();
+  const onSave = vi.fn();
+  render(<DuePicker value={null} onSave={onSave} />);
+  fireEvent.click(screen.getByRole("button", { name: /^Due date:/ }));
+  fireEvent.click(screen.getByRole("option", { name: "Pick a date…" }));
+  const date = screen.getByLabelText("Due date", { selector: "input" });
+  fireEvent.change(date, { target: { value: "2027-03-04" } });
+  fireEvent.blur(date, { relatedTarget: screen.getByRole("option", { name: "Tomorrow" }) });
+  act(() => vi.advanceTimersByTime(DUE_EDIT_SETTLE_MS * 2));
+  expect(onSave).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(onSave).toHaveBeenCalledExactlyOnceWith("2027-03-04");
+  expect(screen.queryByRole("dialog")).toBeNull();
+});

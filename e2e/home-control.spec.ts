@@ -116,8 +116,13 @@ test("an agent's device proposal becomes a decision and only the owner's confirm
     expect(body.result.structuredContent).toMatchObject({ proposed: true, executed: false, risk: "high" });
     let state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
     expect(state.haCalls.filter((c: { domain: string }) => c.domain === "lock")).toHaveLength(0);
-    // The decision's House link opens the confirm card; nothing runs until the owner ticks and confirms.
-    await page.goto(body.result.structuredContent.confirmAt);
+    // #238: the decision carries a tappable "Confirm on House" action that opens the confirm card;
+    // nothing runs until the owner ticks and confirms.
+    await page.goto(`/decisions/${encodeURIComponent(`item:${areaId}`)}`);
+    const go = page.getByRole("link", { name: "Confirm on House" });
+    await expect(go).toHaveAttribute("href", body.result.structuredContent.confirmAt);
+    await go.click();
+    await expect(page).toHaveURL(/\/home-control\?entity=lock\.front_door_lock&propose=unlock/);
     const dialog = page.getByRole("dialog", { name: /Unlock Front door lock\?/ });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: /Yes, unlock/ })).toBeDisabled();
@@ -148,4 +153,11 @@ test("ask Hermes about my home attaches a snapshot of what Jarvis sees", async (
   const context = decodeURIComponent(new URL(page.url()).searchParams.get("context") ?? "");
   expect(context).toContain("Garage door (cover.garage_door)");
   expect(context).toContain("Health:");
+});
+
+test("a paused media player counts as powered on (#246)", async ({ page }) => {
+  await page.goto("/home-control");
+  const sw = page.getByRole("switch", { name: /^Living room speaker: on, turn off$/ });
+  await expect(sw).toBeVisible();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
 });
