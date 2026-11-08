@@ -27,6 +27,7 @@ import { awayFixture, schedulesFixture } from "./fixtures/away";
 import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
+import type { ResumeResponse } from "../lib/resume";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -43,6 +44,17 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
 test.beforeEach(async ({ request, page }) => {
+  await page.route("**/api/work/resume", (route) =>
+    route.fulfill({
+      json: {
+        runs: [],
+        conversations: [],
+        counts: { running: 0, waiting: 0, unread: 0, unfiled: 0 },
+        conversationsUnavailable: false,
+        fetchedAt: "2026-11-07T14:05:00Z",
+      },
+    }),
+  );
   await page.route("**/api/agents/away", (route) => route.fulfill({ json: EMPTY_AWAY }));
   await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(localDate(new Date(), "America/Chicago")) }));
   await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
@@ -2287,5 +2299,147 @@ for (const scheme of ["light", "dark"] as const) {
     await dialog.getByRole("button", { name: "Ask to fix…" }).click();
     await expect(page.getByRole("dialog", { name: "Ask to fix" })).toHaveScreenshot(`feedback-ask-fix-${scheme}.png`, { animations: "disabled" });
     await page.keyboard.press("Escape");
+  });
+}
+
+test("visual: resume hub", async ({ page }) => {
+  await freezeMiddayCT(page);
+  const todayCT = localDate(new Date(), "America/Chicago");
+  const at = `${todayCT}T14:05:00Z`;
+  const run = { kind: "run" as const, path: "General Dev › Jarvis › Resume hub", approval: false, stalled: false, who: "@devchief", at };
+  const conversation = {
+    kind: "conversation" as const,
+    preview: null,
+    path: "General Dev › Jarvis",
+    parentId: "resume_project",
+    unfiled: false,
+    unread: false,
+    unreadCount: null,
+    agentProfile: "devchief",
+    at,
+    itemHref: "/areas?item=resume_project",
+  };
+  const fixture: ResumeResponse = {
+    runs: [
+      {
+        ...run,
+        key: "waiting",
+        itemId: "resume_waiting",
+        title: "Review the resume hub",
+        live: "waiting",
+        approval: true,
+        href: "/chat/resume_waiting",
+        itemHref: "/areas?item=resume_waiting",
+        sessionId: "resume_waiting",
+      },
+      {
+        ...run,
+        key: "running",
+        itemId: "resume_running",
+        title: "Verify navigation",
+        live: "running",
+        href: "/chat/resume_running",
+        itemHref: "/areas?item=resume_running",
+        sessionId: "resume_running",
+      },
+    ],
+    conversations: [
+      { ...conversation, key: "unread", sessionId: "resume_unread", title: "Navigation review", unread: true, unreadCount: 2, href: "/chat/resume_unread" },
+      { ...conversation, key: "recent", sessionId: "resume_recent", title: "Plan the next iteration", href: "/chat/resume_recent" },
+      {
+        ...conversation,
+        key: "unfiled",
+        sessionId: "resume_unfiled",
+        title: "A thought to file",
+        unfiled: true,
+        path: null,
+        parentId: null,
+        itemHref: null,
+        href: "/chat/resume_unfiled",
+      },
+    ],
+    counts: { running: 1, waiting: 1, unread: 1, unfiled: 1 },
+    conversationsUnavailable: false,
+    fetchedAt: at,
+  };
+  await page.route("**/api/work/resume", (route) => route.fulfill({ json: fixture }));
+  const viewport = page.viewportSize()!;
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto("/resume");
+    await expect(page.getByTestId("resume-row")).toHaveCount(5);
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await expectNoHorizontalOverflow(page);
+    const main = page.locator("main").first();
+    const height = await main.evaluate((el) => Math.ceil(el.getBoundingClientRect().height));
+    if (height + 160 > viewport.height) await page.setViewportSize({ width: viewport.width, height: height + 160 });
+    await withoutTray(page, () =>
+      expect(main).toHaveScreenshot(`resume-hub-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => main.locator(m)) }),
+    );
+    await page.setViewportSize(viewport);
+  }
+});
+
+// Coordinator parity: reply-local actions, with stable tool payloads and no real writes.
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: chat actions taken (${scheme})`, async ({ page }) => {
+    const at = "2026-11-07T20:00:00.000Z";
+    const sid = "sess_actions_visual";
+    await page.clock.setFixedTime(new Date(at));
+    await page.emulateMedia({ colorScheme: scheme });
+    const tool = "mcp__jarvis__jarvis_create_item";
+    const result = { item: { id: "wk_retry", title: "Retry policy" }, undoOpId: "op_retry" };
+    await page.route(new RegExp(`/api/hermes/sessions/${sid}$`), (route) =>
+      route.fulfill({
+        json: {
+          ...chatVisual,
+          session: { ...chatVisual.session, id: sid, title: "Jarvis coordinator", startedAt: at, lastActiveAt: at },
+          timeline: [
+            { kind: "user", id: "actions-user", text: "Create the retry policy and dispatch an audit.", at },
+            {
+              kind: "tool",
+              id: "actions-create",
+              tool,
+              summary: "Create retry policy",
+              input: JSON.stringify({ title: "Retry policy", parentId: "wk_area" }),
+              detail: `<untrusted_tool_result source="${tool}">\n${JSON.stringify({ result: JSON.stringify(result) })}\n</untrusted_tool_result>`,
+              at,
+            },
+            {
+              kind: "tool",
+              id: "actions-dispatch",
+              tool: "delegate_task",
+              summary: "Dispatch audit",
+              input: JSON.stringify({ tasks: [{ goal: "Audit retries" }, { goal: "Check tests" }] }),
+              detail: JSON.stringify({ status: "dispatched", delegation_id: "deleg_visual", subagent_ids: ["sa_retry", "sa_tests"] }),
+              at,
+            },
+            { kind: "assistant", id: "actions-answer", text: "Retry policy created. Two sub-agents are checking the implementation and tests.", at },
+          ],
+        },
+      }),
+    );
+    await page.route(`**/api/hermes/sessions/${sid}/execution`, (route) =>
+      route.fulfill({
+        json: {
+          sessionId: sid,
+          parent: null,
+          records: [],
+          sources: [{ source: "hermes_children", state: "ok", at }],
+          fetchedAt: at,
+        },
+      }),
+    );
+    await page.route(`**/api/hermes/sessions/${sid}/area?*`, (route) => route.fulfill({ json: { enabled: false } }));
+    await page.route("**/api/work/conversations/read", (route) => route.fulfill({ json: { ok: true } }));
+    await page.route(/\/api\/feedback(?:\?.*)?$/, (route) => route.fulfill({ json: { entries: [] } }));
+    await page.goto(`/chat/${sid}`);
+    await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), scheme);
+    const message = page.locator("#msg-actions-answer");
+    await expect(message.getByTestId("actions-taken")).toBeVisible();
+    await expect(message.getByRole("button", { name: "Created · Retry policy" })).toBeVisible();
+    await expect(message.getByRole("button", { name: "2 sub-agents · Audit retries" })).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await withoutTray(page, () => expect(message).toHaveScreenshot(`chat-actions-taken-${scheme}.png`, { animations: "disabled" }));
   });
 }

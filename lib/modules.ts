@@ -54,6 +54,7 @@ export const MODULES: ModuleDef[] = [
     apiRoutes: [{ prefix: "/api/quick-actions", capability: "work.use" }],
     routes: [
       { href: "/areas", label: "Areas" },
+      { href: "/resume", label: "In flight" },
       { href: "/decisions", label: "Needs you" },
       { href: "/inbox", label: "Inbox" },
       { href: "/workflows", label: "Workflows" },
