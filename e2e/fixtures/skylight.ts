@@ -2,6 +2,12 @@ import type { NextAction } from "../../lib/contracts";
 import { addDays, localDate, localTimeToInstant } from "../../lib/time";
 
 /**
+ * The one instant every Skylight visual pins the browser clock to (12:00 CDT on a Wednesday, far from DST
+ * changes and day boundaries). Fixtures built from it have fixed due texts at any wall-clock time.
+ */
+export const SKYLIGHT_VISUAL_NOW = "2026-10-14T17:00:00.000Z";
+
+/**
  * /api/sources/skylight for visual tests: two open chores and one done today (fixture text only).
  * Built at test time so freshness (fetchedAt/staleAfter) is real: a fixed past time would show
  * "Last updated N hours ago" on every card.

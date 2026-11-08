@@ -557,6 +557,13 @@ export function createHermes({ apiKey }) {
     if (path === "/health" || path === "/v1/health") {
       return json(res, 200, { status: "ok", platform: "hermes-agent", version: "v2026.9.24-mock" });
     }
+    const busy = control.hermesBusy;
+    if (busy && busy.count > 0 && (!busy.method || busy.method === req.method) && (!busy.path || busy.path === path)) {
+      busy.count--;
+      busy.hits++;
+      res.writeHead(429, { "content-type": "text/plain; charset=utf-8" });
+      return res.end("max connections reached: 10");
+    }
     if (control.fail.has("hermes")) return json(res, 503, { error: { message: "Mock outage", type: "server_error", code: "gateway_draining" } });
     if (!bearerOk(req, profile ? MOCK_PROFILE_KEYS[profile] : apiKey)) {
       return json(res, 401, { error: { message: "Invalid gateway API key (API_SERVER_KEY)", type: "gateway_auth_error", code: "gateway_auth_failed" } });

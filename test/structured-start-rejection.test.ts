@@ -27,8 +27,12 @@ it.each([429, 503])("retains an ambiguous HTTP %s start failure without leaking 
   vi.stubGlobal("fetch", fetch);
   await expect(
     runStructured({ source: "skylight", label: "Skylight", task: "fixture", schema: z.object({ ok: z.boolean() }), example: {} }),
-  ).rejects.toMatchObject({ kind: "bad_response", message: "Hermes could not complete the Skylight request" });
-  expect(requests).toEqual(["POST /api/sessions", "PATCH /api/sessions/session_fixture", "POST /v1/runs"]);
+  ).rejects.toMatchObject({ kind: status === 429 ? "busy" : "bad_response", message: "Hermes could not complete the Skylight request" });
+  // A 429 is retried (same Idempotency-Key, so an accepted run is never started twice); background syncs give up after 2 retries.
+  const starts = status === 429 ? 3 : 1;
+  expect(requests).toEqual(["POST /api/sessions", "PATCH /api/sessions/session_fixture", ...Array(starts).fill("POST /v1/runs")]);
+  const keys = fetch.mock.calls.filter(([u]) => u.pathname === "/v1/runs").map(([, i]) => new Headers(i?.headers).get("idempotency-key"));
+  expect(new Set(keys).size).toBe(1);
   expect(setSetting).toHaveBeenCalledExactlyOnceWith(
     "hermes_sync_failure:skylight",
     expect.objectContaining({ status: "unknown", cleanup: "retained", sessionId: "session_fixture" }),

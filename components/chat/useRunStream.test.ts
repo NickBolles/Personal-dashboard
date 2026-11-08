@@ -5,6 +5,18 @@ const base: RunState = { runId: "r1", phase: "running", text: "", reasoning: "",
 const at = "2026-09-30T00:00:00Z";
 
 describe("run state reducer", () => {
+  it("keeps queued status until work starts, including reconnect and stop", () => {
+    let s = reduceRun(base, { type: "event", event: { type: "run.queued" } });
+    expect(s.phase).toBe("queued");
+    s = reduceRun(s, { type: "event", event: { type: "unknown", event: "heartbeat" } });
+    expect(s.phase).toBe("queued");
+    s = reduceRun(s, { type: "reconciled", view: { runId: "r1", sessionId: "s", status: "queued" } });
+    expect(s.phase).toBe("queued");
+    expect(reduceRun(s, { type: "event", event: { type: "text.delta", delta: "Starting" } }).phase).toBe("running");
+    s = reduceRun(s, { type: "phase", phase: "stopping" });
+    expect(reduceRun(s, { type: "event", event: { type: "run.queued" } }).phase).toBe("stopping");
+    expect(reduceRun({ ...s, phase: "cancelled" }, { type: "event", event: { type: "run.queued" } }).phase).toBe("cancelled");
+  });
   it("accumulates deltas and pairs tool start/complete", () => {
     let s = reduceRun(base, { type: "event", event: { type: "tool.started", tool: "terminal", preview: "ls", at }, seq: 0 });
     s = reduceRun(s, { type: "event", event: { type: "text.delta", delta: "Hi " }, seq: 1 });
