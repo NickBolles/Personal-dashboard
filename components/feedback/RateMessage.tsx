@@ -4,8 +4,8 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { useAccess } from "@/components/access";
-import { Dialog, cx, inputCls, useToast } from "@/components/ui";
-import { Button } from "@/components/ui/kit";
+import { Dialog, cx, useToast, Button } from "@/components/ui";
+import { inputCls } from "@/components/ui/legacy";
 import { ThumbDownIcon, ThumbUpIcon } from "@/components/icons";
 import {
   FEEDBACK_NOTE_MAX,

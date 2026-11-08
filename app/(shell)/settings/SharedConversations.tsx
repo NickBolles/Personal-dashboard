@@ -4,8 +4,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
-import { Button, Card, ErrorNote, Spinner, useToast } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
+import { Button, Card, ErrorNote, useToast, EmptyState, KSpinner } from "@/components/ui";
 
 type Shared = { conversations: { id: string; title: string; lastActiveAt: string | null }[]; unavailable: string[] };
 
@@ -28,7 +27,12 @@ export function SharedConversations() {
     <Card>
       <h2 className="eyebrow mb-1">Shared conversations</h2>
       <p className="mb-2 text-sm text-muted">Others in the household can read and fork these; only you can continue them.</p>
-      {q.isPending ? <Spinner label="Loading…" /> : null}
+      {q.isPending ? (
+        <span role="status">
+          <KSpinner />
+          Loading…
+        </span>
+      ) : null}
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
       {q.data && !list.length ? <EmptyState title="You aren't sharing any conversations." /> : null}
       {list.length ? (
@@ -45,7 +49,7 @@ export function SharedConversations() {
                   </p>
                 ) : null}
               </div>
-              <Button size="sm" onClick={() => stop.mutate(c.id)} busy={stop.isPending && stop.variables === c.id} aria-label={`Stop sharing ${c.title}`}>
+              <Button size="sm" onClick={() => stop.mutate(c.id)} loading={stop.isPending && stop.variables === c.id} aria-label={`Stop sharing ${c.title}`}>
                 Stop sharing
               </Button>
             </li>

@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, Field, inputCls } from "@/components/ui";
+import { Dialog, Field } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { useWorkMutation } from "@/components/work/common";
 import { itemPaths } from "@/components/work/conversations";
 import { CREATABLE_KINDS, KIND_LABELS, defaultChildKind, parseQuickPath, type CreatableKind, type WorkItem } from "@/lib/work";

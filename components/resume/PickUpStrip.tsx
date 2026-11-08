@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ButtonLink, SectionHeader } from "@/components/ui/kit";
+import { ButtonLink, SectionHeader } from "@/components/ui";
 import { pickUpRows } from "@/lib/resume";
 import { ResumeDot, useResume } from "./ResumeView";
 

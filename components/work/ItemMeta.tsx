@@ -2,8 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx } from "@/components/ui";
-import { ChipButton } from "@/components/ui/kit";
+import { cx, ChipButton } from "@/components/ui";
 import { AreaPickerDot, MetaPicker, SelectPicker, PersonIcon, TagIcon, type PickerOption } from "@/components/work/MetaPicker";
 import { assigneeLabel, defaultTagColor, matchesItemFilter, normaliseTag, type TagColor, type WorkTag } from "@/lib/item-tags";
 

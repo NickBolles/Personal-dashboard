@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { APP_CALLBACK_MESSAGES, APP_NAME_MAX, parseRepoList, type GithubSettingsResponse, type PublicGithubApp } from "@/lib/github";
-import { Badge, Button, ButtonLink, Dialog, Field, cx, inputCls, useToast } from "@/components/ui";
+import { Button, ButtonLink, Dialog, Field, Input, Pill, Textarea, cx, useToast } from "@/components/ui";
 
 /**
  * Settings → Connections → GitHub → GitHub App (admin). "Create GitHub App"
@@ -52,7 +52,7 @@ export function GithubAppSection({ s }: { s: GithubSettingsResponse }) {
         <h3 id="gh-app" className="font-semibold">
           GitHub App (recommended)
         </h3>
-        <Badge tone="ok">Read-only</Badge>
+        <Pill tone="ok">Read-only</Pill>
       </div>
       {notice ? (
         <p role="status" data-testid="gh-app-notice" className={cx("rounded-lg p-2 text-sm", ok ? "bg-ok-soft text-ok" : "bg-danger-soft text-danger")}>
@@ -95,29 +95,31 @@ function CreateApp({ s }: { s: GithubSettingsResponse }) {
         }}
       >
         <Field id="gh-app-name" label="App name" hint={`Must be unique on GitHub, up to ${APP_NAME_MAX} characters.`}>
-          <input id="gh-app-name" required maxLength={APP_NAME_MAX} className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+          <Input id="gh-app-name" required maxLength={APP_NAME_MAX} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <fieldset className="space-y-1">
           <legend className="text-sm font-medium">Create it under</legend>
           <label className="tap flex min-h-11 items-center gap-2">
+            {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Segmented cannot preserve native radio name/value and keyboard behavior. */}
             <input type="radio" name="gh-app-target" value="user" checked={target === "user"} onChange={() => setTarget("user")} />
             My GitHub account
           </label>
           <label className="tap flex min-h-11 items-center gap-2">
+            {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Segmented cannot preserve native radio name/value and keyboard behavior. */}
             <input type="radio" name="gh-app-target" value="org" checked={target === "org"} onChange={() => setTarget("org")} />
             An organization
           </label>
         </fieldset>
         {target === "org" ? (
           <Field id="gh-app-org" label="Organization">
-            <input id="gh-app-org" required className={inputCls} value={org} onChange={(e) => setOrg(e.target.value)} placeholder="momentumbets" />
+            <Input id="gh-app-org" required value={org} onChange={(e) => setOrg(e.target.value)} placeholder="momentumbets" />
           </Field>
         ) : null}
         <p className="text-xs break-all text-muted">
           GitHub will send you back to {s.appSetup.callbackUrl}; webhooks go to {s.appSetup.webhookUrl}. The App is public so it can be installed on your
           account and your organizations; only accounts in the allowlist are used.
         </p>
-        <Button type="submit" variant="primary" busy={create.isPending}>
+        <Button type="submit" variant="primary" loading={create.isPending}>
           Create GitHub App
         </Button>
       </form>
@@ -160,16 +162,16 @@ function ConnectExisting() {
       >
         <p className="text-muted">Jarvis checks the App ID and private key with GitHub before saving. Both secrets are write-only.</p>
         <Field id="gh-app-id" label="App ID">
-          <input id="gh-app-id" required inputMode="numeric" pattern="[0-9]+" className={inputCls} value={appId} onChange={(e) => setAppId(e.target.value)} />
+          <Input id="gh-app-id" required inputMode="numeric" pattern="[0-9]+" value={appId} onChange={(e) => setAppId(e.target.value)} />
         </Field>
         <Field id="gh-app-pem" label="Private key (.pem)" hint="Paste it or choose the file GitHub downloaded.">
-          <textarea
+          <Textarea
             id="gh-app-pem"
             required
             rows={4}
             spellCheck={false}
             autoComplete="off"
-            className={cx(inputCls, "font-mono text-xs")}
+            className="font-mono text-xs"
             value={pem}
             onChange={(e) => setPem(e.target.value)}
           />
@@ -191,9 +193,9 @@ function ConnectExisting() {
           />
         </div>
         <Field id="gh-app-secret" label="Webhook secret (optional)" hint="The secret set on the App's webhook. Write-only.">
-          <input id="gh-app-secret" type="password" autoComplete="off" className={inputCls} value={secret} onChange={(e) => setSecret(e.target.value)} />
+          <Input id="gh-app-secret" type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)} />
         </Field>
-        <Button type="submit" busy={connect.isPending}>
+        <Button type="submit" loading={connect.isPending}>
           Connect App
         </Button>
       </form>
@@ -224,18 +226,10 @@ function WebhookSecretForm({ set }: { set: boolean }) {
     >
       <div className="min-w-0 flex-1">
         <Field id="gh-app-hook-secret" label={set ? "Replace the App's webhook secret" : "App webhook secret"} hint="Write-only.">
-          <input
-            id="gh-app-hook-secret"
-            type="password"
-            autoComplete="off"
-            required
-            className={inputCls}
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-          />
+          <Input id="gh-app-hook-secret" type="password" autoComplete="off" required value={secret} onChange={(e) => setSecret(e.target.value)} />
         </Field>
       </div>
-      <Button type="submit" size="sm" busy={save.isPending}>
+      <Button type="submit" size="sm" loading={save.isPending}>
         Save secret
       </Button>
     </form>
@@ -288,7 +282,7 @@ function AppDetails({ app, autoRefresh }: { app: PublicGithubApp; autoRefresh: b
         <ButtonLink href={app.installUrl} external variant="primary" className="min-h-11 px-3 text-sm" data-testid="gh-app-install">
           Install on GitHub
         </ButtonLink>
-        <Button size="sm" onClick={() => refresh.mutate()} busy={refresh.isPending}>
+        <Button size="sm" onClick={() => refresh.mutate()} loading={refresh.isPending}>
           Refresh installations
         </Button>
       </div>
@@ -305,8 +299,8 @@ function AppDetails({ app, autoRefresh }: { app: PublicGithubApp; autoRefresh: b
                     {i.account} <span className="text-xs font-normal text-muted">({i.accountType === "Organization" ? "organization" : "user"})</span>
                   </p>
                   <span className="flex flex-wrap gap-1">
-                    {i.allowed ? <Badge tone="ok">In use</Badge> : <Badge tone="danger">Ignored: not in the allowlist</Badge>}
-                    {i.suspended ? <Badge tone="warn">Suspended</Badge> : null}
+                    {i.allowed ? <Pill tone="ok">In use</Pill> : <Pill tone="bad">Ignored: not in the allowlist</Pill>}
+                    {i.suspended ? <Pill tone="wn">Suspended</Pill> : null}
                   </span>
                 </div>
                 <p className="text-xs break-words text-muted">
@@ -346,7 +340,7 @@ function AppDetails({ app, autoRefresh }: { app: PublicGithubApp; autoRefresh: b
         footer={
           <>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
-            <Button variant="danger" busy={forget.isPending} onClick={() => forget.mutate()}>
+            <Button variant="danger" loading={forget.isPending} onClick={() => forget.mutate()}>
               Forget App
             </Button>
           </>
@@ -385,10 +379,10 @@ function AllowlistForm({ app }: { app: PublicGithubApp }) {
             : "Installations on other accounts are ignored and flagged."
         }
       >
-        <input id="gh-app-allowlist" className={inputCls} value={text} onChange={(e) => setText(e.target.value)} placeholder="nickbolles, momentumbets" />
+        <Input id="gh-app-allowlist" value={text} onChange={(e) => setText(e.target.value)} placeholder="nickbolles, momentumbets" />
       </Field>
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" busy={save.isPending && save.variables !== null}>
+        <Button type="submit" size="sm" loading={save.isPending && save.variables !== null}>
           Save allowlist
         </Button>
         {!app.allowlistIsDefault ? (

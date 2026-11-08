@@ -3,7 +3,8 @@
 import { useId, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, cx, inputCls, Spinner } from "@/components/ui";
+import { Dialog, cx } from "@/components/ui";
+import { Button, inputCls, Spinner } from "@/components/ui/legacy";
 import type { AssistantBackend, ModelOption, ModelsResponse } from "@/lib/assistant";
 
 export function useModels(backend: AssistantBackend, enabled = true) {

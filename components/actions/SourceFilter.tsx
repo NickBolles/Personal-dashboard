@@ -1,7 +1,7 @@
 "use client";
 
 import { sourceFilterOptions, taskSourceLabel } from "@/lib/task-source";
-import { ChipSelect } from "@/components/ui/kit";
+import { ChipSelect } from "@/components/ui";
 
 /** "Source" filter for task lists: one option per source chip label. Hidden with fewer than two sources. */
 export function SourceFilter({

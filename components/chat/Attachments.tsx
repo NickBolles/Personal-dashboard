@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { CHAT_FILE_ACCEPT, formatBytes, validateBatch, type ChatFileKind, type ChatFileView } from "@/lib/chat-files";
-import { Button, Dialog, cx, useToast } from "@/components/ui";
+import { Dialog, cx, useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 
 export type DraftFile = {
   localId: string;

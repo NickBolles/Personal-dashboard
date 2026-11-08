@@ -131,6 +131,7 @@ for (const [name, path] of [
   ["alerts", "/alerts"],
   ["more", "/more"],
   ["kit", "/dev/kit"],
+  ["ui-library", "/dev/ui"],
 ] as const) {
   test(`visual: ${name}`, async ({ page }) => {
     if (name === "home") {

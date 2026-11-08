@@ -8,7 +8,7 @@ import { ONBOARDING_INTEGRATIONS, getIntegrationDef, type IntegrationKind, type 
 import { IntegrationForm, TestResults } from "@/components/integrations/IntegrationForm";
 import { PushControls, QuietHours } from "@/components/NotificationSetup";
 import { InstallPrompt } from "@/components/InstallPrompt";
-import { Badge, Button, Field, cx, inputCls, useToast } from "@/components/ui";
+import { Button, Field, Input, Pill, cx, useToast } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 
 type Step = { id: string; title: string; optional?: boolean };
@@ -67,51 +67,41 @@ function ClaimStep() {
         }}
       >
         <Field id="setup-code" label="Setup code">
-          <input
+          <Input
             id="setup-code"
             required
             autoComplete="one-time-code"
-            className={cx(inputCls, "font-mono uppercase")}
+            className="font-mono uppercase"
             value={setupCode}
             onChange={(e) => setSetupCode(e.target.value)}
           />
         </Field>
         <Field id="owner-name" label="Your name">
-          <input
-            id="owner-name"
-            required
-            className={inputCls}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nick"
-            autoComplete="given-name"
-          />
+          <Input id="owner-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Nick" autoComplete="given-name" />
         </Field>
         <Field id="new-passcode" label="Passcode" hint="At least 6 characters. Used to sign in on new devices.">
-          <input
+          <Input
             id="new-passcode"
             type="password"
             required
             minLength={6}
             autoComplete="new-password"
-            className={inputCls}
             value={passcode}
             onChange={(e) => setPasscode(e.target.value)}
           />
         </Field>
         <Field id="confirm-passcode" label="Confirm passcode" error={error}>
-          <input
+          <Input
             id="confirm-passcode"
             type="password"
             required
             minLength={6}
             autoComplete="new-password"
-            className={inputCls}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
           />
         </Field>
-        <Button type="submit" variant="primary" className="w-full" busy={busy}>
+        <Button type="submit" variant="primary" className="w-full" loading={busy}>
           Continue
         </Button>
       </form>
@@ -167,7 +157,8 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
             const verified = st?.lastTest?.ok;
             return (
               <li key={s.id} className="shrink-0">
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setIdx(i)}
                   aria-current={i === idx ? "step" : undefined}
@@ -187,7 +178,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
                   </span>
                   {s.title}
                   {verified ? <span className="sr-only">(verified)</span> : null}
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -225,7 +216,7 @@ function Wizard({ initialStep, googleStatus, googleMessage }: { initialStep?: st
             Back
           </Button>
           {step.id === "finish" ? (
-            <Button variant="primary" busy={finish.isPending} onClick={() => finish.mutate()}>
+            <Button variant="primary" loading={finish.isPending} onClick={() => finish.mutate()}>
               Open Jarvis
             </Button>
           ) : (
@@ -279,7 +270,7 @@ function IntegrationStep({ kind, onVerified }: { kind: IntegrationKind; onVerifi
       <ul className="flex flex-wrap gap-2">
         {def.uses.map((u) => (
           <li key={u}>
-            <Badge>{u}</Badge>
+            <Pill>{u}</Pill>
           </li>
         ))}
       </ul>
@@ -317,7 +308,7 @@ function Finish({ integrations, onRefresh }: { integrations: PublicIntegration[]
   return (
     <div className="card space-y-4 p-5">
       <p className="text-muted">Re-run every enabled connection test, then do one background refresh so Home has live data when you open it.</p>
-      <Button onClick={runAll} busy={running}>
+      <Button onClick={runAll} loading={running}>
         Re-test all connections
       </Button>
       <ul className="space-y-3">
@@ -329,13 +320,13 @@ function Finish({ integrations, onRefresh }: { integrations: PublicIntegration[]
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{d.label}</span>
                 {!i?.enabled ? (
-                  <Badge>Skipped</Badge>
+                  <Pill>Skipped</Pill>
                 ) : r?.ok ? (
-                  <Badge tone="ok">Verified</Badge>
+                  <Pill tone="ok">Verified</Pill>
                 ) : r ? (
-                  <Badge tone="danger">Failing</Badge>
+                  <Pill tone="bad">Failing</Pill>
                 ) : (
-                  <Badge tone="warn">Not tested</Badge>
+                  <Pill tone="wn">Not tested</Pill>
                 )}
               </div>
               {i?.enabled && r && !r.ok ? (

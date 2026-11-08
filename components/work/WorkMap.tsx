@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
 import { MAP_NODE, MAP_RELATION_LABELS, layoutMap, type MapEdge, type MapGraphNode, type MapRelation } from "@/lib/work-map";
 import { StatusBadge } from "./common";

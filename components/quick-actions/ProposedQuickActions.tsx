@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Button } from "@/components/ui/kit";
-import { inputCls } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { inputCls } from "@/components/ui/legacy";
 import type { QuickAction } from "@/lib/quick-actions";
 import { useQuickActions, useQuickActionWrite } from "./useQuickActions";
 import "./quick-actions.css";

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui/kit";
+import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui";
 import {
   CHECKS_LABEL,
   DEPLOY_LABEL,
@@ -119,7 +119,7 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
           Agent
         </h3>
         {info.who ? <AgentMark name={info.who.kind === "person" ? null : info.who.name} busy={info.live === "running"} /> : null}
-        <span className="min-w-0 text-[13px] font-medium [overflow-wrap:anywhere]" data-testid="agent-who">
+        <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]" data-testid="agent-who">
           {whoLabel(info.who)}
         </span>
         <LiveState live={info.live} at={info.liveAt} approval={info.approval} />
@@ -150,8 +150,8 @@ export function ItemAgentPanel({ itemId }: { itemId: string }) {
       ) : null}
       {info.report ? (
         <div className="ar-report mt-2" data-testid="agent-report">
-          <p className="text-[13px] font-medium [overflow-wrap:anywhere]">{info.report.title}</p>
-          {info.report.summary ? <p className="mt-0.5 text-[13px] [overflow-wrap:anywhere]">{info.report.summary}</p> : null}
+          <p className="text-sm font-medium [overflow-wrap:anywhere]">{info.report.title}</p>
+          {info.report.summary ? <p className="mt-0.5 text-sm [overflow-wrap:anywhere]">{info.report.summary}</p> : null}
           <p className="mt-0.5 text-xs text-muted" data-dynamic>
             Last report · {relativeTime(info.report.at)}
           </p>
@@ -200,7 +200,7 @@ const CHILD_LIVE = (c: { state: ExternalRun["state"] }) => liveOfAgentRun(c.stat
 function AgentRunRow({ run: r }: { run: ExternalRun }) {
   const stalled = isStalled(r, useMinuteTick());
   return (
-    <li className="min-w-0 text-[13px]" data-testid="agent-run" data-stalled={stalled || undefined}>
+    <li className="min-w-0 text-sm" data-testid="agent-run" data-stalled={stalled || undefined}>
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="agent-run-head">
         <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
         <AgentChip profile={r.profile} />
@@ -212,7 +212,7 @@ function AgentRunRow({ run: r }: { run: ExternalRun }) {
           </a>
         ) : null}
       </div>
-      {r.summary ? <p className="mt-0.5 text-[13px] text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
+      {r.summary ? <p className="mt-0.5 text-sm text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
       {r.children?.length ? (
         <ul className="ar-children mt-1 space-y-0.5" aria-label={`Sub-agents of ${r.title}`} data-testid="agent-run-children">
           {r.children.map((c, n) => (
@@ -255,7 +255,7 @@ export function AgentsStrip({ entries, linked, max = 3 }: { entries: ItemAgentIn
             <AgentMark name={e.who?.kind === "person" ? null : (e.who?.name ?? null)} busy={e.live === "running"} />
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="truncate text-[13px] font-medium">{e.who ? whoLabel(e.who) : "Agent"}</span>
+                <span className="truncate text-sm font-medium">{e.who ? whoLabel(e.who) : "Agent"}</span>
                 <LiveState live={e.live} approval={e.approval} compact />
                 {stalledRuns(e, now).length ? <StalledBadge /> : null}
               </span>

@@ -9,7 +9,8 @@ import { relativeTime } from "@/lib/time";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import { mergeSessionPages, type SessionPage } from "@/lib/session-pages";
-import { Badge, Button, ErrorNote, Spinner, cx, inputCls, useOnline, useToast } from "@/components/ui";
+import { ErrorNote, cx, useOnline, useToast } from "@/components/ui";
+import { Badge, Button, Spinner, inputCls } from "@/components/ui/legacy";
 import { ForkIcon, PlusIcon } from "@/components/icons";
 import { BackendSwitch, useAssistantChoice } from "./backend";
 

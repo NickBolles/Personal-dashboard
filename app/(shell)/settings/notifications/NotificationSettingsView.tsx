@@ -5,8 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { NOTIFICATION_CATEGORIES } from "@/lib/contracts";
 import { PushControls, QuietHours, usePreferences } from "@/components/NotificationSetup";
-import { Badge, Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { Card, Checkbox, ErrorNote, Input, PageHeader, Pill, useToast, LoadingState } from "@/components/ui";
 
 export function NotificationSettingsView() {
   const qc = useQueryClient();
@@ -34,7 +33,7 @@ export function NotificationSettingsView() {
   // Local, synchronous toggle state so the checkbox responds instantly; the server copy catches up.
   const [local, setLocal] = useState<Record<string, boolean>>({});
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
       <PageHeader title="Notifications" subtitle="Every alert lands in the Alerts inbox. Push is an extra delivery channel." />
       {prefs.isPending ? <LoadingState label="Loading notification preferences…" /> : null}
       {prefs.error ? <ErrorNote error={prefs.error} retry={() => prefs.refetch()} /> : null}
@@ -53,23 +52,20 @@ export function NotificationSettingsView() {
             const on = local[c.id] ?? cats[c.id]?.push ?? c.defaultPush;
             return (
               <li key={c.id} className="py-3">
-                <label className="flex min-h-11 items-start gap-3">
-                  <input
-                    type="checkbox"
-                    disabled={!prefs.data || prefs.isError}
-                    className="mt-1 h-5 w-5"
-                    checked={on}
-                    onChange={(e) => {
-                      const push = e.target.checked;
-                      setLocal((l) => ({ ...l, [c.id]: push }));
-                      m.mutate({ notificationCategories: { [c.id]: { push } } }, { onError: () => setLocal((l) => ({ ...l, [c.id]: !push })) });
-                    }}
-                  />
-                  <span>
-                    <span className="font-medium">{c.label}</span> {c.bypassQuietHours ? <Badge tone="warn">Ignores quiet hours</Badge> : null}
-                    <span className="block text-sm text-muted">{c.description}</span>
-                  </span>
-                </label>
+                <Checkbox
+                  disabled={!prefs.data || prefs.isError}
+                  checked={on}
+                  onChange={(push) => {
+                    setLocal((l) => ({ ...l, [c.id]: push }));
+                    m.mutate({ notificationCategories: { [c.id]: { push } } }, { onError: () => setLocal((l) => ({ ...l, [c.id]: !push })) });
+                  }}
+                  label={
+                    <span>
+                      <span className="font-medium">{c.label}</span> {c.bypassQuietHours ? <Pill tone="wn">Ignores quiet hours</Pill> : null}
+                      <span className="block text-sm text-muted">{c.description}</span>
+                    </span>
+                  }
+                />
               </li>
             );
           })}
@@ -81,12 +77,12 @@ export function NotificationSettingsView() {
             Alert when a source has been failing for
           </label>
           <div className="mt-2 flex items-center gap-2">
-            <input
+            <Input
               id="fail-min"
               type="number"
               min={5}
               max={1440}
-              className="min-h-12 w-28 rounded-[10px] border border-line-strong bg-surface px-3"
+              className="w-28"
               defaultValue={prefs.data.integrationFailureAlertMinutes}
               onBlur={(e) => m.mutate({ integrationFailureAlertMinutes: Number(e.target.value) })}
             />

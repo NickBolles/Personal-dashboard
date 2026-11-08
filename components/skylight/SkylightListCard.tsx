@@ -3,7 +3,8 @@
 import { useId, useState } from "react";
 import type { NextAction } from "@/lib/contracts";
 import type { SkylightWriteOp } from "@/lib/skylight-write";
-import { Button, cx, inputCls, useOnline } from "@/components/ui";
+import { cx, useOnline } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { listWrite, type SkylightList } from "./model";
 
 export function SkylightListCard({

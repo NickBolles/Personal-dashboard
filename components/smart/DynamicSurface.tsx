@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import type { ControlView } from "@/integrations/home-assistant/controls";
 import { useHaControl } from "@/components/home/HaControls";

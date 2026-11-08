@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { DecisionEntry } from "@/lib/decisions";
-import { Button, ButtonLink, Dialog, ErrorNote, Field, inputCls } from "@/components/ui";
+import { Dialog, ErrorNote, Field } from "@/components/ui";
+import { Button, ButtonLink, inputCls } from "@/components/ui/legacy";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 
 /** Same decision-answer endpoint as the inbox, with review before the local, undoable write. Posting to chat stays in its existing flow. */

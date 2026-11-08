@@ -3,9 +3,8 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
-import { ChipButton, ChipInput, ChipSelect, EmptyState } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, useToast, ChipButton, ChipInput, ChipSelect, EmptyState, LoadingState } from "@/components/ui";
+import { Card } from "@/components/ui/legacy";
 import { TAG_COLORS, TAG_COLOR_LABELS, type TagColor, type WorkTag } from "@/lib/item-tags";
 import { TagChip, useTagDirectory } from "./ItemMeta";
 import { UndoBar, type UndoOp } from "./UndoBar";

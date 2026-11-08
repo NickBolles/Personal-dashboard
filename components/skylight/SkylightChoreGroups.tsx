@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NextAction } from "@/lib/contracts";
 import { localDate } from "@/lib/time";
-import { cx } from "@/components/ui/kit";
+import { cx } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 import { SkylightActionRow } from "./SkylightActionRow";
 import { CHORE_BUCKETS, choreBucket, choreDay, choreTime, type ChoreBucket } from "./grouping";

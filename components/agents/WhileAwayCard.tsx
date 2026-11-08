@@ -6,8 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { EMPTY_AWAY, useAway } from "@/lib/client/away";
 import type { AwayDigest, AwayRun } from "@/lib/away";
-import { Button, Dot, Pill } from "@/components/ui/kit";
-import { useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, Pill, useToast } from "@/components/ui";
 
 const linkCls = "inline-flex min-h-11 min-w-0 items-center text-[var(--ai)] underline-offset-2 hover:underline sm:min-h-10 dense:min-h-6";
 
@@ -86,7 +85,7 @@ function RunRow({ run }: { run: AwayRun }) {
   const waiting = !!run.waiting;
   const tone = run.status === "failed" ? "bad" : needs || waiting ? "wn" : run.status === "skipped" ? "neutral" : "ai";
   return (
-    <li className="min-w-0 px-3 py-2 text-[13px]" data-testid="away-run">
+    <li className="min-w-0 px-3 py-2 text-sm" data-testid="away-run">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <Dot
           tone={tone}
@@ -125,9 +124,9 @@ function RunRow({ run }: { run: AwayRun }) {
           </Link>
         ) : null}
         {run.changes.length ? (
-          <button type="button" className={linkCls} aria-expanded={expanded} aria-controls={changesId} onClick={() => setExpanded(!expanded)} data-dynamic>
+          <ChipButton type="button" className={linkCls} aria-expanded={expanded} aria-controls={changesId} onClick={() => setExpanded(!expanded)} data-dynamic>
             {run.changes.length} {run.changes.length === 1 ? "change" : "changes"}
-          </button>
+          </ChipButton>
         ) : null}
         {needs ? (
           <Link className={`${linkCls} !text-warn`} href="/decisions" data-dynamic>

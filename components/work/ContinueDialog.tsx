@@ -8,7 +8,8 @@ import { kvSet } from "@/lib/client/idb";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import { BACKEND_LABELS } from "@/lib/assistant";
 import { BackendSwitch, useAssistantChoice } from "@/components/chat/backend";
-import { Button, Dialog, useToast } from "@/components/ui";
+import { Dialog, useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { Markdown } from "@/components/markdown/Markdown";
 import type { WorkDetail, WorkLink } from "@/lib/work";
 

@@ -19,8 +19,9 @@ import {
   type JobKind,
   type ScheduledJob,
 } from "@/lib/away";
-import { Dialog, ErrorNote, Field, inputCls, OverflowMenu, useToast } from "@/components/ui";
-import { Button, Chip, ChipSelect, Dot, Pill, Segmented, Toast } from "@/components/ui/kit";
+import { Checkbox, Dialog, ErrorNote, Field, Input, Select, Textarea, useToast, Button, Chip, ChipSelect, Dot, Pill, Segmented, Toast } from "@/components/ui";
+// eslint-disable-next-line jarvis-ui/no-legacy-imports -- Menu has no trigger, outside-click dismissal or Tab-close support; preserve existing keyboard behavior.
+import { OverflowMenu } from "@/components/ui/legacy";
 
 const endpoint = "/api/agents/schedules";
 const jobPath = (job: ScheduledJob) => `${endpoint}/${encodeURIComponent(job.id)}`;
@@ -302,6 +303,7 @@ function JobRow({
   return (
     <li className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1 sm:min-h-10 dense:min-h-9" data-testid="scheduled-job">
       <label className="relative flex min-h-11 min-w-11 shrink-0 items-center justify-center sm:min-h-10 dense:min-h-6 dense:min-w-8">
+        {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Toggle lacks disabled and aria-label props and changes native input keyboard behavior. */}
         <input
           type="checkbox"
           role="switch"
@@ -424,10 +426,10 @@ function JobEditor({
         }}
       >
         <Field id="sj-title" label="Job title">
-          <input id="sj-title" className={inputCls} required maxLength={120} value={form.title} onChange={(e) => set("title", e.target.value)} />
+          <Input id="sj-title" required maxLength={120} value={form.title} onChange={(e) => set("title", e.target.value)} />
         </Field>
         <Field id="sj-area" label="Job area">
-          <select id="sj-area" className={inputCls} value={form.areaId ?? ""} onChange={(e) => set("areaId", e.target.value || null)}>
+          <Select id="sj-area" value={form.areaId ?? ""} onChange={(e) => set("areaId", e.target.value || null)}>
             <option value="">Pick an area</option>
             {areas.map((area) => (
               <option key={area.id} value={area.id} disabled={area.autonomy === "off"}>
@@ -435,7 +437,7 @@ function JobEditor({
                 {area.autonomy === "off" ? " (AI off)" : ""}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="sj-kind" label="Job kind">
           <ChipSelect
@@ -454,15 +456,7 @@ function JobEditor({
           </ChipSelect>
         </Field>
         <Field id="sj-prompt" label="Job prompt">
-          <textarea
-            id="sj-prompt"
-            rows={5}
-            className={inputCls}
-            required
-            maxLength={4000}
-            value={form.prompt}
-            onChange={(e) => set("prompt", e.target.value)}
-          />
+          <Textarea id="sj-prompt" rows={5} required maxLength={4000} value={form.prompt} onChange={(e) => set("prompt", e.target.value)} />
         </Field>
         <div className="min-w-0 [&_.k-seg]:flex-wrap">
           <Segmented
@@ -477,14 +471,7 @@ function JobEditor({
           />
         </div>
         <Field id="sj-time" label="Job time" hint={`Times use ${tz}`}>
-          <input
-            id="sj-time"
-            type="time"
-            required
-            className={inputCls}
-            value={form.schedule.time}
-            onChange={(e) => set("schedule", { ...form.schedule, time: e.target.value })}
-          />
+          <Input id="sj-time" type="time" required value={form.schedule.time} onChange={(e) => set("schedule", { ...form.schedule, time: e.target.value })} />
         </Field>
         {form.schedule.freq === "weekly" ? (
           <fieldset>
@@ -508,11 +495,9 @@ function JobEditor({
             </div>
           </fieldset>
         ) : null}
+        <Checkbox checked={form.overnight} onChange={(checked) => set("overnight", checked)} label="Can run overnight (inside quiet hours)" />
         <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.overnight} onChange={(e) => set("overnight", e.target.checked)} />
-          Can run overnight (inside quiet hours)
-        </label>
-        <label className="flex min-h-11 items-center gap-2 text-sm">
+          {/* eslint-disable-next-line jarvis-ui/no-native-controls -- Checkbox cannot preserve role=switch; Toggle changes native input keyboard behavior. */}
           <input type="checkbox" role="switch" checked={form.enabled} onChange={(e) => set("enabled", e.target.checked)} />
           Job enabled
         </label>

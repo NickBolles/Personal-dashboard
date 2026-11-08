@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Field, cx, inputCls, useToast } from "@/components/ui";
+import { Field, cx, useToast } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { ShareWorkflowPicker } from "@/components/workflows/SharePicker";
 import { useAskHermes } from "@/components/chat/useAskHermes";

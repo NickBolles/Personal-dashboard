@@ -1,6 +1,7 @@
 "use client";
 
-import { LoadingState } from "@/components/ui/LoadingState";
+import { LoadingState, SectionHeader, Dialog, ErrorNote, Field, cx, useToast, FocusGlyph, IconAction } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, OverflowMenu, Spinner, inputCls, type MenuItem } from "@/components/ui/legacy";
 import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
@@ -12,28 +13,10 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type R
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { daysBetween } from "@/lib/time";
-import { SectionHeader } from "@/components/ui/kit";
-import {
-  Badge,
-  Button,
-  ButtonLink,
-  Card,
-  Dialog,
-  Empty,
-  ErrorNote,
-  Field,
-  OverflowMenu,
-  Spinner,
-  cx,
-  inputCls,
-  useToast,
-  type MenuItem,
-} from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { Markdown } from "@/components/markdown/Markdown";
 import { WorkTree } from "@/components/work/WorkTree";
 import { ChatIcon, ChevronIcon } from "@/components/icons";
-import { FocusGlyph, IconAction } from "@/components/ui/IconAction";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
 import { NodeAgentChip } from "@/components/agents/NodeAgentChip";

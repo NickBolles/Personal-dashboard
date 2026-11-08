@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { parseMoney } from "@/lib/finance/csv";
 import type { AccountKind, Cents } from "@/lib/finance/types";
-import { cx } from "@/components/ui";
+import { Checkbox, cx } from "@/components/ui";
 
 /**
  * Money display. Amounts are read with sign words ("owed 1,500.00",
@@ -37,12 +37,7 @@ export const useHideAmounts = () => useContext(HideContext);
 
 export function HideAmountsToggle() {
   const { hidden, setHidden } = useHideAmounts();
-  return (
-    <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-      <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} />
-      Hide amounts on this device
-    </label>
-  );
+  return <Checkbox checked={hidden} onChange={setHidden} label="Hide amounts on this device" />;
 }
 
 export function fmt(c: Cents) {

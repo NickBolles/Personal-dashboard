@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, Empty, ErrorNote, Field, Spinner, inputCls } from "@/components/ui";
-import { ChipButton } from "@/components/ui/kit";
+import { Dialog, ErrorNote, Field, ChipButton } from "@/components/ui";
+import { Button, Empty, Spinner, inputCls } from "@/components/ui/legacy";
 import { AreaPickerDot, SelectPicker } from "@/components/work/MetaPicker";
 import { Gantt, TimelineTable, type Zoom } from "@/components/work/Gantt";
 import { WorkPageHeader, fmtDate, useWorkMutation } from "@/components/work/common";

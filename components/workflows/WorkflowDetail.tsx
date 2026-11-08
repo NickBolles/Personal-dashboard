@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, ButtonLink, PageHeader, cx, useToast } from "@/components/ui";
+import { PageHeader, cx, useToast } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/ui/legacy";
 import type { HistoryRow } from "@/lib/workflows/outputs";
 import { WORKFLOW_START_EVENT } from "./events";
 

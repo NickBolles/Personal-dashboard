@@ -6,7 +6,8 @@ import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog"
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
 import { isTask, type AppliedEntry, type HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
-import { Badge, Button, OverflowMenu, cx, type MenuItem } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { InlineText, useSurface } from "./context";
 import { ApprovalChips, MetricGauge, PRCard, Sparkline, WeekPlan } from "./workflow-components";
 import { ApprovalQueue, BarChart, DecisionMatrix, Gantt, SmartForm, SmartHeader } from "./v2-components";

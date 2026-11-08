@@ -1,8 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Page, PageHeader } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { Page, PageHeader, LoadingState } from "@/components/ui";
 
 // Keep the builder (and its preview/review dependencies) out of the route entry chunk.
 // SSR stays on: both the builder and the chunk fallback include a page h1.

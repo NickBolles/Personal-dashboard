@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { getIntegrationDef, isFieldVisible, type FieldDef, type IntegrationKind, type PublicIntegration, type TestResult } from "@/integrations/registry";
-import { Badge, Button, ErrorNote, Field, cx, inputCls, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { Button, Checkbox, ErrorNote, Field, Input, Pill, Select, Textarea, cx, useToast, LoadingState } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 
 type Preset = { config: Record<string, string>; secrets: Record<string, string> };
@@ -122,26 +121,19 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
       const s = pub?.secrets[f.key];
       return (
         <Field key={f.key} id={id} label={f.label} hint={hint}>
-          <input
+          <Input
             id={id}
             type="password"
             autoComplete="off"
             disabled={env}
-            className={inputCls}
             placeholder={s?.set ? "•••••••• saved — leave blank to keep" : "Not set"}
             value={secrets[f.key] ?? ""}
             onChange={(e) => setSecrets((x) => ({ ...x, [f.key]: e.target.value }))}
           />
           {s?.set && !env ? (
-            <label className="mt-1 flex min-h-11 items-center gap-2 text-xs text-muted">
-              <input
-                type="checkbox"
-                className="h-5 w-5"
-                checked={Boolean(clear[f.key])}
-                onChange={(e) => setClear((c) => ({ ...c, [f.key]: e.target.checked }))}
-              />
-              Remove saved value
-            </label>
+            <div className="mt-1 text-xs text-muted">
+              <Checkbox checked={Boolean(clear[f.key])} onChange={(checked) => setClear((c) => ({ ...c, [f.key]: checked }))} label="Remove saved value" />
+            </div>
           ) : null}
         </Field>
       );
@@ -150,31 +142,25 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
       const options = discovered?.options ?? f.options ?? [];
       return (
         <Field key={f.key} id={id} label={f.label} hint={hint}>
-          <select
-            id={id}
-            disabled={env}
-            className={inputCls}
-            value={values[f.key] ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-          >
+          <Select id={id} disabled={env} value={values[f.key] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}>
             {f.type !== "select" ? <option value="">{values[f.key] ? `Keep: ${values[f.key]}` : "Choose…"}</option> : null}
             {options.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       );
     }
     if (f.type === "textarea") {
       return (
         <Field key={f.key} id={id} label={f.label} hint={hint}>
-          <textarea
+          <Textarea
             id={id}
             rows={f.key === "prompt" ? 3 : 5}
             disabled={env}
-            className={cx(inputCls, "font-mono text-sm")}
+            className="font-mono text-sm"
             value={values[f.key] ?? ""}
             onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
           />
@@ -183,13 +169,12 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
     }
     return (
       <Field key={f.key} id={id} label={f.label} hint={hint}>
-        <input
+        <Input
           id={id}
           type={f.type === "time" ? "time" : f.type === "url" ? "url" : "text"}
           inputMode={f.type === "url" ? "url" : undefined}
           disabled={env}
           required={f.required}
-          className={inputCls}
           placeholder={f.placeholder}
           value={values[f.key] ?? ""}
           onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
@@ -211,8 +196,8 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
     >
       {!compact ? (
         <div className="flex flex-wrap items-center gap-2">
-          {pub?.enabled ? <Badge tone="accent">Enabled</Badge> : <Badge>Not enabled</Badge>}
-          {pub?.lastTest ? <Badge tone={pub.lastTest.ok ? "ok" : "danger"}>{pub.lastTest.ok ? "Verified" : "Last test failed"}</Badge> : null}
+          {pub?.enabled ? <Pill tone="ac">Enabled</Pill> : <Pill>Not enabled</Pill>}
+          {pub?.lastTest ? <Pill tone={pub.lastTest.ok ? "ok" : "bad"}>{pub.lastTest.ok ? "Verified" : "Last test failed"}</Pill> : null}
           {def.docs ? (
             <a href={def.docs} target="_blank" rel="noreferrer noopener" className="text-sm underline">
               Docs<span className="sr-only"> (opens in a new tab)</span>
@@ -235,17 +220,17 @@ export function IntegrationForm({ kind, onVerified, compact }: { kind: Integrati
       {kind === "skylight" && values.mode === "direct" ? <SkylightSignIn onDone={() => qc.invalidateQueries({ queryKey: ["integration", kind] })} /> : null}
       {advanced.length ? (
         <div>
-          <button type="button" className="min-h-11 text-sm underline" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((s) => !s)}>
+          <Button variant="ghost" type="button" className="text-sm underline" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((s) => !s)}>
             {showAdvanced ? "Hide" : "Show"} advanced settings
-          </button>
+          </Button>
           {showAdvanced ? <div className="mt-2 space-y-4">{advanced.map(renderField)}</div> : null}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="primary" busy={save.isPending && save.variables?.test}>
+        <Button type="submit" variant="primary" loading={save.isPending && save.variables?.test}>
           Save & test connection
         </Button>
-        <Button type="button" busy={save.isPending && !save.variables?.test} onClick={() => save.mutate({ test: false })}>
+        <Button type="button" loading={save.isPending && !save.variables?.test} onClick={() => save.mutate({ test: false })}>
           Save
         </Button>
         {pub?.enabled ? (
@@ -271,7 +256,7 @@ function GoogleConnect({ connected, onBeforeConnect }: { connected: boolean; onB
         type="button"
         size="sm"
         className="mt-2"
-        busy={busy}
+        loading={busy}
         onClick={async () => {
           setBusy(true);
           try {
@@ -308,19 +293,12 @@ function SkylightSignIn({ onDone }: { onDone: () => void }) {
         Used once to obtain a refresh token; your password is not stored. If Skylight asks for 2FA, use `skycli auth login` and paste the refresh token instead.
       </p>
       <Field id="sk-email" label="Email">
-        <input id="sk-email" type="email" autoComplete="username" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input id="sk-email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <Field id="sk-pass" label="Password">
-        <input
-          id="sk-pass"
-          type="password"
-          autoComplete="current-password"
-          className={inputCls}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <Input id="sk-pass" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
-      <Button type="button" size="sm" busy={m.isPending} disabled={!email || !password} onClick={() => m.mutate()}>
+      <Button type="button" size="sm" loading={m.isPending} disabled={!email || !password} onClick={() => m.mutate()}>
         Sign in
       </Button>
     </fieldset>

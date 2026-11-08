@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client/api";
 import { ROLE_LABELS, type Role } from "@/lib/modules";
-import { Button, Field, inputCls } from "@/components/ui";
+import { Button, Field, Input } from "@/components/ui";
 
 type Who = { name: string; username: string; role: Role };
 
@@ -65,7 +65,7 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
         </div>
         {!who ? (
           <Field id="code" label="Invite code" error={error}>
-            <input id="code" required autoFocus autoCapitalize="characters" className={inputCls} value={code} onChange={(e) => setCode(e.target.value)} />
+            <Input id="code" required autoFocus autoCapitalize="characters" value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
         ) : (
           <>
@@ -74,33 +74,31 @@ export function JoinForm({ initialCode }: { initialCode: string }) {
               label={who.role === "household" ? "Choose a PIN or passcode" : "Choose a passcode"}
               hint={`At least ${min} ${min === 4 ? "digits" : "characters"}.`}
             >
-              <input
+              <Input
                 id="pass"
                 type="password"
                 required
                 autoFocus
                 minLength={min}
                 autoComplete="new-password"
-                className={inputCls}
                 value={passcode}
                 onChange={(e) => setPasscode(e.target.value)}
               />
             </Field>
             <Field id="pass2" label="Type it again" error={error}>
-              <input
+              <Input
                 id="pass2"
                 type="password"
                 required
                 minLength={min}
                 autoComplete="new-password"
-                className={inputCls}
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
               />
             </Field>
           </>
         )}
-        <Button type="submit" variant="primary" className="w-full" busy={busy}>
+        <Button type="submit" variant="primary" className="w-full" loading={busy}>
           {who ? "Join" : "Continue"}
         </Button>
       </form>

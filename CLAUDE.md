@@ -15,3 +15,4 @@
 - Chat goes through `server/assistant` (Hermes or Claude by id prefix `loc_`/`lrn_`), never straight to `integrations/hermes/service` from routes.
 - Home ranking is the pure selector in `server/ranking/attention.ts` (+ `assists.ts` for suggestion cards); rules and feedback effects in docs/home-priorities.md. Feedback only changes per-person ranking, never source data; suggestions never call a model.
 - Finance: integer cents, pure engine in `lib/finance/`, rules in docs/finance.md. Never send finance to the AI layer; notifications carry no amounts or names.
+- **UI:** build only from `@/components/ui` and follow the "UI rules" in AGENTS.md + docs/ui-library.md (library only, no native controls, tokens only, one primary per view, compact density, confirm + Undo, import/export, 44/40px targets, 200% zoom, reduced motion). `npm run lint` fails on new violations; run `npm run lint:prune` after migrating legacy call sites.

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import type { InitiativeCard, IssueCard } from "@/integrations/paperclip/service";
-import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, Spinner, useToast, type Tone } from "@/components/ui";
+import { ErrorNote, PageHeader, useToast } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, Empty, Spinner, type Tone } from "@/components/ui/legacy";
 
 const STATUS_TONE: Record<string, Tone> = { blocked: "danger", in_review: "warn", in_progress: "accent", done: "ok", todo: "neutral", backlog: "neutral" };
 

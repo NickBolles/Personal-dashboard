@@ -4,9 +4,8 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, ErrorNote, Field, Page, PageHeader, cx, inputCls, useToast } from "@/components/ui";
-import { EmptyState } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, Field, Page, PageHeader, cx, useToast, EmptyState, LoadingState } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { FIELD_TYPES, MODEL_TIERS, WORKFLOW_ICONS, formFields, type WorkflowDefinition, type WorkflowField } from "@/lib/workflows/definition";
 import {
   BUILDER_SECTIONS,

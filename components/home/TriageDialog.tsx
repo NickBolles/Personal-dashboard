@@ -5,7 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { AssistCard } from "@/lib/contracts";
 import { addDays, localDate } from "@/lib/time";
 import { api, ApiError } from "@/lib/client/api";
-import { Button, ButtonLink, Dialog, Field, cx, inputCls, useOnline, useToast } from "@/components/ui";
+import { Dialog, Field, cx, useOnline, useToast } from "@/components/ui";
+import { Button, ButtonLink, inputCls } from "@/components/ui/legacy";
 import { chatHref } from "./chat";
 import { splitGlyph } from "@/components/actions/ActionCard";
 

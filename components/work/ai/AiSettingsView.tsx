@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Card, ErrorNote, Field, PageHeader, Spinner, inputCls, useToast } from "@/components/ui";
+import { ErrorNote, Field, PageHeader, useToast } from "@/components/ui";
+import { Badge, Button, Card, Spinner, inputCls } from "@/components/ui/legacy";
 import { ModelCombobox } from "@/components/areas/ModelPicker";
 import {
   BILLING_LABEL,

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, ErrorNote, PageHeader, Spinner, useToast } from "@/components/ui";
+import { ErrorNote, PageHeader, useToast, Pill, Button, KSpinner } from "@/components/ui";
 import { useAccess } from "@/components/access";
 
 type Row = { id: string; month: string; status: string; closedAt: string | null };
@@ -20,7 +20,7 @@ export function StartCheckinButton({ month, label }: { month: string; label?: st
   });
   if (!can("finance.edit")) return null;
   return (
-    <Button variant="primary" busy={start.isPending} onClick={() => start.mutate()}>
+    <Button variant="primary" className="whitespace-normal" loading={start.isPending} onClick={() => start.mutate()}>
       {label ?? "Start check-in"}
     </Button>
   );
@@ -37,14 +37,19 @@ export function CheckinList() {
         title="Check-ins"
         actions={q.data && !q.data.checkins.some((c) => c.month === month) ? <StartCheckinButton month={month} label={`Start ${monthLabel(month)}`} /> : null}
       />
-      {q.isPending ? <Spinner label="Loading" /> : null}
+      {q.isPending ? (
+        <span role="status" className="inline-flex items-center gap-2">
+          <KSpinner />
+          <span>Loading</span>
+        </span>
+      ) : null}
       {q.error ? <ErrorNote error={q.error} /> : null}
       <ul className="card divide-y divide-line">
         {q.data?.checkins.map((c) => (
           <li key={c.id}>
             <Link href={`/finance/checkin/${c.id}`} className="flex min-h-14 items-center justify-between gap-2 px-4 hover:bg-surface-2">
               <span className="font-medium">{monthLabel(c.month)}</span>
-              {c.status === "closed" ? <Badge tone="ok">Closed</Badge> : <Badge tone="accent">Draft</Badge>}
+              {c.status === "closed" ? <Pill tone="ok">Closed</Pill> : <Pill tone="ac">Draft</Pill>}
             </Link>
           </li>
         ))}

@@ -1,7 +1,8 @@
 "use client";
 
 import { useId, useMemo, useState } from "react";
-import { Button, Dialog, inputCls } from "@/components/ui";
+import { Dialog } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { KIND_LABELS, type WorkItem } from "@/lib/work";
 import { AreaPickerDot } from "./MetaPicker";
 

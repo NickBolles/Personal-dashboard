@@ -3,9 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
-import { Badge, Button, ButtonLink, Card, ErrorNote, PageHeader, useOnline, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { EmptyState } from "@/components/ui/kit";
+import { ErrorNote, PageHeader, useOnline, useToast, LoadingState, EmptyState } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card } from "@/components/ui/legacy";
 
 type Settled<T> = { ok: true; items: T[] } | { ok: false; error: string };
 type Job = {

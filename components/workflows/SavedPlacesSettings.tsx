@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Card, ErrorNote, PageHeader, useToast } from "@/components/ui";
-import { ChipButton, ChipInput, EmptyState } from "@/components/ui/kit";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, useToast, ChipButton, ChipInput, EmptyState, LoadingState } from "@/components/ui";
+import { Card } from "@/components/ui/legacy";
 
 type Place = { id: string; label: string; addressText: string | null; radiusM: number; lat: number | null; lng: number | null };
 

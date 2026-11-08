@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { describeSkylightWrite, doneLabel, type SkylightWriteOp, type SkylightWriteResult } from "@/lib/skylight-write";
-import { Button, Dialog, useOnline, useToast } from "@/components/ui";
+import { Dialog, useOnline, useToast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import { SkylightUndoBar } from "./SkylightUndoBar";
 import { haptic, skylightWrites } from "./writeStore";
 

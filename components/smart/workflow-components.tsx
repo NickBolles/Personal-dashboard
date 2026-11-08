@@ -8,7 +8,8 @@ import { blockFits, blockMoveIntent, chipIntent, DAY_END, DAY_START, fmtMinutes,
 import { calendarRef } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
-import { Badge, Button, ButtonLink, OverflowMenu, cx, type MenuItem } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Badge, Button, ButtonLink, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { InlineText, useSurface } from "./context";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;

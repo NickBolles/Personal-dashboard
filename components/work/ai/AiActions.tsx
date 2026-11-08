@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Badge, Button, Dialog, Field, OverflowMenu, Spinner, cx, inputCls, useNow, useToast } from "@/components/ui";
+import { Dialog, Field, cx, useNow, useToast, Pill, ProposedBox } from "@/components/ui";
+import { Badge, Button, OverflowMenu, Spinner, inputCls } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { ModelCombobox, type ModelChoice } from "@/components/areas/ModelPicker";
 import { useWorkMutation } from "@/components/work/common";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
-import { Pill, ProposedBox } from "@/components/ui/kit";
 import {
   AI_ACTIONS,
   AI_KIND_LABEL,

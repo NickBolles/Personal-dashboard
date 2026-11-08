@@ -5,8 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from "@/lib/client/push";
 import { isAndroidWrapper } from "@/lib/client/wrapper";
-import { Badge, Button, ErrorNote, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, useToast, LoadingState } from "@/components/ui";
+import { Badge, Button } from "@/components/ui/legacy";
 
 export type PushCapabilities = {
   fcmConfigured: boolean;

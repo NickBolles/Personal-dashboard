@@ -4,9 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { fineGrainedTokenUrl, parseRepoList, type GithubSettingsResponse, type GithubTestResult, type PublicGithubConnection } from "@/lib/github";
-import { Badge, Button, Dialog, ErrorNote, Field, cx, inputCls, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
-import { EmptyState } from "@/components/ui/kit";
+import { Button, Dialog, ErrorNote, Field, Input, Pill, cx, useToast, LoadingState, EmptyState } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 import { GithubAppSection } from "./GithubApp";
 
@@ -46,7 +44,7 @@ export function GithubConnections() {
       </p>
       {s.envToken ? (
         <p className="rounded-lg bg-surface-2 p-2 text-sm">
-          <Badge>Fallback</Badge> <code>JARVIS_GITHUB_TOKEN</code> is set on the server and is used for owners without a connection.
+          <Pill>Fallback</Pill> <code>JARVIS_GITHUB_TOKEN</code> is set on the server and is used for owners without a connection.
         </p>
       ) : null}
 
@@ -93,7 +91,7 @@ function TokenHelp() {
       <div className="mt-2 flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1">
           <Field id="gh-help-owner" label="Owner for the link">
-            <input id="gh-help-owner" className={inputCls} value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="momentumbets" />
+            <Input id="gh-help-owner" value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="momentumbets" />
           </Field>
         </div>
         <a
@@ -169,17 +167,17 @@ function ConnectionRow({ c }: { c: PublicGithubConnection }) {
           <p className="text-xs break-words text-muted">{c.repos.length ? `Repos: ${c.repos.join(", ")}` : "All repositories the token can see"}</p>
         </div>
         {!last ? (
-          <Badge tone="warn">Untested</Badge>
+          <Pill tone="wn">Untested</Pill>
         ) : last.ok && !last.warnings.length ? (
-          <Badge tone="ok">Read-only</Badge>
+          <Pill tone="ok">Read-only</Pill>
         ) : last.ok ? (
-          <Badge tone="warn">Can write</Badge>
+          <Pill tone="wn">Can write</Pill>
         ) : (
-          <Badge tone="danger">Failing</Badge>
+          <Pill tone="bad">Failing</Pill>
         )}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => test.mutate(undefined)} busy={test.isPending} aria-label={`Test ${c.label}`}>
+        <Button size="sm" onClick={() => test.mutate(undefined)} loading={test.isPending} aria-label={`Test ${c.label}`}>
           Test
         </Button>
         <Button size="sm" onClick={() => setEditing(true)} aria-label={`Edit ${c.label}`}>
@@ -203,7 +201,7 @@ function ConnectionRow({ c }: { c: PublicGithubConnection }) {
         footer={
           <>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
-            <Button variant="danger" busy={remove.isPending} onClick={() => remove.mutate(undefined)}>
+            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(undefined)}>
               Remove token
             </Button>
           </>
@@ -234,7 +232,7 @@ function ConnectionDialog({ c, onClose }: { c?: PublicGithubConnection; onClose:
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" type="submit" form="gh-conn-form" busy={save.isPending}>
+          <Button variant="primary" type="submit" form="gh-conn-form" loading={save.isPending}>
             Save
           </Button>
         </>
@@ -249,33 +247,16 @@ function ConnectionDialog({ c, onClose }: { c?: PublicGithubConnection; onClose:
         }}
       >
         <Field id="gh-label" label="Label">
-          <input
-            id="gh-label"
-            data-autofocus
-            required
-            className={inputCls}
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Momentum (org)"
-          />
+          <Input id="gh-label" data-autofocus required value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Momentum (org)" />
         </Field>
         <Field id="gh-owner" label="Owner (user or organization)">
-          <input id="gh-owner" required className={inputCls} value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="momentumbets" />
+          <Input id="gh-owner" required value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="momentumbets" />
         </Field>
         <Field id="gh-token" label={c ? "Replace token (optional)" : "Token"} hint={c ? `Current: ${c.tokenHint}. Leave empty to keep it.` : "Write-only."}>
-          <input
-            id="gh-token"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            required={!c}
-            className={inputCls}
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
+          <Input id="gh-token" type="password" autoComplete="off" spellCheck={false} required={!c} value={token} onChange={(e) => setToken(e.target.value)} />
         </Field>
         <Field id="gh-repos" label="Repository allowlist (optional)" hint="Comma-separated repository names. Empty: every repository the token can see.">
-          <input id="gh-repos" className={inputCls} value={repos} onChange={(e) => setRepos(e.target.value)} placeholder="momentum-web, odds-feed" />
+          <Input id="gh-repos" value={repos} onChange={(e) => setRepos(e.target.value)} placeholder="momentum-web, odds-feed" />
         </Field>
       </form>
     </Dialog>
@@ -314,7 +295,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
       </p>
       <Field id="gh-webhook-url" label="Payload URL">
         <div className="flex gap-2">
-          <input id="gh-webhook-url" readOnly className={cx(inputCls, "font-mono text-xs")} value={url} />
+          <Input id="gh-webhook-url" readOnly className="w-full min-w-0 font-mono text-xs" value={url} />
           <Button size="sm" onClick={() => copy(url, "URL")}>
             Copy
           </Button>
@@ -327,7 +308,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
             <label htmlFor="gh-secret" className="sr-only">
               Webhook secret
             </label>
-            <input id="gh-secret" readOnly className={cx(inputCls, "font-mono text-xs")} value={revealed} data-testid="gh-secret" />
+            <Input id="gh-secret" readOnly className="w-full min-w-0 font-mono text-xs" value={revealed} data-testid="gh-secret" />
             <Button size="sm" onClick={() => copy(revealed, "Secret")}>
               Copy
             </Button>
@@ -345,7 +326,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
           )}
         </p>
       )}
-      <Button size="sm" onClick={() => (s.webhook.secretSet ? setConfirm(true) : gen.mutate(undefined))} busy={gen.isPending && !confirm}>
+      <Button size="sm" onClick={() => (s.webhook.secretSet ? setConfirm(true) : gen.mutate(undefined))} loading={gen.isPending && !confirm}>
         {s.webhook.secretSet ? "Regenerate secret" : "Generate secret"}
       </Button>
       <Dialog
@@ -356,7 +337,7 @@ function WebhookSettings({ s }: { s: GithubSettingsResponse }) {
         footer={
           <>
             <Button onClick={() => setConfirm(false)}>Cancel</Button>
-            <Button variant="primary" busy={gen.isPending} onClick={() => gen.mutate(undefined)}>
+            <Button variant="primary" loading={gen.isPending} onClick={() => gen.mutate(undefined)}>
               Regenerate
             </Button>
           </>
@@ -387,22 +368,13 @@ function PollSettings({ s }: { s: GithubSettingsResponse }) {
       >
         <div className="w-40">
           <Field id="gh-poll-minutes" label="Every (minutes)">
-            <input
-              id="gh-poll-minutes"
-              type="number"
-              min={0}
-              max={1440}
-              step={1}
-              className={inputCls}
-              value={minutes}
-              onChange={(e) => setMinutes(e.target.value)}
-            />
+            <Input id="gh-poll-minutes" type="number" min={0} max={1440} step={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
           </Field>
         </div>
-        <Button type="submit" size="sm" busy={save.isPending} disabled={minutes === String(s.pollMinutes) || minutes === ""}>
+        <Button type="submit" size="sm" loading={save.isPending} disabled={minutes === String(s.pollMinutes) || minutes === ""}>
           Save
         </Button>
-        <Button type="button" size="sm" busy={now.isPending} disabled={!s.connections.length && !s.envToken} onClick={() => now.mutate(undefined)}>
+        <Button type="button" size="sm" loading={now.isPending} disabled={!s.connections.length && !s.envToken} onClick={() => now.mutate(undefined)}>
           Check now
         </Button>
       </form>

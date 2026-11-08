@@ -1,6 +1,6 @@
 "use client";
 import { lazy, Suspense, useState } from "react";
-import { Button } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 const Brief = lazy(() => import("./WorkflowSurface").then((m) => ({ default: m.WorkflowSurface })));
 /** Same period surface as /areas/brief; phones initially show the first section. */
 export function InlineBrief() {

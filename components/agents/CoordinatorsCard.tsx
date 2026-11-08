@@ -6,8 +6,7 @@ import { api } from "@/lib/client/api";
 import { usd2 } from "@/lib/ai";
 import { AGENT_SCOPE_LABELS } from "@/lib/agent-access";
 import type { CoordinatorsResponse } from "@/lib/coordinator-settings";
-import { Card, ErrorNote } from "@/components/ui";
-import { EmptyState, ProgressBar, SectionHeader, Skeleton } from "@/components/ui/kit";
+import { Card, ErrorNote, EmptyState, ProgressBar, SectionHeader, Skeleton } from "@/components/ui";
 import { AgentMark } from "@/components/brand/AgentMark";
 
 const LOCKED = ["Settle / archive / move", "Merges", "External writes", "AI-excluded areas", "Credentials"];

@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AreasIcon } from "@/components/icons";
-import { ErrorNote, Page, Spinner } from "@/components/ui";
-import { ButtonLink, Dot, EmptyState, Pill, SectionHeader, Segmented } from "@/components/ui/kit";
+import { ButtonLink, Dot, EmptyState, ErrorNote, Page, Pill, SectionHeader, Segmented, KSpinner } from "@/components/ui";
 import { api } from "@/lib/client/api";
 import type { ResumeResponse, ResumeRow } from "@/lib/resume";
 import { relativeTime } from "@/lib/time";
@@ -159,7 +158,7 @@ export function ResumeView() {
         />
       </div>
       {q.error ? <ErrorNote error={q.error} retry={() => q.refetch()} /> : null}
-      {!data && !q.error ? <Spinner label="Loading in flight…" /> : null}
+      {!data && !q.error ? <KSpinner label="Loading in flight…" /> : null}
       {data?.updating ? (
         <p className="mb-2 text-xs text-muted" role="status">
           Updating…

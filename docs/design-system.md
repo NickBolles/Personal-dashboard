@@ -3,7 +3,7 @@
 **Status:** canonical (owner decision 2026-10-28). Supersedes the visuals of `/opt/data/worktrees/jarvis-design-pass/` (its repo mapping and PR slicing are reused).
 **Sources:** `jarvis-design.html` (base system: principles, tokens, components, shell, 22 pages, states, flows, redlines, keyboard, decisions) + `jarvis-sea.html` (theme: owner's pick **Tide with Lagoon text**).
 **Reference page:** https://artifacts.ai.nickbolles.com/jarvis-design-v1-20261028/ (design.html with this theme applied + phone orb nav).
-**Tokens:** `tokens.css` (this folder) · repo: `app/globals.css` (PR1) · components: `components/ui/*` (PR2) · live kit: `/dev/kit` (owner-only).
+**Tokens:** `tokens.css` (this folder) · repo: `app/globals.css` (PR1) · components: `components/ui/*` (PR2) — **canonical import surface `@/components/ui`, rules + catalogue in [ui-library.md](ui-library.md), lint-enforced** · live kit: `/dev/kit`, library gallery `/dev/ui` (owner-only).
 
 ## 1. Rules (non-negotiable)
 

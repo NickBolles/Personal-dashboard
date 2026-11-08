@@ -4,7 +4,8 @@ import { useId, useState } from "react";
 import type { CalendarEvent } from "@/lib/contracts";
 import type { SkylightWriteOp } from "@/lib/skylight-write";
 import { addDays, localDate } from "@/lib/time";
-import { Button, Dialog, Field, inputCls, useOnline } from "@/components/ui";
+import { Dialog, Field, useOnline } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { eventInstant, eventTime, previousEvent, shiftedEndDate } from "./eventFields";
 
 export function EventForm({

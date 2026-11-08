@@ -3,7 +3,8 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx, Spinner } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Spinner } from "@/components/ui/legacy";
 import {
   COMMANDS,
   REF_TYPE_LABELS,

@@ -7,8 +7,24 @@ import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import type { PlanMode, PlanRow } from "@/lib/finance/plan";
 import type { PlanView as Plan, ActualView } from "@/server/finance/plan";
-import { Badge, Button, Dialog, Empty, ErrorNote, Field, PageHeader, Spinner, cx, inputCls, useToast } from "@/components/ui";
-import { Button as KButton, SectionHeader } from "@/components/ui/kit";
+import {
+  Dialog,
+  ErrorNote,
+  Field,
+  PageHeader,
+  cx,
+  useToast,
+  Button as KButton,
+  SectionHeader,
+  Pill,
+  Button,
+  EmptyState,
+  KSpinner,
+  Input,
+  Select,
+  Textarea,
+  Checkbox,
+} from "@/components/ui";
 import { useAccess } from "@/components/access";
 import { Delta, Money, centsToInput, toCents } from "@/components/finance/money";
 
@@ -43,10 +59,9 @@ function AllocationFields({
     <div className="grid gap-2 sm:grid-cols-3">
       {plan.funds.map((f) => (
         <Field key={f.id} id={`${idPrefix}-${f.id}`} label={f.name}>
-          <input
+          <Input
             id={`${idPrefix}-${f.id}`}
             inputMode="decimal"
-            className={inputCls}
             value={values[f.id] ?? ""}
             onChange={(e) => onChange({ ...values, [f.id]: e.target.value })}
             placeholder="0.00"
@@ -117,14 +132,14 @@ function EventDialog({ plan, row, onClose }: { plan: Plan; row: PlanRow | "new" 
       footer={
         <>
           {!isNew && est ? (
-            <Button variant="danger" busy={remove.isPending} onClick={() => remove.mutate(undefined)}>
+            <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(undefined)}>
               Remove from revision
             </Button>
           ) : null}
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={save.isPending} onClick={() => save.mutate(undefined)}>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate(undefined)}>
             Save
           </Button>
         </>
@@ -134,37 +149,23 @@ function EventDialog({ plan, row, onClose }: { plan: Plan; row: PlanRow | "new" 
         {isNew ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <Field id="ev-label" label="Event">
-              <input
-                id="ev-label"
-                data-autofocus
-                className={inputCls}
-                value={f.label}
-                onChange={(e) => setF({ ...f, label: e.target.value })}
-                placeholder="RSU vest"
-              />
+              <Input id="ev-label" data-autofocus value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="RSU vest" />
             </Field>
             <Field id="ev-kind" label="Kind">
-              <select id="ev-kind" className={inputCls} value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+              <Select id="ev-kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
                 <option value="income">Income (RSU, bonus, ESPP…)</option>
                 <option value="obligation">Obligation (taxes, insurance…)</option>
                 <option value="reallocation">Reallocation between funds</option>
-              </select>
+              </Select>
             </Field>
           </div>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field id="ev-date" label="Planned date">
-            <input id="ev-date" type="date" className={inputCls} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+            <Input id="ev-date" type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
           </Field>
           <Field id="ev-amount" label="Estimated amount">
-            <input
-              id="ev-amount"
-              inputMode="decimal"
-              className={inputCls}
-              value={f.amount}
-              onChange={(e) => setF({ ...f, amount: e.target.value })}
-              placeholder="-8000.00"
-            />
+            <Input id="ev-amount" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder="-8000.00" />
           </Field>
         </div>
         <AllocationFields plan={plan} values={f.alloc} onChange={(alloc) => setF({ ...f, alloc })} idPrefix="ev-al" />
@@ -211,7 +212,7 @@ function ActualDialog({ plan, row, onClose }: { plan: Plan; row: PlanRow | null;
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={save.isPending} onClick={() => save.mutate(undefined)}>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate(undefined)}>
             Record
           </Button>
         </>
@@ -220,20 +221,21 @@ function ActualDialog({ plan, row, onClose }: { plan: Plan; row: PlanRow | null;
       <div className="space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <Field id="ac-date" label="Date">
-            <input id="ac-date" data-autofocus type="date" className={inputCls} value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
+            <Input id="ac-date" data-autofocus type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} />
           </Field>
           <Field id="ac-amount" label="Actual amount (signed)">
-            <input id="ac-amount" inputMode="decimal" className={inputCls} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+            <Input id="ac-amount" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
           </Field>
         </div>
         <AllocationFields plan={plan} values={f.alloc} onChange={(alloc) => setF({ ...f, alloc })} idPrefix="ac-al" />
         <Field id="ac-note" label="Note">
-          <input id="ac-note" className={inputCls} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+          <Input id="ac-note" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </Field>
-        <label className="flex min-h-11 items-center gap-2 text-sm">
-          <input type="checkbox" checked={f.complete} onChange={(e) => setF({ ...f, complete: e.target.checked })} />
-          This completes the event (uncheck for one of several installments)
-        </label>
+        <Checkbox
+          checked={f.complete}
+          onChange={(complete) => setF({ ...f, complete })}
+          label="This completes the event (uncheck for one of several installments)"
+        />
       </div>
     </Dialog>
   );
@@ -261,7 +263,7 @@ function CorrectionDialog({ plan, actual, onClose }: { plan: Plan; actual: Actua
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={save.isPending} onClick={() => save.mutate(undefined)}>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate(undefined)}>
             Record correction
           </Button>
         </>
@@ -269,20 +271,20 @@ function CorrectionDialog({ plan, actual, onClose }: { plan: Plan; actual: Actua
     >
       <div className="space-y-3">
         <Field id="co-fund" label="Fund">
-          <select id="co-fund" data-autofocus className={inputCls} value={f.fundId} onChange={(e) => setF({ ...f, fundId: e.target.value })}>
+          <Select id="co-fund" data-autofocus value={f.fundId} onChange={(e) => setF({ ...f, fundId: e.target.value })}>
             <option value="">Unallocated</option>
             {plan.funds.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="co-amount" label="Signed amount" hint="e.g. -500.00 to draw 500 more from the fund">
-          <input id="co-amount" inputMode="decimal" className={inputCls} value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+          <Input id="co-amount" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
         </Field>
         <Field id="co-note" label="Why (required)">
-          <input id="co-note" className={inputCls} value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+          <Input id="co-note" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </Field>
       </div>
     </Dialog>
@@ -322,8 +324,8 @@ function Comments({ target, onClose }: { target: { type: string; id: string; tit
         <label htmlFor="cm-body" className="sr-only">
           Comment
         </label>
-        <input id="cm-body" data-autofocus className={inputCls} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a comment" />
-        <Button type="submit" busy={add.isPending}>
+        <Input id="cm-body" data-autofocus className="min-w-0 flex-1" value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a comment" />
+        <Button type="submit" loading={add.isPending}>
           Post
         </Button>
       </form>
@@ -356,7 +358,7 @@ function NewRevision({ plan, open, onClose }: { plan: Plan; open: boolean; onClo
           </Button>
           <Button
             variant="primary"
-            busy={save.isPending}
+            loading={save.isPending}
             disabled={!f.changeNote.trim()}
             onClick={() => save.mutate(undefined, { onError: (e) => toast((e as Error).message, "danger") })}
           >
@@ -367,10 +369,10 @@ function NewRevision({ plan, open, onClose }: { plan: Plan; open: boolean; onClo
     >
       <div className="space-y-3">
         <Field id="nr-name" label="Name">
-          <input id="nr-name" data-autofocus className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input id="nr-name" data-autofocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         </Field>
         <Field id="nr-note" label="What changed and why (required)">
-          <textarea id="nr-note" className={`${inputCls} h-24`} value={f.changeNote} onChange={(e) => setF({ ...f, changeNote: e.target.value })} />
+          <Textarea id="nr-note" rows={2} className="h-24" value={f.changeNote} onChange={(e) => setF({ ...f, changeNote: e.target.value })} />
         </Field>
       </div>
     </Dialog>
@@ -409,7 +411,7 @@ function ImportBlock({ open, onClose, year }: { open: boolean; onClose: () => vo
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" busy={save.isPending} disabled={!f.csv.trim() || !f.range.trim()} onClick={() => save.mutate()}>
+          <Button variant="primary" loading={save.isPending} disabled={!f.csv.trim() || !f.range.trim()} onClick={() => save.mutate()}>
             Import
           </Button>
         </>
@@ -417,26 +419,25 @@ function ImportBlock({ open, onClose, year }: { open: boolean; onClose: () => vo
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id="ib-year" label="Plan year">
-          <input id="ib-year" data-autofocus type="number" className={inputCls} value={f.year} onChange={(e) => setF({ ...f, year: e.target.value })} />
+          <Input id="ib-year" data-autofocus type="number" value={f.year} onChange={(e) => setF({ ...f, year: e.target.value })} />
         </Field>
         <Field id="ib-name" label="Revision name">
-          <input id="ib-name" className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input id="ib-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         </Field>
         <Field id="ib-tab" label="Sheet tab">
-          <input id="ib-tab" className={inputCls} value={f.tab} onChange={(e) => setF({ ...f, tab: e.target.value })} />
+          <Input id="ib-tab" value={f.tab} onChange={(e) => setF({ ...f, tab: e.target.value })} />
         </Field>
         <Field id="ib-block" label="Block">
-          <input id="ib-block" className={inputCls} value={f.block} onChange={(e) => setF({ ...f, block: e.target.value })} />
+          <Input id="ib-block" value={f.block} onChange={(e) => setF({ ...f, block: e.target.value })} />
         </Field>
         <Field id="ib-range" label="Cell range">
-          <input id="ib-range" className={inputCls} value={f.range} onChange={(e) => setF({ ...f, range: e.target.value })} placeholder="A40:K58" />
+          <Input id="ib-range" value={f.range} onChange={(e) => setF({ ...f, range: e.target.value })} placeholder="A40:K58" />
         </Field>
         <Field id="ib-file" label="CSV file">
-          <input
+          <Input
             id="ib-file"
             type="file"
             accept=".csv,text/csv"
-            className={inputCls}
             onChange={async (e) => {
               const file = e.target.files?.[0];
               if (file) setF({ ...f, csv: await file.text() });
@@ -445,7 +446,7 @@ function ImportBlock({ open, onClose, year }: { open: boolean; onClose: () => vo
         </Field>
         <div className="sm:col-span-2">
           <Field id="ib-csv" label="…or paste it">
-            <textarea id="ib-csv" className={`${inputCls} h-28 font-mono text-xs`} value={f.csv} onChange={(e) => setF({ ...f, csv: e.target.value })} />
+            <Textarea id="ib-csv" rows={2} className="h-28 font-mono text-xs" value={f.csv} onChange={(e) => setF({ ...f, csv: e.target.value })} />
           </Field>
         </div>
       </div>
@@ -482,7 +483,13 @@ export function PlanView() {
   const eventPatch = useSave((v: { id: string; version: number; body: Record<string, unknown> }) =>
     api.patch(`/api/finance/plan/events/${v.id}`, { ...v.body, version: v.version }),
   );
-  if (q.isPending) return <Spinner label="Loading plan" />;
+  if (q.isPending)
+    return (
+      <span role="status" className="inline-flex items-center gap-2">
+        <KSpinner />
+        <span>Loading plan</span>
+      </span>
+    );
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const go = (y: number, r?: string) => router.push(`/finance/plan?year=${y}${r ? `&revision=${r}` : ""}`);
   const thisYear = new Date().getFullYear();
@@ -491,12 +498,12 @@ export function PlanView() {
     return (
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
         <PageHeader title="Long-term plan" subtitle="Irregular income and big obligations, mapped onto purpose funds." />
-        <Empty
+        <EmptyState
           title={`No plan for ${y} yet`}
           action={
             canEdit ? (
               <div className="flex flex-wrap justify-center gap-2">
-                <Button variant="primary" busy={startYear.isPending} onClick={() => startYear.mutate(y, { onSuccess: () => go(y) })}>
+                <Button variant="primary" loading={startYear.isPending} onClick={() => startYear.mutate(y, { onSuccess: () => go(y) })}>
                   Start {y}
                 </Button>
                 <Button onClick={() => setImporting(true)}>Import from the spreadsheet</Button>
@@ -505,7 +512,7 @@ export function PlanView() {
           }
         >
           Opening fund positions roll over from the previous year when it exists.
-        </Empty>
+        </EmptyState>
         {q.data.years.length ? (
           <p className="text-sm">
             Other years:{" "}
@@ -530,14 +537,14 @@ export function PlanView() {
         title={`${p.year} plan`}
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
-            <Badge tone={p.revision.kind === "active" ? "ok" : p.revision.kind === "hypothetical" ? "accent" : "neutral"}>
+            <Pill tone={p.revision.kind === "active" ? "ok" : p.revision.kind === "hypothetical" ? "ac" : "neutral"}>
               {p.revision.kind === "active"
                 ? "Active"
                 : p.revision.kind === "hypothetical"
                   ? "Hypothetical: never feeds check-ins"
                   : "Old revision (read-only)"}
-            </Badge>
-            {p.revision.provenance ? <Badge tone="warn">Imported, unreconciled</Badge> : null}
+            </Pill>
+            {p.revision.provenance ? <Pill tone="wn">Imported, unreconciled</Pill> : null}
             <span>{p.revision.changeNote}</span>
           </span>
         }
@@ -564,34 +571,35 @@ export function PlanView() {
       />
       <div className="flex flex-wrap items-end gap-3">
         <Field id="pl-year" label="Year">
-          <select id="pl-year" className={inputCls} value={p.year} onChange={(e) => go(Number(e.target.value))}>
+          <Select id="pl-year" value={p.year} onChange={(e) => go(Number(e.target.value))}>
             {[...new Set([...p.years, thisYear, thisYear + 1])].sort().map((y) => (
               <option key={y} value={y}>
                 {y}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field id="pl-rev" label="Revision">
-          <select id="pl-rev" className={inputCls} value={p.revision.id} onChange={(e) => go(p.year, e.target.value)}>
+          <Select id="pl-rev" value={p.revision.id} onChange={(e) => go(p.year, e.target.value)}>
             {p.revisions.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.name} ({x.kind})
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <div role="group" aria-label="Show" className="flex overflow-hidden rounded-xl border border-line-strong">
           {(["plan", "actual", "forecast"] as const).map((m) => (
-            <button
+            <Button
               key={m}
               type="button"
+              variant="ghost"
               aria-pressed={mode === m}
               onClick={() => setMode(m)}
               className={cx("min-h-12 px-4 text-sm font-medium capitalize", mode === m ? "bg-accent text-accent-contrast" : "bg-surface hover:bg-surface-2")}
             >
               {m}
-            </button>
+            </Button>
           ))}
         </div>
         {canEdit ? (
@@ -659,14 +667,14 @@ export function PlanView() {
                   <th scope="row" className="sticky left-0 z-10 min-w-56 bg-surface px-3 py-2 text-left font-normal">
                     <span className="font-medium">{row.label}</span>
                     <div className="mt-1 flex flex-wrap gap-1">
-                      <Badge>{row.kind}</Badge>
+                      <Pill>{row.kind}</Pill>
                       {row.status !== "open" ? (
-                        <Badge tone={row.status === "complete" ? "ok" : "accent"}>{row.status === "complete" ? "Done" : "Partly done"}</Badge>
+                        <Pill tone={row.status === "complete" ? "ok" : "ac"}>{row.status === "complete" ? "Done" : "Partly done"}</Pill>
                       ) : null}
                       {row.attention.map((a) => (
-                        <Badge key={a} tone="warn">
+                        <Pill key={a} tone="wn">
                           {a}
-                        </Badge>
+                        </Pill>
                       ))}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs">
@@ -813,19 +821,17 @@ function Openings({ plan }: { plan: Plan }) {
           <fieldset key={f.id} className="rounded-xl border border-line p-3">
             <legend className="px-1 text-sm font-medium">{f.name}</legend>
             <Field id={`op-${f.id}`} label="Opening" hint={f.rolloverNote ?? undefined}>
-              <input
+              <Input
                 id={`op-${f.id}`}
                 inputMode="decimal"
-                className={inputCls}
                 value={v[f.id]?.opening ?? ""}
                 onChange={(e) => setV({ ...v, [f.id]: { ...v[f.id]!, opening: e.target.value } })}
               />
             </Field>
             <Field id={`gl-${f.id}`} label="Goal">
-              <input
+              <Input
                 id={`gl-${f.id}`}
                 inputMode="decimal"
-                className={inputCls}
                 value={v[f.id]?.goal ?? ""}
                 onChange={(e) => setV({ ...v, [f.id]: { ...v[f.id]!, goal: e.target.value } })}
               />
@@ -833,7 +839,7 @@ function Openings({ plan }: { plan: Plan }) {
           </fieldset>
         ))}
       </div>
-      <Button type="submit" busy={save.isPending}>
+      <Button type="submit" loading={save.isPending}>
         Save openings and goals
       </Button>
     </form>

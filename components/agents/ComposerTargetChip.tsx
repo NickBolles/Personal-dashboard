@@ -1,6 +1,6 @@
 "use client";
 
-import { cx } from "@/components/ui";
+import { ChipButton, cx } from "@/components/ui";
 import { setComposerJarvis, type ComposerTargetState } from "./useComposerTarget";
 
 /**
@@ -17,9 +17,9 @@ export function ComposerTargetChip({ target, className }: { target: ComposerTarg
   const area = target.node?.title ?? "";
   const label = target.switchedToJarvis ? `Asking Jarvis. Switch to ${area}'s agent` : `Asking ${target.agent} in ${area}. Switch to Jarvis`;
   return (
-    <button
+    <ChipButton
       type="button"
-      className={cx("chip max-w-[16rem] shrink-0 cursor-pointer hover:border-line-strong", className)}
+      className={cx("chip max-w-64 shrink-0 cursor-pointer hover:border-line-strong", className)}
       data-tone={target.routed ? "accent" : undefined}
       data-testid="composer-target"
       data-agent={target.agent}
@@ -32,6 +32,6 @@ export function ComposerTargetChip({ target, className }: { target: ComposerTarg
       <span aria-hidden="true">✦</span>
       <span className="truncate font-semibold">{target.switchedToJarvis ? "Jarvis" : target.agent}</span>
       {!target.switchedToJarvis ? <span className="hidden truncate text-muted sm:inline">· {area}</span> : null}
-    </button>
+    </ChipButton>
   );
 }

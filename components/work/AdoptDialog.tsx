@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { Button, Dialog, ErrorNote, Field, Spinner, inputCls, useToast } from "@/components/ui";
+import { Dialog, ErrorNote, Field, useToast } from "@/components/ui";
+import { Button, Spinner, inputCls } from "@/components/ui/legacy";
 import { fmtWhen } from "@/components/work/conversations";
 import type { WorkItem } from "@/lib/work";
 

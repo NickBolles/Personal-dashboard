@@ -1,0 +1,1039 @@
+{
+  "app/(shell)/alerts/AlertsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 5
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "app/(shell)/areas/WorkView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 34
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 55
+    }
+  },
+  "app/(shell)/areas/activity/ActivityView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "app/(shell)/areas/dashboard/DashboardView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 12
+    }
+  },
+  "app/(shell)/areas/timeline/TimelineView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-hex-colours": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "app/(shell)/brain/BrainView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "app/(shell)/chat/ChatIndex.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "app/(shell)/daily-compass/CompassView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "app/(shell)/finance/accounts/AccountsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    }
+  },
+  "app/(shell)/finance/checkin/[id]/CheckinView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "app/(shell)/home-control/HomeControlView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "app/(shell)/home/HomeView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 9
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "app/(shell)/home/all/AllItemsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "app/(shell)/initiatives/InitiativesView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "app/(shell)/more/page.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    }
+  },
+  "app/(shell)/settings/SettingsShell.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    }
+  },
+  "app/(shell)/settings/people/PeopleView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "app/(shell)/skylight/SkylightView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "app/(shell)/todos/TodosView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "app/(shell)/workouts/WorkoutView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 4
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 9
+    }
+  },
+  "app/layout.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "app/offline/page.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/InstallPrompt.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/NotificationSetup.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/SourceState.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/actions/ActionCard.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 7
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/agents/AgentRuns.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/approvals/ApprovalCard.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/approvals/ClarifyCard.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/areas/AreaSettings.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 9
+    }
+  },
+  "components/areas/AreasSidebar.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/areas/BoardTab.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/areas/ConversationsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 5
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/areas/GraphTab.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/areas/ModelPicker.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/areas/PortfolioTab.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 8
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/capture/CaptureExtras.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/capture/CaptureSheet.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/capture/CaptureTokens.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/capture/ShareLanding.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/chat/Attachments.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 9
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "components/chat/ComposerPicker.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 4
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/chat/ContextNote.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/chat/ContextSheet.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 5
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/Conversation.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 21
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 14
+    }
+  },
+  "components/chat/LinksPanel.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/Notice.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/QuickCapture.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/SessionList.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/chat/ToolStep.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/WorkSummary.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/backend.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/chat/dialogs.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 6
+    }
+  },
+  "components/chat/things/ChatPanel.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/chat/things/ChatSheet.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/chat/things/ChatTray.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/chat/things/SummaryChip.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/coordinator/CoordinatorThread.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/coordinator/GlobalCoordinator.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 8
+    }
+  },
+  "components/decisions/DecisionAnswer.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/decisions/DecisionDetail.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/feedback/FeedbackInbox.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/feedback/RateMessage.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "components/finance/FinanceNav.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/home/AssistCard.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/home/Feedback.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 7
+    }
+  },
+  "components/home/HaControls.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/home/TriageDialog.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 4
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/map/AreaPage.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 5
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/map/Decisions.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/map/DecisionsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    }
+  },
+  "components/map/MapView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 11
+    }
+  },
+  "components/markdown/Markdown.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/navigation/AppShell.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 18
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 6
+    }
+  },
+  "components/navigation/CommandDock.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 12
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/navigation/Sidebar.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 22
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 6
+    }
+  },
+  "components/quick-actions/ManageQuickActions.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/quick-actions/ProposedQuickActions.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/search/PaletteChips.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    }
+  },
+  "components/search/SearchDialog.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 9
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 4
+    }
+  },
+  "components/skylight/EventForm.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 7
+    }
+  },
+  "components/skylight/SkylightActionRow.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/skylight/SkylightChoreGroups.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    }
+  },
+  "components/skylight/SkylightListCard.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/skylight/SkylightUndoBar.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/skylight/TodayChores.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/skylight/useSkylightWrite.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/smart/DynamicSurface.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/smart/InlineBrief.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/smart/SmartSurface.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/smart/WorkflowPage.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    }
+  },
+  "components/smart/WorkflowSurface.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/smart/registry.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 8
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/smart/v2-components.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 6
+    }
+  },
+  "components/smart/workflow-components.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 13
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/work/ActivityFeed.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/work/AdoptDialog.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/work/ContinueDialog.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/DestinationPicker.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/work/EscalationBanner.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/Gantt.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 12
+    },
+    "jarvis-ui/no-hex-colours": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/work/InlineEdit.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 6
+    }
+  },
+  "components/work/ItemAiChips.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/ItemMeta.tsx": {
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/work/QuickAdd.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "components/work/TagsSettingsView.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/UndoBar.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/WorkMap.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/WorkTree.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 8
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/work/ai/AiActions.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 13
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 8
+    }
+  },
+  "components/work/ai/AiSettingsView.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 16
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 12
+    }
+  },
+  "components/work/ai/SuggestFiling.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/work/common.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/work/conversations.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 3
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "components/work/inbox.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 23
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 5
+    }
+  },
+  "components/work/structure.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 6
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/work/today.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 13
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 3
+    }
+  },
+  "components/workflows/PassageText.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/workflows/ProposalReview.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 1
+    }
+  },
+  "components/workflows/RunOutputs.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 11
+    }
+  },
+  "components/workflows/RunPanel.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/workflows/SavedPlacesSettings.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/workflows/SharePicker.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  },
+  "components/workflows/StartForm.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 8
+    }
+  },
+  "components/workflows/WorkflowBuilder.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 2
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 22
+    }
+  },
+  "components/workflows/WorkflowDetail.tsx": {
+    "jarvis-ui/no-arbitrary-values": {
+      "count": 1
+    },
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    },
+    "jarvis-ui/no-native-controls": {
+      "count": 2
+    }
+  },
+  "components/workflows/WorkflowsGallery.tsx": {
+    "jarvis-ui/no-legacy-imports": {
+      "count": 1
+    }
+  }
+}

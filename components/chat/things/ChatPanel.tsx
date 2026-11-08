@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useId, useState, type ReactNode, type CSSProperties } from "react";
-import { Badge, Button, Spinner } from "@/components/ui";
+import { Badge, Button, Spinner } from "@/components/ui/legacy";
 import { BrainIcon, ForkIcon, ToolIcon } from "@/components/icons";
 import { safeHref } from "@/components/markdown/Markdown";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";

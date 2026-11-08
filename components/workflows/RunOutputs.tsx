@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog, cx, inputCls, useToast } from "@/components/ui";
+import { Dialog, cx, useToast } from "@/components/ui";
+import { Button, inputCls } from "@/components/ui/legacy";
 import { displayValue } from "@/lib/workflows/runs";
 import type { RunPanelView } from "./RunPanel";
 

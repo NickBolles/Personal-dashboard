@@ -1,7 +1,8 @@
 "use client";
 
 import type { AssistCard as Assist } from "@/lib/contracts";
-import { Button, ButtonLink, cx } from "@/components/ui";
+import { cx } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/ui/legacy";
 import { ChevronIcon } from "@/components/icons";
 import { chatHref } from "./chat";
 import { FeedbackBar } from "./Feedback";

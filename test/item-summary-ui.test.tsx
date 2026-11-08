@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GetStarted, ReportViewer, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
 import { api } from "@/lib/client/api";
-import { OverflowMenu, ToastProvider } from "@/components/ui";
+import { ToastProvider } from "@/components/ui";
+import { OverflowMenu } from "@/components/ui/legacy";
 import type { ItemAiResponse, ReportView } from "@/lib/ai";
 import type { ReactNode } from "react";
 

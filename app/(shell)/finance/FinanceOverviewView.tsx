@@ -5,16 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { relativeTime } from "@/lib/time";
 import type { FinanceOverview } from "@/server/finance/overview";
-import { Badge, Button, ButtonLink, Card, Empty, ErrorNote, PageHeader, cx, useToast } from "@/components/ui";
-import { LoadingState } from "@/components/ui/LoadingState";
+import { ErrorNote, PageHeader, cx, useToast, LoadingState, SectionHeader, Pill, Button, ButtonLink, Card, EmptyState } from "@/components/ui";
 import { AlertIcon, CheckIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
-import { SectionHeader } from "@/components/ui/kit";
 import { Delta, Money } from "@/components/finance/money";
 import { FinanceSnapshotCards } from "@/components/finance/FinanceSnapshotCards";
 import { StartCheckinButton, monthLabel } from "./checkin/CheckinList";
 
-const TONE = { ready: "ok", attention: "warn", failed: "danger", setup: "accent" } as const;
+const TONE = { ready: "ok", attention: "wn", failed: "bad", setup: "ac" } as const;
 const WORD = { ready: "Ready", attention: "Needs attention", failed: "Refresh failed", setup: "Set up" } as const;
 
 export function FinanceOverviewView() {
@@ -50,7 +48,7 @@ export function FinanceOverviewView() {
         actions={
           can("finance.edit") && o.setup.accounts ? (
             o.setup.balanceSource === "monarch" ? (
-              <Button busy={refresh.isPending} onClick={() => refresh.mutate()}>
+              <Button className="whitespace-normal" loading={refresh.isPending} onClick={() => refresh.mutate()}>
                 Refresh balances
               </Button>
             ) : (
@@ -64,9 +62,9 @@ export function FinanceOverviewView() {
         role="status"
         className={cx("card flex flex-wrap items-center gap-3 p-4", o.status === "failed" && "border-danger", o.status === "attention" && "border-warn")}
       >
-        <Badge tone={TONE[o.status]}>
+        <Pill tone={TONE[o.status]}>
           {o.status === "ready" ? <CheckIcon className="h-3.5 w-3.5" /> : <AlertIcon className="h-3.5 w-3.5" />} {WORD[o.status]}
-        </Badge>
+        </Pill>
         <span className="font-medium">{o.statusText}</span>
         <span className="text-sm text-muted">
           {o.asOf ? `Balances as of ${relativeTime(o.asOf)}` : o.setup.accounts ? "Some balances have no known as-of time" : ""}
@@ -82,11 +80,11 @@ export function FinanceOverviewView() {
         </div>
       ) : null}
       {!o.setup.accounts ? (
-        <Empty title="No accounts yet" action={<ButtonLink href="/finance/accounts">Add accounts</ButtonLink>}>
+        <EmptyState title="No accounts yet" action={<ButtonLink href="/finance/accounts">Add accounts</ButtonLink>}>
           Add checking, savings and cards, then set your checking cushion.
-        </Empty>
+        </EmptyState>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <SectionHeader label="Where we stand" />
             {o.totals ? (
@@ -145,7 +143,7 @@ export function FinanceOverviewView() {
                 {o.upcoming.map((u) => (
                   <li key={u.id} className="flex justify-between gap-2">
                     <span>
-                      <span className="text-muted">{u.date}</span> {u.label} {u.kind === "plan" ? <Badge>Plan</Badge> : null}
+                      <span className="text-muted">{u.date}</span> {u.label} {u.kind === "plan" ? <Pill>Plan</Pill> : null}
                     </span>
                     {u.amount !== undefined ? <Delta value={u.amount} /> : null}
                   </li>
@@ -167,7 +165,7 @@ export function FinanceOverviewView() {
               <ul className="mt-2 space-y-1 text-sm">
                 {o.issues.slice(0, 8).map((i) => (
                   <li key={`${i.code}:${i.ref ?? ""}`} className="flex gap-2">
-                    <Badge tone={i.blocking ? "danger" : "warn"}>{i.blocking ? "Must fix" : "Warning"}</Badge>
+                    <Pill tone={i.blocking ? "bad" : "wn"}>{i.blocking ? "Must fix" : "Warning"}</Pill>
                     <span>{i.message}</span>
                   </li>
                 ))}
@@ -181,7 +179,7 @@ export function FinanceOverviewView() {
                 {o.funds.map((f) => (
                   <li key={f.fundId} className="flex justify-between gap-2">
                     <span>
-                      {f.name} {f.protected ? <Badge>Protected</Badge> : null}
+                      {f.name} {f.protected ? <Pill>Protected</Pill> : null}
                     </span>
                     <Money value={f.available} />
                   </li>

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Dialog } from "@/components/ui";
-import { Toast } from "@/components/ui/kit";
+import { Dialog, Toast } from "@/components/ui";
+import { Button } from "@/components/ui/legacy";
 import type { HaRisk, ServiceData } from "@/lib/ha-policy";
 
 /** What the server returns from POST /api/home-assistant/control. */
