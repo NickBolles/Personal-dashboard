@@ -1233,7 +1233,9 @@ function LiveRun({
 
       {state.phase === "queued" ? (
         <p role="status" className="text-sm text-muted">
-          Queued — waiting for an available agent slot. You can leave this chat; the server will start it automatically.
+          {state.queueReason === "connections"
+            ? "Queued — your message was sent. Jarvis is waiting for a free Hermes connection and shows the reply as soon as one opens."
+            : "Queued — waiting for an available agent slot. You can leave this chat; the server will start it automatically."}
         </p>
       ) : null}
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued") ? (

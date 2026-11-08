@@ -5,6 +5,7 @@ import { processSingleton } from "@/server/singleton";
 import { workerStatus } from "@/server/worker/status";
 import { purgeDismissedCaptures } from "@/server/capture/purge";
 import { deliverPendingPushes } from "./push";
+import { withHermesLane } from "@/server/http/hermes-budget";
 
 /**
  * Standalone push dispatcher (spec §3.5, owner decision D17): delivers the
@@ -69,7 +70,8 @@ function runTasks(now: Date) {
     if (t.lastAt !== null && now.getTime() - t.lastAt < t.everyMs) continue;
     t.lastAt = now.getTime();
     try {
-      t.run(now);
+      // Tick work (index warmer, scheduled jobs, reminders) never competes with a person for Hermes connections.
+      withHermesLane("background", () => t.run(now));
     } catch (e) {
       console.error(`[jarvis] dispatcher task ${name} failed`, (e as Error).message.slice(0, 200));
     }

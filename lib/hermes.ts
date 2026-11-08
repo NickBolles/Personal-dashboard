@@ -42,7 +42,11 @@ export type SubagentIdentity = {
 };
 
 export type RunEvent =
-  | { type: "run.queued"; seq?: number }
+  | {
+      type: "run.queued";
+      seq?: number;
+      /** "connections": Jarvis is waiting for a free Hermes connection (the run itself was accepted). */ reason?: "connections";
+    }
   | { type: "text.delta"; seq?: number; delta: string }
   | { type: "commentary"; seq?: number; text: string }
   | { type: "reasoning"; seq?: number; text: string }

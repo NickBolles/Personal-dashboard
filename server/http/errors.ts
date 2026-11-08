@@ -2,7 +2,7 @@
 export class UpstreamError extends Error {
   constructor(
     public source: string,
-    public kind: "unreachable" | "unauthorized" | "not_found" | "bad_response" | "timeout" | "conflict" | "unsupported",
+    public kind: "unreachable" | "unauthorized" | "not_found" | "bad_response" | "timeout" | "conflict" | "unsupported" | "busy",
     message: string,
     public status?: number,
   ) {

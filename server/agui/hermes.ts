@@ -121,7 +121,7 @@ export class HermesAguiTranslator {
     this.ensureRun(out);
     switch (e.type) {
       case "run.queued":
-        out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.run_queued", value: {} }));
+        out.push(this.ev({ type: EventType.CUSTOM, name: "jarvis.run_queued", value: e.reason ? { reason: e.reason } : {} }));
         break;
       case "text.delta": {
         if (!e.delta) break;

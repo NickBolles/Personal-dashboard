@@ -37,6 +37,8 @@ export type RunState = {
   output?: string;
   lastSeq?: number;
   attempts: number;
+  /** Why the run shows "Queued": Hermes' own queue, or Jarvis waiting for a free Hermes connection. */
+  queueReason?: "connections";
 };
 
 type Action =
@@ -83,7 +85,7 @@ export function reduceRun(state: RunState, a: Action): RunState {
     case "event": {
       const e = a.event;
       const s = { ...state, lastSeq: a.seq ?? state.lastSeq, attempts: 0 };
-      if (e.type === "run.queued") return isTerminal(s.phase) || s.phase === "stopping" ? s : { ...s, phase: "queued" };
+      if (e.type === "run.queued") return isTerminal(s.phase) || s.phase === "stopping" ? s : { ...s, phase: "queued", queueReason: e.reason };
       if (e.type === "unknown" && s.phase === "queued") return s;
       if (s.phase === "reconnecting" || s.phase === "disconnected" || s.phase === "starting" || s.phase === "queued") s.phase = "running";
       switch (e.type) {
@@ -182,6 +184,8 @@ function subagentFields(e: SubagentIdentity): SubagentIdentity {
 }
 
 const BACKOFF = [1000, 2000, 4000, 8000, 15000, 15000];
+/** A tab hidden this long closes its run stream (it resumes from the last event when shown). */
+export const HIDDEN_GRACE_MS = 30_000;
 
 /**
  * Streams a Hermes run through the BFF relay. A closed or broken stream never
@@ -388,11 +392,41 @@ export function useRunStream(onTerminal: (state: RunState) => void) {
       if (conn.current.runId && (stateRef.current.phase === "disconnected" || stateRef.current.phase === "reconnecting")) retry();
     };
     window.addEventListener("online", on);
+    // A hidden tab keeps no Hermes connection: after a short grace the stream closes, and it
+    // reconnects from the last seen event when the tab is visible again (Hermes allows only a few
+    // connections in total, shared by every tab, pane and device).
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    let paused = false;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (hideTimer || !es.current) return;
+        hideTimer = setTimeout(() => {
+          hideTimer = null;
+          if (!es.current || !conn.current.runId || isTerminal(stateRef.current.phase)) return;
+          flush();
+          cleanup();
+          paused = true;
+        }, HIDDEN_GRACE_MS);
+        return;
+      }
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = null;
+      if (!paused) return;
+      paused = false;
+      if (!conn.current.runId) return;
+      void reconcile().then((view) => {
+        if (view && isTerminal(view.status)) finish();
+        else connectRef.current();
+      });
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("online", on);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (hideTimer) clearTimeout(hideTimer);
       cleanup();
     };
-  }, [cleanup, retry]);
+  }, [cleanup, retry, flush, reconcile, finish]);
 
   const clear = useCallback(() => {
     cleanup();

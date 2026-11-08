@@ -25,6 +25,7 @@ import {
 } from "@/lib/work";
 import type { z } from "zod";
 import { listItems, placeConversation, syncConversationTitles, type OpOut } from "./store";
+import { withHermesLane } from "@/server/http/hermes-budget";
 
 /**
  * Conversations in the Areas tree: the picker, the conversations view (All /
@@ -264,7 +265,7 @@ export function warmConversationIndexes(now = new Date()): number {
     try {
       // A view may have refreshed it while it waited in the queue.
       const cur = readIndex(u.id);
-      if (!cur || isDue(cur, Date.now())) await refresh(u);
+      if (!cur || isDue(cur, Date.now())) await withHermesLane("background", () => refresh(u));
     } finally {
       warmQueued.delete(u.id);
     }

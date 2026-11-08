@@ -105,7 +105,7 @@ export function aguiToRunEvents(e: AGUIEvent, st: AguiReadState): RunEvent[] {
       const v = (e.value ?? {}) as Record<string, unknown>;
       if (e.name === "jarvis.commentary") return [{ type: "commentary", text: str(v.text) ?? "" }];
       if (e.name === "jarvis.steer_queued") return [{ type: "steer.queued", at }];
-      if (e.name === "jarvis.run_queued") return [{ type: "run.queued" }];
+      if (e.name === "jarvis.run_queued") return [v.reason === "connections" ? { type: "run.queued", reason: "connections" } : { type: "run.queued" }];
       if (e.name === "jarvis.clarify" && typeof v.requestId === "string")
         return [
           {
