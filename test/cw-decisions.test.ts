@@ -150,6 +150,17 @@ describe("decision store", () => {
     expect(head()).toMatchObject({ ref: "D-1" });
   });
 
+  it("a defer is undoable: the decision comes straight back and the head is re-projected", () => {
+    raiseDecision(owner.id, itemId, { question: "A?" }, { raisedBy: "agent:x", correlationId: cid });
+    const out: store.OpOut = {};
+    deferDecision(owner.id, "D-1", inMin(60 * 24 * 20), cid, new Date(), out);
+    expect(row("D-1").state).toBe("deferred");
+    expect(head()).toBeNull();
+    store.undoOp(owner, out.op!.id, cid);
+    expect(row("D-1")).toMatchObject({ state: "open", deferredUntil: null });
+    expect(head()).toMatchObject({ ref: "D-1" });
+  });
+
   it("legacy route refuses a stale confirm: the D-n the owner confirmed must still be the head", () => {
     raiseDecision(owner.id, itemId, { question: "Ship V1?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
     raiseDecision(owner.id, itemId, { question: "Ship V3?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
@@ -391,6 +402,15 @@ describe("MCP decision tools", () => {
     expect(bad).toMatchObject({ isError: true, value: { error: "default_risk" } });
     const listed = await call(token, "jarvis_list_decisions");
     expect(listed.value.decisions.map((d: { ref: string }) => d.ref)).toEqual(["D-2", "D-1"]);
+  });
+
+  it("raise with supersedes refuses a decision whose item the agent can't see (archived)", async () => {
+    await call(token, "jarvis_raise_decision", { itemId, question: "Old?", choices: ["Yes"] });
+    const visibleItem = newItem("Still visible");
+    store.updateItem(owner, itemId, { archived: true }, cid);
+    const r = await call(token, "jarvis_raise_decision", { itemId: visibleItem, question: "New?", choices: ["Yes"], supersedes: "D-1" });
+    expect(r.isError).toBe(true);
+    expect(row("D-1").state).toBe("open");
   });
 
   it("agents supersede only their own decisions; there is no answer tool; the answer route is owner-only", async () => {

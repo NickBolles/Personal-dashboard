@@ -392,6 +392,12 @@ export const TOOLS: ToolDef[] = [
     run: ({ itemId, runId, ...rest }, { agent, correlationId }) => {
       const cur = visible(agent.user.id, itemId);
       if (cur.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask on the work item, not the conversation");
+      // The superseded decision's item must be visible too (archived / AI-excluded subtrees answer not_found).
+      if (rest.supersedes) {
+        const old = findDecision(getDb(), agent.user.id, rest.supersedes);
+        if (!old) throw new HttpError(404, "not_found", "No decision with that id");
+        visible(agent.user.id, old.itemId);
+      }
       const run = runId ? resolveRunId(agent.user.id, runId) : undefined;
       const d = raiseDecision(agent.user.id, itemId, { ...rest, ...(run ? { runId: run } : {}) }, { raisedBy: agent.via, correlationId });
       return { ref: d.ref, decisionId: d.id, state: d.state, item: brief(agentItems(agent.user.id).byId.get(itemId) ?? cur) };
