@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, lt, like } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { can } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
@@ -9,6 +9,7 @@ import type { WorkItem } from "@/lib/work";
 import { areaIndex, type MapExport, type MapExportNode, areaRollups, bucketOf } from "@/lib/map-rollup";
 import { listItems } from "./store";
 import { coordinatorSessions } from "./coordinator";
+import { listDecisionRows } from "./decision-store";
 
 function approvalText(raw: string | null): string {
   if (!raw) return "A running task is waiting for your approval.";
@@ -35,49 +36,45 @@ function sessionFor(item: WorkItem, items: WorkItem[], links: Map<string, { kind
 export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "work.use") ? listItems(user.id) : []): DecisionsResponse {
   const db = getDb();
   const entries: DecisionEntry[] = [];
-  const open = items.filter((i) => i.decision && !i.archived);
-  if (open.length) {
+  // CW-2: one entry per open decision row (several per item). The item's head keeps the old
+  // `item:<id>` key (deep links, the legacy answer route); the others are `decision:D-n`.
+  const live = new Map(items.filter((i) => !i.archived).map((i) => [i.id, i]));
+  const rows = can(user, "work.use") ? listDecisionRows(user.id, { states: ["open"] }).filter((d) => live.has(d.itemId)) : [];
+  if (rows.length) {
     const byId = new Map(items.map((i) => [i.id, i]));
     const areaOf = areaIndex(items);
-    const links = linksByItem(open.map((i) => i.id));
+    const itemIds = [...new Set(rows.map((d) => d.itemId))];
+    const links = linksByItem(itemIds);
     const coord = coordinatorSessions(items);
-    const requests = new Map<string, { reason: string | null; via: string | null }>();
-    for (let n = 0; n < open.length; n += 500) {
-      const events = db
-        .select({ itemId: schema.workEvents.itemId, reason: schema.workEvents.reason, via: schema.workEvents.via })
-        .from(schema.workEvents)
-        .where(
-          and(
-            inArray(
-              schema.workEvents.itemId,
-              open.slice(n, n + 500).map((i) => i.id),
-            ),
-            like(schema.workEvents.reason, "Needs your decision:%"),
-          ),
-        )
-        .orderBy(desc(schema.workEvents.at))
-        .all();
-      for (const event of events) if (!requests.has(event.itemId)) requests.set(event.itemId, event);
-    }
-    for (const i of open)
+    for (const d of rows) {
+      const i = live.get(d.itemId)!;
+      const head = i.decision?.ref === d.ref;
+      const askedBy = d.raisedBy.startsWith("agent:") ? d.raisedBy.slice(6) : undefined;
       entries.push({
-        key: `item:${i.id}`,
+        key: head ? `item:${i.id}` : `decision:${d.ref}`,
         kind: "item",
         title: i.title,
-        question: i.decision!.question,
-        ...(i.decision!.detail ? { detail: i.decision!.detail } : {}),
-        ...(i.decision!.action ? { action: i.decision!.action } : {}),
-        choices: i.decision!.choices,
+        question: d.question,
+        ...(d.detail ? { detail: d.detail } : {}),
+        ...(d.action ? { action: d.action } : {}),
+        choices: d.choices,
         href: `/areas?item=${encodeURIComponent(i.id)}`,
-        at: i.decision!.askedAt || i.updatedAt,
+        at: d.createdAt,
         itemId: i.id,
         areaTitle: byId.get(areaOf.get(i.id) ?? "")?.title,
         sessionId: sessionFor(i, items, links),
         coordinatorSessionId: coord.get(areaOf.get(i.id) ?? "") ?? null,
-        ...(requests.get(i.id)?.reason === `Needs your decision: ${i.decision!.question}` && requests.get(i.id)?.via?.startsWith("agent:")
-          ? { askedBy: requests.get(i.id)!.via!.slice(6) }
-          : {}),
+        ...(askedBy ? { askedBy } : {}),
+        ref: d.ref,
+        decisionId: d.id,
+        recommended: d.recommended,
+        risk: d.risk,
+        pack: d.pack,
+        defaultChoice: d.defaultChoice,
+        expiresAt: d.expiresAt,
+        runId: d.runId,
       });
+    }
   }
   if (can(user, "hermes.chat")) {
     const runs = db

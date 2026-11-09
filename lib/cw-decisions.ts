@@ -105,8 +105,7 @@ export function validateRaise(input: RaiseInput, now = new Date()): RaiseCheck {
   if (hasDefault) {
     if ((input.risk ?? []).length)
       return { ok: false, code: "default_risk", message: "Risk-flagged decisions (permission, credential, device, money, …) never get a default" };
-    if (!input.defaultChoice || !input.expiresAt)
-      return { ok: false, code: "default_pair", message: "defaultChoice and expiresAt go together" };
+    if (!input.defaultChoice || !input.expiresAt) return { ok: false, code: "default_pair", message: "defaultChoice and expiresAt go together" };
     if (!choices.includes(input.defaultChoice.trim())) return { ok: false, code: "default_choice", message: "defaultChoice must be one of the choices" };
     const ms = Date.parse(input.expiresAt) - now.getTime();
     if (!(ms >= DEFAULT_MIN_MS && ms <= DEFAULT_MAX_MS))

@@ -23,6 +23,8 @@ import type { AgentScope } from "@/lib/agent-access";
 import type { AgentPrincipal } from "./tokens";
 import { registerAgentRun } from "@/server/work/registered-runs";
 import { buildDeviceProposal } from "./ha-proposals";
+import { DECISION_STATES, raiseSchema } from "@/lib/cw-decisions";
+import { findDecision, listDecisionRows, raiseDecision, withdrawDecision } from "@/server/work/decision-store";
 
 /**
  * Jarvis MCP tools (docs/agent-tools.md). Every tool:
@@ -126,8 +128,22 @@ export function requestOwnerChange(
     itemId,
     { decision: { question: `@${agent.profile} proposes: ${what}. ${reason}`.slice(0, 500), choices, ...(detail ? { detail } : {}) } },
     correlationId,
+    undefined,
+    { decisionRisk: ["destructive"] },
   );
   return { item: brief(item), proposed: op, note: "The owner decides in Needs you; nothing was changed." };
+}
+
+/** A run of this owner by id or "R-n" (404 otherwise). */
+function resolveRunId(userId: string, ref: string): string {
+  const m = /^R-([1-9]\d{0,8})$/.exec(ref.trim());
+  const row = getDb()
+    .select({ id: schema.agentRuns.id })
+    .from(schema.agentRuns)
+    .where(and(eq(schema.agentRuns.userId, userId), m ? eq(schema.agentRuns.seq, Number(m[1])) : eq(schema.agentRuns.id, ref.trim())))
+    .get();
+  if (!row) throw new HttpError(404, "not_found", "No run with that id");
+  return row.id;
 }
 
 // --- tools ----------------------------------------------------------------------------------
@@ -366,15 +382,37 @@ export const TOOLS: ToolDef[] = [
   }),
   tool({
     name: "jarvis_raise_decision",
-    description: "Ask the owner a decision on an item (shows in Needs you). Up to 6 one-tap choices. One open decision per item.",
+    description:
+      "Ask the owner a decision on an item; it shows once in Needs you as a stable D-n card (refer to it by D-n, never re-list it in chat). Several can be open per item. Up to 6 one-tap choices plus optional: recommended (one of the choices), risk flags (permission | credential | device | money | destructive | public), a context pack {why, facts[{label,value}], options[{choice,effect}], evidence[{kind,label,url?,text?}], unblocks[]}, the raising runId (id or R-n), and for LOW-RISK reversible decisions only a defaultChoice + expiresAt (10 min–30 days ahead) that applies if the owner doesn't answer (never allowed with a risk flag). supersedes: a D-n you raised earlier that this one replaces. Agents can never answer decisions. Returns ref (D-n).",
     scope: "decisions.write",
-    input: z.object({ itemId: id, question: text(500).min(1), choices: z.array(text(120).min(1)).max(6).optional() }).strict(),
-    run: ({ itemId, question, choices }, { agent, correlationId }) => {
+    input: raiseSchema.extend({ itemId: id, supersedes: z.string().trim().max(20).optional() }).strict(),
+    run: ({ itemId, runId, ...rest }, { agent, correlationId }) => {
       const cur = visible(agent.user.id, itemId);
       if (cur.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask on the work item, not the conversation");
-      if (cur.decision) throw new HttpError(409, "decision_open", "That item already has an open decision; wait for the owner's answer");
-      const item = updateItem(agent.user, itemId, { decision: { question: `@${agent.profile}: ${question}`.slice(0, 500), choices } }, correlationId);
-      return { item: brief(item) };
+      const run = runId ? resolveRunId(agent.user.id, runId) : undefined;
+      const d = raiseDecision(agent.user.id, itemId, { ...rest, ...(run ? { runId: run } : {}) }, { raisedBy: agent.via, correlationId });
+      return { ref: d.ref, decisionId: d.id, state: d.state, item: brief(agentItems(agent.user.id).byId.get(itemId) ?? cur) };
+    },
+  }),
+  tool({
+    name: "jarvis_supersede_decision",
+    description:
+      "Close a decision YOU raised that no longer applies: with replacement (same fields as jarvis_raise_decision minus itemId) it becomes superseded by the new D-n; without one it is withdrawn. Only decisions this agent raised; answered ones stay answered.",
+    scope: "decisions.write",
+    input: z.object({ ref: z.string().trim().min(1).max(64), reason: text(500).min(1), replacement: raiseSchema.optional() }).strict(),
+    run: ({ ref, reason, replacement }, { agent, correlationId }) => {
+      const row = findDecision(getDb(), agent.user.id, ref);
+      if (!row) throw new HttpError(404, "not_found", "No decision with that id");
+      visible(agent.user.id, row.itemId);
+      if (!replacement) return { withdrawn: withdrawDecision(agent.user.id, ref, agent.via, reason, correlationId).ref };
+      const run = replacement.runId ? resolveRunId(agent.user.id, replacement.runId) : undefined;
+      const d = raiseDecision(
+        agent.user.id,
+        row.itemId,
+        { ...replacement, ...(run ? { runId: run } : {}), supersedes: ref },
+        { raisedBy: agent.via, correlationId },
+      );
+      return { superseded: ref, ref: d.ref, decisionId: d.id };
     },
   }),
   tool({
@@ -389,17 +427,38 @@ export const TOOLS: ToolDef[] = [
   }),
   tool({
     name: "jarvis_list_decisions",
-    description: "Open owner decisions on items (Needs you), newest first.",
+    description:
+      "The owner's decisions (D-n), newest first. Default: open ones. state: open | answered | defaulted | superseded | deferred | withdrawn | all; since (ISO) = changed since. Use it to learn answers (answeredChoice) instead of re-asking or re-listing decisions in chat.",
     scope: "work.read",
-    input: z.object({}).strict(),
-    run: (_args, { agent }) => {
-      const { items } = agentItems(agent.user.id);
+    input: z
+      .object({ state: z.enum([...DECISION_STATES, "all"]).optional(), since: z.string().datetime({ offset: true }).optional(), itemId: id.optional() })
+      .strict(),
+    run: ({ state = "open", since, itemId }, { agent }) => {
+      const { byId } = agentItems(agent.user.id);
+      if (itemId) visible(agent.user.id, itemId);
+      const rows = listDecisionRows(agent.user.id, {
+        ...(state === "all" ? {} : { states: [state] }),
+        ...(since ? { since: new Date(since).toISOString() } : {}),
+        ...(itemId ? { itemIds: [itemId] } : {}),
+      }).filter((d) => byId.has(d.itemId));
       return {
-        decisions: items
-          .filter((i) => i.decision)
-          .sort((a, b) => (b.decision!.askedAt || b.updatedAt).localeCompare(a.decision!.askedAt || a.updatedAt))
-          .slice(0, 50)
-          .map((i) => ({ itemId: i.id, title: i.title, question: i.decision!.question, choices: i.decision!.choices, askedAt: i.decision!.askedAt })),
+        decisions: rows.slice(0, 50).map((d) => ({
+          ref: d.ref,
+          itemId: d.itemId,
+          title: byId.get(d.itemId)!.title,
+          question: d.question,
+          choices: d.choices,
+          recommended: d.recommended ?? undefined,
+          risk: d.risk.length ? d.risk : undefined,
+          state: d.state,
+          answeredChoice: d.answeredChoice ?? undefined,
+          answeredAt: d.answeredAt ?? undefined,
+          defaultChoice: d.defaultChoice ?? undefined,
+          expiresAt: d.expiresAt ?? undefined,
+          supersededBy: d.supersededBy ?? undefined,
+          raisedBy: d.raisedBy,
+          askedAt: d.createdAt,
+        })),
       };
     },
   }),
@@ -536,6 +595,7 @@ export const TOOLS: ToolDef[] = [
       const p = buildDeviceProposal({ entityId, service, data, reason }, agent.profile, agent.via, correlationId);
       const item = updateItem(agent.user, itemId, { decision: { question: p.question, choices: p.choices } }, correlationId, undefined, {
         decisionAction: { label: "Confirm on House", href: p.href },
+        decisionRisk: ["device"],
       });
       return { proposed: true, executed: false, risk: p.risk, confirmAt: p.href, item: brief(item) };
     },

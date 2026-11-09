@@ -11,7 +11,9 @@ import { createSession as createConversation, getSessionDetail, sessionAccess } 
 import { requireCap } from "@/server/access";
 import type { AssistantBackend } from "@/lib/assistant";
 import { localDate } from "@/lib/time";
-import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
+import { parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
+import type { RiskFlag } from "@/lib/cw-decisions";
+import { answerItemHead, legacyDecisionWrite, undoDecisionOp, type DecisionOp } from "./decision-store";
 import {
   applyTemplate,
   areaValidationDefault,
@@ -522,8 +524,8 @@ export function updateItem(
   body: z.infer<typeof updateItemSchema>,
   correlationId: string,
   out?: OpOut,
-  /** server-built decision action (never from a request body) */
-  internal?: { decisionAction?: DecisionAction },
+  /** server-built decision action and risk flags (never from a request body) */
+  internal?: { decisionAction?: DecisionAction; decisionRisk?: RiskFlag[] },
 ): WorkItem {
   const { status, reason, settings, tags: rawTags, assignee: rawAssignee, decision: rawDecision, ...rest } = body;
   const fields: typeof rest & { tags?: string; assignee?: string | null; decision?: string | null } = { ...rest };
@@ -543,10 +545,15 @@ export function updateItem(
       fields.assignee = a.value;
       if (a.value !== (row.assignee ?? null)) event(tx, id, user.id, { kind: "edit", reason: assigneeChangeText(row.assignee ?? null, a.value, people) });
     }
+    let decisionOp: DecisionOp | undefined;
     if (fields.decision !== undefined && (fields.decision ?? null) !== (row.decision ?? null)) {
       const d = parseDecision(fields.decision);
       if (d && row.kind === "conversation") throw new HttpError(400, "decision_kind", "Ask the decision on the work item, not the conversation");
       event(tx, id, user.id, { kind: "edit", reason: d ? `Needs your decision: ${d.question}` : "Cleared the decision request" });
+      // CW-2: mirror into the decisions table; the stored JSON gains its "ref" (and a clear promotes the next open one).
+      const w = legacyDecisionWrite(tx, user.id, row, fields.decision ?? null, internal?.decisionRisk);
+      fields.decision = w.json;
+      decisionOp = w.decisionOp;
     }
     if (fields.tags !== undefined && fields.tags !== row.tags) {
       const next = parseTags(fields.tags);
@@ -614,7 +621,7 @@ export function updateItem(
       // A status edit also moves the lifecycle fields (planTransition); keep them so undo restores
       // the settlement reason/kind and completedAt, not just the status.
       const life = "status" in next ? { completedAt: row.completedAt, settledKind: row.settledKind, settledReason: row.settledReason } : undefined;
-      if (Object.keys(next).length) recordOp(tx, user.id, id, "edit", { prev, next, ...(life ? { life } : {}) }, out);
+      if (Object.keys(next).length) recordOp(tx, user.id, id, "edit", { prev, next, ...(life ? { life } : {}), ...(decisionOp ? { decisionOp } : {}) }, out);
     }
     if (settings !== undefined) {
       const merged = mergeAreaSettings(parseAreaSettings(row.settings), settings);
@@ -657,17 +664,8 @@ export function updateItem(
  * separate, confirmed step.
  */
 export function answerDecision(user: CurrentUser, id: string, answer: string, correlationId: string, out?: OpOut): WorkItem {
-  getDb().transaction((tx) => {
-    const row = ownedItem(user.id, id, tx);
-    const d = parseDecision(row.decision);
-    if (!d) throw new HttpError(409, "no_decision", "This item isn't waiting on a decision any more");
-    const at = nowIso();
-    const summary = appendDecisionToSummary(row.summary, d.question, answer, at);
-    event(tx, id, user.id, { kind: "decision", reason: decisionLogText(d.question, answer) });
-    recordOp(tx, user.id, id, "edit", { prev: { decision: row.decision, summary: row.summary }, next: { decision: null, summary } }, out);
-    tx.update(T).set({ decision: null, summary, updatedAt: at }).where(eq(T.id, id)).run();
-  });
-  audit({ actor: user.id, action: "work.decision", source: "work", sourceRecord: id, result: "ok", correlationId });
+  // CW-2: answers the item's head decision row (server/work/decision-store.ts); same summary line, event and undo.
+  answerItemHead(user.id, id, answer, correlationId, out);
   return toItem(ownedItem(user.id, id));
 }
 
@@ -1041,6 +1039,8 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         .set({ ...restore, updatedAt: nowIso() })
         .where(eq(T.id, row.id))
         .run();
+      const decisionOp = (payload as { decisionOp?: DecisionOp }).decisionOp;
+      if (decisionOp) undoDecisionOp(tx, user.id, decisionOp);
       if ("status" in restore) event(tx, row.id, user.id, { kind: "status", from: row.status, to: String(restore.status), reason: "Undid edit" });
       event(tx, row.id, user.id, { kind: "undo", reason: "Undid edit" });
     } else if (kind === "archive" || kind === "unarchive") {
