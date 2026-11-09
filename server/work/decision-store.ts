@@ -5,6 +5,7 @@ import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
 import { audit } from "@/server/audit";
 import { currentVia } from "./actor";
+import { pushRaisedDecision } from "./cw-push";
 import { event, recordOp, type OpOut } from "./store";
 import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import {
@@ -286,6 +287,8 @@ export function raiseDecision(
     correlationId: opts.correlationId,
     detail: { ref: decisionRef(out.seq), itemId, risk: parseRisk(out.riskJson), hasDefault: !!out.defaultChoice },
   });
+  // CW-5: urgent (risk-flagged / blocking) decisions push now; the rest wait for the 2-hour digest.
+  pushRaisedDecision(out);
   return toDecision(out);
 }
 

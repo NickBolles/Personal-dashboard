@@ -55,6 +55,8 @@ export async function register() {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
     const { applyDueDecisions } = await import("./server/work/decision-store");
     registerDispatcherTask("decision_defaults", 60_000, (now) => applyDueDecisions(now));
+    const { decisionDigest } = await import("./server/work/cw-push");
+    registerDispatcherTask("decision_digest", 10 * 60_000, (now) => decisionDigest(now));
   } catch (err) {
     console.error("[jarvis] decision defaults didn't start", (err as Error).message);
   }

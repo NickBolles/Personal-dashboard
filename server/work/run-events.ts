@@ -2,6 +2,7 @@ import "server-only";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema, type DB } from "@/server/db";
+import { pushRunTransition } from "./cw-push";
 import { newId } from "@/server/crypto";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
@@ -271,4 +272,6 @@ export function recordRunTransition(db: RunDb, run: typeof T.$inferSelect, state
   if (run.state === state) return;
   const type = state === "running" ? "resumed" : state === "done" || state === "failed" || state === "interrupted" ? state : null;
   if (type) recordRunEvent(db, { userId: run.userId, runId: run.id, type, summary: (summary ?? run.summary ?? run.title).slice(0, 300), via });
+  // CW-5: a failed run or an ended session (interrupted) interrupts the owner; done/resumed never push.
+  if (state === "failed" || state === "interrupted") pushRunTransition(run, state);
 }
