@@ -11,7 +11,7 @@ import { answerDecision, type OpOut } from "@/server/work/store";
 export const POST = api<z.infer<typeof decisionAnswerSchema>, { id: string }>(
   ({ user, params, body, correlationId }) => {
     const out: OpOut = {};
-    const item = answerDecision(user, params.id, body.answer, correlationId, out);
+    const item = answerDecision(user, params.id, body.answer, correlationId, out, body.ref);
     return { item, op: out.op ?? null };
   },
   { cap: "work.use", body: decisionAnswerSchema },

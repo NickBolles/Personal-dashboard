@@ -379,13 +379,15 @@ export function answerDecisionRef(
  * Legacy single-decision answer (POST /api/work/items/<id>/decision): answers the item's head.
  * A head JSON without a ref (written before 0043 or by a path that bypassed the store) gets a row first.
  */
-export function answerItemHead(userId: string, itemId: string, answer: string, correlationId: string, out?: OpOut) {
+export function answerItemHead(userId: string, itemId: string, answer: string, correlationId: string, out?: OpOut, expectedRef?: string) {
   assertOwnerSession();
   const db = getDb();
   const ref = db.transaction((tx) => {
     const item = itemRow(tx, userId, itemId);
     const d = parseDecision(item.decision);
     if (!d) throw new HttpError(409, "no_decision", "This item isn't waiting on a decision any more");
+    // The owner confirmed one question: never let it land on a newer head (D-1 answered elsewhere → D-2).
+    if (expectedRef && d.ref !== expectedRef) throw new HttpError(409, "decision_changed", `${expectedRef} was already answered or replaced`);
     let r = d.ref ? rowByRef(tx, userId, d.ref) : undefined;
     if (!r || r.itemId !== itemId) {
       r = insertDecision(
@@ -467,11 +469,23 @@ export function undoDecisionOp(tx: Tx, userId: string, op: DecisionOp) {
       .set({ state: "withdrawn", updatedAt: at })
       .where(and(eq(D.id, op.raised), eq(D.userId, userId), inArray(D.state, ["open", "deferred"])))
       .run();
-  if (op.closed)
+  if (op.closed) {
+    // Undo is the owner's reversal: the default is dropped so the next tick can't re-apply it.
     tx.update(D)
-      .set({ state: "open", answeredChoice: null, answeredAt: null, answeredVia: null, supersededBy: null, deferredUntil: null, updatedAt: at })
+      .set({
+        state: "open",
+        answeredChoice: null,
+        answeredAt: null,
+        answeredVia: null,
+        supersededBy: null,
+        deferredUntil: null,
+        defaultChoice: null,
+        expiresAt: null,
+        updatedAt: at,
+      })
       .where(and(eq(D.id, op.closed), eq(D.userId, userId)))
       .run();
+  }
 }
 
 /**

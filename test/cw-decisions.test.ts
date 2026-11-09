@@ -128,6 +128,17 @@ describe("decision store", () => {
     expect(row("D-2").state).toBe("open");
   });
 
+  it("legacy route refuses a stale confirm: the D-n the owner confirmed must still be the head", () => {
+    raiseDecision(owner.id, itemId, { question: "Ship V1?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
+    raiseDecision(owner.id, itemId, { question: "Ship V3?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
+    answerDecisionRef(owner.id, "D-1", "Yes", "queue", cid);
+    expect(head()).toMatchObject({ ref: "D-2" });
+    expect(() => store.answerDecision(owner, itemId, "No", cid, undefined, "D-1")).toThrow(/already answered or replaced/);
+    expect(row("D-2").state).toBe("open");
+    store.answerDecision(owner, itemId, "No", cid, undefined, "D-2");
+    expect(row("D-2")).toMatchObject({ state: "answered", answeredChoice: "No" });
+  });
+
   it("answers a non-head decision by D-n (undoable) and a repeat of the same answer is a no-op", () => {
     raiseDecision(owner.id, itemId, { question: "A?", choices: ["Yes"] }, { raisedBy: "agent:x", correlationId: cid });
     raiseDecision(owner.id, itemId, { question: "B?", choices: ["Yes"] }, { raisedBy: "agent:x", correlationId: cid });
@@ -198,6 +209,9 @@ describe("decision store", () => {
       .all()
       .find((o) => o.payload.includes("decisionOp"))!;
     store.undoOp(owner, op.id, cid);
+    expect(row("D-1")).toMatchObject({ state: "open", defaultChoice: null, expiresAt: null });
+    // The owner's Undo sticks: a later tick does not apply the default again.
+    expect(applyDueDecisions(new Date(now + 60 * 60_000)).defaulted).toEqual([]);
     expect(row("D-1").state).toBe("open");
   });
 

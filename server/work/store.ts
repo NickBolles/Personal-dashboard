@@ -663,9 +663,9 @@ export function updateItem(
  * changes status or settles; posting to a conversation is the client's
  * separate, confirmed step.
  */
-export function answerDecision(user: CurrentUser, id: string, answer: string, correlationId: string, out?: OpOut): WorkItem {
+export function answerDecision(user: CurrentUser, id: string, answer: string, correlationId: string, out?: OpOut, expectedRef?: string): WorkItem {
   // CW-2: answers the item's head decision row (server/work/decision-store.ts); same summary line, event and undo.
-  answerItemHead(user.id, id, answer, correlationId, out);
+  answerItemHead(user.id, id, answer, correlationId, out, expectedRef);
   return toItem(ownedItem(user.id, id));
 }
 

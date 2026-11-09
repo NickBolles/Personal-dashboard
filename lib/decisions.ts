@@ -44,6 +44,11 @@ export const decisionAnswerSchema = z
     answer: z.string().trim().min(1).max(2000),
     /** also post the answer to the item's linked Hermes conversation (the client asks first) */
     postToConversation: z.boolean().optional(),
+    /** CW-2: the D-n the owner confirmed; the server refuses (409) when the item's head moved on */
+    ref: z
+      .string()
+      .regex(/^D-\d{1,9}$/)
+      .optional(),
   })
   .strict();
 
@@ -123,6 +128,11 @@ export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
 /** Newest first, with owner item decisions grouped before approvals and workflow proposals at the same time. */
 export function sortDecisions(entries: DecisionEntry[]): DecisionEntry[] {
   return [...entries].sort((a, b) => (a.at === b.at ? a.key.localeCompare(b.key) : a.at < b.at ? 1 : -1));
+}
+
+/** Body for decisionAnswerPath: head entries carry their D-n so a stale confirm can't answer a newer head. */
+export function decisionAnswerBody(e: Pick<DecisionEntry, "key" | "ref">, answer: string, extra: { postToConversation?: boolean } = {}) {
+  return e.key.startsWith("decision:") ? { answer } : { answer, ...extra, ...(e.ref ? { ref: e.ref } : {}) };
 }
 
 /** Where an item entry is answered: the item's head keeps the legacy route; other open D-n rows use the CW-2 route. */
