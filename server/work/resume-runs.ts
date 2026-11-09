@@ -21,11 +21,11 @@ export const resumeSchema = z.object({
   refs: z
     .array(z.string().regex(/^R-\d{1,9}$/))
     .min(1)
-    .max(20),
+    .max(200),
   confirm: z.literal(true),
 });
 
-export type ResumeResult = { ref: string; ok: boolean; sent?: "run" | "steer"; reason?: string };
+export type ResumeResult = { ref: string; ok: boolean; sent?: "run" | "steer" | "already"; reason?: string };
 
 type Deps = {
   start: (user: CurrentUser, r: { sessionId: string; input: string; idempotencyKey: string }, cid: string) => Promise<unknown>;
@@ -51,7 +51,7 @@ export async function resumeInterruptedRuns(
   if (user.id !== getOwner()?.id) throw new HttpError(403, "owner_only", "Only the owner can resume runs");
   const d: Deps = { ...defaultDeps, ...deps };
   const results: ResumeResult[] = [];
-  const bySession = new Map<string, { profile: string; key: string; runs: ReturnType<typeof resolveRun>[] }>();
+  const bySession = new Map<string, { profile: string; runs: ReturnType<typeof resolveRun>[] }>();
   for (const ref of [...new Set(refs)]) {
     let row;
     try {
@@ -68,21 +68,50 @@ export async function resumeInterruptedRuns(
       results.push({ ref, ok: false, reason: "no_session" });
       continue;
     }
-    const g = bySession.get(row.hermesSessionId) ?? { profile: row.profile, key: "", runs: [] };
+    const g = bySession.get(row.hermesSessionId) ?? { profile: row.profile, runs: [] };
     g.runs.push(row);
     bySession.set(row.hermesSessionId, g);
   }
   const db = getDb();
-  for (const [sessionId, g] of bySession) {
-    const listed = g.runs.map((r) => ({ ref: runRef(r.seq) ?? r.id, title: r.title }));
-    const refsOf = () => listed.map((r) => r.ref);
+  for (const [sessionId, group] of bySession) {
+    // Claim each interruption BEFORE sending (one transaction): a retry, a double tap or a second device finds
+    // the claim and sends nothing, whichever path (new turn or steer) the first request took.
+    const claims = db.transaction(
+      (tx) => {
+        const out: { run: (typeof group.runs)[number]; eventId: string }[] = [];
+        for (const r of group.runs) {
+          const claim = JSON.stringify({ resumeClaim: r.interruptedAt ?? "" });
+          const taken = tx
+            .select({ id: schema.runEvents.id })
+            .from(schema.runEvents)
+            .where(and(eq(schema.runEvents.runId, r.id), eq(schema.runEvents.type, "progress"), eq(schema.runEvents.payloadJson, claim)))
+            .get();
+          if (taken) results.push({ ref: runRef(r.seq) ?? r.id, ok: true, sent: "already" });
+          else
+            out.push({
+              run: r,
+              eventId: recordRunEvent(tx, {
+                userId: user.id,
+                runId: r.id,
+                type: "progress",
+                summary: "Resume requested by the owner",
+                payload: { resumeClaim: r.interruptedAt ?? "" },
+                via: `person:${user.id}`,
+              }),
+            });
+        }
+        return out;
+      },
+      { behavior: "immediate" },
+    );
+    if (!claims.length) continue;
+    const listed = claims.map(({ run: r }) => ({ ref: runRef(r.seq) ?? r.id, title: r.title }));
     let input = resumePrompt(listed);
     // Titles are agent-written: never send credential-looking text to a model.
     if (detectSensitivity(input) === "credentials") input = resumePrompt(listed.map((r) => ({ ref: r.ref, title: "see Jarvis" })));
-    // One key per interruption: a second Resume all (or a double tap) never sends the prompt twice.
-    const key = `cw-resume:${sessionId}:${g.runs.map((r) => `${r.seq}@${r.interruptedAt ?? ""}`).join(",")}`.slice(0, 255);
+    const key = `cw-resume:${sessionId}:${claims.map(({ run: r }) => `${r.seq}@${r.interruptedAt ?? ""}`).join(",")}`.slice(0, 255);
     try {
-      await d.track(user, g.profile === "default" ? null : g.profile, sessionId, correlationId);
+      await d.track(user, group.profile === "default" ? null : group.profile, sessionId, correlationId);
       const live = db
         .select()
         .from(schema.runs)
@@ -97,12 +126,12 @@ export async function resumeInterruptedRuns(
         await d.start(user, { sessionId, input, idempotencyKey: key.replace(/[^\x21-\x7e]/g, "_") }, correlationId);
         sent = "run";
       }
-      for (const r of g.runs)
-        recordRunEvent(db, { userId: user.id, runId: r.id, type: "progress", summary: "Resume requested by the owner", via: `person:${user.id}` });
-      for (const ref of refsOf()) results.push({ ref, ok: true, sent });
+      for (const r of listed) results.push({ ref: r.ref, ok: true, sent });
     } catch (err) {
+      // Nothing went out: release the claims so the owner can try again.
+      for (const c of claims) db.delete(schema.runEvents).where(eq(schema.runEvents.id, c.eventId)).run();
       const reason = err instanceof HttpError ? err.code : "send_failed";
-      for (const ref of refsOf()) results.push({ ref, ok: false, reason });
+      for (const r of listed) results.push({ ref: r.ref, ok: false, reason });
     }
   }
   audit({

@@ -35,7 +35,8 @@ export function sessionEnded(s: SessionState | null): s is SessionState & { endR
 }
 
 const profileOf = (p: string) => (!p || p === "default" ? null : p);
-const state = () => processSingleton<{ at: number; busy: boolean }>("cw_session_end", () => ({ at: 0, busy: false }));
+const state = () =>
+  processSingleton<{ at: number; busy: boolean; checked: Map<string, number> }>("cw_session_end", () => ({ at: 0, busy: false, checked: new Map() }));
 
 /** One bounded pass. Returns how many sessions were checked and runs marked. */
 export async function markEndedSessionRuns(now = new Date(), lookup: SessionLookup = defaultLookup): Promise<{ checked: number; marked: number }> {
@@ -55,6 +56,7 @@ export function __resetSessionEnd() {
   const s = state();
   s.at = 0;
   s.busy = false;
+  s.checked.clear();
 }
 
 async function pass(now: Date, lookup: SessionLookup) {
@@ -76,14 +78,20 @@ async function pass(now: Date, lookup: SessionLookup) {
     .limit(200)
     .all();
   const bySession = new Map<string, typeof open>();
+  if (state().checked.size > 5000) state().checked.clear();
   for (const r of open) {
     const key = `${r.userId}|${r.profile}|${r.hermesSessionId}`;
     bySession.set(key, [...(bySession.get(key) ?? []), r]);
   }
   let checked = 0;
   let marked = 0;
-  for (const runs of [...bySession.values()].slice(0, SESSIONS_PER_PASS)) {
+  // Least recently checked sessions first (never checked = first), so a long list rotates instead of
+  // re-reading the same ten every pass.
+  const checkedAt = state().checked;
+  const order = [...bySession.entries()].sort(([a], [b]) => (checkedAt.get(a) ?? 0) - (checkedAt.get(b) ?? 0));
+  for (const [key, runs] of order.slice(0, SESSIONS_PER_PASS)) {
     const first = runs[0]!;
+    checkedAt.set(key, now.getTime());
     let session: SessionState | null;
     try {
       session = await lookup(profileOf(first.profile), first.hermesSessionId!);

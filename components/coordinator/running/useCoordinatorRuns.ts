@@ -14,7 +14,7 @@ export function useCoordinatorRuns() {
   });
 }
 
-export type ResumeAllResponse = { results: { ref: string; ok: boolean; sent?: "run" | "steer"; reason?: string }[] };
+export type ResumeAllResponse = { results: { ref: string; ok: boolean; sent?: "run" | "steer" | "already"; reason?: string }[] };
 
 /** Owner-confirmed Resume all: the server sends one resume prompt per interrupted run's session. */
 export function useResumeAll() {

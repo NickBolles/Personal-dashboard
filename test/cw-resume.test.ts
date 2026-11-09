@@ -72,6 +72,22 @@ describe("session end → interrupted", () => {
     expect(await markEndedSessionRuns(new Date(), lookup)).toEqual({ checked: 0, marked: 0 });
   });
 
+  it("a long session list rotates: the next pass checks the sessions the last one skipped", async () => {
+    const t0 = new Date(Date.now() - 60 * 60_000);
+    for (let i = 0; i < 12; i++) registerAgentRun(owner, "default", { itemId, title: `Lane ${i}`, hermesSessionId: `sess-${i}` }, cid, "tok", t0);
+    const seen: string[] = [];
+    const lookup = async (_p: string | null, id: string) => {
+      seen.push(id);
+      return { endReason: null, lastActiveAt: ago(1000) };
+    };
+    await markEndedSessionRuns(new Date(), lookup);
+    expect(seen).toHaveLength(10);
+    const first = new Set(seen);
+    seen.length = 0;
+    await markEndedSessionRuns(new Date(Date.now() + 6 * 60_000), lookup);
+    expect(seen.slice(0, 2).every((id) => !first.has(id))).toBe(true);
+  });
+
   it("a session that only just closed, or a run that heartbeated after it, stays running; lookup errors are not guesses", async () => {
     const recent = registerAgentRun(
       owner,
@@ -134,10 +150,15 @@ describe("Resume all", () => {
         { ref: "R-999", ok: false, reason: "not_found" },
       ]),
     );
-    // Same interruption → same idempotency key (a double tap never sends twice).
-    await resumeInterruptedRuns(owner, [a.ref, b.ref], cid, { start, steer, track });
-    const again = (start.mock.calls[2] as unknown as [CurrentUser, { idempotencyKey: string }])[1];
-    expect(again.idempotencyKey).toBe(first.idempotencyKey);
+    // Same interruption: claimed already, nothing is sent again (even if a turn is now live on the session).
+    getDb().insert(schema.runs).values({ runId: "hr-live", sessionId: "sess-1", userId: owner.id, idempotencyKey: "k-live", status: "running" }).run();
+    const again = await resumeInterruptedRuns(owner, [a.ref, b.ref], cid, { start, steer, track });
+    expect(again.results).toEqual([
+      { ref: a.ref, ok: true, sent: "already" },
+      { ref: b.ref, ok: true, sent: "already" },
+    ]);
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(steer).not.toHaveBeenCalled();
   });
 
   it("steers a turn still in flight on the session instead of starting another", async () => {
@@ -163,6 +184,12 @@ describe("Resume all", () => {
       track: async () => undefined,
     });
     expect(results).toEqual([{ ref: a.ref, ok: false, reason: "send_failed" }]);
+    // the failed send released its claim: a retry goes out
+    const start = vi.fn(async () => ({}));
+    expect((await resumeInterruptedRuns(owner, [a.ref], cid, { start, track: async () => undefined })).results).toEqual([
+      { ref: a.ref, ok: true, sent: "run" },
+    ]);
+    expect(start).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -194,6 +221,23 @@ describe("one-tap push answers", () => {
     expect(decisionPushActions(owner.id, "cw:digest:x")).toBeNull();
     answerDecisionRef(owner.id, low.ref, "Yes", "queue", cid);
     expect(decisionPushActions(owner.id, `cw:decision:${low.ref}`)).toBeNull();
+  });
+
+  it("credential-like or account-number choices suppress the actions", () => {
+    const key = raiseDecision(
+      owner.id,
+      itemId,
+      { question: "Which one?", choices: [`Use ${["ghp", "x7Qm2Lp9Vt4Rz8Kw3Nb6Hc1Jd5Fg0Sy2Ae7U"].join("_")}`, "Skip"] },
+      { raisedBy: "agent:x", correlationId: cid },
+    );
+    const acct = raiseDecision(
+      owner.id,
+      itemId,
+      { question: "Which account?", choices: ["4111111111111111", "Other"] },
+      { raisedBy: "agent:x", correlationId: cid },
+    );
+    expect(decisionPushActions(owner.id, `cw:decision:${key.ref}`)).toBeNull();
+    expect(decisionPushActions(owner.id, `cw:decision:${acct.ref}`)).toBeNull();
   });
 
   it("the answer route refuses a push answer on a risk-flagged decision or with a non-choice", () => {

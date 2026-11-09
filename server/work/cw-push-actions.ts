@@ -2,6 +2,8 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { decisionRef, parseChoices, parseDecisionRef, parseRisk } from "@/lib/cw-decisions";
+import { detectSensitivity } from "@/server/ai/rules";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 
 /** At most this many one-tap answers on a push (browsers show two notification actions). */
 const MAX_ACTIONS = 2;
@@ -27,6 +29,9 @@ export function decisionPushActions(userId: string, dedupeKey: string | null | u
   if (!choices.length) return null;
   const ordered = d.recommended && choices.includes(d.recommended) ? [d.recommended, ...choices.filter((c) => c !== d.recommended)] : choices;
   const picked = ordered.slice(0, MAX_ACTIONS);
+  // Choice text leaves Jarvis in the push payload: a credential-like or account-number choice suppresses the
+  // actions (never a masked answer, which the answer route would reject); the push still opens the detail.
+  if (picked.some((c) => detectSensitivity(c) === "credentials" || maskAccountNumbers(c) !== c)) return null;
   return {
     ref: decisionRef(d.seq),
     actions: picked.map((c, i) => ({ action: `answer:${i}`, title: clip(c, 32) })),
