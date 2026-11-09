@@ -843,6 +843,124 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await page.keyboard.press("Escape");
 });
 
+test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and Running groups", async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
+  const decision = (seq: number, question: string, extra: Record<string, unknown> = {}) => ({
+    id: `dcw${seq}`,
+    ref: `D-${seq}`,
+    seq,
+    itemId: `wk_cw${seq}`,
+    itemTitle: "Quillwort release train with a fairly long item title",
+    areaTitle: "Portfolio",
+    runId: null,
+    question,
+    choices: ["Ship it now", "Wait for the next window"],
+    recommended: "Ship it now",
+    risk: [],
+    pack: { why: "CI is green on the merge commit and the deploy lock is free.", facts: [{ label: "Path", value: "/opt/data/deployments/jarvis/deploy.sh" }] },
+    defaultChoice: null,
+    expiresAt: null,
+    state: "open",
+    answeredChoice: null,
+    answeredAt: null,
+    answeredVia: null,
+    deferredUntil: null,
+    supersededBy: null,
+    raisedBy: "agent:chiefofstaff",
+    createdAt: iso(40 + seq),
+    updatedAt: iso(40 + seq),
+    ...extra,
+  });
+  const decisions = [
+    decision(48, "Rotate the Cloudflare API key that the tunnel uses before Friday's release window?", {
+      risk: ["credential"],
+      choices: ["Rotate", "Keep"],
+      recommended: "Rotate",
+      pack: { why: "The key was shared in a log.", evidence: [{ kind: "diff", label: "traefik.yml", text: "- key: old\n+ key: ${CF_KEY}" }] },
+    }),
+    decision(49, "Renumber migration 0042 so the Phase 4 train can merge?"),
+    decision(50, "Ship the sedge ledger?"),
+  ];
+  const run = (seq: number, state: string, extra: Record<string, unknown> = {}) => ({
+    id: `rcw${seq}`,
+    ref: `R-${seq}`,
+    seq,
+    itemId: "wk_cw48",
+    itemTitle: "Quillwort release train",
+    profile: "devchief",
+    title: `Lane ${seq}: hotfix chat send while four lanes run with a long title`,
+    state,
+    stalled: false,
+    summary: "Running the e2e suite",
+    prUrl: null,
+    parentRunId: null,
+    parentRef: null,
+    pipeline: [
+      { stage: "build", state: "ok" },
+      { stage: "ci", state: state === "failed" ? "failed" : "running" },
+    ],
+    lock: null,
+    interruptedAt: state === "interrupted" ? iso(30) : null,
+    startedAt: iso(90),
+    updatedAt: iso(5 + seq),
+    finishedAt: null,
+    noticeCount: 2,
+    ...extra,
+  });
+  const runs = [run(65, "failed"), run(66, "running"), run(67, "interrupted"), run(68, "running", { parentRunId: "rcw66", parentRef: "R-66" })];
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { decisions, counts: { open: decisions.length, deferred: 0 } } }),
+  );
+  await page.route(/\/api\/coordinator\/runs$/, (route) =>
+    route.fulfill({ json: { runs, events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
+  await page.route(/\/api\/coordinator\/looked$/, (route) =>
+    route.fulfill({ json: { lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
+  await page.route(/\/api\/coordinator\/decisions\/.+\/(answer|defer)$/, (route) => route.fulfill({ status: 409, json: { error: "Not part of this test" } }));
+  await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
+  const axe = async (label: string, include: string) => {
+    const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).include(include).analyze();
+    expect
+      .soft(
+        r.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${v.id}: ${v.nodes.map((n) => `${n.target} ${n.failureSummary ?? ""}`).join(" | ")}`),
+        label,
+      )
+      .toEqual([]);
+  };
+  const zoom = async () => {
+    const t = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await page.waitForTimeout(250);
+    await expectNoHorizontalOverflow(page, { soft: true });
+    await t.evaluate((el) => (el as Element).remove());
+  };
+  await page.goto("/more");
+  const desktop = info.project.name === "desktop";
+  const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
+  const sel = desktop ? ".gc-rail" : ".gc-sheet";
+  if (desktop) await scope.getByRole("tab", { name: /^Needs you/ }).click();
+  else
+    await page
+      .locator(".gc-tray")
+      .getByRole("button", { name: /need you, open Needs you$/ })
+      .click();
+  await expect(scope.getByRole("button", { name: "D-49: Ship it now", exact: true })).toBeVisible();
+  await axe("needs list", sel);
+  await zoom();
+  await scope.getByRole("button", { name: "D-48: Rotate", exact: true }).click();
+  await expect(scope.getByRole("group", { name: "Confirm answer" })).toBeVisible();
+  await expect(scope.getByRole("radiogroup", { name: "Answers for D-48" })).toBeVisible();
+  await axe("risk-flagged detail", sel);
+  await zoom();
+  await scope.getByRole("tab", { name: /^Running/ }).click();
+  await expect(scope.getByText(/Lane 65/)).toBeVisible();
+  await axe("running", sel);
+  await zoom();
+});
+
 test("alder settings appearance + sub-page section nav: one h1, current section and 200% reflow", async ({ page }) => {
   await stubPhase3Settings(page);
   await page.goto("/settings");

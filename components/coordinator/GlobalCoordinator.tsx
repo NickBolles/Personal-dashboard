@@ -84,6 +84,9 @@ export function GlobalCoordinator() {
   // smart cards, the away digest and failures v3 doesn't model (CI on a PR, Hermes job runs).
   const [nowMs] = useState(() => Date.now());
   const v3 = trayLine({ decisions: cwDecisions.data?.decisions ?? [], runs: cwRuns.data?.runs ?? [], now: nowMs });
+  // Needs you = open D-n rows + the other owner asks the old list carried (run approvals, workflow proposals, stalled runs).
+  const otherAsks = things.decisions.filter((e) => !e.key.startsWith("item:") && !e.key.startsWith("decision:"));
+  const needsCount = cwDecisions.data ? cwDecisions.data.counts.open + otherAsks.length : things.needsYou;
   const useV3 =
     !line.card &&
     !awayLine &&
@@ -348,7 +351,7 @@ export function GlobalCoordinator() {
   const d = info.data?.area ? (info.data as CoordinatorResponse) : null;
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "chat", label: "Chat" },
-    { id: "needs", label: "Needs you", count: things.needsYou },
+    { id: "needs", label: "Needs you", count: needsCount },
     { id: "running", label: "Running", count: things.running.length },
     { id: "changes", label: "Changes", count: things.changes.length },
     { id: "context", label: "Context" },
@@ -458,6 +461,17 @@ export function GlobalCoordinator() {
                   initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
                   onAsk={(ref, question) => prefill(`About ${ref} (${question.slice(0, 160)}): `)}
                 />
+              ) : null}
+              {t.id === "needs" && tab === "needs" && otherAsks.length ? (
+                <section className="gc-list" aria-label="Other approvals">
+                  <h3 className="gc-hint">Approvals and proposals</h3>
+                  {otherAsks.map((ask) => (
+                    <Link key={ask.key} href={ask.href}>
+                      <strong>{ask.title}</strong>
+                      <span>{ask.question}</span>
+                    </Link>
+                  ))}
+                </section>
               ) : null}
               {t.id === "running" && tab === "running" ? (
                 <RunningPanel
@@ -638,17 +652,11 @@ export function GlobalCoordinator() {
                   ⌃
                 </span>
               </button>
-              {things.needsYou || things.running.length || things.failing.length ? (
+              {needsCount || things.running.length || things.failing.length ? (
                 <span className="gc-tray-counts hidden">
-                  {things.needsYou ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-tone="warn"
-                      aria-label={`${things.needsYou} need you, open Needs you`}
-                      onClick={() => openAt("needs")}
-                    >
-                      !{things.needsYou}
+                  {needsCount ? (
+                    <Button size="sm" variant="ghost" data-tone="warn" aria-label={`${needsCount} need you, open Needs you`} onClick={() => openAt("needs")}>
+                      !{needsCount}
                     </Button>
                   ) : null}
                   {things.running.length || things.failing.length ? (
