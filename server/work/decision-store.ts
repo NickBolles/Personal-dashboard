@@ -5,6 +5,7 @@ import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
 import { audit } from "@/server/audit";
 import { currentVia } from "./actor";
+import { pushRaisedDecision } from "./cw-push";
 import { event, recordOp, type OpOut } from "./store";
 import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import {
@@ -286,6 +287,8 @@ export function raiseDecision(
     correlationId: opts.correlationId,
     detail: { ref: decisionRef(out.seq), itemId, risk: parseRisk(out.riskJson), hasDefault: !!out.defaultChoice },
   });
+  // CW-5: urgent (risk-flagged / blocking) decisions push now; the rest wait for the 2-hour digest.
+  pushRaisedDecision(out);
   return toDecision(out);
 }
 
@@ -360,6 +363,10 @@ export function answerDecisionRef(
       repeated = true;
       return r;
     }
+    // A push action answers in one tap, so it may only answer a low-risk decision with one of its own choices;
+    // risk-flagged ones always open the detail and need Confirm in the app.
+    if (via === "push" && (parseRisk(r.riskJson).length > 0 || !parseChoices(r.choicesJson).includes(text)))
+      throw new HttpError(409, "confirm_in_app", `${decisionRef(r.seq)} needs a confirmed answer in Jarvis`);
     if (!nextState(r.state as DecisionState, "answer"))
       throw new HttpError(409, "decision_closed", `${decisionRef(r.seq)} is already ${r.state}${r.answeredChoice ? ` (${r.answeredChoice})` : ""}`);
     const wasDeferred = r.state === "deferred";

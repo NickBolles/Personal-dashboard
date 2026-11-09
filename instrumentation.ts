@@ -39,6 +39,11 @@ export async function register() {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
     const { reconcileDelegatedRuns } = await import("./server/work/delegated-reconcile");
     registerDispatcherTask("coordinator_run_reconcile", 5 * 60_000, (now) => reconcileDelegatedRuns(now));
+    // CW-2: runs whose coordinator session ended become interrupted (one Hermes session GET each, bounded).
+    const { markEndedSessionRuns } = await import("./server/work/session-end");
+    registerDispatcherTask("coordinator_session_end", 5 * 60_000, (now) =>
+      markEndedSessionRuns(now).catch((e) => console.error("[jarvis] session-end pass failed", (e as Error).message.slice(0, 200))),
+    );
   } catch (err) {
     console.error("[jarvis] coordinator run reconcile didn't start", (err as Error).message);
   }
@@ -55,6 +60,8 @@ export async function register() {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
     const { applyDueDecisions } = await import("./server/work/decision-store");
     registerDispatcherTask("decision_defaults", 60_000, (now) => applyDueDecisions(now));
+    const { decisionDigest } = await import("./server/work/cw-push");
+    registerDispatcherTask("decision_digest", 10 * 60_000, (now) => decisionDigest(now));
   } catch (err) {
     console.error("[jarvis] decision defaults didn't start", (err as Error).message);
   }
