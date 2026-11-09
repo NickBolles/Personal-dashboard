@@ -113,7 +113,7 @@ export function CoordinatorThread({
     queryKey: ["session-exec", sid],
     queryFn: () => api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sid!)}/execution`),
     enabled: !!sid && !d.excluded,
-    refetchInterval: (q) => (detail.data?.session.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
+    refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
   });
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
@@ -121,7 +121,7 @@ export function CoordinatorThread({
     enabled: earlier && !d.excluded,
   });
   const postInput = (target: string, input: string, control = false): Promise<{ masked?: string[] } | null> => {
-    const active = detail.data?.session.activeRun;
+    const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
@@ -169,7 +169,7 @@ export function CoordinatorThread({
   });
   const stop = useMutation({
     mutationFn: async () => {
-      const runId = detail.data?.session.activeRun?.runId;
+      const runId = detail.data?.session?.activeRun?.runId;
       if (!runId) throw new Error("No active coordinator run");
       await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/stop`);
     },
@@ -281,9 +281,9 @@ export function CoordinatorThread({
                                 surface="coordinator"
                                 text={m.text}
                                 who="the coordinator's message"
-                                model={detail.data?.session.model ?? null}
+                                model={detail.data?.session?.model ?? null}
                                 onAskFix={async (prompt) => {
-                                  if (send.isPending || detail.data?.session.activeRun) {
+                                  if (send.isPending || detail.data?.session?.activeRun) {
                                     toast("Wait for the coordinator to finish, then ask again.", "warn");
                                     return false;
                                   }
