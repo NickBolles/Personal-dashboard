@@ -39,6 +39,11 @@ export async function register() {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
     const { reconcileDelegatedRuns } = await import("./server/work/delegated-reconcile");
     registerDispatcherTask("coordinator_run_reconcile", 5 * 60_000, (now) => reconcileDelegatedRuns(now));
+    // CW-2: runs whose coordinator session ended become interrupted (one Hermes session GET each, bounded).
+    const { markEndedSessionRuns } = await import("./server/work/session-end");
+    registerDispatcherTask("coordinator_session_end", 5 * 60_000, (now) =>
+      markEndedSessionRuns(now).catch((e) => console.error("[jarvis] session-end pass failed", (e as Error).message.slice(0, 200))),
+    );
   } catch (err) {
     console.error("[jarvis] coordinator run reconcile didn't start", (err as Error).message);
   }

@@ -103,6 +103,8 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
       root.current?.querySelectorAll<HTMLButtonElement>("[role='radio']")[index]?.focus();
       return;
     }
+    // Enter on a focused control (Cancel, Defer, a link) does what that control does, never Confirm.
+    if (e.key === "Enter" && target !== root.current && target.closest("button:not([role='radio']), a")) return;
     const action = decisionKeyAction(e.key, { typing, armed: !!armed && !!current && !saved, canUndo: !!undo.current && saved });
     if (!action) return;
     e.preventDefault();

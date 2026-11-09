@@ -14,6 +14,17 @@ export function useCoordinatorRuns() {
   });
 }
 
+export type ResumeAllResponse = { results: { ref: string; ok: boolean; sent?: "run" | "steer"; reason?: string }[] };
+
+/** Owner-confirmed Resume all: the server sends one resume prompt per interrupted run's session. */
+export function useResumeAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (refs: string[]) => api.post<ResumeAllResponse>("/api/coordinator/runs/resume", { refs, confirm: true }),
+    onSettled: () => qc.invalidateQueries({ queryKey: COORDINATOR_RUNS_KEY }),
+  });
+}
+
 /** Call mutate(surface) once after capturing the previous marker for the visible visit. */
 export function useMarkLooked() {
   const qc = useQueryClient();

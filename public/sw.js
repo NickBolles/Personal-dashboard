@@ -198,7 +198,7 @@ self.addEventListener("push", (event) => {
       tag: data.tag || data.id,
       renotify: data.severity === "critical",
       requireInteraction: data.severity === "critical",
-      data: { url: data.url || "/alerts", id: data.id },
+      data: { url: data.url || "/alerts", id: data.id, ...(data.ref && data.answers ? { ref: data.ref, answers: data.answers } : {}) },
       // Inbox "Report ready": Open report / File it (files under the suggestion; see notificationclick).
       ...(data.actions ? { actions: data.actions } : {}),
     }),
@@ -241,9 +241,77 @@ async function openOrFocus(target) {
   return self.clients.openWindow(target);
 }
 
+/**
+ * CW-5 one-tap answer (low-risk decisions only; the server refuses `via: "push"` on risk-flagged ones).
+ * Answers with the session cookie + CSRF header, then confirms in place with an Undo action. Returns null
+ * when it couldn't (signed out, already answered, offline) so the caller opens the decision instead.
+ */
+async function answerFromNotification(ref, answer) {
+  if (!/^D-\d{1,9}$/.test(ref || "") || typeof answer !== "string" || !answer) return null;
+  try {
+    const res = await fetch(`/api/coordinator/decisions/${encodeURIComponent(ref)}/answer`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "x-jarvis-csrf": "1", "content-type": "application/json" },
+      body: JSON.stringify({ answer, via: "push" }),
+    });
+    if (!res.ok || res.redirected) return null;
+    const j = await res.json();
+    return { ref, answer, opId: j && j.op && typeof j.op.id === "string" ? j.op.id : null };
+  } catch {
+    return null;
+  }
+}
+
+async function undoFromNotification(opId) {
+  if (typeof opId !== "string" || !/^[\w-]{1,80}$/.test(opId)) return false;
+  try {
+    const res = await fetch(`/api/work/ops/${encodeURIComponent(opId)}/undo`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "x-jarvis-csrf": "1" },
+    });
+    return res.ok && !res.redirected;
+  } catch {
+    return false;
+  }
+}
+
 /** Notification tap (exported as a SW global so e2e can drive it). Resolves with what it did. */
 async function handleNotificationClick(action, data, tag) {
   const url = (data && data.url) || "/alerts";
+  if (action && action.startsWith("answer:") && data && data.answers && typeof data.answers[action] === "string") {
+    const answered = await answerFromNotification(data.ref, data.answers[action]);
+    if (answered) {
+      await self.registration
+        .showNotification(`Answered ${answered.ref}`, {
+          body: answered.answer.slice(0, 160),
+          icon: "/icons/icon-192.png",
+          badge: "/icons/badge-72.png",
+          tag: tag || undefined,
+          data: { url, undoOp: answered.opId },
+          ...(answered.opId ? { actions: [{ action: "undo", title: "Undo" }] } : {}),
+        })
+        .catch(() => undefined);
+      return { answered };
+    }
+    // Couldn't answer from here (signed out, changed, offline): open the decision.
+    const target = new URL(url, self.location.origin).href;
+    await openOrFocus(target).catch(() => undefined);
+    return { opened: target };
+  }
+  if (action === "undo" && data && data.undoOp) {
+    const undone = await undoFromNotification(data.undoOp);
+    if (undone) {
+      await self.registration
+        .showNotification("Undone", { body: "The answer was taken back.", icon: "/icons/icon-192.png", badge: "/icons/badge-72.png", tag: tag || undefined, data: { url } })
+        .catch(() => undefined);
+      return { undone: true };
+    }
+    const target = new URL(url, self.location.origin).href;
+    await openOrFocus(target).catch(() => undefined);
+    return { opened: target };
+  }
   if (action === "file" && (url.startsWith("/inbox?") || url.includes("view=inbox"))) {
     const filed = await fileFromNotification(url);
     if (filed) {

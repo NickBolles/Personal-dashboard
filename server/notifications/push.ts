@@ -11,6 +11,7 @@ import { NOTIFICATION_CATEGORIES, type NotificationCategory } from "@/lib/contra
 import { claimPush, pendingPushes, setPushState, unreadActionableCount } from "./index";
 import { fcmData, fcmStatus, sendFcmToUser } from "./fcm";
 import { pushDevices } from "@/server/devices";
+import { decisionPushActions } from "@/server/work/cw-push-actions";
 
 type Vapid = { publicKey: string; privateKey: string };
 
@@ -34,6 +35,9 @@ export type PushPayload = {
   tag?: string;
   severity: string;
   actions?: { action: string; title: string }[];
+  /** CW-5 one-tap decision answers: action id → choice text, and the decision they answer */
+  answers?: Record<string, string>;
+  ref?: string;
 };
 
 /**
@@ -166,6 +170,11 @@ export async function deliverPendingPushes(now = new Date()) {
         { action: "open", title: "Open report" },
         { action: "file", title: "File it" },
       ];
+    // Low-risk decision pushes get one-tap answers (checked now, at delivery); risk-flagged ones only open the detail.
+    if (n.type === "cw.decision") {
+      const a = decisionPushActions(n.userId, n.dedupeKey);
+      if (a) Object.assign(payload, a);
+    }
     const urgency = n.severity === "critical" || n.category === "hermes_input" ? "high" : "normal";
     // Paired phones (FCM) first, then browsers (web push). Without Firebase (or when no phone has a
     // working token) the Android app's own web push subscription is the phone's channel; when FCM did

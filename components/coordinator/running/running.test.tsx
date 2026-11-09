@@ -87,10 +87,29 @@ it("Stop requires confirmation; cancel and confirm only prefill, never call a ru
   await waitFor(() => expect(client.isMutating()).toBe(0));
   expect(vi.mocked(api.post).mock.calls.every(([path]) => path === "/api/coordinator/looked")).toBe(true);
 });
-it("Resume all builds a single interrupted command", () => {
+it("Resume all asks first, then the server resumes every interrupted run (no chat prefill)", async () => {
   mount([run(1, { state: "interrupted" }), run(2, { state: "interrupted" }), run(3, { state: "waiting" })]);
+  const post = vi.mocked(api.post);
+  post.mockImplementation(async (path: string) =>
+    path === "/api/coordinator/runs/resume"
+      ? {
+          results: [
+            { ref: "R-2", ok: true, sent: "run" },
+            { ref: "R-1", ok: false, reason: "send_failed" },
+          ],
+        }
+      : { lastLooked: { ...markers, running: at } },
+  );
   fireEvent.click(screen.getByRole("button", { name: "Resume all 2" }));
-  expect(onCommand).toHaveBeenCalledExactlyOnceWith("Resume R-2, R-1 (interrupted when the session ended).");
+  // Nothing is sent before the owner confirms; Cancel sends nothing.
+  expect(post.mock.calls.some(([path]) => path === "/api/coordinator/runs/resume")).toBe(false);
+  fireEvent.click(within(screen.getByRole("group", { name: "Resume 2 interrupted runs?" })).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("group", { name: "Resume 2 interrupted runs?" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Resume all 2" }));
+  fireEvent.click(within(screen.getByRole("group", { name: "Resume 2 interrupted runs?" })).getByRole("button", { name: "Confirm" }));
+  await waitFor(() => expect(post).toHaveBeenCalledWith("/api/coordinator/runs/resume", { refs: ["R-2", "R-1"], confirm: true }));
+  expect(await screen.findByText("Resume sent for R-2. Couldn't resume R-1", { selector: "p" })).toBeTruthy();
+  expect(onCommand).not.toHaveBeenCalled();
 });
 it("sub-runs are hidden until expanded, and logs load lazily", async () => {
   const child = run(2, { parentRunId: "run-1", parentRef: "R-1", state: "failed" });

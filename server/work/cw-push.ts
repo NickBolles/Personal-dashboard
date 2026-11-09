@@ -15,8 +15,9 @@ import { coordLink } from "@/lib/coordinator/links";
  * CW-5 (owner-approved): what interrupts the owner. Failed runs, ended sessions (interrupted runs)
  * and urgent/blocking decisions (risk-flagged, or the pack says it unblocks something) push at once;
  * every other new decision is batched into one digest every 2 hours. Goes through the existing
- * notifications inbox + push dispatcher (category prefs and quiet hours apply). Pushes never carry
- * an answer action; the deep link opens the decision/run in the coordinator sheet or rail.
+ * notifications inbox + push dispatcher (category prefs and quiet hours apply). A LOW-RISK decision push
+ * gets one-tap answers at delivery (cw-push-actions.ts, Undo after); a risk-flagged one only deep-links to
+ * the decision detail (Confirm in the app). The deep link opens the decision/run in the coordinator sheet or rail.
  */
 export const DIGEST_EVERY_MS = 2 * 3_600_000;
 const DIGEST_KEY = (userId: string) => `cw:digest-at:${userId}`;

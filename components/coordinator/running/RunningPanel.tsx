@@ -8,7 +8,7 @@ import { api } from "@/lib/client/api";
 import type { RunEvent } from "@/lib/cw-runs";
 import { childrenOf, groupRuns, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
-import { useCoordinatorRuns, useMarkLooked } from "./useCoordinatorRuns";
+import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
 type Props = {
   onSteer: (ref: string, title: string) => void;
@@ -27,6 +27,13 @@ export function RunningPanel({ onSteer, onCommand, initialRef }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const seenFailures = useRef(new Set<string>());
   const [announcement, setAnnouncement] = useState("");
+  const [confirmResume, setConfirmResume] = useState(false);
+  const [resumeNote, setResumeNote] = useState("");
+  const resumeAll = useResumeAll();
+  const say = (text: string) => {
+    setResumeNote(text);
+    setAnnouncement(text);
+  };
   const runs = query.data?.runs;
   useEffect(() => {
     if (!query.data || marked.current) return;
@@ -77,6 +84,11 @@ export function RunningPanel({ onSteer, onCommand, initialRef }: Props) {
         {announcement}
       </span>
       {query.isLoading ? <p className="text-muted">Loading runs…</p> : null}
+      {resumeNote ? (
+        <p className="text-sm text-muted" data-dynamic>
+          {resumeNote}
+        </p>
+      ) : null}
       {query.error ? (
         <p role="alert">
           Couldn&apos;t load runs.{" "}
@@ -101,16 +113,41 @@ export function RunningPanel({ onSteer, onCommand, initialRef }: Props) {
               count={groups[key].length}
               action={
                 key === "interrupted" ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onCommand(`Resume ${groups.interrupted.map((r) => r.ref).join(", ")} (interrupted when the session ended).`)}
-                  >
+                  <Button size="sm" variant="ghost" disabled={resumeAll.isPending} onClick={() => setConfirmResume(true)}>
                     Resume all {groups.interrupted.length}
                   </Button>
                 ) : undefined
               }
             />
+            {key === "interrupted" && confirmResume ? (
+              <div role="group" aria-label={`Resume ${groups.interrupted.length} interrupted runs?`} className="gc-run-confirm">
+                <p>Send a resume prompt to the session of {groups.interrupted.map((r) => r.ref).join(", ")}?</p>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const refs = groups.interrupted.map((r) => r.ref);
+                    setConfirmResume(false);
+                    resumeAll.mutate(refs, {
+                      onSuccess: ({ results }) => {
+                        const sent = results.filter((r) => r.ok).map((r) => r.ref);
+                        const failed = results.filter((r) => !r.ok).map((r) => r.ref);
+                        say(
+                          [sent.length ? `Resume sent for ${sent.join(", ")}` : "", failed.length ? `Couldn't resume ${failed.join(", ")}` : ""]
+                            .filter(Boolean)
+                            .join(". "),
+                        );
+                      },
+                      onError: (error) => say(error instanceof Error ? error.message : "Couldn't resume. Try again."),
+                    });
+                  }}
+                >
+                  Confirm
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmResume(false)}>
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
             {groups[key].map((run) => (
               <RunRow key={run.id} run={run} runs={runs ?? []} onSteer={onSteer} onCommand={onCommand} initialRef={initialRef} />
             ))}
