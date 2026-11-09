@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { newId } from "@/server/crypto";
 import { HttpError } from "@/server/http/errors";
@@ -47,9 +47,21 @@ export type DecisionOp = { raised?: string; closed?: string };
 
 const nowIso = () => new Date().toISOString();
 
+/** Next D-n: above both the highest row and a durable high-water mark, so a deleted item's D-n is never reused. */
 export function nextDecisionSeq(db: Db, userId: string): number {
-  const r = db.select({ seq: D.seq }).from(D).where(eq(D.userId, userId)).orderBy(asc(D.seq)).all();
-  return (r.length ? r[r.length - 1]!.seq : 0) + 1;
+  const max = db
+    .select({ seq: sql<number>`coalesce(max(${D.seq}), 0)` })
+    .from(D)
+    .where(eq(D.userId, userId))
+    .get()!.seq;
+  const key = `cw:decision-seq:${userId}`;
+  const prior = db.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
+  const seq = Math.max(max, Number(prior?.value) || 0) + 1;
+  db.insert(schema.settings)
+    .values({ key, value: String(seq) })
+    .onConflictDoUpdate({ target: schema.settings.key, set: { value: String(seq), updatedAt: new Date().toISOString() } })
+    .run();
+  return seq;
 }
 
 function parseAction(raw: string | null): DecisionAction | undefined {

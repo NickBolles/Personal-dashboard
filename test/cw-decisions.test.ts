@@ -21,7 +21,7 @@ import { NextRequest } from "next/server";
 import { __resetAgentRate, mintAgentToken } from "@/server/agent-access/tokens";
 import * as mcpRoute from "@/app/api/mcp/route";
 import * as answerRoute from "@/app/api/coordinator/decisions/[ref]/answer/route";
-import { nextState, shouldDefault, sortByUrgency, validateRaise, type Decision } from "@/lib/cw-decisions";
+import { nextState, packSchema, shouldDefault, sortByUrgency, validateRaise, type Decision } from "@/lib/cw-decisions";
 
 const cid = "test";
 let owner: CurrentUser;
@@ -54,6 +54,16 @@ describe("pure rules", () => {
     expect(validateRaise({ ...base, defaultChoice: "Maybe", expiresAt: "2026-11-08T13:00:00Z" }, now)).toMatchObject({ code: "default_choice" });
     expect(validateRaise({ ...base, defaultChoice: "Yes", expiresAt: "2026-11-08T12:05:00Z" }, now)).toMatchObject({ code: "expires_at" });
     expect(validateRaise({ ...base, recommended: "Other" }, now)).toMatchObject({ code: "recommended" });
+    for (const url of ["javascript:alert(1)", "//evil.example", "http://x.example", "data:text/html,x"])
+      expect(packSchema.safeParse({ evidence: [{ kind: "url", label: "x", url }] }).success).toBe(false);
+    expect(
+      packSchema.safeParse({
+        evidence: [
+          { kind: "pr", label: "x", url: "https://github.com/o/r/pull/1" },
+          { kind: "item", label: "y", url: "/areas?item=wk_1" },
+        ],
+      }).success,
+    ).toBe(true);
     expect(validateRaise({ ...base, pack: { options: [{ choice: "Other", effect: "x" }] } }, now)).toMatchObject({ code: "pack_option" });
   });
   it("state machine", () => {

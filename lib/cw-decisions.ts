@@ -44,8 +44,10 @@ export const evidenceSchema = z
   .object({
     kind: z.enum(["pr", "issue", "board", "diff", "log", "run", "item", "url", "image", "code"]),
     label: str(200).min(1),
-    /** https URL or same-origin path; validated again on read */
-    url: str(2000).optional(),
+    /** https URL or same-origin path only (never javascript:/data:/protocol-relative) */
+    url: str(2000)
+      .refine((u) => /^https:\/\/[^\s]+$/i.test(u) || /^\/(?![/\\])[^\s\\]*$/.test(u), "https URL or an app path")
+      .optional(),
     /** diff/code/log excerpt shown as text (never executed or fetched) */
     text: str(4000).optional(),
     ref: str(64).optional(),

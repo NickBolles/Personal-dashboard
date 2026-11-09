@@ -72,10 +72,25 @@ export function liveLabel(live: RunLive, approval?: boolean): string {
 }
 
 /** Runs an agent registered through Jarvis MCP (jarvis_run_start/update, agent_runs table). */
-export const AGENT_RUN_STATES = ["running", "waiting", "done", "failed"] as const;
+export const AGENT_RUN_STATES = ["running", "waiting", "done", "failed", "interrupted"] as const;
 export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
+export const AGENT_RUN_LABEL: Record<AgentRunState, string> = {
+  running: "Running",
+  waiting: "Waiting",
+  done: "Done",
+  failed: "Failed",
+  interrupted: "Interrupted",
+};
 export function liveOfAgentRun(state: string): RunLive {
-  return state === "running" ? "running" : state === "waiting" ? "waiting" : state === "failed" ? "failed" : state === "done" ? "finished" : "idle";
+  return state === "running"
+    ? "running"
+    : state === "waiting" || state === "interrupted"
+      ? "waiting"
+      : state === "failed"
+        ? "failed"
+        : state === "done"
+          ? "finished"
+          : "idle";
 }
 export type RunChild = { title: string; state: AgentRunState; summary?: string | null };
 export type ExternalRun = {
@@ -102,7 +117,7 @@ export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt">, now: numb
 }
 /** The run that decides an item's row (waiting > running > newest), not just the newest one (#251). */
 export const decidingRun = (runs: readonly ExternalRun[] | undefined): ExternalRun | undefined =>
-  runs?.find((r) => r.state === "waiting") ?? runs?.find((r) => r.state === "running") ?? runs?.[0];
+  runs?.find((r) => r.state === "waiting" || r.state === "interrupted") ?? runs?.find((r) => r.state === "running") ?? runs?.[0];
 
 export const stalledRuns = (i: Pick<ItemAgentInfo, "agentRuns">, now: number = Date.now()) => (i.agentRuns ?? []).filter((r) => isStalled(r, now));
 

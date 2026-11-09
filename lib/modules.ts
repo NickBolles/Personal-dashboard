@@ -51,7 +51,12 @@ export const MODULES: ModuleDef[] = [
     description: "One private tree for AI-assisted work and conversations: handoffs, PR links, validation and a dashboard.",
     sources: ["work"],
     viewCapability: "work.use",
-    apiRoutes: [{ prefix: "/api/quick-actions", capability: "work.use" }],
+    apiRoutes: [
+      { prefix: "/api/quick-actions", capability: "work.use" },
+      { prefix: "/api/coordinator/decisions", capability: "work.use" },
+      { prefix: "/api/coordinator/runs", capability: "work.use" },
+      { prefix: "/api/coordinator/looked", capability: "work.use" },
+    ],
     routes: [
       { href: "/areas", label: "Areas" },
       { href: "/resume", label: "In flight" },

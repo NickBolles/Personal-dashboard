@@ -25,6 +25,9 @@ import { registerAgentRun } from "@/server/work/registered-runs";
 import { buildDeviceProposal } from "./ha-proposals";
 import { DECISION_STATES, raiseSchema } from "@/lib/cw-decisions";
 import { findDecision, listDecisionRows, raiseDecision, withdrawDecision } from "@/server/work/decision-store";
+import { RUN_TOOLS } from "./run-tools";
+import { lockSchema, pipelineSchema, runRef } from "@/lib/cw-runs";
+import { ensureRunSeqs, recordRunTransition, resolveRun, runIdentifier } from "@/server/work/run-events";
 
 /**
  * Jarvis MCP tools (docs/agent-tools.md). Every tool:
@@ -92,7 +95,7 @@ export function agentItems(userId: string): { items: WorkItem[]; byId: Map<strin
   return { items, byId: new Map(items.map((i) => [i.id, i])) };
 }
 
-function visible(userId: string, itemId: string): WorkItem {
+export function visible(userId: string, itemId: string): WorkItem {
   const v = agentItems(userId).byId.get(itemId);
   if (!v) throw new HttpError(404, "not_found", "No item with that id (or it isn't available to agents)");
   return v;
@@ -489,7 +492,7 @@ export const TOOLS: ToolDef[] = [
   tool({
     name: "jarvis_run_start",
     description:
-      "Register an agent run (e.g. a delegated sub-agent) on a work item; it shows in the item's Agent panel and the Agents strip. Pass delegationId (your delegate_task/batch id) so a retry returns the same runId, plus the sub-agent's hermesSessionId and transcriptPath when known. Send jarvis_run_update at least every 30 min while it runs, or the run shows as Stalled. Returns runId.",
+      "Register an agent run on a work item. Pass delegationId (your delegate_task/batch id) for idempotent retries, plus hermesSessionId/transcriptPath when known. Optional parentRunId accepts an owner's run id or R-n reference. Heartbeat at least every 30 min. Returns {runId, ref, existing?}.",
     scope: "runs.write",
     input: z
       .object({
@@ -498,24 +501,37 @@ export const TOOLS: ToolDef[] = [
         hermesSessionId: handle.optional(),
         delegationId: handle.optional(),
         transcriptPath: pathText.optional(),
+        parentRunId: runIdentifier.optional(),
       })
       .strict(),
-    run: ({ itemId, title, hermesSessionId, delegationId, transcriptPath }, { agent, correlationId }) => {
+    run: ({ itemId, title, hermesSessionId, delegationId, transcriptPath, parentRunId }, { agent, correlationId }) => {
       const item = visible(agent.user.id, itemId);
       if (item.parentId === null || item.kind === "conversation")
         throw new HttpError(400, "bad_item", "Record runs on a project or item, not an area or conversation");
-      return registerAgentRun(agent.user, agent.profile, { itemId, title, hermesSessionId, delegationId, transcriptPath }, correlationId, agent.tokenId);
+      if (parentRunId) {
+        ensureRunSeqs(agent.user.id);
+        visible(agent.user.id, resolveRun(agent.user.id, parentRunId).itemId);
+      }
+      return registerAgentRun(
+        agent.user,
+        agent.profile,
+        { itemId, title, hermesSessionId, delegationId, transcriptPath, parentRunId },
+        correlationId,
+        agent.tokenId,
+      );
     },
   }),
   tool({
     name: "jarvis_run_update",
     description:
-      "Update a run you started: state running | waiting | done | failed, a short summary, the PR URL, the sub-agent's hermesSessionId/transcriptPath, and children (one {title, state, summary} per sub-agent of a delegation batch; replaces the list). Any update counts as a heartbeat. A done/failed update is posted to the item's Activity. Never settles the item.",
+      "Update your own run (id or R-n): state running | waiting | done | failed | interrupted, summary, PR URL, hermesSessionId/transcriptPath, children, pipeline, lock (null clears). Every update is a heartbeat. Interrupted is not terminal; running resumes it. Lifecycle events are recorded once per transition; done/failed also posts to Activity. Never settles the item. Returns {runId, ref, state}.",
     scope: "runs.write",
     input: z
       .object({
-        runId: id,
+        runId: runIdentifier,
         state: z.enum(AGENT_RUN_STATES),
+        pipeline: pipelineSchema.optional(),
+        lock: lockSchema.nullable().optional(),
         summary: text(2000).optional(),
         prUrl: z.string().trim().max(500).optional(),
         hermesSessionId: handle.optional(),
@@ -526,15 +542,9 @@ export const TOOLS: ToolDef[] = [
           .optional(),
       })
       .strict(),
-    run: ({ runId, state, summary, prUrl, hermesSessionId, transcriptPath, children }, { agent, correlationId }) => {
+    run: ({ runId: identifier, state, summary, prUrl, hermesSessionId, transcriptPath, children, pipeline, lock }, { agent, correlationId }) => {
       const db = getDb();
-      const run = db
-        .select()
-        .from(schema.agentRuns)
-        .where(and(eq(schema.agentRuns.id, runId), eq(schema.agentRuns.userId, agent.user.id), eq(schema.agentRuns.profile, agent.profile)))
-        .get();
-      if (!run) throw new HttpError(404, "not_found", "No run with that id for this agent");
-      visible(agent.user.id, run.itemId);
+      ensureRunSeqs(agent.user.id);
       let pr: string | null | undefined;
       if (prUrl !== undefined) {
         const gh = parseGithubUrl(prUrl);
@@ -543,35 +553,47 @@ export const TOOLS: ToolDef[] = [
       }
       const at = new Date().toISOString();
       const terminal = state === "done" || state === "failed";
-      db.transaction((tx) => {
-        tx.update(schema.agentRuns)
-          .set({
-            state,
-            updatedAt: at,
-            ...(summary !== undefined ? { summary } : {}),
-            ...(pr !== undefined ? { prUrl: pr } : {}),
-            ...(hermesSessionId !== undefined ? { hermesSessionId } : {}),
-            ...(transcriptPath !== undefined ? { transcriptPath } : {}),
-            ...(children !== undefined ? { childrenJson: JSON.stringify(children) } : {}),
-            finishedAt: terminal ? at : null,
-          })
-          .where(eq(schema.agentRuns.id, runId))
-          .run();
-        if (terminal && run.state !== state)
-          tx.insert(schema.workEvents)
-            .values({
-              id: newId(),
-              itemId: run.itemId,
-              actor: agent.user.id,
-              kind: "agent_run",
-              reason: `agent run ${state === "done" ? "finished" : "failed"}: ${run.title}`,
-              via: agent.via,
-              at,
+      const result = db.transaction(
+        (tx) => {
+          const run = resolveRun(agent.user.id, identifier, tx);
+          const runId = run.id;
+          if (run.profile !== agent.profile) throw new HttpError(404, "not_found", "No run with that id for this agent");
+          visible(agent.user.id, run.itemId);
+          tx.update(schema.agentRuns)
+            .set({
+              state,
+              updatedAt: at,
+              interruptedAt: state === "interrupted" ? (run.interruptedAt ?? at) : null,
+              ...(pipeline !== undefined ? { pipelineJson: JSON.stringify(pipeline) } : {}),
+              ...(lock !== undefined ? { lockJson: lock === null ? null : JSON.stringify(lock) } : {}),
+              ...(summary !== undefined ? { summary } : {}),
+              ...(pr !== undefined ? { prUrl: pr } : {}),
+              ...(hermesSessionId !== undefined ? { hermesSessionId } : {}),
+              ...(transcriptPath !== undefined ? { transcriptPath } : {}),
+              ...(children !== undefined ? { childrenJson: JSON.stringify(children) } : {}),
+              finishedAt: terminal ? at : null,
             })
+            .where(eq(schema.agentRuns.id, runId))
             .run();
-      });
-      audit({ actor: agent.via, action: "agent.run_update", source: "agent", sourceRecord: runId, result: "ok", correlationId, detail: { state } });
-      return { runId, state };
+          if (terminal && run.state !== state)
+            tx.insert(schema.workEvents)
+              .values({
+                id: newId(),
+                itemId: run.itemId,
+                actor: agent.user.id,
+                kind: "agent_run",
+                reason: `agent run ${state === "done" ? "finished" : "failed"}: ${run.title}`,
+                via: agent.via,
+                at,
+              })
+              .run();
+          recordRunTransition(tx, run, state, summary, agent.via);
+          return { runId, ref: runRef(run.seq)!, state };
+        },
+        { behavior: "immediate" },
+      );
+      audit({ actor: agent.via, action: "agent.run_update", source: "agent", sourceRecord: result.runId, result: "ok", correlationId, detail: { state } });
+      return result;
     },
   }),
   tool({
@@ -600,6 +622,7 @@ export const TOOLS: ToolDef[] = [
       return { proposed: true, executed: false, risk: p.risk, confirmAt: p.href, item: brief(item) };
     },
   }),
+  ...RUN_TOOLS,
 ];
 
 export const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));

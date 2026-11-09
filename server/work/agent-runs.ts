@@ -24,11 +24,13 @@ import { listItems } from "./store";
 import { linksByItem } from "./decisions";
 import type { ExecutionRecord } from "@/lib/chat-execution";
 import { executionLinks, executionState, executionText, EXECUTION_LIMIT } from "@/server/chat/execution-store";
+import { ensureRunSeqs } from "./run-events";
 
 const chunks = <T>(xs: T[], n = 500) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 /** Exact session identities only: never associate unrelated work by title or item totals. */
 export function executionRuns(user: CurrentUser, sessionId: string, childIds: string[] = []) {
+  ensureRunSeqs(user.id);
   const db = getDb();
   const ids = [sessionId, ...childIds.slice(0, EXECUTION_LIMIT)];
   const jarvis: ExecutionRecord[] = db
@@ -123,7 +125,7 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
           source: "registered_run" as const,
           id: r.id,
           title: executionText(r.title, 300) ?? "Registered run",
-          state: r.state === "done" ? ("completed" as const) : executionState(r.state),
+          state: r.state === "done" ? ("completed" as const) : r.state === "interrupted" ? ("waiting" as const) : executionState(r.state),
           summary: executionText(r.summary),
           startedAt: r.startedAt,
           endedAt: r.finishedAt,
@@ -154,6 +156,7 @@ function sessionsByItem(items: WorkItem[], links: Map<string, { kind: string; ta
  * starts anything.
  */
 export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.id)): AgentRunsResponse {
+  ensureRunSeqs(user.id);
   const db = getDb();
   const live = items.filter((i) => !i.archived);
   const byId = new Map(live.map((i) => [i.id, i]));
