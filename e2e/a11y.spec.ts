@@ -733,6 +733,11 @@ test("a11y + 200% text: item Agent panel with a delegation (children, copyable t
 
 test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick actions", async ({ page }, info) => {
   test.setTimeout(120_000);
+  // Other specs leave D-n/R-n rows behind; a failing one makes the tray open Running instead of Chat.
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+  await page.route(/\/api\/coordinator\/runs$/, (route) =>
+    route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
   const at = new Date(Date.now() - 20 * 60_000).toISOString();
   const quick = (id: string, label: string, extra: Record<string, unknown> = {}) => ({
     id,
@@ -921,6 +926,15 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   await page.route(/\/api\/coordinator\/decisions\/.+\/(answer|defer)$/, (route) => route.fulfill({ status: 409, json: { error: "Not part of this test" } }));
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
   const axe = async (label: string, include: string) => {
+    // Let the detail's push-in (opacity) animation finish: mid-fade colours fail color-contrast.
+    await page.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((a) => Number.isFinite(Number(a.effect?.getComputedTiming().endTime)))
+          .map((a) => a.finished.catch(() => undefined)),
+      ),
+    );
     const r = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).include(include).analyze();
     expect
       .soft(

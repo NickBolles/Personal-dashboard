@@ -44,6 +44,11 @@ test("phone search shortcut closes the Chief of staff sheet and focuses the pale
 });
 
 test("phone accepts a proposed quick action and can Undo without closing the sheet", async ({ page }) => {
+  // Other specs leave D-n/R-n rows behind; a failing one makes the tray open Running instead of Chat.
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+  await page.route(/\/api\/coordinator\/runs$/, (route) =>
+    route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
   const at = "2026-11-07T18:00:00Z";
   let accepted = false;
   let undone = false;
