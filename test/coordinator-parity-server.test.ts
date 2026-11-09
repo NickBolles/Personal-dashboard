@@ -315,6 +315,9 @@ describe("coordinator parity (server)", () => {
     registerAgentRun(owner, "momentumchief", { itemId: area.id, title: "Token-owned", delegationId: "deleg_tok" }, cid, "tok_1", then);
     const recent = sub("sa-0-live", "running", { delegationId: "deleg_v", subagentId: "sa-0-live", startedAt: "2026-11-09T00:30:00.000Z" });
     syncDelegatedRuns(owner, "api_sw", "chiefofstaff", [recent], new Date("2026-11-09T00:30:00Z"));
+    // More than one page (200) of newer records: the old child's end is still found (Codex P2).
+    for (let i = 0; i < 205; i++)
+      upsertExecution("api_sw", sub(`f${i}`, "completed", { delegationId: `deleg_f${i}`, updatedAt: "2026-11-08T00:00:00.000Z" }), "chiefofstaff");
     const read = vi.fn(async () => 0);
     await reconcileDelegatedRuns(now, read).done;
     const rows = runsOf(area.id);

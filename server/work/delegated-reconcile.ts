@@ -135,6 +135,7 @@ async function defaultRead(user: CurrentUser, sessionId: string) {
 /** how often the stale-mirror sweep runs (first tick after start, then hourly) */
 const SWEEP_EVERY_MS = 60 * 60_000;
 const SWEEP_MAX_ROWS = 200;
+const SWEEP_RECORDS_PER_PARENT = 10_000;
 
 /**
  * Clean-up for #258 (release 65's back-fill registered old sub-agents as `running`): open automatic mirrors
@@ -158,7 +159,8 @@ export function sweepStaleMirrors(now = new Date()): { closed: number; removed: 
   const recordsOf = (parent: string) => {
     let list = byParent.get(parent);
     if (!list) {
-      list = linkChildSessions(executionRecords(parent).filter((r) => r.source === "subagent"));
+      // Every persisted record of the parent (not just the latest page): an old child's end must not be missed.
+      list = linkChildSessions(executionRecords(parent, SWEEP_RECORDS_PER_PARENT).filter((r) => r.source === "subagent"));
       byParent.set(parent, list);
     }
     return list;
