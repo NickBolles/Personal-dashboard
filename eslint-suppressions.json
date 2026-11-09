@@ -441,17 +441,6 @@
       "count": 1
     }
   },
-  "components/coordinator/CoordinatorThread.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
-    }
-  },
   "components/coordinator/GlobalCoordinator.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
