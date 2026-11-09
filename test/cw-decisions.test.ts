@@ -128,6 +128,28 @@ describe("decision store", () => {
     expect(row("D-2").state).toBe("open");
   });
 
+  it("an agent-raised (or withdrawn) decision is undoable from Activity; undo of a supersede reopens the old one", () => {
+    const ops = () =>
+      getDb()
+        .select()
+        .from(schema.workOps)
+        .where(eq(schema.workOps.itemId, itemId))
+        .all()
+        .filter((o) => o.payload.includes("decisionOp"));
+    raiseDecision(owner.id, itemId, { question: "Old?", choices: ["Yes"] }, { raisedBy: "agent:a", correlationId: cid });
+    raiseDecision(owner.id, itemId, { question: "New?", choices: ["Yes"], supersedes: "D-1" }, { raisedBy: "agent:a", correlationId: cid });
+    expect(row("D-1").state).toBe("superseded");
+    store.undoOp(owner, ops().at(-1)!.id, cid);
+    expect(row("D-2").state).toBe("withdrawn");
+    expect(row("D-1").state).toBe("open");
+    expect(head()).toMatchObject({ ref: "D-1" });
+    withdrawDecision(owner.id, "D-1", "agent:a", "not needed", cid);
+    expect(head()).toBeNull();
+    store.undoOp(owner, ops().at(-1)!.id, cid);
+    expect(row("D-1").state).toBe("open");
+    expect(head()).toMatchObject({ ref: "D-1" });
+  });
+
   it("legacy route refuses a stale confirm: the D-n the owner confirmed must still be the head", () => {
     raiseDecision(owner.id, itemId, { question: "Ship V1?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
     raiseDecision(owner.id, itemId, { question: "Ship V3?", choices: ["Yes", "No"] }, { raisedBy: "agent:x", correlationId: cid });
@@ -207,7 +229,8 @@ describe("decision store", () => {
       .from(schema.workOps)
       .where(eq(schema.workOps.itemId, itemId))
       .all()
-      .find((o) => o.payload.includes("decisionOp"))!;
+      .filter((o) => o.payload.includes("decisionOp"))
+      .at(-1)!;
     store.undoOp(owner, op.id, cid);
     expect(row("D-1")).toMatchObject({ state: "open", defaultChoice: null, expiresAt: null });
     // The owner's Undo sticks: a later tick does not apply the default again.
