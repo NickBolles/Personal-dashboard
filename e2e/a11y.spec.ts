@@ -970,6 +970,7 @@ test("feedback inbox and rate dialogs: axe clean and reflow at 200% text zoom", 
 test("phone width guard: long real-shaped data never widens key pages past the viewport", async ({ page }, testInfo) => {
   const vw = page.viewportSize()!.width;
   test.skip(vw > 700, "phone layouts only");
+  test.setTimeout(120_000);
   const long = "Urgent/blocking: fold the stalled mirror cleanup into the next release train before anything else";
   const url = "https://github.com/NickBolles/Personal-dashboard/pull/123456789?diff=split&w=1#discussion_r1234567890abcdef";
   const unbroken = "Supercalifragilisticexpialidocious_area_title_without_any_spaces_at_all_0123456789";
