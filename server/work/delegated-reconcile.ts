@@ -188,7 +188,13 @@ export function sweepStaleMirrors(now = new Date()): { closed: number; removed: 
       closed++;
       continue;
     }
-    if (record && !staleOpenRecord(record, now)) continue;
+    if (record && !staleOpenRecord(record, now)) {
+      // Still in flight: carry the child's newer activity onto the mirror (the heartbeat syncDelegatedRuns
+      // writes), so it leaves the stale window and can't crowd later stale mirrors out of the batch (#260).
+      const seen = record.updatedAt ?? record.startedAt;
+      if (seen && seen > (row.updatedAt ?? "")) db.update(T).set({ updatedAt: seen }).where(eq(T.id, row.id)).run();
+      continue;
+    }
     db.delete(T).where(eq(T.id, row.id)).run();
     removed++;
   }

@@ -52,6 +52,23 @@ const norm = (t: string | null | undefined) =>
     .trim()
     .toLowerCase();
 
+const ELLIPSIS = /\s*(?:…|\.\.\.)$/;
+/** A truncated child title must keep at least this much of the goal to count as a prefix match. */
+const MIN_PREFIX = 12;
+/**
+ * Same task title. Hermes' session list truncates long child titles with "…" ("Subagent: Resume owning Jarvis
+ * Phase 2 implementation…"), so a child title ending in an ellipsis matches a dispatch goal that starts with it (#261).
+ */
+export function sameTaskTitle(childTitle: string | null | undefined, dispatchTitle: string | null | undefined): boolean {
+  const c = norm(childTitle);
+  const d = norm(dispatchTitle);
+  if (!c || !d) return false;
+  if (c === d) return true;
+  if (!ELLIPSIS.test(c)) return false;
+  const head = c.replace(ELLIPSIS, "").trim();
+  return head.length >= MIN_PREFIX && d.startsWith(head);
+}
+
 /**
  * A background delegate_task saves one record per sub-agent (`sa-…` handle, state running) and Hermes' session
  * list later reports each child SESSION as its own record (child session id, no delegation/handle, state unknown,
@@ -84,16 +101,19 @@ export function linkChildSessions(subs: ExecutionRecord[]): ExecutionRecord[] {
   };
   const ordered = [...dispatch].sort((x, y) => (x.startedAt ?? "").localeCompare(y.startedAt ?? "") || x.id.localeCompare(y.id));
   // 1) Title matches first, across all dispatches, so a fallback can never take another task's child.
+  // A truncated title that fits more than one dispatch in the window is ambiguous: no title pairing for it.
+  const claims = (c: ExecutionRecord) => dispatch.filter((o) => near(o, c) && sameTaskTitle(c.title, o.title)).length;
   for (const d of ordered) {
-    const byTitle = orphans.filter((c) => !used.has(c.id) && near(d, c) && norm(c.title) && norm(c.title) === norm(d.title));
+    const byTitle = orphans.filter((c) => !used.has(c.id) && near(d, c) && sameTaskTitle(c.title, d.title) && claims(c) === 1);
     if (byTitle.length === 1) pair(d, byTitle[0]!);
   }
   // 2) Time-only fallback: exactly one unpaired dispatch and one free child in the window, and the
   // child's title names no other dispatch.
-  const titles = new Set(dispatch.map((d) => norm(d.title)).filter(Boolean));
+  const namesOther = (c: ExecutionRecord, d: ExecutionRecord) =>
+    !sameTaskTitle(c.title, d.title) && dispatch.some((o) => o !== d && sameTaskTitle(c.title, o.title));
   for (const d of ordered) {
     if (merged.has(d.key)) continue;
-    const free = orphans.filter((c) => !used.has(c.id) && near(d, c) && !(norm(c.title) && titles.has(norm(c.title)) && norm(c.title) !== norm(d.title)));
+    const free = orphans.filter((c) => !used.has(c.id) && near(d, c) && !namesOther(c, d));
     if (free.length !== 1) continue;
     const rivals = ordered.filter((o) => o !== d && !merged.has(o.key) && near(o, free[0]!));
     if (rivals.length) continue;
