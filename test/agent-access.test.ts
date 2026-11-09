@@ -228,7 +228,11 @@ describe("Jarvis MCP", () => {
     // Editing another field must not erase who raised the still-open question.
     store.updateItem(owner, item.id, { nextAction: "Review the proposed archive" }, cid);
     expect(listDecisions(owner).entries.find((e) => e.itemId === item.id)?.askedBy).toBe("chiefofstaff");
-    expect((await call(token, "jarvis_raise_decision", { itemId: item.id, question: "Again?" })).value.error).toBe("decision_open");
+    // CW-2: several decisions can be open on one item; each gets its own stable D-n.
+    const again = await call(token, "jarvis_raise_decision", { itemId: item.id, question: "Again?" });
+    expect(again.isError).toBe(false);
+    expect(again.value.ref).toMatch(/^D-\d+$/);
+    expect(listDecisions(owner).entries.filter((e) => e.itemId === item.id)).toHaveLength(2);
   });
 
   it("validates input sizes and links only https / GitHub URLs", async () => {

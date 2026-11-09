@@ -53,7 +53,7 @@ export function useCoordinatorThings() {
   for (const item of Object.values(runs.data?.items ?? {})) {
     const external = item.agentRuns ?? [];
     for (const run of external) {
-      const state = isStalled(run, now) ? "stalled" : run.state;
+      const state = isStalled(run, now) ? "stalled" : run.state === "interrupted" ? "waiting" : run.state;
       if (state !== "done") {
         const row: CoordinatorRun = { id: run.id, itemId: item.itemId, title: run.title, state, at: run.updatedAt };
         if (state === "stalled" || (state === "failed" && failureStillCounts(run, external, now))) failing.push(row);

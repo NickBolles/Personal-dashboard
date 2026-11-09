@@ -50,6 +50,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] scheduled jobs didn't start", (err as Error).message);
   }
+  // CW-3: deferred decisions come back when due; LOW-RISK defaults apply on expiry (audited, undoable).
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { applyDueDecisions } = await import("./server/work/decision-store");
+    registerDispatcherTask("decision_defaults", 60_000, (now) => applyDueDecisions(now));
+  } catch (err) {
+    console.error("[jarvis] decision defaults didn't start", (err as Error).message);
+  }
   // Workflow reminders (W4, D6): opt-in, remind-only notifications; never start a model run.
   try {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");

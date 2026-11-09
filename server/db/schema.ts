@@ -1887,8 +1887,108 @@ export const agentRuns = sqliteTable(
     startedAt: text("started_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
     finishedAt: text("finished_at"),
+    /** CW-2: per-owner display number (R-n), never reused; assigned on insert (server/work/registered-runs.ts) */
+    seq: integer("seq"),
+    /** CW-2: the run that delegated this one (sub-agent tree); same owner */
+    parentRunId: text("parent_run_id"),
+    /** CW-2: JSON [{stage: build|ci|review|merge|deploy|live, state: pending|running|ok|failed|skipped, label?, url?}] (lib/cw-runs.ts) */
+    pipelineJson: text("pipeline_json"),
+    /** CW-2: JSON {name, holder?, since?} lock/gate the run holds or waits on (lib/cw-runs.ts) */
+    lockJson: text("lock_json"),
+    /** CW-2: when the run was marked interrupted (its coordinator session ended); cleared on resume */
+    interruptedAt: text("interrupted_at"),
   },
-  (t) => [index("agent_runs_item_idx").on(t.userId, t.itemId)],
+  (t) => [index("agent_runs_item_idx").on(t.userId, t.itemId), index("agent_runs_seq_idx").on(t.userId, t.seq)],
+);
+
+/**
+ * CW-2 owner decisions (D-n). Several open per item; `work_items.decision` stays as the
+ * back-compat projection of the item's head decision (server/work/decision-store.ts keeps
+ * them in sync). Only the owner session answers; agents raise and supersede their own.
+ */
+export const decisions = sqliteTable(
+  "decisions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** D-n display number, per owner, never reused */
+    seq: integer("seq").notNull(),
+    itemId: text("item_id")
+      .notNull()
+      .references(() => workItems.id, { onDelete: "cascade" }),
+    /** agent_runs.id of the raising run (no FK: the run can be pruned while the decision stays) */
+    runId: text("run_id"),
+    question: text("question").notNull(),
+    /** JSON string[] (≤ 6) one-tap choices */
+    choicesJson: text("choices_json").notNull().default("[]"),
+    recommended: text("recommended"),
+    /** JSON RiskFlag[] (lib/cw-decisions.ts); [] = low risk */
+    riskJson: text("risk_json").notNull().default("[]"),
+    /** JSON DecisionPack {why?, facts[], options[], evidence[], unblocks[]} (lib/cw-decisions.ts) */
+    packJson: text("pack_json").notNull().default("{}"),
+    /** full proposed content (legacy `detail`) */
+    detail: text("detail"),
+    /** server-built next step (legacy `action`), JSON {label, href} */
+    actionJson: text("action_json"),
+    /** applied when expires_at passes; only ever on low-risk decisions */
+    defaultChoice: text("default_choice"),
+    expiresAt: text("expires_at"),
+    /** open | answered | defaulted | superseded | deferred | withdrawn */
+    state: text("state").notNull().default("open"),
+    answeredChoice: text("answered_choice"),
+    answeredAt: text("answered_at"),
+    /** queue | item | default | push | chat */
+    answeredVia: text("answered_via"),
+    deferredUntil: text("deferred_until"),
+    supersededBy: text("superseded_by"),
+    /** "agent:<profile>" | "person:<userId>" | "system:<what>" */
+    raisedBy: text("raised_by").notNull(),
+    /** legacy askedAt of the work_items.decision JSON this row mirrors (pairs restores on undo) */
+    askedAt: text("asked_at").notNull().default(now),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("decisions_seq_idx").on(t.userId, t.seq),
+    index("decisions_item_idx").on(t.userId, t.itemId, t.state),
+    index("decisions_state_idx").on(t.userId, t.state, t.expiresAt),
+  ],
+);
+
+/** CW-4 structured run events (folded notices, progress, CI/deploy, locks): append-only. */
+export const runEvents = sqliteTable(
+  "run_events",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    runId: text("run_id")
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: "cascade" }),
+    /** lib/cw-runs.ts RUN_EVENT_TYPES */
+    type: text("type").notNull(),
+    summary: text("summary").notNull().default(""),
+    payloadJson: text("payload_json").notNull().default("{}"),
+    via: text("via"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("run_events_run_idx").on(t.runId, t.createdAt), index("run_events_user_idx").on(t.userId, t.createdAt)],
+);
+
+/** CW: when the owner last looked at a coordinator surface (chat | needs | running | …), for "Since HH:MM" and "Done since you looked". */
+export const ownerMarkers = sqliteTable(
+  "owner_markers",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    surface: text("surface").notNull(),
+    lastLookedAt: text("last_looked_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.surface] })],
 );
 
 /** 👍/👎 on an assistant message (chat, coordinator, smart card); the Feedback inbox + daily triage read it. */

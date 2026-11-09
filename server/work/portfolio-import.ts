@@ -6,6 +6,7 @@ import { audit } from "@/server/audit";
 import type { CurrentUser } from "@/server/auth";
 import { parseTags, serialiseTags } from "@/lib/item-tags";
 import { serialiseDecision } from "@/lib/decisions";
+import { adoptHeadDecision } from "./decision-store";
 import { planPortfolioImport, type ImportPlan, type PlanLink, type PortfolioMap } from "@/lib/portfolio-import";
 import { event, insertItem, recordOp, type OpOut } from "./store";
 import { ensureTags } from "./tags";
@@ -94,6 +95,7 @@ export function importPortfolioMap(
           })
           .where(eq(T.id, id))
           .run();
+        if (e.decision) adoptHeadDecision(tx, user.id, id);
         event(tx, id, user.id, { kind: "created", to: e.status ?? "captured", reason: "Imported from the portfolio map" });
         keyIds.set(e.key, id);
         payload.items.push(id);

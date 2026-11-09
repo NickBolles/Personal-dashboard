@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import type { DecisionEntry } from "@/lib/decisions";
+import { decisionAnswerBody, decisionAnswerPath, type DecisionEntry } from "@/lib/decisions";
 import { Dialog, ErrorNote, Field } from "@/components/ui";
 import { Button, ButtonLink, inputCls } from "@/components/ui/legacy";
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
@@ -16,8 +16,7 @@ export function DecisionAnswer({ entry, initialChoice = "" }: { entry: DecisionE
   const [answered, setAnswered] = useState(false);
   const [op, setOp] = useState<UndoOp | null>(null);
   const answer = useMutation({
-    mutationFn: () =>
-      api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(entry.itemId!)}/decision`, { answer: text.trim(), postToConversation: false }),
+    mutationFn: () => api.post<{ op: UndoOp | null }>(decisionAnswerPath(entry), decisionAnswerBody(entry, text.trim(), { postToConversation: false })),
     onSuccess: (result) => {
       setOp(result.op);
       setAnswered(true);

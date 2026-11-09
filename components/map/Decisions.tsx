@@ -8,7 +8,7 @@ import { cx, useToast, Button, ChipButton, EmptyState, Pill } from "@/components
 import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { useAccess } from "@/components/access";
 import "./map.css";
-import { decisionLogText, withdrawPost, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
+import { decisionAnswerBody, decisionAnswerPath, decisionLogText, withdrawPost, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
 
 export const DECISIONS_KEY = ["work", "decisions"] as const;
 
@@ -96,7 +96,7 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
   const { toast } = useToast();
   const [text, setText] = useState("");
   const answer = useMutation({
-    mutationFn: (a: string) => api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(e.itemId!)}/decision`, { answer: a }),
+    mutationFn: (a: string) => api.post<{ op: UndoOp | null }>(decisionAnswerPath(e), decisionAnswerBody(e, a)),
     onSuccess: (r, a) => {
       toast("Answered");
       if (r.op) onAnswered(r.op, `Decision on "${e.title}": ${decisionLogText(e.question, a)}`);

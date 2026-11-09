@@ -5,6 +5,7 @@
  * settles anything and never posts to a conversation without an explicit confirm.
  */
 import { z } from "zod";
+import type { DecisionPack, RiskFlag } from "./cw-decisions";
 
 /**
  * A server-built, tappable next step for a decision (e.g. an agent's device
@@ -14,7 +15,10 @@ import { z } from "zod";
 export type DecisionAction = { label: string; href: string };
 
 /** `detail` = the full proposed content (e.g. a scheduled job's note body), shown with the question. */
-export type ItemDecision = { question: string; choices: string[]; askedAt: string; detail?: string; action?: DecisionAction };
+export type ItemDecision = { question: string; choices: string[]; askedAt: string; detail?: string; action?: DecisionAction; ref?: string };
+
+/** "D-n" (lib/cw-decisions.ts): the decisions-table row this item decision projects. */
+const REF = /^D-[1-9]\d{0,8}$/;
 
 /** Same-origin app path only ("/x…", never "//host" or a scheme). */
 export const isAppPath = (href: unknown): href is string => typeof href === "string" && href.length <= 600 && /^\/(?![/\\])[^\s\\]*$/.test(href);
@@ -40,6 +44,11 @@ export const decisionAnswerSchema = z
     answer: z.string().trim().min(1).max(2000),
     /** also post the answer to the item's linked Hermes conversation (the client asks first) */
     postToConversation: z.boolean().optional(),
+    /** CW-2: the D-n the owner confirmed; the server refuses (409) when the item's head moved on */
+    ref: z
+      .string()
+      .regex(/^D-\d{1,9}$/)
+      .optional(),
   })
   .strict();
 
@@ -51,17 +60,22 @@ export function parseDecision(raw: string | null | undefined): ItemDecision | nu
     const choices = Array.isArray(v.choices) ? v.choices.filter((c): c is string => typeof c === "string" && !!c.trim()) : [];
     const detail = typeof v.detail === "string" && v.detail.trim() ? { detail: v.detail.slice(0, DECISION_DETAIL_MAX) } : {};
     const action = parseAction(v.action);
-    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "", ...detail, ...(action ? { action } : {}) };
+    const ref = typeof v.ref === "string" && REF.test(v.ref) ? { ref: v.ref } : {};
+    return { question: v.question, choices, askedAt: typeof v.askedAt === "string" ? v.askedAt : "", ...detail, ...(action ? { action } : {}), ...ref };
   } catch {
     return null;
   }
 }
 
-export function serialiseDecision(d: { question: string; choices?: string[]; detail?: string; action?: DecisionAction }, askedAt: string): string {
+export function serialiseDecision(
+  d: { question: string; choices?: string[]; detail?: string; action?: DecisionAction; ref?: string },
+  askedAt: string,
+): string {
   const choices = [...new Set((d.choices ?? []).map((c) => c.trim()).filter(Boolean))];
   const detail = d.detail?.trim().slice(0, DECISION_DETAIL_MAX);
   const action = parseAction(d.action);
-  return JSON.stringify({ question: d.question.trim(), choices, askedAt, ...(detail ? { detail } : {}), ...(action ? { action } : {}) });
+  const ref = d.ref && REF.test(d.ref) ? { ref: d.ref } : {};
+  return JSON.stringify({ question: d.question.trim(), choices, askedAt, ...(detail ? { detail } : {}), ...(action ? { action } : {}), ...ref });
 }
 
 /** The line appended to the item's summary (and the activity reason) when a decision is answered. */
@@ -98,6 +112,15 @@ export type DecisionEntry = {
   coordinatorSessionId?: string | null;
   /** Profile that raised this question, from its decision-request activity event (not the latest item editor). */
   askedBy?: string;
+  /** CW-2: the decisions-table row behind an item entry ("D-n"); answer it at /api/coordinator/decisions/<ref>/answer */
+  ref?: string;
+  decisionId?: string;
+  recommended?: string | null;
+  risk?: RiskFlag[];
+  pack?: DecisionPack;
+  defaultChoice?: string | null;
+  expiresAt?: string | null;
+  runId?: string | null;
 };
 
 export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
@@ -105,6 +128,18 @@ export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
 /** Newest first, with owner item decisions grouped before approvals and workflow proposals at the same time. */
 export function sortDecisions(entries: DecisionEntry[]): DecisionEntry[] {
   return [...entries].sort((a, b) => (a.at === b.at ? a.key.localeCompare(b.key) : a.at < b.at ? 1 : -1));
+}
+
+/** Body for decisionAnswerPath: head entries carry their D-n so a stale confirm can't answer a newer head. */
+export function decisionAnswerBody(e: Pick<DecisionEntry, "key" | "ref">, answer: string, extra: { postToConversation?: boolean } = {}) {
+  return e.key.startsWith("decision:") ? { answer } : { answer, ...extra, ...(e.ref ? { ref: e.ref } : {}) };
+}
+
+/** Where an item entry is answered: the item's head keeps the legacy route; other open D-n rows use the CW-2 route. */
+export function decisionAnswerPath(e: Pick<DecisionEntry, "key" | "itemId" | "ref">): string {
+  return e.ref && e.key.startsWith("decision:")
+    ? `/api/coordinator/decisions/${encodeURIComponent(e.ref)}/answer`
+    : `/api/work/items/${encodeURIComponent(e.itemId ?? "")}/decision`;
 }
 
 /** Undo of an answer withdraws its pending conversation post (#167); other offers stay. */
