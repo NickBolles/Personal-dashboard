@@ -116,15 +116,17 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
         ) : (
           <span className="min-w-0 truncate text-[13px] font-medium">{e.title}</span>
         )}
-        {e.areaTitle && !compact ? <span className="text-xs text-muted">{e.areaTitle}</span> : null}
+        {e.areaTitle && !compact ? <span className="min-w-0 text-xs text-muted wrap-anywhere">{e.areaTitle}</span> : null}
       </div>
-      <p id={qid} className="mt-1 text-sm break-words">
+      <p id={qid} className="mt-1 text-sm wrap-anywhere">
         {e.question}
       </p>
       {e.kind === "item" ? (
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label={`Answer: ${e.question}`}>
           {e.choices.map((c) => (
-            <ChipButton key={c} disabled={answer.isPending} onClick={() => answer.mutate(c)}>
+            // Choices are free text from agents (often a whole sentence): let a long one wrap inside the row
+            // instead of running past a phone viewport (#257: an 81-char choice widened prod /home to 445 px).
+            <ChipButton key={c} className="whitespace-normal py-1.5 text-left wrap-anywhere" disabled={answer.isPending} onClick={() => answer.mutate(c)}>
               {c}
             </ChipButton>
           ))}

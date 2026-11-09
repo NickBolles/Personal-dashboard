@@ -6,7 +6,7 @@ import { claimInstance, createSession, resolveUser, type CurrentUser } from "@/s
 import * as store from "@/server/work/store";
 import { mintAgentToken } from "@/server/agent-access/tokens";
 import { filedChatContext } from "@/server/work/chat-context";
-import { syncDelegatedRuns } from "@/server/work/delegated-runs";
+import { sameTaskTitle, syncDelegatedRuns } from "@/server/work/delegated-runs";
 import { registerAgentRun } from "@/server/work/registered-runs";
 import { executionRecords, executionState, upsertExecution } from "@/server/chat/execution-store";
 import { writeIndex } from "@/server/work/conversation-index";
@@ -327,5 +327,74 @@ describe("coordinator parity (server)", () => {
       ["sub:api_sw:sa-0-live", "running", null],
     ]);
     expect(sweepStaleMirrors(now)).toEqual({ closed: 0, removed: 0 });
+  });
+
+  it("pairs ended children whose session title Hermes truncated with an ellipsis (#261: prod sa-0/sa-1 titles)", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Truncated" }, cid);
+    store.placeConversation(owner, { sessionId: "api_tr", parentId: area.id, title: "Truncated coordinator" }, cid);
+    const at = "2026-11-06T16:41:20.000Z";
+    const goalA = "Resume owning Jarvis Phase 2 implementation from the handoff and ship the board";
+    const goalB = "Review the Phase 2 board for regressions and post findings on the PR";
+    const a = sub("sa-0-53892b77", "running", { delegationId: "deleg_t", subagentId: "sa-0-53892b77", title: goalA, startedAt: at, updatedAt: at });
+    const b = sub("sa-1-ff85b8a7", "running", { delegationId: "deleg_t", subagentId: "sa-1-ff85b8a7", title: goalB, startedAt: at, updatedAt: at });
+    const child = (id: string, title: string, end: string) =>
+      sub(id, "unknown", { delegationId: null, childSessionId: id, title, startedAt: "2026-11-06T16:41:23.000Z", endedAt: end, updatedAt: end });
+    const ca = child("20261106_164123_0e04e3", "Subagent: Resume owning Jarvis Phase 2 implementation…", "2026-11-06T18:02:00.000Z");
+    const cb = child("20261106_164123_451eb3", "Subagent: Review the Phase 2 board for regressi...", "2026-11-06T17:30:00.000Z");
+    syncDelegatedRuns(owner, "api_tr", "devchief", [a, b, ca, cb], new Date("2026-11-09T01:00:00Z"));
+    expect(
+      runsOf(area.id)
+        .map((r) => [r.delegationId, r.state, r.finishedAt])
+        .sort(),
+    ).toEqual([
+      ["sub:api_tr:sa-0-53892b77", "done", "2026-11-06T18:02:00.000Z"],
+      ["sub:api_tr:sa-1-ff85b8a7", "done", "2026-11-06T17:30:00.000Z"],
+    ]);
+  });
+
+  it("a truncated title shared by two dispatches pairs neither by title; a too-short prefix never matches", () => {
+    expect(sameTaskTitle("Subagent: Resume owning Jarvis…", "Resume owning Jarvis Phase 2")).toBe(true);
+    expect(sameTaskTitle("Subagent: Resume…", "Resume owning Jarvis Phase 2")).toBe(false);
+    expect(sameTaskTitle("Subagent: Resume owning Jarvis", "Resume owning Jarvis Phase 2")).toBe(false);
+    expect(sameTaskTitle("Subagent: Task B", "task b")).toBe(true);
+    const area = store.createItem(owner, { kind: "area", title: "Ambiguous" }, cid);
+    store.placeConversation(owner, { sessionId: "api_am", parentId: area.id, title: "Ambiguous coordinator" }, cid);
+    const at = "2026-11-08T02:55:00.000Z";
+    const a = sub("sa-0-am", "running", { delegationId: "deleg_am", subagentId: "sa-0-am", title: "Audit the release clone for drift", startedAt: at });
+    const b = sub("sa-1-am", "running", { delegationId: "deleg_am", subagentId: "sa-1-am", title: "Audit the release clone for secrets", startedAt: at });
+    const c = sub("child_am", "unknown", {
+      delegationId: null,
+      childSessionId: "child_am",
+      title: "Subagent: Audit the release clone for…",
+      startedAt: "2026-11-08T02:55:02.000Z",
+      endedAt: "2026-11-08T03:00:00.000Z",
+      updatedAt: "2026-11-08T03:00:00.000Z",
+    });
+    syncDelegatedRuns(owner, "api_am", "devchief", [a, b, c], new Date("2026-11-08T04:00:00Z"));
+    expect(
+      runsOf(area.id)
+        .map((r) => r.state)
+        .sort(),
+    ).toEqual(["running", "running"]);
+  });
+
+  it("sweep (#260) heartbeats kept live mirrors so they leave the stale batch", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Heartbeat" }, cid);
+    store.placeConversation(owner, { sessionId: "api_hb", parentId: area.id, title: "Heartbeat coordinator" }, cid);
+    const then = new Date("2026-11-07T00:00:00Z");
+    const now = new Date("2026-11-09T01:00:00Z");
+    const live = sub("sa-0-hb", "running", {
+      delegationId: "deleg_hb",
+      subagentId: "sa-0-hb",
+      title: "Long task",
+      startedAt: then.toISOString(),
+      updatedAt: then.toISOString(),
+    });
+    syncDelegatedRuns(owner, "api_hb", "chiefofstaff", [live], then);
+    // the persisted record shows activity an hour ago, but the mirror row was never touched since
+    upsertExecution("api_hb", { ...live, updatedAt: "2026-11-09T00:00:00.000Z" }, "chiefofstaff");
+    expect(sweepStaleMirrors(now)).toEqual({ closed: 0, removed: 0 });
+    const row = runsOf(area.id).find((r) => r.delegationId === "sub:api_hb:sa-0-hb")!;
+    expect([row.state, row.updatedAt]).toEqual(["running", "2026-11-09T00:00:00.000Z"]);
   });
 });
