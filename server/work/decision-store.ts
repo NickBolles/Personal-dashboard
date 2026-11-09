@@ -319,7 +319,8 @@ function closeWithAnswer(tx: Tx, userId: string, r: Row, answer: string, state: 
   const nextDecision = isHead ? (promoted ? headJson(promoted) : null) : undefined;
   event(tx, r.itemId, userId, {
     kind: "decision",
-    reason: `${decisionRef(r.seq)} · ${decisionLogText(r.question, answer)}${state === "defaulted" ? " (default applied)" : ""}`.slice(0, 1000),
+    // Same activity text as before D-n rows ("Decision: <q> → <a>"); the ref lives on the decision row.
+    reason: `${decisionLogText(r.question, answer)}${state === "defaulted" ? " (default applied)" : ""}`.slice(0, 1000),
   });
   const prev: Record<string, unknown> = { summary: item.summary };
   const next: Record<string, unknown> = { summary };
