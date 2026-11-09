@@ -488,7 +488,13 @@ html[data-kb="open"] .gc-tray-qa {
     left: 8px;
     right: 8px;
     bottom: calc(82px + env(safe-area-inset-bottom));
-    max-width: none;
+    /* A <button> shrinks to fit even with left+right set, so long failing text used to grow it past the
+       viewport (429 px at 412, #257): pin the width to the inset box and clip; the line ellipsizes. */
+    box-sizing: border-box;
+    width: calc(100% - 16px);
+    max-width: calc(100% - 16px);
+    min-width: 0;
+    overflow: hidden;
     min-height: 52px;
     border-radius: 14px;
   }
@@ -509,6 +515,8 @@ html[data-kb="open"] .gc-tray-qa {
   }
   .gc-tray-copy {
     flex: 1;
+    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
   }
   .gc-tray-copy strong {
@@ -532,7 +540,10 @@ html[data-kb="open"] .gc-tray-qa {
   .gc-tray .gc-tray-counts {
     display: inline-flex;
     gap: 5px;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 50%;
+    overflow: hidden;
     font-size: 0.6875rem;
   }
   .gc-tray-counts > span {

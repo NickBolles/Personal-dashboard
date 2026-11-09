@@ -12,8 +12,20 @@ import type { ExecutionRecord, ExecState } from "@/lib/chat-execution";
 export const AUTO_RUN_PREFIX = "sub:";
 const MAX_PER_CALL = 20;
 
-const runState = (s: ExecState): "running" | "waiting" | "done" | "failed" | null =>
+export const runState = (s: ExecState): "running" | "waiting" | "done" | "failed" | null =>
   s === "running" ? "running" : s === "waiting" ? "waiting" : s === "completed" ? "done" : s === "failed" || s === "cancelled" ? "failed" : null;
+
+/**
+ * A child that is not finished and shows no activity for this long has an unknown fate (Hermes never reported
+ * its end): it is never mirrored as a running run, and an existing open mirror for it is withdrawn (#258).
+ * Same span as the reconcile's recent-conversation window.
+ */
+export const STALE_CHILD_MS = 24 * 60 * 60_000;
+/** True when an unfinished record's last known activity (update, else start) is older than STALE_CHILD_MS. */
+export function staleOpenRecord(r: Pick<ExecutionRecord, "updatedAt" | "startedAt">, now: Date): boolean {
+  const t = Date.parse(r.updatedAt ?? r.startedAt ?? "");
+  return Number.isFinite(t) && now.getTime() - t > STALE_CHILD_MS;
+}
 
 const when = (iso: string | null | undefined, fallback: Date) => {
   const t = iso ? Date.parse(iso) : NaN;
@@ -167,8 +179,21 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
     // Historical results keep their own times, so an old failure never looks newer than a later success.
     const startedAt = when(r.startedAt, now);
     const finishedAt = when(r.endedAt ?? r.updatedAt, now);
+    const open = next !== "done" && next !== "failed";
     if (own) {
       if (own.tokenId !== null) continue;
+      if (
+        open &&
+        (own.state === "running" || own.state === "waiting") &&
+        staleOpenRecord(r, now) &&
+        now.getTime() - Date.parse(own.updatedAt) > STALE_CHILD_MS
+      ) {
+        // Unfinished child silent for over a day: its fate is unknown, so the mirror is withdrawn rather
+        // than counted as Stalled forever (#258). The execution record itself is kept.
+        db.delete(T).where(eq(T.id, own.id)).run();
+        changed++;
+        continue;
+      }
       if (theirs) {
         // A jarvis_run_start registration arrived after the automatic mirror: keep only theirs.
         db.delete(T).where(eq(T.id, own.id)).run();
@@ -202,6 +227,9 @@ export function syncDelegatedRuns(user: CurrentUser, parentSessionId: string, pr
     if (!(r.delegationId || r.childSessionId || r.subagentId)) continue;
     // Unknown state: wait until the transcript says running/finished instead of guessing "running".
     if (theirs || !next) continue;
+    // Back-fill (#258): an old child is mirrored only once its final state is known (done/failed);
+    // an unfinished child silent for over a day would otherwise appear as a Stalled run.
+    if (open && staleOpenRecord(r, now)) continue;
     const { runId } = registerAgentRun(
       user,
       who,

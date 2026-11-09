@@ -80,8 +80,9 @@ function record(row: typeof T.$inferSelect): ExecutionRecord {
     links: JSON.parse(row.linksJson) as ExecutionRecord["links"],
   };
 }
-export function executionRecords(parentSessionId: string) {
-  const rows = getDb().select().from(T).where(eq(T.parentSessionId, parentSessionId)).orderBy(desc(T.updatedAt)).limit(EXECUTION_LIMIT).all();
+/** `limit` bounds the page read (latest first); the stale-mirror sweep passes a larger one so older evidence is seen. */
+export function executionRecords(parentSessionId: string, limit = EXECUTION_LIMIT) {
+  const rows = getDb().select().from(T).where(eq(T.parentSessionId, parentSessionId)).orderBy(desc(T.updatedAt)).limit(limit).all();
   const groups: (typeof rows)[] = [];
   const same = (a: (typeof rows)[number], b: (typeof rows)[number]) =>
     a.source === b.source &&
