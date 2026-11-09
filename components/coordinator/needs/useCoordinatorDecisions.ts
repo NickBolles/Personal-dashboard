@@ -51,14 +51,20 @@ export function useDecisionFeedbackController() {
   const undoing = useRef(new Set<string>());
   const undoneOps = useRef(new Set<string>());
   const stagedRefs = useRef(new Set<string>());
+  /** Writes staged behind a grace period: committed (not dropped) if the panel unmounts first. */
+  const pendingExpiry = useRef(new Map<string, () => void>());
   const invalidate = useInvalidateDecisions();
   const defer = useDeferDecision();
   const { toast } = useToast();
   useEffect(() => {
     const active = timers.current;
+    const pending = pendingExpiry.current;
     return () => {
       active.forEach(clearTimeout);
       active.clear();
+      // Leaving the tab is not Undo: a staged defer still happens.
+      pending.forEach((commit) => commit());
+      pending.clear();
     };
   }, []);
 
@@ -73,6 +79,7 @@ export function useDecisionFeedbackController() {
       if (undoing.current.has(id)) return;
       undoing.current.add(id);
       clearTimeout(timers.current.get(id));
+      pendingExpiry.current.delete(id);
       try {
         await action();
         remove(id);
@@ -84,10 +91,12 @@ export function useDecisionFeedbackController() {
       }
     };
     setNotices((rows) => [...rows, { id, text, undo }]);
+    if (onExpire) pendingExpiry.current.set(id, onExpire);
     timers.current.set(
       id,
       setTimeout(() => {
         remove(id);
+        pendingExpiry.current.delete(id);
         onExpire?.();
       }, DECISION_UNDO_MS),
     );

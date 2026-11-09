@@ -86,6 +86,9 @@ export function GlobalCoordinator() {
   const v3 = trayLine({ decisions: cwDecisions.data?.decisions ?? [], runs: cwRuns.data?.runs ?? [], now: nowMs });
   // Needs you = open D-n rows + the other owner asks the old list carried (run approvals, workflow proposals, stalled runs).
   const otherAsks = things.decisions.filter((e) => !e.key.startsWith("item:") && !e.key.startsWith("decision:"));
+  // Hermes/job runs and failing PR checks have no R-n row: keep them reachable under Running.
+  const cwRunIds = new Set((cwRuns.data?.runs ?? []).map((r) => r.id));
+  const otherRuns = [...things.running, ...things.failing.filter((f) => !things.running.some((r) => r.id === f.id))].filter((r) => !cwRunIds.has(r.id));
   const needsCount = cwDecisions.data ? cwDecisions.data.counts.open + otherAsks.length : things.needsYou;
   const useV3 =
     !line.card &&
@@ -480,6 +483,20 @@ export function GlobalCoordinator() {
                   onSteer={(ref, title) => prefill(`Steer ${ref} (${title.slice(0, 120)}): `)}
                   onCommand={prefill}
                 />
+              ) : null}
+              {t.id === "running" && tab === "running" && otherRuns.length ? (
+                <section className="gc-list" aria-label="Other activity">
+                  <h3 className="gc-hint">Jobs and checks</h3>
+                  {otherRuns.map((run) => (
+                    <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
+                      <strong>{run.title}</strong>
+                      <span data-tone={run.state === "failed" || run.state === "stalled" ? "bad" : "ai"}>
+                        {run.state}
+                        {run.at ? ` · ${relativeTime(run.at)}` : ""}
+                      </span>
+                    </Link>
+                  ))}
+                </section>
               ) : null}
               {t.id === "changes" ? (
                 <div className="gc-changes">

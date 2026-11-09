@@ -1708,6 +1708,8 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
   );
   await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items, active: Object.values(items) } }));
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemoDecisions, count: 44 } }));
+  // v3 count = open D-n rows (42) + the run approvals / workflow proposals among mapDemoDecisions (2) = 44.
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 42, deferred: 0 } } }));
   for (const zoom of [false, true]) {
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });

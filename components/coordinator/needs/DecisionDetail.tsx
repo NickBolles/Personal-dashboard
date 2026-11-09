@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { AlertIcon, ChevronIcon } from "@/components/icons";
-import { Button, Card, IconButton, Pill, useNow } from "@/components/ui";
+import { Button, ButtonLink, Card, IconButton, Pill, useNow } from "@/components/ui";
+import { Markdown } from "@/components/markdown/Markdown";
 import { RISK_LABEL, type Decision } from "@/lib/cw-decisions";
 import { ageLabel, decisionKeyAction, defaultLine, deferUntil, isRisky, nextAfterAnswer, pagerState, safeEvidenceHref } from "@/lib/coordinator/needs";
 import { DecisionId, DecisionMenu, DecisionNotices } from "./NeedsList";
@@ -159,6 +160,24 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
       </nav>
       <h3 className="gc-needs-question">{d.question}</h3>
       {d.pack.why ? <p className="gc-needs-why">{d.pack.why}</p> : null}
+      {d.detail ? (
+        <div className="gc-needs-detail-text min-w-0">
+          <Markdown text={d.detail} />
+        </div>
+      ) : null}
+      {d.action && d.action.href.startsWith("/") && !d.action.href.startsWith("//") ? (
+        <ButtonLink href={d.action.href} size="sm" variant="primary">
+          {d.action.label}
+        </ButtonLink>
+      ) : null}
+      {!d.choices.length ? (
+        <p className="gc-needs-why">
+          No one-tap answers here.{" "}
+          <ButtonLink href={`/areas?item=${encodeURIComponent(d.itemId)}`} size="sm">
+            Answer on the item
+          </ButtonLink>
+        </p>
+      ) : null}
       <dl className="gc-needs-facts">
         {facts.map((fact, i) => (
           <div key={`${fact.label}-${i}`}>
