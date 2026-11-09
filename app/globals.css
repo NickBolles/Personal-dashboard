@@ -1866,6 +1866,9 @@ button:active > .dock-orb {
     padding: 0 10px;
     cursor: pointer;
     white-space: nowrap;
+    /* .k-pick may shrink below its text (min-width: 0); never let the text paint (and scroll) past the chip.
+       Long free-text chips should opt into wrapping (whitespace-normal), see Decisions. */
+    overflow: hidden;
   }
   .k-pick-btn:disabled {
     opacity: 0.45;

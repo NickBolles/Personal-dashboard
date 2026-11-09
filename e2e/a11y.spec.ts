@@ -963,3 +963,50 @@ test("feedback inbox and rate dialogs: axe clean and reflow at 200% text zoom", 
   await zoomed();
   await page.keyboard.press("Escape");
 });
+
+// #257: real prod data (an agent's 81-character decision choice) widened every phone page to 445 px, so the
+// fixed coordinator tray filled the wider layout viewport and its composer sat off-screen. Mobile emulation
+// WIDENS innerWidth/clientWidth when a page overflows, so compare against the configured viewport instead.
+test("phone width guard: long real-shaped data never widens key pages past the viewport", async ({ page }, testInfo) => {
+  const vw = page.viewportSize()!.width;
+  test.skip(vw > 700, "phone layouts only");
+  const long = "Urgent/blocking: fold the stalled mirror cleanup into the next release train before anything else";
+  const url = "https://github.com/NickBolles/Personal-dashboard/pull/123456789?diff=split&w=1#discussion_r1234567890abcdef";
+  const unbroken = "Supercalifragilisticexpialidocious_area_title_without_any_spaces_at_all_0123456789";
+  const at = new Date().toISOString();
+  const entries = [
+    {
+      key: "item:mi_long",
+      kind: "item",
+      title: `${unbroken} item`,
+      question: `Which option should we take? See ${url}`,
+      choices: [long, `Fold into run cards and drop the separate list ${url}`, "Later"],
+      href: "/areas?item=mi_long",
+      at,
+      itemId: "mi_long",
+      areaTitle: unbroken,
+      sessionId: null,
+    },
+    {
+      key: "approval:r_long",
+      kind: "approval",
+      title: `Hermes needs your approval: ${unbroken}`,
+      question: `Run ${url}`,
+      choices: [],
+      href: "/chat/sess_demo",
+      at,
+    },
+    { key: "stalled:a_long", kind: "stalled", title: `Stalled: ${unbroken}`, question: long, choices: [], href: "/areas?item=mi_long", at },
+  ];
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { count: 987654, entries } }));
+  const offenders: string[] = [];
+  for (const path of ["/home", "/areas", "/decisions", "/chat", "/resume"]) {
+    await page.goto(path);
+    if (path !== "/chat" && path !== "/resume") await expect(page.getByText(long, { exact: true }).first()).toBeVisible();
+    else await expect(page.locator("main").first()).toBeVisible();
+    await page.waitForTimeout(800);
+    const r = await page.evaluate(() => ({ iw: innerWidth, sw: document.documentElement.scrollWidth }));
+    if (r.iw > vw || r.sw > vw) offenders.push(`${path}: innerWidth ${r.iw}, scrollWidth ${r.sw} > ${vw}`);
+  }
+  expect(offenders, `${testInfo.project.name}: pages wider than the phone viewport`).toEqual([]);
+});
