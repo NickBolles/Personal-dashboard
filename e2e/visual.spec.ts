@@ -1662,6 +1662,86 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
   }
 });
 
+test("chief of staff phone tray: a long failing line truncates inside the viewport and the composer stays reachable (#257)", async ({ page }, info) => {
+  test.skip(info.project.name === "desktop", "Phone tray");
+  await stubGlobalCoordinator(page);
+  // Prod state that overflowed release 65: 21 stalled runs + 44 decisions → "Failing · Chief of staff / 21 runs need attention" + badges.
+  const stale = new Date(Date.now() - 26 * 3600_000).toISOString();
+  const items = Object.fromEntries(
+    Array.from({ length: 21 }, (_, i) => {
+      const itemId = `wk_tray_${i}`;
+      const run = {
+        id: `arun_tray_${i}`,
+        title: `Delegated task with a fairly long title number ${i}`,
+        profile: "chiefofstaff",
+        state: "running",
+        summary: null,
+        prUrl: null,
+        startedAt: stale,
+        updatedAt: stale,
+      };
+      const info = {
+        itemId,
+        areaId: null,
+        title: `Tray item ${i}`,
+        who: null,
+        live: "running",
+        liveAt: stale,
+        sessionId: null,
+        runs: 1,
+        prs: [],
+        report: null,
+        progress: null,
+        agentRuns: [run],
+      };
+      return [itemId, info];
+    }),
+  );
+  await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items, active: Object.values(items) } }));
+  await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemoDecisions, count: 44 } }));
+  for (const zoom of [false, true]) {
+    await page.goto("/home");
+    if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
+    await expect(tray).toContainText("21 runs need attention");
+    await expect(tray.locator(".gc-tray-counts")).toContainText("44");
+    await page.waitForTimeout(200);
+    const m = await tray.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const line = el.querySelector(".gc-priority") as HTMLElement;
+      return {
+        left: r.left,
+        right: r.right,
+        vw: window.innerWidth,
+        cw: document.documentElement.clientWidth,
+        sw: document.documentElement.scrollWidth,
+        truncated: line.scrollWidth > line.clientWidth,
+      };
+    });
+    const label = `${info.project.name}${zoom ? " @200%" : ""}: ${JSON.stringify(m)}`;
+    expect(m.vw, label).toBe(page.viewportSize()!.width);
+    expect(m.left, label).toBeGreaterThanOrEqual(0);
+    expect(m.right, label).toBeLessThanOrEqual(m.cw);
+    expect(m.sw, label).toBeLessThanOrEqual(m.cw + 1);
+    if (zoom) expect(m.truncated, label).toBe(true);
+    await expectNoHorizontalOverflow(page);
+    // The sheet's composer is on screen and takes a tap (nothing is sent).
+    await tray.click();
+    const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+    const input = sheet.getByTestId("gc-input");
+    await expect(input).toBeVisible();
+    const box = (await input.boundingBox())!;
+    expect(box.y + box.height, label).toBeLessThanOrEqual(page.viewportSize()!.height);
+    expect(box.x + box.width, label).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await input.click();
+    await input.fill("tray reachable");
+    await expect(input).toHaveValue("tray reachable");
+    await input.fill("");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
+});
+
 /** Batch 5 (H1/C4/A3/C1): House by room, chat list chips + unread, area ⋯ settings dialog, @profile chat badge. */
 const HIDE_OVERLAYS = 'nav[aria-label="Primary"], .chat-dock, .k-dock, [data-command-dock] { visibility: hidden !important; }';
 const conversationsVisual = (() => {
@@ -1912,6 +1992,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: fixture }));
     // Never reaches the mock (or real Skylight): a fixed verified answer for the final-state shot.
     await page.route(/\/api\/skylight\/write$/, (route) => route.fulfill({ json: { ok: true, writeId: "vis-write", undoable: true, message: "Verified" } }));
+    // Everything ABOVE the chores section is fixed too: the section's height in the shot is rounded from its
+    // fractional page offset, so live mock Today data (todos dated by the real CT day, "Upcoming" vs "Due
+    // today", next event) moved it 826↔827 px in the 00:00–06:00Z window even with the browser clock pinned.
+    await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
+    await page.route(/\/api\/home\/pulse(?:\?.*)?$/, (route) => route.fulfill({ json: homePulseVisual }));
     await page.goto("/home");
     await page.evaluate(() => document.getElementById("vis-hide-chores")?.remove());
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);

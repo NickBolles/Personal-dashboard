@@ -1,10 +1,12 @@
 import "server-only";
-import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, like, lt } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import { userById, type CurrentUser } from "@/server/auth";
 import { processSingleton } from "@/server/singleton";
+import { executionRecords } from "@/server/chat/execution-store";
 import { readIndex } from "./conversation-index";
-import { takeCapped } from "./delegated-runs";
+import { AUTO_RUN_PREFIX, linkChildSessions, mirrorKey, runState, STALE_CHILD_MS, staleOpenRecord, takeCapped } from "./delegated-runs";
+import { finishRegisteredRun } from "./registered-runs";
 
 /**
  * Background reconcile for coordinator parity: sub-agents become agent runs on their item even when nobody
@@ -25,8 +27,8 @@ const ACTIVE_RECHECK_MS = 15 * 60_000;
 export const ACTIVE_CHILD_WINDOW_MS = 7 * 24 * 60 * 60_000;
 
 type Candidate = { user: CurrentUser; sessionId: string; marker: string; at: number };
-type State = { seen: Map<string, string>; busy: boolean };
-const state = () => processSingleton<State>("coordinator_run_reconcile", () => ({ seen: new Map(), busy: false }));
+type State = { seen: Map<string, string>; busy: boolean; sweptAt: number };
+const state = () => processSingleton<State>("coordinator_run_reconcile", () => ({ seen: new Map(), busy: false, sweptAt: 0 }));
 
 const ACTIVE_STATES = ["running", "waiting", "unknown"] as const;
 
@@ -93,6 +95,14 @@ export function reconcileDelegatedRuns(
 ): { queued: number; done: Promise<void> } {
   const s = state();
   if (s.busy) return { queued: 0, done: Promise.resolve() };
+  if (!(now.getTime() - s.sweptAt < SWEEP_EVERY_MS)) {
+    s.sweptAt = now.getTime();
+    try {
+      sweepStaleMirrors(now);
+    } catch {
+      // best effort: retried on the next sweep
+    }
+  }
   const list = reconcileCandidates(now);
   if (!list.length) return { queued: 0, done: Promise.resolve() };
   s.busy = true;
@@ -122,9 +132,71 @@ async function defaultRead(user: CurrentUser, sessionId: string) {
   return chatExecution(user, sessionId);
 }
 
+/** how often the stale-mirror sweep runs (first tick after start, then hourly) */
+const SWEEP_EVERY_MS = 60 * 60_000;
+const SWEEP_MAX_ROWS = 200;
+
+/**
+ * Clean-up for #258 (release 65's back-fill registered old sub-agents as `running`): open automatic mirrors
+ * with no update for over a day are settled from the persisted execution records alone (no Hermes call, so it
+ * also reaches conversations the reconcile no longer re-reads). Child known to have ended → the run finishes
+ * with the child's state and end time; still in flight with recent activity → left alone; fate unknown →
+ * the mirror is withdrawn, exactly what the fixed back-fill would have done. Token-owned registrations are
+ * never touched. Idempotent: a second pass finds nothing.
+ */
+export function sweepStaleMirrors(now = new Date()): { closed: number; removed: number } {
+  const db = getDb();
+  const T = schema.agentRuns;
+  const cutoff = new Date(now.getTime() - STALE_CHILD_MS).toISOString();
+  const rows = db
+    .select()
+    .from(T)
+    .where(and(isNull(T.tokenId), like(T.delegationId, `${AUTO_RUN_PREFIX}%`), inArray(T.state, ["running", "waiting"]), lt(T.updatedAt, cutoff)))
+    .limit(SWEEP_MAX_ROWS)
+    .all();
+  const byParent = new Map<string, ReturnType<typeof linkChildSessions>>();
+  const recordsOf = (parent: string) => {
+    let list = byParent.get(parent);
+    if (!list) {
+      list = linkChildSessions(executionRecords(parent).filter((r) => r.source === "subagent"));
+      byParent.set(parent, list);
+    }
+    return list;
+  };
+  let closed = 0;
+  let removed = 0;
+  for (const row of rows) {
+    const user = userById(row.userId);
+    if (!user) continue;
+    const rest = row.delegationId!.slice(AUTO_RUN_PREFIX.length);
+    const cut = rest.indexOf(":");
+    // `sub:<parent>:<record id>`; pre-#251 keys (`sub:<record id>`) name no parent, so their fate is unknown.
+    const parent = cut > 0 ? rest.slice(0, cut) : null;
+    const record = parent ? recordsOf(parent).find((r) => mirrorKey(parent, r.id) === row.delegationId) : undefined;
+    const next = record ? runState(record.state) : null;
+    if (record && (next === "done" || next === "failed")) {
+      const at = Date.parse(record.endedAt ?? record.updatedAt ?? "");
+      finishRegisteredRun(
+        user,
+        row.id,
+        next,
+        (record.summary ?? record.error ?? (next === "done" ? "Finished" : "Failed")).slice(0, 2000),
+        Number.isFinite(at) && at <= now.getTime() ? new Date(at) : now,
+      );
+      closed++;
+      continue;
+    }
+    if (record && !staleOpenRecord(record, now)) continue;
+    db.delete(T).where(eq(T.id, row.id)).run();
+    removed++;
+  }
+  return { closed, removed };
+}
+
 /** tests only */
 export function __resetReconcile() {
   const s = state();
   s.seen.clear();
   s.busy = false;
+  s.sweptAt = 0;
 }

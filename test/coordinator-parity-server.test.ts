@@ -10,7 +10,7 @@ import { syncDelegatedRuns } from "@/server/work/delegated-runs";
 import { registerAgentRun } from "@/server/work/registered-runs";
 import { executionRecords, executionState, upsertExecution } from "@/server/chat/execution-store";
 import { writeIndex } from "@/server/work/conversation-index";
-import { __resetReconcile, RECONCILE_MAX_PER_TICK, reconcileDelegatedRuns } from "@/server/work/delegated-reconcile";
+import { __resetReconcile, RECONCILE_MAX_PER_TICK, reconcileDelegatedRuns, sweepStaleMirrors } from "@/server/work/delegated-reconcile";
 import type { ExecutionRecord } from "@/lib/chat-execution";
 
 const cid = "test";
@@ -257,5 +257,72 @@ describe("coordinator parity (server)", () => {
     const rows = runsOf(area.id);
     expect(rows.find((r) => r.delegationId === "sub:api_p:sa-0-x")?.state).toBe("running");
     expect(rows.find((r) => r.delegationId === "sub:api_p:sa-1-x")?.state).toBe("done");
+  });
+
+  it("back-fill (#258): old unfinished children are not mirrored; old children with a known end are mirrored terminal", () => {
+    const area = store.createItem(owner, { kind: "area", title: "Backfill" }, cid);
+    store.placeConversation(owner, { sessionId: "api_bf", parentId: area.id, title: "Backfill coordinator" }, cid);
+    const now = new Date("2026-11-09T01:00:00Z");
+    const old = "2026-11-05T13:45:00.000Z";
+    const lost = sub("sa-0-lost", "running", { delegationId: "deleg_l", subagentId: "sa-0-lost", title: "Lost task", startedAt: old, updatedAt: old });
+    const ended = sub("sa-0-end", "running", { delegationId: "deleg_e", subagentId: "sa-0-end", title: "Ended task", startedAt: old, updatedAt: old });
+    const endedChild = sub("child_end", "unknown", {
+      delegationId: null,
+      childSessionId: "child_end",
+      title: "Subagent: Ended task",
+      startedAt: "2026-11-05T13:45:01.000Z",
+      endedAt: "2026-11-05T14:10:00.000Z",
+      updatedAt: "2026-11-05T14:10:00.000Z",
+    });
+    const failedOld = sub("sa-0-fail", "failed", { delegationId: "deleg_f", subagentId: "sa-0-fail", startedAt: old, updatedAt: old, error: "boom" });
+    const fresh = sub("sa-0-new", "running", { delegationId: "deleg_n", subagentId: "sa-0-new", startedAt: "2026-11-09T00:40:00.000Z" });
+    syncDelegatedRuns(owner, "api_bf", "chiefofstaff", [lost, ended, endedChild, failedOld, fresh], now);
+    const rows = runsOf(area.id);
+    expect(rows.map((r) => [r.delegationId, r.state, r.finishedAt]).sort()).toEqual([
+      ["sub:api_bf:sa-0-end", "done", "2026-11-05T14:10:00.000Z"],
+      ["sub:api_bf:sa-0-fail", "failed", old],
+      ["sub:api_bf:sa-0-new", "running", null],
+    ]);
+    // an existing open mirror whose child went silent for over a day is withdrawn on the next read
+    syncDelegatedRuns(owner, "api_bf", "chiefofstaff", [fresh], now);
+    expect(syncDelegatedRuns(owner, "api_bf", "chiefofstaff", [fresh], new Date("2026-11-10T02:00:00Z"))).toBe(1);
+    expect(runsOf(area.id).some((r) => r.delegationId === "sub:api_bf:sa-0-new")).toBe(false);
+  });
+
+  it("reconcile sweep (#258) settles release-65 back-filled mirrors from persisted records, once, without touching agent registrations", async () => {
+    __resetReconcile();
+    const area = store.createItem(owner, { kind: "area", title: "Sweep" }, cid);
+    store.placeConversation(owner, { sessionId: "api_sw", parentId: area.id, title: "Sweep coordinator" }, cid);
+    const then = new Date("2026-11-05T13:50:00Z");
+    const now = new Date("2026-11-09T01:00:00Z");
+    const at = "2026-11-05T13:45:00.000Z";
+    const lost = sub("sa-0-lost", "running", { delegationId: "deleg_l", subagentId: "sa-0-lost", title: "Lost task", startedAt: at, updatedAt: at });
+    const ended = sub("sa-0-end", "running", { delegationId: "deleg_e", subagentId: "sa-0-end", title: "Ended task", startedAt: at, updatedAt: at });
+    const child = sub("child_end", "unknown", {
+      delegationId: null,
+      childSessionId: "child_end",
+      title: "Subagent: Ended task",
+      startedAt: "2026-11-05T13:45:01.000Z",
+      updatedAt: "2026-11-05T13:46:00.000Z",
+    });
+    // What release 65 left behind: mirrors registered as running with their historical start (stalled ever since).
+    syncDelegatedRuns(owner, "api_sw", "chiefofstaff", [lost, ended, child], then);
+    expect(runsOf(area.id).map((r) => r.state)).toEqual(["running", "running"]);
+    // Persisted evidence now: the paired child session ended; the other dispatch never reported back.
+    upsertExecution("api_sw", lost, "chiefofstaff");
+    upsertExecution("api_sw", ended, "chiefofstaff");
+    upsertExecution("api_sw", { ...child, endedAt: "2026-11-05T14:12:56.000Z", updatedAt: "2026-11-05T14:12:56.000Z" }, "chiefofstaff");
+    registerAgentRun(owner, "momentumchief", { itemId: area.id, title: "Token-owned", delegationId: "deleg_tok" }, cid, "tok_1", then);
+    const recent = sub("sa-0-live", "running", { delegationId: "deleg_v", subagentId: "sa-0-live", startedAt: "2026-11-09T00:30:00.000Z" });
+    syncDelegatedRuns(owner, "api_sw", "chiefofstaff", [recent], new Date("2026-11-09T00:30:00Z"));
+    const read = vi.fn(async () => 0);
+    await reconcileDelegatedRuns(now, read).done;
+    const rows = runsOf(area.id);
+    expect(rows.map((r) => [r.delegationId, r.state, r.finishedAt]).sort()).toEqual([
+      ["deleg_tok", "running", null],
+      ["sub:api_sw:sa-0-end", "done", "2026-11-05T14:12:56.000Z"],
+      ["sub:api_sw:sa-0-live", "running", null],
+    ]);
+    expect(sweepStaleMirrors(now)).toEqual({ closed: 0, removed: 0 });
   });
 });
