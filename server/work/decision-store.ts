@@ -44,7 +44,7 @@ type Db = ReturnType<typeof getDb> | Tx;
 type Row = typeof D.$inferSelect;
 
 /** Undo marker stored on the work_op: which decision row the op raised and/or closed. */
-export type DecisionOp = { raised?: string; closed?: string };
+export type DecisionOp = { raised?: string; closed?: string; deferred?: { id: string; prevUntil: string | null; prevState: "open" | "deferred" } };
 
 const nowIso = () => new Date().toISOString();
 
@@ -417,7 +417,7 @@ export function answerItemHead(userId: string, itemId: string, answer: string, c
 }
 
 /** Owner defers a decision until a time (≤ 30 days). It leaves the queue and comes back on its own. */
-export function deferDecision(userId: string, refOrId: string, until: string, correlationId: string, now = new Date()): Decision {
+export function deferDecision(userId: string, refOrId: string, until: string, correlationId: string, now = new Date(), out?: OpOut): Decision {
   assertOwnerSession("defer decisions");
   const t = Date.parse(until);
   if (!(t > now.getTime() && t - now.getTime() <= 30 * 86_400_000)) throw new HttpError(400, "until", "Defer to a time within the next 30 days");
@@ -432,6 +432,9 @@ export function deferDecision(userId: string, refOrId: string, until: string, co
       .run();
     event(tx, r.itemId, userId, { kind: "edit", reason: `${decisionRef(r.seq)} deferred until ${new Date(t).toISOString()}` });
     syncHead(tx, userId, r.itemId);
+    // Undoable: an accidental 30-day defer comes straight back.
+    const deferred = { id: r.id, prevUntil: r.deferredUntil, prevState: r.state === "deferred" ? "deferred" : "open" } as const;
+    recordOp(tx, userId, r.itemId, "edit", { prev: {}, next: {}, decisionOp: { deferred } satisfies DecisionOp }, out);
     return tx.select().from(D).where(eq(D.id, r.id)).get()!;
   });
   audit({ actor: userId, action: "decision.defer", source: "work", sourceRecord: row.id, result: "ok", correlationId });
@@ -494,8 +497,13 @@ export function undoDecisionOp(tx: Tx, userId: string, op: DecisionOp) {
       .where(and(eq(D.id, op.closed), eq(D.userId, userId)))
       .run();
   }
-  // Re-project each touched item's head (raise/withdraw ops carry no `prev.decision` to restore).
-  const ids = [op.raised, op.closed].filter((x): x is string => !!x);
+  if (op.deferred)
+    tx.update(D)
+      .set({ state: op.deferred.prevState, deferredUntil: op.deferred.prevUntil, updatedAt: at })
+      .where(and(eq(D.id, op.deferred.id), eq(D.userId, userId), eq(D.state, "deferred")))
+      .run();
+  // Re-project each touched item's head (raise/withdraw/defer ops carry no `prev.decision` to restore).
+  const ids = [op.raised, op.closed, op.deferred?.id].filter((x): x is string => !!x);
   const items = ids.length
     ? tx
         .select({ itemId: D.itemId })
