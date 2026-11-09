@@ -272,6 +272,9 @@ export function raiseDecision(
       if (old.itemId !== itemId) syncHead(tx, userId, old.itemId);
     }
     syncHead(tx, userId, itemId);
+    // Undoable from Activity like any agent write (7-day window for agent ops): Undo withdraws the new
+    // row and reopens a superseded one (undoDecisionOp), then re-projects the head.
+    recordOp(tx, userId, itemId, "edit", { prev: {}, next: {}, decisionOp: { raised: row.id, ...(old ? { closed: old.id } : {}) } satisfies DecisionOp });
     return row;
   });
   audit({
@@ -297,6 +300,7 @@ export function withdrawDecision(userId: string, refOrId: string, raisedBy: stri
     tx.update(D).set({ state: "withdrawn", updatedAt: nowIso() }).where(eq(D.id, r.id)).run();
     event(tx, r.itemId, userId, { kind: "edit", reason: `${decisionRef(r.seq)} withdrawn: ${reason}`.slice(0, 500) });
     syncHead(tx, userId, r.itemId);
+    recordOp(tx, userId, r.itemId, "edit", { prev: {}, next: {}, decisionOp: { closed: r.id } satisfies DecisionOp });
     return tx.select().from(D).where(eq(D.id, r.id)).get()!;
   });
   audit({ actor: raisedBy, action: "decision.withdraw", source: "work", sourceRecord: row.id, result: "ok", correlationId });
@@ -487,6 +491,16 @@ export function undoDecisionOp(tx: Tx, userId: string, op: DecisionOp) {
       .where(and(eq(D.id, op.closed), eq(D.userId, userId)))
       .run();
   }
+  // Re-project each touched item's head (raise/withdraw ops carry no `prev.decision` to restore).
+  const ids = [op.raised, op.closed].filter((x): x is string => !!x);
+  const items = ids.length
+    ? tx
+        .select({ itemId: D.itemId })
+        .from(D)
+        .where(and(eq(D.userId, userId), inArray(D.id, ids)))
+        .all()
+    : [];
+  for (const itemId of new Set(items.map((i) => i.itemId))) syncHead(tx, userId, itemId);
 }
 
 /**
