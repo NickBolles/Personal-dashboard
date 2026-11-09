@@ -41,12 +41,19 @@ describe("coordinator parity (server)", () => {
     const noTools = filedChatContext(owner, "api_coord", "devchief")!;
     expect(noTools).toContain("You are the General Dev coordinator");
     expect(noTools).toContain("Jarvis conversation id: api_coord");
-    expect(noTools).toContain("**Current state:**");
+    expect(noTools).toContain("**Next action:**");
+    expect(noTools).not.toContain("**Current state:**");
     expect(noTools).toContain("never claim you changed anything");
     mintAgentToken(owner, { name: "Dev", profile: "devchief", scopes: ["work.read"] }, cid);
     const withTools = filedChatContext(owner, "api_coord", "devchief")!;
     expect(withTools).toContain("jarvis_run_start");
     expect(withTools).toContain("hermesSessionId = api_coord");
+    // CW v3: no status footer; decisions by D-n via jarvis_raise_decision, progress via jarvis_run_event.
+    expect(withTools).not.toContain("**Current state:**");
+    expect(withTools).toContain("don't re-list open decisions");
+    expect(withTools).toContain("jarvis_raise_decision");
+    expect(withTools).toContain("D-n");
+    expect(withTools).toContain("jarvis_run_event");
     const deep = filedChatContext(owner, "api_deep", "devchief")!;
     expect(deep).not.toContain("coordinator in Jarvis");
     expect(deep).toContain("If you dispatch sub-agents with delegate_task");

@@ -1529,6 +1529,14 @@ async function stubGlobalCoordinator(page: Page) {
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
   await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
   await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: 0 } }));
+  // CW v3 lists (tray line, Needs you, Running): empty so other specs' decisions/runs never leak in.
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+  await page.route(/\/api\/coordinator\/runs$/, (route) =>
+    route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
+  await page.route(/\/api\/coordinator\/looked$/, (route) =>
+    route.fulfill({ json: { lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+  );
   // Never a real coordinator/Hermes write from a visual test.
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
 }
@@ -1548,7 +1556,8 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(rail).toHaveAttribute("data-open", "true");
     await expect(rail.getByTestId("quick-action-proposal")).toContainText("Weekly review");
     await expect(rail.getByTestId("quick-actions-row").getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
-    await expect(rail.locator(".gc-priority").first()).toContainText("need");
+    // v3: no priority line inside the rail (the tray/strip carry it); counts sit on the tabs.
+    await expect(rail.getByRole("tab", { name: /^Needs you/ })).toBeVisible();
     // A chip only fills the composer.
     await rail.getByTestId("quick-actions-row").getByRole("button", { name: "Plan my week", exact: true }).click();
     await expect(rail.getByTestId("gc-input")).toHaveValue("Help me plan this week");
@@ -1699,12 +1708,14 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
   );
   await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items, active: Object.values(items) } }));
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { ...mapDemoDecisions, count: 44 } }));
+  // v3 count = open D-n rows (42) + the run approvals / workflow proposals among mapDemoDecisions (2) = 44.
+  await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 42, deferred: 0 } } }));
   for (const zoom of [false, true]) {
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
     await expect(tray).toContainText("21 runs need attention");
-    await expect(tray.locator(".gc-tray-counts")).toContainText("44");
+    await expect(page.locator(".gc-tray .gc-tray-counts")).toContainText("44");
     await page.waitForTimeout(200);
     const m = await tray.evaluate((el) => {
       const r = el.getBoundingClientRect();

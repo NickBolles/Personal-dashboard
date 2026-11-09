@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -11,8 +11,9 @@ import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, Dot, Input, cx, useToast, type KTone } from "@/components/ui";
-import { inputCls } from "@/components/ui/legacy";
+import { Button, ChipButton, Dot, Input, Textarea, useToast, type KTone } from "@/components/ui";
+import { parseNotice } from "@/lib/chat-notices";
+import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
@@ -48,6 +49,10 @@ export function CoordinatorThread({
   onDraft,
   inlineActions,
   quickContext,
+  lastLookedChat,
+  sinceCounts = { decisions: 0, runs: 0 },
+  onJump,
+  onRef,
 }: {
   info: CoordinatorResponse;
   compact?: boolean;
@@ -58,6 +63,10 @@ export function CoordinatorThread({
   inlineActions?: (lastUserAt: string | null) => ReactNode;
   /** Context for quick-action chips ({area}/{page} fill + scope). Chips fill the composer only. */
   quickContext?: QuickActionContext;
+  lastLookedChat?: string | null;
+  sinceCounts?: { decisions: number; runs: number };
+  onJump?: (tab: "needs" | "running") => void;
+  onRef?: (ref: string) => void;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -104,7 +113,7 @@ export function CoordinatorThread({
     queryKey: ["session-exec", sid],
     queryFn: () => api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sid!)}/execution`),
     enabled: !!sid && !d.excluded,
-    refetchInterval: (q) => (detail.data?.session.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
+    refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
   });
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
@@ -112,7 +121,7 @@ export function CoordinatorThread({
     enabled: earlier && !d.excluded,
   });
   const postInput = (target: string, input: string, control = false): Promise<{ masked?: string[] } | null> => {
-    const active = detail.data?.session.activeRun;
+    const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
@@ -160,7 +169,7 @@ export function CoordinatorThread({
   });
   const stop = useMutation({
     mutationFn: async () => {
-      const runId = detail.data?.session.activeRun?.runId;
+      const runId = detail.data?.session?.activeRun?.runId;
       if (!runId) throw new Error("No active coordinator run");
       await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/stop`);
     },
@@ -181,7 +190,10 @@ export function CoordinatorThread({
   );
   const records = execution.data?.records?.filter((r) => r.source === "subagent" || r.source === "registered_run" || r.source === "jarvis_run") ?? [];
   const previous = discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid).slice(0, 5) ?? [];
-  const msgs = timeline.filter((t): t is Extract<TimelineItem, { kind: "user" | "assistant" }> => t.kind === "user" || t.kind === "assistant").slice(-6);
+  const messageGroups = groupMessages(timeline).slice(-6);
+  const msgs = messageGroups.map((group) => group[0]);
+  const divider = sinceDivider(lastLookedChat, new Date(), sinceCounts);
+  const dividerIndex = divider ? messageGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat!))) : -1;
   const lastUser = timeline.filter((t) => t.kind === "user").at(-1);
   return (
     <>
@@ -236,42 +248,66 @@ export function CoordinatorThread({
             ) : null}
             {sid && msgs.length ? (
               <ol aria-label="Latest messages">
-                {msgs.map((m) => (
-                  <li key={m.id} className="co-msg">
-                    {m.kind === "assistant" && sid ? (
-                      <div className="co-msg-head flex items-center justify-between gap-1">
-                        <p className="text-xs font-semibold text-muted">Coordinator</p>
-                        <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
-                          <RateMessage
-                            sessionId={sid}
-                            messageId={m.id}
-                            surface="coordinator"
-                            text={m.text}
-                            who="the coordinator's message"
-                            model={detail.data?.session.model ?? null}
-                            onAskFix={async (prompt) => {
-                              if (send.isPending || detail.data?.session.activeRun) {
-                                toast("Wait for the coordinator to finish, then ask again.", "warn");
-                                return false;
-                              }
-                              await send.mutateAsync({ input: prompt, correction: true });
-                              return true;
-                            }}
-                          />
-                        </span>
-                      </div>
+                {msgs.map((m, index) => (
+                  <Fragment key={m.id}>
+                    {index === dividerIndex && divider ? (
+                      <li className="gc-since">
+                        <div role="separator" aria-label={divider.label}>
+                          {divider.label}
+                        </div>
+                        <div className="flex min-w-0 flex-wrap gap-1">
+                          <ChipButton disabled={!onJump} onClick={() => onJump?.("needs")}>
+                            {divider.jumps.decisions} decisions
+                          </ChipButton>
+                          <ChipButton disabled={!onJump} onClick={() => onJump?.("running")}>
+                            {divider.jumps.runs} runs
+                          </ChipButton>
+                        </div>
+                      </li>
+                    ) : null}
+                    {isBackgroundNotice(m.text) ? (
+                      <li className="co-msg">
+                        <BackgroundNotices messages={messageGroups[index]} />
+                      </li>
                     ) : (
-                      <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
+                      <li key={m.id} className="co-msg">
+                        {m.kind === "assistant" && sid ? (
+                          <div className="co-msg-head flex items-center justify-between gap-1">
+                            <p className="text-xs font-semibold text-muted">Coordinator</p>
+                            <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
+                              <RateMessage
+                                sessionId={sid}
+                                messageId={m.id}
+                                surface="coordinator"
+                                text={m.text}
+                                who="the coordinator's message"
+                                model={detail.data?.session?.model ?? null}
+                                onAskFix={async (prompt) => {
+                                  if (send.isPending || detail.data?.session?.activeRun) {
+                                    toast("Wait for the coordinator to finish, then ask again.", "warn");
+                                    return false;
+                                  }
+                                  await send.mutateAsync({ input: prompt, correction: true });
+                                  return true;
+                                }}
+                              />
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
+                        )}
+                        {m.kind === "assistant" ? (
+                          <>
+                            <Markdown text={m.text} />
+                            <ActionsTaken actions={replyActions.get(m.id) ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+                          </>
+                        ) : (
+                          <p className="whitespace-pre-wrap">{m.text.length > 600 ? `${m.text.slice(0, 600)}…` : m.text}</p>
+                        )}
+                        {onRef ? <Mentions text={m.text} onRef={onRef} /> : null}
+                      </li>
                     )}
-                    {m.kind === "assistant" ? (
-                      <>
-                        <Markdown text={m.text} />
-                        <ActionsTaken actions={replyActions.get(m.id) ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                      </>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{m.text.length > 600 ? `${m.text.slice(0, 600)}…` : m.text}</p>
-                    )}
-                  </li>
+                  </Fragment>
                 ))}
               </ol>
             ) : sid && detail.isSuccess ? (
@@ -338,9 +374,9 @@ export function CoordinatorThread({
           {compact && context ? (
             <div className="gc-context">
               <span>Viewing: {context.label}</span>
-              <button type="button" aria-label="Remove page context" onClick={onRemoveContext}>
+              <Button variant="ghost" size="sm" aria-label="Remove page context" onClick={onRemoveContext}>
                 ×
-              </button>
+              </Button>
             </div>
           ) : null}
           <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
@@ -348,12 +384,12 @@ export function CoordinatorThread({
             Message the coordinator
           </label>
           <div className={compact ? "gc-compose-row" : undefined}>
-            <textarea
+            <Textarea
               ref={textarea}
               id={`${titleId}-m`}
               data-autofocus
               data-testid={compact ? "gc-input" : "coordinator-input"}
-              className={compact ? "gc-input" : cx(inputCls, "min-h-[72px] w-full min-w-0 resize-y text-[16px] sm:text-sm")}
+              className={compact ? "gc-input" : "gc-thread-input w-full min-w-0 resize-y"}
               rows={compact ? 1 : text.length > 200 ? 8 : 3}
               maxLength={8000}
               value={text}
@@ -419,6 +455,59 @@ export function CoordinatorThread({
       ) : null}
     </>
   );
+}
+
+type ThreadMessage = Extract<TimelineItem, { kind: "user" | "assistant" | "system" }>;
+function isBackgroundNotice(text: string) {
+  const notice = parseNotice(text);
+  return notice?.kind === "process" || notice?.kind === "delegation";
+}
+/** Consecutive completion frames form one folded group, including role=system frames. */
+function groupMessages(timeline: TimelineItem[]) {
+  const groups: ThreadMessage[][] = [];
+  for (const message of timeline) {
+    if (message.kind === "tool" || (message.kind === "system" && !isBackgroundNotice(message.text))) continue;
+    const previous = groups.at(-1);
+    if (isBackgroundNotice(message.text) && previous && isBackgroundNotice(previous[0].text)) previous.push(message);
+    else groups.push([message]);
+  }
+  return groups;
+}
+function BackgroundNotices({ messages }: { messages: ThreadMessage[] }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <div className="gc-background-notices">
+      <ChipButton aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
+        {messages.length} background notices
+      </ChipButton>
+      {open ? (
+        <ul id={id}>
+          {messages.map((message) => (
+            <li key={message.id}>
+              <p className="text-xs text-muted">{parseNotice(message.text)?.kind === "process" ? "Process" : "Delegation"}</p>
+              <Markdown text={message.text} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+function Mentions({ text, onRef }: { text: string; onRef: (ref: string) => void }) {
+  // Keep the Markdown renderer untouched; code and link destinations are not prose mentions.
+  const prose = text.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`]*`|\]\([^)]*\)/g, " ");
+  const mentions = [...new Set(refChips(prose).map((chip) => chip.ref))];
+  return mentions.length ? (
+    <div className="gc-mentions" aria-label="Mentions">
+      <span>Mentions:</span>
+      {mentions.map((ref) => (
+        <ChipButton key={ref} aria-label={`${ref.startsWith("D") ? "Decision" : "Run"} ${ref.replace("-", " ")}`} onClick={() => onRef(ref)}>
+          {ref}
+        </ChipButton>
+      ))}
+    </div>
+  ) : null;
 }
 
 const RUN_TONE: Record<ExecutionRecord["state"], KTone> = {

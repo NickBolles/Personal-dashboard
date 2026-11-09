@@ -228,7 +228,7 @@ describe("global coordinator", () => {
     expect(((await screen.findByTestId("gc-input")) as HTMLTextAreaElement).value).toBe("Brief me");
     expect(api.post).not.toHaveBeenCalled();
   });
-  it("removes context until navigation, and This page only fills the draft", async () => {
+  it("removes context until navigation, and Context only fills the draft", async () => {
     makeClient();
     const view = render(globalView(), { wrapper });
     await screen.findByTestId("gc-input");
@@ -239,7 +239,7 @@ describe("global coordinator", () => {
     nav.path = "/decisions";
     view.rerender(globalView());
     await chatPanel().findByText("Viewing: Needs you");
-    fireEvent.click(screen.getByRole("tab", { name: "This page" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
     fireEvent.click(screen.getByRole("button", { name: "Ask about this page" }));
     expect((screen.getByTestId("gc-input") as HTMLTextAreaElement).value).toContain("Help me understand this page");
     expect(api.post).not.toHaveBeenCalled();
@@ -253,7 +253,7 @@ describe("global coordinator", () => {
     render(globalView(), { wrapper });
     const input = await screen.findByTestId("gc-input");
     expect(document.querySelector(".gc-context")).not.toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "This page" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
     expect(screen.getByRole("button", { name: "Ask about this page" })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
     fireEvent.change(input, { target: { value: "Hello" } });
@@ -306,7 +306,7 @@ describe("global coordinator", () => {
     await screen.findByTestId("gc-input");
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/work/items"));
     expect(document.querySelector(".gc-context")).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "This page" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
     expect(screen.getByText("No page context is shared.")).toBeTruthy();
   });
   it("opens the phone modal from its tray and restores focus when closed; hides tray on chat", async () => {
