@@ -31,7 +31,7 @@ for (const instant of TASK_UX_CLOCKS) {
       await expect(title).toHaveCSS("-webkit-line-clamp", "none");
       expect(await title.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
-      await zoom.evaluate((el) => el.remove());
+      await zoom.evaluate((el) => (el as Element).remove());
     }
   });
 }
