@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-10 — Chief of staff and chat clarity pass
+
+What changed for the owner (details in the PR):
+
+- **One honest status.** The phone tray is one button with one sentence ("Checkout smoke tests stalled · 21 need you · 2 working") instead of "Failing · Chief of staff" plus `!23` / `↻14` badges. A run that got stuck _after_ you last opened Activity turns it red; once you have looked it is still counted ("3 stuck") but no longer shouts, and failures older than three days fold under "Older failures". Rules: `lib/coordinator/status.ts`.
+- **Three tabs, not five.** Chat · Needs you · Activity. Activity is what agents are doing (Stuck, Working, Finished since you looked) plus what the Chief of staff changed (grouped by item, with Undo). The Context tab is now the page chip in the composer (Ask about this page · remove · share again).
+- **Needs you reads like a list of questions.** The question is the headline, the D-n ref is a quiet handle, an item title that only repeats the question is dropped, paragraph-long agent "questions" get a short heading and the rest as body text, raw statuses (`ready_to_settle`) read as words, run approvals lead the list, and stalled runs are no longer listed here a second time (they are in Activity). No more sideways overflow.
+- **Sleeker controls.** Inside the panel, actions are quiet text or small icons at every width (tap areas stay generous through hit-slop); decision answers are compact, aligned option cards with the risk stated before the second tap.
+- **Coordinator composer parity.** The Chief of staff composer has the full chat’s add menu (photo or file, camera, context) and paste-to-attach, and its replies render smart (`jarvis-ui`) blocks through the same renderer as full chat.
+- **Full chat.** An idle conversation no longer carries a status tray of zeros; your messages show your words (page context becomes a caption, one-tap decisions a receipt); the conversation list gives titles the row.
+
+Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux-shots.mjs` has both sizes). Demo data for all of this: `node scripts/demo-seed-coordinator.mjs`.
+
 ## 2026-11-07 — Home Assistant control + Finance in AI (owner-approved policy changes)
 
 Both changes were explicitly approved by the owner on 2026-11-07:

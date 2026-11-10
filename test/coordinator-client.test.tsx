@@ -164,6 +164,83 @@ describe("shared coordinator thread", () => {
     expect(api.get).not.toHaveBeenCalled();
     expect(api.post).not.toHaveBeenCalled();
   });
+  it("offline: says so, keeps the draft and never sends", () => {
+    makeClient();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    const input = screen.getByTestId("gc-input") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "Hello" } });
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    expect(api.post).not.toHaveBeenCalled();
+    expect(screen.getByText(/You.re offline. Your draft is kept/)).toBeTruthy();
+    expect(input.value).toBe("Hello");
+  });
+  it("shows the owner’s words in a bubble: page context becomes a caption and a decision receipt reads as the choice", async () => {
+    makeClient();
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path.startsWith("/api/hermes/sessions/s1/execution")) return { records: [], sources: [] };
+      if (path.startsWith("/api/hermes/sessions/"))
+        return {
+          session: { id: "s1", pinned: false, archived: false },
+          timeline: [
+            { kind: "user", id: "u1", text: "[Viewing: Todos — /todos]\nSkip the weekly chores", at: new Date(Date.now() - 9000).toISOString() },
+            { kind: "assistant", id: "a1", text: "Done.", at: new Date(Date.now() - 8000).toISOString() },
+            {
+              kind: "user",
+              id: "u2",
+              text: 'Decision on "Feature names": Decision: Use plain names? → Keep plain names',
+              at: new Date(Date.now() - 7000).toISOString(),
+            },
+          ],
+        };
+      if (path === "/api/quick-actions") return { actions: [] };
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    expect(await screen.findByText("Skip the weekly chores")).toBeTruthy();
+    expect(screen.queryByText(/\[Viewing:/)).toBeNull();
+    expect(screen.getByText("Sent while viewing Todos")).toBeTruthy();
+    expect(screen.getByText("You decided · Feature names")).toBeTruthy();
+    expect(screen.getByText("Keep plain names")).toBeTruthy();
+    // Replies are signed by who the owner is talking to, not by an internal role name.
+    expect(screen.getByText("Chief of staff")).toBeTruthy();
+    expect(screen.queryByText("Coordinator")).toBeNull();
+  });
+  it("has the full chat's add menu (photo or file, camera, context) and never uploads or sends by opening it", () => {
+    makeClient();
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
+    const menu = screen.getByRole("menu", { name: "Add to message" });
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((i) => i.textContent),
+    ).toEqual(["Photo or file", "Camera", "Area, item or person"]);
+    expect(document.querySelector('[data-testid="chat-file-input"]')).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+  it("renders smart (jarvis-ui) replies through the same renderer as full chat, never as raw JSON", async () => {
+    makeClient();
+    const reply =
+      'Here is the plan.\n\n```jarvis-ui\n{"v":1,"catalog":"jarvis-ui@1","root":"r","elements":{"r":{"type":"Text","props":{"text":"Hidden spec"}}}}\n```\n';
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path === "/api/smart/settings") return { enabled: false };
+      if (path.startsWith("/api/hermes/sessions/s1/execution")) return { records: [], sources: [] };
+      if (path.startsWith("/api/hermes/sessions/s1/files")) return { files: [] };
+      if (path.startsWith("/api/hermes/sessions/"))
+        return {
+          session: { id: "s1", pinned: false, archived: false },
+          timeline: [{ kind: "assistant", id: "a1", text: reply, at: new Date().toISOString() }],
+        };
+      if (path === "/api/quick-actions") return { actions: [] };
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    expect(await screen.findByText("Here is the plan.")).toBeTruthy();
+    expect(screen.queryByText(/"catalog"/)).toBeNull();
+    expect(await screen.findByText(/This reply has an interactive part/)).toBeTruthy();
+  });
   it("quick action chips above the composer fill it, never send", async () => {
     makeClient();
     quick = [qa("q1", "Review", "Review {area}")];
@@ -228,7 +305,7 @@ describe("global coordinator", () => {
     expect(((await screen.findByTestId("gc-input")) as HTMLTextAreaElement).value).toBe("Brief me");
     expect(api.post).not.toHaveBeenCalled();
   });
-  it("removes context until navigation, and Context only fills the draft", async () => {
+  it("removes context until navigation or Share page, and Ask about this page only fills the draft", async () => {
     makeClient();
     const view = render(globalView(), { wrapper });
     await screen.findByTestId("gc-input");
@@ -236,13 +313,19 @@ describe("global coordinator", () => {
     expect(chatPanel().getByText("Viewing: Areas")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove page context" }));
     expect(chatPanel().queryByText("Viewing: Areas")).toBeNull();
+    // Honest about the off state, and reversible without leaving the page.
+    expect(chatPanel().getByText("This page is not shared.")).toBeTruthy();
+    fireEvent.click(chatPanel().getByRole("button", { name: "Share page" }));
+    expect(chatPanel().getByText("Viewing: Areas")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove page context" }));
     nav.path = "/decisions";
     view.rerender(globalView());
     await chatPanel().findByText("Viewing: Needs you");
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    // There is no Context tab any more: the composer carries the page chip and its one action.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Needs you", "Activity"]);
     fireEvent.click(screen.getByRole("button", { name: "Ask about this page" }));
     expect((screen.getByTestId("gc-input") as HTMLTextAreaElement).value).toContain("Help me understand this page");
-    expect(api.post).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
     nav.path = "/areas";
     view.rerender(globalView());
     await chatPanel().findByText("Viewing: Areas");
@@ -253,9 +336,7 @@ describe("global coordinator", () => {
     render(globalView(), { wrapper });
     const input = await screen.findByTestId("gc-input");
     expect(document.querySelector(".gc-context")).not.toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
     expect(screen.getByRole("button", { name: "Ask about this page" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
     fireEvent.change(input, { target: { value: "Hello" } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() =>
@@ -306,7 +387,8 @@ describe("global coordinator", () => {
     await screen.findByTestId("gc-input");
     await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/work/items"));
     expect(document.querySelector(".gc-context")).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    expect(screen.queryByRole("button", { name: "Ask about this page" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Share page" })).toBeNull();
     expect(screen.getByText("No page context is shared.")).toBeTruthy();
   });
   it("opens the phone modal from its tray and restores focus when closed; hides tray on chat", async () => {
@@ -325,6 +407,146 @@ describe("global coordinator", () => {
     view.rerender(globalView());
     expect(screen.queryByRole("button", { name: "Chief of staff" })).toBeNull();
   });
+  it("the phone tray says in one sentence what is going on, and a tap lands on what it points at", async () => {
+    nav.wide = false;
+    nav.path = "/home";
+    info = { ...base, sessionId: "s1" };
+    const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
+    const decision = (seq: number) => ({
+      id: `d${seq}`,
+      ref: `D-${seq}`,
+      seq,
+      itemId: `item-${seq}`,
+      itemTitle: `Item ${seq}`,
+      areaTitle: "Portfolio",
+      runId: null,
+      question: `Question ${seq}?`,
+      choices: ["Yes", "No"],
+      recommended: "Yes",
+      risk: [],
+      pack: {},
+      defaultChoice: null,
+      expiresAt: null,
+      state: "open",
+      answeredChoice: null,
+      answeredAt: null,
+      answeredVia: null,
+      deferredUntil: null,
+      supersededBy: null,
+      raisedBy: "agent:devchief",
+      createdAt: iso(90),
+      updatedAt: iso(90),
+    });
+    const runRow = (seq: number, over: Record<string, unknown>) => ({
+      id: `run-${seq}`,
+      ref: `R-${seq}`,
+      seq,
+      itemId: "item",
+      itemTitle: "Item",
+      profile: "devchief",
+      title: `Work ${seq}`,
+      state: "running",
+      stalled: false,
+      summary: null,
+      prUrl: null,
+      parentRunId: null,
+      parentRef: null,
+      pipeline: [],
+      lock: null,
+      interruptedAt: null,
+      startedAt: iso(300),
+      updatedAt: iso(2),
+      finishedAt: null,
+      noticeCount: 0,
+      ...over,
+    });
+    let looked: string | null = iso(60);
+    let runRows = [runRow(1, {}), runRow(2, { state: "failed", title: "Ledger import", updatedAt: iso(5) })];
+    const fallback = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
+      if (path.startsWith("/api/coordinator/decisions")) return { decisions: [decision(1), decision(2)], counts: { open: 2, deferred: 0 } };
+      if (path === "/api/coordinator/runs")
+        return { runs: runRows, events: [], lastLooked: { chat: null, needs: null, running: looked, changes: null, context: null } };
+      if (path.startsWith("/api/coordinator/runs/")) return { events: [] };
+      return fallback(path, ...rest);
+    });
+    const qc = makeClient();
+    render(globalView(), { wrapper });
+    const tray = screen.getByRole("button", { name: "Chief of staff" });
+    const status = () => document.getElementById(tray.getAttribute("aria-describedby")!)!.textContent;
+    // A failure newer than the last look leads and names the run; the rest follows in words, not glyphs.
+    await waitFor(() => expect(status()).toBe("Ledger import failed · 2 need you · 1 working"));
+    expect(document.querySelector(".gc-tray")?.getAttribute("data-state")).toBe("failed");
+    expect(document.querySelector(".jv-shell")?.getAttribute("data-gc-dot")).toBe("red");
+    expect(within(document.querySelector<HTMLElement>(".gc-tray")!).getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(tray);
+    const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
+    expect(
+      within(sheet)
+        .getByRole("tab", { name: /Activity/ })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+    expect((await within(sheet).findByRole("region", { name: "Stuck" })).textContent).toContain("Ledger import");
+    // Once seen it is still counted, but what waits on the owner leads and nothing is red.
+    looked = new Date().toISOString();
+    runRows = runRows.map((r) => ({ ...r }));
+    await act(() => qc.invalidateQueries({ queryKey: ["work", "coordinator", "runs"] }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close Chief of staff" }));
+    await waitFor(() => expect(status()).toBe("2 need you · 1 working"));
+    expect(document.querySelector(".gc-tray")?.getAttribute("data-state")).toBe("needs");
+    expect(document.querySelector(".jv-shell")?.getAttribute("data-gc-dot")).toBe("yellow");
+    fireEvent.click(tray);
+    expect(
+      within(screen.getByRole("dialog", { name: "Chief of staff" }))
+        .getByRole("tab", { name: /Needs you/ })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+  it("Needs you counts what Today counts: approvals and stalled runs are listed with the decisions, stalled ones link to Activity", async () => {
+    info = { ...base, sessionId: "s1" };
+    const fallback = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
+      if (path === "/api/work/decisions")
+        return {
+          count: 2,
+          entries: [
+            {
+              key: "approval:run_1",
+              kind: "approval",
+              title: "Hermes needs your approval",
+              question: "Recursive delete",
+              choices: [],
+              href: "/chat/s9",
+              at: new Date().toISOString(),
+            },
+            {
+              key: "stalled:run-7",
+              kind: "stalled",
+              title: "Ledger",
+              question: "@devchief's run \"Ledger import\" hasn't reported in over 30 min.",
+              choices: [],
+              href: "/areas?item=i7",
+              at: new Date().toISOString(),
+              itemId: "i7",
+            },
+          ],
+        };
+      if (path.startsWith("/api/coordinator/decisions")) return { decisions: [], counts: { open: 0, deferred: 0 } };
+      if (path === "/api/coordinator/runs")
+        return { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } };
+      return fallback(path, ...rest);
+    });
+    makeClient();
+    render(globalView(), { wrapper });
+    const tab = await screen.findByRole("tab", { name: /Needs you\s*2/ });
+    fireEvent.click(tab);
+    const panel = within(screen.getByRole("tabpanel", { name: /Needs you/ }));
+    expect((await panel.findByRole("region", { name: "Approvals and proposals" })).textContent).toContain("Recursive delete");
+    const stalled = panel.getByRole("region", { name: "Stalled runs" });
+    expect(stalled.textContent).toContain("No report for over 30 minutes");
+    fireEvent.click(within(stalled).getByRole("button", { name: "See in Activity" }));
+    expect(screen.getByRole("tab", { name: /Activity/ }).getAttribute("aria-selected")).toBe("true");
+  });
   it("renders the no-area setup link without a send control", async () => {
     info = { area: null };
     makeClient();
@@ -333,7 +555,7 @@ describe("global coordinator", () => {
     expect(screen.getByRole("link", { name: "Settings → Agents" }).getAttribute("href")).toBe("/settings/agents");
     expect(screen.queryByRole("textbox")).toBeNull();
   });
-  it("shows recent attributed action cards inline and in Changes, and calls the existing undo endpoint", async () => {
+  it("shows recent attributed action cards inline and under Activity → Changes, and calls the existing undo endpoint", async () => {
     info = { ...base, sessionId: "s1" };
     activity = [action("new", "chiefofstaff"), action("old", "chiefofstaff", new Date(Date.now() - 10000).toISOString()), action("other", "devchief")];
     makeClient();
@@ -341,8 +563,8 @@ describe("global coordinator", () => {
     const chatPanel = screen.getByRole("tabpanel", { name: "Chat" });
     await waitFor(() => expect(within(chatPanel).getByRole("link", { name: "Item new" })).toBeTruthy());
     expect(within(chatPanel).queryByRole("link", { name: "Item old" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
-    const changes = screen.getByRole("tabpanel", { name: /Changes/ });
+    fireEvent.click(screen.getByRole("tab", { name: /Activity/ }));
+    const changes = within(screen.getByRole("tabpanel", { name: /Activity/ })).getByRole("region", { name: "Changes" });
     expect(within(changes).getByRole("link", { name: "Item old" })).toBeTruthy();
     expect(within(changes).queryByRole("link", { name: "Item other" })).toBeNull();
     fireEvent.click(within(changes).getByRole("button", { name: "Undo Created item: Item new" }));

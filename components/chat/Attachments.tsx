@@ -67,6 +67,8 @@ export function useChatAttachments(sessionId: string) {
   // #85: drafts uploaded before a reload come back into the composer (else they'd hold the
   // per-conversation draft quota with nothing visible to send or remove).
   useEffect(() => {
+    // The coordinator composer has no conversation until its first message or attachment.
+    if (!sessionId) return;
     let off = false;
     api
       .get<{ files: ChatFileView[] }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/files`)

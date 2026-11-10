@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient, type FetchInfiniteQueryOptions, type InfiniteData } from "@tanstack/react-query";
 import type { SessionSummary } from "@/lib/hermes";
 import { relativeTime } from "@/lib/time";
+import { scheduledTitle } from "@/lib/chat/display";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import { mergeSessionPages, type SessionPage } from "@/lib/session-pages";
@@ -132,6 +133,8 @@ export function SessionList({ compact }: { compact?: boolean }) {
         {list.map((s) => {
           const href = `/chat/${encodeURIComponent(s.id)}`;
           const active = pathname === href;
+          // "[Cron delivery: job] …" conversations: the wrapper becomes a quiet tag (same as the conversations view).
+          const scheduled = scheduledTitle(s.title);
           return (
             <li key={s.id}>
               <Link
@@ -140,7 +143,9 @@ export function SessionList({ compact }: { compact?: boolean }) {
                 className={cx("block rounded-[8px] px-2.5 py-2 dense:py-1.5", active ? "bg-accent-soft text-accent" : "hover:bg-surface-2")}
               >
                 <span className="flex items-center gap-2">
-                  <span className={cx("min-w-0 flex-1 truncate", active ? "font-semibold" : "font-medium")}>{s.title}</span>
+                  <span className={cx("min-w-0 flex-1 truncate", active ? "font-semibold" : "font-medium")} title={scheduled ? s.title : undefined}>
+                    {scheduled ? scheduled.title : s.title}
+                  </span>
                   {s.source === "claude" ? <Badge>Claude</Badge> : null}
                   {s.activeRun ? (
                     <Badge tone={s.activeRun.status === "waiting_for_approval" ? "warn" : "accent"}>
@@ -155,6 +160,7 @@ export function SessionList({ compact }: { compact?: boolean }) {
                     </span>
                   ) : null}
                   {s.subagentCount ? <span>{s.subagentCount === 1 ? "1 sub-agent" : `${s.subagentCount} sub-agents`}</span> : null}
+                  {scheduled ? <span>Scheduled</span> : null}
                   {s.pinned ? <span>Pinned</span> : null}
                   {s.archived ? <span>Archived</span> : null}
                   {s.lastActiveAt ? <span data-dynamic>{relativeTime(s.lastActiveAt)}</span> : null}

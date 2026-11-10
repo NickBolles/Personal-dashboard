@@ -360,7 +360,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await page.goto("/chat?view=unfiled");
   const conv = (t: string) => page.locator("[data-conversation]", { hasText: t });
   await expect(conv(`V5 evaluator hydration notes ${nonce}`)).toBeVisible();
-  await expect(conv(`Loose thought ${nonce}`)).toContainText("Miscellaneous");
+  await expect(conv(`Loose thought ${nonce}`)).toHaveAttribute("data-placement", "misc");
   // Linked to V5 above, so it counts as filed.
   await expect(conv(`Picker check ${nonce}`)).toHaveCount(0);
   await conv(`V5 evaluator hydration notes ${nonce}`)

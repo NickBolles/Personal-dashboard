@@ -10,8 +10,21 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown } from "@/components/markdown/Markdown";
+import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
+import {
+  AttachButton,
+  AttachmentChips,
+  CameraButton,
+  MessageAttachments,
+  pastedFiles,
+  useChatAttachments,
+  useConversationFiles,
+} from "@/components/chat/Attachments";
+import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
+import { parseFileMarkers } from "@/lib/chat-files";
+import { PlusIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, Input, Textarea, useToast, type KTone } from "@/components/ui";
+import { Button, ChipButton, Dot, Input, Menu, Textarea, useNow, useOnline, useToast, type KTone } from "@/components/ui";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
@@ -24,8 +37,10 @@ import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { actionsByReply } from "@/lib/chat/actions";
 import { canControl, steerText, stopText } from "@/lib/coordinator/control";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
+import { STALL_AFTER_MIN } from "@/lib/agent-runs";
 import type { ConversationListResponse } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
+import { parseUserMessage, plainMessageLine, splitAttachedContext } from "@/lib/chat/display";
 import "@/components/agents/agents.css";
 
 export type CoordinatorResponse = {
@@ -43,8 +58,12 @@ type Detail = { session: SessionSummary; timeline: TimelineItem[] };
 export function CoordinatorThread({
   info: d,
   compact = false,
+  name = "Coordinator",
   context = null,
+  contextRemoved = false,
   onRemoveContext,
+  onRestoreContext,
+  onAskPage,
   draft,
   onDraft,
   inlineActions,
@@ -56,8 +75,15 @@ export function CoordinatorThread({
 }: {
   info: CoordinatorResponse;
   compact?: boolean;
+  /** Who the owner is talking to, as shown on replies ("Chief of staff" in the global rail). */
+  name?: string;
   context?: PageContext | null;
+  /** The owner turned this page's context off (it can be shared again). */
+  contextRemoved?: boolean;
   onRemoveContext?: () => void;
+  onRestoreContext?: () => void;
+  /** Fills the composer with a question about the page being viewed. Never sends. */
+  onAskPage?: () => void;
   draft?: string;
   onDraft?: (text: string) => void;
   inlineActions?: (lastUserAt: string | null) => ReactNode;
@@ -71,6 +97,8 @@ export function CoordinatorThread({
   const qc = useQueryClient();
   const { toast } = useToast();
   const titleId = useId();
+  const online = useOnline();
+  const sentText = compact ? `Sent to your ${name}` : "Sent to the coordinator";
   const [localText, setLocalText] = useState("");
   const text = draft ?? localText;
   const setText = onDraft ?? setLocalText;
@@ -120,33 +148,85 @@ export function CoordinatorThread({
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
     enabled: earlier && !d.excluded,
   });
-  const postInput = (target: string, input: string, control = false): Promise<{ masked?: string[] } | null> => {
+  const postInput = (
+    target: string,
+    input: string,
+    control = false,
+    extra: { context?: string; files?: string[] } = {},
+  ): Promise<{ masked?: string[] } | null> => {
     const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
       idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
+      ...extra,
     });
   };
+  const ensureSession = async () => {
+    if (sid) return sid;
+    const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
+    setSessionId(s.id);
+    setFresh(false);
+    return s.id;
+  };
+  // Same attach + context tools as the full chat composer. Files upload to the conversation, so the first
+  // attachment starts it (nothing is sent to the agent until Send).
+  // An area excluded from AI has no conversation here: nothing is fetched or uploaded for it.
+  const attachments = useChatAttachments(d.excluded ? "" : (sid ?? ""));
+  const queued = useRef<File[]>([]);
+  const addFiles = attachments.add;
+  useEffect(() => {
+    if (!sid || !queued.current.length) return;
+    const files = queued.current;
+    queued.current = [];
+    addFiles(files);
+  }, [sid, addFiles]);
+  const attach = (files: File[]) => {
+    if (!files.length || d.excluded) return;
+    if (sid) return attachments.add(files);
+    queued.current.push(...files);
+    void ensureSession().catch((err) => {
+      queued.current = [];
+      toast(`Not attached: ${(err as Error).message}`, "danger");
+    });
+  };
+  const [chips, setChips] = useState<ContextChip[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
+  const addButton = useRef<HTMLButtonElement>(null);
   const send = useMutation({
     mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
-      let target = sid;
-      if (!target) {
-        const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
-        target = s.id;
-        setSessionId(s.id);
-        setFresh(false);
-      }
-      const run = await postInput(target, compact && !correction ? withPageContext(input, context) : input);
+      const target = await ensureSession();
+      if (correction) return { target, notice: maskedNotice(await postInput(target, input)) };
+      // Sheet picks that are @/# references ride in the message as tokens; the rest go as context lines (as in full chat).
+      const tokens = chips.filter((c) => c.token && !input.includes(c.token)).map((c) => c.token);
+      const typed = tokens.length ? `${input}\n\n${tokens.join(" ")}` : input;
+      const extra = {
+        context:
+          chips
+            .filter((c) => !c.token)
+            .map((c) => `- ${c.label} [${c.ref}]`)
+            .join("\n")
+            .slice(0, 4000) || undefined,
+        files: attachments.readyIds.length ? attachments.readyIds : undefined,
+      };
+      const run = await postInput(target, compact ? withPageContext(typed, context) : typed, false, extra);
       return { target, notice: maskedNotice(run) };
     },
     onSuccess: ({ target, notice }, { correction }) => {
       if (!correction) {
         setText("");
+        setChips([]);
+        if (attachments.drafts.length) {
+          attachments.clear();
+          void qc.invalidateQueries({ queryKey: ["chat-files", target] });
+        }
         if (textarea.current && compact) textarea.current.style.height = "auto";
       }
-      toast(notice ?? "Sent to the coordinator", notice ? "warn" : undefined);
+      toast(notice ?? sentText, notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -160,7 +240,7 @@ export function CoordinatorThread({
     },
     onSuccess: (notice) => {
       if (notice) toast(notice, "warn");
-      else toast("Sent to the coordinator");
+      else toast(sentText);
       void qc.invalidateQueries({ queryKey: ["session", sid] });
       void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -181,7 +261,8 @@ export function CoordinatorThread({
     onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
   });
   const submit = () => {
-    if (text.trim() && !send.isPending && !d.excluded) send.mutate({ input: text.trim() });
+    if (attachments.uploading) return toast("Wait for the upload to finish, then send.", "warn");
+    if ((text.trim() || attachments.readyIds.length) && !send.isPending && !d.excluded && online) send.mutate({ input: text.trim() });
   };
   const timeline = detail.data?.timeline ?? [];
   const replyActions = useMemo(
@@ -195,9 +276,27 @@ export function CoordinatorThread({
   const divider = sinceDivider(lastLookedChat, new Date(), sinceCounts);
   const dividerIndex = divider ? messageGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat!))) : -1;
   const lastUser = timeline.filter((t) => t.kind === "user").at(-1);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sinceRef = useRef<HTMLLIElement>(null);
+  const positioned = useRef<string | null>(null);
+  const lastId = msgs.at(-1)?.id;
+  const running = !!detail.data?.session?.activeRun;
+  const hasDivider = dividerIndex >= 0;
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!body || !compact || !lastId) return;
+    // A chat opens where the news starts: the "Since …" divider when there is one, otherwise the latest message.
+    // After that first placement it simply follows new messages.
+    // (The divider can arrive a beat after the messages; it gets its one placement when it does.)
+    const place = `${sid}:${hasDivider}`;
+    const first = positioned.current !== place;
+    positioned.current = place;
+    if (first && sinceRef.current) body.scrollTop = Math.max(0, sinceRef.current.offsetTop - body.offsetTop - 4);
+    else body.scrollTop = body.scrollHeight;
+  }, [compact, sid, lastId, running, hasDivider]);
   return (
-    <>
-      <div className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
+    <SmartSession.Provider value={sid}>
+      <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
             Areas excluded from AI are never sent: this area has no coordinator chat.
@@ -236,14 +335,19 @@ export function CoordinatorThread({
             {!sid ? (
               <div>
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
-                  No coordinator conversation yet. Your first message starts one, filed in this area.
+                  {compact
+                    ? "Nothing here yet. Ask for a catch-up, or what needs you."
+                    : "No coordinator conversation yet. Your first message starts one, filed in this area."}
                 </p>
               </div>
             ) : null}
             {detail.isLoading ? <p className="text-sm text-muted">Loading messages…</p> : null}
             {detail.error ? (
               <p role="alert" className="text-sm text-danger">
-                Couldn&apos;t load messages: {(detail.error as Error).message}
+                Couldn&apos;t load messages: {(detail.error as Error).message}{" "}
+                <Button size="sm" variant="ghost" loading={detail.isFetching} onClick={() => void detail.refetch()}>
+                  Try again
+                </Button>
               </p>
             ) : null}
             {sid && msgs.length ? (
@@ -251,29 +355,35 @@ export function CoordinatorThread({
                 {msgs.map((m, index) => (
                   <Fragment key={m.id}>
                     {index === dividerIndex && divider ? (
-                      <li className="gc-since">
+                      <li className="gc-since" ref={sinceRef}>
                         <div role="separator" aria-label={divider.label}>
                           {divider.label}
                         </div>
-                        <div className="flex min-w-0 flex-wrap gap-1">
-                          <ChipButton disabled={!onJump} onClick={() => onJump?.("needs")}>
-                            {divider.jumps.decisions} decisions
-                          </ChipButton>
-                          <ChipButton disabled={!onJump} onClick={() => onJump?.("running")}>
-                            {divider.jumps.runs} runs
-                          </ChipButton>
-                        </div>
+                        {divider.jumps.decisions || divider.jumps.runs ? (
+                          <div className="gc-since-jumps">
+                            {divider.jumps.decisions ? (
+                              <Button variant="ghost" size="sm" disabled={!onJump} onClick={() => onJump?.("needs")}>
+                                {divider.jumps.decisions === 1 ? "1 new decision" : `${divider.jumps.decisions} new decisions`}
+                              </Button>
+                            ) : null}
+                            {divider.jumps.runs ? (
+                              <Button variant="ghost" size="sm" disabled={!onJump} onClick={() => onJump?.("running")}>
+                                {divider.jumps.runs === 1 ? "1 run updated" : `${divider.jumps.runs} runs updated`}
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </li>
                     ) : null}
                     {isBackgroundNotice(m.text) ? (
                       <li className="co-msg">
                         <BackgroundNotices messages={messageGroups[index]} />
                       </li>
-                    ) : (
-                      <li key={m.id} className="co-msg">
-                        {m.kind === "assistant" && sid ? (
-                          <div className="co-msg-head flex items-center justify-between gap-1">
-                            <p className="text-xs font-semibold text-muted">Coordinator</p>
+                    ) : m.kind === "assistant" ? (
+                      <li key={m.id} className="co-msg" data-who="assistant">
+                        <div className="co-msg-head flex items-center justify-between gap-1">
+                          <p className="text-xs font-semibold text-muted">{name}</p>
+                          {sid ? (
                             <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
                               <RateMessage
                                 sessionId={sid}
@@ -292,18 +402,15 @@ export function CoordinatorThread({
                                 }}
                               />
                             </span>
-                          </div>
-                        ) : (
-                          <p className="text-xs font-semibold text-muted">{m.kind === "user" ? "You" : "Coordinator"}</p>
-                        )}
-                        {m.kind === "assistant" ? (
-                          <>
-                            <Markdown text={m.text} />
-                            <ActionsTaken actions={replyActions.get(m.id) ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                          </>
-                        ) : (
-                          <p className="whitespace-pre-wrap">{m.text.length > 600 ? `${m.text.slice(0, 600)}…` : m.text}</p>
-                        )}
+                          ) : null}
+                        </div>
+                        <AssistantText text={m.text} />
+                        <ActionsTaken actions={replyActions.get(m.id) ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+                        {onRef ? <Mentions text={m.text} onRef={onRef} /> : null}
+                      </li>
+                    ) : (
+                      <li key={m.id} className="co-msg" data-who="user">
+                        <UserMessage text={m.text} sessionId={sid} />
                         {onRef ? <Mentions text={m.text} onRef={onRef} /> : null}
                       </li>
                     )}
@@ -316,7 +423,7 @@ export function CoordinatorThread({
             {detail.data?.session?.activeRun ? (
               <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
                 <Dot tone="ai" live label="Coordinator running" />
-                <span className="text-muted">Working…</span>
+                <span className="text-muted">{compact ? `${name} is working…` : "Working…"}</span>
                 <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
                   Stop
                 </Button>
@@ -331,11 +438,14 @@ export function CoordinatorThread({
                 Couldn&apos;t load coordinator runs.
               </p>
             ) : null}
-            {execution.data?.sources?.some((source) => source.state !== "ok") ? (
-              <p className="mt-2 text-xs text-muted">Some run sources are unavailable or stale. Open the conversation for details.</p>
+            {/* "stale" is the child inventory's permanent caveat (server/chat/execution.ts), not news: only a source that
+                could not be read at all is worth a line here. */}
+            {execution.data?.sources?.some((source) => source.state === "unavailable") ? (
+              <p className="mt-2 text-xs text-muted">Couldn&apos;t check all background work just now. Open the conversation for details.</p>
             ) : null}
             {records.length ? (
               <section aria-label="Coordinator runs" className="mt-2 space-y-1">
+                <p className="gc-hint">Background work</p>
                 {records.slice(0, 5).map((record) => (
                   <CoordinatorRunCard
                     key={`${sid}:${record.key}`}
@@ -373,17 +483,83 @@ export function CoordinatorThread({
         >
           {compact && context ? (
             <div className="gc-context">
-              <span>Viewing: {context.label}</span>
-              <Button variant="ghost" size="sm" aria-label="Remove page context" onClick={onRemoveContext}>
-                ×
+              <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
+              {onAskPage ? (
+                <Button variant="ghost" size="sm" onClick={onAskPage}>
+                  Ask about this page
+                </Button>
+              ) : null}
+              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
+                Remove
               </Button>
             </div>
+          ) : compact && contextRemoved ? (
+            <div className="gc-context-off">
+              <span>This page is not shared.</span>
+              <Button variant="ghost" size="sm" onClick={onRestoreContext}>
+                Share page
+              </Button>
+            </div>
+          ) : compact ? (
+            <p className="gc-hint gc-context-none">No page context is shared.</p>
           ) : null}
-          <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
+          {compact && text.trim() ? null : (
+            <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
+          )}
           <label htmlFor={`${titleId}-m`} className="sr-only">
             Message the coordinator
           </label>
+          {compact ? (
+            <>
+              {chips.length ? (
+                <div className="gc-chips" role="group" aria-label="Context to send">
+                  {chips.map((c) => (
+                    <ChipButton key={c.ref} aria-label={`Remove context ${c.label}`} onClick={() => setChips((all) => all.filter((x) => x.ref !== c.ref))}>
+                      {c.label} ×
+                    </ChipButton>
+                  ))}
+                </div>
+              ) : null}
+              <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
+            </>
+          ) : null}
           <div className={compact ? "gc-compose-row" : undefined}>
+            {compact ? (
+              <div className="gc-add-menu">
+                <Button
+                  ref={addButton}
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  icon={<PlusIcon className="h-4 w-4" />}
+                  className="gc-add"
+                  aria-label="Add to message"
+                  aria-haspopup="menu"
+                  aria-expanded={adding}
+                  onClick={() => setAdding((v) => !v)}
+                >
+                  Add
+                </Button>
+                {adding ? (
+                  <Menu
+                    label="Add to message"
+                    items={[
+                      { label: "Photo or file", onSelect: () => fileInput.current?.click(), disabled: !online },
+                      { label: "Camera", onSelect: () => cameraInput.current?.click(), disabled: !online },
+                      { label: "Area, item or person", onSelect: () => setSheet(true) },
+                    ]}
+                    onClose={() => {
+                      setAdding(false);
+                      addButton.current?.focus();
+                    }}
+                  />
+                ) : null}
+                <span hidden>
+                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} />
+                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} />
+                </span>
+              </div>
+            ) : null}
             <Textarea
               ref={textarea}
               id={`${titleId}-m`}
@@ -393,7 +569,7 @@ export function CoordinatorThread({
               rows={compact ? 1 : text.length > 200 ? 8 : 3}
               maxLength={8000}
               value={text}
-              placeholder="Ask the coordinator…"
+              placeholder={compact ? `Ask ${name === "Coordinator" ? "the coordinator" : "your " + name.toLowerCase()}…` : "Ask the coordinator…"}
               onChange={(e) => {
                 setText(e.target.value);
                 if (compact) {
@@ -407,6 +583,14 @@ export function CoordinatorThread({
                   submit();
                 }
               }}
+              onPaste={(e) => {
+                if (!compact) return;
+                const files = pastedFiles(e);
+                if (files.length) {
+                  e.preventDefault();
+                  attach(files);
+                }
+              }}
             />
             {compact ? (
               <Button
@@ -417,7 +601,7 @@ export function CoordinatorThread({
                 icon={<span>↑</span>}
                 className="gc-send"
                 aria-label="Send"
-                disabled={!text.trim()}
+                disabled={(!text.trim() && !attachments.readyIds.length) || !online}
                 loading={send.isPending}
               >
                 Send
@@ -441,7 +625,7 @@ export function CoordinatorThread({
                 type="submit"
                 size="sm"
                 variant={hasProposals ? "secondary" : "primary"}
-                disabled={!text.trim()}
+                disabled={!text.trim() || !online}
                 loading={send.isPending}
                 data-testid="coordinator-send"
               >
@@ -449,12 +633,70 @@ export function CoordinatorThread({
               </Button>
             </div>
           ) : (
-            <p className="gc-hint">Ctrl/⌘+Enter to send · Enter for a new line</p>
+            <>
+              {!online ? (
+                <p className="gc-hint" role="status" data-tone="warn">
+                  You&apos;re offline. Your draft is kept; send it when you&apos;re back.
+                </p>
+              ) : null}
+              <p className="gc-hint gc-keys">Ctrl/⌘+Enter to send · Enter for a new line</p>
+            </>
           )}
         </form>
       ) : null}
+      {sheet ? (
+        <ContextSheet
+          open
+          onClose={() => setSheet(false)}
+          sessionId={sid ?? ""}
+          areaTitle={d.area.title}
+          selected={chips}
+          onToggle={(chip) => setChips((all) => (all.some((x) => x.ref === chip.ref) ? all.filter((x) => x.ref !== chip.ref) : [...all, chip].slice(0, 12)))}
+        />
+      ) : null}
+    </SmartSession.Provider>
+  );
+}
+
+/** What the owner sent: their words in a bubble; machine wrappers become a quiet caption or a compact receipt. */
+function UserMessage({ text, sessionId }: { text: string; sessionId?: string | null }) {
+  const { body, attached } = splitAttachedContext(text);
+  const parts = parseUserMessage(body);
+  const fileIds = parseFileMarkers(attached);
+  // A long dictated message folds to a few lines: the reply is what the owner came for.
+  const long = parts.text.length > 320 || parts.text.split("\n").length > 6;
+  const [open, setOpen] = useState(false);
+  if (parts.decision)
+    return (
+      <div className="gc-receipt">
+        <p className="gc-receipt-head">You decided · {parts.decision.title}</p>
+        <p className="gc-receipt-answer">{parts.decision.answer}</p>
+        <details>
+          <summary>The question</summary>
+          <p className="whitespace-pre-wrap">{parts.decision.question}</p>
+        </details>
+      </div>
+    );
+  return (
+    <>
+      <span className="sr-only">You said: </span>
+      <div className="gc-bubble">
+        <p className={`whitespace-pre-wrap${long && !open ? " line-clamp-4" : ""}`}>{parts.text}</p>
+        {long ? (
+          <Button variant="ghost" size="sm" className="gc-bubble-more" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            {open ? "Show less" : "Show all"}
+          </Button>
+        ) : null}
+      </div>
+      {fileIds.length && sessionId ? <SentFiles sessionId={sessionId} ids={fileIds} /> : null}
+      {parts.context ? <p className="gc-msg-context">Sent while viewing {parts.context.label}</p> : null}
     </>
   );
+}
+
+function SentFiles({ sessionId, ids }: { sessionId: string; ids: string[] }) {
+  const files = useConversationFiles(sessionId);
+  return <MessageAttachments sessionId={sessionId} ids={ids} files={files.data ?? []} />;
 }
 
 type ThreadMessage = Extract<TimelineItem, { kind: "user" | "assistant" | "system" }>;
@@ -479,7 +721,7 @@ function BackgroundNotices({ messages }: { messages: ThreadMessage[] }) {
   return (
     <div className="gc-background-notices">
       <ChipButton aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
-        {messages.length} background notices
+        {messages.length === 1 ? "1 background notice" : `${messages.length} background notices`}
       </ChipButton>
       {open ? (
         <ul id={id}>
@@ -528,12 +770,17 @@ function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionR
   const handle = record.subagentId ?? record.id;
   const controllable = record.source === "subagent" && canControl(handle) && isActiveExec(record);
   const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
+  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes is stalled, not working.
+  const now = useNow();
+  // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
+  const stalled = record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
+  const title = plainMessageLine(record.title).replace(/^Subagent:\s*/i, "");
   return (
     <article className="min-w-0 rounded-lg border border-line px-2 py-1" data-testid="coordinator-run-card" aria-label={record.title}>
       <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
-        <Dot tone={RUN_TONE[record.state]} live={record.state === "running"} label={record.state} />
+        <Dot tone={stalled ? "bad" : RUN_TONE[record.state]} live={record.state === "running" && !stalled} label={stalled ? "stalled" : record.state} />
         <span className="min-w-0 flex-1 truncate" title={record.title}>
-          {record.title}
+          {title}
         </span>
         {at ? (
           <time dateTime={at} title={at} className="text-muted" data-dynamic>

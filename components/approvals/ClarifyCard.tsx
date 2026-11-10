@@ -89,6 +89,7 @@ export function ClarifyCard({
               type="button"
               size="sm"
               variant="primary"
+              className="clarify-send"
               disabled={!picked.length || Boolean(busy)}
               busy={Boolean(busy)}
               onClick={() => void send(picked.join(", "))}
@@ -99,7 +100,7 @@ export function ClarifyCard({
         </div>
       ) : null}
       <form
-        className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5"
+        className="clarify-other mt-2 flex min-w-0 flex-wrap items-center gap-1.5"
         onSubmit={(e) => {
           e.preventDefault();
           void send(other);
@@ -113,7 +114,14 @@ export function ClarifyCard({
           aria-label={clarify.choices.length ? "Other answer" : "Your answer"}
           maxLength={4000}
         />
-        <Button type="submit" size="sm" disabled={!other.trim() || Boolean(busy)}>
+        {/* With choices above (the one-tap answers) this is a quiet text action; alone, it is the card's one primary. */}
+        <Button
+          type="submit"
+          size="sm"
+          variant={clarify.choices.length ? "ghost" : "primary"}
+          className={clarify.choices.length ? "clarify-answer" : undefined}
+          disabled={!other.trim() || Boolean(busy)}
+        >
           Answer
         </Button>
       </form>

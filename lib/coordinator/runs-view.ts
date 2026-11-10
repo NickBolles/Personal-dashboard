@@ -34,12 +34,19 @@ export type RunsResponse = {
 const newest = (a: CoordinatorRunRow, b: CoordinatorRunRow) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || b.seq - a.seq;
 
 export function groupRuns(runs: readonly CoordinatorRunRow[], lastLookedRunning?: string | null) {
-  const groups: Record<"attention" | "running" | "done" | "interrupted", CoordinatorRunRow[]> = { attention: [], running: [], done: [], interrupted: [] };
+  const groups: Record<"attention" | "waiting" | "running" | "done" | "interrupted", CoordinatorRunRow[]> = {
+    attention: [],
+    waiting: [],
+    running: [],
+    done: [],
+    interrupted: [],
+  };
   const marker = lastLookedRunning ? Date.parse(lastLookedRunning) : NaN;
   const since = Number.isFinite(marker) ? marker : Date.now() - 86_400_000;
   for (const run of [...runs].filter((r) => !r.parentRunId).sort(newest)) {
     if (run.state === "interrupted") groups.interrupted.push(run);
-    else if (run.state === "failed" || run.state === "waiting" || run.stalled) groups.attention.push(run);
+    else if (run.state === "waiting") groups.waiting.push(run);
+    else if (run.state === "failed" || run.stalled) groups.attention.push(run);
     else if (run.state === "running") groups.running.push(run);
     else if (run.state === "done" && run.finishedAt && Date.parse(run.finishedAt) > since) groups.done.push(run);
   }

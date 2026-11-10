@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertIcon, CheckIcon } from "@/components/icons";
-import { Button, Card, ChipButton, EmptyState, IconButton, Menu, Pill, SectionHeader, Toast, useNow } from "@/components/ui";
+import { Button, Card, ChipButton, EmptyState, IconButton, Menu, SectionHeader, Toast, useNow } from "@/components/ui";
 import type { UndoOp } from "@/components/work/UndoBar";
 import { AGEING_MS, RISK_LABEL, type Decision } from "@/lib/cw-decisions";
 import { ageLabel, defaultLine, deferUntil, isRisky, recommendedChoice } from "@/lib/coordinator/needs";
+import { plainStatusWords, sameLabel, splitLead } from "@/lib/chat/display";
 import {
   DECISION_UNDO_MS,
   DECISIONS_KEY,
@@ -35,12 +36,18 @@ export function DecisionNotices({ notices }: { notices: DecisionNotice[] }) {
     </div>
   );
 }
+/** The D-n handle: how agents and the owner name a decision in chat. Quiet on purpose; the question is the headline. */
 export function DecisionId({ refId }: { refId: string }) {
   return (
-    <span role="img" aria-label={`Decision ${refId.replace("-", " ")}`}>
-      <Pill tone="ai">{refId}</Pill>
+    <span className="gc-ref" role="img" aria-label={`Decision ${refId.replace("-", " ")}`}>
+      {refId}
     </span>
   );
+}
+/** "Portfolio / Store launch", without repeating an item title that only restates the question. */
+export function decisionWhere(d: Pick<Decision, "areaTitle" | "itemTitle" | "itemId" | "question">) {
+  const item = d.itemTitle && !sameLabel(d.itemTitle, d.question) ? d.itemTitle : null;
+  return [d.areaTitle, item].filter(Boolean).join(" / ") || (d.itemTitle ? "" : d.itemId);
 }
 export function DecisionMenu({
   decision,
@@ -70,7 +77,7 @@ export function DecisionMenu({
           onClick={() => setOpen((v) => !v)}
         />
       ) : (
-        <Button ref={trigger} size="sm" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Button ref={trigger} size="sm" variant="ghost" disabled={disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
           Defer
         </Button>
       )}
@@ -127,7 +134,7 @@ export function NeedsList({
       .filter((r) => !decisions.some((d) => d.ref === r.ref)),
   ];
   const groups = [
-    { title: "Ageing", rows: visible.filter((d) => now - Date.parse(d.createdAt) > AGEING_MS) },
+    { title: "Waiting over a day", rows: visible.filter((d) => now - Date.parse(d.createdAt) > AGEING_MS) },
     { title: "New", rows: visible.filter((d) => !(now - Date.parse(d.createdAt) > AGEING_MS)) },
   ];
   function clearReceipt(ref: string) {
@@ -207,7 +214,7 @@ export function NeedsList({
   return (
     <section className="gc-needs-list min-w-0" aria-label="Needs you decisions">
       <div className="gc-needs-header">
-        <span>{open.length} open</span>
+        <span>{open.length === 1 ? "1 open decision" : `${open.length} open decisions`}</span>
         {candidates.length >= 2 ? (
           <Button size="sm" disabled={batchBusy || pending.length > 0} onClick={() => setBatch([...candidates])}>
             Accept {candidates.length} low-risk
@@ -253,7 +260,13 @@ export function NeedsList({
                 {rows.map((d) => {
                   const receipt = receipts[d.ref];
                   const choice = recommendedChoice(d);
-                  const compact = title === "New" && decisions.length > 12;
+                  const where = decisionWhere(d);
+                  const asked = splitLead(plainStatusWords(d.question));
+                  // A paragraph that cannot be read in the row is headed by its item; its answer waits for the detail,
+                  // where the whole question is on screen (a one-tap "Do it" on half a sentence is a blind answer).
+                  const titled = !asked.whole && !!d.itemTitle && !sameLabel(d.itemTitle, d.question);
+                  const readable = asked.whole && !asked.rest;
+                  const defaults = defaultLine(d, now);
                   const disabled = pending.includes(d.ref) || batchBusy || feedback.deferring.includes(d.ref);
                   return receipt ? (
                     <div className="gc-needs-receipt" key={d.ref}>
@@ -271,27 +284,29 @@ export function NeedsList({
                       ) : null}
                     </div>
                   ) : (
-                    <div className={`gc-needs-row${compact ? " gc-needs-row-compact" : ""}`} key={d.ref}>
+                    <div className="gc-needs-row" key={d.ref}>
                       <Button variant="ghost" className="gc-needs-row-body" onClick={() => onOpen(d.ref)} aria-label={`Open decision ${d.ref}: ${d.question}`}>
-                        <span className="gc-needs-row-title">
-                          {!compact ? <DecisionId refId={d.ref} /> : null}
-                          <span className={compact ? "gc-needs-one-line" : "line-clamp-2"}>{d.question}</span>
+                        <span className="gc-needs-row-title line-clamp-2">{titled ? d.itemTitle : asked.lead}</span>
+                        {titled ? <span className="gc-needs-row-sub line-clamp-2">{asked.rest}</span> : null}
+                        <span className="gc-needs-meta">
+                          {isRisky(d) ? (
+                            <span className="gc-needs-risk">
+                              <AlertIcon className="h-3 w-3" />
+                              {d.risk.map((r) => RISK_LABEL[r]).join(" · ")}
+                            </span>
+                          ) : null}
+                          {where && !(titled && where.endsWith(d.itemTitle ?? "")) ? (
+                            <span>{where}</span>
+                          ) : titled && d.areaTitle ? (
+                            <span>{d.areaTitle}</span>
+                          ) : null}
+                          <span>{ageLabel(d.createdAt, now)}</span>
+                          <DecisionId refId={d.ref} />
+                          {defaults ? <span className="gc-needs-default">{defaults}</span> : null}
                         </span>
-                        {!compact ? (
-                          <span className="gc-needs-meta">
-                            {ageLabel(d.createdAt, now)} · {[d.areaTitle, d.itemTitle].filter(Boolean).join(" / ") || d.itemId}
-                            {isRisky(d) ? (
-                              <span className="gc-needs-risk">
-                                <AlertIcon className="h-3 w-3" />
-                                {d.risk.map((r) => RISK_LABEL[r]).join(" · ")}
-                              </span>
-                            ) : null}
-                            {defaultLine(d, now) ? <span>{defaultLine(d, now)}</span> : null}
-                          </span>
-                        ) : null}
                       </Button>
                       <div className="gc-needs-row-actions">
-                        {choice ? (
+                        {choice && readable ? (
                           <ChipButton
                             disabled={disabled}
                             aria-label={`${d.ref}: ${choice}`}

@@ -30,18 +30,17 @@ async function decisionState(page: Page, ref: string) {
   return body.decisions.find((d) => d.ref === ref);
 }
 
-/** Opens Needs you: the tray's "!N" count on phones, the rail tab on desktop. Returns the panel scope. */
+/** Opens Needs you: the tray (phones) then the tab; the rail tab on desktop. Returns the panel scope. */
 async function openNeeds(page: Page, desktop: boolean): Promise<Locator> {
-  if (desktop) {
-    const rail = page.getByRole("complementary", { name: "Chief of staff" });
-    await rail.getByRole("tab", { name: /^Needs you/ }).click();
-    return rail;
+  if (!desktop) {
+    const tray = page.locator(".gc-tray");
+    // The tray's one sentence says something is waiting before we open it.
+    await expect(tray.locator(".gc-tray-status")).toContainText(/needs? you|Needs you:/);
+    await tray.getByRole("button", { name: "Chief of staff", exact: true }).click();
   }
-  await page
-    .locator(".gc-tray")
-    .getByRole("button", { name: /need you, open Needs you$/ })
-    .click();
-  return page.getByRole("dialog", { name: "Chief of staff" });
+  const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
+  await scope.getByRole("tab", { name: /^Needs you/ }).click();
+  return scope;
 }
 
 let areaId: string | null = null;
@@ -87,7 +86,7 @@ test("MCP-raised decisions: tray → answer in 2 taps with Undo; risk-flagged ne
   expect(low.ref).toMatch(/^D-\d+$/);
 
   await page.goto("/home");
-  // Tap 1: the tray count (phone) / the rail tab (desktop). Tap 2: the recommended answer on the row.
+  // Open Needs you (tray → tab on phones, the rail tab on desktop), then one tap on the recommended answer.
   const scope = await openNeeds(page, desktop);
   await scope.getByRole("button", { name: `${low.ref}: Ship it`, exact: true }).click();
   await expect(scope.getByRole("button", { name: "Undo" }).first()).toBeVisible();
@@ -204,9 +203,9 @@ test("coordinator chat: one Since divider after 2 h away, D-n/R-n chips, run not
   const divider = scope.getByRole("separator", { name: /^Since / });
   await expect(divider).toHaveCount(1);
   await expect(divider).toContainText("2 h");
-  // The mention chip opens the run in Running.
+  // The mention chip opens the run under Activity.
   await scope.getByRole("button", { name: "Run R 7", exact: true }).last().click();
-  await expect(scope.getByRole("tab", { name: /^Running/ })).toHaveAttribute("aria-selected", "true");
+  await expect(scope.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
   await expect(scope.getByText("Sedge ledger build")).toBeVisible();
   await expect(scope.getByText(/2 notices/)).toBeVisible();
   await expectNoHorizontalOverflow(page);

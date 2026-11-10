@@ -8,23 +8,24 @@ import { api } from "@/lib/client/api";
 import type { ActivityItem } from "@/lib/activity";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
+import { sortByUrgency } from "@/lib/cw-decisions";
+import { coordinatorStatus } from "@/lib/coordinator/status";
+import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
-import { useToast } from "@/components/ui";
 import { OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
 import { useCoordinatorThings } from "./useCoordinatorThings";
-import { pickTrayLine } from "@/lib/coordinator/things";
+import { pickTrayLine, type PriorityLine } from "@/lib/coordinator/things";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { DynamicSurface } from "@/components/smart/DynamicSurface";
-import { Button } from "@/components/ui";
-import { trayLine } from "@/lib/coordinator/runs-view";
+import { Button, SectionHeader, useNow, useToast } from "@/components/ui";
 import { NeedsPanel } from "./needs/NeedsPanel";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
@@ -38,9 +39,11 @@ const subscribeWide = (cb: () => void) => {
   return () => m.removeEventListener("change", cb);
 };
 const getWide = () => window.matchMedia("(min-width: 900px)").matches;
-type Tab = "chat" | "needs" | "running" | "changes" | "context";
-const TAB_KEYS: Record<string, Tab> = { n: "needs", r: "running", c: "chat" };
+/** "running" is the Activity tab: runs (working, stuck, finished) plus what the Chief of staff changed. */
+type Tab = "chat" | "needs" | "running";
+const TAB_KEYS: Record<string, Tab> = { n: "needs", r: "running", a: "running", c: "chat" };
 const typingIn = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
 export function GlobalCoordinator() {
@@ -76,26 +79,47 @@ export function GlobalCoordinator() {
   });
   const [activeCard, setActiveCard] = useState<DynamicCard>();
   const [snoozed, setSnoozed] = useState<string[]>([]);
-  const line = pickTrayLine(priority, awayLine ? [] : (dynamic.data?.cards ?? []), snoozed);
   const cwDecisions = useCoordinatorDecisions();
   const cwRuns = useCoordinatorRuns();
   const { mutate: markLooked } = useMarkLooked();
-  // v3 tray line: the single most urgent D-n / R-n (a failing run outranks decisions). The legacy line keeps
-  // smart cards, the away digest and failures v3 doesn't model (CI on a PR, Hermes job runs).
-  const [nowMs] = useState(() => Date.now());
-  const v3 = trayLine({ decisions: cwDecisions.data?.decisions ?? [], runs: cwRuns.data?.runs ?? [], now: nowMs });
-  // Needs you = open D-n rows + the other owner asks the old list carried (run approvals, workflow proposals, stalled runs).
-  const otherAsks = things.decisions.filter((e) => !e.key.startsWith("item:") && !e.key.startsWith("decision:"));
-  // Hermes/job runs and failing PR checks have no R-n row: keep them reachable under Running.
-  const cwRunIds = new Set((cwRuns.data?.runs ?? []).map((r) => r.id));
+  const now = useNow();
+  // Needs you = open D-n rows + run approvals / workflow proposals + stalled runs: the same things, and the same
+  // number, that Today and the sidebar call "Needs you". Stalled runs get one compact line each here and their
+  // full row (log, steer, stop) under Activity.
+  const otherAsks = things.decisions.filter((e) => !/^(item|decision|stalled):/.test(e.key));
+  const stalledAsks = things.decisions.filter((e) => e.key.startsWith("stalled:"));
+  const needsCount = cwDecisions.data ? cwDecisions.data.counts.open + otherAsks.length + stalledAsks.length : things.needsYou;
+  // Hermes/job runs and failing PR checks have no R-n row: keep them reachable under Activity.
+  const runRows = cwRuns.data?.runs ?? [];
+  const cwRunIds = new Set(runRows.map((r) => r.id));
   const otherRuns = [...things.running, ...things.failing.filter((f) => !things.running.some((r) => r.id === f.id))].filter((r) => !cwRunIds.has(r.id));
-  const needsCount = cwDecisions.data ? cwDecisions.data.counts.open + otherAsks.length : things.needsYou;
-  const useV3 =
-    !line.card &&
-    !awayLine &&
-    v3.kind !== "none" &&
-    (v3.tone === "bad" || line.state !== "failing") &&
-    (v3.kind === "decision" || v3.tone === "bad" || line.state === "running" || line.state === "idle");
+  const stillFailing = new Set(things.failing.map((f) => f.id));
+  const topDecision = sortByUrgency(
+    (cwDecisions.data?.decisions ?? []).filter((d) => d.state === "open"),
+    new Date(now),
+  )[0];
+  // One honest status for the tray, the strip and the tab badges (lib/coordinator/status.ts).
+  const status = coordinatorStatus({
+    needs: needsCount,
+    topQuestion: topDecision?.question ?? otherAsks[0]?.question,
+    topRef: topDecision?.ref,
+    runs: runRows,
+    otherRuns: otherRuns.filter((r) => r.state !== "failed" || stillFailing.has(r.id)),
+    finished: things.doneUnseen,
+    lastLooked: cwRuns.data?.lastLooked.running,
+    now,
+  });
+  // Smart cards never displace a new failure or something waiting on the owner; the away digest keeps its own line.
+  const cardBase: PriorityLine = {
+    ...priority,
+    state: status.state === "failed" ? "failing" : status.state === "needs" ? "needs" : "idle",
+  };
+  const line = pickTrayLine(cardBase, awayLine ? [] : (dynamic.data?.cards ?? []), snoozed);
+  const tray = line.card
+    ? { state: "card", tone: line.tone, dot: line.dot, text: line.card.line.text, rest: "" }
+    : awayLine
+      ? { state: priority.state === "failing" ? "failed" : priority.state, tone: priority.tone, dot: priority.dot, text: priority.text, rest: "" }
+      : { state: status.state, tone: status.tone, dot: status.dot, text: status.text, rest: status.rest };
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("jarvis.smart.snoozed") ?? "null") as { day?: string; ids?: string[] } | null;
@@ -172,16 +196,23 @@ export function GlobalCoordinator() {
     setChatExpandedOn(pageKey);
     setPhoneOpen(true);
   };
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    if (next === "running") markSeen();
+  };
   const openAt = (next: Tab, ref?: string) => {
     show();
-    setTab(next);
+    selectTab(next);
     setFocusRef((f) => ({ tab: next, ref, n: (f?.n ?? 0) + 1 }));
   };
   const showPriority = () => {
-    if (useV3) return openAt(v3.target.tab, v3.target.ref);
-    show();
-    setActiveCard(line.card);
-    if (awayLine) setTab("chat");
+    if (line.card) {
+      show();
+      setActiveCard(line.card);
+    } else if (awayLine) {
+      show();
+      setTab("chat");
+    } else openAt(status.target.tab, status.target.ref);
   };
   const prefill = (value: string) => {
     setActiveCard(undefined);
@@ -204,7 +235,7 @@ export function GlobalCoordinator() {
       if (next) {
         e.preventDefault();
         setActiveCard(undefined);
-        setTab(next);
+        selectTab(next);
         requestAnimationFrame(() => document.getElementById(`${ids}-${next}`)?.focus());
       }
       return;
@@ -282,13 +313,13 @@ export function GlobalCoordinator() {
   useEffect(() => {
     const shell = host.current?.closest<HTMLElement>(".jv-shell");
     shell?.style.setProperty("--gc-w", `${wide ? railWidth : 0}px`);
-    if (line.dot) shell?.setAttribute("data-gc-dot", line.dot);
+    if (tray.dot) shell?.setAttribute("data-gc-dot", tray.dot);
     else shell?.removeAttribute("data-gc-dot");
     return () => {
       shell?.style.removeProperty("--gc-w");
       shell?.removeAttribute("data-gc-dot");
     };
-  }, [wide, railWidth, line.dot]);
+  }, [wide, railWidth, tray.dot]);
   useEffect(() => {
     if (wide || !phoneOpen) return;
     const element = dialog.current;
@@ -310,7 +341,8 @@ export function GlobalCoordinator() {
   useEffect(() => {
     const key = `${coord}:${coordRef ?? ""}`;
     if (!coord || openedCoord.current === key) return;
-    const next: Tab | null = coord === "needs" ? "needs" : coord === "running" ? "running" : coord === "chat" ? "chat" : null;
+    // "changes" predates the merged Activity tab; old links still land where the changes are.
+    const next: Tab | null = coord === "needs" ? "needs" : coord === "running" || coord === "changes" ? "running" : coord === "chat" ? "chat" : null;
     if (!next) return;
     openedCoord.current = key;
     const ref = coordRef && /^[DR]-\d{1,9}$/.test(coordRef) ? coordRef : undefined;
@@ -334,7 +366,7 @@ export function GlobalCoordinator() {
   const sinceCounts = Number.isFinite(sinceAt)
     ? {
         decisions: (cwDecisions.data?.decisions ?? []).filter((x) => Date.parse(x.createdAt) > sinceAt).length,
-        runs: (cwRuns.data?.runs ?? []).filter((r) => Date.parse(r.updatedAt) > sinceAt).length,
+        runs: runRows.filter((r) => Date.parse(r.updatedAt) > sinceAt).length,
       }
     : { decisions: 0, runs: 0 };
   const openedRequest = useRef<string | null>(null);
@@ -352,28 +384,42 @@ export function GlobalCoordinator() {
     }
   }, [requestedCard, dynamic.data]);
   const d = info.data?.area ? (info.data as CoordinatorResponse) : null;
-  const tabs: { id: Tab; label: string; count?: number }[] = [
+  const inFlight = status.counts.working + status.counts.stuck;
+  const tabs: { id: Tab; label: string; count?: number; tone?: "bad" | "warn"; hint?: string }[] = [
     { id: "chat", label: "Chat" },
-    { id: "needs", label: "Needs you", count: needsCount },
-    { id: "running", label: "Running", count: things.running.length },
-    { id: "changes", label: "Changes", count: things.changes.length },
-    { id: "context", label: "Context" },
+    { id: "needs", label: "Needs you", count: needsCount, tone: needsCount ? "warn" : undefined, hint: `${needsCount} waiting on you` },
+    {
+      id: "running",
+      label: "Activity",
+      count: inFlight,
+      tone: status.counts.newStuck ? "bad" : undefined,
+      hint: `${status.counts.working} working, ${status.counts.stuck} stuck`,
+    },
   ];
   const content = (
     <>
       <header className="gc-head">
         <h2 id={`${ids}-title`}>Chief of staff</h2>
-        <button data-gc-close type="button" className="gc-icon" aria-label={wide ? "Collapse Chief of staff" : "Close Chief of staff"} onClick={hide}>
-          {wide ? "›" : "×"}
-        </button>
-        {d ? <AgentChip agent={d.agent} prefix="Answers" /> : null}
+        {d && (!d.agent.routed || d.agent.profile !== d.agent.requested) ? <AgentChip agent={d.agent} prefix="Answers" /> : null}
+        <Button
+          data-gc-close
+          variant="ghost"
+          size="sm"
+          iconOnly
+          icon={wide ? <ChevronIcon className="h-4 w-4" /> : "×"}
+          className="gc-close"
+          aria-label={wide ? "Collapse Chief of staff" : "Close Chief of staff"}
+          onClick={hide}
+        >
+          {wide ? "Collapse" : "Close"}
+        </Button>
       </header>
       {line.card ? (
         <p className="gc-priority" data-tone={line.tone} data-dynamic={awayLine || undefined} role="status">
           {line.text}
-          <button type="button" className="gc-icon" onClick={showPriority}>
+          <Button variant="ghost" size="sm" onClick={showPriority}>
             {line.card.action}
-          </button>
+          </Button>
         </p>
       ) : null}
       {activeCard ? (
@@ -390,10 +436,7 @@ export function GlobalCoordinator() {
                 aria-selected={tab === t.id}
                 tabIndex={tab === t.id ? 0 : -1}
                 key={t.id}
-                onClick={() => {
-                  setTab(t.id);
-                  if (t.id === "changes" || t.id === "running") markSeen();
-                }}
+                onClick={() => selectTab(t.id)}
                 onKeyDown={(e) => {
                   let next = index;
                   if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
@@ -402,13 +445,13 @@ export function GlobalCoordinator() {
                   else if (e.key === "End") next = tabs.length - 1;
                   else return;
                   e.preventDefault();
-                  setTab(tabs[next]!.id);
+                  selectTab(tabs[next]!.id);
                   document.getElementById(`${ids}-${tabs[next]!.id}`)?.focus();
                 }}
               >
                 {t.label}
-                {t.count !== undefined ? (
-                  <span className="gc-badge" data-tone={t.id === "running" && things.failing.length ? "bad" : undefined}>
+                {t.count ? (
+                  <span className="gc-badge" data-tone={t.tone} title={t.hint}>
                     {t.count}
                   </span>
                 ) : null}
@@ -417,10 +460,10 @@ export function GlobalCoordinator() {
           </div>
           {info.error || error ? (
             <p role="alert" className="gc-error">
-              Some coordinator data couldn&apos;t load. It will retry automatically.
+              Some of this couldn&apos;t load. Retrying automatically.
             </p>
           ) : null}
-          {info.isLoading ? <p className="gc-empty">Loading Chief of staff…</p> : null}
+          {info.isLoading ? <p className="gc-empty">Loading…</p> : null}
           {info.isSuccess && !d ? (
             <div className="gc-empty">
               No Chief of staff yet: set an area&apos;s agent to chiefofstaff in <Link href="/settings/agents">Settings → Agents</Link>.
@@ -437,7 +480,7 @@ export function GlobalCoordinator() {
               tabIndex={0}
             >
               {t.id === "chat" ? (
-                <div className="max-h-[45%] shrink-0 overflow-y-auto">
+                <div className="gc-away">
                   <WhileAwayCard compact />
                 </div>
               ) : null}
@@ -446,15 +489,22 @@ export function GlobalCoordinator() {
                   key={d.area.id}
                   info={d}
                   compact
+                  name="Chief of staff"
                   draft={draft}
                   onDraft={setDraft}
                   context={attached}
+                  contextRemoved={!!context && !attached}
                   onRemoveContext={() => setRemovedOn(pageKey)}
+                  onRestoreContext={() => setRemovedOn(null)}
+                  onAskPage={() => {
+                    setRemovedOn(null);
+                    prefill(ASK_PAGE);
+                  }}
                   quickContext={quickContext}
                   inlineActions={(lastUserAt) => <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} />}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
-                  onJump={(next) => setTab(next === "needs" ? "needs" : "running")}
+                  onJump={(next) => selectTab(next === "needs" ? "needs" : "running")}
                   onRef={onRef}
                 />
               ) : null}
@@ -463,18 +513,53 @@ export function GlobalCoordinator() {
                   key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
                   initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
                   onAsk={(ref, question) => prefill(`About ${ref} (${question.slice(0, 160)}): `)}
+                  lead={
+                    otherAsks.length || stalledAsks.length ? (
+                      <>
+                        {otherAsks.length ? (
+                          <section className="gc-list" aria-label="Approvals and proposals">
+                            <SectionHeader label="Waiting for your approval" count={otherAsks.length} />
+                            {otherAsks.map((ask) => (
+                              <Link key={ask.key} href={ask.href}>
+                                <strong>{ask.title}</strong>
+                                <span>{ask.question} · opens the conversation</span>
+                              </Link>
+                            ))}
+                          </section>
+                        ) : null}
+                        {stalledAsks.length ? (
+                          <section className="gc-list" aria-label="Stalled runs">
+                            <SectionHeader
+                              label="Stalled runs"
+                              count={stalledAsks.length}
+                              action={
+                                <Button variant="ghost" size="sm" onClick={() => selectTab("running")}>
+                                  See in Activity
+                                </Button>
+                              }
+                            />
+                            {stalledAsks.map((ask) => {
+                              const run = runRows.find((r) => `stalled:${r.id}` === ask.key);
+                              return (
+                                <Button key={ask.key} variant="ghost" className="gc-stalled-row" onClick={() => openAt("running", run?.ref)}>
+                                  <strong>{run?.title ?? ask.title}</strong>
+                                  <span>No report for over 30 minutes{run ? ` · ${run.profile}` : ""}</span>
+                                </Button>
+                              );
+                            })}
+                          </section>
+                        ) : null}
+                      </>
+                    ) : null
+                  }
                 />
               ) : null}
-              {t.id === "needs" && tab === "needs" && otherAsks.length ? (
-                <section className="gc-list" aria-label="Other approvals">
-                  <h3 className="gc-hint">Approvals and proposals</h3>
-                  {otherAsks.map((ask) => (
-                    <Link key={ask.key} href={ask.href}>
-                      <strong>{ask.title}</strong>
-                      <span>{ask.question}</span>
-                    </Link>
-                  ))}
-                </section>
+              {t.id === "running" && things.changes.length ? (
+                <p className="gc-jump">
+                  <Button variant="ghost" size="sm" onClick={() => document.getElementById(`${ids}-changes`)?.scrollIntoView({ block: "start" })}>
+                    {things.changes.length === 1 ? "1 change" : `${things.changes.length} changes`} by the Chief of staff today
+                  </Button>
+                </p>
               ) : null}
               {t.id === "running" && tab === "running" ? (
                 <RunningPanel
@@ -482,57 +567,31 @@ export function GlobalCoordinator() {
                   initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
                   onSteer={(ref, title) => prefill(`Steer ${ref} (${title.slice(0, 120)}): `)}
                   onCommand={prefill}
+                  quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
                 />
               ) : null}
               {t.id === "running" && tab === "running" && otherRuns.length ? (
-                <section className="gc-list" aria-label="Other activity">
-                  <h3 className="gc-hint">Jobs and checks</h3>
+                <section className="gc-list" aria-label="Jobs and checks">
+                  <SectionHeader label={cwRuns.isError ? "Runs, from item status" : "Jobs and checks"} count={otherRuns.length} />
                   {otherRuns.map((run) => (
                     <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
                       <strong>{run.title}</strong>
                       <span data-tone={run.state === "failed" || run.state === "stalled" ? "bad" : "ai"}>
-                        {run.state}
+                        {OTHER_STATE[run.state]}
                         {run.at ? ` · ${relativeTime(run.at)}` : ""}
                       </span>
                     </Link>
                   ))}
                 </section>
               ) : null}
-              {t.id === "changes" ? (
-                <div className="gc-changes">
-                  <p className="gc-hint">By @chiefofstaff · last 24 hours</p>
-                  <ActionCards rows={things.changes} />
-                  {!things.changes.length ? <p>No recent changes.</p> : null}
-                </div>
-              ) : null}
-              {t.id === "context" ? (
-                <div className="gc-page">
-                  {context ? (
-                    <>
-                      <p>Viewing: {context.label}</p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveCard(undefined);
-                          setDraft("Help me understand this page and suggest the next action.");
-                          setRemovedOn(null);
-                          setTab("chat");
-                        }}
-                      >
-                        Ask about this page
-                      </button>
-                    </>
-                  ) : (
-                    <p>No page context is shared.</p>
-                  )}
-                </div>
-              ) : null}
+              {t.id === "running" ? <ChangesSection id={`${ids}-changes`} rows={things.changes} /> : null}
             </div>
           ))}
         </>
       )}
     </>
   );
+  const statusId = `${ids}-status`;
   return (
     <div ref={host} className="gc-host">
       {wide ? (
@@ -576,30 +635,35 @@ export function GlobalCoordinator() {
             </>
           ) : (
             <>
-              <button type="button" className="gc-icon gc-expand" aria-label="Expand Chief of staff" onClick={show}>
+              <Button
+                variant="ghost"
+                className="gc-strip-btn gc-expand"
+                aria-label="Expand Chief of staff"
+                title={`Chief of staff · ${tray.text}`}
+                onClick={show}
+              >
                 <span className="gc-orb" aria-hidden="true" />
-                <AttentionDot dot={line.dot} />
-              </button>
-              {tabs.slice(1, 4).map((t) => (
-                <button
-                  type="button"
-                  className="gc-icon"
+                <AttentionDot dot={tray.dot} />
+              </Button>
+              {tabs.slice(1).map((t) => (
+                <Button
+                  variant="ghost"
+                  className="gc-strip-btn"
                   key={t.id}
                   aria-label={`${t.label}${t.count ? `, ${t.count}` : ""}`}
+                  title={t.count ? `${t.label} · ${t.hint}` : t.label}
                   onClick={() => {
                     show();
-                    setTab(t.id);
+                    selectTab(t.id);
                   }}
                 >
-                  <span aria-hidden="true" data-tone={t.id === "running" && things.failing.length ? "bad" : undefined}>
-                    {t.id === "needs" ? "!" : t.id === "running" ? "↻" : "≡"}
-                  </span>
+                  {t.id === "needs" ? <InboxIcon className="h-4 w-4" /> : <BoltIcon className="h-4 w-4" />}
                   {t.count ? (
-                    <span className="gc-badge" data-tone={t.id === "running" && things.failing.length ? "bad" : undefined}>
+                    <span className="gc-badge" data-tone={t.tone}>
                       {t.count}
                     </span>
                   ) : null}
-                </button>
+                </Button>
               ))}
             </>
           )}
@@ -620,30 +684,21 @@ export function GlobalCoordinator() {
             </div>
           ) : null}
           {!chat ? (
-            <div className="gc-tray" data-state={useV3 && v3.tone === "bad" ? "failing" : line.state} data-dynamic-tone={line.card?.line.tone}>
-              <button type="button" className="gc-tray-main" aria-label="Chief of staff" aria-haspopup="dialog" onClick={showPriority}>
+            <div className="gc-tray" data-state={tray.state} data-dynamic-tone={line.card?.line.tone}>
+              <button
+                type="button"
+                className="gc-tray-main"
+                aria-label="Chief of staff"
+                aria-describedby={statusId}
+                aria-haspopup="dialog"
+                onClick={showPriority}
+              >
                 <span className="gc-tray-avatar">
                   <span className="gc-orb" aria-hidden="true" />
-                  <span className="gc-tray-phone hidden">
-                    <AttentionDot dot={line.dot} />
-                  </span>
+                  <AttentionDot dot={tray.dot} />
                 </span>
                 <span className="gc-tray-copy">
                   <strong>
-                    {!line.card ? (
-                      <span className="gc-tray-phone hidden" data-tone={line.tone}>
-                        {line.state === "failing"
-                          ? "Failing"
-                          : line.state === "needs"
-                            ? "Needs you"
-                            : line.state === "done"
-                              ? "Finished"
-                              : line.state === "running"
-                                ? "Running"
-                                : "Quiet"}{" "}
-                        ·{" "}
-                      </span>
-                    ) : null}
                     {line.card ? (
                       <>
                         <span aria-hidden="true">{line.card.line.icon} </span>
@@ -653,42 +708,14 @@ export function GlobalCoordinator() {
                       "Chief of staff"
                     )}
                   </strong>
-                  <span
-                    className="gc-priority"
-                    data-tone={useV3 ? (v3.tone === "bad" ? "bad" : v3.tone === "warn" ? "warn" : "ai") : line.tone}
-                    data-dynamic={awayLine || useV3 || undefined}
-                  >
-                    {line.card ? line.card.line.text : useV3 ? v3.text : line.text}
+                  <span id={statusId} className="gc-tray-status" data-dynamic>
+                    <span data-tone={tray.tone === "neutral" ? undefined : tray.tone}>{tray.text}</span>
+                    {tray.rest ? <span className="gc-tray-rest"> · {tray.rest}</span> : null}
                   </span>
                 </span>
-                {line.card ? <span className="shrink-0 text-xs text-accent">{line.card.action}</span> : null}
-                <span className="gc-tray-tablet-dot">
-                  <AttentionDot dot={line.dot} />
-                </span>
-                <span className="gc-tray-phone hidden" aria-hidden="true">
-                  ⌃
-                </span>
+                {line.card ? <span className="gc-tray-action">{line.card.action}</span> : null}
+                <ChevronIcon className="gc-tray-chevron h-4 w-4" />
               </button>
-              {needsCount || things.running.length || things.failing.length ? (
-                <span className="gc-tray-counts hidden">
-                  {needsCount ? (
-                    <Button size="sm" variant="ghost" data-tone="warn" aria-label={`${needsCount} need you, open Needs you`} onClick={() => openAt("needs")}>
-                      !{needsCount}
-                    </Button>
-                  ) : null}
-                  {things.running.length || things.failing.length ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-tone={things.failing.length ? "bad" : "ai"}
-                      aria-label={`${things.running.length} running${things.failing.length ? `, ${things.failing.length} failing` : ""}, open Running`}
-                      onClick={() => openAt("running")}
-                    >
-                      ↻{things.running.length}
-                    </Button>
-                  ) : null}
-                </span>
-              ) : null}
             </div>
           ) : null}
           {phoneOpen ? (
@@ -716,8 +743,15 @@ export function GlobalCoordinator() {
   );
 }
 
+const OTHER_STATE: Record<"running" | "stalled" | "failed" | "waiting", string> = {
+  running: "Working",
+  stalled: "No update for a while",
+  failed: "Failed",
+  waiting: "Waiting",
+};
+
 function AttentionDot({ dot }: { dot: "red" | "yellow" | null }) {
-  return dot ? <span className="gc-dot" data-dot={dot} aria-label={dot === "red" ? "Attention required" : "Updates to review"} /> : null;
+  return dot ? <span className="gc-dot" data-dot={dot} role="img" aria-label={dot === "red" ? "Attention required" : "Updates to review"} /> : null;
 }
 
 function actionLabel(row: ActivityItem) {
@@ -736,7 +770,7 @@ function ActionCards({ rows }: { rows: ActivityItem[] }) {
     </div>
   );
 }
-function ActionCard({ row }: { row: ActivityItem }) {
+function UndoButton({ row }: { row: ActivityItem }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
@@ -755,6 +789,19 @@ function ActionCard({ row }: { row: ActivityItem }) {
       setPending(false);
     }
   };
+  return row.undoOpId ? (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={pending || undone}
+      onClick={() => void undo()}
+      aria-label={`Undo ${actionLabel(row)}${row.object ? `: ${row.object.title}` : ""}`}
+    >
+      {undone ? "Undone" : "Undo"}
+    </Button>
+  ) : null;
+}
+function ActionCard({ row }: { row: ActivityItem }) {
   return (
     <article className="gc-action">
       <span className="gc-action-icon" aria-hidden="true">
@@ -763,18 +810,61 @@ function ActionCard({ row }: { row: ActivityItem }) {
       <div>
         <strong>{actionLabel(row)}</strong>
         {row.object ? <Link href={`/areas?item=${encodeURIComponent(row.object.id)}`}>{row.object.title}</Link> : null}
-        <span className="gc-hint">{relativeTime(row.at)} · @chiefofstaff</span>
+        <span className="gc-hint">{relativeTime(row.at)}</span>
       </div>
-      {row.undoOpId ? (
-        <button
-          type="button"
-          disabled={pending || undone}
-          onClick={() => void undo()}
-          aria-label={`Undo ${actionLabel(row)}${row.object ? `: ${row.object.title}` : ""}`}
-        >
-          {undone ? "Undone" : "Undo"}
-        </button>
-      ) : null}
+      <UndoButton row={row} />
     </article>
+  );
+}
+
+const CHANGES_SHOWN = 5;
+/** What the Chief of staff changed in the last day, grouped by item so three edits to one item read as one entry. */
+function ChangesSection({ rows, id }: { rows: ActivityItem[]; id?: string }) {
+  const [all, setAll] = useState(false);
+  const groups: { key: string; object: ActivityItem["object"]; rows: ActivityItem[] }[] = [];
+  for (const row of rows) {
+    const key = row.object?.id ?? `row:${row.id}`;
+    const group = groups.find((g) => g.key === key);
+    if (group) group.rows.push(row);
+    else groups.push({ key, object: row.object, rows: [row] });
+  }
+  const shown = all ? groups : groups.slice(0, CHANGES_SHOWN);
+  return (
+    <section id={id} className="gc-changes" aria-label="Changes">
+      <SectionHeader
+        label="Changes · last 24 hours"
+        count={rows.length}
+        action={
+          groups.length > CHANGES_SHOWN ? (
+            <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+              {all ? "Show fewer" : `Show all ${groups.length}`}
+            </Button>
+          ) : undefined
+        }
+      />
+      {!rows.length ? <p className="gc-hint">Nothing changed by the Chief of staff in the last day.</p> : null}
+      <ul className="gc-change-groups">
+        {shown.map((group) => (
+          <li key={group.key} className="gc-change-group">
+            {group.object ? (
+              <Link className="gc-change-title" href={`/areas?item=${encodeURIComponent(group.object.id)}`}>
+                {group.object.title}
+              </Link>
+            ) : null}
+            <ul>
+              {group.rows.map((row) => (
+                <li key={row.id} className="gc-change-row">
+                  <span className="min-w-0 flex-1">
+                    {actionLabel(row)}
+                    <span className="gc-hint"> · {relativeTime(row.at)}</span>
+                  </span>
+                  <UndoButton row={row} />
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

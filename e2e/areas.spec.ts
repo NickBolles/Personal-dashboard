@@ -145,6 +145,7 @@ test("the conversations view: All / Unfiled over the same tree data", async ({ p
   await expect(page.getByRole("heading", { level: 1, name: "Conversations" })).toBeVisible();
   await page.getByRole("button", { name: /^Unfiled/ }).click();
   await expect(page).toHaveURL(/view=unfiled/);
-  await expect(page.locator("[data-conversation]", { hasText: `Unfiled idea ${nonce}` })).toContainText("Miscellaneous");
+  // Unfiled rows no longer spell out "Miscellaneous" (only a real filing shows its path); the row carries where it sits.
+  await expect(page.locator("[data-conversation]", { hasText: `Unfiled idea ${nonce}` })).toHaveAttribute("data-placement", "misc");
   await expectNoHorizontalOverflow(page);
 });

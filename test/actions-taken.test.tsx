@@ -90,16 +90,31 @@ describe("ActionsTaken", () => {
     expect(chip.title).toBe(`Created · ${title}`);
     expect(chip.textContent).toBe(`Created · ${title.slice(0, 39)}…`);
     expect(screen.getByRole("group", { name: "Actions in Jarvis" })).toBeTruthy();
-    expect(chip.className).toContain("border-dashed");
-    expect(screen.getByText("Actions", { exact: true })).toBeTruthy();
+    // Done = solid agent outline; only something merely proposed keeps the dashed "proposed" outline.
+    expect(chip.className).not.toContain("border-dashed");
+    view.rerender(<ActionsTaken actions={[action({ kind: "quick_action", label: "Quick action proposed", undoOpId: null })]} />);
+    expect(screen.getByRole("button", { name: "Proposed a quick action · Retry policy" }).className).toContain("border-dashed");
   });
-  it("shows eight chips then expands +N more without sending anything", () => {
-    render(<ActionsTaken actions={Array.from({ length: 10 }, (_, i) => action({ id: `a${i}`, title: `Item ${i}` }))} />, { wrapper });
-    expect(screen.getAllByRole("button")).toHaveLength(9);
-    expect(screen.queryByRole("button", { name: "Created · Item 8" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "+2 more" }));
-    expect(screen.getAllByRole("button")).toHaveLength(10);
-    expect(screen.getByRole("button", { name: "Created · Item 9" })).toBeTruthy();
+  it("summarises several actions in one plain line and lists them, repeats folded, only on request", () => {
+    const run = (id: string) => action({ id, kind: "run_started", label: "Run started", title: null, runId: id, undoOpId: null });
+    const delegated = action({ id: "d", kind: "delegated", label: "2 sub-agents", title: "Audit retries", count: 2, href: null, itemId: null, undoOpId: null });
+    render(<ActionsTaken actions={[action(), run("arun_1"), run("arun_2"), delegated, action({ id: "u", kind: "updated", label: "Updated" })]} />, { wrapper });
+    const summary = screen.getByRole("button", { name: "Created 1 item, started 2 runs, handed off to 2 agents, +1 more" });
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(summary);
+    expect(summary.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      within(screen.getByRole("list", { name: "What was done" }))
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Created · Retry policy", "Started 2 runs", "Handed off to 2 agents · Audit retries", "Updated · Retry policy"]);
+    // Every row still opens what it opened before.
+    openChip("Updated · Retry policy");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open" }));
+    expect(mocks.push).toHaveBeenCalledWith("/areas?item=wk_retry");
+    fireEvent.click(summary);
+    expect(screen.queryByRole("list", { name: "What was done" })).toBeNull();
     expect(api.post).not.toHaveBeenCalled();
   });
   it("opens internal paths through the router and closes the menu with focus restored", () => {
@@ -165,20 +180,20 @@ describe("ActionsTaken", () => {
     expect(mocks.push).not.toHaveBeenCalled();
   });
   it("opens delegated work through the session-scoped Running event or link", () => {
-    const delegated = action({ kind: "delegated", label: "2 sub-agents", title: null, href: null, itemId: null, undoOpId: null });
+    const delegated = action({ kind: "delegated", label: "2 sub-agents", count: 2, title: null, href: null, itemId: null, undoOpId: null });
     const handler = vi.fn();
     window.history.replaceState({}, "", "/chat/s1");
     window.addEventListener(OPEN_CHAT_RUNNING, handler);
     const view = render(<ActionsTaken actions={[delegated]} sessionId="s1" />, { wrapper });
-    openChip("2 sub-agents");
+    openChip("Handed off to 2 agents");
     expect(handler).toHaveBeenCalledOnce();
     expect((handler.mock.calls[0][0] as CustomEvent).detail).toEqual({ sessionId: "s1" });
     window.removeEventListener(OPEN_CHAT_RUNNING, handler);
     window.history.replaceState({}, "", "/areas");
-    openChip("2 sub-agents");
+    openChip("Handed off to 2 agents");
     expect(mocks.push).toHaveBeenCalledWith("/chat/s1?panel=running");
     view.rerender(<ActionsTaken actions={[delegated]} />);
-    expect((screen.getByRole("button", { name: "2 sub-agents" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Handed off to 2 agents" }) as HTMLButtonElement).disabled).toBe(true);
   });
   it("closes on Escape and outside clicks", () => {
     render(<ActionsTaken actions={[action()]} />, { wrapper });

@@ -1540,7 +1540,7 @@ async function stubGlobalCoordinator(page: Page) {
   // Never a real coordinator/Hermes write from a visual test.
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
 }
-const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint"].map((m) => scope.locator(m));
+const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint", ".gc-change-row .gc-hint"].map((m) => scope.locator(m));
 async function gcTheme(page: Page, scheme: "light" | "dark") {
   await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -1636,10 +1636,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
-    await sheet.getByRole("tab", { name: /^Changes/ }).click();
+    // Activity = runs + what the Chief of staff changed (the old Changes tab).
+    await sheet.getByRole("tab", { name: /^Activity/ }).click();
     await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
     await page.waitForTimeout(200);
-    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-changes-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-activity-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
 }
 
@@ -1674,8 +1675,9 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
 test("chief of staff phone tray: a long failing line truncates inside the viewport and the composer stays reachable (#257)", async ({ page }, info) => {
   test.skip(info.project.name === "desktop", "Phone tray");
   await stubGlobalCoordinator(page);
-  // Prod state that overflowed release 65: 21 stalled runs + 44 decisions → "Failing · Chief of staff / 21 runs need attention" + badges.
-  const stale = new Date(Date.now() - 26 * 3600_000).toISOString();
+  // Prod state that overflowed release 65: 21 stalled runs + 44 decisions. They stalled since the owner last looked, so the
+  // tray leads with them: "21 runs newly stuck · 44 need you" (one sentence, no count badges).
+  const stale = new Date(Date.now() - 45 * 60_000).toISOString();
   const items = Object.fromEntries(
     Array.from({ length: 21 }, (_, i) => {
       const itemId = `wk_tray_${i}`;
@@ -1714,12 +1716,13 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
-    await expect(tray).toContainText("21 runs need attention");
-    await expect(page.locator(".gc-tray .gc-tray-counts")).toContainText("44");
+    await expect(tray).toContainText("21 runs newly stuck");
+    await expect(tray.locator(".gc-tray-status")).toContainText("44 need you");
+    await expect(page.locator(".gc-tray").getByRole("button")).toHaveCount(1);
     await page.waitForTimeout(200);
     const m = await tray.evaluate((el) => {
       const r = el.getBoundingClientRect();
-      const line = el.querySelector(".gc-priority") as HTMLElement;
+      const line = el.querySelector(".gc-tray-status") as HTMLElement;
       return {
         left: r.left,
         right: r.right,
@@ -2546,8 +2549,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), scheme);
     const message = page.locator("#msg-actions-answer");
     await expect(message.getByTestId("actions-taken")).toBeVisible();
+    // Several actions collapse into one plain summary line; the snapshot shows it opened.
+    await message.getByRole("button", { name: "Created 1 item, handed off to 2 agents" }).click();
     await expect(message.getByRole("button", { name: "Created · Retry policy" })).toBeVisible();
-    await expect(message.getByRole("button", { name: "2 sub-agents · Audit retries" })).toBeVisible();
+    await expect(message.getByRole("button", { name: "Handed off to 2 agents · Audit retries" })).toBeVisible();
+    await page.mouse.move(0, 0);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(message).toHaveScreenshot(`chat-actions-taken-${scheme}.png`, { animations: "disabled" }));
   });
