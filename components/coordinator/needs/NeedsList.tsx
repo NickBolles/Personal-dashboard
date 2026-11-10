@@ -221,7 +221,8 @@ export function NeedsList({
   }
   return (
     <section className="gc-needs-list min-w-0" aria-label="Needs you decisions">
-      <div className="gc-needs-header">
+      {/* An empty queue is said once, by the empty state below. */}
+      <div className="gc-needs-header" hidden={!open.length}>
         <span>{open.length === 1 ? "1 open decision" : `${open.length} open decisions`}</span>
         {candidates.length >= 2 ? (
           <Button size="sm" disabled={batchBusy || pending.length > 0} onClick={() => setBatch([...candidates])}>

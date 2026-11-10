@@ -10,6 +10,7 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
 import { sortByUrgency } from "@/lib/cw-decisions";
 import { coordinatorStatus } from "@/lib/coordinator/status";
+import { sinceRunCounts } from "@/lib/coordinator/run-card";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
@@ -366,7 +367,10 @@ export function GlobalCoordinator() {
   const sinceCounts = Number.isFinite(sinceAt)
     ? {
         decisions: (cwDecisions.data?.decisions ?? []).filter((x) => Date.parse(x.createdAt) > sinceAt).length,
-        runs: runRows.filter((r) => Date.parse(r.updatedAt) > sinceAt).length,
+        ...sinceRunCounts(
+          runRows.filter((r) => !r.parentRunId),
+          sinceAt,
+        ),
       }
     : { decisions: 0, runs: 0 };
   const openedRequest = useRef<string | null>(null);

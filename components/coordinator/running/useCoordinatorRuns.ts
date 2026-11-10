@@ -6,11 +6,13 @@ import type { LookSurface } from "@/lib/cw-runs";
 import type { RunsResponse } from "@/lib/coordinator/runs-view";
 
 export const COORDINATOR_RUNS_KEY = ["work", "coordinator", "runs"] as const;
-export function useCoordinatorRuns() {
+/** `live`: the runs are on screen (Activity, or run cards in Chat), so keep them current; otherwise a slow tick feeds the tray. */
+export function useCoordinatorRuns(live = false, enabled = true) {
   return useQuery({
     queryKey: COORDINATOR_RUNS_KEY,
     queryFn: ({ signal }) => api.get<RunsResponse>("/api/coordinator/runs", signal),
-    refetchInterval: 30_000,
+    enabled,
+    refetchInterval: live ? 10_000 : 30_000,
   });
 }
 

@@ -1,0 +1,443 @@
+/* ==== run cards ====
+   One card per piece of agent work, in Activity and in Chat: a tinted state chip, the title, who is on it, its
+   pipeline, a real timeline (newest first) and a quiet action bar. Tones come from the library's k-t-* classes
+   (--k-fg / --k-bg), the same ones the item pages use for PR, checks and deploy pills. */
+.rc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  background: var(--s1, var(--surface));
+  color: var(--t1);
+  overflow-wrap: anywhere;
+}
+.rc + .rc {
+  margin-top: 8px;
+}
+.rc[data-state="failed"] {
+  border-color: color-mix(in oklab, var(--bad) 32%, var(--bd));
+}
+.rc:is([data-state="stuck"], [data-state="waiting"], [data-state="interrupted"]) {
+  border-color: color-mix(in oklab, var(--wn) 32%, var(--bd));
+}
+.rc > p {
+  margin: 0;
+}
+
+/* Header: the whole block toggles the card. */
+.rc .k-btn.rc-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-weight: 400;
+  text-align: start;
+  white-space: normal;
+}
+.rc .k-btn.rc-head:hover:not(:disabled) {
+  background: none;
+}
+.rc-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rc-status {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 7px;
+  min-width: 0;
+}
+.rc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  background: var(--k-bg, var(--s3));
+  color: var(--k-fg, var(--t2));
+  font: 600 0.75rem/1rem var(--sans);
+  white-space: nowrap;
+}
+.rc-chip > .k-dot {
+  width: 6px;
+  height: 6px;
+}
+.rc-status-detail {
+  color: var(--t3);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.rc-ref {
+  flex: none;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.rc-chevron {
+  flex: none;
+  color: var(--t3);
+}
+.rc-title {
+  margin: 0;
+  color: var(--t1);
+  font: 600 0.875rem/1.35 var(--sans);
+}
+.rc-meta {
+  display: block;
+  color: var(--t3);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.rc-meta > * {
+  display: inline;
+  margin-inline-end: 0.3em;
+}
+.rc-meta > *:not(:last-child)::after {
+  /* No-break space: the dot stays with the item it follows. */
+  content: "\00a0·";
+}
+.rc-summary,
+.rc-outcome {
+  color: var(--t2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.rc-outcome[data-tone="bad"] {
+  color: var(--bad);
+}
+.rc-lock {
+  color: var(--wn);
+  font-size: 0.75rem;
+}
+.rc-note {
+  color: var(--t3);
+  font-size: 0.75rem;
+}
+
+/* Pipeline: a row of small stage pills joined by a hairline; colour and a glyph carry the state. */
+.rc-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.rc-stage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--s3);
+  color: var(--t3);
+  font: 500 0.6875rem/1rem var(--sans);
+}
+.rc-stage:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(100% + 1px);
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--bd2, var(--bd));
+}
+.rc-stage[data-state="ok"] {
+  background: var(--oks);
+  color: var(--ok);
+}
+.rc-stage[data-state="ok"]::before {
+  content: "✓";
+}
+.rc-stage[data-state="running"] {
+  background: var(--ais);
+  color: var(--ai);
+}
+.rc-stage[data-state="running"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.rc-stage[data-state="failed"] {
+  background: var(--bads);
+  color: var(--bad);
+}
+.rc-stage[data-state="failed"]::before {
+  content: "✕";
+}
+.rc-stage[data-state="skipped"] {
+  border-color: var(--bd);
+  border-style: dashed;
+  background: none;
+}
+
+/* Timeline: a rail with one node per event. */
+.rc-timeline {
+  display: grid;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rc-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  padding: 3px 0;
+  color: var(--t2);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+.rc-event::before {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bd);
+}
+.rc-event:first-child::before {
+  top: 10px;
+}
+.rc-event:last-child::before {
+  bottom: calc(100% - 10px);
+}
+.rc-event:only-child::before {
+  display: none;
+}
+.rc-node {
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  margin: 5px 3px 0;
+  border-radius: 999px;
+  background: var(--k-fg, var(--t3));
+  box-shadow: 0 0 0 2px var(--s1, var(--surface));
+}
+.rc-event[data-latest] {
+  color: var(--t1);
+}
+.rc-event[data-latest] .rc-node {
+  box-shadow:
+    0 0 0 2px var(--s1, var(--surface)),
+    0 0 0 4px var(--k-bg, var(--s3));
+}
+.rc-event-main {
+  min-width: 0;
+}
+.rc-event .k-pill.rc-event-chip {
+  margin-inline-end: 6px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  line-height: 0.9375rem;
+  vertical-align: 1px;
+}
+.rc-event-time {
+  padding-top: 1px;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rc-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  animation: rc-reveal 140ms ease-out;
+}
+.rc .k-btn.rc-earlier {
+  align-self: flex-start;
+  margin-inline-start: 14px;
+  color: var(--t2);
+}
+.rc-outcome .k-btn.rc-earlier {
+  margin-inline-start: 2px;
+  vertical-align: baseline;
+}
+
+/* Action bar: the card's bottom edge. Quiet icon + word buttons; Stop sits apart at the end. */
+.rc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 2px -6px -4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bd);
+}
+.rc .rc-actions .k-btn.rc-act {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--t2);
+  font: 500 0.78125rem/1 var(--sans);
+  text-decoration: none;
+}
+.rc .rc-actions .k-btn.rc-act:hover:not(:disabled) {
+  background: var(--s3);
+  color: var(--t1);
+}
+.rc .rc-actions .k-btn.rc-act-stop {
+  margin-inline-start: auto;
+}
+.rc .rc-actions .k-btn.rc-act-stop:hover:not(:disabled) {
+  background: var(--bads);
+  color: var(--bad);
+}
+.rc-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--wn) 45%, var(--bd));
+  border-radius: 8px;
+  background: var(--s2);
+}
+.rc-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--t2);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+.rc-steer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.rc-progress {
+  padding-block: 2px;
+}
+
+/* Sub-runs sit inside their parent: rows, not cards in a card. */
+.rc-children .rc {
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--bd);
+  border-radius: 0;
+  background: none;
+}
+.rc-children .rc + .rc {
+  margin-top: 8px;
+}
+
+/* "Live · checked just now" */
+.rc-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin: 0 0 6px;
+  color: var(--t3);
+  font-size: 0.71875rem;
+  line-height: 1.25rem;
+}
+.rc-live > .k-dot {
+  width: 6px;
+  height: 6px;
+}
+.rc-live[data-state="failed"] {
+  color: var(--wn);
+}
+.rc-live .k-btn.rc-live-retry {
+  color: var(--accent);
+}
+
+/* ==== catch-up ("Since you last looked") ====
+   A small card in the thread: when you last looked, then what moved, as tinted chips that jump to it. */
+.gc-since {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 14px 0 8px;
+  padding: 8px 10px 9px;
+  border-radius: 12px;
+  background: var(--s2);
+  list-style: none;
+}
+.gc-since-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t2);
+  font: 600 0.71875rem/1rem var(--sans);
+  letter-spacing: 0.01em;
+}
+.gc-since-label > svg {
+  flex: none;
+  color: var(--t3);
+}
+/* Nothing moved: just the marker, as a hairline. */
+.gc-since:not(:has(.gc-since-jumps)) {
+  padding: 0;
+  background: none;
+}
+.gc-since:not(:has(.gc-since-jumps)) .gc-since-label {
+  color: var(--t3);
+  font-weight: 500;
+}
+.gc-since:not(:has(.gc-since-jumps)) .gc-since-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+.gc-since-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gc-since .gc-since-jumps .k-btn.gc-since-chip {
+  min-height: 26px;
+  padding: 0 10px 0 8px;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--k-bg, var(--s3));
+  color: var(--k-fg, var(--t2));
+  font: 600 0.75rem/1 var(--sans);
+}
+.gc-since .gc-since-jumps .k-btn.gc-since-chip:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--k-fg, var(--t2)) 18%, var(--s1, var(--surface)));
+}
+
+@keyframes rc-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-more {
+    animation: none;
+  }
+}

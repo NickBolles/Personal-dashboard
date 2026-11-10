@@ -774,15 +774,6 @@ html[data-kb="open"] .gc-tray-qa {
   border-color: transparent;
   background: none;
 }
-.gc-run-more {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 4px;
-}
-.gc-run-more .k-btn {
-  color: var(--accent);
-}
 
 /* ==== sleek controls ====
    Owner taste (AGENTS.md: "compact, dense, premium: no chonky inputs"): inside the Chief of staff panel every
@@ -832,11 +823,8 @@ html[data-kb="open"] .gc-tray-qa {
   background: var(--surface-2);
 }
 /* Text actions read as links in the accent colour, never as boxes. */
-.gc-run-actions .k-btn,
-.gc-run-more .k-btn,
 .gc-needs-actions .k-btn-ghost,
-.gc-needs-menu > .k-btn,
-.gc-since-jumps .k-btn {
+.gc-needs-menu > .k-btn {
   color: var(--accent);
 }
 .gc-head .gc-close {
@@ -942,11 +930,6 @@ html[data-kb="open"] .gc-tray-qa {
   margin: 2px 0 -2px -8px;
   color: var(--accent);
 }
-/* One right-hand column for the row action, so chevrons and links line up down the list. */
-.gc-run-actions {
-  min-width: 4rem;
-  justify-content: flex-end;
-}
 /* The sheet never scrolls as a whole (its panels do). Visually-hidden labels inside messages are absolutely
    positioned: give them a containing block here, or they stretch the sheet’s own scroll height. */
 .gc-sheet {
@@ -956,13 +939,6 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-thread-body,
 .co-msg {
   position: relative;
-}
-/* Background-work cards in the chat: one calm line each, whatever actions they carry. */
-:is(.gc-rail, .gc-sheet) [data-testid="coordinator-run-card"] {
-  padding: 4px 8px;
-}
-:is(.gc-rail, .gc-sheet) [data-testid="coordinator-run-card"] a {
-  min-height: 26px;
 }
 :is(.gc-rail, .gc-sheet) .k-btn.gc-send {
   width: 32px;
@@ -1073,16 +1049,6 @@ html[data-kb="open"] .gc-tray-qa {
   text-align: start;
   padding-inline: 8px;
 }
-/* A run row is one surface: no partial hover card behind just its text column. */
-.gc-host .gc-running .gc-run-body:hover:not(:disabled) {
-  background: none;
-}
-.gc-run-row[data-state]:has(.gc-run-body[aria-expanded="true"]) {
-  background: var(--surface-2);
-  border-radius: 8px;
-  padding-inline: 6px;
-  margin-inline: -6px;
-}
 .gc-older-preview {
   padding: 0 0 6px;
 }
@@ -1096,6 +1062,20 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-running [role="alert"] .k-btn,
 .gc-thread-body [role="alert"] .k-btn {
   color: var(--accent);
+}
+/* Background work in the chat: a labelled group of run cards. */
+.gc-bgwork {
+  margin-top: 12px;
+}
+.gc-bgwork-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 8px;
+}
+.gc-bgwork-head .rc-live {
+  margin: 0;
 }
 /* ==== end sleek controls ==== */
 
@@ -1115,35 +1095,6 @@ html[data-kb="open"] .gc-tray-qa {
     flex-wrap: wrap;
     gap: 0.25rem;
   }
-  .gc-run-row {
-    min-width: 0;
-    border-bottom: 1px solid var(--bd);
-  }
-  .gc-run-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    min-width: 0;
-    gap: 0.25rem;
-  }
-  .gc-running .gc-run-body {
-    display: flex;
-    flex: 1 1 12rem;
-    flex-direction: column;
-    align-items: stretch;
-    min-width: 0;
-    max-width: 100%;
-    height: auto;
-    padding: 0.375rem 0.25rem;
-    text-align: start;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .gc-run-title,
-  .gc-run-meta,
-  .gc-run-actions,
-  .gc-run-confirm,
-  .gc-run-pipeline,
   .gc-mentions {
     display: flex;
     flex-wrap: wrap;
@@ -1152,24 +1103,11 @@ html[data-kb="open"] .gc-tray-qa {
     max-width: 100%;
     gap: 0.25rem;
   }
-  .gc-run-title {
-    color: var(--t1);
+  .gc-running > section + section,
+  .gc-list .k-sh,
+  .gc-changes .k-sh {
+    margin-top: 0.5rem;
   }
-  .gc-run-title {
-    flex-wrap: nowrap;
-    align-items: flex-start;
-    font-weight: 500;
-  }
-  .gc-run-title > .k-dot {
-    margin-top: 0.4rem;
-  }
-  .gc-run-chevron {
-    flex-shrink: 0;
-    margin-top: 0.15rem;
-    color: var(--t3);
-  }
-  /* Inline flow: "Failed 4 days ago · devchief · R-4" wraps like a sentence. */
-  .gc-running .gc-run-meta,
   .gc-needs-panel .gc-needs-meta {
     display: block;
     color: var(--t3);
@@ -1178,129 +1116,19 @@ html[data-kb="open"] .gc-tray-qa {
     line-height: 1.5;
   }
   /* The dot trails its item and items never break inside, so a wrapped line never starts with a separator. */
-  .gc-run-meta > *,
   .gc-needs-meta > * {
     display: inline;
     margin-inline-end: 0.3em;
   }
-  .gc-run-meta > .gc-ref,
   .gc-needs-meta > .gc-ref {
     white-space: nowrap;
   }
-  .gc-run-meta > *:not(:last-child)::after,
   .gc-needs-meta > *:not(:last-child)::after {
     /* No-break space: the dot stays with the item it follows. */
     content: "\00a0·";
     color: var(--t3);
     font-family: var(--sans);
     font-weight: normal;
-  }
-  .gc-run-meta,
-  .gc-run-summary,
-  .gc-run-body > .gc-run-pipeline,
-  .gc-run-body > .gc-run-lock {
-    padding-inline-start: 1rem;
-  }
-  .gc-run-summary {
-    min-width: 0;
-    color: var(--t2);
-    font-size: 0.75rem;
-    font-weight: normal;
-  }
-  .gc-run-actions {
-    margin-inline-start: auto;
-  }
-  .gc-running > section + section,
-  .gc-list .k-sh,
-  .gc-changes .k-sh {
-    margin-top: 0.5rem;
-  }
-  .gc-run-stage {
-    padding: 0 0.25rem;
-    border-radius: 0.25rem;
-    border-bottom: 2px solid var(--bd);
-    background: var(--s2);
-    color: var(--t3);
-  }
-  .gc-run-stage-ok {
-    border-color: var(--ok);
-    color: var(--ok);
-  }
-  .gc-run-stage-running {
-    border-color: var(--ai);
-    color: var(--ai);
-  }
-  .gc-run-stage-failed {
-    border-color: var(--bad);
-    color: var(--bad);
-  }
-  .gc-run-stage-skipped {
-    border-bottom-style: dashed;
-  }
-  .gc-run-lock {
-    flex-basis: 100%;
-    color: var(--wn);
-  }
-  .gc-run-confirm {
-    border: 1px solid var(--wn);
-    border-radius: 0.375rem;
-    padding: 0.375rem;
-    background: var(--s2);
-  }
-  .gc-run-confirm p {
-    flex-basis: 100%;
-  }
-  .gc-run-log {
-    min-width: 0;
-    padding: 0.375rem;
-    font-size: 0.75rem;
-    color: var(--t2);
-    animation: gc-run-reveal 140ms ease-out;
-  }
-  .gc-run-log li {
-    overflow-wrap: anywhere;
-  }
-  .gc-run-pr {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    color: var(--ac);
-    text-decoration: underline;
-  }
-  /* "New since you last looked": a hairline label, with the counts as quiet links. */
-  .gc-since {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0 0.5rem;
-    min-width: 0;
-    margin-top: 0.875rem;
-    color: var(--t3);
-    font-size: 0.6875rem;
-    overflow-wrap: anywhere;
-  }
-  .gc-since > [role="separator"] {
-    display: flex;
-    flex: 1 1 8rem;
-    align-items: center;
-    gap: 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .gc-since > [role="separator"]::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: var(--bd);
-  }
-  .gc-since-jumps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 0.25rem;
-  }
-  .gc-since-jumps .k-btn {
-    color: var(--ac);
-    font-size: 0.75rem;
   }
   .gc-mentions {
     color: var(--t3);
@@ -1323,18 +1151,7 @@ html[data-kb="open"] .gc-tray-qa {
   .gc-thread-input {
     font-size: 1rem;
   }
-  @keyframes gc-run-reveal {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
   @media (prefers-reduced-motion: reduce) {
-    .gc-run-log {
-      animation: gc-run-reveal 80ms linear;
-    }
     .gc-running .k-dot-live {
       animation: none;
     }

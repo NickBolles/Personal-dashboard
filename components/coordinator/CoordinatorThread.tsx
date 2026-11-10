@@ -22,9 +22,9 @@ import {
 } from "@/components/chat/Attachments";
 import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
-import { PlusIcon } from "@/components/icons";
+import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PlusIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, Input, Menu, Textarea, useNow, useOnline, useToast, type KTone } from "@/components/ui";
+import { Button, ChipButton, Dot, Menu, Textarea, useOnline, useToast } from "@/components/ui";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
 import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
@@ -35,12 +35,12 @@ import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickAc
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { actionsByReply } from "@/lib/chat/actions";
-import { canControl, steerText, stopText } from "@/lib/coordinator/control";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import { STALL_AFTER_MIN } from "@/lib/agent-runs";
+import { sinceChips, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
+import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
-import { relativeTime } from "@/lib/time";
-import { parseUserMessage, plainMessageLine, splitAttachedContext } from "@/lib/chat/display";
+import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 import "@/components/agents/agents.css";
 
 export type CoordinatorResponse = {
@@ -90,7 +90,7 @@ export function CoordinatorThread({
   /** Context for quick-action chips ({area}/{page} fill + scope). Chips fill the composer only. */
   quickContext?: QuickActionContext;
   lastLookedChat?: string | null;
-  sinceCounts?: { decisions: number; runs: number };
+  sinceCounts?: SinceCounts;
   onJump?: (tab: "needs" | "running") => void;
   onRef?: (ref: string) => void;
 }) {
@@ -141,7 +141,7 @@ export function CoordinatorThread({
     queryKey: ["session-exec", sid],
     queryFn: () => api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sid!)}/execution`),
     enabled: !!sid && !d.excluded,
-    refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 30000),
+    refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 15000),
   });
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
@@ -269,11 +269,23 @@ export function CoordinatorThread({
     () => new Map(actionsByReply(detail.data?.timeline ?? []).map((group) => [group.replyId, group.actions])),
     [detail.data?.timeline],
   );
-  const records = execution.data?.records?.filter((r) => r.source === "subagent" || r.source === "registered_run" || r.source === "jarvis_run") ?? [];
+  const records = (execution.data?.records?.filter((r) => r.source === "subagent" || r.source === "registered_run" || r.source === "jarvis_run") ?? [])
+    .map((record, index) => ({ record, index }))
+    // What needs the owner first (failed, waiting), then what is in flight, then what ended; newest first within each.
+    .sort((a, b) => EXEC_ORDER[a.record.state] - EXEC_ORDER[b.record.state] || a.index - b.index)
+    .map((x) => x.record);
+  // Work that is also a tracked run (R-n) brings its timeline into the card.
+  const tracked = useCoordinatorRuns(
+    true,
+    records.some((r) => r.source !== "subagent"),
+  );
+  const runOf = (record: ExecutionRecord) => (record.source === "subagent" ? undefined : tracked.data?.runs?.find((r) => r.id === record.id));
+  const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
   const previous = discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid).slice(0, 5) ?? [];
   const messageGroups = groupMessages(timeline).slice(-6);
   const msgs = messageGroups.map((group) => group[0]);
   const divider = sinceDivider(lastLookedChat, new Date(), sinceCounts);
+  const caughtUp = divider ? sinceChips(divider.jumps) : [];
   const dividerIndex = divider ? messageGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat!))) : -1;
   const lastUser = timeline.filter((t) => t.kind === "user").at(-1);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -356,21 +368,25 @@ export function CoordinatorThread({
                   <Fragment key={m.id}>
                     {index === dividerIndex && divider ? (
                       <li className="gc-since" ref={sinceRef}>
-                        <div role="separator" aria-label={divider.label}>
-                          {divider.label}
+                        <div role="separator" aria-label={divider.label} className="gc-since-label">
+                          <ClockIcon className="h-3.5 w-3.5" />
+                          <span>{divider.label}</span>
                         </div>
-                        {divider.jumps.decisions || divider.jumps.runs ? (
+                        {caughtUp.length ? (
                           <div className="gc-since-jumps">
-                            {divider.jumps.decisions ? (
-                              <Button variant="ghost" size="sm" disabled={!onJump} onClick={() => onJump?.("needs")}>
-                                {divider.jumps.decisions === 1 ? "1 new decision" : `${divider.jumps.decisions} new decisions`}
+                            {caughtUp.map((chip) => (
+                              <Button
+                                key={chip.key}
+                                variant="ghost"
+                                size="sm"
+                                className={`gc-since-chip k-t-${chip.tone}`}
+                                icon={SINCE_ICON[chip.key]}
+                                disabled={!onJump}
+                                onClick={() => onJump?.(chip.tab)}
+                              >
+                                {chip.label}
                               </Button>
-                            ) : null}
-                            {divider.jumps.runs ? (
-                              <Button variant="ghost" size="sm" disabled={!onJump} onClick={() => onJump?.("running")}>
-                                {divider.jumps.runs === 1 ? "1 run updated" : `${divider.jumps.runs} runs updated`}
-                              </Button>
-                            ) : null}
+                            ))}
                           </div>
                         ) : null}
                       </li>
@@ -433,25 +449,36 @@ export function CoordinatorThread({
               </div>
             ) : null}
             <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-            {execution.error ? (
+            {execution.error && !records.length ? (
               <p role="alert" className="mt-2 text-xs text-danger">
-                Couldn&apos;t load coordinator runs.
+                Couldn&apos;t load coordinator runs.{" "}
+                <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
+                  Try again
+                </Button>
               </p>
             ) : null}
-            {/* "stale" is the child inventory's permanent caveat (server/chat/execution.ts), not news: only a source that
-                could not be read at all is worth a line here. */}
-            {execution.data?.sources?.some((source) => source.state === "unavailable") ? (
-              <p className="mt-2 text-xs text-muted">Couldn&apos;t check all background work just now. Open the conversation for details.</p>
-            ) : null}
             {records.length ? (
-              <section aria-label="Coordinator runs" className="mt-2 space-y-1">
-                <p className="gc-hint">Background work</p>
+              <section aria-label="Coordinator runs" className="gc-bgwork">
+                <div className="gc-bgwork-head">
+                  <p className="gc-hint">Background work</p>
+                  {/* Each card is kept current here (5 s while anything runs). "stale" is the child inventory's permanent
+                      caveat (server/chat/execution.ts), not news: only a source that could not be read is said out loud. */}
+                  <LiveLine
+                    updatedAt={execution.dataUpdatedAt}
+                    failed={sourceDown}
+                    fetching={execution.isFetching}
+                    onRetry={() => void execution.refetch()}
+                    what="background work"
+                  />
+                </div>
                 {records.slice(0, 5).map((record) => (
-                  <CoordinatorRunCard
+                  <ExecCard
                     key={`${sid}:${record.key}`}
                     record={record}
                     pending={control.isPending}
                     onControl={(input) => control.mutateAsync(input)}
+                    run={runOf(record)}
+                    events={tracked.data?.events}
                   />
                 ))}
                 {records.length > 5 && sid ? (
@@ -752,97 +779,13 @@ function Mentions({ text, onRef }: { text: string; onRef: (ref: string) => void 
   ) : null;
 }
 
-const RUN_TONE: Record<ExecutionRecord["state"], KTone> = {
-  running: "ai",
-  waiting: "wn",
-  completed: "ok",
-  failed: "bad",
-  cancelled: "neutral",
-  unknown: "neutral",
+/** Background work in the order the owner needs it. */
+const EXEC_ORDER: Record<ExecutionRecord["state"], number> = { failed: 0, waiting: 1, running: 2, unknown: 3, completed: 4, cancelled: 5 };
+const SINCE_ICON: Record<SinceChip["key"], ReactNode> = {
+  failed: <AlertIcon className="h-3.5 w-3.5" />,
+  decisions: <InboxIcon className="h-3.5 w-3.5" />,
+  waiting: <BellIcon className="h-3.5 w-3.5" />,
+  stuck: <ClockIcon className="h-3.5 w-3.5" />,
+  finished: <CheckIcon className="h-3.5 w-3.5" />,
+  runs: <BoltIcon className="h-3.5 w-3.5" />,
 };
-
-function CoordinatorRunCard({ record, pending, onControl }: { record: ExecutionRecord; pending: boolean; onControl: (input: string) => Promise<unknown> }) {
-  const [steering, setSteering] = useState(false);
-  const [guidance, setGuidance] = useState("");
-  const [confirmStop, setConfirmStop] = useState(false);
-  // A child discovered through the session list first keeps its child-session id as record id;
-  // the coordinator steers/stops by Hermes' sub-agent handle (#251).
-  const handle = record.subagentId ?? record.id;
-  const controllable = record.source === "subagent" && canControl(handle) && isActiveExec(record);
-  const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
-  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes is stalled, not working.
-  const now = useNow();
-  // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
-  const stalled = record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
-  const title = plainMessageLine(record.title).replace(/^Subagent:\s*/i, "");
-  return (
-    <article className="min-w-0 rounded-lg border border-line px-2 py-1" data-testid="coordinator-run-card" aria-label={record.title}>
-      <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs">
-        <Dot tone={stalled ? "bad" : RUN_TONE[record.state]} live={record.state === "running" && !stalled} label={stalled ? "stalled" : record.state} />
-        <span className="min-w-0 flex-1 truncate" title={record.title}>
-          {title}
-        </span>
-        {at ? (
-          <time dateTime={at} title={at} className="text-muted" data-dynamic>
-            {relativeTime(at)}
-          </time>
-        ) : null}
-        {record.href ? (
-          <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={record.href}>
-            Open
-          </Link>
-        ) : null}
-        {controllable ? (
-          <>
-            <Button size="sm" variant="ghost" disabled={pending} aria-expanded={steering} onClick={() => setSteering((value) => !value)}>
-              Steer
-            </Button>
-            <Button size="sm" variant="ghost" disabled={pending} onClick={() => setConfirmStop((value) => !value)}>
-              {confirmStop ? "Cancel stop" : "Stop"}
-            </Button>
-            {confirmStop ? (
-              <Button
-                size="sm"
-                variant="danger"
-                loading={pending}
-                onClick={() =>
-                  void onControl(stopText(handle))
-                    .then(() => setConfirmStop(false))
-                    .catch(() => undefined)
-                }
-              >
-                Stop? Yes
-              </Button>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-      {controllable && steering ? (
-        <form
-          className="mt-1 flex min-w-0 flex-wrap items-center gap-1"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!guidance.trim() || pending) return;
-            void onControl(steerText(handle, guidance))
-              .then(() => {
-                setGuidance("");
-                setSteering(false);
-              })
-              .catch(() => undefined);
-          }}
-        >
-          <Input
-            aria-label={`Guidance for ${record.title}`}
-            className="min-w-0 flex-1"
-            value={guidance}
-            maxLength={2000}
-            onChange={(event) => setGuidance(event.target.value)}
-          />
-          <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
-            Send
-          </Button>
-        </form>
-      ) : null}
-    </article>
-  );
-}

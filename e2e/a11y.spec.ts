@@ -292,7 +292,13 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
   ]);
   await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
   const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-  expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  expect
+    .soft(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+    )
+    .toEqual([]);
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
@@ -839,6 +845,8 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await zoom();
   await tray.click();
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+  // The tray opens where its sentence points (here: the approvals under Needs you); the chat is one tab away.
+  await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
   await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
   await axe("sheet chat");
   await zoom();

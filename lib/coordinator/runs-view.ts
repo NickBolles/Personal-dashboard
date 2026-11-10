@@ -106,7 +106,7 @@ export function trayLine({ decisions, runs, now }: { decisions: readonly Decisio
   return { kind: "none", ref: null, text: "", tone: "quiet", target: { tab: "chat" } };
 }
 
-export function sinceDivider(lastLookedChat: string | null | undefined, now: Date | number, counts: { decisions: number; runs: number }) {
+export function sinceDivider<C extends { decisions: number; runs: number }>(lastLookedChat: string | null | undefined, now: Date | number, counts: C) {
   if (!lastLookedChat) return null;
   const then = new Date(lastLookedChat);
   const elapsed = new Date(now).getTime() - then.getTime();

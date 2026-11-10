@@ -253,7 +253,7 @@ describe("coordinator parity controls", () => {
       record({ key: "unsafe", id: "bad id" }),
       record({ key: "jarvis", source: "jarvis_run", state: "waiting" }),
       record({ key: "finished", state: "completed" }),
-      record({ key: "sixth" }),
+      record({ key: "sixth", state: "completed" }),
       record({ key: "process", source: "process" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });

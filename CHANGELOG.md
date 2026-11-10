@@ -13,6 +13,21 @@ What changed for the owner (details in the PR):
 
 Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux-shots.mjs` has both sizes). Demo data for all of this: `node scripts/demo-seed-coordinator.mjs`.
 
+- **Run cards.** Every run in Activity, and every piece of background work in Chat, is one card that reads
+  without opening anything: a tinted state chip ("Stuck · no update for 47 min", "Waiting on you", "Failed",
+  "Working", "Done"), the title, who is on it, pipeline stage pills, and a real timeline (newest first, a
+  coloured node and type chip per event: Progress, Notice, CI, Lock, Staged, Live, Failed…, in the tones the
+  item pages use for PR / checks / deploy). The first few runs that need you arrive open with their last three
+  events; "Show N earlier" loads the rest. Steer / Retry / Ask / Pull request / Open item / Stop live in one
+  quiet icon-and-word bar at the card's bottom edge.
+- **Kept current in place.** Activity polls every 10 s while it is on screen and says so ("Live · checked just
+  now"); background work in Chat polls every 5 s while anything runs, 15 s otherwise. If a refresh fails the
+  line says exactly that, with the age of what is shown and "Try again", instead of "may be out of date".
+  Background-work cards show the step in progress, the outcome or the error, progress when the source
+  reports it, and their links, ordered failed → waiting → working → done.
+- **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
+  "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
+
 ## 2026-11-07 — Home Assistant control + Finance in AI (owner-approved policy changes)
 
 Both changes were explicitly approved by the owner on 2026-11-07:
