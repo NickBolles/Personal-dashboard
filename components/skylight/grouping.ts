@@ -22,7 +22,15 @@ export type ChoreGroup = (typeof CHORE_BUCKETS)[number] & { actions: NextAction[
 /** `late` = due today and its time has passed (amber); `overdue` = due on a past day (red). */
 export type DueState = "late" | "overdue" | undefined;
 
-type Opts = { now: Date | number; timezone: string };
+type Opts = { now: Date | number; timezone: string; showUpcomingDaily?: boolean };
+
+/** Presentation only: never use this selector in source synchronization. */
+export function visibleChore(a: NextAction, opts: Opts): boolean {
+  const ref = a.skylight;
+  return (
+    opts.showUpcomingDaily === true || ref?.kind !== "chore" || ref.recurrenceFrequency !== "DAILY" || choreDay(a, opts) <= localDate(opts.now, opts.timezone)
+  );
+}
 
 /**
  * Open Skylight chore: direct-mode chores carry a `chore` ref; Hermes-mode chores (`mapHermesAnswer`) carry no ref
@@ -69,7 +77,7 @@ const dueMs = (a: NextAction) => {
 
 /** Open Skylight chores in display order; empty buckets are omitted. Input is never mutated. */
 export function groupSkylightChores(actions: NextAction[], opts: Opts): ChoreGroup[] {
-  const open = actions.filter(isOpenChore);
+  const open = actions.filter((a) => isOpenChore(a) && visibleChore(a, opts));
   const key = (a: NextAction) => `${choreDay(a, opts)} ${choreTime(a, opts.timezone) ?? "99:99"}`;
   return CHORE_BUCKETS.map((group) => ({
     ...group,

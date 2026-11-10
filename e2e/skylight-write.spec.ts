@@ -71,7 +71,7 @@ test("skywrite completes a Nick chore and undoes its completion", async ({ page 
   const check = page.getByRole("checkbox", { name: /Done: .*Take out recycling/ });
   await expect(check).toBeVisible();
   await check.click();
-  await confirm(page, /Mark “.*Take out recycling” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(page.getByTestId("skylight-done")).toContainText("Take out recycling");
   await expect(check).toHaveCount(0);
   await expect
@@ -153,11 +153,11 @@ test("skywrite creates, edits, deletes and restores a calendar event", async ({ 
 
 test("skywrite Cancel sends no mutation and returns focus", async ({ page }) => {
   await page.goto("/skylight");
-  const check = page.getByRole("checkbox", { name: /Done: .*Take out recycling/ });
+  const check = page.getByRole("button", { name: /Reopen: .*Wipe the kitchen counters/ });
   const before = await writes(page);
   await check.click();
   const dialog = page.getByRole("dialog", { name: "Confirm Skylight change" });
-  await expect(dialog).toContainText("Take out recycling");
+  await expect(dialog).toContainText("Wipe the kitchen counters");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(check).toBeFocused();

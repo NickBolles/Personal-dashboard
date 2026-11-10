@@ -96,7 +96,10 @@ describe("optimistic Skylight write state machine", () => {
       { type: "success", key: K, at: 2 },
       { type: "settle", key: K, at: 3 },
     ]);
-    expect(applyOverlay([action()], skipped, "2026-11-07")).toEqual([]);
+    expect(applyOverlay([action()], skipped, "2026-11-07")[0]).toMatchObject({
+      status: "skipped",
+      skylight: { skippedOn: "2026-11-07", completedOn: undefined },
+    });
     const claimed = run([
       { type: "confirm", key: K, op: claim, at: 1 },
       { type: "success", key: K, at: 2 },

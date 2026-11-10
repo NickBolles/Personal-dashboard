@@ -309,6 +309,13 @@
       "when": 1794200221452,
       "tag": "0043_coordinator_workflow",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1794320154790,
+      "tag": "0044_soft_galactus",
+      "breakpoints": true
     }
   ]
 }

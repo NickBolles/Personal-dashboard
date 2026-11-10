@@ -211,6 +211,49 @@ describe("exact raw Skylight write contracts", () => {
     expect((await writes()).map((w) => w.body)).toEqual([{ status: "complete", category_id: 13600771 }, { status: "pending" }]);
   });
 
+  it("native recurring Skip/Undo uses PUT base completions and restores only the exact dated/timed occurrence", async () => {
+    const day = "2026-11-01"; // DST fall-back wall time must not be converted to UTC in the request.
+    for (const time of ["01:30", "06:00"]) {
+      await fetch(`${base}/__mock/skylight/chores`, {
+        method: "POST",
+        body: JSON.stringify({ id: `88345000-${day}-${time.replace(":", "")}`, summary: "DST routine", start: day, start_time: time, up_for_grabs: true }),
+      });
+    }
+    const op = skylightWriteOp.parse({
+      op: "chore.skip",
+      choreId: `88345000-${day}-0130`,
+      title: "DST routine",
+      instanceDate: day,
+      instanceTime: "01:30",
+      upForGrabs: true,
+      categoryId: "13600771",
+    });
+    const result = await run(op);
+    const row = recordWrite(op, { id: userId }, result.created);
+    tick();
+    await undoWrite(row.id, { id: userId }, opts);
+    expect(await writes()).toEqual([
+      { method: "PUT", path: `/api${f}/chores/88345000/completions`, body: { status: "skipped", instance_date: day, instance_time: "01:30" } },
+      { method: "PUT", path: `/api${f}/chores/88345000/completions`, body: { status: "pending", instance_date: day, instance_time: "01:30" } },
+    ]);
+    const read = await skylightRequest<{ data: { id: string; attributes: { status: string; completed_on: string | null } }[] }>("GET", `${f}/chores`, {
+      query: { after: day, before: day },
+    });
+    expect(read.data.find((c) => c.id.endsWith("-0130"))?.attributes).toMatchObject({ status: "pending", completed_on: null });
+    expect(read.data.find((c) => c.id.endsWith("-0600"))?.attributes.status).toBe("pending");
+  });
+
+  it.each([
+    ["POST", "/chores/55900629/completions", { status: "skipped" }],
+    ["PUT", "/chores/55900629/skip", { status: "skipped" }],
+    ["PUT", "/chores/55900629/completions", { data: { attributes: { status: "skipped" } } }],
+    ["PUT", "/chores/55900629/completions", { status: "skipped", category_id: 13600771 }],
+    ["PUT", "/chores/55900629/completions", { status: "skipped", instance_time: "06:00" }],
+  ] as const)("strict native Skip mock rejects %s %s %j", async (method, path, body) => {
+    await expect(raw(method, path, body)).rejects.toBeDefined();
+    expect(await writes()).toEqual([]);
+  });
+
   it("refuses to move a recurring occurrence", async () => {
     await expect(
       run({ op: "chore.reschedule", choreId: "55780859-2026-11-09-1800", title: "Recycling", start: "2026-11-12", previousStart: "2026-11-09" }),

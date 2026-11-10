@@ -143,6 +143,8 @@ export const sourceCompletions = sqliteTable(
     day: text("day").notNull(),
     title: text("title").notNull(),
     wasOpen: integer("was_open", { mode: "boolean" }).notNull().default(false),
+    /** Terminal provider state: skipped is never a completed chore. */
+    outcome: text("outcome").notNull().default("completed"),
     completedAt: text("completed_at").notNull().default(now),
   },
   (t) => [uniqueIndex("source_completions_unique").on(t.source, t.sourceId, t.day), index("source_completions_at").on(t.completedAt)],

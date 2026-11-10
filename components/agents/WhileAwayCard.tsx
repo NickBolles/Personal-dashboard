@@ -16,7 +16,7 @@ export function WhileAwayCard({ compact = false }: { compact?: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
-  if (!q.data?.runs?.length) return null;
+  if (!q.data || (!q.data.runs?.length && !q.data.chores?.length)) return null;
   const counts = q.data.counts;
   const dismiss = async () => {
     setBusy(true);
@@ -65,9 +65,24 @@ export function WhileAwayCard({ compact = false }: { compact?: boolean }) {
             </Pill>
           ) : null}
           {counts.failed > 0 ? <Pill tone="bad">{counts.failed} failed</Pill> : null}
+          {q.data.chores?.some((c) => c.status === "completed") ? (
+            <Pill tone="ok">{q.data.chores.filter((c) => c.status === "completed").length} chores completed</Pill>
+          ) : null}
+          {q.data.chores?.some((c) => c.status === "skipped") ? (
+            <Pill tone="neutral">{q.data.chores.filter((c) => c.status === "skipped").length} chores skipped</Pill>
+          ) : null}
         </div>
       </header>
       <ul className="divide-y divide-line">
+        {q.data.chores?.map((chore) => (
+          <li key={chore.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm" data-testid="away-chore">
+            <Pill tone={chore.status === "skipped" ? "neutral" : "ok"}>{chore.status === "skipped" ? "Skipped" : "Completed"}</Pill>
+            <span className="min-w-0 flex-1">{chore.title}</span>
+            <Link href="/skylight" className="text-accent">
+              Skylight
+            </Link>
+          </li>
+        ))}
         {[...q.data.runs]
           .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
           .map((run) => (

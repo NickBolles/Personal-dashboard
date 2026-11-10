@@ -261,6 +261,7 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
     });
     if (chores.length) {
       const done = chores.filter((a) => a.status === "completed");
+      const skipped = chores.filter((a) => a.status === "skipped");
       const grabs = chores.filter((a) => a.status === "open" && a.assignee?.kind === "up_for_grabs");
       const unknown = chores.filter((a) => a.status === "open" && !a.assignee);
       add({
@@ -272,16 +273,16 @@ export function dynamicCards(user: CurrentUser, now = new Date(), requestedId?: 
           dot: null,
           icon: "✓",
           label: "Chores",
-          text: `${done.length} of ${chores.length} done · ${unknown.length ? "assignments unavailable" : `${grabs.length} up for grabs`}`,
+          text: `${done.length} of ${chores.length} done${skipped.length ? ` · ${skipped.length} skipped` : ""} · ${unknown.length ? "assignments unavailable" : `${grabs.length} up for grabs`}`,
         },
         spec: single("Table", {
           columns: [
             { key: "state", label: "State" },
             { key: "chore", label: "Chore" },
           ],
-          rows: [...done, ...grabs, ...unknown].slice(0, 50).map((a) => ({
+          rows: [...done, ...skipped, ...grabs, ...unknown].slice(0, 50).map((a) => ({
             cells: {
-              state: a.status === "completed" ? "✓ Done" : a.assignee ? "Up for grabs" : "Open · assignment unavailable",
+              state: a.status === "completed" ? "✓ Done" : a.status === "skipped" ? "Skipped" : a.assignee ? "Up for grabs" : "Open · assignment unavailable",
               chore: a.title.slice(0, 200),
             },
           })),

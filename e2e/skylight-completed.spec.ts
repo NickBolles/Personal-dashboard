@@ -18,7 +18,8 @@ test("skylight page lists chores done today apart from the open ones", async ({ 
   await expect(page.locator('section[aria-labelledby^="sk-"]:not([aria-labelledby="sk-done"])').filter({ hasText: "Wipe the kitchen counters" })).toHaveCount(
     0,
   );
-  await expect(page.getByText(/Sort the mail pile/)).toHaveCount(0);
+  await expect(page.getByTestId("sk-skipped")).toContainText("Sort the mail pile");
+  await expect(done).not.toContainText("Sort the mail pile");
 });
 
 test("todos merges Skylight chores behind a Skylight source chip", async ({ page }) => {

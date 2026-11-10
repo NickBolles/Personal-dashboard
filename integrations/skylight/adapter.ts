@@ -318,11 +318,10 @@ export function choreDoneDay(a: Record<string, unknown>, timezone: string): stri
 
 /**
  * Direct-mode chore filter: open chores, plus chores completed inside the read window
- * (frame-local completion day, else the scheduled day). Skipped chores are dropped.
+ * (frame-local completion/skip day, else the scheduled day). Daily rows stay in the snapshot.
  */
 export function keepChore(a: Record<string, unknown>, window: { from: string; to: string }, timezone = "America/Chicago"): boolean {
-  if (a.status === "skipped") return false;
-  if (a.status !== "complete" && a.status !== "completed") return true;
+  if (a.status !== "skipped" && a.status !== "complete" && a.status !== "completed") return true;
   const day = choreDoneDay(a, timezone);
   return day >= window.from && day <= window.to;
 }
@@ -414,6 +413,17 @@ async function collect(path: string, query: Record<string, string>) {
 
 const listDoc = z.object({ data: z.unknown(), included: z.array(resource).optional() });
 const isDone = (a: Record<string, unknown>) => a.status === "complete" || a.status === "completed";
+
+/** Native chores expose recurrence_set (RFC 5545 lines); older clients may expose rrule. */
+export function choreFrequency(a: Record<string, unknown>): string | undefined {
+  const rules = Array.isArray(a.recurrence_set) ? a.recurrence_set : [];
+  for (const line of [...rules, a.rrule]) {
+    if (typeof line !== "string") continue;
+    const match = /(?:^|[;:])FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY|HOURLY|MINUTELY|SECONDLY)(?:;|$)/i.exec(line);
+    if (match) return match[1]!.toUpperCase();
+  }
+  return undefined;
+}
 
 /** Open chore → due instant / priority from its scheduled day (date-only chores sort by day). */
 function choreDue(a: Record<string, unknown>, ctx: AdapterContext) {
@@ -536,13 +546,16 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
     const categoryId = choreCategory(c.relationships);
     const who = classifySkylightChore({ categoryId, upForGrabs: a.up_for_grabs === true }, members, mine, groups);
     const done = isDone(a);
-    const due = done ? { dueAt: undefined, priorityReason: "today" as const } : choreDue(a, ctx);
-    const recurring = a.recurring === true || /-\d{4}-\d{2}-\d{2}/.test(c.id);
+    const skipped = a.status === "skipped";
+    const due = done || skipped ? { dueAt: undefined, priorityReason: "today" as const } : choreDue(a, ctx);
+    const frequency = choreFrequency(a);
+    const recurring = a.recurring === true || frequency !== undefined || /-\d{4}-\d{2}-\d{2}/.test(c.id);
     actions.push(
       baseAction("skylight", c.id, ctx, STALE, {
         title: `${a.emoji_icon ? `${a.emoji_icon} ` : ""}${String(a.summary ?? "Chore")}`,
         detail: who.kind === "up_for_grabs" ? "Skylight chore · up for grabs" : who.name ? `Skylight chore · ${who.name}` : "Skylight chore",
         ...choreState(done, due.dueAt, ctx),
+        ...(skipped ? { status: "skipped" as const, primaryAction: undefined } : {}),
         ...due,
         sourceLabel: who.kind === "up_for_grabs" ? "Skylight · Up for grabs" : "Skylight · Chores",
         assignee: who.kind === "mine" ? { kind: "mine", name: who.name } : who,
@@ -551,6 +564,7 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           choreId: c.id,
           categoryId,
           recurring,
+          ...(frequency ? { recurrenceFrequency: frequency } : {}),
           ...(recurring && a.start ? { instanceDate: String(a.start).slice(0, 10) } : {}),
           ...(recurring && a.start_time ? { instanceTime: String(a.start_time).slice(0, 5) } : {}),
           // Skylight's own flag (not Jarvis' group classification): only these completions may name who did it.
@@ -558,6 +572,7 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           ...(a.start ? { startDate: String(a.start).slice(0, 10) } : {}),
           ...(a.start_time ? { startTime: String(a.start_time).slice(0, 5) } : {}),
           ...(done ? { completedOn: choreDoneDay(a, ctx.timezone) } : {}),
+          ...(skipped ? { skippedOn: choreDoneDay(a, ctx.timezone) } : {}),
         },
       }),
     );
@@ -573,6 +588,8 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
     hidden: open.filter((x) => x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })).length,
     completedToday: doneList.filter((x) => x.skylight?.kind === "chore" && x.skylight.completedOn === ctx.today).length,
     completedWindow: doneList.length,
+    skippedToday: actions.filter((x) => x.status === "skipped" && x.skylight?.kind === "chore" && x.skylight.skippedOn === ctx.today).length,
+    skippedWindow: actions.filter((x) => x.status === "skipped").length,
   };
   const lists = listsR.status === "fulfilled" ? listsR.value : { lists: [], items: [] };
   return {
@@ -593,7 +610,8 @@ async function fetchDirect(ctx: AdapterContext): Promise<SourceData> {
           (x) =>
             // Whose-tasks prefs apply to open AND completed chores; completions also only for today.
             Boolean(x.assignee && !keepAssigned(x.assignee, { ...prefs, members: mine })) ||
-            (x.status === "completed" && x.skylight?.kind === "chore" && x.skylight.completedOn !== ctx.today),
+            (x.status === "completed" && x.skylight?.kind === "chore" && x.skylight.completedOn !== ctx.today) ||
+            (x.status === "skipped" && x.skylight?.kind === "chore" && x.skylight.skippedOn !== ctx.today),
         )
         .map((x) => x.id),
       health: { ok: failed.length === 0, failed },

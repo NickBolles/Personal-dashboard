@@ -292,7 +292,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
     if (chores) {
       const C = schema.sourceCompletions;
       const done = db
-        .select({ id: C.id, title: C.title, completedAt: C.completedAt })
+        .select({ id: C.id, title: C.title, completedAt: C.completedAt, outcome: C.outcome })
         .from(C)
         .where(and(eq(C.source, "skylight"), cur ? tieBound("source_completions", "completed_at", "id", "sc:", cur) : undefined))
         .orderBy(desc(C.completedAt), desc(C.id))
@@ -306,7 +306,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           at: r.completedAt,
           type: "chore",
           actor: { kind: "system", name: "Skylight" },
-          verb: "chore completed",
+          verb: r.outcome === "skipped" ? "chore skipped" : r.outcome === "reopened" ? "chore reopened" : "chore completed",
           object: null,
           detail: r.title,
           undoOpId: null,

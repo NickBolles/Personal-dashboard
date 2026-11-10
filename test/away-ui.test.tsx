@@ -13,6 +13,7 @@ import { AreaAutonomy, AreaSettingsDialog } from "@/components/areas/AreaSetting
 import { useCoordinatorThings } from "@/components/coordinator/useCoordinatorThings";
 import { DEFAULT_AREA_SETTINGS, type WorkItem } from "@/lib/work";
 import { awayFixture, schedulesFixture } from "../e2e/fixtures/away";
+import { skylightTaskUxFixture } from "../e2e/fixtures/skylight-task-ux";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -70,6 +71,17 @@ afterEach(() => {
   cleanup();
   qc.clear();
   vi.restoreAllMocks();
+});
+
+it("shows skipped chores as distinct outcomes even when no agent ran", async () => {
+  away = skylightTaskUxFixture().away;
+  render(<WhileAwayCard />, { wrapper });
+  const card = await screen.findByTestId("while-away");
+  expect(within(card).getByText("1 chores completed")).toBeDefined();
+  expect(within(card).getByText("1 chores skipped")).toBeDefined();
+  const rows = within(card).getAllByTestId("away-chore");
+  expect(rows.map((r) => r.textContent)).toEqual(["CompletedCompleted kitchen routineSkylight", "SkippedSkipped routine, not completedSkylight"]);
+  expect(within(card).queryByText("0 ran")).toBeNull();
 });
 
 it("renders schedules, status, next run and disabled templates", async () => {

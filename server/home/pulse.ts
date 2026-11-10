@@ -87,6 +87,7 @@ export function homePulse(user: Capable & { id: string }, now = new Date()): Hom
               .where(
                 and(
                   eq(schema.sourceCompletions.source, "skylight"),
+                  eq(schema.sourceCompletions.outcome, "completed"),
                   gte(schema.sourceCompletions.completedAt, new Date(now.getTime() - 15 * 86_400_000).toISOString()),
                 ),
               )

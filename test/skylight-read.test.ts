@@ -9,7 +9,7 @@ import { claimInstance } from "@/server/auth";
 import { updatePreferences } from "@/server/settings";
 import { saveIntegration } from "@/integrations/store";
 import { adapterContext, homeScopedSkylight } from "@/server/sources";
-import { choreDoneDay, readWindow, skylightAdapter } from "@/integrations/skylight/adapter";
+import { choreDoneDay, choreFrequency, readWindow, skylightAdapter } from "@/integrations/skylight/adapter";
 
 const BASE = "http://skylight.test";
 type Call = { method: string; path: string; query: Record<string, string> };
@@ -27,13 +27,13 @@ const chore = (id: string, cat: string | null, attrs: Record<string, unknown>) =
   relationships: { category: { data: cat ? { id: cat, type: "category" } : null } },
 });
 const CHORES = [
-  chore("1", "100", {}),
+  chore("1", "100", { completed_on: "2026-11-04" }), // pending wins over completed_on
   chore("2", "200", {}), // Will's: kept now (was dropped at ingest)
   chore("3", "100", { status: "complete", completed_on: "2026-11-01" }), // completed 3 days ago
   chore("4", "200", { status: "complete", completed_on: "2026-11-04T02:30:00Z" }), // 20:30 CT Nov 3
   chore("5", "300", { start: "2026-11-07" }), // Family group: up for grabs, in 3 days
   chore("6", "100", { start: "2026-11-02" }), // overdue
-  chore("7", "100", { status: "skipped" }),
+  chore("7", "100", { status: "skipped", completed_on: "2026-11-04" }),
   chore("8", "100", { status: "complete", completed_on: "2026-11-04" }),
   chore("9", "200", { status: "complete", completed_on: "2026-11-04" }), // Will's, done today: not on Home
 ];
@@ -132,7 +132,10 @@ describe("Skylight full read (direct)", () => {
   it("keeps every member's chores (others labelled) and completions from earlier days", async () => {
     const data = await fetchNow();
     const by = new Map(data.actions.map((a) => [a.sourceId, a]));
-    expect([...by.keys()].sort()).toEqual(["1", "2", "3", "4", "5", "6", "8", "9"]);
+    expect([...by.keys()].sort()).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    expect(by.get("1")!.status).toBe("open");
+    expect(by.get("7")).toMatchObject({ status: "skipped", primaryAction: undefined, skylight: { skippedOn: "2026-11-04" } });
+    expect(by.get("7")!.skylight).not.toHaveProperty("completedOn");
     expect(by.get("2")!.assignee).toEqual({ kind: "other", name: "Will" });
     expect(by.get("5")!.assignee).toMatchObject({ kind: "up_for_grabs" });
     expect(by.get("3")).toMatchObject({ status: "completed", skylight: { kind: "chore", completedOn: "2026-11-01", categoryId: "100" } });
@@ -143,7 +146,7 @@ describe("Skylight full read (direct)", () => {
     expect(by.get("5")).toMatchObject({ dueAt: "2026-11-08T05:59:00.000Z", dueIsDate: true, dueTimezone: "America/Chicago" });
     expect(by.get("1")!.priorityReason).toBe("today");
     expect(data.extra).toMatchObject({
-      counts: { mine: 2, upForGrabs: 1, others: 1, hidden: 1, completedToday: 2, completedWindow: 4 },
+      counts: { mine: 2, upForGrabs: 1, others: 1, hidden: 1, completedToday: 2, completedWindow: 4, skippedToday: 1, skippedWindow: 1 },
       window: { from: "2026-10-28", to: "2026-11-11" },
       health: { ok: true, failed: [] },
       needsMember: false,
@@ -153,7 +156,7 @@ describe("Skylight full read (direct)", () => {
   it("Home keeps mine + up for grabs and only today's completions", async () => {
     const data = await fetchNow();
     const scoped = homeScopedSkylight({ status: { source: "skylight", label: "Skylight", state: "ok" }, data });
-    expect(scoped.data!.actions.map((a) => a.sourceId).sort()).toEqual(["1", "5", "6", "8"]);
+    expect(scoped.data!.actions.map((a) => a.sourceId).sort()).toEqual(["1", "5", "6", "7", "8"]);
   });
 
   it("reads lists into list-item rows with a list source chip", async () => {
@@ -167,6 +170,25 @@ describe("Skylight full read (direct)", () => {
     expect(items[0]!.skylight).toEqual({ kind: "list_item", listId: "L1", itemId: "i1", listLabel: "Groceries" });
     // List items never enter actions (Home attention).
     expect(data.actions.some((a) => a.sourceId.startsWith("li:"))).toBe(false);
+  });
+
+  it("retains upstream future DAILY rows and recurrence metadata during sync", async () => {
+    CHORES.push(
+      chore("10-2026-11-05-0600", "100", {
+        start: "2026-11-05",
+        start_time: "06:00",
+        recurrence_set: ["DTSTART:20261104T060000", "RRULE:FREQ=DAILY;BYHOUR=6"],
+      }),
+    );
+    try {
+      const data = await fetchNow();
+      expect(data.actions.find((a) => a.sourceId === "10-2026-11-05-0600")).toMatchObject({
+        status: "open",
+        skylight: { recurrenceFrequency: "DAILY", instanceDate: "2026-11-05", instanceTime: "06:00" },
+      });
+    } finally {
+      CHORES.pop();
+    }
   });
 
   it("maps events with their write ref", async () => {
@@ -197,5 +219,16 @@ describe("Skylight full read (direct)", () => {
     expect(choreDoneDay({ completed_on: "2026-11-04T05:59:00Z" }, "America/Chicago")).toBe("2026-11-03");
     expect(choreDoneDay({ completed_on: "2026-11-04T06:01:00Z" }, "America/Chicago")).toBe("2026-11-04");
     expect(choreDoneDay({ start: "2026-11-01" }, "America/Chicago")).toBe("2026-11-01");
+  });
+
+  it.each([
+    [{ recurrence_set: ["RRULE:FREQ=DAILY;INTERVAL=1"] }, "DAILY"],
+    [{ recurrence_set: ["EXDATE:20261101", "RRULE:FREQ=WEEKLY;BYDAY=MO"] }, "WEEKLY"],
+    [{ recurrence_set: ["RRULE:FREQ=MONTHLY"] }, "MONTHLY"],
+    [{ recurrence_set: ["RRULE:FREQ=YEARLY"] }, "YEARLY"],
+    [{ recurrence_set: [null, 42], rrule: "FREQ=DAILY;BYHOUR=6" }, "DAILY"],
+    [{ recurrence_set: [] }, undefined],
+  ])("parses provider recurrence metadata %j", (attrs, expected) => {
+    expect(choreFrequency(attrs)).toBe(expected);
   });
 });

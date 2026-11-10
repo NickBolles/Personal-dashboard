@@ -22,6 +22,7 @@ export function choreWrite(action: NextAction, op: "chore.complete" | "chore.reo
     instanceDate: ref.instanceDate,
     instanceTime: ref.instanceTime,
     categoryId: ref.categoryId,
+    ...(op === "chore.reopen" && action.status === "skipped" ? { previousStatus: "skipped" as const } : {}),
     // Skylight's own flag only: a Family/group-assigned chore that Jarvis lists as up for grabs still 422s with category_id.
     ...(ref.upForGrabs ? { upForGrabs: true } : {}),
   };

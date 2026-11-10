@@ -174,6 +174,8 @@ export type AwayDigest = {
   runs: AwayRun[];
   since: string | null;
   counts: { ran: number; failed: number; changes: number; needsYou: number; running: number; waiting: number };
+  /** Provider outcomes since dismissal; separate from agent-run counts. */
+  chores?: { id: string; title: string; status: "completed" | "skipped"; at: string }[];
   /** one-line text for the tray's dynamic line, null when nothing to say */
   line: string | null;
 };
