@@ -182,6 +182,20 @@ describe("skipped outcome history and recap", () => {
         .items.filter((r) => r.type === "chore")
         .map((r) => r.verb),
     ).toEqual(["chore skipped"]);
+    recordCompletions(snap([{ ...a, status: "open" }]), null, next.today, new Date(second.getTime() + 1000));
+    expect(
+      getDb()
+        .select()
+        .from(schema.sourceCompletions)
+        .all()
+        .map((r) => r.outcome)
+        .sort(),
+    ).toEqual(["reopened", "superseded"]);
+    expect(
+      listActivity(u, {})
+        .items.filter((r) => r.type === "chore")
+        .map((r) => r.verb),
+    ).toEqual(["chore reopened"]);
   });
   it("a completed occurrence changed to skipped no longer counts completed, despite an old completion row", () => {
     const now = new Date("2026-11-04T18:00:00Z");

@@ -31,7 +31,7 @@ export function recordCompletions(data: SourceData, prevPayload: string | null |
     for (const a of open) {
       tx.update(T)
         .set({ outcome: "reopened", completedAt: at })
-        .where(and(eq(T.source, a.source), eq(T.sourceId, a.sourceId), ne(T.outcome, "reopened")))
+        .where(and(eq(T.source, a.source), eq(T.sourceId, a.sourceId), ne(T.outcome, "reopened"), ne(T.outcome, "superseded")))
         .run();
     }
     for (const a of done) {
