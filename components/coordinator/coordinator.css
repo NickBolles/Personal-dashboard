@@ -1092,6 +1092,11 @@ html[data-kb="open"] .gc-tray-qa {
     max-width: min(420px, calc(100vw - 16px));
   }
 }
+.gc-needs-error .k-btn,
+.gc-running [role="alert"] .k-btn,
+.gc-thread-body [role="alert"] .k-btn {
+  color: var(--accent);
+}
 /* ==== end sleek controls ==== */
 
 /* ==== running ==== */
@@ -1637,7 +1642,13 @@ html[data-kb="open"] .gc-tray-qa {
     .gc-needs-nav > .k-btn:first-child {
       display: none;
     }
+    /* The decision stays in view while the list beside it scrolls; long ones scroll inside their own column. */
     .gc-needs-detail-pane {
+      position: sticky;
+      top: 0.5rem;
+      align-self: start;
+      max-height: calc(100dvh - 11rem);
+      overflow-y: auto;
       border-inline-start: 1px solid var(--bd);
       padding-inline-start: 0.5rem;
     }

@@ -53,7 +53,7 @@ export type StatusInput = {
   now: number;
 };
 
-export type StatusCounts = { needs: number; working: number; stuck: number; newStuck: number; finished: number };
+export type StatusCounts = { needs: number; working: number; stuck: number; newStuck: number; waiting: number; finished: number };
 export type CoordinatorStatus = {
   state: "failed" | "needs" | "working" | "stuck" | "finished" | "quiet";
   tone: "bad" | "warn" | "ai" | "ok" | "neutral";
@@ -94,12 +94,14 @@ export function stuckRuns(input: Pick<StatusInput, "runs" | "otherRuns" | "lastL
 }
 
 export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
-  const stuckAll = stuckRuns(input).filter((r) => !r.old);
+  const attention = stuckRuns(input).filter((r) => !r.old);
+  const stuckAll = attention.filter((r) => r.kind !== "waiting");
+  const waiting = attention.length - stuckAll.length;
   const fresh = stuckAll.filter((r) => r.fresh);
   const working =
     input.runs.filter((r) => !r.parentRunId && r.state === "running" && !r.stalled).length +
     (input.otherRuns ?? []).filter((r) => r.state === "running").length;
-  const counts: StatusCounts = { needs: input.needs, working, stuck: stuckAll.length, newStuck: fresh.length, finished: input.finished ?? 0 };
+  const counts: StatusCounts = { needs: input.needs, working, stuck: stuckAll.length, newStuck: fresh.length, waiting, finished: input.finished ?? 0 };
   const parts = {
     needs: counts.needs ? plural(counts.needs, "needs you", "need you") : "",
     working: counts.working ? `${counts.working} working` : "",

@@ -384,7 +384,7 @@ export function GlobalCoordinator() {
     }
   }, [requestedCard, dynamic.data]);
   const d = info.data?.area ? (info.data as CoordinatorResponse) : null;
-  const inFlight = status.counts.working + status.counts.stuck;
+  const inFlight = status.counts.working + status.counts.stuck + status.counts.waiting;
   const tabs: { id: Tab; label: string; count?: number; tone?: "bad" | "warn"; hint?: string }[] = [
     { id: "chat", label: "Chat" },
     { id: "needs", label: "Needs you", count: needsCount, tone: needsCount ? "warn" : undefined, hint: `${needsCount} waiting on you` },
@@ -393,7 +393,7 @@ export function GlobalCoordinator() {
       label: "Activity",
       count: inFlight,
       tone: status.counts.newStuck ? "bad" : undefined,
-      hint: `${status.counts.working} working, ${status.counts.stuck} stuck`,
+      hint: `${status.counts.working} working, ${status.counts.stuck} stuck, ${status.counts.waiting} waiting on you`,
     },
   ];
   const content = (

@@ -79,6 +79,7 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props
             </Button>
           </p>
         ) : null}
+        {!query.data && !query.isPending ? lead : null}
         {query.data ? (
           <div className="gc-needs-layout" data-detail={!!selected}>
             <div className="gc-needs-list-pane min-w-0">

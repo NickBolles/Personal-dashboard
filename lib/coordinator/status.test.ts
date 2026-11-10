@@ -45,7 +45,7 @@ describe("coordinatorStatus", () => {
     });
     expect(s).toMatchObject({ state: "failed", tone: "bad", dot: "red", text: "Sedge ledger build failed", rest: "4 need you · 1 working" });
     expect(s.target).toEqual({ tab: "running", ref: "R-7" });
-    expect(s.counts).toEqual({ needs: 4, working: 1, stuck: 1, newStuck: 1, finished: 0 });
+    expect(s.counts).toEqual({ needs: 4, working: 1, stuck: 1, newStuck: 1, waiting: 0, finished: 0 });
   });
 
   it("once the owner has looked, the same failure is counted but no longer shouts", () => {
@@ -113,6 +113,11 @@ describe("coordinatorStatus", () => {
       now,
     });
     expect(s).toMatchObject({ text: "2 runs newly stuck", rest: "2 need you", counts: { stuck: 3, newStuck: 2 } });
+  });
+
+  it("a run waiting on the owner is counted as waiting, never as stuck or as news", () => {
+    const s = coordinatorStatus({ needs: 3, runs: [run(1, { state: "waiting", updatedAt: ago(5) }), run(2)], lastLooked: ago(60), now });
+    expect(s).toMatchObject({ state: "needs", text: "3 need you", rest: "1 working", counts: { stuck: 0, newStuck: 0, waiting: 1 } });
   });
 
   it("several new problems are summarised, and finished work outranks plain progress", () => {
