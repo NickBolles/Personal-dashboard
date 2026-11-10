@@ -154,6 +154,35 @@ it("undo errors are danger toasts, never an invented Undone success", async () =
   expect(done).not.toHaveBeenCalled();
 });
 
+function MultiHarness() {
+  const write = useSkylightWrite();
+  return (
+    <>
+      <button onClick={() => write.request({ ...op, op: "chore.complete", choreId: "one" })}>First chore</button>
+      <button onClick={() => write.request({ ...op, op: "chore.skip", choreId: "two" })}>Second chore</button>
+      {write.node}
+    </>
+  );
+}
+it("keeps distinct-row clicks while another write is pending, with an Undo for each", async () => {
+  const finish: ((value: unknown) => void)[] = [];
+  vi.mocked(api.post).mockImplementation(() => new Promise((resolve) => finish.push(resolve)));
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MultiHarness />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "First chore" }));
+  fireEvent.click(screen.getByRole("button", { name: "Second chore" }));
+  fireEvent.click(screen.getByRole("button", { name: "First chore" }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+  await act(async () => finish[0]({ ok: true, writeId: "one", undoable: true }));
+  await act(async () => finish[1]({ ok: true, writeId: "two", undoable: true }));
+  expect(screen.getByRole("status").textContent).toContain("Skipped");
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.getByRole("status").textContent).toContain("Marked done");
+});
+
 it.each(["chore.complete", "chore.skip"] as const)("%s is deliberate confirmation, double clicks are ignored, Undo remains available", async (kind) => {
   let finish!: (value: unknown) => void;
   vi.mocked(api.post).mockImplementationOnce(

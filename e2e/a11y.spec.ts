@@ -131,7 +131,8 @@ test("Skylight write dialogs: axe clean and reflow at 200% text zoom", async ({ 
     await expectNoHorizontalOverflow(page);
     await zoom.evaluate((el) => (el as Element).remove());
   };
-  const opener = page.getByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ });
+  // Completion is deliberately one-tap; inspect the still-confirmed Claim dialog instead.
+  const opener = page.getByRole("button", { name: /Claim: .*Visualsky fold the towels/ });
   await opener.click();
   await checkDialog();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();

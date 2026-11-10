@@ -14,7 +14,7 @@ import type { SourceData } from "@/integrations/types";
 export function recordCompletions(data: SourceData, prevPayload: string | null | undefined, today: string, now = new Date()): SourceData {
   const done = data.actions.filter((a) => a.status === "completed" || a.status === "skipped");
   // Open readback may be Undo/reopen: retain history, but do not recap it as still completed/skipped.
-  const open = data.actions.filter((a) => a.status === "open");
+  const open = data.actions.filter((a) => a.status === "open" && a.skylight?.kind === "chore");
   if (!done.length && !open.length) return data;
   let prevOpen = new Set<string>();
   try {
@@ -39,6 +39,12 @@ export function recordCompletions(data: SourceData, prevPayload: string | null |
       // after its day is stamped at noon UTC of that day rather than "now" (no fake "done just now").
       const day = (a.skylight?.kind === "chore" && (a.status === "skipped" ? a.skylight.skippedOn : a.skylight.completedOn)) || today;
       const stamp = day === today ? at : day < today ? `${day}T12:00:00.000Z` : at;
+      // The terminal date can change without changing the occurrence identity.
+      if (a.skylight?.kind === "chore")
+        tx.update(T)
+          .set({ outcome: "superseded" })
+          .where(and(eq(T.source, a.source), eq(T.sourceId, a.sourceId), ne(T.day, day), ne(T.outcome, a.status)))
+          .run();
       tx.insert(T)
         .values({
           id: newId("sc"),

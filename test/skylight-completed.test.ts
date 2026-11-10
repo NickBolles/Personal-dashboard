@@ -111,7 +111,7 @@ describe("skipped outcome history and recap", () => {
   it("readback of Skip Undo removes only that occurrence from the closed recap, and re-skip is new", () => {
     const now = new Date("2026-11-01T07:30:00Z");
     const ctx = adapterContext(now);
-    const open = chore("series-2026-11-01-0600", false, ctx);
+    const open = { ...chore("series-2026-11-01-0600", false, ctx), skylight: { kind: "chore" as const, choreId: "series-2026-11-01-0600", categoryId: null } };
     const skipped = {
       ...open,
       status: "skipped" as const,
@@ -162,6 +162,27 @@ describe("skipped outcome history and recap", () => {
     expect(awayDigest(u, later).chores).toEqual([]);
   });
 
+  it("reconciles completion to skipped across household days by occurrence, not outcome day", () => {
+    const first = new Date("2026-11-04T18:00:00Z");
+    const second = new Date("2026-11-05T18:00:00Z");
+    const ctx = adapterContext(first);
+    const a = {
+      ...chore("same-occurrence", true, ctx),
+      skylight: { kind: "chore" as const, choreId: "same-occurrence", categoryId: null, completedOn: ctx.today },
+    };
+    recordCompletions(snap([a]), null, ctx.today, first);
+    const next = adapterContext(second);
+    recordCompletions(snap([{ ...a, status: "skipped", skylight: { ...a.skylight, skippedOn: next.today } }]), null, next.today, second);
+    const u = userById(userId)!;
+    expect(homePulse(u, second).trend!.completed.reduce((sum, n) => sum + n, 0)).toBe(0);
+    expect(awayDigest(u, second).chores).toMatchObject([{ status: "skipped" }]);
+    expect(awayDigest(u, second).chores).toHaveLength(1);
+    expect(
+      listActivity(u, {})
+        .items.filter((r) => r.type === "chore")
+        .map((r) => r.verb),
+    ).toEqual(["chore skipped"]);
+  });
   it("a completed occurrence changed to skipped no longer counts completed, despite an old completion row", () => {
     const now = new Date("2026-11-04T18:00:00Z");
     const ctx = adapterContext(now);

@@ -16,10 +16,20 @@ export const useSkylightWriteContext = () => useContext(SkylightWriteContext);
 
 export function useSkylightWrite() {
   const [op, setOp] = useState<SkylightWriteOp | null>(null);
-  const [undo, setUndo] = useState<{ id: string; label: string; key?: string } | null>(null);
+  const [undos, setUndos] = useState<{ id: string; label: string; key?: string }[]>([]);
+  const undo = undos.at(-1);
   // Row key (action id) of the write being confirmed: its row shimmers while pending, shakes on rollback.
   const keyRef = useRef<string | undefined>(undefined);
-  const inFlight = useRef(false);
+  const inFlight = useRef(new Set<string>());
+  const targetKey = (value: SkylightWriteOp, key?: string) =>
+    key ??
+    ("choreId" in value
+      ? `chore:${value.choreId}`
+      : "itemId" in value
+        ? `item:${value.itemId}`
+        : "eventId" in value
+          ? `event:${value.eventId}`
+          : JSON.stringify(value));
   // Shown inside the confirm sheet (a toast lands under/over the sheet and loses Skylight's reason).
   const [failure, setFailure] = useState<{ message: string; reason?: string; status?: number } | null>(null);
   const qc = useQueryClient();
@@ -32,18 +42,17 @@ export function useSkylightWrite() {
     void qc.invalidateQueries({ queryKey: ["away"] });
     void qc.invalidateQueries({ queryKey: ["smart-dynamic"] });
   }, [qc]);
-  const dismissUndo = useCallback(() => setUndo(null), []);
+  const undoId = undo?.id;
+  const dismissUndo = useCallback(() => setUndos((rows) => rows.filter((row) => row.id !== undoId)), [undoId]);
   const mutation = useMutation({
     mutationFn: ({ value }: { value: SkylightWriteOp; key?: string }) => api.post<SkylightWriteResult>("/api/skylight/write", value),
     onSuccess: (result, { value, key }) => {
       if (key) skylightWrites.success(key, result.writeId);
       haptic(8);
-      setOp(null);
-      setFailure(null);
+      setOp((current) => (current === value ? null : current));
       invalidate();
-      if (result.undoable) setUndo({ id: result.writeId, label: doneLabel(value), key });
+      if (result.undoable) setUndos((rows) => [...rows, { id: result.writeId, label: doneLabel(value), key }]);
       else {
-        setUndo(null);
         toast(doneLabel(value), "ok");
       }
     },
@@ -59,18 +68,18 @@ export function useSkylightWrite() {
         ...(typeof d.status === "number" ? { status: d.status } : {}),
       });
     },
-    onSettled: () => {
-      inFlight.current = false;
+    onSettled: (_result, _error, { value, key }) => {
+      inFlight.current.delete(targetKey(value, key));
     },
   });
   const execute = (value: SkylightWriteOp, key?: string) => {
-    if (!online || inFlight.current) return;
+    if (!online || inFlight.current.has(targetKey(value, key))) return;
     if (key && !skylightWrites.confirm(key, value)) return;
-    inFlight.current = true;
+    inFlight.current.add(targetKey(value, key));
     mutation.mutate({ value, key });
   };
   const request: SkylightRequest = (value, key) => {
-    if (!online || inFlight.current) return;
+    if (!online || inFlight.current.has(targetKey(value, key))) return;
     keyRef.current = key;
     setFailure(null);
     // Owner override: the deliberate completion/Skip click IS confirmation. Other writes still review.
