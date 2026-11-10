@@ -971,8 +971,9 @@ html[data-kb="open"] .gc-tray-qa {
   min-height: 32px;
   padding: 0;
 }
-:is(.gc-rail, .gc-sheet) .k-btn.gc-add {
+:is(.gc-rail, .gc-sheet) .gc-add-menu .k-btn.gc-add.k-btn-icon {
   width: 30px;
+  min-width: 30px;
   min-height: 30px;
 }
 :is(.gc-rail, .gc-sheet) .k-menu-i {
