@@ -97,7 +97,7 @@ describe("Needs you owner actions", () => {
     const invalidate = vi.spyOn(qc, "invalidateQueries");
     render(<NeedsList decisions={rows} onOpen={vi.fn()} onAnswered={onAnswered} />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "D-48: Accept" }));
-    await screen.findByText("D-48 → Accept");
+    await screen.findAllByText("Answer recorded: Accept · Question 48?");
     expect(api.post).toHaveBeenCalledWith("/api/coordinator/decisions/D-48/answer", { answer: "Accept", via: "queue", idempotencyKey: expect.any(String) });
     expect(onAnswered).toHaveBeenCalledWith(expect.objectContaining({ id: "op-D-48" }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["work"] });
@@ -140,7 +140,7 @@ describe("Needs you owner actions", () => {
     rows = [decision(48), decision(49), decision(50)];
     render(<NeedsPanel onAsk={vi.fn()} initialRef="D-48" />, { wrapper });
     fireEvent.click(await screen.findByRole("radio", { name: /Accept/ }));
-    await screen.findByText("D-48 → Accept");
+    await screen.findAllByText("Answer recorded: Accept · Question 48?");
     expect(screen.getByRole("heading", { name: "Question 48?" })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Question 49?" })).toBeTruthy(), { timeout: 1800 });
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));

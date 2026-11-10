@@ -492,7 +492,7 @@ describe("global coordinator", () => {
     runRows = runRows.map((r) => ({ ...r }));
     await act(() => qc.invalidateQueries({ queryKey: ["work", "coordinator", "runs"] }));
     fireEvent.click(within(sheet).getByRole("button", { name: "Close Chief of staff" }));
-    await waitFor(() => expect(status()).toBe("2 need you · 1 working"));
+    await waitFor(() => expect(status()).toBe("2 need you · 1 working · 1 stuck"));
     expect(document.querySelector(".gc-tray")?.getAttribute("data-state")).toBe("needs");
     expect(document.querySelector(".jv-shell")?.getAttribute("data-gc-dot")).toBe("yellow");
     fireEvent.click(tray);
@@ -542,9 +542,12 @@ describe("global coordinator", () => {
     fireEvent.click(tab);
     const panel = within(screen.getByRole("tabpanel", { name: /Needs you/ }));
     expect((await panel.findByRole("region", { name: "Approvals and proposals" })).textContent).toContain("Recursive delete");
-    const stalled = panel.getByRole("region", { name: "Stalled runs" });
-    expect(stalled.textContent).toContain("No report for over 30 minutes");
-    fireEvent.click(within(stalled).getByRole("button", { name: "See in Activity" }));
+    const stalled = panel.getByRole("region", { name: "Runs to check" });
+    expect(stalled.textContent).toContain("1 run has not reported for over 30 minutes");
+    // With other things waiting, an empty decision queue does not claim that nothing needs the owner.
+    expect(panel.getByText("No open decisions")).toBeTruthy();
+    expect(panel.queryByText("Nothing needs you")).toBeNull();
+    fireEvent.click(within(stalled).getByRole("button"));
     expect(screen.getByRole("tab", { name: /Activity/ }).getAttribute("aria-selected")).toBe("true");
   });
   it("renders the no-area setup link without a send control", async () => {

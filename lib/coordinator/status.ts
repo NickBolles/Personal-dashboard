@@ -71,7 +71,7 @@ const short = (text: string, max = 64) => {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 };
-const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "stalled", waiting: "is waiting", interrupted: "was interrupted" };
+const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "has stopped reporting", waiting: "is waiting", interrupted: "was interrupted" };
 
 export function stuckRuns(input: Pick<StatusInput, "runs" | "otherRuns" | "lastLooked" | "now">): StuckRun[] {
   const looked = input.lastLooked ? Date.parse(input.lastLooked) : NaN;
@@ -123,8 +123,8 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
       tone: "warn",
       dot: "yellow",
       text,
-      // Stalled runs are part of "need you" (as on Today); a separate stuck count here would count them twice.
-      rest: rest("working"),
+      // Seen is not solved: what is still stuck stays in the sentence, quietly.
+      rest: rest("working", "stuck"),
       target: { tab: "needs", ref: counts.needs === 1 ? (input.topRef ?? undefined) : undefined },
       counts,
     };

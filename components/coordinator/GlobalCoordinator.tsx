@@ -510,6 +510,7 @@ export function GlobalCoordinator() {
               ) : null}
               {t.id === "needs" && tab === "needs" ? (
                 <NeedsPanel
+                  hasOther={otherAsks.length + stalledAsks.length > 0}
                   key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
                   initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
                   onAsk={(ref, question) => prefill(`About ${ref} (${question.slice(0, 160)}): `)}
@@ -528,25 +529,11 @@ export function GlobalCoordinator() {
                           </section>
                         ) : null}
                         {stalledAsks.length ? (
-                          <section className="gc-list" aria-label="Stalled runs">
-                            <SectionHeader
-                              label="Stalled runs"
-                              count={stalledAsks.length}
-                              action={
-                                <Button variant="ghost" size="sm" onClick={() => selectTab("running")}>
-                                  See in Activity
-                                </Button>
-                              }
-                            />
-                            {stalledAsks.map((ask) => {
-                              const run = runRows.find((r) => `stalled:${r.id}` === ask.key);
-                              return (
-                                <Button key={ask.key} variant="ghost" className="gc-stalled-row" onClick={() => openAt("running", run?.ref)}>
-                                  <strong>{run?.title ?? ask.title}</strong>
-                                  <span>No report for over 30 minutes{run ? ` · ${run.profile}` : ""}</span>
-                                </Button>
-                              );
-                            })}
+                          <section className="gc-list" aria-label="Runs to check">
+                            <Button variant="ghost" className="gc-stalled-row" onClick={() => selectTab("running")}>
+                              <strong>{stalledAsks.length === 1 ? "1 run has" : `${stalledAsks.length} runs have`} not reported for over 30 minutes</strong>
+                              <span>Counted here as on Today · check them in Activity</span>
+                            </Button>
                           </section>
                         ) : null}
                       </>
@@ -557,7 +544,7 @@ export function GlobalCoordinator() {
               {t.id === "running" && things.changes.length ? (
                 <p className="gc-jump">
                   <Button variant="ghost" size="sm" onClick={() => document.getElementById(`${ids}-changes`)?.scrollIntoView({ block: "start" })}>
-                    {things.changes.length === 1 ? "1 change" : `${things.changes.length} changes`} by the Chief of staff today
+                    {things.changes.length === 1 ? "1 change" : `${things.changes.length} changes`} by the Chief of staff in the last 24 hours
                   </Button>
                 </p>
               ) : null}
@@ -572,7 +559,7 @@ export function GlobalCoordinator() {
               ) : null}
               {t.id === "running" && tab === "running" && otherRuns.length ? (
                 <section className="gc-list" aria-label="Jobs and checks">
-                  <SectionHeader label={cwRuns.isError ? "Runs, from item status" : "Jobs and checks"} count={otherRuns.length} />
+                  <SectionHeader label={cwRuns.isError ? "Saved item status · live details unavailable" : "Jobs and checks"} count={otherRuns.length} />
                   {otherRuns.map((run) => (
                     <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
                       <strong>{run.title}</strong>
@@ -832,12 +819,12 @@ function ChangesSection({ rows, id }: { rows: ActivityItem[]; id?: string }) {
   return (
     <section id={id} className="gc-changes" aria-label="Changes">
       <SectionHeader
-        label="Changes · last 24 hours"
+        label={`Changes on ${groups.length === 1 ? "1 item" : `${groups.length} items`} · last 24 hours`}
         count={rows.length}
         action={
           groups.length > CHANGES_SHOWN ? (
             <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
-              {all ? "Show fewer" : `Show all ${groups.length}`}
+              {all ? "Show fewer" : `All ${groups.length} items`}
             </Button>
           ) : undefined
         }

@@ -9,6 +9,7 @@ import type { RunEvent } from "@/lib/cw-runs";
 import { childrenOf, groupRuns, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
 import { sameLabel } from "@/lib/chat/display";
+import { ageLabel } from "@/lib/coordinator/needs";
 import { relativeTime } from "@/lib/time";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
@@ -20,7 +21,7 @@ type Props = {
   quietEmpty?: boolean;
 };
 const toneOf = (run: CoordinatorRunRow): KTone =>
-  run.state === "failed" || run.stalled ? "bad" : run.state === "waiting" || run.state === "interrupted" ? "wn" : run.state === "done" ? "ok" : "ai";
+  run.state === "failed" ? "bad" : run.stalled || run.state === "waiting" || run.state === "interrupted" ? "wn" : run.state === "done" ? "ok" : "ai";
 const commandFor = (run: CoordinatorRunRow) => `${run.state === "failed" ? "Retry" : "Resume"} ${run.ref} (${run.title}).`;
 /** What is happening, in words: the state and how long ago, never a bare enum. */
 function stateLine(run: CoordinatorRunRow): string {
@@ -29,7 +30,8 @@ function stateLine(run: CoordinatorRunRow): string {
   if (run.state === "interrupted") return `Interrupted ${relativeTime(run.interruptedAt ?? run.updatedAt)}`;
   if (run.state === "waiting") return `Waiting since ${ago}`;
   if (run.state === "done") return `Finished ${relativeTime(run.finishedAt ?? run.updatedAt)}`;
-  return run.stalled ? `Stalled · last update ${ago}` : `Working · updated ${ago}`;
+  // A quiet run is not a failed run: say what is known (how long since it last reported), in amber, not red.
+  return run.stalled ? `No update for ${ageLabel(run.updatedAt, Date.now())}` : `Working · updated ${ago}`;
 }
 const SECTIONS = [
   ["attention", "Stuck"],
@@ -191,7 +193,17 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
               </Button>
             }
           />
-          {showOlder ? older.map((run) => <RunRow key={run.id} run={run} {...rowProps} />) : null}
+          {showOlder ? (
+            older.map((run) => <RunRow key={run.id} run={run} {...rowProps} />)
+          ) : (
+            <p className="gc-hint gc-older-preview">
+              {older
+                .slice(0, 2)
+                .map((run) => run.title)
+                .join(" · ")}
+              {older.length > 2 ? ` · +${older.length - 2} more` : ""}
+            </p>
+          )}
         </section>
       ) : null}
     </div>
@@ -255,7 +267,7 @@ function RunRow({
             <ChevronIcon className={`gc-run-chevron h-4 w-4 ${expanded ? "-rotate-90" : "rotate-90"}`} />
           </span>
           <span className="gc-run-meta">
-            <span data-tone={toneOf(run) === "bad" ? "bad" : undefined}>{stateLine(run)}</span>
+            <span data-tone={toneOf(run) === "bad" ? "bad" : run.stalled ? "warn" : undefined}>{stateLine(run)}</span>
             <span>{run.profile}</span>
             <span className="gc-ref" role="img" aria-label={`Run ${run.ref.replace("-", " ")}`}>
               {run.ref}

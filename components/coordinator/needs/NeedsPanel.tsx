@@ -13,8 +13,10 @@ type Props = {
   onCount?: (n: number) => void;
   /** Shown with the list, above it (run approvals block live work); never beside an open decision on a narrow panel. */
   lead?: ReactNode;
+  /** Approvals or runs to check are listed in `lead`: an empty decision queue must not say "Nothing needs you". */
+  hasOther?: boolean;
 };
-export function NeedsPanel({ onAsk, initialRef, onCount, lead }: Props) {
+export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props) {
   const query = useCoordinatorDecisions();
   const feedback = useDecisionFeedbackController();
   const [selected, setSelected] = useState<{ ref: string; arm?: string; visit: number } | null>(() => (initialRef ? { ref: initialRef, visit: 0 } : null));
@@ -81,7 +83,7 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead }: Props) {
           <div className="gc-needs-layout" data-detail={!!selected}>
             <div className="gc-needs-list-pane min-w-0">
               {lead}
-              <NeedsList decisions={decisions} onOpen={open} />
+              <NeedsList decisions={decisions} onOpen={open} hasOther={hasOther} />
             </div>
             <div className="gc-needs-detail-pane min-w-0">
               {selected ? (

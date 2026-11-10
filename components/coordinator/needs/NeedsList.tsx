@@ -100,14 +100,22 @@ export function DecisionMenu({
 }
 
 type Receipt = { decision: Decision; answer: string; undo: (() => Promise<void>) | null };
+/** "Answer recorded: Do it · Archive the old landing pages": what was answered, not just its ref. Undo takes the answer back. */
+export function receiptText(d: Pick<Decision, "question" | "itemTitle">, answer: string) {
+  const asked = splitLead(plainStatusWords(d.question), 70);
+  const about = asked.whole ? asked.lead : (d.itemTitle ?? asked.lead);
+  return `Answer recorded: ${answer} · ${about}`;
+}
 export function NeedsList({
   decisions,
   onOpen,
   onAnswered,
+  hasOther,
 }: {
   decisions: Decision[];
   onOpen: (ref: string, options?: NeedsOpenOptions) => void;
   onAnswered?: (op: UndoOp) => void;
+  hasOther?: boolean;
 }) {
   const answer = useAnswerDecision();
   const client = useQueryClient();
@@ -164,7 +172,7 @@ export function NeedsList({
     try {
       const result = await answer.mutateAsync({ ref: d.ref, answer: choice });
       const undo = result.op
-        ? feedback.showUndo(`${d.ref} → ${choice}`, async () => {
+        ? feedback.showUndo(receiptText(d, choice), async () => {
             await feedback.undoOps([result.op!]);
             clearReceipt(d.ref);
           })
@@ -250,7 +258,7 @@ export function NeedsList({
         </div>
       ) : null}
       {!visible.length ? (
-        <EmptyState title="Nothing needs you">New decisions from agents show up here.</EmptyState>
+        <EmptyState title={hasOther ? "No open decisions" : "Nothing needs you"}>New decisions from agents show up here.</EmptyState>
       ) : (
         groups.map(({ title, rows }) =>
           rows.length ? (
@@ -271,7 +279,7 @@ export function NeedsList({
                   return receipt ? (
                     <div className="gc-needs-receipt" key={d.ref}>
                       <CheckIcon className="h-4 w-4" />
-                      <span>{receipt.answer}</span>
+                      <span className="min-w-0 flex-1">{receiptText(d, receipt.answer)}</span>
                       {receipt.undo ? (
                         <Button
                           size="sm"

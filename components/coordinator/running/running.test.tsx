@@ -193,7 +193,7 @@ it("says what each run is doing in words, with one labelled action, and drops a 
       .getAllByRole("button")
       .filter((b) => !b.hasAttribute("data-run-body")),
   ).toHaveLength(1);
-  expect(row("R-3").getByText(/^Stalled · last update /)).toBeTruthy();
+  expect(row("R-3").getByText(/^No update for /)).toBeTruthy();
   expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
 });
 it("folds failures older than three days away from what is stuck now, still one tap away", () => {

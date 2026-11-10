@@ -51,7 +51,7 @@ describe("coordinatorStatus", () => {
   it("once the owner has looked, the same failure is counted but no longer shouts", () => {
     const runs = [run(7, { state: "failed", updatedAt: ago(120) }), run(8)];
     const withNeeds = coordinatorStatus({ needs: 4, runs, lastLooked: ago(60), now });
-    expect(withNeeds).toMatchObject({ state: "needs", tone: "warn", dot: "yellow", text: "4 need you", rest: "1 working", target: { tab: "needs" } });
+    expect(withNeeds).toMatchObject({ state: "needs", tone: "warn", dot: "yellow", text: "4 need you", rest: "1 working · 1 stuck", target: { tab: "needs" } });
     const alone = coordinatorStatus({ needs: 0, runs: [runs[0]], lastLooked: ago(60), now });
     expect(alone).toMatchObject({ state: "stuck", tone: "neutral", dot: null, text: "1 run is stuck", rest: "nothing new since you looked" });
   });

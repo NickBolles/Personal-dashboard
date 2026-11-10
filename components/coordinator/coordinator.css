@@ -1012,7 +1012,7 @@ html[data-kb="open"] .gc-tray-qa {
 }
 /* Generous tap area for the small controls (visual 26-30px + slop ≈ 44px). */
 :is(.gc-rail, .gc-sheet) :is(.k-btn, .k-pick, .jv-iact):not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn)::after {
-  inset: -9px -4px;
+  inset: -9px -7px;
 }
 .gc-list > .gc-stalled-row.k-btn {
   display: flex;
@@ -1047,6 +1047,49 @@ html[data-kb="open"] .gc-tray-qa {
 }
 .gc-list > .gc-stalled-row.k-btn span {
   font-weight: 400;
+}
+/* Less chrome above the content on a phone: title row and tabs give 16px back. */
+@media (max-width: 639.98px) {
+  .gc-head {
+    min-height: 48px;
+    padding-block: 2px;
+  }
+  .gc-head .gc-close {
+    top: 4px;
+  }
+  .gc-tabs button {
+    min-height: 40px;
+  }
+}
+/* Unfolded and wide rails: keep prose to a readable measure. */
+.gc-thread-body > ol,
+.gc-thread-body > details,
+.gc-composer > * {
+  max-width: 42rem;
+  margin-inline: auto;
+}
+.gc-jump {
+  text-align: start;
+  padding-inline: 8px;
+}
+/* A run row is one surface: no partial hover card behind just its text column. */
+.gc-host .gc-running .gc-run-body:hover:not(:disabled) {
+  background: none;
+}
+.gc-run-row[data-state]:has(.gc-run-body[aria-expanded="true"]) {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding-inline: 6px;
+  margin-inline: -6px;
+}
+.gc-older-preview {
+  padding: 0 0 6px;
+}
+/* Unfolded phone / tablet: the tray is a pill; give its sentence room. */
+@media (min-width: 640px) {
+  .gc-tray {
+    max-width: min(420px, calc(100vw - 16px));
+  }
 }
 /* ==== end sleek controls ==== */
 
@@ -1580,7 +1623,8 @@ html[data-kb="open"] .gc-tray-qa {
   }
   @container gc-needs (min-width: 640px) {
     .gc-needs-layout {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      /* The decision being read gets the wider column. */
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
       align-items: stretch;
       gap: 0.875rem;
     }
@@ -1588,6 +1632,9 @@ html[data-kb="open"] .gc-tray-qa {
     .gc-needs-layout[data-detail] > .gc-needs-list-pane,
     .gc-needs-layout[data-detail] > .gc-needs-detail-pane {
       display: block;
+    }
+    .gc-needs-nav > .k-btn:first-child {
+      display: none;
     }
     .gc-needs-detail-pane {
       border-inline-start: 1px solid var(--bd);

@@ -7,7 +7,7 @@ import { Markdown } from "@/components/markdown/Markdown";
 import { RISK_LABEL, type Decision } from "@/lib/cw-decisions";
 import { ageLabel, decisionKeyAction, defaultLine, deferUntil, isRisky, nextAfterAnswer, pagerState, safeEvidenceHref } from "@/lib/coordinator/needs";
 import { plainStatusWords, sameLabel, splitLead } from "@/lib/chat/display";
-import { DecisionId, DecisionMenu, DecisionNotices } from "./NeedsList";
+import { DecisionId, DecisionMenu, DecisionNotices, receiptText } from "./NeedsList";
 import { useAnswerDecision, useDecisionFeedback } from "./useCoordinatorDecisions";
 
 type Props = { decisions: Decision[]; refId: string; onBack: () => void; onNavigate: (ref: string) => void; onAsk: (ref: string) => void; arm?: string };
@@ -69,7 +69,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
         }
         onNavigate(refId);
       };
-      if (result.op) undo.current = feedback.showUndo(`${refId} → ${choice}`, returnToDecision);
+      if (result.op) undo.current = feedback.showUndo(receiptText(current, choice), returnToDecision);
       else feedback.toast(`Saved ${refId}`);
       if (mounted.current) {
         setArmed(null);
@@ -288,7 +288,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
       ) : null}
       {saved ? (
         <p role="status" className="gc-needs-saved">
-          Saved · {submitted?.answer}
+          Answer recorded · {submitted?.answer}
         </p>
       ) : null}
       <div className="gc-needs-actions">
