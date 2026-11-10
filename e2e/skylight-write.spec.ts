@@ -116,9 +116,8 @@ test("skywrite adds groceries, checks oat milk and undoes the check", async ({ p
   await expect(groceries.getByRole("checkbox", { name: "Skywrite lemons", exact: true })).toBeVisible();
   const oat = groceries.getByRole("checkbox", { name: "Oat milk", exact: true });
   await oat.click();
-  // No optimistic check: confirmation must precede any upstream mutation.
-  await expect(oat).not.toBeChecked();
-  await confirm(page, "Check off “Oat milk” on Groceries");
+  // The explicit check is confirmation; adding/removing list items still reviews separately.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(oat).toBeChecked();
   await undo(page);
   await expect(oat).not.toBeChecked();

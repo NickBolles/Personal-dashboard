@@ -83,7 +83,7 @@ export function useSkylightWrite() {
     keyRef.current = key;
     setFailure(null);
     // Owner override: the deliberate completion/Skip click IS confirmation. Other writes still review.
-    if (value.op === "chore.complete" || value.op === "chore.skip") {
+    if (value.op === "chore.complete" || value.op === "chore.skip" || value.op === "list.check") {
       setOp(null);
       execute(value, key);
       return;

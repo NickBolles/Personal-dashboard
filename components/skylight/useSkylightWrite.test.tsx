@@ -154,6 +154,38 @@ it("undo errors are danger toasts, never an invented Undone success", async () =
   expect(done).not.toHaveBeenCalled();
 });
 
+function ListHarness() {
+  const write = useSkylightWrite();
+  return (
+    <>
+      <button onClick={() => write.request({ op: "list.check", listId: "list", itemId: "item", label: "List task", listLabel: "Tasks" })}>
+        Check list task
+      </button>
+      {write.node}
+    </>
+  );
+}
+it("list completion is one deliberate click with Undo, not a confirmation modal", async () => {
+  vi.mocked(api.post).mockResolvedValue({ ok: true, writeId: "list-check", undoable: true });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ListHarness />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check list task" }));
+  await waitFor(() =>
+    expect(api.post).toHaveBeenCalledExactlyOnceWith("/api/skylight/write", {
+      op: "list.check",
+      listId: "list",
+      itemId: "item",
+      label: "List task",
+      listLabel: "Tasks",
+    }),
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDefined());
+});
+
 function MultiHarness() {
   const write = useSkylightWrite();
   return (
