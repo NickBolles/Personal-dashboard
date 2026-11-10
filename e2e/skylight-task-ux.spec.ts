@@ -26,6 +26,12 @@ for (const instant of TASK_UX_CLOCKS) {
       await expect(page.getByText("Daily tomorrow hidden", { exact: true })).toBeVisible();
       await page.getByRole("switch", { name: "Show upcoming daily chores" }).click();
       await expect(page.getByText("Daily tomorrow hidden", { exact: true })).toHaveCount(0);
+      const zoom = await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+      const title = page.locator(".sk-row .jv-trow h3").first();
+      await expect(title).toHaveCSS("-webkit-line-clamp", "none");
+      expect(await title.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
+      await zoom.evaluate((el) => el.remove());
     }
   });
 }

@@ -3344,6 +3344,22 @@ button:active > .dock-orb {
   /* No transform at rest: a transformed row would trap its ⋯ menu (fixed popover, stacking context). */
   transition: transform var(--d2) var(--ease);
 }
+/* Keep a useful text column when task actions wrap, including 320px at 200% text. */
+@media (max-width: 639px) {
+  .sk-row > .jv-trow > .flex-1 {
+    flex-basis: min(10rem, calc(100% - 3.5rem));
+  }
+  .sk-row > .jv-trow h3 {
+    display: block;
+    -webkit-line-clamp: unset;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .sk-row > .jv-trow > .flex-1 > p {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 .sk-row[data-swiping] {
   transform: translateX(var(--sk-dx, 0px));
   transition: none;
