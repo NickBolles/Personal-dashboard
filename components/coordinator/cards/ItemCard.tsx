@@ -53,7 +53,7 @@ const RUN_ICON: Record<RunStatus["key"], ReactNode> = {
   failed: <AlertIcon className="h-3 w-3" />,
   interrupted: <AlertIcon className="h-3 w-3" />,
   waiting: <BellIcon className="h-3 w-3" />,
-  stuck: <ClockIcon className="h-3 w-3" />,
+  stuck: <AlertIcon className="h-3 w-3" />,
   working: <BoltIcon className="h-3 w-3" />,
   done: undefined,
 };
@@ -130,7 +130,12 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
         : `edited ${relativeTime(model.updatedAt, now)}`;
   // The chip is the state; the item's own stage is only worth a word when it has moved past the default.
   const stage = model && model.headline.key !== "status" && model.status.label !== "Captured" ? `Stage: ${model.status.label}` : "";
-  const meta = model ? [model.path.join(" › "), stage, ...model.tags.slice(0, 3).map((t) => `#${t}`)].filter(Boolean) : [];
+  // Progress with nothing done yet is a count, not an empty bar.
+  const progress = model?.progress && model.progress.total ? model.progress : null;
+  const counted = progress && !progress.done ? `${progress.done} of ${progress.total} done` : "";
+  const meta = model ? [model.path.join(" › "), stage, counted, ...model.tags.slice(0, 3).map((t) => `#${t}`)].filter(Boolean) : [];
+  // Closed: one chip of each kind; the rest are one tap in.
+  const chips = open ? 2 : 1;
   return (
     <article className="rc ic" data-item={itemId} data-state={model?.headline.key ?? "unknown"} data-open={open || undefined}>
       <div className="ic-headrow">
@@ -182,17 +187,17 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           {agent && busy ? <LiveState live={agent.live} at={agent.liveAt} approval={agent.approval} /> : null}
         </p>
       ) : null}
-      {model?.progress && model.progress.total ? (
+      {progress && progress.done ? (
         <div className="ic-progress">
-          <ProgressBar value={(model.progress.done / model.progress.total) * 100} tone="orb" label={`${model.progress.done} of ${model.progress.total} done`} />
+          <ProgressBar value={(progress.done / progress.total) * 100} tone="orb" label={`${progress.done} of ${progress.total} done`} />
           <span data-dynamic>
-            {model.progress.done} of {model.progress.total} done
+            {progress.done} of {progress.total} done
           </span>
         </div>
       ) : null}
       {model && (model.decisions.length || runs.length) ? (
         <div className="ic-jumps">
-          {model.decisions.slice(0, 2).map((d) => (
+          {model.decisions.slice(0, chips).map((d) => (
             <Button
               key={d.id}
               variant="ghost"
@@ -200,15 +205,15 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
               className="rc-jump k-t-ac"
               icon={<InboxIcon className="h-3 w-3" />}
               disabled={!onRef}
-              aria-label={`Answer decision ${d.ref.replace("-", " ")}: ${d.question.slice(0, 80)}`}
+              aria-label={`Review decision ${d.ref.replace("-", " ")}: ${d.question.slice(0, 80)}`}
               title={d.question}
               onClick={() => onRef?.(d.ref)}
             >
-              Answer {d.ref}
+              Review {d.ref}
             </Button>
           ))}
-          {model.decisions.length > 2 ? <span className="ic-more">+{model.decisions.length - 2} more</span> : null}
-          {runs.slice(0, 2).map((r) => {
+          {model.decisions.length > chips ? <span className="ic-more">+{model.decisions.length - chips} more</span> : null}
+          {runs.slice(0, chips).map((r) => {
             const status = runStatus(r, now);
             return (
               <Button
@@ -226,7 +231,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
               </Button>
             );
           })}
-          {runs.length > 2 ? <span className="ic-more">+{runs.length - 2} runs</span> : null}
+          {runs.length > chips ? <span className="ic-more">+{runs.length - chips} runs</span> : null}
         </div>
       ) : null}
       {prs.length ? (

@@ -279,6 +279,12 @@ describe("coordinator parity controls", () => {
     // A raw fallback from the source reads as a sentence.
     expect(screen.getByText("Vendor portal timed out")).toBeTruthy();
     expect(screen.queryByText(/status=failed/)).toBeNull();
+    // Work that failed cannot be steered, but it can be answered: Reply writes a line in the composer, unsent.
+    const failed = within(screen.getByText("Draft the email").closest("article")!);
+    expect(failed.queryByRole("button", { name: "Steer" })).toBeNull();
+    fireEvent.click(failed.getByRole("button", { name: "Reply" }));
+    expect((screen.getByTestId("coordinator-input") as HTMLTextAreaElement).value).toBe('About "Draft the email": ');
+    expect(api.post).not.toHaveBeenCalled();
   });
   it("groups actions under replies and renders a live group without parsing the Markdown footer", async () => {
     const tool = (id: string): TimelineItem => ({

@@ -116,7 +116,7 @@ describe("itemCardModel", () => {
     const base = { item: tree[3]!, items: tree, now };
     expect(itemCardModel({ ...base, runs, decisions: [decision("1", "b")] }).headline).toMatchObject({ key: "needs", label: "Needs you", tone: "wn" });
     expect(itemCardModel({ ...base, runs }).headline).toMatchObject({ key: "failed", tone: "bad" });
-    expect(itemCardModel({ ...base, runs: runs.slice(0, 2) }).headline).toMatchObject({ key: "stuck", tone: "wn" });
+    expect(itemCardModel({ ...base, runs: runs.slice(0, 2) }).headline).toMatchObject({ key: "stuck", label: "Run quiet", tone: "wn" });
     expect(itemCardModel({ ...base, runs: runs.slice(0, 1) }).headline).toMatchObject({ key: "working", live: true });
     // an answered decision and a failure from last week are history
     const old = run("4", "b", { state: "failed", updatedAt: iso(now - 6 * 86_400_000) });

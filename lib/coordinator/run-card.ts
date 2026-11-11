@@ -38,16 +38,16 @@ export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): Run
     };
   if (run.state === "waiting") return { key: "waiting", label: "Waiting on you", detail: `since ${ago}`, tone: "wn", live: false, attention: true };
   if (run.state === "done")
-    return { key: "done", label: "Done", detail: relativeTime(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
+    return { key: "done", label: "Finished", detail: relativeTime(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
   // A quiet run is not a failed run: say what is known (how long since it last reported), in amber, not red.
-  if (run.stalled) return { key: "stuck", label: "Stuck", detail: `no update for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
+  if (run.stalled) return { key: "stuck", label: "Quiet", detail: `no update for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
   return { key: "working", label: "Working", detail: `updated ${ago}`, tone: "ai", live: true, attention: false };
 }
 
 const CHIP: Record<RunEventType, { label: string; tone: CardTone }> = {
   started: { label: "Started", tone: "neutral" },
   progress: { label: "Progress", tone: "ai" },
-  notice: { label: "Step", tone: "inf" },
+  notice: { label: "Step done", tone: "inf" },
   ci: { label: "CI", tone: "inf" },
   "lock.acquired": { label: "Lock", tone: "wn" },
   "lock.released": { label: "Unlocked", tone: "neutral" },
@@ -76,7 +76,8 @@ export function eventChip(event: Pick<RunEvent, "type" | "summary" | "payload">)
   const chip = CHIP[event.type] ?? { label: event.type, tone: "neutral" as const };
   if (event.type === "ci") return { ...chip, tone: ciTone(event) };
   // A step or progress report that says it failed is not a calm blue line.
-  if ((event.type === "notice" || event.type === "progress") && SAYS_FAILED.test(event.summary)) return { ...chip, tone: "bad" };
+  if ((event.type === "notice" || event.type === "progress") && SAYS_FAILED.test(event.summary))
+    return { label: event.type === "notice" ? "Step failed" : chip.label, tone: "bad" };
   return chip;
 }
 
@@ -98,11 +99,44 @@ export function tidyOutcome(text: string | null | undefined): string {
 
 /** "Synced just now" / "Synced 3 minutes ago"; when a refresh fails, when the data on screen was last good. */
 export function syncLine(updatedAt: number, failed: boolean, now: number = Date.now()): string {
-  const age = !updatedAt ? "" : now - updatedAt < 60_000 ? "just now" : relativeTime(updatedAt, now);
+  const fresh = now - updatedAt < 60_000;
+  const age = !updatedAt ? "" : fresh ? "just now" : relativeTime(updatedAt, now);
   if (!failed) return age ? `Synced ${age}` : "";
   if (!updatedAt) return "Couldn't refresh";
   const at = new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return `Couldn't refresh · last synced ${at}${now - updatedAt < 60_000 ? "" : ` (${age})`}`;
+  return `Couldn't refresh · last synced ${age}${fresh ? "" : ` (${at})`}`;
+}
+
+/**
+ * What a waiting run needs from the owner, in the best words available: the open decision it raised, else what
+ * the agent last summarised (a waiting run's summary is normally its ask).
+ */
+export function runNeeds(
+  run: Pick<CoordinatorRunRow, "id" | "state" | "summary" | "title">,
+  decisions: readonly Decision[],
+): { text: string; decision: Decision | null } | null {
+  if (run.state !== "waiting") return null;
+  const decision = runAsk(run, decisions);
+  const text = decision ? decision.question : tidyOutcome(run.summary);
+  return text && text.toLowerCase() !== run.title.trim().toLowerCase() ? { text, decision } : null;
+}
+
+/**
+ * Runs that need a look, most in need first: one that failed, then one whose last report says a step failed,
+ * then the rest by how recently they went quiet. Silence alone never outranks a reported failure.
+ */
+export function byNeed(runs: readonly CoordinatorRunRow[], events: readonly RunEvent[]): CoordinatorRunRow[] {
+  const latest = new Map<string, RunEvent>();
+  for (const event of events) {
+    const prior = latest.get(event.runId);
+    if (!prior || Date.parse(event.at) >= Date.parse(prior.at)) latest.set(event.runId, event);
+  }
+  const rank = (run: CoordinatorRunRow) => {
+    if (run.state === "failed") return 0;
+    const last = latest.get(run.id) ?? run.lastEvent;
+    return last && eventChip(last).tone === "bad" ? 1 : 2;
+  };
+  return [...runs].sort((x, y) => rank(x) - rank(y) || Date.parse(y.updatedAt) - Date.parse(x.updatedAt) || y.seq - x.seq);
 }
 
 export type BackgroundWork = {
@@ -182,7 +216,7 @@ export function sinceChips(counts: SinceCounts): SinceChip[] {
   if (failed) chips.push({ key: "failed", label: `${failed} failed`, tone: "bad", tab: "running" });
   if (counts.decisions) chips.push({ key: "decisions", label: count(counts.decisions, "new decision", "new decisions"), tone: "ac", tab: "needs" });
   if (waiting) chips.push({ key: "waiting", label: `${waiting} waiting on you`, tone: "wn", tab: "running" });
-  if (stuck) chips.push({ key: "stuck", label: `${stuck} stuck`, tone: "wn", tab: "running" });
+  if (stuck) chips.push({ key: "stuck", label: `${stuck} went quiet`, tone: "wn", tab: "running" });
   if (finished) chips.push({ key: "finished", label: `${finished} finished`, tone: "ok", tab: "running" });
   const rest = Math.max(0, counts.runs - failed - stuck - waiting - finished);
   if (rest) chips.push({ key: "runs", label: count(rest, "run updated", "runs updated"), tone: "ai", tab: "running" });

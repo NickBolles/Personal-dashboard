@@ -207,6 +207,5 @@ test("coordinator chat: one Since divider after 2 h away, D-n/R-n chips, run not
   await scope.getByRole("button", { name: "Run R 7", exact: true }).last().click();
   await expect(scope.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
   await expect(scope.getByText("Sedge ledger build")).toBeVisible();
-  await expect(scope.getByText(/2 steps reported/)).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

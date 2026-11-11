@@ -335,8 +335,10 @@
 .rc .rc-actions .k-btn.rc-act-stop {
   margin-inline-start: auto;
 }
-.rc .rc-actions .k-btn.rc-act-stop:hover:not(:disabled) {
-  background: var(--bads);
+/* Stop stays a quiet control even while pointed at or opened: the confirm below carries the weight. */
+.rc .rc-actions .k-btn.rc-act-stop:hover:not(:disabled),
+.rc .rc-actions .k-btn.rc-act-stop[aria-expanded="true"] {
+  background: none;
   color: var(--bad);
 }
 .rc-confirm {
@@ -362,6 +364,20 @@
   gap: 6px;
   min-width: 0;
   padding-top: 2px;
+}
+.rc-steer {
+  align-items: flex-end;
+}
+.rc .rc-steer .rc-steer-input {
+  min-height: 2.75rem;
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  resize: none;
+}
+/* While refreshes are failing, ages on the cards are measured against stale data: step them back. */
+.gc-running[data-stale] .rc-status-detail {
+  opacity: 0.55;
 }
 .rc-progress {
   padding-block: 2px;

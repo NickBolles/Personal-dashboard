@@ -130,7 +130,7 @@ export function itemCardModel(input: {
       : waiting
         ? { key: "waiting", label: "Waiting on you", tone: "wn", live: false }
         : attention.length
-          ? { key: "stuck", label: "Run stuck", tone: "wn", live: false }
+          ? { key: "stuck", label: "Run quiet", tone: "wn", live: false }
           : working.length || agent?.live === "running"
             ? { key: "working", label: "Working", tone: "ai", live: true }
             : { key: "status", ...status, live: false };

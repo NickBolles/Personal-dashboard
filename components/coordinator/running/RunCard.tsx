@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, ButtonLink, Dot, Input, Pill, ProgressBar, SectionHeader, useNow } from "@/components/ui";
+import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
 import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
@@ -16,7 +16,7 @@ import {
   eventChip,
   eventClock,
   eventText,
-  runAsk,
+  runNeeds,
   runStatus,
   syncLine,
   tidyOutcome,
@@ -28,8 +28,8 @@ import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view"
 import { relativeTime } from "@/lib/time";
 import "./run-card.css";
 
-/** How many events an open card shows before "Show earlier". */
-const PREVIEW = 3;
+/** How many events (ones that say something) an open card shows before "Show earlier". */
+const PREVIEW = 2;
 
 /** The state of a piece of work as a tinted chip (dot + one or two words), then how long, in plain text. */
 export function StatusChip({ tone, live, label, detail, dotLabel }: { tone: CardTone; live?: boolean; label: string; detail?: string; dotLabel?: string }) {
@@ -49,8 +49,8 @@ export function StatusChip({ tone, live, label, detail, dotLabel }: { tone: Card
 }
 
 /**
- * How current the cards are: "Synced just now", or, when a refresh fails, when what is on screen was last good,
- * with Retry on the same line. It describes fetching, never whether an agent is working.
+ * How current the cards are: "Synced just now", or, when a refresh fails, how long ago what is on screen was
+ * last good, with Retry on the same line. It describes fetching, never whether an agent is working.
  */
 export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: number; failed?: boolean; fetching?: boolean; onRetry?: () => void }) {
   const now = useNow(10_000);
@@ -109,14 +109,16 @@ function Pipeline({ run }: { run: CoordinatorRunRow }) {
   );
 }
 
-/** The one guidance field both kinds of card use: type what it should do differently, Send. */
+/** The one guidance / reply field both kinds of card use: type it, Send. Two lines, so what is typed stays in view. */
 function SteerField({
   label,
+  placeholder = "What should it do differently?",
   pending,
   onSend,
   onClose,
 }: {
   label: string;
+  placeholder?: string;
   pending: boolean;
   onSend: (guidance: string) => Promise<unknown>;
   onClose: () => void;
@@ -124,7 +126,7 @@ function SteerField({
   const [guidance, setGuidance] = useState("");
   const form = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    form.current?.querySelector("input")?.focus();
+    form.current?.querySelector("textarea")?.focus();
   }, []);
   return (
     <form
@@ -141,10 +143,11 @@ function SteerField({
           .catch(() => undefined);
       }}
     >
-      <Input
+      <Textarea
         aria-label={label}
-        className="min-w-0 flex-1"
-        placeholder="What should it do differently?"
+        className="rc-steer-input min-w-0 flex-1"
+        rows={2}
+        placeholder={placeholder}
         value={guidance}
         maxLength={2000}
         onChange={(event) => setGuidance(event.target.value)}
@@ -165,7 +168,7 @@ export type RunCardProps = {
   decisions?: readonly Decision[];
   /**
    * With guidance: send it to the run now (resolves once sent or written into Chat). Without: open Chat with a
-   * blank steering line (the keyboard shortcut, and "Ask" on a run that has stopped).
+   * blank steering line (the keyboard shortcut, and "Ask in chat" on a run that has stopped).
    */
   onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
   onCommand: (text: string) => void;
@@ -228,17 +231,26 @@ export function RunCard({
     run.lastEvent ? [run.lastEvent] : undefined,
     full.data?.events,
   );
-  // Closed: the newest event that says something (a bare "Done" or "Started" under the same chip says nothing new).
-  const latest = known.find((e) => eventText(e, run.title)) ?? null;
-  const shown = open ? (all ? known : known.slice(0, PREVIEW)) : latest ? [latest] : [];
+  // Events that say something (a bare "Started" or "Finished" under the same chip adds nothing): the newest one
+  // on a closed card, the newest two on an open one; "Show earlier" brings every event.
+  const telling = known.filter((e) => eventText(e, run.title));
+  const latest = telling[0] ?? null;
+  const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
   const hidden = known.length - shown.length;
-  const canStop = run.state === "running" || run.state === "waiting";
+  const waiting = run.state === "waiting";
+  const canStop = run.state === "running" || waiting;
   const canRetry = ["failed", "waiting", "interrupted"].includes(run.state);
-  const ask = run.state === "waiting" ? runAsk(run, decisions) : null;
+  // A working run is steered and a waiting one is answered, both in the card; one that has stopped cannot take either.
+  const canSteer = waiting || !canRetry;
+  const needs = runNeeds(run, decisions);
   // What the run itself last summarised: the outcome of a finished run, or all there is when it has sent no events.
   const summary = tidyOutcome(run.summary);
   const outcome =
-    summary && eventText({ summary }, run.title) && (run.state === "done" || !latest) && summary !== (latest ? eventText(latest, run.title) : "")
+    summary &&
+    summary !== needs?.text &&
+    eventText({ summary }, run.title) &&
+    (run.state === "done" || !latest) &&
+    summary !== (latest ? eventText(latest, run.title) : "")
       ? summary
       : "";
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
@@ -264,27 +276,28 @@ export function RunCard({
         <span className="rc-meta">
           <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
-          {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 step reported" : `${run.noticeCount} steps reported`}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
         </span>
       </Button>
-      {ask ? (
+      {needs ? (
         <p className="rc-ask">
           <span className="rc-ask-text">
             <span className="rc-ask-label">Needs you</span>
-            {ask.question}
+            {needs.text}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="rc-jump k-t-ac"
-            icon={<InboxIcon className="h-3.5 w-3.5" />}
-            disabled={!onRef}
-            aria-label={`Answer decision ${ask.ref.replace("-", " ")}`}
-            onClick={() => onRef?.(ask.ref)}
-          >
-            Answer {ask.ref}
-          </Button>
+          {needs.decision ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rc-jump k-t-ac"
+              icon={<InboxIcon className="h-3.5 w-3.5" />}
+              disabled={!onRef}
+              aria-label={`Review decision ${needs.decision.ref.replace("-", " ")}`}
+              onClick={() => onRef?.(needs.decision!.ref)}
+            >
+              Review {needs.decision.ref}
+            </Button>
+          ) : null}
         </p>
       ) : null}
       <Pipeline run={run} />
@@ -337,6 +350,19 @@ export function RunCard({
             </section>
           ) : null}
           <div className="rc-actions">
+            {canSteer ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rc-act"
+                icon={<SteerIcon className="h-3.5 w-3.5" />}
+                aria-label={`${waiting ? "Reply to" : "Steer"} ${run.ref}`}
+                aria-expanded={steering}
+                onClick={() => setSteering((value) => !value)}
+              >
+                {waiting ? "Reply" : "Steer"}
+              </Button>
+            ) : null}
             {canRetry ? (
               <Button
                 size="sm"
@@ -349,7 +375,7 @@ export function RunCard({
                 {run.state === "failed" ? "Retry" : "Resume"}
               </Button>
             ) : null}
-            {canRetry ? (
+            {!canSteer ? (
               // A run that has stopped cannot be steered: this opens Chat with a line about it.
               <Button
                 size="sm"
@@ -361,19 +387,7 @@ export function RunCard({
               >
                 Ask in chat
               </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<SteerIcon className="h-3.5 w-3.5" />}
-                aria-label={`Steer ${run.ref}`}
-                aria-expanded={steering}
-                onClick={() => setSteering((value) => !value)}
-              >
-                Steer
-              </Button>
-            )}
+            ) : null}
             {prUrl ? (
               <ButtonLink size="sm" variant="ghost" className="rc-act" href={prUrl} external icon={<ExternalIcon className="h-3.5 w-3.5" />}>
                 Pull request
@@ -403,9 +417,10 @@ export function RunCard({
               </Button>
             ) : null}
           </div>
-          {steering && !canRetry ? (
+          {steering && canSteer ? (
             <SteerField
-              label={`Guidance for ${run.ref}`}
+              label={`${waiting ? "Reply to" : "Guidance for"} ${run.ref}`}
+              placeholder={waiting ? "Your answer" : undefined}
               pending={sending}
               onClose={() => setSteering(false)}
               onSend={async (guidance) => {
@@ -445,7 +460,7 @@ export function RunCard({
 const EXEC_STATUS: Record<ExecutionRecord["state"], { label: string; tone: CardTone }> = {
   running: { label: "Working", tone: "ai" },
   waiting: { label: "Waiting on you", tone: "wn" },
-  completed: { label: "Done", tone: "ok" },
+  completed: { label: "Finished", tone: "ok" },
   failed: { label: "Failed", tone: "bad" },
   cancelled: { label: "Stopped", tone: "neutral" },
   unknown: { label: "No report yet", tone: "neutral" },
@@ -455,21 +470,25 @@ const OUTCOME_CHARS = 180;
 
 /**
  * Background work started from a conversation, as a card that answers "did it finish, fail or need me?" in place:
- * state chip, the current step or the outcome or error, progress when the source reports it, links, and Steer /
- * Ask to stop for a sub-agent that can take them. When the work is also a tracked run (R-n), that run's state and
- * latest events are what the card shows: one card per piece of work, one source of truth for its state.
+ * state chip, the current step or the outcome or error, progress when the source reports it, links, and what you
+ * can do: Steer (or Reply, when it waits on you) and Ask to stop for a sub-agent that can take them, Reply for
+ * work that failed. When the work is also a tracked run (R-n), that run's state and latest events are what the
+ * card shows, and stopping it works as it does under Activity: the request is written for you to send.
  */
 export function ExecCard({
   work,
   events = [],
   pending,
   onControl,
+  onDraft,
   children,
 }: {
   work: BackgroundWork;
   events?: readonly RunEvent[];
   pending: boolean;
   onControl: (input: string) => Promise<unknown>;
+  /** Writes a line into the conversation's composer (never sends): a stop request for a tracked run, a reply about work that failed. */
+  onDraft?: (text: string) => void;
   children?: ReactNode;
 }) {
   const { record, run } = work;
@@ -485,13 +504,14 @@ export function ExecCard({
   const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
   const controllable = target.source === "subagent" && canControl(handle) && active;
   const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
-  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes is stalled, not working.
+  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes has gone quiet.
   // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
   const stalled = !tracked && record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
   const title = plainMessageLine(record.title).replace(/^Subagent:\s*/i, "");
-  const status = tracked ?? (stalled ? { label: "Stuck", tone: "wn" as const } : EXEC_STATUS[record.state]);
+  const status = tracked ?? (stalled ? { label: "Quiet", tone: "wn" as const } : EXEC_STATUS[record.state]);
   const detail = tracked ? tracked.detail : stalled ? `no update for ${ageLabel(record.updatedAt!, now)}` : at ? relativeTime(at, now) : "";
   const dotLabel = tracked ? tracked.key : stalled ? "stalled" : record.state;
+  const waiting = tracked ? tracked.key === "waiting" : record.state === "waiting";
   // What happened, in the source's own words: the error, else the step it is on, else how it ended.
   const said = tidyOutcome(record.error || (active ? record.step : null) || record.summary || record.step);
   const outcome =
@@ -507,6 +527,10 @@ export function ExecCard({
         .slice(0, 2)
     : [];
   const links = (record.links ?? []).filter((link) => /^https:\/\//i.test(link.url)).slice(0, 3);
+  // Work that failed cannot be steered, but it can be answered: a line about it in the composer.
+  const canReply = !controllable && !!onDraft && (record.state === "failed" || waiting);
+  // A tracked run stops the way it does under Activity: the request is written for the owner to send.
+  const drafts = !!run && !!onDraft;
   return (
     <article
       className="rc rc-exec"
@@ -545,8 +569,26 @@ export function ExecCard({
       ) : null}
       {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} /> : null}
       {children}
-      {record.href || links.length || controllable ? (
+      {record.href || links.length || controllable || canReply ? (
         <div className="rc-actions">
+          {canReply ? (
+            <Button size="sm" variant="ghost" className="rc-act" icon={<SteerIcon className="h-3.5 w-3.5" />} onClick={() => onDraft?.(`About "${title}": `)}>
+              Reply
+            </Button>
+          ) : null}
+          {controllable ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act"
+              icon={<SteerIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={steering}
+              onClick={() => setSteering((value) => !value)}
+            >
+              {waiting ? "Reply" : "Steer"}
+            </Button>
+          ) : null}
           {record.href ? (
             <ButtonLink size="sm" variant="ghost" className="rc-act" href={record.href} icon={<ChatIcon className="h-3.5 w-3.5" />}>
               Open
@@ -558,36 +600,24 @@ export function ExecCard({
             </ButtonLink>
           ))}
           {controllable ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<SteerIcon className="h-3.5 w-3.5" />}
-                disabled={pending}
-                aria-expanded={steering}
-                onClick={() => setSteering((value) => !value)}
-              >
-                Steer
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act rc-act-stop"
-                icon={<StopIcon className="h-3.5 w-3.5" />}
-                disabled={pending}
-                aria-expanded={confirmStop}
-                onClick={() => setConfirmStop((value) => !value)}
-              >
-                Ask to stop
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act rc-act-stop"
+              icon={<StopIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={confirmStop}
+              onClick={() => setConfirmStop((value) => !value)}
+            >
+              Ask to stop
+            </Button>
           ) : null}
         </div>
       ) : null}
       {controllable && steering ? (
         <SteerField
-          label={`Guidance for ${record.title}`}
+          label={`${waiting ? "Reply to" : "Guidance for"} ${record.title}`}
+          placeholder={waiting ? "Your answer" : undefined}
           pending={pending}
           onClose={() => setSteering(false)}
           onSend={(guidance) => onControl(steerText(handle, guidance))}
@@ -595,19 +625,40 @@ export function ExecCard({
       ) : null}
       {controllable && confirmStop ? (
         <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
-          <p>Send a request to stop this sub-agent? It goes to the coordinator as soon as you confirm.</p>
-          <Button
-            size="sm"
-            variant="danger"
-            loading={pending}
-            onClick={() =>
-              void onControl(stopText(handle))
-                .then(() => setConfirmStop(false))
-                .catch(() => undefined)
-            }
-          >
-            Send stop request
-          </Button>
+          {drafts ? (
+            <>
+              <p>
+                Ask the coordinator to stop {run!.ref} and its sub-agents? This writes the request in the composer for you to send; nothing stops until you send
+                it.
+              </p>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => {
+                  onDraft?.(`Stop ${run!.ref} (${title}) and its sub-agents.`);
+                  setConfirmStop(false);
+                }}
+              >
+                Write stop request
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>Send a request to stop this sub-agent? It goes to the coordinator as soon as you confirm.</p>
+              <Button
+                size="sm"
+                variant="danger"
+                loading={pending}
+                onClick={() =>
+                  void onControl(stopText(handle))
+                    .then(() => setConfirmStop(false))
+                    .catch(() => undefined)
+                }
+              >
+                Send stop request
+              </Button>
+            </>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setConfirmStop(false)}>
             Cancel
           </Button>

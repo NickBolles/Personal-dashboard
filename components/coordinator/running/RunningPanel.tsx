@@ -5,6 +5,7 @@ import { Button, EmptyState, SectionHeader, useNow } from "@/components/ui";
 import type { Decision } from "@/lib/cw-decisions";
 import { groupRuns } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
+import { byNeed } from "@/lib/coordinator/run-card";
 import { LiveLine, RunCard, runCommand } from "./RunCard";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
@@ -25,9 +26,10 @@ type Props = {
  * and still says its state, what it needs and its latest event, so a phone screen holds an overview, not one card.
  */
 const OPEN_ON_ARRIVAL = 1;
+// What waits on the owner first, then what needs a look.
 const SECTIONS = [
-  ["attention", "Stuck"],
   ["waiting", "Waiting on you"],
+  ["attention", "Stuck"],
   ["interrupted", "Interrupted"],
   ["running", "Working"],
   ["done", "Finished since you looked"],
@@ -66,12 +68,18 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
   const grouped = groupRuns(runs ?? [], visit ? visit.since : query.data?.lastLooked.running);
   // Failures older than a few days are history: reachable, but folded away from what is stuck now.
   const older = grouped.attention.filter((r) => isOldFailure(r, now) && r.ref !== initialRef);
-  const groups = { ...grouped, attention: grouped.attention.filter((r) => !older.includes(r)) };
+  const groups = {
+    ...grouped,
+    attention: byNeed(
+      grouped.attention.filter((r) => !older.includes(r)),
+      query.data?.events ?? [],
+    ),
+  };
   const [showOlder, setShowOlder] = useState(false);
   const [stopping, setStopping] = useState<string | null>(null);
   const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], decisions, onSteer, onCommand, onRef, initialRef, stopping, onStopping: setStopping };
-  const openFirst = new Set([...groups.attention, ...groups.waiting, ...groups.interrupted].slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
-  const ordered = [...groups.attention, ...groups.waiting, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
+  const openFirst = new Set([...groups.waiting, ...groups.attention, ...groups.interrupted].slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
+  const ordered = [...groups.waiting, ...groups.attention, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (event.altKey || event.ctrlKey || event.metaKey || target.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -101,7 +109,7 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
     }
   };
   return (
-    <div className="gc-running" ref={root} tabIndex={0} aria-label="Runs" onKeyDown={onKeyDown}>
+    <div className="gc-running" ref={root} tabIndex={0} aria-label="Runs" data-stale={query.error && query.data ? "" : undefined} onKeyDown={onKeyDown}>
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </span>

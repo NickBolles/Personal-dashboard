@@ -101,8 +101,8 @@ it("what needs the owner leads, and its chips jump to the decision and the run",
   // one clock for the chip (how long the decision has waited); the item's own stage moves to the quiet line
   expect(card().getByText(/^waiting /)).toBeTruthy();
   expect(card().getByText("Stage: In progress")).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { name: "Answer decision D 14: Use last year's dates?" }));
-  fireEvent.click(card().getByRole("button", { name: "Run R 3: Stuck, Smoke tests" }));
+  fireEvent.click(card().getByRole("button", { name: "Review decision D 14: Use last year's dates?" }));
+  fireEvent.click(card().getByRole("button", { name: "Run R 3: Quiet, Smoke tests" }));
   expect(onRef.mock.calls).toEqual([["D-14"], ["R-3"]]);
   // who is on it, progress and the pull request with its checks; the run chip already says it is running
   expect(card().getByText("@devchief")).toBeTruthy();
@@ -120,7 +120,9 @@ it("a project gathers what is under it", () => {
   render(<ItemCard itemId="proj" title="Storefront" data={data({ runs: [run], decisions: [decision] })} />);
   expect(card().getByText("Project")).toBeTruthy();
   expect(card().getByText("Needs you")).toBeTruthy();
-  expect(card().getByRole("progressbar", { name: "0 of 1 done" })).toBeTruthy();
+  // nothing done yet is a count on the quiet line, not an empty bar
+  expect(card().getByText("0 of 1 done")).toBeTruthy();
+  expect(card().queryByRole("progressbar")).toBeNull();
   fireEvent.click(card().getByRole("button", { expanded: false }));
   expect(card().getByRole("link", { name: "Open project" })).toBeTruthy();
 });

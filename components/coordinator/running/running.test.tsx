@@ -68,15 +68,37 @@ afterEach(() => {
   client.clear();
   vi.restoreAllMocks();
 });
-it("groups stuck first, failure first, then interrupted, working, finished", async () => {
+it("orders by need: waiting on you, then stuck with failures first, then interrupted, working, finished", async () => {
   const { container } = mount(
     [run(1), run(2, { state: "waiting" }), run(3, { state: "failed" }), run(4, { state: "interrupted" }), run(5, { state: "done", finishedAt: at })],
     undefined,
     { ...markers, running: earlier },
   );
-  expect(Array.from(container.querySelectorAll("article")).map((r) => r.getAttribute("data-run-ref"))).toEqual(["R-3", "R-2", "R-4", "R-1", "R-5"]);
+  expect(Array.from(container.querySelectorAll("article")).map((r) => r.getAttribute("data-run-ref"))).toEqual(["R-2", "R-3", "R-4", "R-1", "R-5"]);
   await waitFor(() => expect(api.post).toHaveBeenCalledExactlyOnceWith("/api/coordinator/looked", { surface: "running" }));
   expect(screen.getByRole("region", { name: "Finished since you looked" }).textContent).toContain("R-5");
+});
+it("among stuck runs a reported failed step outranks silence alone, and that card is the one that arrives open", () => {
+  const quietAt = new Date(Date.now() - 31 * 60_000).toISOString();
+  const older = new Date(Date.now() - 90 * 60_000).toISOString();
+  const failedStep: RunEvent = {
+    id: "e1",
+    runId: "run-2",
+    runRef: "R-2",
+    type: "notice",
+    summary: "Re-run of the coupon test: failed again",
+    payload: {},
+    via: null,
+    at: older,
+  };
+  mount([run(1, { stalled: true, updatedAt: quietAt }), run(2, { stalled: true, updatedAt: older })], undefined, markers, [failedStep]);
+  expect(Array.from(document.querySelectorAll("article")).map((r) => r.getAttribute("data-run-ref"))).toEqual(["R-2", "R-1"]);
+  expect(document.querySelector('[data-run-body="R-2"]')!.getAttribute("aria-expanded")).toBe("true");
+  expect(document.querySelector('[data-run-body="R-1"]')!.getAttribute("aria-expanded")).toBe("false");
+  const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-2"]')!);
+  expect(card.getByText("Step failed")).toBeTruthy();
+  // Silence is "Quiet", not a claim that the run is blocked.
+  expect(card.getByText("Quiet")).toBeTruthy();
 });
 it("Stop requires confirmation; cancel and confirm only prefill, never call a run API", async () => {
   mount([run(65)]);
@@ -139,30 +161,30 @@ it("keyboard j/k focus rows, Enter expands, s steers, x arms stop and r prefills
   const panel = screen.getByLabelText("Runs");
   panel.focus();
   fireEvent.keyDown(panel, { key: "j" });
-  expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-2");
-  // A failed run arrives open; Enter closes and reopens it.
+  // What waits on the owner is first, and arrives open; Enter closes and reopens it.
+  expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-3");
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("false");
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
-  fireEvent.keyDown(document.activeElement!, { key: "r" });
-  expect(onCommand).toHaveBeenLastCalledWith("Retry R-2 (Work 2).");
   fireEvent.keyDown(document.activeElement!, { key: "s" });
-  expect(onSteer).toHaveBeenLastCalledWith("R-2", "Work 2");
-  fireEvent.keyDown(document.activeElement!, { key: "j" });
-  expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-3");
+  expect(onSteer).toHaveBeenLastCalledWith("R-3", "Work 3");
   fireEvent.keyDown(document.activeElement!, { key: "x" });
   expect(screen.getByRole("group", { name: "Stop R-3 and its sub-agents?" })).toBeTruthy();
-  fireEvent.keyDown(document.activeElement!, { key: "k" });
+  fireEvent.keyDown(document.activeElement!, { key: "j" });
   expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-2");
+  fireEvent.keyDown(document.activeElement!, { key: "r" });
+  expect(onCommand).toHaveBeenLastCalledWith("Retry R-2 (Work 2).");
+  fireEvent.keyDown(document.activeElement!, { key: "k" });
+  expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-3");
 });
 it("initialRef reveals a selected sub-run and unsafe PR URLs are not links", async () => {
   mount([run(1, { prUrl: "javascript:alert(1)" }), run(2, { parentRunId: "run-1", parentRef: "R-1" })], "R-2");
   await waitFor(() => expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-2"));
   expect(screen.queryByRole("link", { name: /Pull request/ })).toBeNull();
 });
-it("renders pipeline, lock, notices, and a non-pulsing stalled state", () => {
+it("renders pipeline, lock and a non-pulsing quiet state", () => {
   const { container } = mount([
     run(1, {
       stalled: true,
@@ -176,8 +198,6 @@ it("renders pipeline, lock, notices, and a non-pulsing stalled state", () => {
   ]);
   expect(screen.getByRole("img", { name: "Pipeline: build ok, ci running" })).toBeTruthy();
   expect(screen.getByText("Holds deploy lock")).toBeTruthy();
-  expect(screen.getByText("3 steps reported")).toBeTruthy();
-  expect(screen.queryByText("1 steps reported")).toBeNull();
   expect(container.querySelector("article .k-dot-live")).toBeNull();
 });
 it("renders the empty state", () => {
@@ -199,7 +219,7 @@ it("says what each run is doing in a chip and plain words, and drops a summary t
   expect(row("R-2").getByText("Tests failed on the ledger import")).toBeTruthy();
   expect(row("R-2").getByRole("button", { name: "Retry R-2" }).textContent).toBe("Retry");
   expect(row("R-2").queryByRole("button", { name: "Stop R-2" })).toBeNull();
-  expect(row("R-3").getByText("Stuck")).toBeTruthy();
+  expect(row("R-3").getByText("Quiet")).toBeTruthy();
   expect(row("R-3").getByText(/^no update for /)).toBeTruthy();
   expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
 });
@@ -222,10 +242,18 @@ it("Steer opens a guidance field in the card and sends what is typed; a stopped 
   fireEvent.click(failed.getByRole("button", { name: "Ask in chat about R-2" }));
   expect(onSteer).toHaveBeenLastCalledWith("R-2", "Work 2");
 });
-it("a run waiting on the owner says what it needs and jumps to that decision", () => {
+it("a run waiting on the owner arrives open, says what it needs, takes a reply, and jumps to its decision", async () => {
   const onRef = vi.fn();
-  const waiting = run(4, { state: "waiting" });
-  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs: [run(1, { state: "failed" }), waiting], events: [], lastLooked: markers });
+  onSteer.mockResolvedValue(undefined);
+  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, {
+    runs: [
+      run(1, { state: "failed" }),
+      run(4, { state: "waiting" }),
+      run(5, { state: "waiting", summary: "Pick a frame before I order samples", updatedAt: earlier }),
+    ],
+    events: [],
+    lastLooked: markers,
+  });
   render(
     <QueryClientProvider client={client}>
       <RunningPanel
@@ -239,12 +267,22 @@ it("a run waiting on the owner says what it needs and jumps to that decision", (
     </QueryClientProvider>,
   );
   const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-4"]')!);
-  // Closed (only the first run that needs the owner arrives open), and still says what it is waiting for.
-  expect(document.querySelector('[data-run-body="R-4"]')!.getAttribute("aria-expanded")).toBe("false");
+  expect(document.querySelector('[data-run-body="R-4"]')!.getAttribute("aria-expanded")).toBe("true");
+  expect(document.querySelector('[data-run-body="R-1"]')!.getAttribute("aria-expanded")).toBe("false");
   expect(card.getByText("Which frame should I order?")).toBeTruthy();
-  fireEvent.click(card.getByRole("button", { name: "Answer decision D 9" }));
+  // The chip says where it goes: it opens the decision, it does not answer it.
+  fireEvent.click(card.getByRole("button", { name: "Review decision D 9" }));
   expect(onRef).toHaveBeenCalledExactlyOnceWith("D-9");
-  expect(document.querySelector('[data-run-body="R-1"]')!.getAttribute("aria-expanded")).toBe("true");
+  // A waiting run is answered in its card.
+  fireEvent.click(card.getByRole("button", { name: "Reply to R-4" }));
+  fireEvent.change(card.getByRole("textbox", { name: "Reply to R-4" }), { target: { value: "The oak one" } });
+  fireEvent.click(card.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(onSteer).toHaveBeenCalledExactlyOnceWith("R-4", "Work 4", "The oak one"));
+  // No decision raised: the agent's own waiting summary is the ask, on a closed card too.
+  const other = within(document.querySelector<HTMLElement>('[data-run-ref="R-5"]')!);
+  expect(document.querySelector('[data-run-body="R-5"]')!.getAttribute("aria-expanded")).toBe("false");
+  expect(other.getByText("Pick a frame before I order samples")).toBeTruthy();
+  expect(other.queryByRole("button", { name: /^Review decision/ })).toBeNull();
 });
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
   const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({
@@ -270,8 +308,9 @@ it("shows the latest event on a closed card and a real timeline on an open one",
   // Closed: just the newest event, as a labelled chip and its words.
   expect(list().map((li) => li.textContent)).toEqual([expect.stringContaining("FailedRan out of budget")]);
   fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
-  expect(list()).toHaveLength(3);
-  fireEvent.click(card.getByRole("button", { name: "Show 2 earlier" }));
+  // Open: the two newest events that say something; the rest (and the bare "Started") are one tap away.
+  expect(list()).toHaveLength(2);
+  fireEvent.click(card.getByRole("button", { name: "Show 3 earlier" }));
   expect(list()).toHaveLength(5);
   // The "started" event only repeats the title: it keeps its chip and drops the words.
   expect(list().at(-1)!.textContent).toMatch(/^Started/);

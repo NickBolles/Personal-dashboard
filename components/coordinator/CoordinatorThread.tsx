@@ -486,6 +486,7 @@ export function CoordinatorThread({
                     events={tracked.data?.events}
                     pending={control.isPending}
                     onControl={(input) => control.mutateAsync(input)}
+                    onDraft={fill}
                   />
                 ))}
                 {work.length > 5 && sid ? (
@@ -792,7 +793,7 @@ const SINCE_ICON: Record<SinceChip["key"], ReactNode> = {
   failed: <AlertIcon className="h-3.5 w-3.5" />,
   decisions: <InboxIcon className="h-3.5 w-3.5" />,
   waiting: <BellIcon className="h-3.5 w-3.5" />,
-  stuck: <ClockIcon className="h-3.5 w-3.5" />,
+  stuck: <AlertIcon className="h-3.5 w-3.5" />,
   finished: <CheckIcon className="h-3.5 w-3.5" />,
   runs: <BoltIcon className="h-3.5 w-3.5" />,
 };
