@@ -492,7 +492,7 @@ describe("global coordinator", () => {
     runRows = runRows.map((r) => ({ ...r }));
     await act(() => qc.invalidateQueries({ queryKey: ["work", "coordinator", "runs"] }));
     fireEvent.click(within(sheet).getByRole("button", { name: "Close Chief of staff" }));
-    await waitFor(() => expect(status()).toBe("2 need you · 1 working · 1 stuck"));
+    await waitFor(() => expect(status()).toBe("2 need you · 1 working · 1 needs a look"));
     expect(document.querySelector(".gc-tray")?.getAttribute("data-state")).toBe("needs");
     expect(document.querySelector(".jv-shell")?.getAttribute("data-gc-dot")).toBe("yellow");
     fireEvent.click(tray);

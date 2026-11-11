@@ -7,7 +7,7 @@ import { FAILED_ATTENTION_MS, type CoordinatorRun } from "./things";
  *
  * "Stuck" (failed / stalled / waiting / interrupted) is split by whether the owner has seen it:
  * a run that got stuck after the owner last opened Activity is NEW and turns the tray red; one they
- * have already looked at stays counted ("3 stuck") but no longer shouts. Failures older than
+ * have already looked at stays counted ("3 need a look") but no longer shouts. Failures older than
  * FAILED_ATTENTION_MS are history: still listed under Activity → Older, never counted here.
  */
 export type StuckKind = "failed" | "stalled" | "waiting" | "interrupted";
@@ -60,7 +60,7 @@ export type CoordinatorStatus = {
   dot: "red" | "yellow" | null;
   /** The headline: the one thing to know. */
   text: string;
-  /** Everything else that is non-zero, e.g. "2 working · 3 stuck". Empty when there is nothing else. */
+  /** Everything else that is non-zero, e.g. "2 working · 3 need a look". Empty when there is nothing else. */
   rest: string;
   target: { tab: "needs" | "running" | "chat"; ref?: string };
   counts: StatusCounts;
