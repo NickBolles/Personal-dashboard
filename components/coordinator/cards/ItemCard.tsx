@@ -1,17 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { LiveState, useAgentRuns } from "@/components/agents/AgentRuns";
 import { Button, ButtonLink, Pill, ProgressBar, useNow, type KTone } from "@/components/ui";
-import { AlertIcon, AreasIcon, ChatIcon, ChevronIcon, ClockIcon, ExternalIcon, InboxIcon } from "@/components/icons";
+import { AlertIcon, AreasIcon, BellIcon, BoltIcon, ChatIcon, ChevronIcon, ClockIcon, ExternalIcon, InboxIcon } from "@/components/icons";
 import type { ActivityItem } from "@/lib/activity";
 import { CHECKS_LABEL, DEPLOY_LABEL, whoLabel, type ItemAgentInfo, type PrState } from "@/lib/agent-runs";
 import { api } from "@/lib/client/api";
 import type { Decision } from "@/lib/cw-decisions";
 import { changeChip, changeText, itemCardModel } from "@/lib/coordinator/item-card";
-import { eventClock, runStatus } from "@/lib/coordinator/run-card";
+import { ageLabel } from "@/lib/coordinator/needs";
+import { runStatus, type RunStatus } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
@@ -20,7 +22,7 @@ import { StatusChip } from "../running/RunCard";
 import { useCoordinatorRuns } from "../running/useCoordinatorRuns";
 import "../running/run-card.css";
 
-/** How many changes a card lists before "N earlier". */
+/** How many changes an open card lists before "Show N earlier"; a closed card shows only the latest. */
 const CHANGES_SHOWN = 3;
 
 export type ItemCardData = {
@@ -46,6 +48,15 @@ export function useItemCardData(enabled = true): ItemCardData {
   return { items: items.data?.items ?? [], agents: agents.data?.items ?? {}, runs: runs.data?.runs ?? [], decisions: decisions.data?.decisions ?? [] };
 }
 
+/** One icon per kind of thing a chip points at, the same in the catch-up card and on item cards. */
+const RUN_ICON: Record<RunStatus["key"], ReactNode> = {
+  failed: <AlertIcon className="h-3 w-3" />,
+  interrupted: <AlertIcon className="h-3 w-3" />,
+  waiting: <BellIcon className="h-3 w-3" />,
+  stuck: <ClockIcon className="h-3 w-3" />,
+  working: <BoltIcon className="h-3 w-3" />,
+  done: undefined,
+};
 const PR_TONE = (p: PrState): KTone => (p.state === "merged" ? "ai" : p.state === "closed" ? "neutral" : "ac");
 const CHECK_TONE: Record<string, KTone> = { success: "ok", failure: "bad", pending: "wn" };
 function PrLine({ pr }: { pr: PrState }) {
@@ -85,10 +96,10 @@ export type ItemCardProps = {
 };
 
 /**
- * One item or project, readable at a glance: the state that matters now (a decision waiting on you, a run that
- * failed or went quiet, an agent working, else its own status), where it sits, what is next and when it is due,
- * who is on it, progress and pull requests, and what was just changed. Chips jump to the decision or run;
- * opening the card adds its summary, the last agent report and what you can do with it.
+ * One item or project, readable at a glance: the one state that matters now (a decision waiting on you, a run
+ * that failed or went quiet, an agent working, else its own status), where it sits, what is next and when it is
+ * due, progress and pull requests, and the latest change. Chips jump to the decision or run; the arrow opens the
+ * item; opening the card adds the rest of the changes, its summary, the last agent report and Ask.
  */
 export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk, defaultOpen = false }: ItemCardProps) {
   const now = useNow();
@@ -98,43 +109,56 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const item = data.items.find((i) => i.id === itemId);
   const agent = data.agents[itemId] ?? null;
   const model = item ? itemCardModel({ item, items: data.items, agent, runs: data.runs, decisions: data.decisions, now }) : null;
-  const shown = allChanges ? changes : changes.slice(0, CHANGES_SHOWN);
+  const shown = allChanges ? changes : changes.slice(0, open ? CHANGES_SHOWN : 1);
   const hidden = changes.length - shown.length;
   const href = `/areas?item=${encodeURIComponent(itemId)}`;
   const name = model?.title ?? title;
-  // An area's standing coordinator is on everything under it: only worth a line when it (or anyone) is actually working.
-  const busy = !!agent && agent.live !== "idle";
+  const runs = model ? [...model.attention, ...model.working] : [];
+  // An area's standing coordinator is on everything under it: only worth a line when it (or anyone) is actually
+  // working, and not at all when the run chips below already say so.
+  const busy = !!agent && agent.live !== "idle" && !runs.length;
   const who = agent?.who && (busy || agent.who.kind !== "coordinator") ? agent.who : null;
   const prs = agent?.prs ?? [];
-  const meta = model
-    ? [model.path.join(" › "), model.headline.key === "status" ? "" : model.status.label, ...model.tags.slice(0, 3).map((t) => `#${t}`)].filter(Boolean)
-    : [];
+  // One clock for the chip: how long the decision has waited, what the run last said, else when the item was edited.
+  const lead = runs[0] ? runStatus(runs[0], now) : null;
+  const detail = !model
+    ? ""
+    : model.headline.key === "needs" && model.decisions[0]
+      ? `waiting ${ageLabel(model.decisions[0].createdAt, now)}`
+      : model.headline.key !== "status" && lead
+        ? `${runs[0]!.ref} · ${lead.detail}`
+        : `edited ${relativeTime(model.updatedAt, now)}`;
+  // The chip is the state; the item's own stage is only worth a word when it has moved past the default.
+  const stage = model && model.headline.key !== "status" && model.status.label !== "Captured" ? `Stage: ${model.status.label}` : "";
+  const meta = model ? [model.path.join(" › "), stage, ...model.tags.slice(0, 3).map((t) => `#${t}`)].filter(Boolean) : [];
   return (
     <article className="rc ic" data-item={itemId} data-state={model?.headline.key ?? "unknown"} data-open={open || undefined}>
-      <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
-        <span className="rc-top">
-          {model ? (
-            <StatusChip
-              tone={model.headline.tone}
-              live={model.headline.live}
-              label={model.headline.label}
-              detail={`updated ${relativeTime(model.updatedAt, now)}`}
-            />
-          ) : (
-            <span className="rc-status" />
-          )}
-          {model ? <span className="rc-ref">{model.kind}</span> : null}
-          <ChevronIcon className={`rc-chevron h-4 w-4 ${open ? "-rotate-90" : "rotate-90"}`} />
-        </span>
-        <span className="rc-title line-clamp-2">{name}</span>
-        {meta.length ? (
-          <span className="rc-meta">
-            {meta.map((part) => (
-              <span key={part}>{part}</span>
-            ))}
+      <div className="ic-headrow">
+        <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
+          <span className="rc-top">
+            {model ? (
+              <StatusChip tone={model.headline.tone} live={model.headline.live} label={model.headline.label} detail={detail} />
+            ) : (
+              <span className="rc-status" />
+            )}
+            {model ? <span className="rc-ref">{model.kind}</span> : null}
+            <ChevronIcon className={`rc-chevron h-4 w-4 ${open ? "-rotate-90" : "rotate-90"}`} />
           </span>
+          <span className="rc-title line-clamp-2">{name}</span>
+          {meta.length ? (
+            <span className="rc-meta">
+              {meta.map((part) => (
+                <span key={part}>{part}</span>
+              ))}
+            </span>
+          ) : null}
+        </Button>
+        {model ? (
+          <Link className="ic-open" href={href} aria-label={`Open ${name}`} title={`Open ${model.container ? model.kind.toLowerCase() : "item"}`}>
+            <ExternalIcon className="h-3.5 w-3.5" />
+          </Link>
         ) : null}
-      </Button>
+      </div>
       {model?.next || model?.due ? (
         <p className="ic-next">
           {model.next ? (
@@ -166,24 +190,25 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           </span>
         </div>
       ) : null}
-      {model && (model.decisions.length || model.attention.length || model.working.length) ? (
+      {model && (model.decisions.length || runs.length) ? (
         <div className="ic-jumps">
           {model.decisions.slice(0, 2).map((d) => (
             <Button
               key={d.id}
               variant="ghost"
               size="sm"
-              className="rc-jump k-t-wn"
-              icon={<InboxIcon className="h-3.5 w-3.5" />}
+              className="rc-jump k-t-ac"
+              icon={<InboxIcon className="h-3 w-3" />}
               disabled={!onRef}
-              aria-label={`Decision ${d.ref.replace("-", " ")}: ${d.question.slice(0, 80)}`}
+              aria-label={`Answer decision ${d.ref.replace("-", " ")}: ${d.question.slice(0, 80)}`}
+              title={d.question}
               onClick={() => onRef?.(d.ref)}
             >
-              {d.ref} needs you
+              Answer {d.ref}
             </Button>
           ))}
           {model.decisions.length > 2 ? <span className="ic-more">+{model.decisions.length - 2} more</span> : null}
-          {[...model.attention, ...model.working].slice(0, 2).map((r) => {
+          {runs.slice(0, 2).map((r) => {
             const status = runStatus(r, now);
             return (
               <Button
@@ -191,18 +216,17 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
                 variant="ghost"
                 size="sm"
                 className={`rc-jump k-t-${status.tone}`}
-                icon={status.attention ? <AlertIcon className="h-3.5 w-3.5" /> : undefined}
+                icon={RUN_ICON[status.key]}
                 disabled={!onRef}
                 aria-label={`Run ${r.ref.replace("-", " ")}: ${status.label}, ${r.title.slice(0, 80)}`}
+                title={r.title}
                 onClick={() => onRef?.(r.ref)}
               >
                 {r.ref} {status.label.toLowerCase()}
               </Button>
             );
           })}
-          {model.attention.length + model.working.length > 2 ? (
-            <span className="ic-more">+{model.attention.length + model.working.length - 2} runs</span>
-          ) : null}
+          {runs.length > 2 ? <span className="ic-more">+{runs.length - 2} runs</span> : null}
         </div>
       ) : null}
       {prs.length ? (
@@ -213,32 +237,29 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
         </ul>
       ) : null}
       {shown.length ? (
-        <ol className="rc-timeline" aria-label={`Changes to ${name}`}>
-          {shown.map((row, index) => {
-            const chip = changeChip(row);
-            return (
-              <li key={row.id} className={`rc-event k-t-${chip.tone}`} data-latest={index === 0 || undefined}>
-                <span className="rc-node" aria-hidden="true" />
-                <span className="rc-event-main">
-                  <Pill tone={chip.tone} className="rc-event-chip">
-                    {chip.label}
-                  </Pill>
-                  {changeText(row) ? <span className="rc-event-text">{changeText(row)}</span> : null}
-                </span>
-                <span className="ic-change-side">
-                  <time className="rc-event-time" dateTime={row.at} title={new Date(row.at).toLocaleString()} data-dynamic>
-                    {eventClock(row.at, now)}
-                  </time>
-                  {undo?.(row)}
-                </span>
-              </li>
-            );
-          })}
+        <ol className="rc-timeline ic-changes" aria-label={`Changes to ${name}`}>
+          {shown.map((row, index) => (
+            <li key={row.id} className={`rc-event k-t-${changeChip(row).tone}`} data-latest={index === 0 || undefined}>
+              <span className="rc-node" aria-hidden="true" />
+              <span className="rc-event-main">{changeText(row)}</span>
+              <time className="rc-event-time" dateTime={row.at} title={new Date(row.at).toLocaleString()} data-dynamic>
+                {relativeTime(row.at, now)}
+              </time>
+              <span className="ic-undo">{undo?.(row)}</span>
+            </li>
+          ))}
         </ol>
       ) : null}
       {hidden > 0 || allChanges ? (
-        <Button size="sm" variant="ghost" className="rc-earlier" aria-expanded={allChanges} onClick={() => setAllChanges((value) => !value)}>
-          {allChanges ? "Show fewer" : hidden === 1 ? "1 earlier change" : `${hidden} earlier changes`}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="rc-earlier"
+          icon={<ChevronIcon className={`h-3 w-3 ${allChanges ? "-rotate-90" : "rotate-90"}`} />}
+          aria-expanded={allChanges}
+          onClick={() => setAllChanges((value) => !value)}
+        >
+          {allChanges ? "Show fewer" : `Show ${hidden} earlier`}
         </Button>
       ) : null}
       {open ? (
@@ -271,10 +292,10 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
                 variant="ghost"
                 className="rc-act"
                 icon={<ChatIcon className="h-3.5 w-3.5" />}
-                aria-label={`Ask about ${name}`}
+                aria-label={`Ask in chat about ${name}`}
                 onClick={() => onAsk(name)}
               >
-                Ask
+                Ask in chat
               </Button>
             ) : null}
             {agent?.sessionId ? (

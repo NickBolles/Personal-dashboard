@@ -230,6 +230,14 @@ export function GlobalCoordinator() {
     );
   };
   const onRef = (ref: string) => openAt(ref.startsWith("D-") ? "needs" : "running", ref);
+  // Steering a run from its card sends the same one-line command the Chat tab would; with no conversation to send
+  // it to yet, the line is written into the composer instead.
+  const commandRef = useRef<((text: string) => Promise<unknown>) | null>(null);
+  const steerRun = async (ref: string, title: string, guidance?: string) => {
+    const line = `Steer ${ref} (${title.slice(0, 120)}): ${guidance?.trim() ?? ""}`;
+    if (guidance?.trim() && commandRef.current) await commandRef.current(line);
+    else prefill(line);
+  };
   // Item and project cards (changes under Activity and under a reply) read live state while the panel is on screen.
   const cardData = useItemCardData(wide ? open : phoneOpen);
   const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => prefill(`About "${title}": `) };
@@ -499,6 +507,7 @@ export function GlobalCoordinator() {
                   info={d}
                   compact
                   name="Chief of staff"
+                  commandRef={commandRef}
                   draft={draft}
                   onDraft={setDraft}
                   context={attached}
@@ -563,8 +572,10 @@ export function GlobalCoordinator() {
                 <RunningPanel
                   key={focusRef?.tab === "running" ? `r${focusRef.n}` : "running"}
                   initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
-                  onSteer={(ref, title) => prefill(`Steer ${ref} (${title.slice(0, 120)}): `)}
+                  onSteer={steerRun}
                   onCommand={prefill}
+                  decisions={cwDecisions.data?.decisions}
+                  onRef={onRef}
                   quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
                 />
               ) : null}
@@ -842,17 +853,22 @@ function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: str
   return (
     <section id={id} className="gc-changes" aria-label="Changes">
       <SectionHeader
-        label={`Changes on ${groups.length === 1 ? "1 item" : `${groups.length} items`} · last 24 hours`}
-        count={rows.length}
+        label="Changes · last 24 hours"
         action={
           groups.length > CHANGES_SHOWN ? (
             <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
-              {all ? "Show fewer" : `All ${groups.length} items`}
+              {all ? "Show fewer" : `Show all ${groups.length}`}
             </Button>
           ) : undefined
         }
       />
       {!rows.length ? <p className="gc-hint">Nothing changed by the Chief of staff in the last day.</p> : null}
+      {rows.length ? (
+        <p className="gc-hint gc-changes-count">
+          {rows.length === 1 ? "1 change" : `${rows.length} changes`} across {groups.length === 1 ? "1 item" : `${groups.length} items`}
+          {groups.length > shown.length ? `; showing the ${shown.length} most recent.` : "."}
+        </p>
+      ) : null}
       <ul className="gc-change-groups">
         {shown.map((group) =>
           group.object ? (

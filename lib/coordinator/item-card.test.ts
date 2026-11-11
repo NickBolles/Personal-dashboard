@@ -140,27 +140,28 @@ describe("itemCardModel", () => {
 
 describe("changes", () => {
   const row = (type: string, verb: string, detail: string | null = null) => ({ type, verb, detail }) as never;
-  it("says each change in plain words with a chip for its kind", () => {
+  it("says each change as a short sentence, verb first, with a tone for its kind", () => {
     expect(changeLabel(row("created", "created"))).toBe("Created item");
+    expect(changeText(row("created", "created"))).toBe("Created");
     expect(changeChip(row("created", "created"))).toEqual({ label: "Created", tone: "ok" });
-    // the chip names the kind of change; the text adds only what it cannot
-    expect(changeText(row("created", "created"))).toBe("");
-    expect(changeText(row("edit", "edited summary"))).toBe("Summary");
-    expect(changeLabel(row("edit", "edited summary"))).toBe("Edited summary");
+    expect(changeText(row("edit", "edited summary"))).toBe("Edited summary");
+    expect(changeText(row("edit", "tagged #q4, #sale"))).toBe("Tagged #q4, #sale");
     expect(changeChip(row("edit", "tagged #q4, #sale"))).toEqual({ label: "Tags", tone: "inf" });
-    expect(changeText(row("edit", "tagged #q4, #sale"))).toBe("#q4, #sale");
-    expect(changeText(row("link", "linked", "Linked Sponsor shortlist (draft)"))).toBe("Sponsor shortlist (draft)");
+    expect(changeText(row("link", "linked", "Linked Sponsor shortlist (draft)"))).toBe("Linked Sponsor shortlist (draft)");
+    expect(changeText(row("link", "linked", "Sponsor shortlist"))).toBe("Linked Sponsor shortlist");
     expect(changeChip(row("edit", "needs your decision: Ship tonight?"))).toEqual({ label: "Decision", tone: "wn" });
-    expect(changeText(row("edit", "needs your decision: Ship tonight?"))).toBe("Ship tonight?");
+    expect(changeText(row("edit", "needs your decision: Ship tonight?"))).toBe("Raised decision: Ship tonight?");
     expect(changeChip(row("edit", "started agent run: Smoke tests"))).toEqual({ label: "Run", tone: "ai" });
-    expect(changeText(row("edit", "started agent run: Smoke tests"))).toBe("Smoke tests");
-    expect(changeText(row("status", "moved to Exploring", "Captured → Exploring: Predates the new checkout"))).toBe("Exploring: Predates the new checkout");
-    expect(changeText(row("status", "moved to Ready"))).toBe("Ready");
+    expect(changeText(row("edit", "started agent run: Smoke tests"))).toBe("Started agent run: Smoke tests");
+    expect(changeText(row("status", "moved to Exploring", "Captured → Exploring: Predates the new checkout"))).toBe(
+      "Moved to Exploring: Predates the new checkout",
+    );
+    expect(changeText(row("status", "moved to Ready"))).toBe("Moved to Ready");
   });
-  it("turns the raw date edit into what changed", () => {
+  it("turns the raw date edit into what changed, with what it was before", () => {
     expect(changeLabel(row("edit", "Dates: start — → —, target — → 2026-11-22"))).toMatch(/^Target date \w+ 22$/);
-    expect(changeLabel(row("edit", "Dates: start — → 2026-11-12, target 2026-11-22 → —"))).toMatch(/^Start date \w+ 12, target date cleared$/);
+    expect(changeText(row("edit", "Dates: start — → 2026-11-12, target 2026-11-22 → —"))).toMatch(/^Start date \w+ 12, target date cleared \(was \w+ 22\)$/);
+    expect(changeText(row("edit", "Dates: start — → —, target 2026-11-15 → 2026-11-22"))).toMatch(/^Target date \w+ 22 \(was \w+ 15\)$/);
     expect(changeChip(row("edit", "Dates: start — → —, target — → 2026-11-22")).label).toBe("Dates");
-    expect(changeText(row("edit", "Dates: start — → —, target — → 2026-11-22"))).toMatch(/^Target \w+ 22$/);
   });
 });

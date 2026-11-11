@@ -1050,6 +1050,9 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-thread-body [role="alert"] .k-btn {
   color: var(--accent);
 }
+.gc-changes-count {
+  margin: 0 0 6px;
+}
 /* Item cards in the changes list and under a reply. */
 .gc-change-groups {
   margin: 0;

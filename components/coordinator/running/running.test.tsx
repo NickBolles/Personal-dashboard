@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@/lib/client/api";
 import { Button } from "@/components/ui";
+import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import type { CoordinatorRunRow, RunsResponse } from "@/lib/coordinator/runs-view";
 import { RunningPanel } from "./RunningPanel";
@@ -46,7 +47,7 @@ function run(seq: number, overrides: Partial<CoordinatorRunRow> = {}): Coordinat
 }
 let client: QueryClient;
 let onCommand = vi.fn<(text: string) => void>();
-let onSteer = vi.fn<(ref: string, title: string) => void>();
+let onSteer = vi.fn<(ref: string, title: string, guidance?: string) => void | Promise<unknown>>();
 function mount(runs: CoordinatorRunRow[], initialRef?: string, lastLooked = markers, events: RunEvent[] = []) {
   client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs, events, lastLooked });
   return render(
@@ -80,14 +81,16 @@ it("groups stuck first, failure first, then interrupted, working, finished", asy
 it("Stop requires confirmation; cancel and confirm only prefill, never call a run API", async () => {
   mount([run(65)]);
   // Stop is one step in: a working run's card is closed until its header is tapped.
-  expect(screen.queryByRole("button", { name: "Stop R-65" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Ask to stop R-65" })).toBeNull();
   fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-65"]')!);
-  fireEvent.click(screen.getByRole("button", { name: "Stop R-65" }));
+  // The button says what it does before it is tapped: it asks, it does not stop.
+  expect(screen.getByRole("button", { name: "Ask to stop R-65" }).textContent).toBe("Ask to stop");
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop R-65" }));
   expect(onCommand).not.toHaveBeenCalled();
   const confirm = screen.getByRole("group", { name: "Stop R-65 and its sub-agents?" });
   fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("group")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Stop R-65" }));
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop R-65" }));
   // The card says what will happen: a request is written into chat for the owner to send.
   expect(screen.getByRole("group", { name: "Stop R-65 and its sub-agents?" }).textContent).toContain("nothing stops until you send it");
   fireEvent.click(screen.getByRole("button", { name: "Write stop request" }));
@@ -173,8 +176,8 @@ it("renders pipeline, lock, notices, and a non-pulsing stalled state", () => {
   ]);
   expect(screen.getByRole("img", { name: "Pipeline: build ok, ci running" })).toBeTruthy();
   expect(screen.getByText("Holds deploy lock")).toBeTruthy();
-  expect(screen.getByText("3 notices")).toBeTruthy();
-  expect(screen.queryByText("1 notices")).toBeNull();
+  expect(screen.getByText("3 steps reported")).toBeTruthy();
+  expect(screen.queryByText("1 steps reported")).toBeNull();
   expect(container.querySelector("article .k-dot-live")).toBeNull();
 });
 it("renders the empty state", () => {
@@ -199,6 +202,49 @@ it("says what each run is doing in a chip and plain words, and drops a summary t
   expect(row("R-3").getByText("Stuck")).toBeTruthy();
   expect(row("R-3").getByText(/^no update for /)).toBeTruthy();
   expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
+});
+it("Steer opens a guidance field in the card and sends what is typed; a stopped run asks in chat instead", async () => {
+  onSteer.mockResolvedValue(undefined);
+  mount([run(1), run(2, { state: "failed" })]);
+  fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
+  const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!);
+  fireEvent.click(card.getByRole("button", { name: "Steer R-1" }));
+  expect(onSteer).not.toHaveBeenCalled();
+  const field = card.getByRole("textbox", { name: "Guidance for R-1" });
+  expect((card.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(field, { target: { value: "Skip the flaky coupon test" } });
+  fireEvent.click(card.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(onSteer).toHaveBeenCalledExactlyOnceWith("R-1", "Work 1", "Skip the flaky coupon test"));
+  await waitFor(() => expect(card.queryByRole("textbox")).toBeNull());
+  // A failed run cannot be steered: its card offers Retry and a line in chat.
+  const failed = within(document.querySelector<HTMLElement>('[data-run-ref="R-2"]')!);
+  expect(failed.queryByRole("button", { name: "Steer R-2" })).toBeNull();
+  fireEvent.click(failed.getByRole("button", { name: "Ask in chat about R-2" }));
+  expect(onSteer).toHaveBeenLastCalledWith("R-2", "Work 2");
+});
+it("a run waiting on the owner says what it needs and jumps to that decision", () => {
+  const onRef = vi.fn();
+  const waiting = run(4, { state: "waiting" });
+  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs: [run(1, { state: "failed" }), waiting], events: [], lastLooked: markers });
+  render(
+    <QueryClientProvider client={client}>
+      <RunningPanel
+        onCommand={onCommand}
+        onSteer={onSteer}
+        onRef={onRef}
+        decisions={[
+          { id: "d1", ref: "D-9", itemId: "item", runId: "run-4", question: "Which frame should I order?", state: "open", createdAt: at } as Decision,
+        ]}
+      />
+    </QueryClientProvider>,
+  );
+  const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-4"]')!);
+  // Closed (only the first run that needs the owner arrives open), and still says what it is waiting for.
+  expect(document.querySelector('[data-run-body="R-4"]')!.getAttribute("aria-expanded")).toBe("false");
+  expect(card.getByText("Which frame should I order?")).toBeTruthy();
+  fireEvent.click(card.getByRole("button", { name: "Answer decision D 9" }));
+  expect(onRef).toHaveBeenCalledExactlyOnceWith("D-9");
+  expect(document.querySelector('[data-run-body="R-1"]')!.getAttribute("aria-expanded")).toBe("true");
 });
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
   const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({

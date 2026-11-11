@@ -83,11 +83,13 @@ it("a quiet item shows its status, where it sits and what is next; actions are o
   expect(card().getByText("Storefront")).toBeTruthy();
   expect(card().getByText("#q4")).toBeTruthy();
   expect(card().getByText("Confirm the sale dates")).toBeTruthy();
+  // The arrow goes straight to the item; the rest of the actions are one tap in.
+  expect(card().getByRole("link", { name: "Open Holiday sale checklist" }).getAttribute("href")).toBe("/areas?item=b");
   expect(card().queryByRole("link", { name: "Open item" })).toBeNull();
   fireEvent.click(card().getByRole("button", { expanded: false }));
   expect(card().getByRole("link", { name: "Open item" }).getAttribute("href")).toBe("/areas?item=b");
   expect(card().getByText("Last year's list, updated.")).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { name: "Ask about Holiday sale checklist" }));
+  fireEvent.click(card().getByRole("button", { name: "Ask in chat about Holiday sale checklist" }));
   expect(onAsk).toHaveBeenCalledExactlyOnceWith("Holiday sale checklist");
 });
 
@@ -96,13 +98,15 @@ it("what needs the owner leads, and its chips jump to the decision and the run",
   render(<ItemCard itemId="b" title="x" data={data({ runs: [run], decisions: [decision], agents: { b: agent } })} onRef={onRef} />);
   expect(document.querySelector("article")!.getAttribute("data-state")).toBe("needs");
   expect(card().getByText("Needs you")).toBeTruthy();
-  // the item's own status moves to the quiet line once something else is the headline
-  expect(card().getByText("In progress")).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { name: "Decision D 14: Use last year's dates?" }));
+  // one clock for the chip (how long the decision has waited); the item's own stage moves to the quiet line
+  expect(card().getByText(/^waiting /)).toBeTruthy();
+  expect(card().getByText("Stage: In progress")).toBeTruthy();
+  fireEvent.click(card().getByRole("button", { name: "Answer decision D 14: Use last year's dates?" }));
   fireEvent.click(card().getByRole("button", { name: "Run R 3: Stuck, Smoke tests" }));
   expect(onRef.mock.calls).toEqual([["D-14"], ["R-3"]]);
-  // who is on it, progress and the pull request with its checks
+  // who is on it, progress and the pull request with its checks; the run chip already says it is running
   expect(card().getByText("@devchief")).toBeTruthy();
+  expect(card().queryByTestId("agent-live")).toBeNull();
   expect(card().getByRole("progressbar", { name: "1 of 4 done" })).toBeTruthy();
   const prs = within(card().getByRole("list", { name: "Pull requests" }));
   expect(prs.getByRole("link", { name: /^Sale banner/ }).getAttribute("href")).toBe("https://example.com/pr/1");
@@ -121,7 +125,7 @@ it("a project gathers what is under it", () => {
   expect(card().getByRole("link", { name: "Open project" })).toBeTruthy();
 });
 
-it("lists what was changed as a timeline, newest three first, each with its own Undo", () => {
+it("lists what was changed as a timeline: the latest when closed, three when open, each with its own Undo", () => {
   const changes = [
     change("c1", { verb: "Dates: start — → —, target — → 2026-11-22", undoOpId: "op1" }),
     change("c2", { verb: "tagged #q4" }),
@@ -132,13 +136,16 @@ it("lists what was changed as a timeline, newest three first, each with its own 
     <ItemCard itemId="b" title="x" data={data()} changes={changes} undo={(row) => (row.undoOpId ? <button type="button">Undo {row.id}</button> : null)} />,
   );
   const list = () => within(card().getByRole("list", { name: "Changes to Holiday sale checklist" })).getAllByRole("listitem");
-  expect(list().map((li) => li.querySelector(".rc-event-chip")!.textContent)).toEqual(["Dates", "Tags", "Status"]);
-  expect(list()[0]!.textContent).toMatch(/Target \w+ 22/);
-  expect(list()[2]!.textContent).toContain("Exploring: Predates the new checkout");
+  const said = () => list().map((li) => li.querySelector(".rc-event-main")!.textContent);
+  expect(said()).toEqual([expect.stringMatching(/^Target date \w+ 22$/)]);
   expect(within(list()[0]!).getByRole("button", { name: "Undo c1" })).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { name: "1 earlier change" }));
-  expect(list()).toHaveLength(4);
-  expect(list()[3]!.querySelector(".rc-event-chip")!.textContent).toBe("Created");
+  fireEvent.click(card().getByRole("button", { expanded: false, name: /Holiday sale checklist/ }));
+  expect(said().slice(1)).toEqual(["Tagged #q4", "Moved to Exploring: Predates the new checkout"]);
+  // each row's colour says what kind of change it was
+  expect(list()[2]!.className).toContain("k-t-ac");
+  fireEvent.click(card().getByRole("button", { name: "Show 1 earlier" }));
+  expect(said()).toHaveLength(4);
+  expect(said()[3]).toBe("Created");
 });
 
 it("an item that is gone still shows what was done to it", () => {

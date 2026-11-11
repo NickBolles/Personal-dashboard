@@ -2,6 +2,8 @@
  * What a run card says: its status in words, a tone and label per event type (the same tones the item
  * pages use for PR / checks / deploy pills), and the "since you last looked" breakdown. Pure and client-safe.
  */
+import type { ExecutionRecord } from "@/lib/chat-execution";
+import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent, RunEventType } from "@/lib/cw-runs";
 import { relativeTime } from "@/lib/time";
 import { ageLabel } from "./needs";
@@ -45,7 +47,7 @@ export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): Run
 const CHIP: Record<RunEventType, { label: string; tone: CardTone }> = {
   started: { label: "Started", tone: "neutral" },
   progress: { label: "Progress", tone: "ai" },
-  notice: { label: "Notice", tone: "inf" },
+  notice: { label: "Step", tone: "inf" },
   ci: { label: "CI", tone: "inf" },
   "lock.acquired": { label: "Lock", tone: "wn" },
   "lock.released": { label: "Unlocked", tone: "neutral" },
@@ -69,9 +71,80 @@ function ciTone(event: Pick<RunEvent, "summary" | "payload">): CardTone {
   if (/\b(pass(ed|ing|es)?|green|succeeded)\b/i.test(event.summary)) return "ok";
   return "inf";
 }
+const SAYS_FAILED = /\b(fail(ed|ing|ure|s)?|errors?|timed out|crashed|broken)\b/i;
 export function eventChip(event: Pick<RunEvent, "type" | "summary" | "payload">): { label: string; tone: CardTone } {
   const chip = CHIP[event.type] ?? { label: event.type, tone: "neutral" as const };
-  return event.type === "ci" ? { ...chip, tone: ciTone(event) } : chip;
+  if (event.type === "ci") return { ...chip, tone: ciTone(event) };
+  // A step or progress report that says it failed is not a calm blue line.
+  if ((event.type === "notice" || event.type === "progress") && SAYS_FAILED.test(event.summary)) return { ...chip, tone: "bad" };
+  return chip;
+}
+
+/** What a waiting run needs from the owner: the open decision it raised, when there is one. */
+export function runAsk(run: Pick<CoordinatorRunRow, "id">, decisions: readonly Decision[]): Decision | null {
+  return decisions.filter((d) => d.state === "open" && d.runId === run.id).sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))[0] ?? null;
+}
+
+/**
+ * Agent text as a sentence: "(no summary — status=failed: vendor portal timed out)" is a fallback some sources
+ * write when they have nothing else; say what it says.
+ */
+export function tidyOutcome(text: string | null | undefined): string {
+  const flat = (text ?? "").replace(/\s+/g, " ").trim();
+  const raw = /^\(?no summary\s*[—–-]\s*status=\w+:?\s*(.*?)\)?$/i.exec(flat);
+  const said = raw ? raw[1]!.trim() : flat;
+  return said ? said.charAt(0).toUpperCase() + said.slice(1) : "";
+}
+
+/** "Synced just now" / "Synced 3 minutes ago"; when a refresh fails, when the data on screen was last good. */
+export function syncLine(updatedAt: number, failed: boolean, now: number = Date.now()): string {
+  const age = !updatedAt ? "" : now - updatedAt < 60_000 ? "just now" : relativeTime(updatedAt, now);
+  if (!failed) return age ? `Synced ${age}` : "";
+  if (!updatedAt) return "Couldn't refresh";
+  const at = new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return `Couldn't refresh · last synced ${at}${now - updatedAt < 60_000 ? "" : ` (${age})`}`;
+}
+
+export type BackgroundWork = {
+  record: ExecutionRecord;
+  /** The tracked run (R-n) this work is, when it is one: its state and timeline are the authority. */
+  run?: CoordinatorRunRow;
+  /** The sub-agent record that can take Steer / Stop for this work. */
+  control?: ExecutionRecord;
+};
+const workTitle = (title: string) =>
+  title
+    .replace(/^Subagent:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+const informative = (r: ExecutionRecord) => (r.state === "unknown" ? 0 : 2) + (r.error || r.summary || r.step ? 1 : 0);
+/**
+ * One card per piece of work. A conversation's background work arrives from several sources (the sub-agent
+ * itself, its run registration, the R-n run), and they describe the same thing with different freshness:
+ * records that are the same tracked run, or share a title while one of them has no status, are one card.
+ * Two sub-agents that merely share a title and each report a real state stay separate.
+ */
+export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
+  const byId = new Map(runs.map((r) => [r.id, r]));
+  const byTitle = new Map<string, CoordinatorRunRow>();
+  for (const run of [...runs].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))) byTitle.set(workTitle(run.title), run);
+  const out: (BackgroundWork & { title: string })[] = [];
+  for (const record of records) {
+    const title = workTitle(record.title);
+    const run = (record.source === "subagent" ? undefined : byId.get(record.id)) ?? byTitle.get(title);
+    const control = record.source === "subagent" ? record : undefined;
+    const same = out.find(
+      (w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")),
+    );
+    if (!same) {
+      out.push({ record, run, control, title });
+      continue;
+    }
+    if (informative(record) > informative(same.record)) same.record = record;
+    same.control ??= control;
+  }
+  return out.map(({ title: _title, ...work }) => work);
 }
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -107,7 +180,7 @@ export function sinceChips(counts: SinceCounts): SinceChip[] {
   const chips: SinceChip[] = [];
   const { failed = 0, stuck = 0, waiting = 0, finished = 0 } = counts;
   if (failed) chips.push({ key: "failed", label: `${failed} failed`, tone: "bad", tab: "running" });
-  if (counts.decisions) chips.push({ key: "decisions", label: count(counts.decisions, "new decision", "new decisions"), tone: "wn", tab: "needs" });
+  if (counts.decisions) chips.push({ key: "decisions", label: count(counts.decisions, "new decision", "new decisions"), tone: "ac", tab: "needs" });
   if (waiting) chips.push({ key: "waiting", label: `${waiting} waiting on you`, tone: "wn", tab: "running" });
   if (stuck) chips.push({ key: "stuck", label: `${stuck} stuck`, tone: "wn", tab: "running" });
   if (finished) chips.push({ key: "finished", label: `${finished} finished`, tone: "ok", tab: "running" });

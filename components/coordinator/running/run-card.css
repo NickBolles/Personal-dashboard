@@ -118,7 +118,36 @@
   line-height: 1.45;
 }
 .rc-outcome[data-tone="bad"] {
+  color: var(--t1);
+}
+.rc-outcome-label {
+  margin-inline-end: 6px;
   color: var(--bad);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* What a waiting run needs from you, with the way to answer it. */
+.rc-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  color: var(--t1);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.rc-ask-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.rc-ask-label {
+  margin-inline-end: 6px;
+  color: var(--wn);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 .rc-lock {
   color: var(--wn);
@@ -268,8 +297,9 @@
 }
 .rc .k-btn.rc-earlier {
   align-self: flex-start;
+  gap: 4px;
   margin-inline-start: 14px;
-  color: var(--t2);
+  color: var(--accent);
 }
 .rc-outcome .k-btn.rc-earlier {
   margin-inline-start: 2px;
@@ -331,6 +361,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+  padding-top: 2px;
 }
 .rc-progress {
   padding-block: 2px;
@@ -367,6 +398,9 @@
   color: var(--wn);
 }
 .rc-live .k-btn.rc-live-retry {
+  min-height: 20px;
+  margin-block: -2px;
+  padding: 0 6px;
   color: var(--accent);
 }
 
@@ -415,18 +449,18 @@
   gap: 6px;
 }
 .gc-since .gc-since-jumps .k-btn.gc-since-chip,
-.rc .ic-jumps .k-btn.rc-jump {
-  min-height: 26px;
-  padding: 0 10px 0 8px;
-  gap: 5px;
+.rc :is(.ic-jumps, .rc-ask) .k-btn.rc-jump {
+  min-height: 24px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
   border: 0;
   border-radius: 999px;
   background: var(--k-bg, var(--s3));
   color: var(--k-fg, var(--t2));
-  font: 600 0.75rem/1 var(--sans);
+  font: 500 0.71875rem/1 var(--sans);
 }
 .gc-since .gc-since-jumps .k-btn.gc-since-chip:hover:not(:disabled),
-.rc .ic-jumps .k-btn.rc-jump:hover:not(:disabled) {
+.rc :is(.ic-jumps, .rc-ask) .k-btn.rc-jump:hover:not(:disabled) {
   background: color-mix(in oklab, var(--k-fg, var(--t2)) 18%, var(--s1, var(--surface)));
 }
 
@@ -531,12 +565,55 @@ a.ic-pr-name:hover {
   padding: 0 6px;
   font-size: 0.6875rem;
 }
-.ic-change-side {
+.ic-headrow {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
 }
-.rc .ic-change-side .k-btn {
+.ic-headrow > .rc-head {
+  flex: 1;
+}
+/* Straight to the item, without opening the card first. */
+.ic-open {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -3px -6px 0 0;
+  border-radius: 7px;
+  color: var(--t3);
+}
+.ic-open::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.ic-open:hover {
+  background: var(--s3);
+  color: var(--t1);
+}
+.ic-changes .rc-event {
+  grid-template-columns: 14px minmax(0, 1fr) auto 2.75rem;
+  align-items: baseline;
+}
+.ic-changes .rc-node {
+  align-self: start;
+}
+/* No Undo on any row of this card: no empty column. */
+.ic-changes:not(:has(.ic-undo .k-btn)) .rc-event {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+.ic-changes:not(:has(.ic-undo .k-btn)) .ic-undo {
+  display: none;
+}
+.ic-undo {
+  display: flex;
+  justify-content: flex-end;
+}
+.rc .ic-undo .k-btn {
   min-height: 22px;
   margin-block: -3px;
   padding: 0 6px;

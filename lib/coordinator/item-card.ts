@@ -175,12 +175,18 @@ const shortDate = (value: string) => {
   const date = new Date(`${value.trim().slice(0, 10)}T00:00:00`);
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString([], { month: "short", day: "numeric" }) : value.trim();
 };
-/** "Dates: start — → —, target — → 2026-11-22" → "Target date Nov 22": only what actually changed, as a person would say it. */
+/**
+ * "Dates: start — → —, target — → 2026-11-22" → "Target date Nov 22": only what actually changed, as a person
+ * would say it, with the previous value when there was one (it is what Undo restores).
+ */
 function tidyDates(verb: string): string | null {
   const m = /^dates:\s*start\s+(.+?)\s*→\s*(.+?),\s*target\s+(.+?)\s*→\s*(.+)$/i.exec(verb);
   if (!m) return null;
-  const part = (name: string, from: string, to: string) =>
-    from.trim() === to.trim() ? "" : to.trim() === "—" ? `${name} date cleared` : `${name} date ${shortDate(to)}`;
+  const part = (name: string, from: string, to: string) => {
+    if (from.trim() === to.trim()) return "";
+    const was = from.trim() === "—" ? "" : ` (was ${shortDate(from)})`;
+    return to.trim() === "—" ? `${name} date cleared${was}` : `${name} date ${shortDate(to)}${was}`;
+  };
   const said = [part("start", m[1]!, m[2]!), part("target", m[3]!, m[4]!)].filter(Boolean).join(", ");
   return said ? said.charAt(0).toUpperCase() + said.slice(1) : "Dates unchanged";
 }
@@ -200,23 +206,20 @@ export function changeChip(row: Pick<ActivityItem, "type" | "verb">): { label: s
   if (/^tagged\b/i.test(row.verb)) return { label: "Tags", tone: "inf" };
   return CHANGE_CHIP[row.type] ?? { label: row.type, tone: "neutral" };
 }
-const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 /**
- * The words after the chip. The chip already says what kind of change it was, so the text only adds what the
- * chip cannot: which field, which link, what the decision asks, which run, why the status moved.
+ * One change as a short sentence, verb first, the way the item pages write activity: "Edited summary",
+ * "Raised decision: Ship tonight?", "Moved to Exploring: predates the new checkout", "Linked Sponsor shortlist".
  */
 export function changeText(row: Pick<ActivityItem, "type" | "verb" | "detail">): string {
-  const after = /^(?:needs your decision|started agent run|finished agent run):\s*(.+)$/i.exec(row.verb)?.[1];
-  if (after) return after.trim();
-  if (row.type === "created") return "";
+  const after = /^(?:needs your decision|started agent run|finished agent run):\s*(.+)$/i.exec(row.verb)?.[1]?.trim();
+  const label = changeLabel(row);
+  if (after) return `${label}: ${after}`;
+  if (row.type === "created") return "Created";
   const detail = row.detail?.trim() ?? "";
-  if (row.type === "link") return upper(detail.replace(/^linked\s+/i, "") || row.verb.replace(/^linked\s*/i, "")) || "";
+  if (row.type === "link" && detail) return /^linked\b/i.test(detail) ? detail : `Linked ${detail}`;
   if (row.type === "status") {
-    const to = row.verb.replace(/^moved to\s+/i, "");
     const why = detail.replace(/^[^:]{1,60}→[^:]{1,60}:\s*/, "");
-    return upper(why && why !== detail ? `${to}: ${why}` : to);
+    return why && why !== detail ? `${label}: ${why}` : label;
   }
-  const dates = tidyDates(row.verb);
-  if (dates) return dates.replace(/ date /g, " ");
-  return upper(row.verb.replace(/^(?:edited|tagged)\s+/i, ""));
+  return label;
 }

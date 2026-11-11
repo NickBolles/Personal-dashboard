@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "@/lib/cw-runs";
-import { eventChip, eventClock, eventText, runStatus, sinceChips, sinceRunCounts, timelineOf } from "./run-card";
+import type { ExecutionRecord } from "@/lib/chat-execution";
+import type { Decision } from "@/lib/cw-decisions";
+import {
+  eventChip,
+  eventClock,
+  eventText,
+  mergeBackgroundWork,
+  runAsk,
+  runStatus,
+  sinceChips,
+  sinceRunCounts,
+  syncLine,
+  tidyOutcome,
+  timelineOf,
+} from "./run-card";
 import type { CoordinatorRunRow } from "./runs-view";
 
 const now = Date.parse("2026-11-10T16:00:00.000Z");
@@ -62,6 +76,12 @@ describe("eventChip", () => {
     expect(eventChip(event({ type: "failed" }))).toEqual({ label: "Failed", tone: "bad" });
     expect(eventChip(event({ type: "release.live" }))).toEqual({ label: "Live", tone: "ok" });
   });
+  it("a step that says it failed is red, and a folded notice is called a step", () => {
+    expect(eventChip(event({ type: "notice", summary: "Background process finished: wrote the diff" }))).toEqual({ label: "Step", tone: "inf" });
+    expect(eventChip(event({ type: "notice", summary: "Re-run 1 of the coupon test: failed again" }))).toEqual({ label: "Step", tone: "bad" });
+    expect(eventChip(event({ type: "progress", summary: "Vendor portal timed out" })).tone).toBe("bad");
+    expect(eventChip(event({ type: "progress", summary: "11 of 12 checks passed" })).tone).toBe("ai");
+  });
   it("colours a CI event only by what it says", () => {
     expect(eventChip(event({ type: "ci", summary: "Smoke suite started" })).tone).toBe("inf");
     expect(eventChip(event({ type: "ci", summary: "Checks failed on main" })).tone).toBe("bad");
@@ -85,6 +105,51 @@ describe("timeline helpers", () => {
     expect(eventClock(ago(5), now)).toMatch(/\d{1,2}:\d{2}/);
     expect(eventClock(ago(60 * 24 * 30), now)).not.toMatch(/:/);
     expect(eventClock("nope", now)).toBe("");
+  });
+});
+
+describe("background work", () => {
+  const rec = (over: Partial<ExecutionRecord>): ExecutionRecord => ({
+    key: "k",
+    source: "subagent",
+    id: "sa",
+    title: "Audit previews",
+    state: "running",
+    ...over,
+  });
+  it("the sub-agent, its registration and the tracked run are one card; the run is the authority", () => {
+    const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
+    const work = mergeBackgroundWork(
+      [
+        rec({ key: "a", id: "sa_1", updatedAt: ago(180) }),
+        rec({ key: "b", source: "registered_run", id: "reg_1", state: "unknown" }),
+        rec({ key: "c", id: "sa_2", title: "Other work", state: "completed", summary: "Done" }),
+      ],
+      [tracked],
+    );
+    expect(work).toHaveLength(2);
+    expect(work[0]).toMatchObject({ run: { ref: "R-9" }, control: { id: "sa_1" }, record: { key: "a" } });
+    expect(work[1]).toMatchObject({ record: { key: "c" } });
+    expect(work[1]!.run).toBeUndefined();
+  });
+  it("a record with no status folds into its twin; two real sub-agents with one title stay apart", () => {
+    expect(
+      mergeBackgroundWork([rec({ key: "a", state: "unknown" }), rec({ key: "b", state: "failed", error: "Timed out" })], []).map((w) => w.record.key),
+    ).toEqual(["b"]);
+    expect(mergeBackgroundWork([rec({ key: "a", id: "sa_1" }), rec({ key: "b", id: "sa_2", state: "failed" })], [])).toHaveLength(2);
+  });
+  it("says what a waiting run needs, a raw fallback as a sentence, and how fresh the view is", () => {
+    const d = (id: string, over: Partial<Decision>) =>
+      ({ id, ref: `D-${id}`, itemId: "i1", runId: "r1", question: "Which frame?", state: "open", createdAt: ago(5), ...over }) as Decision;
+    expect(runAsk(run(), [d("2", { createdAt: ago(1) }), d("1", {}), d("3", { state: "answered" }), d("4", { runId: "other" })])?.ref).toBe("D-1");
+    expect(runAsk(run(), [])).toBeNull();
+    expect(tidyOutcome("(no summary — status=failed: vendor portal timed out)")).toBe("Vendor portal timed out");
+    expect(tidyOutcome("  Drafted   three variants. ")).toBe("Drafted three variants.");
+    expect(tidyOutcome(null)).toBe("");
+    expect(syncLine(now - 5_000, false, now)).toBe("Synced just now");
+    expect(syncLine(now - 180_000, false, now)).toBe("Synced 3 minutes ago");
+    expect(syncLine(now - 180_000, true, now)).toMatch(/^Couldn't refresh · last synced \d{1,2}:\d{2}.* \(3 minutes ago\)$/);
+    expect(syncLine(0, true, now)).toBe("Couldn't refresh");
   });
 });
 

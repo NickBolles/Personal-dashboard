@@ -2,20 +2,29 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button, EmptyState, SectionHeader, useNow } from "@/components/ui";
+import type { Decision } from "@/lib/cw-decisions";
 import { groupRuns } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
 import { LiveLine, RunCard, runCommand } from "./RunCard";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
 type Props = {
-  onSteer: (ref: string, title: string) => void;
+  /** With guidance: send it (resolves when sent, or written into Chat when it cannot be sent). Without: open Chat on a blank steering line. */
+  onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
   onCommand: (text: string) => void;
+  /** Open decisions, so a run waiting on the owner says which one. */
+  decisions?: readonly Decision[];
+  /** Jump to a decision (D-n). */
+  onRef?: (ref: string) => void;
   initialRef?: string;
   /** Other activity is listed below this panel: say "no runs" in one quiet line instead of a full empty state. */
   quietEmpty?: boolean;
 };
-/** The first few runs that need the owner arrive open (timeline and actions showing); the rest are one tap away. */
-const OPEN_ON_ARRIVAL = 3;
+/**
+ * Only the run that most needs the owner arrives open (timeline and actions showing). Every other card is closed
+ * and still says its state, what it needs and its latest event, so a phone screen holds an overview, not one card.
+ */
+const OPEN_ON_ARRIVAL = 1;
 const SECTIONS = [
   ["attention", "Stuck"],
   ["waiting", "Waiting on you"],
@@ -24,7 +33,7 @@ const SECTIONS = [
   ["done", "Finished since you looked"],
 ] as const;
 
-export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Props) {
+export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef, quietEmpty }: Props) {
   const query = useCoordinatorRuns(true);
   const { mutate: markLooked } = useMarkLooked();
   const marked = useRef(false);
@@ -60,8 +69,8 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
   const groups = { ...grouped, attention: grouped.attention.filter((r) => !older.includes(r)) };
   const [showOlder, setShowOlder] = useState(false);
   const [stopping, setStopping] = useState<string | null>(null);
-  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], onSteer, onCommand, initialRef, stopping, onStopping: setStopping };
-  const openFirst = new Set([...groups.waiting, ...groups.attention.slice(0, OPEN_ON_ARRIVAL)].map((r) => r.id));
+  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], decisions, onSteer, onCommand, onRef, initialRef, stopping, onStopping: setStopping };
+  const openFirst = new Set([...groups.attention, ...groups.waiting, ...groups.interrupted].slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
   const ordered = [...groups.attention, ...groups.waiting, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
@@ -79,7 +88,7 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
     if (!run) return;
     if (event.key === "s") {
       event.preventDefault();
-      onSteer(run.ref, run.title);
+      void onSteer(run.ref, run.title);
     } else if (event.key === "x") {
       event.preventDefault();
       if (run.state === "running" || run.state === "waiting") setStopping(run.ref);
@@ -97,9 +106,7 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
         {announcement}
       </span>
       {query.isLoading ? <p className="text-muted">Loading runs…</p> : null}
-      {query.data ? (
-        <LiveLine updatedAt={query.dataUpdatedAt} failed={!!query.error} fetching={query.isFetching} onRetry={() => void query.refetch()} what="runs" />
-      ) : null}
+      {query.data ? <LiveLine updatedAt={query.dataUpdatedAt} failed={!!query.error} fetching={query.isFetching} onRetry={() => void query.refetch()} /> : null}
       {resumeNote ? (
         <p className="text-sm text-muted" data-dynamic>
           {resumeNote}
