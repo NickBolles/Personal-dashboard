@@ -11,6 +11,8 @@ import { relativeTime } from "@/lib/time";
 import { sortByUrgency } from "@/lib/cw-decisions";
 import { coordinatorStatus } from "@/lib/coordinator/status";
 import { sinceRunCounts } from "@/lib/coordinator/run-card";
+import { changeLabel } from "@/lib/coordinator/item-card";
+import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
@@ -228,6 +230,9 @@ export function GlobalCoordinator() {
     );
   };
   const onRef = (ref: string) => openAt(ref.startsWith("D-") ? "needs" : "running", ref);
+  // Item and project cards (changes under Activity and under a reply) read live state while the panel is on screen.
+  const cardData = useItemCardData(wide ? open : phoneOpen);
+  const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => prefill(`About "${title}": `) };
   const onPanelKey = (e: ReactKeyboardEvent) => {
     if (typingIn(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
     if (gPending.current) {
@@ -505,7 +510,9 @@ export function GlobalCoordinator() {
                     prefill(ASK_PAGE);
                   }}
                   quickContext={quickContext}
-                  inlineActions={(lastUserAt) => <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} />}
+                  inlineActions={(lastUserAt) => (
+                    <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} {...cardHooks} />
+                  )}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
                   onJump={(next) => selectTab(next === "needs" ? "needs" : "running")}
@@ -575,7 +582,7 @@ export function GlobalCoordinator() {
                   ))}
                 </section>
               ) : null}
-              {t.id === "running" ? <ChangesSection id={`${ids}-changes`} rows={things.changes} /> : null}
+              {t.id === "running" ? <ChangesSection id={`${ids}-changes`} rows={things.changes} {...cardHooks} /> : null}
             </div>
           ))}
         </>
@@ -745,19 +752,37 @@ function AttentionDot({ dot }: { dot: "red" | "yellow" | null }) {
   return dot ? <span className="gc-dot" data-dot={dot} role="img" aria-label={dot === "red" ? "Attention required" : "Updates to review"} /> : null;
 }
 
-function actionLabel(row: ActivityItem) {
-  if (row.type === "created") return "Created item";
-  if (/needs your decision/i.test(row.verb)) return "Raised decision";
-  if (/started.*run/i.test(row.verb)) return "Started agent run";
-  if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return "Finished agent run";
-  return row.verb.charAt(0).toUpperCase() + row.verb.slice(1);
+const actionLabel = changeLabel;
+type CardHooks = { data: ItemCardData; onRef: (ref: string) => void; onAsk: (title: string) => void };
+/** Changes grouped by the item they were made to, in the order the rows arrive (newest first). */
+function byItem(rows: ActivityItem[]) {
+  const groups: { key: string; object: ActivityItem["object"]; rows: ActivityItem[] }[] = [];
+  for (const row of rows) {
+    const key = row.object?.id ?? `row:${row.id}`;
+    const group = groups.find((g) => g.key === key);
+    if (group) group.rows.push(row);
+    else groups.push({ key, object: row.object, rows: [row] });
+  }
+  return groups;
 }
-function ActionCards({ rows }: { rows: ActivityItem[] }) {
+/** What the Chief of staff just changed, under its reply: one card per item touched. */
+function ActionCards({ rows, ...hooks }: { rows: ActivityItem[] } & CardHooks) {
   return (
     <div className="gc-action-list">
-      {rows.map((row) => (
-        <ActionCard key={row.id} row={row} />
-      ))}
+      {byItem(rows).map((group) =>
+        group.object ? (
+          <ItemCard
+            key={group.key}
+            itemId={group.object.id}
+            title={group.object.title}
+            changes={group.rows}
+            undo={(row) => <UndoButton row={row} />}
+            {...hooks}
+          />
+        ) : (
+          group.rows.map((row) => <ActionCard key={row.id} row={row} />)
+        ),
+      )}
     </div>
   );
 }
@@ -810,15 +835,9 @@ function ActionCard({ row }: { row: ActivityItem }) {
 
 const CHANGES_SHOWN = 5;
 /** What the Chief of staff changed in the last day, grouped by item so three edits to one item read as one entry. */
-function ChangesSection({ rows, id }: { rows: ActivityItem[]; id?: string }) {
+function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: string } & CardHooks) {
   const [all, setAll] = useState(false);
-  const groups: { key: string; object: ActivityItem["object"]; rows: ActivityItem[] }[] = [];
-  for (const row of rows) {
-    const key = row.object?.id ?? `row:${row.id}`;
-    const group = groups.find((g) => g.key === key);
-    if (group) group.rows.push(row);
-    else groups.push({ key, object: row.object, rows: [row] });
-  }
+  const groups = byItem(rows);
   const shown = all ? groups : groups.slice(0, CHANGES_SHOWN);
   return (
     <section id={id} className="gc-changes" aria-label="Changes">
@@ -835,26 +854,27 @@ function ChangesSection({ rows, id }: { rows: ActivityItem[]; id?: string }) {
       />
       {!rows.length ? <p className="gc-hint">Nothing changed by the Chief of staff in the last day.</p> : null}
       <ul className="gc-change-groups">
-        {shown.map((group) => (
-          <li key={group.key} className="gc-change-group">
-            {group.object ? (
-              <Link className="gc-change-title" href={`/areas?item=${encodeURIComponent(group.object.id)}`}>
-                {group.object.title}
-              </Link>
-            ) : null}
-            <ul>
-              {group.rows.map((row) => (
-                <li key={row.id} className="gc-change-row">
-                  <span className="min-w-0 flex-1">
-                    {actionLabel(row)}
-                    <span className="gc-hint"> · {relativeTime(row.at)}</span>
-                  </span>
-                  <UndoButton row={row} />
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
+        {shown.map((group) =>
+          group.object ? (
+            <li key={group.key}>
+              <ItemCard itemId={group.object.id} title={group.object.title} changes={group.rows} undo={(row) => <UndoButton row={row} />} {...hooks} />
+            </li>
+          ) : (
+            <li key={group.key} className="gc-change-group">
+              <ul>
+                {group.rows.map((row) => (
+                  <li key={row.id} className="gc-change-row">
+                    <span className="min-w-0 flex-1">
+                      {actionLabel(row)}
+                      <span className="gc-hint"> · {relativeTime(row.at)}</span>
+                    </span>
+                    <UndoButton row={row} />
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ),
+        )}
       </ul>
     </section>
   );

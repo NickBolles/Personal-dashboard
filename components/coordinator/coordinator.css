@@ -364,16 +364,6 @@
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.gc-change-title {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text);
-}
-.gc-change-title:hover {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
 .gc-change-row {
   display: flex;
   align-items: center;
@@ -1014,9 +1004,6 @@ html[data-kb="open"] .gc-tray-qa {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.gc-change-title {
-  color: var(--accent);
-}
 .gc-list > .gc-stalled-row.k-btn strong {
   color: var(--text);
   font-size: 0.875rem;
@@ -1062,6 +1049,20 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-running [role="alert"] .k-btn,
 .gc-thread-body [role="alert"] .k-btn {
   color: var(--accent);
+}
+/* Item cards in the changes list and under a reply. */
+.gc-change-groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gc-action-list:has(.rc) {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.gc-action-list .rc + .rc {
+  margin-top: 0;
 }
 /* Background work in the chat: a labelled group of run cards. */
 .gc-bgwork {

@@ -25,6 +25,16 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   line says exactly that, with the age of what is shown and "Try again", instead of "may be out of date".
   Background-work cards show the step in progress, the outcome or the error, progress when the source
   reports it, and their links, ordered failed → waiting → working → done.
+- **Item and project cards.** Wherever the Chief of staff lists what it changed (Activity → Changes, and under
+  a reply in Chat), each item or project is a card in the same family as the run cards: one state chip for
+  what matters now ("Needs you" when a decision is open on it, "Run failed", "Run stuck", "Working", else its
+  own status), where it sits, the next step and a due chip ("Due Nov 22", "Overdue 3 d"), who is on it when
+  someone is working, progress, pull requests with their state / checks / deploy pills, and chips that jump
+  straight to the open decision (D-n) or run (R-n). A project gathers the decisions and runs under it. The
+  changes are a timeline with a chip per kind (Created, Edit, Status, Dates, Tags, Link, Decision, Run) and
+  only the words the chip cannot say ("Target Nov 22", not "Dates: start — → —, target — → 2026-11-22");
+  every change keeps its own Undo. Opening a card adds its summary, the last agent report, Open item, Ask
+  and the agent's conversation. Cards read the same live queries as the rest of the app.
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
   "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
 

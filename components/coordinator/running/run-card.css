@@ -414,7 +414,8 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.gc-since .gc-since-jumps .k-btn.gc-since-chip {
+.gc-since .gc-since-jumps .k-btn.gc-since-chip,
+.rc .ic-jumps .k-btn.rc-jump {
   min-height: 26px;
   padding: 0 10px 0 8px;
   gap: 5px;
@@ -424,8 +425,139 @@
   color: var(--k-fg, var(--t2));
   font: 600 0.75rem/1 var(--sans);
 }
-.gc-since .gc-since-jumps .k-btn.gc-since-chip:hover:not(:disabled) {
+.gc-since .gc-since-jumps .k-btn.gc-since-chip:hover:not(:disabled),
+.rc .ic-jumps .k-btn.rc-jump:hover:not(:disabled) {
   background: color-mix(in oklab, var(--k-fg, var(--t2)) 18%, var(--s1, var(--surface)));
+}
+
+/* ==== item and project cards ====
+   The same card, for a work item: next step and due date, who is on it, progress, pull requests, chips that jump
+   to its open decision or run, and what was just changed (each change keeps its Undo). */
+.ic-label {
+  margin-inline-end: 6px;
+  color: var(--t3);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ic-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+  color: var(--t1);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.ic-next-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.ic-next .k-pill.ic-due {
+  flex: none;
+  gap: 4px;
+  font-size: 0.6875rem;
+}
+.ic-agent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.ic-who {
+  font-weight: 500;
+}
+.ic-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ic-progress > .k-prog {
+  flex: 1;
+  min-width: 0;
+}
+.ic-jumps,
+.gc-since-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ic-more {
+  color: var(--t3);
+  font-size: 0.75rem;
+}
+.ic-prs {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ic-pr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+.ic-pr-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  color: var(--t1);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.ic-pr-name:hover {
+  text-decoration: underline;
+}
+.ic-pr-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ic-pr-pills .k-pill {
+  padding: 0 6px;
+  font-size: 0.6875rem;
+}
+.ic-change-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.rc .ic-change-side .k-btn {
+  min-height: 22px;
+  margin-block: -3px;
+  padding: 0 6px;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.ic-report {
+  display: grid;
+  gap: 2px;
+  color: var(--t2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.ic-report-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rc.ic > .k-btn.rc-earlier {
+  margin-top: -4px;
 }
 
 @keyframes rc-reveal {

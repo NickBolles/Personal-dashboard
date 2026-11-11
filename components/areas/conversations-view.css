@@ -5,12 +5,13 @@
 
 /*
  * A filing suggestion inside a row's meta line: it reads as quiet inline text (accent, dashed underline =
- * "proposed"), not as a chip competing with the title, and still files in one tap. It is as tall as the meta
- * line; on touch screens the hit-slop below gives it a comfortable target without making the row taller.
+ * "proposed"), not as a chip competing with the title, and still files in one tap. It sits on top of the row's
+ * own link, so its box is the 24px WCAG 2.2 minimum (the spacing exception cannot apply inside another target);
+ * on touch screens the hit-slop below makes the tap area comfortable without making the row taller.
  */
 .wk-suggest.wk-suggest-inline {
   max-width: 100%;
-  min-height: 1.25rem;
+  min-height: 1.5rem;
   margin: 0 0 0 -6px;
   padding: 0 6px;
   border-color: transparent;

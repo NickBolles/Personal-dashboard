@@ -564,12 +564,14 @@ describe("global coordinator", () => {
     makeClient();
     render(globalView(), { wrapper });
     const chatPanel = screen.getByRole("tabpanel", { name: "Chat" });
-    await waitFor(() => expect(within(chatPanel).getByRole("link", { name: "Item new" })).toBeTruthy());
-    expect(within(chatPanel).queryByRole("link", { name: "Item old" })).toBeNull();
+    // Each touched item is a card (its title opens the card; "Open item" is inside).
+    await waitFor(() => expect(within(chatPanel).getByText("Item new")).toBeTruthy());
+    expect(within(chatPanel).queryByText("Item old")).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /Activity/ }));
     const changes = within(screen.getByRole("tabpanel", { name: /Activity/ })).getByRole("region", { name: "Changes" });
-    expect(within(changes).getByRole("link", { name: "Item old" })).toBeTruthy();
-    expect(within(changes).queryByRole("link", { name: "Item other" })).toBeNull();
+    expect(within(changes).getByText("Item old")).toBeTruthy();
+    expect(within(changes).queryByText("Item other")).toBeNull();
+    expect(within(changes).getAllByRole("list", { name: /^Changes to Item / })).toHaveLength(2);
     fireEvent.click(within(changes).getByRole("button", { name: "Undo Created item: Item new" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/work/ops/op-new/undo"));
   });
