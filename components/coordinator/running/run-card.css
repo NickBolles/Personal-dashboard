@@ -293,7 +293,6 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  animation: rc-reveal 140ms ease-out;
 }
 .rc .k-btn.rc-earlier {
   align-self: flex-start;
@@ -658,16 +657,234 @@ a.ic-pr-name:hover {
   margin-top: -4px;
 }
 
-@keyframes rc-reveal {
+/* ==== life ====
+   Motion that means something, in the app's own vocabulary (the agent mark's working arc, the live dot's ping,
+   the orb gradient, the checkbox's pop and sparks): work in flight moves, work that has gone quiet is still,
+   and anything that changes while you watch says so once. All of it stops under prefers-reduced-motion. */
+.rc {
+  position: relative;
+}
+/* Cards arrive one after another. */
+:is(.gc-running, .gc-changes, .gc-bgwork, .gc-action-list) .rc {
+  animation: rc-rise 280ms var(--ease) both;
+}
+:is(.gc-running section, .gc-change-groups, .gc-bgwork) > :nth-child(2):is(.rc, li) {
+  animation-delay: 40ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(3),
+.gc-change-groups > li:nth-child(2) > .rc {
+  animation-delay: 80ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(4),
+.gc-change-groups > li:nth-child(3) > .rc {
+  animation-delay: 120ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(n + 5),
+.gc-change-groups > li:nth-child(n + 4) > .rc {
+  animation-delay: 160ms;
+}
+/* Work in flight: a current runs along the card's top edge. */
+.rc[data-live]::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 14px;
+  left: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent 0%, var(--ai) 35%, var(--o2, var(--ac)) 50%, var(--ai) 65%, transparent 100%);
+  background-size: 200% 100%;
+  animation: k-shimmer 2.8s linear infinite;
+  pointer-events: none;
+}
+/* "Working" shimmers the way it does in a conversation. */
+.rc-chip {
+  position: relative;
+}
+.rc-shimmer {
+  background: linear-gradient(90deg, var(--k-fg, var(--ai)) 30%, var(--o2, var(--ac)) 50%, var(--k-fg, var(--ai)) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-work-shimmer 2s linear infinite;
+}
+/* Who is on it: the agent's mark, with its arc turning while it works. */
+.rc-head > .rc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 1px;
+}
+.rc-head > .rc-meta > * {
+  min-width: 0;
+}
+.rc-meta > .rc-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-end: 0.75em;
+  color: var(--t2);
+  font-weight: 500;
+}
+/* The mark and name are one unit: no separator dot hanging off it. */
+.rc-meta > .rc-who::after {
+  content: none;
+}
+.rc-who > .agent-mark[data-size="18"] {
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+}
+/* When it reported, start to now: evenly spaced ticks are a steady run, a gap at the right is silence. */
+.rc-pulse {
+  position: relative;
+  display: block;
+  height: 10px;
+  margin-top: 2px;
+}
+.rc-pulse::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--bd);
+}
+.rc-pulse > i {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at, 0) * (100% - 3px));
+  width: 3px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 2px;
+  background: var(--k-fg, var(--t3));
+  animation: rc-tick 320ms var(--ease-pop) both;
+}
+.rc-pulse > .rc-pulse-now {
+  left: calc(100% - 6px);
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 999px;
+  background: var(--ai);
+}
+.rc-pulse > .rc-pulse-now::after,
+.rc-event[data-live] .rc-node::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: k-ping 2.4s var(--ease) infinite;
+}
+/* The timeline draws itself when a card opens; an event that arrives while you watch slides in and glows once. */
+.rc[data-open] .rc-event {
+  animation: rc-rise 240ms var(--ease) both;
+}
+.rc[data-open] .rc-event:nth-child(2) {
+  animation-delay: 45ms;
+}
+.rc[data-open] .rc-event:nth-child(3) {
+  animation-delay: 90ms;
+}
+.rc[data-open] .rc-event:nth-child(n + 4) {
+  animation-delay: 135ms;
+}
+.rc .rc-event[data-new] {
+  border-radius: 6px;
+  animation:
+    rc-arrive 420ms var(--ease) both,
+    jv-flash 1.8s ease-out;
+}
+.rc-more {
+  animation: rc-rise 220ms var(--ease) both;
+}
+.rc-chevron {
+  transition: transform 180ms var(--ease);
+}
+/* Progress that is still moving has light running through it. */
+.rc-progress[data-live] .k-prog-f,
+.rc[data-live] .ic-progress .k-prog-f {
+  background-image: linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--s1, var(--surface)) 45%, transparent) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: k-shimmer 1.8s linear infinite;
+}
+/* Each successful sync blinks the dot once. */
+.rc-sync {
+  display: inline-flex;
+  animation: k-pop 320ms var(--ease-pop);
+}
+/* Chips and actions answer a press. */
+.rc :is(.rc-act, .rc-jump, .ic-open),
+.gc-since-chip {
+  transition:
+    transform 120ms var(--ease),
+    background-color 120ms var(--ease),
+    color 120ms var(--ease);
+}
+.rc :is(.rc-act, .rc-jump, .ic-open):active:not(:disabled),
+.gc-since-chip:active:not(:disabled) {
+  transform: scale(0.95);
+}
+/* The catch-up card's chips arrive one by one. */
+.gc-since-chip {
+  animation: rc-rise 260ms var(--ease) both;
+}
+.gc-since-chip:nth-child(2) {
+  animation-delay: 50ms;
+}
+.gc-since-chip:nth-child(3) {
+  animation-delay: 100ms;
+}
+.gc-since-chip:nth-child(n + 4) {
+  animation-delay: 150ms;
+}
+@keyframes rc-rise {
   from {
     opacity: 0;
+    transform: translateY(5px);
   }
   to {
     opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rc-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rc-tick {
+  from {
+    opacity: 0;
+    transform: scaleY(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rc-more {
-    animation: none;
+  .rc,
+  .rc *,
+  .rc::before,
+  .rc *::before,
+  .rc *::after,
+  .rc-sync,
+  .gc-since-chip {
+    animation: none !important;
+    transition: none !important;
+  }
+  .rc-shimmer {
+    background: none;
+    color: inherit;
   }
 }

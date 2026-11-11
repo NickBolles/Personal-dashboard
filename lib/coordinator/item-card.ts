@@ -161,14 +161,14 @@ export function itemCardModel(input: {
 
 const CHANGE_CHIP: Record<ActivityType, { label: string; tone: CardTone }> = {
   created: { label: "Created", tone: "ok" },
-  edit: { label: "Edit", tone: "inf" },
-  status: { label: "Status", tone: "ac" },
+  edit: { label: "Edited", tone: "inf" },
+  status: { label: "Moved", tone: "ac" },
   structure: { label: "Moved", tone: "neutral" },
-  link: { label: "Link", tone: "inf" },
+  link: { label: "Linked", tone: "inf" },
   github: { label: "GitHub", tone: "ac" },
-  capture: { label: "Capture", tone: "neutral" },
+  capture: { label: "Captured", tone: "neutral" },
   chat: { label: "Chat", tone: "ai" },
-  validation: { label: "Check", tone: "ok" },
+  validation: { label: "Checked", tone: "ok" },
   chore: { label: "Chore", tone: "neutral" },
 };
 const shortDate = (value: string) => {
@@ -199,27 +199,35 @@ export function changeLabel(row: Pick<ActivityItem, "type" | "verb">): string {
   if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return "Finished agent run";
   return tidyDates(row.verb) ?? row.verb.charAt(0).toUpperCase() + row.verb.slice(1);
 }
+/**
+ * The coloured chip on a change row. It is the verb ("Edited", "Moved", "Raised decision"), so chip + object
+ * read as a sentence, the way the item pages write activity, and the colour says what kind of change it was.
+ */
 export function changeChip(row: Pick<ActivityItem, "type" | "verb">): { label: string; tone: CardTone } {
-  if (/needs your decision/i.test(row.verb)) return { label: "Decision", tone: "wn" };
-  if (/(started|finished).*run|run.*(done|finished)/i.test(row.verb)) return { label: "Run", tone: "ai" };
+  if (/needs your decision/i.test(row.verb)) return { label: "Raised decision", tone: "wn" };
+  if (/started.*run/i.test(row.verb)) return { label: "Run started", tone: "ai" };
+  if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return { label: "Run finished", tone: "ok" };
   if (/^dates:/i.test(row.verb)) return { label: "Dates", tone: "inf" };
-  if (/^tagged\b/i.test(row.verb)) return { label: "Tags", tone: "inf" };
+  if (/^tagged\b/i.test(row.verb)) return { label: "Tagged", tone: "inf" };
   return CHANGE_CHIP[row.type] ?? { label: row.type, tone: "neutral" };
 }
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 /**
- * One change as a short sentence, verb first, the way the item pages write activity: "Edited summary",
- * "Raised decision: Ship tonight?", "Moved to Exploring: predates the new checkout", "Linked Sponsor shortlist".
+ * What the chip's verb was done to: "summary", "to Exploring: predates the new checkout", "Sponsor shortlist",
+ * "target Nov 22 (was Nov 15)", the decision's question, the run's title. Empty when the chip says it all.
  */
-export function changeText(row: Pick<ActivityItem, "type" | "verb" | "detail">): string {
+export function changeObject(row: Pick<ActivityItem, "type" | "verb" | "detail">): string {
   const after = /^(?:needs your decision|started agent run|finished agent run):\s*(.+)$/i.exec(row.verb)?.[1]?.trim();
-  const label = changeLabel(row);
-  if (after) return `${label}: ${after}`;
-  if (row.type === "created") return "Created";
+  if (after) return after;
+  if (row.type === "created") return "";
   const detail = row.detail?.trim() ?? "";
-  if (row.type === "link" && detail) return /^linked\b/i.test(detail) ? detail : `Linked ${detail}`;
+  if (row.type === "link") return detail.replace(/^linked\s+/i, "") || row.verb.replace(/^linked\s*/i, "");
   if (row.type === "status") {
+    const to = row.verb.replace(/^moved\s+/i, "");
     const why = detail.replace(/^[^:]{1,60}→[^:]{1,60}:\s*/, "");
-    return why && why !== detail ? `${label}: ${why}` : label;
+    return why && why !== detail ? `${to}: ${why}` : to;
   }
-  return label;
+  const dates = tidyDates(row.verb);
+  if (dates) return lowerFirst(dates.replace(/ date /g, " "));
+  return row.verb.replace(/^(?:edited|tagged|moved|linked)\s+/i, "");
 }

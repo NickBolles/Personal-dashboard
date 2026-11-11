@@ -127,7 +127,7 @@ it("a project gathers what is under it", () => {
   expect(card().getByRole("link", { name: "Open project" })).toBeTruthy();
 });
 
-it("lists what was changed as a timeline: the latest when closed, three when open, each with its own Undo", () => {
+it("lists what was changed as a chip timeline: three when closed, all when open, each with its own Undo", () => {
   const changes = [
     change("c1", { verb: "Dates: start — → —, target — → 2026-11-22", undoOpId: "op1" }),
     change("c2", { verb: "tagged #q4" }),
@@ -138,16 +138,18 @@ it("lists what was changed as a timeline: the latest when closed, three when ope
     <ItemCard itemId="b" title="x" data={data()} changes={changes} undo={(row) => (row.undoOpId ? <button type="button">Undo {row.id}</button> : null)} />,
   );
   const list = () => within(card().getByRole("list", { name: "Changes to Holiday sale checklist" })).getAllByRole("listitem");
-  const said = () => list().map((li) => li.querySelector(".rc-event-main")!.textContent);
-  expect(said()).toEqual([expect.stringMatching(/^Target date \w+ 22$/)]);
-  expect(within(list()[0]!).getByRole("button", { name: "Undo c1" })).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { expanded: false, name: /Holiday sale checklist/ }));
-  expect(said().slice(1)).toEqual(["Tagged #q4", "Moved to Exploring: Predates the new checkout"]);
-  // each row's colour says what kind of change it was
+  const chips = () => list().map((li) => li.querySelector(".rc-event-chip")!.textContent);
+  // The chip is the verb, in the colour of its kind; the words after it are what it was done to.
+  expect(chips()).toEqual(["Dates", "Tagged", "Moved"]);
+  expect(list()[0]!.querySelector(".rc-event-text")!.textContent).toMatch(/^target [A-Za-z]+ 22$/);
+  expect(list()[2]!.querySelector(".rc-event-text")!.textContent).toBe("to Exploring: Predates the new checkout");
   expect(list()[2]!.className).toContain("k-t-ac");
-  fireEvent.click(card().getByRole("button", { name: "Show 1 earlier" }));
-  expect(said()).toHaveLength(4);
-  expect(said()[3]).toBe("Created");
+  expect(within(list()[0]!).getByRole("button", { name: "Undo c1" })).toBeTruthy();
+  // The rest are one tap away, and that tap opens the card.
+  fireEvent.click(card().getByRole("button", { name: "1 earlier change" }));
+  expect(chips()).toEqual(["Dates", "Tagged", "Moved", "Created"]);
+  expect(list()[3]!.querySelector(".rc-event-text")).toBeNull();
+  expect(card().getByRole("link", { name: "Open item" })).toBeTruthy();
 });
 
 it("an item that is gone still shows what was done to it", () => {

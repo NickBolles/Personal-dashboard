@@ -10,6 +10,7 @@ import {
   mergeBackgroundWork,
   runAsk,
   runNeeds,
+  runPulse,
   runStatus,
   sinceChips,
   sinceRunCounts,
@@ -170,6 +171,23 @@ describe("background work", () => {
     expect(syncLine(now - 180_000, true, now)).toBe("Couldn't refresh · last synced 3 minutes ago");
     expect(syncLine(now - 5_000, true, now)).toBe("Couldn't refresh · last synced just now");
     expect(syncLine(0, true, now)).toBe("Couldn't refresh");
+  });
+});
+
+describe("runPulse", () => {
+  it("places each report in the run's lifetime, oldest first, with its tone", () => {
+    const r = run({ startedAt: ago(100), finishedAt: null });
+    const ticks = runPulse(
+      r,
+      [event({ id: "b", at: ago(25) }), event({ id: "a", at: ago(75), type: "notice", summary: "Step failed again" }), event({ id: "c", at: "nope" })],
+      now,
+    );
+    expect(ticks.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(ticks[0]).toMatchObject({ at: 0.25, tone: "bad" });
+    expect(ticks[1]!.at).toBeCloseTo(0.75);
+    // a finished run is measured to when it finished; nonsense spans give nothing
+    expect(runPulse(run({ startedAt: ago(100), finishedAt: ago(50) }), [event({ at: ago(75) })], now)[0]!.at).toBeCloseTo(0.5);
+    expect(runPulse(run({ startedAt: "nope" }), [event()], now)).toEqual([]);
   });
 });
 

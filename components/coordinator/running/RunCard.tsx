@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { AgentMark } from "@/components/brand/AgentMark";
 import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
 import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
@@ -17,6 +18,7 @@ import {
   eventClock,
   eventText,
   runNeeds,
+  runPulse,
   runStatus,
   syncLine,
   tidyOutcome,
@@ -29,15 +31,40 @@ import { relativeTime } from "@/lib/time";
 import "./run-card.css";
 
 /** How many events (ones that say something) an open card shows before "Show earlier". */
-const PREVIEW = 2;
+const PREVIEW = 3;
 
 /** The state of a piece of work as a tinted chip (dot + one or two words), then how long, in plain text. */
-export function StatusChip({ tone, live, label, detail, dotLabel }: { tone: CardTone; live?: boolean; label: string; detail?: string; dotLabel?: string }) {
+export function StatusChip({
+  tone,
+  live,
+  label,
+  detail,
+  dotLabel,
+  burst = 0,
+  celebrate,
+}: {
+  tone: CardTone;
+  live?: boolean;
+  label: string;
+  detail?: string;
+  dotLabel?: string;
+  /** Bumped each time the state changes while on screen: the chip pops once per change. */
+  burst?: number;
+  /** With a burst: this change is good news (the work finished), so the pop comes with a few sparks. */
+  celebrate?: boolean;
+}) {
   return (
     <span className="rc-status">
-      <span className={`rc-chip k-t-${tone}`}>
+      <span key={burst} className={`rc-chip k-t-${tone}${burst ? " k-pop" : ""}`}>
         <Dot tone={tone} live={live} label={dotLabel} />
-        {label}
+        <span className={live ? "rc-shimmer" : undefined}>{label}</span>
+        {burst && celebrate ? (
+          <span className="k-spark" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => (
+              <i key={i} style={{ "--a": `${i * 45}deg` } as CSSProperties} />
+            ))}
+          </span>
+        ) : null}
       </span>
       {detail ? (
         <span className="rc-status-detail" data-dynamic>
@@ -63,7 +90,9 @@ export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: 
       title={updatedAt ? `Last synced ${new Date(updatedAt).toLocaleTimeString()}` : undefined}
       data-dynamic
     >
-      <Dot tone={failed ? "wn" : "ok"} />
+      <span key={failed ? "failed" : updatedAt} className={failed ? undefined : "rc-sync"}>
+        <Dot tone={failed ? "wn" : "ok"} />
+      </span>
       <span>{text}</span>
       {failed && onRetry ? (
         <Button size="sm" variant="ghost" className="rc-live-retry" disabled={fetching} onClick={onRetry}>
@@ -75,15 +104,23 @@ export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: 
 }
 
 /** Events as a real timeline: newest first, a tinted node and type chip per event, the time on the right. */
-export function RunTimeline({ events, runTitle, label }: { events: readonly RunEvent[]; runTitle: string; label: string }) {
+export function RunTimeline({ events, runTitle, label, live }: { events: readonly RunEvent[]; runTitle: string; label: string; live?: boolean }) {
   const now = useNow();
+  // Anything reported after this timeline was first drawn is news: it slides in and glows once.
+  const [since] = useState(() => Date.now());
   return (
     <ol className="rc-timeline" aria-label={label}>
       {events.map((event, index) => {
         const chip = eventChip(event);
         const text = eventText(event, runTitle);
         return (
-          <li key={event.id} className={`rc-event k-t-${chip.tone}`} data-latest={index === 0 || undefined}>
+          <li
+            key={event.id}
+            className={`rc-event k-t-${chip.tone}`}
+            data-latest={index === 0 || undefined}
+            data-live={(live && index === 0) || undefined}
+            data-new={Date.parse(event.at) > since || undefined}
+          >
             <span className="rc-node" aria-hidden="true" />
             <span className="rc-event-main">
               <Pill tone={chip.tone} className="rc-event-chip">
@@ -219,6 +256,13 @@ export function RunCard({
   const [all, setAll] = useState(false);
   const [steering, setSteering] = useState(false);
   const [sending, setSending] = useState(false);
+  // The state changed while this card was on screen (derived during render, so it costs no extra effect).
+  const [shownState, setShownState] = useState(reported.key);
+  const [burst, setBurst] = useState(() => (reported.key === "done" && !!run.finishedAt && Date.now() - Date.parse(run.finishedAt) < 30_000 ? 1 : 0));
+  if (shownState !== reported.key) {
+    setShownState(reported.key);
+    setBurst((n) => n + 1);
+  }
   const confirmStop = stopping === run.ref;
   const detailId = useId();
   const head = useRef<HTMLButtonElement>(null);
@@ -239,6 +283,7 @@ export function RunCard({
   // Events that say something (a bare "Started" or "Finished" under the same chip adds nothing): the newest one
   // on a closed card, the newest two on an open one; "Show earlier" brings every event.
   const telling = known.filter((e) => eventText(e, run.title));
+  const pulse = runPulse(run, known, now);
   const latest = telling[0] ?? null;
   // A run that went quiet right after reporting a failed step says so in its chip: the failure is the news, the
   // silence is the detail. (A failed step is not a failed run; the run's own state is unchanged.)
@@ -264,7 +309,7 @@ export function RunCard({
       : "";
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
   return (
-    <article className="rc" data-run-ref={run.ref} data-state={status.key} data-open={open || undefined}>
+    <article className="rc" data-run-ref={run.ref} data-state={status.key} data-open={open || undefined} data-live={status.live || undefined}>
       <Button
         ref={head}
         variant="ghost"
@@ -275,7 +320,15 @@ export function RunCard({
         onClick={() => setOpen((value) => !value)}
       >
         <span className="rc-top">
-          <StatusChip tone={status.tone} live={status.live} label={status.label} detail={status.detail} dotLabel={status.key} />
+          <StatusChip
+            tone={status.tone}
+            live={status.live}
+            label={status.label}
+            detail={status.detail}
+            dotLabel={status.key}
+            burst={burst}
+            celebrate={status.key === "done"}
+          />
           <span className="gc-ref rc-ref" role="img" aria-label={`Run ${run.ref.replace("-", " ")}`}>
             {run.ref}
           </span>
@@ -283,10 +336,27 @@ export function RunCard({
         </span>
         <span className="rc-title line-clamp-2">{run.title}</span>
         <span className="rc-meta">
-          <span>{run.profile}</span>
+          <span className="rc-who">
+            <AgentMark name={run.profile} busy={status.live} />
+            {run.profile}
+          </span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
+          <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
         </span>
+        {pulse.length > 1 ? (
+          <span
+            className="rc-pulse"
+            role="img"
+            aria-label={`${pulse.length} reports since it started; the last one ${relativeTime(known[0]!.at, now)}`}
+            title="When it reported, from its start to now"
+          >
+            {pulse.map((tick) => (
+              <i key={tick.id} className={`k-t-${tick.tone}`} style={{ "--at": tick.at } as CSSProperties} />
+            ))}
+            {status.live ? <i className="rc-pulse-now" /> : null}
+          </span>
+        ) : null}
       </Button>
       {needs ? (
         <p className="rc-ask">
@@ -312,7 +382,7 @@ export function RunCard({
       <Pipeline run={run} />
       {run.lock ? <p className="rc-lock">{run.lock.mode === "waits" ? `Waiting for ${run.lock.name}` : `Holds ${run.lock.name} lock`}</p> : null}
       {outcome ? <p className="rc-summary line-clamp-3">{outcome}</p> : null}
-      {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} /> : null}
+      {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} live={status.live} /> : null}
       {open ? (
         <div className="rc-more" id={detailId}>
           {hidden > 0 || all ? (
@@ -504,6 +574,12 @@ export function ExecCard({
   const [steering, setSteering] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [whole, setWhole] = useState(false);
+  const [shownState, setShownState] = useState(record.state);
+  const [burst, setBurst] = useState(0);
+  if (shownState !== record.state) {
+    setShownState(record.state);
+    setBurst((n) => n + 1);
+  }
   // A child discovered through the session list first keeps its child-session id as record id;
   // the coordinator steers/stops by Hermes' sub-agent handle (#251).
   const target = work.control ?? record;
@@ -536,6 +612,7 @@ export function ExecCard({
         .slice(0, 2)
     : [];
   const links = (record.links ?? []).filter((link) => /^https:\/\//i.test(link.url)).slice(0, 3);
+  const isLive = tracked ? tracked.live : record.state === "running" && !stalled;
   // Work that failed cannot be steered, but it can be answered: the same field, sent as a line about it.
   const canReply = !controllable && (record.state === "failed" || waiting);
   const [replying, setReplying] = useState(false);
@@ -545,16 +622,19 @@ export function ExecCard({
     <article
       className="rc rc-exec"
       data-state={tracked ? tracked.key : stalled ? "stuck" : record.state}
+      data-live={isLive || undefined}
       data-testid="coordinator-run-card"
       aria-label={record.title}
     >
       <div className="rc-top">
         <StatusChip
           tone={status.tone}
-          live={tracked ? tracked.live : record.state === "running" && !stalled}
+          live={isLive}
           label={status.label}
           detail={detail}
           dotLabel={dotLabel}
+          burst={burst}
+          celebrate={record.state === "completed"}
         />
         {run ? <span className="gc-ref rc-ref">{run.ref}</span> : null}
       </div>
@@ -573,11 +653,11 @@ export function ExecCard({
         </p>
       ) : null}
       {active && typeof record.progress === "number" ? (
-        <div className="rc-progress">
+        <div className="rc-progress" data-live={isLive || undefined}>
           <ProgressBar value={record.progress * 100} tone="ai" label={`${Math.round(record.progress * 100)}% done`} />
         </div>
       ) : null}
-      {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} /> : null}
+      {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
       {children}
       {record.href || links.length || controllable || canReply ? (
         <div className="rc-actions">

@@ -11,7 +11,7 @@ import type { ActivityItem } from "@/lib/activity";
 import { CHECKS_LABEL, DEPLOY_LABEL, whoLabel, type ItemAgentInfo, type PrState } from "@/lib/agent-runs";
 import { api } from "@/lib/client/api";
 import type { Decision } from "@/lib/cw-decisions";
-import { changeChip, changeText, itemCardModel } from "@/lib/coordinator/item-card";
+import { changeChip, changeObject, itemCardModel } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
 import type { RunEvent } from "@/lib/cw-runs";
 import { byNeed, eventChip, runStatus, type RunStatus } from "@/lib/coordinator/run-card";
@@ -23,7 +23,7 @@ import { StatusChip } from "../running/RunCard";
 import { useCoordinatorRuns } from "../running/useCoordinatorRuns";
 import "../running/run-card.css";
 
-/** How many changes an open card lists before "Show N earlier"; a closed card shows only the latest. */
+/** How many changes a closed card shows; opening it shows them all. */
 const CHANGES_SHOWN = 3;
 
 export type ItemCardData = {
@@ -113,12 +113,14 @@ export type ItemCardProps = {
 export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk, defaultOpen = false }: ItemCardProps) {
   const now = useNow();
   const [open, setOpen] = useState(defaultOpen);
-  const [allChanges, setAllChanges] = useState(false);
+
   const detailId = useId();
+  // A change made while this card is on screen slides in and glows once.
+  const [since] = useState(() => Date.now());
   const item = data.items.find((i) => i.id === itemId);
   const agent = data.agents[itemId] ?? null;
   const model = item ? itemCardModel({ item, items: data.items, agent, runs: data.runs, decisions: data.decisions, now }) : null;
-  const shown = allChanges ? changes : changes.slice(0, open ? CHANGES_SHOWN : 1);
+  const shown = open ? changes : changes.slice(0, CHANGES_SHOWN);
   const hidden = changes.length - shown.length;
   const href = `/areas?item=${encodeURIComponent(itemId)}`;
   const name = model?.title ?? title;
@@ -147,7 +149,13 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   // Closed: one chip of each kind; the rest are one tap in.
   const chips = open ? 2 : 1;
   return (
-    <article className="rc ic" data-item={itemId} data-state={model?.headline.key ?? "unknown"} data-open={open || undefined}>
+    <article
+      className="rc ic"
+      data-item={itemId}
+      data-state={model?.headline.key ?? "unknown"}
+      data-open={open || undefined}
+      data-live={model?.headline.live || undefined}
+    >
       <div className="ic-headrow">
         <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
           <span className="rc-top">
@@ -267,27 +275,30 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       {shown.length ? (
         <ol className="rc-timeline ic-changes" aria-label={`Changes to ${name}`}>
           {shown.map((row, index) => (
-            <li key={row.id} className={`rc-event k-t-${changeChip(row).tone}`} data-latest={index === 0 || undefined}>
+            <li
+              key={row.id}
+              className={`rc-event k-t-${changeChip(row).tone}`}
+              data-latest={index === 0 || undefined}
+              data-new={Date.parse(row.at) > since || undefined}
+            >
               <span className="rc-node" aria-hidden="true" />
-              <span className="rc-event-main">{changeText(row)}</span>
+              <span className="rc-event-main">
+                <Pill tone={changeChip(row).tone} className="rc-event-chip">
+                  {changeChip(row).label}
+                </Pill>
+                {changeObject(row) ? <span className="rc-event-text">{changeObject(row)}</span> : null}
+              </span>
               <time className="rc-event-time" dateTime={row.at} title={new Date(row.at).toLocaleString()} data-dynamic>
-                {relativeTime(row.at, now)}
+                {now - Date.parse(row.at) < 60_000 ? "just now" : `${ageLabel(row.at, now)} ago`}
               </time>
               <span className="ic-undo">{undo?.(row)}</span>
             </li>
           ))}
         </ol>
       ) : null}
-      {open && (hidden > 0 || allChanges) ? (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="rc-earlier"
-          icon={<ChevronIcon className={`h-3 w-3 ${allChanges ? "-rotate-90" : "rotate-90"}`} />}
-          aria-expanded={allChanges}
-          onClick={() => setAllChanges((value) => !value)}
-        >
-          {allChanges ? "Show fewer" : `Show ${hidden} earlier`}
+      {!open && hidden > 0 ? (
+        <Button size="sm" variant="ghost" className="rc-earlier" icon={<ChevronIcon className="h-3 w-3 rotate-90" />} onClick={() => setOpen(true)}>
+          {hidden === 1 ? "1 earlier change" : `${hidden} earlier changes`}
         </Button>
       ) : null}
       {open ? (

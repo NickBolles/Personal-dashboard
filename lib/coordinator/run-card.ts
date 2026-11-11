@@ -25,7 +25,7 @@ export type RunStatus = {
 };
 
 export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): RunStatus {
-  const ago = relativeTime(run.updatedAt, now);
+  const ago = now - Date.parse(run.updatedAt) < 60_000 ? "just now" : relativeTime(run.updatedAt, now);
   if (run.state === "failed") return { key: "failed", label: "Failed", detail: ago, tone: "bad", live: false, attention: true };
   if (run.state === "interrupted")
     return {
@@ -232,4 +232,21 @@ export function sinceRunCounts(runs: readonly CoordinatorRunRow[], sinceAt: numb
   const finished = moved.filter((r) => r.state === "done").length;
   const stuck = moved.filter((r) => r.stalled && r.state === "running").length;
   return { runs: moved.length, failed, stuck, waiting, finished };
+}
+
+export type PulseTick = { id: string; at: number; tone: CardTone };
+/**
+ * A run's reports laid out in time, from its start to now (or to when it finished): each tick is one event at
+ * its place (0..1) in that span. The spacing is the story: a steady run has even ticks to the right edge, a run
+ * that went quiet has a gap after its last one.
+ */
+export function runPulse(run: Pick<CoordinatorRunRow, "startedAt" | "finishedAt">, events: readonly RunEvent[], now: number = Date.now()): PulseTick[] {
+  const start = Date.parse(run.startedAt);
+  const end = run.finishedAt ? Date.parse(run.finishedAt) : now;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
+  return [...events]
+    .filter((e) => Number.isFinite(Date.parse(e.at)))
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+    .slice(-24)
+    .map((e) => ({ id: e.id, at: Math.min(1, Math.max(0, (Date.parse(e.at) - start) / (end - start))), tone: eventChip(e).tone }));
 }

@@ -311,9 +311,12 @@ it("shows the latest event on a closed card and a real timeline on an open one",
   // Closed: just the newest event, as a labelled chip and its words.
   expect(list().map((li) => li.textContent)).toEqual([expect.stringContaining("FailedRan out of budget")]);
   fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
-  // Open: the two newest events that say something; the rest (and the bare "Started") are one tap away.
-  expect(list()).toHaveLength(2);
-  fireEvent.click(card.getByRole("button", { name: "Show 3 earlier" }));
+  // Open: the three newest events that say something; the rest (and the bare "Started") are one tap away.
+  expect(list()).toHaveLength(3);
+  // Who is on it (with the working arc) and when it reported, start to now.
+  expect(document.querySelector('[data-run-ref="R-1"] .agent-mark')!.getAttribute("data-busy")).toBe("true");
+  expect(card.getByRole("img", { name: /^5 reports since it started; the last one / })).toBeTruthy();
+  fireEvent.click(card.getByRole("button", { name: "Show 2 earlier" }));
   expect(list()).toHaveLength(5);
   // The "started" event only repeats the title: it keeps its chip and drops the words.
   expect(list().at(-1)!.textContent).toMatch(/^Started/);
