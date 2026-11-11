@@ -1460,6 +1460,10 @@ html[data-kb="open"] .gc-tray-qa {
     .gc-needs-nav > .k-btn:first-child {
       display: none;
     }
+    /* Without Back leading the row, its first word lines up with the question below it. */
+    .gc-needs-nav {
+      margin-inline-start: 0;
+    }
     /* The decision stays in view while the list beside it scrolls; long ones scroll inside their own column. */
     .gc-needs-detail-pane {
       position: sticky;
@@ -1467,6 +1471,8 @@ html[data-kb="open"] .gc-tray-qa {
       align-self: start;
       max-height: calc(100dvh - 11rem);
       overflow-y: auto;
+      /* The pager's tap area reaches past the column edge; that is not something to scroll to. */
+      overflow-x: hidden;
       border-inline-start: 1px solid var(--bd);
       padding-inline-start: 0.5rem;
     }
