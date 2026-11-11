@@ -52,9 +52,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Build tools for native modules (better-sqlite3)
-        run: apt-get update && apt-get install -y --no-install-recommends build-essential python3
       - run: npm ci
+      # better-sqlite3 ships its Linux binary inside the package (prebuilds/, no install script), so nothing is
+      # compiled here and the job does not depend on the Ubuntu package mirror. Fail early, and clearly, if the
+      # bundled binary ever stops loading in this image.
+      - name: Check the bundled SQLite binary loads
+        run: node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get(); console.log('better-sqlite3: bundled binary loads')"
       - run: npm run build
       - run: npx playwright test
         env:
