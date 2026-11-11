@@ -52,10 +52,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      # better-sqlite3 ships its Linux binary inside the package (prebuilds/, no install script), so nothing is
-      # compiled here and the job does not depend on the Ubuntu package mirror. Fail early, and clearly, if the
-      # bundled binary ever stops loading in this image.
+      # better-sqlite3 ships its Linux binary inside the package (prebuilds/). npm would still run node-gyp for
+      # it, because the package has a binding.gyp: a build that compiles nothing but needs `make`, which this
+      # image only gets from the Ubuntu package mirror. Skipping install scripts uses the bundled binary as it
+      # is, so the job does not depend on that mirror. Nothing else this job runs needs an install script (SWC,
+      # sharp and esbuild resolve their binaries as optional packages). The next step fails early, and clearly,
+      # if the bundled binary ever stops loading in this image.
+      - run: npm ci --ignore-scripts
       - name: Check the bundled SQLite binary loads
         run: |
           node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get(); console.log('better-sqlite3 bundled binary loads')"

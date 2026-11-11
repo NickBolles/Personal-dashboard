@@ -30,9 +30,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Install scripts are skipped so better-sqlite3's bundled Linux binary is used as it is, with no build
+      # tools from the Ubuntu package mirror (see the same step in ci.yml).
       - if: steps.check.outputs.skip != 'true'
-        run: npm ci
-      # better-sqlite3 ships its Linux binary inside the package: no compiler, no package mirror (see ci.yml).
+        run: npm ci --ignore-scripts
       - if: steps.check.outputs.skip != 'true'
         name: Check the bundled SQLite binary loads
         run: |
