@@ -1742,6 +1742,8 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     // The sheet's composer is on screen and takes a tap (nothing is sent).
     await tray.click();
     const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+    // The tray opens where its sentence points (Activity, for stuck runs); the composer is on the Chat tab.
+    await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
     const input = sheet.getByTestId("gc-input");
     await expect(input).toBeVisible();
     const box = (await input.boundingBox())!;
