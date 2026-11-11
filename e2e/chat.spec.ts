@@ -147,7 +147,10 @@ test("a real secret inside a message is removed before sending, not blocked", as
 test("fork latest state leaves the original unchanged and links both ways", async ({ page }) => {
   await page.goto("/chat/sess_v5");
   await expect(page.getByText("Plan: compatibility audit")).toBeVisible();
-  const originalMessages = await page.locator("ol > li").count();
+  // Count the thread's own rows: the shell's (hidden) breadcrumb list is briefly present twice while the page
+  // streams in, so "every list item on the page" depends on when it is counted.
+  const turns = page.locator("ol.chat-turns > li");
+  const originalMessages = await turns.count();
   expect(originalMessages).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Conversation actions" }).click();
   await page.getByRole("menuitem", { name: "Fork latest state" }).click();
@@ -160,7 +163,7 @@ test("fork latest state leaves the original unchanged and links both ways", asyn
   await expect(page.getByText("Forked from")).toBeVisible();
   await page.getByRole("link", { name: "Enable v5 rollout" }).first().click();
   await expect(page).toHaveURL(/sess_v5/);
-  await expect(page.locator("ol > li")).toHaveCount(originalMessages);
+  await expect(page.locator("ol.chat-turns > li")).toHaveCount(originalMessages);
   await expect(page.getByRole("link", { name: "v5 alt plan" }).first()).toBeVisible();
 });
 
