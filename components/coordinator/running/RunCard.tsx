@@ -40,6 +40,7 @@ export function StatusChip({
   label,
   detail,
   dotLabel,
+  agent,
   burst = 0,
   celebrate,
 }: {
@@ -48,6 +49,8 @@ export function StatusChip({
   label: string;
   detail?: string;
   dotLabel?: string;
+  /** Whose work this is: the chip then leads with that agent's mark (its arc turns while working) instead of a dot. */
+  agent?: string;
   /** Bumped each time the state changes while on screen: the chip pops once per change. */
   burst?: number;
   /** With a burst: this change is good news (the work finished), so the pop comes with a few sparks. */
@@ -56,8 +59,9 @@ export function StatusChip({
   return (
     <span className="rc-status">
       <span key={burst} className={`rc-chip k-t-${tone}${burst ? " k-pop" : ""}`}>
-        <Dot tone={tone} live={live} label={dotLabel} />
-        <span className={live ? "rc-shimmer" : undefined}>{label}</span>
+        {agent ? <AgentMark name={agent} busy={live} label={dotLabel} /> : <Dot tone={tone} live={live} label={dotLabel} />}
+        {/* One live signal per chip: the mark's arc when there is a mark, else the shimmer. */}
+        <span className={live && !agent ? "rc-shimmer" : undefined}>{label}</span>
         {burst && celebrate ? (
           <span className="k-spark" aria-hidden="true">
             {Array.from({ length: 8 }, (_, i) => (
@@ -326,6 +330,7 @@ export function RunCard({
             label={status.label}
             detail={status.detail}
             dotLabel={status.key}
+            agent={run.profile}
             burst={burst}
             celebrate={status.key === "done"}
           />
@@ -336,10 +341,7 @@ export function RunCard({
         </span>
         <span className="rc-title line-clamp-2">{run.title}</span>
         <span className="rc-meta">
-          <span className="rc-who">
-            <AgentMark name={run.profile} busy={status.live} />
-            {run.profile}
-          </span>
+          <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
           <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>

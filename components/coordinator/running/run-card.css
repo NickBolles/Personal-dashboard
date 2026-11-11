@@ -683,19 +683,11 @@ a.ic-pr-name:hover {
 .gc-change-groups > li:nth-child(n + 4) > .rc {
   animation-delay: 160ms;
 }
-/* Work in flight: a current runs along the card's top edge. */
-.rc[data-live]::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  right: 14px;
-  left: 14px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent 0%, var(--ai) 35%, var(--o2, var(--ac)) 50%, var(--ai) 65%, transparent 100%);
-  background-size: 200% 100%;
-  animation: k-shimmer 2.8s linear infinite;
-  pointer-events: none;
+/* Work in flight: the card's outline takes the agent colour of the theme, like the amber and red outlines of
+   cards that need a look. */
+.rc[data-live] {
+  border-color: color-mix(in oklab, var(--ai) 50%, var(--bd));
+  box-shadow: 0 0 0 3px var(--ais);
 }
 /* "Working" shimmers the way it does in a conversation. */
 .rc-chip {
@@ -709,32 +701,16 @@ a.ic-pr-name:hover {
   color: transparent;
   animation: chat-work-shimmer 2s linear infinite;
 }
-/* Who is on it: the agent's mark, with its arc turning while it works. */
-.rc-head > .rc-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  row-gap: 1px;
+/* Whose work it is: the agent's mark leads the chip, and its arc turns while the agent works. */
+.rc-chip > .agent-mark[data-size="18"] {
+  width: 15px;
+  height: 15px;
+  margin-inline: -2px 3px;
+  font-size: 8.5px;
+  background: var(--s1, var(--surface));
 }
-.rc-head > .rc-meta > * {
-  min-width: 0;
-}
-.rc-meta > .rc-who {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-inline-end: 0.75em;
-  color: var(--t2);
-  font-weight: 500;
-}
-/* The mark and name are one unit: no separator dot hanging off it. */
-.rc-meta > .rc-who::after {
-  content: none;
-}
-.rc-who > .agent-mark[data-size="18"] {
-  width: 16px;
-  height: 16px;
-  font-size: 9px;
+.rc-chip > .agent-mark[data-busy]::after {
+  inset: -2.5px;
 }
 /* When it reported, start to now: evenly spaced ticks are a steady run, a gap at the right is silence. */
 .rc-pulse {
@@ -771,7 +747,6 @@ a.ic-pr-name:hover {
   border-radius: 999px;
   background: var(--ai);
 }
-.rc-pulse > .rc-pulse-now::after,
 .rc-event[data-live] .rc-node::after {
   content: "";
   position: absolute;
