@@ -374,17 +374,6 @@
   line-height: 1.4;
   resize: none;
 }
-/* A second way out of the reply field sits under it, quiet and to the right. */
-.rc-steer {
-  flex-wrap: wrap;
-}
-/* The field keeps a usable width, so the second way out drops to its own line under it. */
-.rc .rc-steer .rc-steer-input {
-  flex: 1 1 11rem;
-}
-.rc-steer-alt {
-  margin-inline-start: auto;
-}
 /* While refreshes are failing, ages on the cards are measured against stale data: step them back. */
 .gc-running[data-stale] .rc-status-detail,
 .gc-running[data-stale] .rc-event-time {

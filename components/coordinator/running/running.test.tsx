@@ -289,10 +289,20 @@ it("a run waiting on the owner arrives open, says what it needs, takes a reply, 
   expect(other.getByText("Pick a frame before I order samples")).toBeTruthy();
   expect(other.queryByRole("button", { name: /^Review decision/ })).toBeNull();
 });
-it("a waiting run can be resumed without an answer from its reply field", () => {
+it("a waiting run's reply button is Resume while the field is empty and Send once there is an answer", () => {
   mount([run(3, { state: "waiting" })]);
   const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-3"]')!);
   fireEvent.click(card.getByRole("button", { name: "Reply to R-3" }));
+  // typing swaps the one button to Send; clearing the field swaps it back
+  expect(card.queryByRole("button", { name: "Send" })).toBeNull();
+  fireEvent.change(card.getByRole("textbox", { name: "Reply to R-3" }), { target: { value: "Keep it under $400" } });
+  expect(card.getByRole("button", { name: "Send" })).toBeTruthy();
+  expect(card.queryByRole("button", { name: "Resume without replying" })).toBeNull();
+  fireEvent.change(card.getByRole("textbox", { name: "Reply to R-3" }), { target: { value: "  " } });
+  expect(card.getByRole("button", { name: "Resume without replying" }).textContent).toBe("Resume");
+  // Enter on an empty field does nothing: resuming is always a deliberate tap
+  fireEvent.submit(card.getByRole("textbox", { name: "Reply to R-3" }).closest("form")!);
+  expect(onCommand).not.toHaveBeenCalled();
   fireEvent.click(card.getByRole("button", { name: "Resume without replying" }));
   expect(onCommand).toHaveBeenCalledExactlyOnceWith("Resume R-3 (Work 3).");
   // the field closes: the choice was made

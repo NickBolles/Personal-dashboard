@@ -59,7 +59,7 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   the time beside "Working" is the time of the newest report, in the timeline's own format, so the two cannot
   disagree; only a report under two minutes old pulses; the reporting strip is labelled ("Reports … now"); work
   in flight keeps its order when one run reports; a catch-up chip lands on the section it was about and marks
-  it for a moment; "Resume without replying" sits in the waiting run's reply field; a sub-agent that outlives
+  it for a moment; a waiting run's reply button is Resume while the field is empty and Send once there is an answer; a sub-agent that outlives
   its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
   fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:

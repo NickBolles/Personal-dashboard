@@ -174,8 +174,8 @@ function SteerField({
   pending: boolean;
   onSend: (guidance: string) => Promise<unknown>;
   onClose: () => void;
-  /** A second way out of the field, e.g. resuming a waiting run without an answer. */
-  alt?: { label: string; onSelect: () => void };
+  /** What the field's button does while nothing is typed, e.g. resume a waiting run without an answer. */
+  alt?: { label: string; short: string; onSelect: () => void };
 }) {
   const [guidance, setGuidance] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -206,24 +206,29 @@ function SteerField({
         maxLength={2000}
         onChange={(event) => setGuidance(event.target.value)}
       />
-      <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
-        Send
-      </Button>
-      {alt ? (
+      {alt && !guidance.trim() ? (
+        // One button, two jobs: with nothing typed it is the other way out (resume without an answer); as soon as
+        // there is an answer it is Send.
         <Button
           type="button"
           size="sm"
           variant="ghost"
-          className="rc-steer-alt"
+          icon={<RetryIcon className="h-3.5 w-3.5" />}
+          aria-label={alt.label}
+          title={alt.label}
           disabled={pending}
           onClick={() => {
             alt.onSelect();
             onClose();
           }}
         >
-          {alt.label}
+          {alt.short}
         </Button>
-      ) : null}
+      ) : (
+        <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
+          Send
+        </Button>
+      )}
     </form>
   );
 }
@@ -570,7 +575,7 @@ export function RunCard({
                   setSending(false);
                 }
               }}
-              alt={waiting && canRetry ? { label: "Resume without replying", onSelect: () => onCommand(runCommand(run)) } : undefined}
+              alt={waiting && canRetry ? { label: "Resume without replying", short: "Resume", onSelect: () => onCommand(runCommand(run)) } : undefined}
             />
           ) : null}
         </div>
