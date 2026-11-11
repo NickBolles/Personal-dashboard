@@ -217,7 +217,7 @@ describe("shared coordinator thread", () => {
         .getAllByRole("menuitem")
         .map((i) => i.textContent),
     ).toEqual(["Photo or file", "Camera", "Area, item or person"]);
-    expect(document.querySelector('[data-testid="chat-file-input"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="gc-file-input"]')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
   });
   it("renders smart (jarvis-ui) replies through the same renderer as full chat, never as raw JSON", async () => {

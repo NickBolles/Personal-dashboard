@@ -668,9 +668,13 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                             {session!.title}
                           </h1>
                           <ParentChatLink parent={chatThings.execution?.parent} />
-                          {/* One quiet line of context: status, where the chat is filed, one filing suggestion. It wraps
-                              when it has more to say (forks, links); nothing scrolls sideways. */}
-                          <div className="chat-head-chips mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+                          {/* One quiet line of context: status, where the chat is filed, one filing suggestion. Phones keep
+                              it to one line that scrolls sideways (a wrapped header at large text leaves no room between
+                              it and the composer); wider screens wrap when it has more to say (forks, links). */}
+                          <div
+                            data-scroll-x
+                            className="chat-head-chips scroll-x-clean mt-0.5 flex min-w-0 items-center gap-x-2 gap-y-0.5 text-xs whitespace-nowrap text-muted sm:flex-wrap sm:whitespace-normal"
+                          >
                             {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
                             {phase ? (
                               <span className="inline-flex shrink-0 rounded-full bg-surface">

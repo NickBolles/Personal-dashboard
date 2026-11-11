@@ -582,8 +582,8 @@ export function CoordinatorThread({
                   />
                 ) : null}
                 <span hidden>
-                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} />
-                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} />
+                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} testId="gc-file-input" />
+                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} testId="gc-camera-input" />
                 </span>
               </div>
             ) : null}

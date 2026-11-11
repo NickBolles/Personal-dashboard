@@ -223,9 +223,11 @@ type PickerButtonProps = {
   buttonClassName?: string;
   /** lets another control (the phone "+" menu) open the same picker */
   inputRef?: { current: HTMLInputElement | null };
+  /** test id of the hidden input, for a second composer on the same page (the Chief of staff rail) */
+  testId?: string;
 };
 
-export function AttachButton({ onFiles, disabled, buttonClassName, inputRef }: PickerButtonProps) {
+export function AttachButton({ onFiles, disabled, buttonClassName, inputRef, testId = "chat-file-input" }: PickerButtonProps) {
   const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
@@ -248,7 +250,7 @@ export function AttachButton({ onFiles, disabled, buttonClassName, inputRef }: P
         multiple
         accept={CHAT_FILE_ACCEPT}
         aria-label="Choose files or pictures to attach"
-        data-testid="chat-file-input"
+        data-testid={testId}
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {
@@ -261,7 +263,7 @@ export function AttachButton({ onFiles, disabled, buttonClassName, inputRef }: P
 }
 
 /** Phones: camera straight away (`capture`), separate from the picker so the library stays reachable. */
-export function CameraButton({ onFiles, disabled, buttonClassName, inputRef }: PickerButtonProps) {
+export function CameraButton({ onFiles, disabled, buttonClassName, inputRef, testId = "chat-camera-input" }: PickerButtonProps) {
   const ref = useRef<HTMLInputElement | null>(null);
   return (
     <>
@@ -284,7 +286,7 @@ export function CameraButton({ onFiles, disabled, buttonClassName, inputRef }: P
         accept="image/*"
         capture="environment"
         aria-label="Take a photo to attach"
-        data-testid="chat-camera-input"
+        data-testid={testId}
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {

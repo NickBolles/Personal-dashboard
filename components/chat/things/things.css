@@ -316,13 +316,19 @@
     pointer-events: auto;
     box-shadow: var(--sh2);
   }
-  /* The shortcut hint shows while the composer is in use, not as a permanent row. */
+  /* The shortcut hint shows while the composer is in use. Its row is always there on wide screens (only its
+     visibility changes): if focus changed the card's height, a click on Stop, Send or a picture would move its
+     own target between mouse-down and mouse-up and be lost. Phones have no hint and no row. */
   .chat-composer-hint {
     display: none;
   }
   @media (min-width: 640px) {
-    .chat-composer-card:focus-within .chat-composer-hint {
+    .chat-composer-hint {
       display: block;
+      visibility: hidden;
+    }
+    .chat-composer-card:focus-within .chat-composer-hint {
+      visibility: visible;
     }
   }
   @media (max-width: 639.98px) {
@@ -423,7 +429,8 @@
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
-  min-height: 1.25rem;
+  /* 24px: the WCAG 2.2 target minimum is measured on the element's own box, not on its ::after hit-slop. */
+  min-height: 1.5rem;
   align-items: center;
   gap: 2px;
   border-radius: 4px;
