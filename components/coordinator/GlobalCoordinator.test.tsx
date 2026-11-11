@@ -63,3 +63,21 @@ it.each([OPEN_PALETTE_EVENT, QUICK_ACTION_MANAGE])("dismisses the native phone s
   expect(close).toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+it("a long press on the phone tray goes straight to a tab", () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <GlobalCoordinator />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.contextMenu(screen.getByRole("button", { name: "Chief of staff" }), { clientX: 40, clientY: 700 });
+  const menu = screen.getByRole("menu", { name: "Open Chief of staff at" });
+  expect(Array.from(menu.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual(["Chat", "Needs you", "Activity"]);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Activity" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
+  expect(sheet.hasAttribute("open")).toBe(true);
+  expect(screen.getByRole("tab", { name: /^Activity/ }).getAttribute("aria-selected")).toBe("true");
+});

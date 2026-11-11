@@ -13,6 +13,7 @@ import { coordinatorStatus } from "@/lib/coordinator/status";
 import { sinceRunCounts } from "@/lib/coordinator/run-card";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
+import { CardMenu, useCardMenu } from "./cards/CardMenu";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
@@ -413,6 +414,12 @@ export function GlobalCoordinator() {
       hint: `${status.counts.working} working, ${status.counts.stuck} stuck, ${status.counts.waiting} waiting on you`,
     },
   ];
+  // The tray is one button with one sentence; a long press (or right-click) goes straight to a tab.
+  const trayMenu = useCardMenu();
+  const trayActions = [
+    { label: "Chief of staff", heading: true },
+    ...tabs.map((t) => ({ label: t.count ? `${t.label} · ${t.count}` : t.label, onSelect: () => openAt(t.id) })),
+  ];
   const content = (
     <>
       <header className="gc-head">
@@ -701,6 +708,7 @@ export function GlobalCoordinator() {
                 aria-describedby={statusId}
                 aria-haspopup="dialog"
                 onClick={showPriority}
+                onContextMenu={trayMenu.onContextMenu}
               >
                 <span className="gc-tray-avatar">
                   <span className="gc-orb" aria-hidden="true" />
@@ -727,6 +735,7 @@ export function GlobalCoordinator() {
               </button>
             </div>
           ) : null}
+          {!chat ? <CardMenu at={trayMenu.at} label="Open Chief of staff at" items={trayActions} onClose={trayMenu.close} className="gc-tray-menu" /> : null}
           {phoneOpen ? (
             <dialog
               ref={dialog}

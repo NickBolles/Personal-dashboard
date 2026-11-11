@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
@@ -15,7 +16,7 @@ import { canControl, steerText, stopText } from "@/lib/coordinator/control";
 import { ageLabel } from "@/lib/coordinator/needs";
 import {
   eventChip,
-  eventClock,
+  eventAgo,
   eventText,
   runNeeds,
   runPulse,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/coordinator/run-card";
 import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
+import { CardMenu, useCardMenu } from "../cards/CardMenu";
 import "./run-card.css";
 
 /** How many events (ones that say something) an open card shows before "Show earlier". */
@@ -133,7 +135,7 @@ export function RunTimeline({ events, runTitle, label, live }: { events: readonl
               {text ? <span className="rc-event-text">{text}</span> : null}
             </span>
             <time className="rc-event-time" dateTime={event.at} title={new Date(event.at).toLocaleString()} data-dynamic>
-              {eventClock(event.at, now)}
+              {eventAgo(event.at, now)}
             </time>
           </li>
         );
@@ -312,8 +314,38 @@ export function RunCard({
       ? summary
       : "";
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
+  // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
+  const router = useRouter();
+  const menu = useCardMenu();
+  const actions = [
+    { label: `${run.ref} · ${status.label}`, heading: true },
+    canSteer
+      ? {
+          label: waiting ? "Reply…" : "Steer…",
+          onSelect: () => {
+            setOpen(true);
+            setSteering(true);
+          },
+        }
+      : null,
+    canRetry ? { label: run.state === "failed" ? "Retry" : waiting ? "Resume without replying" : "Resume", onSelect: () => onCommand(runCommand(run)) } : null,
+    { label: "Ask in chat", onSelect: () => void onSteer(run.ref, run.title) },
+    { label: open ? "Close timeline" : "Open timeline", onSelect: () => setOpen((value) => !value) },
+    run.itemId ? { label: "Open item", onSelect: () => router.push(`/areas?item=${encodeURIComponent(run.itemId)}`) } : null,
+    prUrl ? { label: "Open pull request", onSelect: () => void window.open(prUrl, "_blank", "noopener,noreferrer") } : null,
+    { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) },
+    canStop ? { label: "Ask to stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
+  ].filter((item) => item !== null);
   return (
-    <article className="rc" data-run-ref={run.ref} data-state={status.key} data-open={open || undefined} data-live={status.live || undefined}>
+    <article
+      className="rc"
+      data-run-ref={run.ref}
+      data-state={status.key}
+      data-open={open || undefined}
+      data-live={status.live || undefined}
+      onContextMenu={menu.onContextMenu}
+    >
+      <CardMenu at={menu.at} label={`Actions for ${run.ref}`} items={actions} onClose={menu.close} />
       <Button
         ref={head}
         variant="ghost"
@@ -344,6 +376,7 @@ export function RunCard({
           <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
+          {run.noticeCount ? <span title="Steps it has reported finishing">{run.noticeCount === 1 ? "1 step" : `${run.noticeCount} steps`}</span> : null}
           <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
         </span>
         {pulse.length > 1 ? (
@@ -589,7 +622,11 @@ export function ExecCard({
   const now = useNow();
   const tracked = run ? runStatus(run, now) : null;
   const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
-  const controllable = target.source === "subagent" && canControl(handle) && active;
+  const reachable = target.source === "subagent" && canControl(handle);
+  const controllable = reachable && active;
+  // A sub-agent can outlive the tracked run it belongs to. The card shows the run's state and offers no Steer or
+  // Stop for a run that has ended, but the sub-agent that is still going is one long-press away.
+  const lingering = reachable && !active && isActiveExec(target);
   const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
   // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes has gone quiet.
   // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
@@ -618,8 +655,25 @@ export function ExecCard({
   // Work that failed cannot be steered, but it can be answered: the same field, sent as a line about it.
   const canReply = !controllable && (record.state === "failed" || waiting);
   const [replying, setReplying] = useState(false);
-  // A tracked run stops the way it does under Activity: the request is written for the owner to send.
-  const drafts = !!run && !!onDraft;
+  // A tracked run stops the way it does under Activity: the request is written for the owner to send. Once that
+  // run has ended there is nothing of it to stop: the request goes to the sub-agent itself.
+  const drafts = !!run && !!onDraft && active;
+  const steerable = controllable || lingering;
+  const router = useRouter();
+  const actions = [
+    { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },
+    steerable ? { label: lingering ? "Steer sub-agent…" : waiting ? "Reply…" : "Steer…", disabled: pending, onSelect: () => setSteering(true) } : null,
+    canReply ? { label: "Reply…", disabled: pending, onSelect: () => setReplying(true) } : null,
+    record.href ? { label: "Open conversation", onSelect: () => router.push(record.href!) } : null,
+    ...links.map((link) => ({
+      label: `Open ${link.label?.trim() || (link.kind === "github" ? "GitHub" : "link")}`,
+      onSelect: () => void window.open(link.url, "_blank", "noopener,noreferrer"),
+    })),
+    run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
+    steerable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
+  ].filter((item) => item !== null);
+  // Nothing to offer (work that ended, with no links): the browser's own menu stays.
+  const menu = useCardMenu(actions.length > 1);
   return (
     <article
       className="rc rc-exec"
@@ -627,7 +681,9 @@ export function ExecCard({
       data-live={isLive || undefined}
       data-testid="coordinator-run-card"
       aria-label={record.title}
+      onContextMenu={menu.onContextMenu}
     >
+      <CardMenu at={menu.at} label={`Actions for ${title}`} items={actions} onClose={menu.close} />
       <div className="rc-top">
         <StatusChip
           tone={status.tone}
@@ -714,7 +770,7 @@ export function ExecCard({
           ) : null}
         </div>
       ) : null}
-      {controllable && steering ? (
+      {steerable && steering ? (
         <SteerField
           label={`${waiting ? "Reply to" : "Guidance for"} ${record.title}`}
           placeholder={waiting ? "Your answer" : undefined}
@@ -732,7 +788,7 @@ export function ExecCard({
           onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
         />
       ) : null}
-      {controllable && confirmStop ? (
+      {steerable && confirmStop ? (
         <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
           {drafts ? (
             <>

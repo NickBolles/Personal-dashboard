@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
@@ -21,6 +22,7 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { useCoordinatorDecisions } from "../needs/useCoordinatorDecisions";
 import { StatusChip } from "../running/RunCard";
 import { useCoordinatorRuns } from "../running/useCoordinatorRuns";
+import { CardMenu, useCardMenu } from "./CardMenu";
 import "../running/run-card.css";
 
 /** How many changes a closed card shows; opening it shows them all. */
@@ -148,6 +150,21 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const meta = model ? [model.path.join(" › "), stage, counted, ...model.tags.slice(0, 3).map((t) => `#${t}`)].filter(Boolean) : [];
   // Closed: one chip of each kind; the rest are one tap in.
   const chips = open ? 2 : 1;
+  // Everything this card can do, for a right-click or a long press.
+  const router = useRouter();
+  const menu = useCardMenu();
+  const actions = [
+    { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
+    { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
+    onAsk ? { label: "Ask in chat", onSelect: () => onAsk(name) } : null,
+    ...(model?.decisions ?? []).slice(0, 3).map((d) => ({ label: `Review ${d.ref}`, disabled: !onRef, onSelect: () => onRef?.(d.ref) })),
+    ...runs.slice(0, 3).map((r) => ({ label: `Go to ${r.ref}`, disabled: !onRef, onSelect: () => onRef?.(r.ref) })),
+    agent?.sessionId ? { label: "Agent conversation", onSelect: () => router.push(`/chat/${encodeURIComponent(agent.sessionId!)}`) } : null,
+    { label: open ? "Close details" : "Open details", onSelect: () => setOpen((value) => !value) },
+    model
+      ? { label: "Copy link", onSelect: () => void navigator.clipboard?.writeText(new URL(href, window.location.origin).toString()).catch(() => undefined) }
+      : null,
+  ].filter((item) => item !== null);
   return (
     <article
       className="rc ic"
@@ -155,7 +172,9 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       data-state={model?.headline.key ?? "unknown"}
       data-open={open || undefined}
       data-live={model?.headline.live || undefined}
+      onContextMenu={menu.onContextMenu}
     >
+      <CardMenu at={menu.at} label={`Actions for ${name}`} items={actions} onClose={menu.close} />
       <div className="ic-headrow">
         <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
           <span className="rc-top">
@@ -318,7 +337,11 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
               </span>
             </p>
           ) : null}
-          {!model ? <p className="rc-note">This item is no longer in your areas; its changes are kept here.</p> : null}
+          {!model ? (
+            <p className="rc-note">
+              This item is no longer in your areas (archived or deleted); its changes are kept here. <Link href={href}>Try opening it</Link>
+            </p>
+          ) : null}
           <div className="rc-actions">
             {model ? (
               <ButtonLink size="sm" variant="ghost" className="rc-act" href={href} icon={<AreasIcon className="h-3.5 w-3.5" />}>

@@ -683,11 +683,52 @@ a.ic-pr-name:hover {
 .gc-change-groups > li:nth-child(n + 4) > .rc {
   animation-delay: 160ms;
 }
-/* Work in flight: the card's outline takes the agent colour of the theme, like the amber and red outlines of
-   cards that need a look. */
+/* Work in flight: the card's outline is the theme's agent colour with light travelling along it, an
+   indeterminate "still going" in place of a progress bar. Under reduced motion it is the same outline, still. */
 .rc[data-live] {
-  border-color: color-mix(in oklab, var(--ai) 50%, var(--bd));
-  box-shadow: 0 0 0 3px var(--ais);
+  border-color: transparent;
+}
+.rc[data-live]::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 0%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 30%,
+    var(--ai) 45%,
+    var(--o2, var(--ac)) 50%,
+    var(--ai) 55%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 70%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-mask:
+    linear-gradient(black 0 0) content-box,
+    linear-gradient(black 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: k-shimmer 3.6s linear infinite;
+  pointer-events: none;
+}
+/* Right-click / long-press menu: every action of the card, where it was asked for. Its card rises above the
+   cards after it while the menu is open (each card is its own stacking context). */
+.rc:has(> .rc-menu) {
+  z-index: 5;
+}
+.rc-menu {
+  position: absolute;
+  top: var(--y, 0);
+  left: var(--x, 0);
+  z-index: 30;
+  width: 216px;
+  animation: rc-rise 140ms var(--ease) both;
+}
+.rc-menu > .k-menu {
+  min-width: 0;
+  width: 100%;
 }
 /* "Working" shimmers the way it does in a conversation. */
 .rc-chip {
@@ -817,33 +858,29 @@ a.ic-pr-name:hover {
 .gc-since-chip:nth-child(n + 4) {
   animation-delay: 150ms;
 }
+/* Entrances move, they do not fade: text part-way through a fade is briefly below contrast, and a glance (or an
+   accessibility scan) can land on exactly that frame. */
 @keyframes rc-rise {
   from {
-    opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(6px);
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }
 @keyframes rc-arrive {
   from {
-    opacity: 0;
     transform: translateY(-8px);
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }
 @keyframes rc-tick {
   from {
-    opacity: 0;
     transform: scaleY(0.2);
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }

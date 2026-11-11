@@ -8,6 +8,8 @@ import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import type { WorkItem } from "@/lib/work";
 import { ItemCard, type ItemCardData } from "./ItemCard";
 
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a href={href} {...rest}>
@@ -159,4 +161,42 @@ it("an item that is gone still shows what was done to it", () => {
   fireEvent.click(card().getByRole("button", { expanded: false }));
   expect(card().queryByRole("link", { name: /^Open/ })).toBeNull();
   expect(card().getByText(/no longer in your areas/)).toBeTruthy();
+  // archived items still open; the link is offered as a try, not as the header arrow
+  expect(card().getByRole("link", { name: "Try opening it" }).getAttribute("href")).toBe("/areas?item=gone");
+  fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
+  expect(screen.getByRole("menuitem", { name: "Try opening it" })).toBeTruthy();
+});
+
+it("right-click or long-press opens a menu with everything the card can do", () => {
+  const onRef = vi.fn();
+  const onAsk = vi.fn();
+  render(<ItemCard itemId="b" title="x" data={data({ runs: [run], decisions: [decision], agents: { b: agent } })} onRef={onRef} onAsk={onAsk} />);
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
+  const menu = within(screen.getByRole("menu", { name: "Actions for Holiday sale checklist" }));
+  expect(menu.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+    "Open item",
+    "Ask in chat",
+    "Review D-14",
+    "Go to R-3",
+    "Agent conversation",
+    "Open details",
+    "Copy link",
+  ]);
+  fireEvent.click(menu.getByRole("menuitem", { name: "Review D-14" }));
+  expect(onRef).toHaveBeenCalledExactlyOnceWith("D-14");
+  // choosing closes it; Escape and a tap elsewhere do too
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Open item" }));
+  expect(push).toHaveBeenLastCalledWith("/areas?item=b");
+  fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole("menu")).toBeNull();
+  // a link inside the card keeps the browser's own menu
+  fireEvent.contextMenu(screen.getByRole("link", { name: "Open Holiday sale checklist" }));
+  expect(screen.queryByRole("menu")).toBeNull();
 });

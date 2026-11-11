@@ -463,9 +463,9 @@ export function CoordinatorThread({
               </div>
             ) : null}
             <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-            {execution.error && !records.length ? (
+            {sourceDown && !records.length ? (
               <p role="alert" className="mt-2 text-xs text-danger">
-                Couldn&apos;t load coordinator runs.{" "}
+                {execution.error ? "Couldn't load coordinator runs." : "Couldn't check every source of background work."}{" "}
                 <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
                   Try again
                 </Button>

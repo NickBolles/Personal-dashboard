@@ -5,7 +5,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import {
   byNeed,
   eventChip,
-  eventClock,
+  eventAgo,
   eventText,
   mergeBackgroundWork,
   runAsk,
@@ -104,10 +104,12 @@ describe("timeline helpers", () => {
     expect(timelineOf([a, b], [b]).map((e) => e.id)).toEqual(["b", "a"]);
     expect(timelineOf(undefined)).toEqual([]);
   });
-  it("shows a time today and a day for older events", () => {
-    expect(eventClock(ago(5), now)).toMatch(/\d{1,2}:\d{2}/);
-    expect(eventClock(ago(60 * 24 * 30), now)).not.toMatch(/:/);
-    expect(eventClock("nope", now)).toBe("");
+  it("says how long ago an event was, against now", () => {
+    expect(eventAgo(ago(0.2), now)).toBe("just now");
+    expect(eventAgo(ago(12), now)).toBe("12 min ago");
+    expect(eventAgo(ago(60 * 3), now)).toBe("3 h ago");
+    expect(eventAgo(ago(60 * 24 * 2), now)).toBe("2 d ago");
+    expect(eventAgo("nope", now)).toBe("");
   });
 });
 

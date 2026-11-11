@@ -7,7 +7,9 @@ import { Button } from "@/components/ui";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import type { CoordinatorRunRow, RunsResponse } from "@/lib/coordinator/runs-view";
+import type { ExecutionRecord } from "@/lib/chat-execution";
 import { RunningPanel } from "./RunningPanel";
+import { ExecCard } from "./RunCard";
 import { COORDINATOR_RUNS_KEY, useMarkLooked } from "./useCoordinatorRuns";
 import { CoordinatorThread, type CoordinatorResponse } from "../CoordinatorThread";
 
@@ -286,6 +288,106 @@ it("a run waiting on the owner arrives open, says what it needs, takes a reply, 
   expect(document.querySelector('[data-run-body="R-5"]')!.getAttribute("aria-expanded")).toBe("false");
   expect(other.getByText("Pick a frame before I order samples")).toBeTruthy();
   expect(other.queryByRole("button", { name: /^Review decision/ })).toBeNull();
+});
+it("right-click or long-press opens a menu with every action for that run's state", () => {
+  mount([run(1), run(2, { state: "failed", prUrl: "https://example.com/pr/2" }), run(3, { state: "waiting" })]);
+  const items = (ref: string) => {
+    fireEvent.contextMenu(document.querySelector<HTMLElement>(`[data-run-ref="${ref}"]`)!, { clientX: 30, clientY: 40 });
+    const menu = screen.getByRole("menu", { name: `Actions for ${ref}` });
+    const labels = within(menu)
+      .getAllByRole("menuitem")
+      .map((i) => i.textContent);
+    return { menu, labels };
+  };
+  // working: steer, ask, open, copy, stop
+  let m = items("R-1");
+  expect(m.labels).toEqual(["Steer…", "Ask in chat", "Open timeline", "Open item", "Copy R-1", "Ask to stop…"]);
+  fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Steer…" }));
+  // it opened the card with the guidance field ready
+  expect(within(document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!).getByRole("textbox", { name: "Guidance for R-1" })).toBeTruthy();
+  expect(screen.queryByRole("menu")).toBeNull();
+  // failed: retry, its pull request, no steer and no stop
+  m = items("R-2");
+  expect(m.labels).toEqual(["Retry", "Ask in chat", "Open timeline", "Open item", "Open pull request", "Copy R-2"]);
+  fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Retry" }));
+  expect(onCommand).toHaveBeenLastCalledWith("Retry R-2 (Work 2).");
+  // waiting: Reply leads; resuming without an answer is still possible, and says what it is
+  m = items("R-3");
+  expect(m.labels).toEqual(["Reply…", "Resume without replying", "Ask in chat", "Close timeline", "Open item", "Copy R-3", "Ask to stop…"]);
+  fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Resume without replying" }));
+  expect(onCommand).toHaveBeenLastCalledWith("Resume R-3 (Work 3).");
+  m = items("R-3");
+  fireEvent.click(within(m.menu).getByRole("menuitem", { name: "Ask to stop…" }));
+  expect(screen.getByRole("group", { name: "Stop R-3 and its sub-agents?" })).toBeTruthy();
+});
+it("says how many steps a run has reported", () => {
+  mount([run(1, { noticeCount: 3 }), run(2, { noticeCount: 1 }), run(3)]);
+  const card = (ref: string) => within(document.querySelector<HTMLElement>(`[data-run-ref="${ref}"]`)!);
+  expect(card("R-1").getByText("3 steps")).toBeTruthy();
+  expect(card("R-2").getByText("1 step")).toBeTruthy();
+  expect(card("R-3").queryByText(/bsteps?$/)).toBeNull();
+});
+const sub = (overrides: Partial<ExecutionRecord> = {}): ExecutionRecord => ({
+  key: "subagent:sa_1",
+  source: "subagent",
+  id: "sa_1",
+  subagentId: "sa_1",
+  title: "Subagent: Audit the feeds",
+  state: "running",
+  ...overrides,
+});
+const menuLabels = () =>
+  within(screen.getByRole("menu"))
+    .getAllByRole("menuitem")
+    .map((i) => i.textContent);
+it("background work: a long press offers what the card can do, and work with nothing to offer keeps the browser's menu", async () => {
+  const onControl = vi.fn().mockResolvedValue(undefined);
+  const view = render(
+    <ExecCard
+      work={{ record: sub({ href: "/chat/child", links: [{ url: "https://example.com/pr/1", label: "PR 1", kind: "github" }] }) }}
+      pending={false}
+      onControl={onControl}
+    />,
+  );
+  fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
+  expect(screen.getByRole("menu", { name: "Actions for Audit the feeds" })).toBeTruthy();
+  expect(menuLabels()).toEqual(["Steer…", "Open conversation", "Open PR 1", "Ask to stop…"]);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Ask to stop…" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  // the same confirmation as the button: nothing is sent by the menu itself
+  expect(onControl).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole("group", { name: "Stop Audit the feeds?" })).getByRole("button", { name: "Send stop request" }));
+  await waitFor(() => expect(onControl).toHaveBeenCalledExactlyOnceWith("Stop sa_1"));
+  view.unmount();
+  render(<ExecCard work={{ record: sub({ state: "completed" }) }} pending={false} onControl={onControl} />);
+  const untouched = fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
+  expect(untouched).toBe(true);
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+it("a sub-agent still going after its tracked run ended is one long press away, and its stop goes to the sub-agent", async () => {
+  const onControl = vi.fn().mockResolvedValue(undefined);
+  const onDraft = vi.fn();
+  render(
+    <ExecCard
+      work={{ record: sub(), control: sub(), run: run(7, { state: "done", finishedAt: at }) }}
+      pending={false}
+      onControl={onControl}
+      onDraft={onDraft}
+    />,
+  );
+  // the card shows the run's state and no bar for a run that is over
+  expect(screen.getByText("Finished")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Steer" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Ask to stop" })).toBeNull();
+  fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
+  expect(menuLabels()).toEqual(["Steer sub-agent…", "Copy R-7", "Ask sub-agent to stop…"]);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Ask sub-agent to stop…" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send stop request" }));
+  await waitFor(() => expect(onControl).toHaveBeenCalledExactlyOnceWith("Stop sa_1"));
+  expect(onDraft).not.toHaveBeenCalled();
+  fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Steer sub-agent…" }));
+  expect(screen.getByRole("textbox", { name: "Guidance for Subagent: Audit the feeds" })).toBeTruthy();
 });
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
   const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({

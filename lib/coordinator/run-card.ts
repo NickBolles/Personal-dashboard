@@ -196,14 +196,11 @@ export function timelineOf(...lists: (readonly RunEvent[] | undefined)[]): RunEv
   return [...seen.values()].sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id.localeCompare(a.id));
 }
 
-/** "9:51 AM" today, "Mon 9:51 AM" this week, "Nov 3" before that. */
-export function eventClock(at: string, now: number = Date.now()): string {
-  const then = new Date(at);
-  if (!Number.isFinite(then.getTime())) return "";
-  const time = then.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  if (then.toDateString() === new Date(now).toDateString()) return time;
-  if (now - then.getTime() < 6 * 86_400_000) return `${then.toLocaleDateString([], { weekday: "short" })} ${time}`;
-  return then.toLocaleDateString([], { month: "short", day: "numeric" });
+/** How long ago, measured against now: "just now", "12 min ago", "3 h ago", "2 d ago". */
+export function eventAgo(at: string, now: number = Date.now()): string {
+  const then = Date.parse(at);
+  if (!Number.isFinite(then)) return "";
+  return now - then < 60_000 ? "just now" : `${ageLabel(at, now)} ago`;
 }
 
 export type SinceCounts = { decisions: number; runs: number; failed?: number; stuck?: number; waiting?: number; finished?: number };

@@ -35,13 +35,25 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   only the words the chip cannot say ("Target Nov 22", not "Dates: start — → —, target — → 2026-11-22");
   every change keeps its own Undo. Opening a card adds its summary, the last agent report, Open item, Ask
   and the agent's conversation. Cards read the same live queries as the rest of the app.
-- **Life.** The cards move where it means something, in the app's own motion vocabulary. Work in flight has a
-  current running along the card's top edge, a shimmering "Working", the agent's mark with its arc turning, and
-  a pulsing newest event; work that has gone quiet is still. An event that arrives while you watch slides in
+- **Life.** The cards move where it means something, in the app's own motion vocabulary. Work in flight has
+  light travelling round the card's outline in the theme's agent colour (an indeterminate "still going"), the
+  agent's mark turning inside the "Working" chip, and a pulsing newest event; work that has gone quiet is still. An event that arrives while you watch slides in
   and glows once; a run that finishes pops with a few sparks; each sync blinks the dot. A thin strip on every
   run shows when it reported from its start to now, so a steady run and one that went silent look different at
   a glance. Item cards have their chip timeline back (the chip is the verb, in the colour of its kind), three
   changes showing. Everything stops under "reduce motion".
+- **Times against now.** Run timelines say "12 min ago", "3 h ago", "2 d ago" (the exact time is the tooltip),
+  the same way item timelines do.
+- **Right-click or long-press a card.** Every run, item, project and background-work card opens a menu of
+  everything it can do in its current state, without opening the card first: Steer / Reply, Retry, "Resume
+  without replying", Ask in chat, open the item or pull request, jump to its decisions and runs, copy the ref
+  or link, Ask to stop (still behind its confirmation). A long press on the phone tray goes straight to Chat,
+  Needs you or Activity. The Menu key and Shift+F10 open the same menu from the keyboard.
+- **Nothing lost in the redesign.** An audit against `main` found no removed capability; what had become
+  harder to reach or stopped being shown is back: a sub-agent that outlives its tracked run can still be
+  steered and stopped (from the menu), a run says how many steps it has reported ("3 steps"), an item that is no longer
+  listed offers "Try opening it", and a background-work source that could not be read is said even when there
+  is nothing to list.
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
   "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
 

@@ -1512,3 +1512,16 @@ html[data-kb="open"] .gc-tray-qa {
   }
 }
 /* ==== end needs ==== */
+
+/* Long-press / right-click on the phone tray: straight to a tab. It sits just above the tray. */
+.gc-tray-menu {
+  position: fixed;
+  left: 8px;
+  bottom: calc(142px + env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 216px;
+}
+.gc-tray-menu > .k-menu {
+  min-width: 0;
+  width: 100%;
+}
