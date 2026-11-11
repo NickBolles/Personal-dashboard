@@ -605,6 +605,11 @@ test("visual: chat (dark)", async ({ page }) => {
   const timeline = [...chatVisual.timeline, { kind: "assistant" as const, id: "visual-markdown", text: MARKDOWN_FIXTURE, at: visualNow }];
   await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
   await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: { ...chatVisual, timeline } }));
+  // The composer's status tray only appears when the conversation has background work. Earlier specs leave runs
+  // on this session, so in a full run the tray showed ("Finished · keyboard hello") and moved the thread: pin it.
+  await page.route(/\/api\/hermes\/sessions\/sess_morning\/execution$/, (route) =>
+    route.fulfill({ json: { sessionId: "sess_morning", parent: null, records: [], sources: [{ source: "hermes_children", state: "ok", at: visualNow }] } }),
+  );
   await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
   await page.goto("/chat/sess_morning");
