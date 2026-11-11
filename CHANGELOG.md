@@ -51,9 +51,17 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   Needs you or Activity. The Menu key and Shift+F10 open the same menu from the keyboard.
 - **Nothing lost in the redesign.** An audit against `main` found no removed capability; what had become
   harder to reach or stopped being shown is back: a sub-agent that outlives its tracked run can still be
-  steered and stopped (from the menu), a run says how many steps it has reported ("3 steps"), an item that is no longer
+  steered and stopped (from the menu), a run says how many steps it has reported, an item that is no longer
   listed offers "Try opening it", and a background-work source that could not be read is said even when there
   is nothing to list.
+- **Council round 7 (the whole change, before merge).** What all three reviewers agreed on: the tray uses the
+  cards' words ("2 runs went quiet", "2 runs failed", "3 runs need a look"; silence is never called stuck);
+  the time beside "Working" is the time of the newest report, in the timeline's own format, so the two cannot
+  disagree; only a report under two minutes old pulses; the reporting strip is labelled ("Reports … now"); work
+  in flight keeps its order when one run reports; a catch-up chip lands on the section it was about and marks
+  it for a moment; "Resume without replying" sits in the waiting run's reply field; a sub-agent that outlives
+  its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
+  fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
   "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
 

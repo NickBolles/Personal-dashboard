@@ -263,7 +263,7 @@ export function NeedsList({
       ) : (
         groups.map(({ title, rows }) =>
           rows.length ? (
-            <section key={title} aria-label={title}>
+            <section key={title} aria-label={title} data-land={title === "New" ? "new" : undefined}>
               <SectionHeader label={title} count={rows.filter((d) => !receipts[d.ref]).length} />
               <div className="gc-needs-rows">
                 {rows.map((d) => {

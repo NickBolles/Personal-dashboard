@@ -374,6 +374,33 @@
   line-height: 1.4;
   resize: none;
 }
+/* A second way out of the reply field sits under it, quiet and to the right. */
+.rc-steer {
+  flex-wrap: wrap;
+}
+/* The field keeps a usable width, so the second way out drops to its own line under it. */
+.rc .rc-steer .rc-steer-input {
+  flex: 1 1 11rem;
+}
+.rc-steer-alt {
+  margin-inline-start: auto;
+}
+/* While refreshes are failing, ages on the cards are measured against stale data: step them back. */
+.gc-running[data-stale] .rc-status-detail,
+.gc-running[data-stale] .rc-event-time {
+  opacity: 0.55;
+}
+/* Where a catch-up chip lands: the section it was about, marked for a moment. */
+[data-landed] {
+  border-radius: 8px;
+  animation: jv-flash 1.8s ease-out;
+}
+/* A long decision or run title in a card menu ends in an ellipsis instead of widening the menu. */
+.rc-menu [role="menuitem"] {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .rc-progress {
   padding-block: 2px;
 }
@@ -754,11 +781,25 @@ a.ic-pr-name:hover {
   inset: -2.5px;
 }
 /* When it reported, start to now: evenly spaced ticks are a steady run, a gap at the right is silence. */
+/* The strip is labelled at both ends, so it reads as "when it reported" and not as progress. */
+.rc-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.rc-pulse-label {
+  flex: none;
+  color: var(--t2);
+  font-size: 0.6875rem;
+  line-height: 1;
+}
 .rc-pulse {
   position: relative;
   display: block;
+  flex: 1;
+  min-width: 0;
   height: 10px;
-  margin-top: 2px;
 }
 .rc-pulse::before {
   content: "";

@@ -137,7 +137,7 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
       ) : null}
       {SECTIONS.map(([key, label]) =>
         groups[key].length ? (
-          <section key={key} aria-label={label}>
+          <section key={key} aria-label={label} data-land={key}>
             <SectionHeader
               label={label}
               count={groups[key].length}

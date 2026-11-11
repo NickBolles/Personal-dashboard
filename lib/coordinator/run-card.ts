@@ -25,13 +25,13 @@ export type RunStatus = {
 };
 
 export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): RunStatus {
-  const ago = now - Date.parse(run.updatedAt) < 60_000 ? "just now" : relativeTime(run.updatedAt, now);
+  const ago = eventAgo(run.updatedAt, now);
   if (run.state === "failed") return { key: "failed", label: "Failed", detail: ago, tone: "bad", live: false, attention: true };
   if (run.state === "interrupted")
     return {
       key: "interrupted",
       label: "Interrupted",
-      detail: relativeTime(run.interruptedAt ?? run.updatedAt, now),
+      detail: eventAgo(run.interruptedAt ?? run.updatedAt, now),
       tone: "wn",
       live: false,
       attention: true,
@@ -39,10 +39,20 @@ export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): Run
   if (run.state === "waiting")
     return { key: "waiting", label: "Waiting on you", detail: `for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
   if (run.state === "done")
-    return { key: "done", label: "Finished", detail: relativeTime(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
+    return { key: "done", label: "Finished", detail: eventAgo(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
   // A quiet run is not a failed run: say what is known (how long since it last reported), in amber, not red.
   if (run.stalled) return { key: "stuck", label: "Quiet", detail: `no update for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
-  return { key: "working", label: "Working", detail: `updated ${ago}`, tone: "ai", live: true, attention: false };
+  // The time beside "Working" is the time of its newest report when there is one, in the same words as the
+  // timeline under it: the chip and the timeline can never disagree about how fresh the run is.
+  const report = run.lastEvent?.at;
+  return {
+    key: "working",
+    label: "Working",
+    detail: report ? `last report ${eventAgo(report, now)}` : `updated ${ago}`,
+    tone: "ai",
+    live: true,
+    attention: false,
+  };
 }
 
 const CHIP: Record<RunEventType, { label: string; tone: CardTone }> = {

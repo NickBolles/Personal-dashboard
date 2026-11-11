@@ -289,6 +289,29 @@ it("a run waiting on the owner arrives open, says what it needs, takes a reply, 
   expect(other.getByText("Pick a frame before I order samples")).toBeTruthy();
   expect(other.queryByRole("button", { name: /^Review decision/ })).toBeNull();
 });
+it("a waiting run can be resumed without an answer from its reply field", () => {
+  mount([run(3, { state: "waiting" })]);
+  const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-3"]')!);
+  fireEvent.click(card.getByRole("button", { name: "Reply to R-3" }));
+  fireEvent.click(card.getByRole("button", { name: "Resume without replying" }));
+  expect(onCommand).toHaveBeenCalledExactlyOnceWith("Resume R-3 (Work 3).");
+  // the field closes: the choice was made
+  expect(card.queryByRole("textbox", { name: "Reply to R-3" })).toBeNull();
+});
+it("only the newest event of a working run pulses, and only while it is news; the chip gives its age", () => {
+  const event = (id: string, minutes: number): RunEvent =>
+    ({ id, runId: "run-1", type: "progress", at: new Date(Date.now() - minutes * 60_000).toISOString(), summary: `Did ${id}`, payload: {} }) as RunEvent;
+  const old = event("old", 17);
+  const view = mount([run(1, { lastEvent: old })], undefined, markers, [old]);
+  const card = () => document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!;
+  expect(within(card()).getByText("last report 17 min ago")).toBeTruthy();
+  expect(card().querySelector(".rc-event[data-live]")).toBeNull();
+  view.unmount();
+  const fresh = event("fresh", 0.5);
+  mount([run(1, { lastEvent: fresh })], undefined, markers, [fresh]);
+  expect(within(card()).getByText("last report just now")).toBeTruthy();
+  expect(card().querySelector(".rc-event[data-live]")).toBeTruthy();
+});
 it("right-click or long-press opens a menu with every action for that run's state", () => {
   mount([run(1), run(2, { state: "failed", prUrl: "https://example.com/pr/2" }), run(3, { state: "waiting" })]);
   const items = (ref: string) => {
@@ -323,9 +346,9 @@ it("right-click or long-press opens a menu with every action for that run's stat
 it("says how many steps a run has reported", () => {
   mount([run(1, { noticeCount: 3 }), run(2, { noticeCount: 1 }), run(3)]);
   const card = (ref: string) => within(document.querySelector<HTMLElement>(`[data-run-ref="${ref}"]`)!);
-  expect(card("R-1").getByText("3 steps")).toBeTruthy();
-  expect(card("R-2").getByText("1 step")).toBeTruthy();
-  expect(card("R-3").queryByText(/bsteps?$/)).toBeNull();
+  expect(card("R-1").getByText("3 steps reported")).toBeTruthy();
+  expect(card("R-2").getByText("1 step reported")).toBeTruthy();
+  expect(card("R-3").queryByText(/reported$/)).toBeNull();
 });
 const sub = (overrides: Partial<ExecutionRecord> = {}): ExecutionRecord => ({
   key: "subagent:sa_1",
@@ -364,7 +387,7 @@ it("background work: a long press offers what the card can do, and work with not
   expect(untouched).toBe(true);
   expect(screen.queryByRole("menu")).toBeNull();
 });
-it("a sub-agent still going after its tracked run ended is one long press away, and its stop goes to the sub-agent", async () => {
+it("a sub-agent still going after its tracked run ended keeps Steer and Stop on its card, and its stop goes to the sub-agent", async () => {
   const onControl = vi.fn().mockResolvedValue(undefined);
   const onDraft = vi.fn();
   render(
@@ -375,10 +398,11 @@ it("a sub-agent still going after its tracked run ended is one long press away, 
       onDraft={onDraft}
     />,
   );
-  // the card shows the run's state and no bar for a run that is over
+  // the card shows the run's state, says a sub-agent is still going, and keeps its controls in view
   expect(screen.getByText("Finished")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Steer" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Ask to stop" })).toBeNull();
+  expect(screen.getByText("A sub-agent of this run is still working.")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Steer sub-agent" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Ask to stop" })).toBeTruthy();
   fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
   expect(menuLabels()).toEqual(["Steer sub-agent…", "Copy R-7", "Ask sub-agent to stop…"]);
   fireEvent.click(screen.getByRole("menuitem", { name: "Ask sub-agent to stop…" }));
@@ -523,7 +547,8 @@ it("thread has one since separator, safe mention chips and folded background not
   expect(screen.queryByRole("button", { name: "Decision D 99" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "2 new decisions" }));
   expect(screen.getByRole("button", { name: "1 run updated" })).toBeTruthy();
-  expect(onJump).toHaveBeenCalledWith("needs");
+  // the chip says which part of the tab it was about, so the tab can land there
+  expect(onJump).toHaveBeenCalledWith("needs", "decisions");
   expect(screen.queryByText(/Hidden background output/)).toBeNull();
   const notices = screen.getByRole("button", { name: "2 background notices" });
   fireEvent.click(notices);

@@ -49,6 +49,8 @@ const TAB_KEYS: Record<string, Tab> = { n: "needs", r: "running", a: "running", 
 const typingIn = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
+/** Which section of its tab each catch-up chip is about (the `data-land` values the panels carry). */
+const LAND: Record<string, string> = { decisions: "new", failed: "attention", stuck: "attention", waiting: "waiting", finished: "done", runs: "running" };
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
 export function GlobalCoordinator() {
   const pathname = usePathname();
@@ -203,6 +205,21 @@ export function GlobalCoordinator() {
   const selectTab = (next: Tab) => {
     setTab(next);
     if (next === "running") markSeen();
+  };
+  // A catch-up chip lands on the part of the tab it was about ("2 finished" on Finished, "2 new decisions" on New),
+  // marked for a moment. The tab may still be drawing, so look for it over a few frames.
+  const land = (about?: string) => {
+    const section = about ? LAND[about] : undefined;
+    if (!section) return;
+    let tries = 0;
+    const look = () => {
+      const el = document.querySelector<HTMLElement>(`[data-land="${section}"]`);
+      if (!el) return void (tries++ < 20 && requestAnimationFrame(look));
+      el.scrollIntoView?.({ block: "start" });
+      el.setAttribute("data-landed", "");
+      window.setTimeout(() => el.removeAttribute("data-landed"), 1900);
+    };
+    requestAnimationFrame(look);
   };
   const openAt = (next: Tab, ref?: string) => {
     show();
@@ -531,7 +548,10 @@ export function GlobalCoordinator() {
                   )}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
-                  onJump={(next) => selectTab(next === "needs" ? "needs" : "running")}
+                  onJump={(next, about) => {
+                    selectTab(next === "needs" ? "needs" : "running");
+                    land(about);
+                  }}
                   onRef={onRef}
                 />
               ) : null}

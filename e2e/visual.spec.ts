@@ -1676,7 +1676,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
   test.skip(info.project.name === "desktop", "Phone tray");
   await stubGlobalCoordinator(page);
   // Prod state that overflowed release 65: 21 stalled runs + 44 decisions. They stalled since the owner last looked, so the
-  // tray leads with them: "21 runs newly stuck · 44 need you" (one sentence, no count badges).
+  // tray leads with them: "21 runs went quiet · 44 need you" (one sentence, no count badges).
   const stale = new Date(Date.now() - 45 * 60_000).toISOString();
   const items = Object.fromEntries(
     Array.from({ length: 21 }, (_, i) => {
@@ -1716,7 +1716,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
-    await expect(tray).toContainText("21 runs newly stuck");
+    await expect(tray).toContainText("21 runs went quiet");
     await expect(tray.locator(".gc-tray-status")).toContainText("44 need you");
     await expect(page.locator(".gc-tray").getByRole("button")).toHaveCount(1);
     await page.waitForTimeout(200);

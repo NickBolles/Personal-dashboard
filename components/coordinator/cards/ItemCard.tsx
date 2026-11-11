@@ -15,7 +15,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import { changeChip, changeObject, itemCardModel } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
 import type { RunEvent } from "@/lib/cw-runs";
-import { byNeed, eventChip, runStatus, type RunStatus } from "@/lib/coordinator/run-card";
+import { byNeed, eventChip, runStatus, type RunStatus, eventAgo } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
@@ -106,6 +106,9 @@ export type ItemCardProps = {
   defaultOpen?: boolean;
 };
 
+/** "Review D-4 · Rotate the newsletter key": a ref alone asks the owner to remember what it was. */
+const named = (lead: string, title?: string | null) => (title?.trim() ? `${lead} · ${title.trim().replace(/\s+/g, " ").slice(0, 60)}` : lead);
+
 /**
  * One item or project, readable at a glance: the one state that matters now (a decision waiting on you, a run
  * that failed or went quiet, an agent working, else its own status), where it sits, what is next and when it is
@@ -141,7 +144,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       ? `waiting ${ageLabel(model.decisions[0].createdAt, now)}`
       : model.headline.key !== "status" && lead
         ? `${runs[0]!.ref} · ${lead.detail}`
-        : `edited ${relativeTime(model.updatedAt, now)}`;
+        : `edited ${eventAgo(new Date(Math.max(Date.parse(model.updatedAt), ...changes.map((c) => Date.parse(c.at)).filter(Number.isFinite))).toISOString(), now)}`;
   // The chip is the state; the item's own stage is only worth a word when it has moved past the default.
   const stage = model && model.headline.key !== "status" && model.status.label !== "Captured" ? `Stage: ${model.status.label}` : "";
   // Progress with nothing done yet is a count, not an empty bar.
@@ -157,8 +160,8 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
     { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
     { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
     onAsk ? { label: "Ask in chat", onSelect: () => onAsk(name) } : null,
-    ...(model?.decisions ?? []).slice(0, 3).map((d) => ({ label: `Review ${d.ref}`, disabled: !onRef, onSelect: () => onRef?.(d.ref) })),
-    ...runs.slice(0, 3).map((r) => ({ label: `Go to ${r.ref}`, disabled: !onRef, onSelect: () => onRef?.(r.ref) })),
+    ...(model?.decisions ?? []).slice(0, 3).map((d) => ({ label: named(`Review ${d.ref}`, d.question), disabled: !onRef, onSelect: () => onRef?.(d.ref) })),
+    ...runs.slice(0, 3).map((r) => ({ label: named(`Go to ${r.ref}`, r.title), disabled: !onRef, onSelect: () => onRef?.(r.ref) })),
     agent?.sessionId ? { label: "Agent conversation", onSelect: () => router.push(`/chat/${encodeURIComponent(agent.sessionId!)}`) } : null,
     { label: open ? "Close details" : "Open details", onSelect: () => setOpen((value) => !value) },
     model

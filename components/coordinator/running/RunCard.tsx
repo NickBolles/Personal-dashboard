@@ -109,6 +109,9 @@ export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: 
   );
 }
 
+/** How long a live run's newest event keeps pulsing: after that the outline alone says the run is working. */
+const FRESH_MS = 2 * 60_000;
+
 /** Events as a real timeline: newest first, a tinted node and type chip per event, the time on the right. */
 export function RunTimeline({ events, runTitle, label, live }: { events: readonly RunEvent[]; runTitle: string; label: string; live?: boolean }) {
   const now = useNow();
@@ -124,7 +127,7 @@ export function RunTimeline({ events, runTitle, label, live }: { events: readonl
             key={event.id}
             className={`rc-event k-t-${chip.tone}`}
             data-latest={index === 0 || undefined}
-            data-live={(live && index === 0) || undefined}
+            data-live={(live && index === 0 && now - Date.parse(event.at) < FRESH_MS) || undefined}
             data-new={Date.parse(event.at) > since || undefined}
           >
             <span className="rc-node" aria-hidden="true" />
@@ -164,12 +167,15 @@ function SteerField({
   pending,
   onSend,
   onClose,
+  alt,
 }: {
   label: string;
   placeholder?: string;
   pending: boolean;
   onSend: (guidance: string) => Promise<unknown>;
   onClose: () => void;
+  /** A second way out of the field, e.g. resuming a waiting run without an answer. */
+  alt?: { label: string; onSelect: () => void };
 }) {
   const [guidance, setGuidance] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -203,6 +209,21 @@ function SteerField({
       <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
         Send
       </Button>
+      {alt ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="rc-steer-alt"
+          disabled={pending}
+          onClick={() => {
+            alt.onSelect();
+            onClose();
+          }}
+        >
+          {alt.label}
+        </Button>
+      ) : null}
     </form>
   );
 }
@@ -376,20 +397,24 @@ export function RunCard({
           <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
-          {run.noticeCount ? <span title="Steps it has reported finishing">{run.noticeCount === 1 ? "1 step" : `${run.noticeCount} steps`}</span> : null}
+          {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 step reported" : `${run.noticeCount} steps reported`}</span> : null}
           <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
         </span>
         {pulse.length > 1 ? (
-          <span
-            className="rc-pulse"
-            role="img"
-            aria-label={`${pulse.length} reports since it started; the last one ${relativeTime(known[0]!.at, now)}`}
-            title="When it reported, from its start to now"
-          >
-            {pulse.map((tick) => (
-              <i key={tick.id} className={`k-t-${tick.tone}`} style={{ "--at": tick.at } as CSSProperties} />
-            ))}
-            {status.live ? <i className="rc-pulse-now" /> : null}
+          <span className="rc-pulse-row">
+            <span className="rc-pulse-label">Reports</span>
+            <span
+              className="rc-pulse"
+              role="img"
+              aria-label={`${pulse.length} reports since it started; the last one ${relativeTime(known[0]!.at, now)}`}
+              title="When it reported, from its start to now"
+            >
+              {pulse.map((tick) => (
+                <i key={tick.id} className={`k-t-${tick.tone}`} style={{ "--at": tick.at } as CSSProperties} />
+              ))}
+              {status.live ? <i className="rc-pulse-now" /> : null}
+            </span>
+            <span className="rc-pulse-label">{status.key === "done" ? "end" : "now"}</span>
           </span>
         ) : null}
       </Button>
@@ -545,6 +570,7 @@ export function RunCard({
                   setSending(false);
                 }
               }}
+              alt={waiting && canRetry ? { label: "Resume without replying", onSelect: () => onCommand(runCommand(run)) } : undefined}
             />
           ) : null}
         </div>
@@ -672,8 +698,8 @@ export function ExecCard({
     run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
     steerable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
-  // Nothing to offer (work that ended, with no links): the browser's own menu stays.
-  const menu = useCardMenu(actions.length > 1);
+  // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
+  const menu = useCardMenu(actions.length > 2);
   return (
     <article
       className="rc rc-exec"
@@ -717,7 +743,8 @@ export function ExecCard({
       ) : null}
       {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
       {children}
-      {record.href || links.length || controllable || canReply ? (
+      {lingering ? <p className="rc-note">A sub-agent of this run is still working.</p> : null}
+      {record.href || links.length || steerable || canReply ? (
         <div className="rc-actions">
           {canReply ? (
             <Button
@@ -732,7 +759,7 @@ export function ExecCard({
               Reply
             </Button>
           ) : null}
-          {controllable ? (
+          {steerable ? (
             <Button
               size="sm"
               variant="ghost"
@@ -742,7 +769,7 @@ export function ExecCard({
               aria-expanded={steering}
               onClick={() => setSteering((value) => !value)}
             >
-              {waiting ? "Reply" : "Steer"}
+              {lingering ? "Steer sub-agent" : waiting ? "Reply" : "Steer"}
             </Button>
           ) : null}
           {record.href ? (
@@ -755,7 +782,7 @@ export function ExecCard({
               {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}
             </ButtonLink>
           ))}
-          {controllable ? (
+          {steerable ? (
             <Button
               size="sm"
               variant="ghost"

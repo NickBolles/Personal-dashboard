@@ -92,7 +92,8 @@ export function CoordinatorThread({
   quickContext?: QuickActionContext;
   lastLookedChat?: string | null;
   sinceCounts?: SinceCounts;
-  onJump?: (tab: "needs" | "running") => void;
+  /** A catch-up chip was tapped: the tab it points at, and which chip (so the tab can land on that part). */
+  onJump?: (tab: "needs" | "running", about?: string) => void;
   onRef?: (ref: string) => void;
   /**
    * Lets another panel (a run card under Activity) send a one-line command into this conversation, exactly as the
@@ -396,7 +397,7 @@ export function CoordinatorThread({
                                 className={`gc-since-chip k-t-${chip.tone}`}
                                 icon={SINCE_ICON[chip.key]}
                                 disabled={!onJump}
-                                onClick={() => onJump?.(chip.tab)}
+                                onClick={() => onJump?.(chip.tab, chip.key)}
                               >
                                 {chip.label}
                               </Button>

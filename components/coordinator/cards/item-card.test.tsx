@@ -177,13 +177,13 @@ it("right-click or long-press opens a menu with everything the card can do", () 
   expect(menu.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
     "Open item",
     "Ask in chat",
-    "Review D-14",
-    "Go to R-3",
+    "Review D-14 · Use last year's dates?",
+    "Go to R-3 · Smoke tests",
     "Agent conversation",
     "Open details",
     "Copy link",
   ]);
-  fireEvent.click(menu.getByRole("menuitem", { name: "Review D-14" }));
+  fireEvent.click(menu.getByRole("menuitem", { name: /^Review D-14/ }));
   expect(onRef).toHaveBeenCalledExactlyOnceWith("D-14");
   // choosing closes it; Escape and a tap elsewhere do too
   expect(screen.queryByRole("menu")).toBeNull();

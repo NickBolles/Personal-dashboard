@@ -71,7 +71,7 @@ const short = (text: string, max = 64) => {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 };
-const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "has stopped reporting", waiting: "is waiting", interrupted: "was interrupted" };
+const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "went quiet", waiting: "is waiting", interrupted: "was interrupted" };
 
 export function stuckRuns(input: Pick<StatusInput, "runs" | "otherRuns" | "lastLooked" | "now">): StuckRun[] {
   const looked = input.lastLooked ? Date.parse(input.lastLooked) : NaN;
@@ -105,7 +105,7 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
   const parts = {
     needs: counts.needs ? plural(counts.needs, "needs you", "need you") : "",
     working: counts.working ? `${counts.working} working` : "",
-    stuck: counts.stuck ? `${counts.stuck} stuck` : "",
+    stuck: counts.stuck ? plural(counts.stuck, "needs a look", "need a look") : "",
   };
   const rest = (...keys: (keyof typeof parts)[]) =>
     keys
@@ -115,7 +115,10 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
 
   if (fresh.length) {
     const first = fresh[0];
-    const text = fresh.length === 1 ? `${short(first.title, 48)} ${VERB[first.kind]}` : `${fresh.length} runs newly stuck`;
+    // The same words as the cards: silence is "quiet", only a reported failure is "failed".
+    const all = (kind: StuckKind) => fresh.every((r) => r.kind === kind);
+    const many = all("failed") ? "runs failed" : all("stalled") ? "runs went quiet" : "runs need a look";
+    const text = fresh.length === 1 ? `${short(first.title, 48)} ${VERB[first.kind]}` : `${fresh.length} ${many}`;
     return { state: "failed", tone: "bad", dot: "red", text, rest: rest("needs", "working"), target: { tab: "running", ref: first.ref ?? undefined }, counts };
   }
   if (counts.needs) {
@@ -159,7 +162,7 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
       state: "stuck",
       tone: "neutral",
       dot: null,
-      text: `${plural(counts.stuck, "run is", "runs are")} stuck`,
+      text: `${plural(counts.stuck, "run needs", "runs need")} a look`,
       rest: "nothing new since you looked",
       target: { tab: "running" },
       counts,

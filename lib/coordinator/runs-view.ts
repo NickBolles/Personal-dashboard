@@ -50,6 +50,8 @@ export function groupRuns(runs: readonly CoordinatorRunRow[], lastLookedRunning?
     else if (run.state === "running") groups.running.push(run);
     else if (run.state === "done" && run.finishedAt && Date.parse(run.finishedAt) > since) groups.done.push(run);
   }
+  // Work in flight keeps its place (newest started first): a card must not jump while its report is being read.
+  groups.running.sort((a, b) => b.seq - a.seq);
   // Failures lead the attention section even when a waiting row has a newer heartbeat.
   groups.attention.sort((a, b) => Number(b.state === "failed") - Number(a.state === "failed") || newest(a, b));
   return groups;
