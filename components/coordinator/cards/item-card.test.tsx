@@ -72,7 +72,7 @@ const agent = {
   report: { title: "Banner drafted", summary: "Two variants.", at: ago(40), href: null },
   progress: { done: 1, total: 4 },
 } as unknown as ItemAgentInfo;
-const data = (over: Partial<ItemCardData> = {}): ItemCardData => ({ items, agents: {}, runs: [], decisions: [], ...over });
+const data = (over: Partial<ItemCardData> = {}): ItemCardData => ({ items, agents: {}, runs: [], events: [], decisions: [], ...over });
 const card = () => within(document.querySelector<HTMLElement>("article")!);
 afterEach(cleanup);
 

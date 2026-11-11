@@ -375,10 +375,6 @@
   line-height: 1.4;
   resize: none;
 }
-/* While refreshes are failing, ages on the cards are measured against stale data: step them back. */
-.gc-running[data-stale] .rc-status-detail {
-  opacity: 0.55;
-}
 .rc-progress {
   padding-block: 2px;
 }
@@ -540,9 +536,18 @@
   align-items: center;
   gap: 6px;
 }
-.ic-more {
+/* "+4 decisions": opens the card, where the rest are. */
+.rc .ic-jumps .k-btn.ic-more {
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--t2);
+  font: 500 0.71875rem/1 var(--sans);
+}
+.rc .ic-jumps .k-btn.ic-more:disabled {
   color: var(--t3);
-  font-size: 0.75rem;
+  opacity: 1;
 }
 .ic-prs {
   display: grid;

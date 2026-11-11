@@ -486,7 +486,7 @@ describe("global coordinator", () => {
         .getByRole("tab", { name: /Activity/ })
         .getAttribute("aria-selected"),
     ).toBe("true");
-    expect((await within(sheet).findByRole("region", { name: "Stuck" })).textContent).toContain("Ledger import");
+    expect((await within(sheet).findByRole("region", { name: "Needs a look" })).textContent).toContain("Ledger import");
     // Once seen it is still counted, but what waits on the owner leads and nothing is red.
     looked = new Date().toISOString();
     runRows = runRows.map((r) => ({ ...r }));

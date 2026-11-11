@@ -96,9 +96,11 @@ it("among stuck runs a reported failed step outranks silence alone, and that car
   expect(document.querySelector('[data-run-body="R-2"]')!.getAttribute("aria-expanded")).toBe("true");
   expect(document.querySelector('[data-run-body="R-1"]')!.getAttribute("aria-expanded")).toBe("false");
   const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-2"]')!);
-  expect(card.getByText("Step failed")).toBeTruthy();
-  // Silence is "Quiet", not a claim that the run is blocked.
-  expect(card.getByText("Quiet")).toBeTruthy();
+  // The chip leads with the reported failure; the silence is the detail. The same words label the event below.
+  expect(card.getAllByText("Step failed")).toHaveLength(2);
+  expect(card.getByText(/^no update for /)).toBeTruthy();
+  // Silence alone is "Quiet", not a claim that the run is blocked.
+  expect(within(document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!).getByText("Quiet")).toBeTruthy();
 });
 it("Stop requires confirmation; cancel and confirm only prefill, never call a run API", async () => {
   mount([run(65)]);
@@ -221,7 +223,7 @@ it("says what each run is doing in a chip and plain words, and drops a summary t
   expect(row("R-2").queryByRole("button", { name: "Stop R-2" })).toBeNull();
   expect(row("R-3").getByText("Quiet")).toBeTruthy();
   expect(row("R-3").getByText(/^no update for /)).toBeTruthy();
-  expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
+  expect(screen.getByRole("region", { name: "Needs a look" }).textContent).toContain("R-2");
 });
 it("Steer opens a guidance field in the card and sends what is typed; a stopped run asks in chat instead", async () => {
   onSteer.mockResolvedValue(undefined);
@@ -273,7 +275,8 @@ it("a run waiting on the owner arrives open, says what it needs, takes a reply, 
   // The chip says where it goes: it opens the decision, it does not answer it.
   fireEvent.click(card.getByRole("button", { name: "Review decision D 9" }));
   expect(onRef).toHaveBeenCalledExactlyOnceWith("D-9");
-  // A waiting run is answered in its card.
+  // A waiting run is answered in its card; "Resume" would only confuse the matter.
+  expect(card.queryByRole("button", { name: "Resume R-4" })).toBeNull();
   fireEvent.click(card.getByRole("button", { name: "Reply to R-4" }));
   fireEvent.change(card.getByRole("textbox", { name: "Reply to R-4" }), { target: { value: "The oak one" } });
   fireEvent.click(card.getByRole("button", { name: "Send" }));
@@ -320,7 +323,7 @@ it("shows the latest event on a closed card and a real timeline on an open one",
 it("folds failures older than three days away from what is stuck now, still one tap away", () => {
   const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
   mount([run(1, { state: "failed" }), run(2, { state: "failed", updatedAt: old }), run(3, { state: "failed", updatedAt: old })]);
-  expect(screen.getByRole("region", { name: "Stuck" }).querySelectorAll("article").length).toBe(1);
+  expect(screen.getByRole("region", { name: "Needs a look" }).querySelectorAll("article").length).toBe(1);
   const older = screen.getByRole("region", { name: "Older failures" });
   expect(older.querySelectorAll("article").length).toBe(0);
   fireEvent.click(within(older).getByRole("button", { name: "Show" }));
@@ -329,7 +332,7 @@ it("folds failures older than three days away from what is stuck now, still one 
 it("a deep-linked old failure is shown in place, not hidden in the fold", () => {
   const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
   mount([run(2, { state: "failed", updatedAt: old })], "R-2");
-  expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
+  expect(screen.getByRole("region", { name: "Needs a look" }).textContent).toContain("R-2");
   expect(screen.queryByRole("region", { name: "Older failures" })).toBeNull();
 });
 it("uses one quiet line instead of the empty state when other activity is listed below", () => {

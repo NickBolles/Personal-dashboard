@@ -167,7 +167,7 @@ describe("background work", () => {
     expect(syncLine(now - 5_000, false, now)).toBe("Synced just now");
     expect(syncLine(now - 180_000, false, now)).toBe("Synced 3 minutes ago");
     // a failed refresh always says how old the view is, however fresh
-    expect(syncLine(now - 180_000, true, now)).toMatch(/^Couldn't refresh · last synced 3 minutes ago \(\d{1,2}:\d{2}.*\)$/);
+    expect(syncLine(now - 180_000, true, now)).toBe("Couldn't refresh · last synced 3 minutes ago");
     expect(syncLine(now - 5_000, true, now)).toBe("Couldn't refresh · last synced just now");
     expect(syncLine(0, true, now)).toBe("Couldn't refresh");
   });

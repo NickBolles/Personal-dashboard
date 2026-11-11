@@ -13,7 +13,8 @@ import { api } from "@/lib/client/api";
 import type { Decision } from "@/lib/cw-decisions";
 import { changeChip, changeText, itemCardModel } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
-import { runStatus, type RunStatus } from "@/lib/coordinator/run-card";
+import type { RunEvent } from "@/lib/cw-runs";
+import { byNeed, eventChip, runStatus, type RunStatus } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
@@ -29,6 +30,8 @@ export type ItemCardData = {
   items: readonly WorkItem[];
   agents: Record<string, ItemAgentInfo>;
   runs: readonly CoordinatorRunRow[];
+  /** Recent run events (from the runs list), to tell a run with a failed step from one that is merely quiet. */
+  events: readonly RunEvent[];
   decisions: readonly Decision[];
 };
 /**
@@ -45,7 +48,13 @@ export function useItemCardData(enabled = true): ItemCardData {
   const agents = useAgentRuns(enabled);
   const runs = useCoordinatorRuns(false, enabled);
   const decisions = useCoordinatorDecisions();
-  return { items: items.data?.items ?? [], agents: agents.data?.items ?? {}, runs: runs.data?.runs ?? [], decisions: decisions.data?.decisions ?? [] };
+  return {
+    items: items.data?.items ?? [],
+    agents: agents.data?.items ?? {},
+    runs: runs.data?.runs ?? [],
+    events: runs.data?.events ?? [],
+    decisions: decisions.data?.decisions ?? [],
+  };
 }
 
 /** One icon per kind of thing a chip points at, the same in the catch-up card and on item cards. */
@@ -113,7 +122,8 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const hidden = changes.length - shown.length;
   const href = `/areas?item=${encodeURIComponent(itemId)}`;
   const name = model?.title ?? title;
-  const runs = model ? [...model.attention, ...model.working] : [];
+  // The run that most needs a look gets the visible chip.
+  const runs = model ? [...byNeed(model.attention, data.events), ...model.working] : [];
   // An area's standing coordinator is on everything under it: only worth a line when it (or anyone) is actually
   // working, and not at all when the run chips below already say so.
   const busy = !!agent && agent.live !== "idle" && !runs.length;
@@ -212,9 +222,18 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
               Review {d.ref}
             </Button>
           ))}
-          {model.decisions.length > chips ? <span className="ic-more">+{model.decisions.length - chips} more</span> : null}
+          {model.decisions.length > chips ? (
+            <Button variant="ghost" size="sm" className="ic-more" onClick={() => setOpen(true)} disabled={open}>
+              +{model.decisions.length - chips} {model.decisions.length - chips === 1 ? "decision" : "decisions"}
+            </Button>
+          ) : null}
           {runs.slice(0, chips).map((r) => {
-            const status = runStatus(r, now);
+            const base = runStatus(r, now);
+            const last = data.events.filter((e) => e.runId === r.id).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? r.lastEvent;
+            const status =
+              base.key === "stuck" && last && eventChip(last).tone === "bad"
+                ? { ...base, key: "failed" as const, label: "Step failed", tone: "bad" as const }
+                : base;
             return (
               <Button
                 key={r.id}
@@ -231,7 +250,11 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
               </Button>
             );
           })}
-          {runs.length > chips ? <span className="ic-more">+{runs.length - chips} runs</span> : null}
+          {runs.length > chips ? (
+            <Button variant="ghost" size="sm" className="ic-more" onClick={() => setOpen(true)} disabled={open}>
+              +{runs.length - chips} {runs.length - chips === 1 ? "run" : "runs"}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {prs.length ? (
@@ -255,7 +278,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           ))}
         </ol>
       ) : null}
-      {hidden > 0 || allChanges ? (
+      {open && (hidden > 0 || allChanges) ? (
         <Button
           size="sm"
           variant="ghost"

@@ -57,11 +57,16 @@ export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: 
   const text = syncLine(updatedAt, !!failed, now);
   if (!text) return null;
   return (
-    <p className="rc-live" data-state={failed ? "failed" : "live"} data-dynamic>
+    <p
+      className="rc-live"
+      data-state={failed ? "failed" : "live"}
+      title={updatedAt ? `Last synced ${new Date(updatedAt).toLocaleTimeString()}` : undefined}
+      data-dynamic
+    >
       <Dot tone={failed ? "wn" : "ok"} />
       <span>{text}</span>
       {failed && onRetry ? (
-        <Button size="sm" variant="ghost" className="rc-live-retry" loading={fetching} onClick={onRetry}>
+        <Button size="sm" variant="ghost" className="rc-live-retry" disabled={fetching} onClick={onRetry}>
           Retry
         </Button>
       ) : null}
@@ -203,7 +208,7 @@ export function RunCard({
   ancestors = [],
 }: RunCardProps) {
   const now = useNow();
-  const status = runStatus(run, now);
+  const reported = runStatus(run, now);
   const childRuns = childrenOf(runs, run.id).filter((r) => !ancestors.includes(r.id) && r.id !== run.id);
   const descendantSelected = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false;
@@ -224,7 +229,7 @@ export function RunCard({
     queryKey: ["work", "coordinator", "runs", run.ref, "events"],
     queryFn: ({ signal }) => api.get<{ events: RunEvent[] }>(`/api/coordinator/runs/${encodeURIComponent(run.ref)}/events`, signal),
     enabled: open,
-    refetchInterval: open && status.live ? 10_000 : false,
+    refetchInterval: open && reported.live ? 10_000 : false,
   });
   const known = timelineOf(
     events.filter((e) => e.runId === run.id),
@@ -235,6 +240,10 @@ export function RunCard({
   // on a closed card, the newest two on an open one; "Show earlier" brings every event.
   const telling = known.filter((e) => eventText(e, run.title));
   const latest = telling[0] ?? null;
+  // A run that went quiet right after reporting a failed step says so in its chip: the failure is the news, the
+  // silence is the detail. (A failed step is not a failed run; the run's own state is unchanged.)
+  const failedStep = reported.key === "stuck" && !!latest && eventChip(latest).tone === "bad";
+  const status = failedStep ? { ...reported, label: "Step failed", tone: "bad" as const } : reported;
   const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
   const hidden = known.length - shown.length;
   const waiting = run.state === "waiting";
@@ -363,7 +372,7 @@ export function RunCard({
                 {waiting ? "Reply" : "Steer"}
               </Button>
             ) : null}
-            {canRetry ? (
+            {canRetry && !waiting ? (
               <Button
                 size="sm"
                 variant="ghost"
@@ -487,7 +496,7 @@ export function ExecCard({
   events?: readonly RunEvent[];
   pending: boolean;
   onControl: (input: string) => Promise<unknown>;
-  /** Writes a line into the conversation's composer (never sends): a stop request for a tracked run, a reply about work that failed. */
+  /** Writes a line into the conversation's composer (never sends): the stop request for a tracked run. */
   onDraft?: (text: string) => void;
   children?: ReactNode;
 }) {
@@ -527,8 +536,9 @@ export function ExecCard({
         .slice(0, 2)
     : [];
   const links = (record.links ?? []).filter((link) => /^https:\/\//i.test(link.url)).slice(0, 3);
-  // Work that failed cannot be steered, but it can be answered: a line about it in the composer.
-  const canReply = !controllable && !!onDraft && (record.state === "failed" || waiting);
+  // Work that failed cannot be steered, but it can be answered: the same field, sent as a line about it.
+  const canReply = !controllable && (record.state === "failed" || waiting);
+  const [replying, setReplying] = useState(false);
   // A tracked run stops the way it does under Activity: the request is written for the owner to send.
   const drafts = !!run && !!onDraft;
   return (
@@ -572,7 +582,15 @@ export function ExecCard({
       {record.href || links.length || controllable || canReply ? (
         <div className="rc-actions">
           {canReply ? (
-            <Button size="sm" variant="ghost" className="rc-act" icon={<SteerIcon className="h-3.5 w-3.5" />} onClick={() => onDraft?.(`About "${title}": `)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act"
+              icon={<SteerIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={replying}
+              onClick={() => setReplying((value) => !value)}
+            >
               Reply
             </Button>
           ) : null}
@@ -621,6 +639,15 @@ export function ExecCard({
           pending={pending}
           onClose={() => setSteering(false)}
           onSend={(guidance) => onControl(steerText(handle, guidance))}
+        />
+      ) : null}
+      {canReply && replying ? (
+        <SteerField
+          label={`Reply about ${record.title}`}
+          placeholder="Your answer"
+          pending={pending}
+          onClose={() => setReplying(false)}
+          onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
         />
       ) : null}
       {controllable && confirmStop ? (

@@ -29,7 +29,7 @@ const OPEN_ON_ARRIVAL = 1;
 // What waits on the owner first, then what needs a look.
 const SECTIONS = [
   ["waiting", "Waiting on you"],
-  ["attention", "Stuck"],
+  ["attention", "Needs a look"],
   ["interrupted", "Interrupted"],
   ["running", "Working"],
   ["done", "Finished since you looked"],

@@ -36,7 +36,8 @@ export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): Run
       live: false,
       attention: true,
     };
-  if (run.state === "waiting") return { key: "waiting", label: "Waiting on you", detail: `since ${ago}`, tone: "wn", live: false, attention: true };
+  if (run.state === "waiting")
+    return { key: "waiting", label: "Waiting on you", detail: `for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
   if (run.state === "done")
     return { key: "done", label: "Finished", detail: relativeTime(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
   // A quiet run is not a failed run: say what is known (how long since it last reported), in amber, not red.
@@ -103,8 +104,8 @@ export function syncLine(updatedAt: number, failed: boolean, now: number = Date.
   const age = !updatedAt ? "" : fresh ? "just now" : relativeTime(updatedAt, now);
   if (!failed) return age ? `Synced ${age}` : "";
   if (!updatedAt) return "Couldn't refresh";
-  const at = new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  return `Couldn't refresh · last synced ${age}${fresh ? "" : ` (${at})`}`;
+  // Short enough to keep Retry on the same line on a phone; the exact time is in the line's tooltip.
+  return `Couldn't refresh · last synced ${age}`;
 }
 
 /**
