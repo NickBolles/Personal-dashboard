@@ -63,9 +63,11 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
   fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
 - **Council code review (both changes, before merge).** Fixed: background work is tied to a tracked run by title
-  only when their times overlap, two live sub-agents with one title are two cards, and a card's Steer / Stop
-  always go to the sub-agent it shows (they could reach a different one); Steer and Stop need the sub-agent
-  itself to be going; a finished run offers "Ask in chat", not Steer; a run waiting on the owner with no
+  only when their times overlap; a run that two live sub-agents could both be is neither's (each keeps its own
+  card and controls, in any order), and a card's Steer / Stop always go to the sub-agent it shows (they could
+  reach a different one); a card's typed guidance and stop confirmation belong to that sub-agent and never
+  carry over to another; Steer needs the sub-agent itself to be going, while a run that is still going can
+  always be asked to stop; a finished run offers "Ask in chat", not Steer; a run waiting on the owner with no
   decision of its own leads the tray ("… is waiting on you") where it said "No agent work waiting"; the first
   attachment and a quick Send share one new conversation and Send waits for the file; Undo in a change row no
   longer takes taps meant for the row above; a card menu gives focus back when it closes and stays put while

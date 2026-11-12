@@ -14,6 +14,7 @@ import { setPanelOwner } from "@/lib/client/panel-owner";
 import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
 import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
+import { ToastProvider } from "@/components/ui";
 
 const nav = vi.hoisted(() => ({ path: "/areas", search: "", wide: true }));
 vi.mock("next/navigation", () => ({
@@ -225,7 +226,12 @@ describe("shared coordinator thread", () => {
     // The new conversation never comes back in this test: everything asserted happens while it is being created.
     vi.mocked(api.post).mockImplementation(((path: string) =>
       path === "/api/hermes/sessions" ? new Promise(() => undefined) : Promise.resolve({ ok: true })) as typeof api.post);
-    render(<CoordinatorThread info={base} compact name="Chief of staff" />, { wrapper });
+    render(
+      <ToastProvider>
+        <CoordinatorThread info={base} compact name="Chief of staff" />
+      </ToastProvider>,
+      { wrapper },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
     const picker = document.querySelector('[data-testid="gc-file-input"]') as HTMLInputElement;
     fireEvent.change(picker, { target: { files: [new File(["a"], "plan.pdf", { type: "application/pdf" })] } });
@@ -240,6 +246,8 @@ describe("shared coordinator thread", () => {
     expect(posts.filter((path) => path === "/api/hermes/sessions")).toHaveLength(1);
     expect(posts.some((path) => path.endsWith("/runs"))).toBe(false);
     expect(input.value).toBe("Here is the plan");
+    // Send was refused, and said why (without the guard it would start sending and say nothing)
+    expect(screen.getByText("Wait for the upload to finish, then send.")).toBeTruthy();
   });
   it("renders smart (jarvis-ui) replies through the same renderer as full chat, never as raw JSON", async () => {
     makeClient();
@@ -561,7 +569,8 @@ describe("global coordinator", () => {
       fireEvent.click(screen.getByRole("button", { name: "Chief of staff" }));
       const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
       fireEvent.click(within(sheet).getByRole("tab", { name: /Activity/ }));
-      const card = within(await waitFor(() => sheet.querySelector<HTMLElement>('[data-run-ref="R-1"]')!));
+      await waitFor(() => expect(sheet.querySelector('[data-run-ref="R-1"]')).toBeTruthy());
+      const card = within(sheet.querySelector<HTMLElement>('[data-run-ref="R-1"]')!);
       // a working run arrives closed: open it, then Steer
       fireEvent.click(sheet.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
       fireEvent.click(await card.findByRole("button", { name: "Steer R-1" }));

@@ -143,14 +143,33 @@ describe("background work", () => {
     ).toEqual(["b"]);
     expect(mergeBackgroundWork([rec({ key: "a", id: "sa_1" }), rec({ key: "b", id: "sa_2", state: "failed" })], [])).toHaveLength(2);
   });
-  it("a card never shows one sub-agent and controls another", () => {
+  it("a card never shows one sub-agent and controls another, whatever order the records arrive in", () => {
     const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
-    // two live sub-agents with one title and one tracked run of that title: two cards, each with its own controls
-    const two = mergeBackgroundWork([rec({ key: "a", id: "sa_1" }), rec({ key: "b", id: "sa_2", step: "Reading the logs" })], [tracked]);
-    expect(two).toHaveLength(2);
-    expect(two[0]).toMatchObject({ run: { ref: "R-9" }, record: { key: "a" }, control: { id: "sa_1" } });
-    expect(two[1]).toMatchObject({ record: { key: "b" }, control: { id: "sa_2" } });
-    expect(two[1]!.run).toBeUndefined();
+    const a = rec({ key: "a", id: "sa_1" });
+    const b = rec({ key: "b", id: "sa_2", step: "Reading the logs" });
+    // two live sub-agents with one title and one tracked run of that title: which of them is the run cannot be
+    // told, so neither is. Each has its own card and its own controls, in either order.
+    for (const order of [
+      [a, b],
+      [b, a],
+    ]) {
+      const two = mergeBackgroundWork(order, [tracked]);
+      expect(two).toHaveLength(2);
+      for (const work of two) {
+        expect(work.run).toBeUndefined();
+        expect(work.control).toBe(work.record);
+      }
+    }
+    // the run is still shown, by its own record, with no sub-agent controls attached
+    const withRun = mergeBackgroundWork([a, b, rec({ key: "r", source: "registered_run", id: "reg_1", state: "unknown" })], [tracked]);
+    expect(withRun.map((w) => [w.record.key, w.run?.ref, w.control?.id])).toEqual([
+      ["a", undefined, "sa_1"],
+      ["b", undefined, "sa_2"],
+      ["r", "R-9", undefined],
+    ]);
+    // a second view of one of them does not become a third card
+    const again = rec({ key: "b2", id: "child_2", subagentId: "sa_2" });
+    expect(mergeBackgroundWork([a, { ...b, subagentId: "sa_2" }, again], [tracked]).map((w) => w.control?.id)).toEqual(["sa_1", "sa_2"]);
     // a record with no status folds into its twin, and the controls go to the one that is shown
     const folded = mergeBackgroundWork([rec({ key: "a", id: "sa_1", state: "unknown" }), rec({ key: "b", id: "sa_2" })], []);
     expect(folded).toHaveLength(1);
@@ -175,6 +194,10 @@ describe("background work", () => {
     });
     const today = rec({ key: "a", id: "sa_1", startedAt: ago(20) });
     expect(mergeBackgroundWork([today], [lastWeek])[0]!.run).toBeUndefined();
+    const justBefore = run({ id: "run-3", ref: "R-3", title: "Audit previews", state: "done", startedAt: ago(90), updatedAt: ago(25), finishedAt: ago(25) });
+    expect(mergeBackgroundWork([today], [justBefore])[0]!.run).toBeUndefined();
+    // a record that only says when it last reported is placed by that
+    expect(mergeBackgroundWork([rec({ key: "u", id: "sa_3", updatedAt: ago(3) })], [lastWeek])[0]!.run).toBeUndefined();
     // and of two runs with that title, the one from the same time is the one
     const thisWeek = run({ id: "run-2", ref: "R-2", title: "Audit previews", startedAt: ago(21), updatedAt: ago(1) });
     expect(mergeBackgroundWork([today], [lastWeek, thisWeek])[0]!.run?.ref).toBe("R-2");

@@ -691,6 +691,8 @@ export function ExecCard({
   // run has ended there is nothing of it to stop: the request goes to the sub-agent itself.
   const drafts = !!run && !!onDraft && active;
   const steerable = controllable || lingering;
+  // Stopping a tracked run only writes the request, so it does not need a live sub-agent to send it through.
+  const stoppable = steerable || (drafts && reachable);
   const router = useRouter();
   const actions = [
     { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },
@@ -702,7 +704,7 @@ export function ExecCard({
       onSelect: () => void window.open(link.url, "_blank", "noopener,noreferrer"),
     })),
     run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
-    steerable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
+    stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
   // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
   const menu = useCardMenu(actions.length > 2);
@@ -750,7 +752,7 @@ export function ExecCard({
       {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
       {children}
       {lingering ? <p className="rc-note">A sub-agent of this run is still working.</p> : null}
-      {record.href || links.length || steerable || canReply ? (
+      {record.href || links.length || stoppable || canReply ? (
         <div className="rc-actions">
           {canReply ? (
             <Button
@@ -788,7 +790,7 @@ export function ExecCard({
               {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}
             </ButtonLink>
           ))}
-          {steerable ? (
+          {stoppable ? (
             <Button
               size="sm"
               variant="ghost"
@@ -821,7 +823,7 @@ export function ExecCard({
           onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
         />
       ) : null}
-      {steerable && confirmStop ? (
+      {stoppable && confirmStop ? (
         <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
           {drafts ? (
             <>

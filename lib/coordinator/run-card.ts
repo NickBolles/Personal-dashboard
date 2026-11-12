@@ -168,13 +168,14 @@ const timeOf = (at?: string | null) => {
   const t = at ? Date.parse(at) : NaN;
   return Number.isFinite(t) ? t : null;
 };
-const WINDOW_SLACK_MS = 10 * 60_000;
+const WINDOW_SLACK_MS = 60_000;
 /**
  * A shared title is only a hint that a record and a tracked run are the same work. It is no hint at all when one
  * ended before the other began: a weekly job reuses its title, and last week's sub-agent is not this week's run.
+ * A record that carries no start time is placed by its last update.
  */
 function sameWindow(record: ExecutionRecord, run: CoordinatorRunRow): boolean {
-  const recordStart = timeOf(record.startedAt);
+  const recordStart = timeOf(record.startedAt ?? record.updatedAt);
   const recordEnd = timeOf(record.endedAt);
   const runStart = timeOf(run.startedAt);
   const runEnd = timeOf(run.finishedAt);
@@ -188,11 +189,14 @@ const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
 /**
  * One card per piece of work. A conversation's background work arrives from several sources (the sub-agent
  * itself, its run registration, the R-n run), and they describe the same thing with different freshness:
- * records that are the same tracked run, or share a title while one of them has no status, are one card.
+ * records that are the same sub-agent or the same tracked run, or share a title while one of them has no
+ * status, are one card.
  *
- * Steer and Stop go to `control`, so a card must never show one sub-agent and control another: two sub-agents
- * that each report a real state are two cards whatever they are called (only the first is taken to be the
- * tracked run of that title), and within a card the controls follow the best-informed sub-agent record.
+ * Steer and Stop go to `control`, so a card must never show one sub-agent and control another, and which
+ * sub-agent a card controls must not depend on the order the records arrive in (it changes on every poll):
+ * - a tracked run that two different live sub-agents could both be (same title, same time) is neither's.
+ *   Each keeps its own card and its own controls, and the run is shown only by its own record, if it has one;
+ * - within a card the controls follow the best-informed record of the one sub-agent it is about.
  */
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
   const byId = new Map(runs.map((r) => [r.id, r]));
@@ -201,14 +205,27 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
     const key = workTitle(run.title);
     byTitle.set(key, [...(byTitle.get(key) ?? []), run]);
   }
+  const runOf = (record: ExecutionRecord) =>
+    (record.source === "subagent" ? undefined : byId.get(record.id)) ?? byTitle.get(workTitle(record.title))?.find((r) => sameWindow(record, r));
+  const claims = new Map<string, ExecutionRecord[]>();
+  for (const record of records) {
+    if (record.source !== "subagent" || record.state === "unknown") continue;
+    const run = runOf(record);
+    if (!run) continue;
+    const agents = claims.get(run.id) ?? [];
+    if (!agents.some((agent) => sameAgent(agent, record))) claims.set(run.id, [...agents, record]);
+  }
   const out: (BackgroundWork & { title: string })[] = [];
   for (const record of records) {
     const title = workTitle(record.title);
     const sub = record.source === "subagent";
-    const run = (sub ? undefined : byId.get(record.id)) ?? byTitle.get(title)?.find((r) => sameWindow(record, r));
-    const same = out.find(
-      (w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")),
-    );
+    const matched = runOf(record);
+    const run = sub && matched && (claims.get(matched.id)?.length ?? 0) > 1 ? undefined : matched;
+    const same =
+      (sub ? out.find((w) => !!w.control && sameAgent(w.control, record)) : undefined) ??
+      out.find((w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")));
+    // Cannot happen while contested runs are set aside above; kept so that no change to the matching can ever
+    // fold two live sub-agents into one card.
     const rival = sub && !!same?.control && !sameAgent(same.control, record) && same.control.state !== "unknown" && record.state !== "unknown";
     if (!same || rival) {
       out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, title });

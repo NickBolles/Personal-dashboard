@@ -497,7 +497,9 @@ export function CoordinatorThread({
                 </div>
                 {work.slice(0, 5).map((w) => (
                   <ExecCard
-                    key={`${sid}:${w.run?.id ?? w.control?.key ?? w.record.key}`}
+                    // Keyed by what its controls reach: a card that came to control another sub-agent is a new card,
+                    // so guidance typed for one, or a stop being confirmed, can never be sent to the other.
+                    key={`${sid}:${w.control?.key ?? w.run?.id ?? w.record.key}`}
                     work={w}
                     events={tracked.data?.events}
                     pending={control.isPending}

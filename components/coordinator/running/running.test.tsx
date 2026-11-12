@@ -460,17 +460,25 @@ it("a finished run takes no Steer, and a sub-agent that has ended is not steered
   expect(within(card).queryByRole("button", { name: "Steer R-1" })).toBeNull();
   view.unmount();
   const onControl = vi.fn();
+  const onDraft = vi.fn();
   render(
     <ExecCard
       work={{ record: sub({ state: "completed" }), control: sub({ state: "completed" }), run: run(7) }}
       pending={false}
       onControl={onControl}
-      onDraft={vi.fn()}
+      onDraft={onDraft}
     />,
   );
-  // the card shows the run (still working), but the only sub-agent it could reach has finished
+  // the card shows the run (still working), but the only sub-agent it could reach has finished: no Steer
   expect(screen.queryByRole("button", { name: /^Steer/ })).toBeNull();
   expect(screen.queryByText("A sub-agent of this run is still working.")).toBeNull();
+  fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
+  expect(menuLabels()).toEqual(["Copy R-7", "Ask to stop…"]);
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  // the run itself can still be asked to stop, and that only writes the request
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop" }));
+  fireEvent.click(screen.getByRole("button", { name: "Write stop request" }));
+  expect(onDraft).toHaveBeenCalledExactlyOnceWith("Stop R-7 (Audit the feeds) and its sub-agents.");
   expect(onControl).not.toHaveBeenCalled();
 });
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
@@ -617,6 +625,45 @@ it("thread has one since separator, safe mention chips and folded background not
   fireEvent.click(notices);
   expect(screen.queryByText(/Hidden background output/)).toBeNull();
   expect(api.post).not.toHaveBeenCalled();
+});
+it("guidance being typed on a background-work card stays with its sub-agent when a tracked run arrives and when the cards reorder", async () => {
+  client.setQueryData(["session", "thread"], { session: { id: "thread" }, timeline: [{ kind: "assistant", id: "reply", at, text: "Working" }] });
+  const a = sub({ startedAt: at });
+  const b = sub({ key: "subagent:sa_2", id: "sa_2", subagentId: "sa_2", startedAt: at });
+  const registration = sub({ key: "registered_run:reg_1", source: "registered_run", id: "reg_1", subagentId: null, state: "unknown" });
+  const exec = (records: ExecutionRecord[]) => client.setQueryData(["session-exec", "thread"], { sessionId: "thread", parent: null, records, sources: [] });
+  const tracked = (runs: CoordinatorRunRow[]) => client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs, events: [], lastLooked: markers });
+  exec([a, registration]);
+  tracked([]);
+  render(
+    <QueryClientProvider client={client}>
+      <CoordinatorThread info={info} />
+    </QueryClientProvider>,
+  );
+  const cards = () => screen.getAllByTestId("coordinator-run-card");
+  expect(cards()).toHaveLength(1);
+  fireEvent.click(within(cards()[0]!).getByRole("button", { name: "Steer" }));
+  const field = () => screen.getByRole("textbox", { name: /^Guidance for/ }) as HTMLTextAreaElement;
+  fireEvent.change(field(), { target: { value: "Only the feeds page" } });
+  // its tracked run is matched a poll later: the same card, now with its R-n, and the text is still there
+  act(() => {
+    tracked([run(7, { title: "Audit the feeds" })]);
+  });
+  await waitFor(() => expect(cards()[0]!.textContent).toContain("R-7"));
+  expect(cards()).toHaveLength(1);
+  expect(field().value).toBe("Only the feeds page");
+  // a second live sub-agent with the same title turns up and sorts first (it is waiting)
+  act(() => {
+    exec([{ ...b, state: "waiting" }, a, registration]);
+  });
+  await waitFor(() => expect(cards()).toHaveLength(3));
+  expect(field().value).toBe("Only the feeds page");
+  // and what was typed for the first one is sent to the first one
+  fireEvent.click(within(field().closest<HTMLElement>('[data-testid="coordinator-run-card"]')!).getByRole("button", { name: "Send" }));
+  await waitFor(() =>
+    expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions/thread/runs", expect.objectContaining({ input: "Steer sa_1: Only the feeds page" })),
+  );
+  expect(vi.mocked(api.post).mock.calls.some(([, body]) => String((body as { input?: string } | undefined)?.input).includes("sa_2"))).toBe(false);
 });
 it("thread omits the divider without a marker; the owner's active-run Stop still stops it", async () => {
   client.setQueryData(["session", "thread"], {
