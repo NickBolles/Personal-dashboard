@@ -239,19 +239,29 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   const ownRun = (record: ExecutionRecord, matched: CoordinatorRunRow | undefined) => {
     if (!matched) return undefined;
     const agent = agentOf.get(record)!;
-    // Nothing is known about this sub-agent yet: it claims nothing, and may fold into the run's card.
-    if (!known.has(agent)) return matched;
     const live = going.get(matched.id);
     const claimants = live?.size ? live : ended.get(matched.id);
+    // Nothing is known about this sub-agent yet: it claims nothing, and may fold into the card of a run that
+    // is not contested.
+    if (!known.has(agent)) return (claimants?.size ?? 0) < 2 ? matched : undefined;
     return claimants?.size === 1 && claimants.has(agent) ? matched : undefined;
   };
+  // One answer per sub-agent, whichever of its views could be matched to the run (a view that carries no start
+  // time may not be): the card must not gain or lose its run with the order the views arrive in.
+  const runOfAgent = new Map<number, CoordinatorRunRow>();
+  for (const record of subs) {
+    const agent = agentOf.get(record)!;
+    const run = ownRun(record, runOf(record));
+    const prior = runOfAgent.get(agent);
+    const newer = !!run && !!prior && (Date.parse(run.updatedAt) - Date.parse(prior.updatedAt) || run.id.localeCompare(prior.id)) > 0;
+    if (run && (!prior || newer)) runOfAgent.set(agent, run);
+  }
   const out: (BackgroundWork & { title: string; agent?: number })[] = [];
   for (const record of records) {
     const title = workTitle(record.title);
     const sub = record.source === "subagent";
     const agent = agentOf.get(record);
-    const matched = runOf(record);
-    const run = sub ? ownRun(record, matched) : matched;
+    const run = sub ? runOfAgent.get(agent!) : runOf(record);
     const same =
       (sub ? out.find((w) => w.agent === agent) : undefined) ??
       out.find((w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")));

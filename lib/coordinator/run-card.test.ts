@@ -230,6 +230,24 @@ describe("background work", () => {
       expect(work).toHaveLength(1);
       expect(work[0]!.run?.ref).toBe("R-9");
     }
+    // a sub-agent that outlived its run, seen once with a start time and once without: its run either way
+    const done = run({ id: "run-7", ref: "R-7", title: "Audit previews", state: "done", startedAt: ago(30), updatedAt: ago(20), finishedAt: ago(20) });
+    const bare = rec({ key: "child", id: "child_1", subagentId: "sa_1", updatedAt: ago(10) });
+    const full = rec({ key: "handle", id: "sa_1", subagentId: "sa_1", startedAt: ago(30), updatedAt: ago(10), summary: "Finishing cleanup" });
+    for (const order of orders([bare, full])) {
+      expect(shape(mergeBackgroundWork(order, [done]))).toEqual(["sa_1:handle:R-7"]);
+    }
+    // two views of one sub-agent under different titles, only one of which is the run's title
+    const session = rec({ key: "session", id: "child_1", subagentId: "sa_1", title: "Audit", startedAt: ago(30) });
+    for (const order of orders([session, full])) {
+      expect(shape(mergeBackgroundWork(order, [done]))).toEqual(["sa_1:handle:R-7"]);
+    }
+    // a run two live sub-agents could both be is nobody's, including a third nothing is known about
+    const other = rec({ key: "b", id: "sa_two", subagentId: "sa_two" });
+    const blank = rec({ key: "n", id: "sa_q", state: "unknown" });
+    for (const order of orders([retry, other, blank])) {
+      expect(mergeBackgroundWork(order, [tracked]).every((w) => !w.run)).toBe(true);
+    }
     // a sub-agent nothing is known about yet folds into the run's card and never takes its controls
     const nothing = rec({ key: "n", id: "sa_q", state: "unknown" });
     for (const order of orders([nothing, retry])) {
