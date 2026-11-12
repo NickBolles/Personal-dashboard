@@ -119,6 +119,9 @@ const DEALT_WITH =
   /\b(?:fix(?:ed|es|ing)?|resolv\w+|repair\w*|address\w*|handl\w+|patch\w*|silenc\w+|deflak\w+|quarantin\w+|skipp?\w*|debug\w*|investigat\w+|look(?:ed|ing)? into|reproduc\w+|retr(?:y|ied|ying)|rerun\w*|re-ran|cleared|clean(?:ed)? up|recover\w*|work(?:ed)? around|triag\w+|diagnos\w+|explain\w*|document\w*|test(?:ed|ing)? for|catch(?:es|ing)?|caught)\b[^.;!?\n]{0,60}?\b(?:fail\w*|errors?|broke\w*|crash\w*|time[sd]?\s?outs?|exceptions?|red)\b/gi;
 /** Still broken overrides "fixed": "Fixed 2 of 3; 1 still failing". */
 const STILL_BROKEN = /\bstill\s+(?:fail\w*|broke\w*|red|erroring|crash\w*|timing out)\b/i;
+/** The attempt itself is what failed: "Retry failed", "Patch failed to apply", "Fix attempt crashed". */
+const ATTEMPT_FAILED =
+  /\b(?:retr(?:y|ies)|re-?run|fix(?:es)?|patch(?:es)?|repair|recovery|rebuild|attempt|migration|rollback)\s+(?:\w+\s+)?(?:failed|errored|crashed|timed out|broke)\b/i;
 const SAYS_FAILED =
   /(?:^\s*(?:fail(?:ed|ure)?|error|fatal|panic|aborted)\b)|\b(?:fail(?:ed|s|ing|ures?)?|errors?|errored|erroring|timed\s?out|crash(?:ed|es|ing)?|broken|broke|exception|panick?(?:ed)?|abort(?:ed)?|blocked|denied|rejected|non-zero exit|exit(?:ed)?\s+(?:with\s+)?(?:code|status)\s+[1-9]\d*|could(?:n't| not)|cannot|can't|unable to|(?:is|are|went|turned|goes|stays?)\s+red)\b/i;
 const SAYS_PASSED = /\b(?:pass(?:ed|ing|es)?|green|succeeded|successful(?:ly)?|all (?:\w+\s+){0,2}?(?:ok|good))\b/i;
@@ -143,7 +146,7 @@ function statedOutcome(payload: Record<string, unknown> | undefined, type: strin
 export function proseSaysFailed(text: string | null | undefined): boolean {
   const said = (text ?? "").replace(/\s+/g, " ").trim();
   if (!said) return false;
-  if (STILL_BROKEN.test(said)) return true;
+  if (STILL_BROKEN.test(said) || ATTEMPT_FAILED.test(said)) return true;
   let rest = said;
   for (const re of NOT_A_FAILURE) rest = rest.replace(re, " ");
   rest = rest.replace(DEALT_WITH, " ");

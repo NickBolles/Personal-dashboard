@@ -228,11 +228,12 @@ export function AnchoredMenu({ menu, label, items, className }: { menu: Anchored
     };
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", outside);
+    const onResize = () => closeRef.current();
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("pointerdown", outside, true);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", outside);
+      window.removeEventListener("resize", onResize);
     };
   }, [at, isTrigger]);
 

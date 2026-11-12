@@ -30,6 +30,9 @@ const FAILED: string[] = [
   "Can't reach Hermes: 429 max connections reached",
   "Lint errored on eslint-suppressions.json",
   "main CI is red on 4a809cc",
+  "Retry failed",
+  "Patch failed to apply on top of main",
+  "Fix attempt crashed the dev server",
 ];
 const NOT_FAILED: string[] = [
   "Fixed the 3 failing tests",

@@ -124,3 +124,11 @@ it("disabled: no trigger and the browser's own context menu stays", () => {
   expect(ev.defaultPrevented).toBe(false);
   expect(screen.queryByRole("menu")).toBeNull();
 });
+
+it("a viewport resize closes the menu (no throw on the window target)", () => {
+  render(<Card onCopy={() => undefined} />);
+  fireEvent.contextMenu(screen.getByTestId("card"), { clientX: 30, clientY: 40 });
+  expect(screen.getByRole("menu")).toBeTruthy();
+  fireEvent(window, new Event("resize"));
+  expect(screen.queryByRole("menu")).toBeNull();
+});
