@@ -1506,7 +1506,8 @@ const gcQuickActions = [
 const GC_HIDE = 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock], .gc-tablet-dock { visibility: hidden !important; }';
 async function stubGlobalCoordinator(page: Page) {
   // Relative to the frozen browser clock: the sheet is a top-layer dialog, so masks can't cover its times.
-  const at = new Date((await freezeMiddayCT(page)) - 20 * 60_000).toISOString();
+  const frozen = await freezeMiddayCT(page);
+  const at = new Date(frozen - 20 * 60_000).toISOString();
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
   await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) => route.fulfill({ json: { actions: gcQuickActions } }));
   await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) =>
@@ -1544,6 +1545,8 @@ async function stubGlobalCoordinator(page: Page) {
   );
   // Never a real coordinator/Hermes write from a visual test.
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
+  /** The browser's frozen "now": fixture times must be relative to this, never to the real clock. */
+  return frozen;
 }
 const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint", ".gc-change-row .gc-hint"].map((m) => scope.locator(m));
 async function gcTheme(page: Page, scheme: "light" | "dark") {
@@ -1679,10 +1682,12 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
 
 test("chief of staff phone tray: a long failing line truncates inside the viewport and the composer stays reachable (#257)", async ({ page }, info) => {
   test.skip(info.project.name === "desktop", "Phone tray");
-  await stubGlobalCoordinator(page);
+  const frozen = await stubGlobalCoordinator(page);
   // Prod state that overflowed release 65: 21 stalled runs + 44 decisions. They stalled since the owner last looked, so the
   // tray leads with them: "21 runs newly stuck · 44 need you" (one sentence, no count badges).
-  const stale = new Date(Date.now() - 45 * 60_000).toISOString();
+  // 45 minutes before the browser's frozen clock, not the real one: after 12:15 CT the real clock is ahead of the
+  // frozen midday, the runs looked freshly updated and the tray said "21 working".
+  const stale = new Date(frozen - 45 * 60_000).toISOString();
   const items = Object.fromEntries(
     Array.from({ length: 21 }, (_, i) => {
       const itemId = `wk_tray_${i}`;
