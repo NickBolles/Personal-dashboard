@@ -170,12 +170,26 @@ export function CoordinatorThread({
       ...extra,
     });
   };
-  const ensureSession = async () => {
-    if (sid) return sid;
-    const s = await api.post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id });
-    setSessionId(s.id);
-    setFresh(false);
-    return s.id;
+  // One conversation per thread: the first attachment and Send can both ask for it before it exists, so they
+  // share the request in flight (two requests made two conversations, the file in one and the message in the other).
+  const creating = useRef<Promise<string> | null>(null);
+  useEffect(() => {
+    if (sid) creating.current = null;
+  }, [sid]);
+  const ensureSession = (): Promise<string> => {
+    if (sid) return Promise.resolve(sid);
+    creating.current ??= api
+      .post<SessionSummary>("/api/hermes/sessions", { title: `${d.area.title} coordinator`, areaId: d.area.id })
+      .then((s) => {
+        setSessionId(s.id);
+        setFresh(false);
+        return s.id;
+      })
+      .catch((err: unknown) => {
+        creating.current = null;
+        throw err;
+      });
+    return creating.current;
   };
   // Same attach + context tools as the full chat composer. Files upload to the conversation, so the first
   // attachment starts it (nothing is sent to the agent until Send).
@@ -276,7 +290,8 @@ export function CoordinatorThread({
     onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
   });
   const submit = () => {
-    if (attachments.uploading) return toast("Wait for the upload to finish, then send.", "warn");
+    // Files picked before the conversation exists wait in `queued` until it does: sending now would leave them behind.
+    if (attachments.uploading || queued.current.length) return toast("Wait for the upload to finish, then send.", "warn");
     if ((text.trim() || attachments.readyIds.length) && !send.isPending && !d.excluded && online) send.mutate({ input: text.trim() });
   };
   const timeline = detail.data?.timeline ?? [];

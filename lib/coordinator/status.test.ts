@@ -127,6 +127,26 @@ describe("coordinatorStatus", () => {
     expect(s).toMatchObject({ state: "needs", text: "3 need you", rest: "1 working", counts: { stuck: 0, newStuck: 0, waiting: 1 } });
   });
 
+  it("a waiting run with no decision of its own is never reported as nothing waiting", () => {
+    const one = coordinatorStatus({ needs: 0, runs: [run(1, { state: "waiting", title: "Order the filters", updatedAt: ago(5) }), run(2)], lastLooked: ago(1), now });
+    expect(one).toMatchObject({
+      state: "needs",
+      dot: "yellow",
+      text: "Order the filters is waiting on you",
+      rest: "1 working",
+      target: { tab: "running", ref: "R-1" },
+      counts: { needs: 0, waiting: 1 },
+    });
+    const two = coordinatorStatus({
+      needs: 0,
+      runs: [run(1, { state: "waiting", updatedAt: ago(5) }), run(2, { state: "waiting", updatedAt: ago(9) })],
+      lastLooked: ago(1),
+      now,
+    });
+    expect(two).toMatchObject({ state: "needs", text: "2 runs are waiting on you", target: { tab: "running" } });
+    expect(two.target.ref).toBeUndefined();
+  });
+
   it("several new problems are summarised, and finished work outranks plain progress", () => {
     const many = coordinatorStatus({
       needs: 0,

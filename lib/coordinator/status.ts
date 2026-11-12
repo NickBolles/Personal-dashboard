@@ -134,6 +134,21 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
       counts,
     };
   }
+  // A run can wait on the owner without raising a decision (its ask is its summary): it is not counted under
+  // "needs", so without this the tray said "No agent work waiting" while Activity showed it waiting.
+  if (counts.waiting) {
+    const first = attention.find((r) => r.kind === "waiting");
+    const text = counts.waiting === 1 && first ? `${short(first.title, 44)} ${VERB.waiting} on you` : `${counts.waiting} runs are waiting on you`;
+    return {
+      state: "needs",
+      tone: "warn",
+      dot: "yellow",
+      text,
+      rest: rest("working", "stuck"),
+      target: { tab: "running", ref: counts.waiting === 1 ? (first?.ref ?? undefined) : undefined },
+      counts,
+    };
+  }
   if (counts.finished)
     return {
       state: "finished",
