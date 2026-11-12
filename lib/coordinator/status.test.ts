@@ -121,7 +121,12 @@ describe("coordinatorStatus", () => {
   });
 
   it("a waiting run with no decision of its own is never reported as nothing waiting", () => {
-    const one = coordinatorStatus({ needs: 0, runs: [run(1, { state: "waiting", title: "Order the filters", updatedAt: ago(5) }), run(2)], lastLooked: ago(1), now });
+    const one = coordinatorStatus({
+      needs: 0,
+      runs: [run(1, { state: "waiting", title: "Order the filters", updatedAt: ago(5) }), run(2)],
+      lastLooked: ago(1),
+      now,
+    });
     expect(one).toMatchObject({
       state: "needs",
       dot: "yellow",
