@@ -280,6 +280,17 @@ describe("background work", () => {
     ).toEqual(["a|a|-", "b|b|-"]);
     // two sub-agents nothing is known about, on one run: one card, and always the same one of them
     expect(same([rec({ key: "a", id: "sa_a", state: "unknown", ...at }), rec({ key: "b", id: "sa_b", state: "unknown", ...at })], [done])).toEqual(["a|a|R-1"]);
+    // views with no status that share titles pairwise: the same grouping however they arrive
+    const bridge = [
+      rec({ key: "a1", id: "agent-a", title: "X", state: "unknown" }),
+      rec({ key: "a2", id: "agent-a", title: "Y", state: "unknown" }),
+      rec({ key: "b", id: "agent-b", title: "Y", state: "unknown" }),
+    ];
+    expect(same(bridge, [])).toEqual(["a1|a1|-"]);
+    // two runs with one title and one timestamp: the same one whichever is listed first
+    const twin = { ...done, id: "run-2", ref: "R-2" };
+    const registration = [rec({ key: "reg", source: "registered_run", id: "registration", state: "completed", ...at })];
+    expect(shape(mergeBackgroundWork(registration, [done, twin]))).toEqual(shape(mergeBackgroundWork(registration, [twin, done])));
     // a live sub-agent, its registration and a stray with no status, with and without the run
     const mix = [
       rec({ key: "live", id: "sa_1", subagentId: "sa_1", startedAt: ago(30) }),

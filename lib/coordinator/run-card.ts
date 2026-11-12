@@ -207,7 +207,7 @@ const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
   const byId = new Map(runs.map((r) => [r.id, r]));
   const byTitle = new Map<string, CoordinatorRunRow[]>();
-  for (const run of [...runs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))) {
+  for (const run of [...runs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id.localeCompare(b.id))) {
     const key = workTitle(run.title);
     byTitle.set(key, [...(byTitle.get(key) ?? []), run]);
   }
@@ -261,7 +261,11 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   // card that knows more, so the cards, what each shows and what each controls are the same in any order of
   // the records; only the order of the cards follows the order of the records.
   const phase = (record: ExecutionRecord) => (record.source === "subagent" ? (known.has(agentOf.get(record)!) ? 0 : 2) : record.state === "unknown" ? 2 : 1);
-  const queue = records.map((record, index) => ({ record, index })).sort((x, y) => phase(x.record) - phase(y.record) || x.index - y.index);
+  // Within a phase the records are taken in key order, not arrival order, so the result is a function of the
+  // set of records alone; `index` is kept only to put the finished cards in the order the records came in.
+  const queue = records
+    .map((record, index) => ({ record, index }))
+    .sort((x, y) => phase(x.record) - phase(y.record) || x.record.key.localeCompare(y.record.key) || x.index - y.index);
   // The better-informed record; between equals, always the same one.
   const better = (a: ExecutionRecord, b: ExecutionRecord) => (informative(a) - informative(b) || b.key.localeCompare(a.key)) > 0;
   const out: (BackgroundWork & { titles: Set<string>; agent?: number; index: number })[] = [];
