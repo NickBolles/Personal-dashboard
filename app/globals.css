@@ -24,6 +24,8 @@
   --d1: 120ms;
   --d2: 160ms;
   --d3: 200ms;
+  /* Anchored menus (cards, tray): wide enough for "Review D-12 · <question>" in two lines, rem so it grows with text. */
+  --k-menu-w: 18rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1);
   /* Orb: pine → sea → periwinkle (Tide). Gradient lives ONLY on the orb, agent glyph and agent progress. */
@@ -1716,6 +1718,41 @@ button:active > .dock-orb {
   }
   .k-menu-danger {
     color: var(--bad);
+  }
+  /* Anchored menu (components/ui/AnchoredMenu.tsx): top layer when the browser has popovers, else fixed. The
+     width is a token (rem-based, never wider than the viewport) and labels wrap, so 200% text never truncates. */
+  .k-amenu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    z-index: 60;
+    width: var(--k-menu-w);
+    max-width: calc(100vw - 16px);
+    animation: k-amenu-in var(--d2, 160ms) var(--ease) both;
+  }
+  .k-amenu > .k-menu {
+    min-width: 0;
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+  }
+  .k-amenu .k-menu-i {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding-block: 6px;
+  }
+  .k-amenu .k-menu-h {
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  @keyframes k-amenu-in {
+    from {
+      opacity: 0;
+    }
   }
   .k-pill {
     display: inline-flex;

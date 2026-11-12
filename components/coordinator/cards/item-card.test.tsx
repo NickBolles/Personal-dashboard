@@ -76,6 +76,11 @@ const agent = {
 } as unknown as ItemAgentInfo;
 const data = (over: Partial<ItemCardData> = {}): ItemCardData => ({ items, agents: {}, runs: [], events: [], decisions: [], ...over });
 const card = () => within(document.querySelector<HTMLElement>("article")!);
+// The card's head (it opens the card); the ⋯ menu trigger is a button too.
+const head = () =>
+  card()
+    .getAllByRole("button", { expanded: false })
+    .find((b) => !b.classList.contains("k-amenu-trigger"))!;
 afterEach(cleanup);
 
 it("a quiet item shows its status, where it sits and what is next; actions are one tap in", () => {
@@ -88,7 +93,7 @@ it("a quiet item shows its status, where it sits and what is next; actions are o
   // The arrow goes straight to the item; the rest of the actions are one tap in.
   expect(card().getByRole("link", { name: "Open Holiday sale checklist" }).getAttribute("href")).toBe("/areas?item=b");
   expect(card().queryByRole("link", { name: "Open item" })).toBeNull();
-  fireEvent.click(card().getByRole("button", { expanded: false }));
+  fireEvent.click(head());
   expect(card().getByRole("link", { name: "Open item" }).getAttribute("href")).toBe("/areas?item=b");
   expect(card().getByText("Last year's list, updated.")).toBeTruthy();
   fireEvent.click(card().getByRole("button", { name: "Ask in chat about Holiday sale checklist" }));
@@ -113,7 +118,7 @@ it("what needs the owner leads, and its chips jump to the decision and the run",
   const prs = within(card().getByRole("list", { name: "Pull requests" }));
   expect(prs.getByRole("link", { name: /^Sale banner/ }).getAttribute("href")).toBe("https://example.com/pr/1");
   expect(prs.getByText("Open")).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { expanded: false }));
+  fireEvent.click(head());
   expect(card().getByText("Banner drafted: Two variants.")).toBeTruthy();
   expect(card().getByRole("link", { name: "Agent conversation" }).getAttribute("href")).toBe("/chat/sess%201");
 });
@@ -125,7 +130,7 @@ it("a project gathers what is under it", () => {
   // nothing done yet is a count on the quiet line, not an empty bar
   expect(card().getByText("0 of 1 done")).toBeTruthy();
   expect(card().queryByRole("progressbar")).toBeNull();
-  fireEvent.click(card().getByRole("button", { expanded: false }));
+  fireEvent.click(head());
   expect(card().getByRole("link", { name: "Open project" })).toBeTruthy();
 });
 
@@ -158,7 +163,7 @@ it("an item that is gone still shows what was done to it", () => {
   render(<ItemCard itemId="gone" title="Archived thing" data={data()} changes={[change("c1", { object: { id: "gone", title: "Archived thing" } })]} />);
   expect(card().getByText("Archived thing")).toBeTruthy();
   expect(screen.getByRole("list", { name: "Changes to Archived thing" })).toBeTruthy();
-  fireEvent.click(card().getByRole("button", { expanded: false }));
+  fireEvent.click(head());
   expect(card().queryByRole("link", { name: /^Open/ })).toBeNull();
   expect(card().getByText(/no longer in your areas/)).toBeTruthy();
   // archived items still open; the link is offered as a try, not as the header arrow
