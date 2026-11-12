@@ -57,7 +57,7 @@ function decision(seq: number, overrides: Partial<Decision> = {}): Decision {
 }
 afterEach(() => vi.useRealTimers());
 describe("groupRuns", () => {
-  it("folds sub-runs, separates interruptions, puts failures before waiting and stalled", () => {
+  it("folds sub-runs, separates interruptions and waiting-on-you, puts failures before stalled", () => {
     const child = run(5, { parentRunId: "run-1", parentRef: "R-1", state: "failed" });
     const runs = [
       run(1),
@@ -68,7 +68,9 @@ describe("groupRuns", () => {
       run(6, { state: "interrupted", stalled: true }),
     ];
     const groups = groupRuns(runs);
-    expect(groups.attention.map((r) => r.ref)).toEqual(["R-3", "R-4", "R-2"]);
+    expect(groups.attention.map((r) => r.ref)).toEqual(["R-3", "R-4"]);
+    // A run waiting on the owner is not stuck: it gets its own section.
+    expect(groups.waiting.map((r) => r.ref)).toEqual(["R-2"]);
     expect(groups.running.map((r) => r.ref)).toEqual(["R-1"]);
     expect(groups.interrupted.map((r) => r.ref)).toEqual(["R-6"]);
     expect(childrenOf(runs, "run-1")).toEqual([child]);

@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChipButton, Menu, cx, useToast, type KMenuItem } from "@/components/ui";
+import { Button, ChipButton, Menu, cx, useToast, type KMenuItem } from "@/components/ui";
+import { CheckIcon, ChevronIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
-import { focusTarget, type ChatAction } from "@/lib/chat/actions";
+import { actionRows, focusTarget, summarizeActions, type ActionRow, type ChatAction } from "@/lib/chat/actions";
 
 /** Bridge to Conversation's existing tray callback, scoped so the global rail cannot open another chat. */
 export const OPEN_CHAT_RUNNING = "jarvis:chat-running";
 
+/** Things the agent only proposed (nothing applied yet) keep the dashed "proposed" outline; everything else is done. */
+const PROPOSED = new Set<ChatAction["kind"]>(["device_proposal", "quick_action"]);
+
+/**
+ * What a reply did, in plain words. One action shows as itself; several show as one summary line
+ * ("Created 1 item, started 2 runs") that opens the list. Repeats are folded ("Started 2 runs").
+ * Each row keeps its menu (Open / Undo / Focus); handed-off work opens the chat's Running tab.
+ */
 export function ActionsTaken({
   actions,
   sessionId,
@@ -26,9 +35,11 @@ export function ActionsTaken({
   const qc = useQueryClient();
   const { toast } = useToast();
   const menuId = useId();
+  const listId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const rows = useMemo(() => actionRows(actions), [actions]);
   const [selected, setSelected] = useState<string | null>(null);
   const [undone, setUndone] = useState<Set<string>>(() => new Set());
   const action = actions.find((a) => a.id === selected);
@@ -88,54 +99,83 @@ export function ActionsTaken({
         ...(focusTarget(action) ? [{ label: "Focus", disabled: focus.isPending, onSelect: () => focus.mutate(action) }] : []),
       ]
     : [];
+  const chip = ({ action: a, label, full }: ActionRow) => {
+    const title = a.title && a.title.length > 40 ? `${a.title.slice(0, 39)}…` : a.title;
+    return (
+      <ChipButton
+        className={cx("min-h-8 max-w-full border-[var(--aib)] text-[var(--ai)] sm:min-h-6", PROPOSED.has(a.kind) && "border-dashed")}
+        title={full}
+        aria-label={full}
+        aria-haspopup={a.kind === "delegated" ? undefined : "menu"}
+        aria-expanded={a.kind === "delegated" ? undefined : selected === a.id}
+        aria-controls={selected === a.id ? menuId : undefined}
+        disabled={a.kind === "delegated" && !sessionId}
+        onClick={(event) => {
+          trigger.current = event.currentTarget;
+          if (a.kind === "delegated") openRunning();
+          else setSelected((old) => (old === a.id ? null : a.id));
+        }}
+      >
+        <span className="truncate">
+          {label}
+          {title ? ` · ${title}` : ""}
+        </span>
+      </ChipButton>
+    );
+  };
+  const menu = action ? (
+    <div id={menuId} className="mt-1">
+      <Menu label={`Actions for ${action.title ?? action.label}`} items={items} onClose={close} className="w-52 min-w-0 max-w-full" />
+    </div>
+  ) : null;
   return (
     <div
       ref={root}
       data-testid="actions-taken"
       role="group"
       aria-label={areaHint ? `Actions in ${areaHint}` : "Actions taken"}
-      className={cx("mt-1 flex min-w-0 flex-wrap items-center gap-1", compact ? "text-xs" : "text-sm")}
+      className={cx("chat-actions mt-1 min-w-0", compact ? "text-xs" : "text-sm")}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setSelected(null);
       }}
     >
-      <span className="mr-1 text-xs font-medium text-muted">Actions</span>
-      {(expanded ? actions : actions.slice(0, 8)).map((a) => {
-        const full = a.title ? `${a.label} · ${a.title}` : a.label;
-        const title = a.title && a.title.length > 40 ? `${a.title.slice(0, 39)}…` : a.title;
-        return (
-          <ChipButton
-            key={a.id}
-            className="min-h-6 max-w-full border-dashed border-[var(--ai)] text-[var(--ai)]"
-            title={full}
-            aria-label={full}
-            aria-haspopup={a.kind === "delegated" ? undefined : "menu"}
-            aria-expanded={a.kind === "delegated" ? undefined : selected === a.id}
-            aria-controls={selected === a.id ? menuId : undefined}
-            disabled={a.kind === "delegated" && !sessionId}
-            onClick={(event) => {
-              trigger.current = event.currentTarget;
-              if (a.kind === "delegated") openRunning();
-              else setSelected((old) => (old === a.id ? null : a.id));
-            }}
-          >
-            <span className="truncate">
-              {a.label}
-              {title ? ` · ${title}` : ""}
-            </span>
-          </ChipButton>
-        );
-      })}
-      {!expanded && actions.length > 8 ? (
-        <ChipButton aria-expanded={false} onClick={() => setExpanded(true)} className="min-h-6">
-          +{actions.length - 8} more
-        </ChipButton>
-      ) : null}
-      {action ? (
-        <div id={menuId} className="basis-full">
-          <Menu label={`Actions for ${action.title ?? action.label}`} items={items} onClose={close} className="w-52 min-w-0 max-w-full" />
+      {rows.length === 1 ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          <CheckIcon className="h-3.5 w-3.5 shrink-0 text-[var(--ai)]" />
+          {chip(rows[0])}
         </div>
-      ) : null}
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-expanded={expanded}
+            aria-controls={expanded ? listId : undefined}
+            onClick={() => {
+              setExpanded((open) => !open);
+              setSelected(null);
+            }}
+            className={cx(
+              "chat-actions-head -ml-2 h-auto max-w-full justify-start gap-1.5 px-2 py-1 text-left whitespace-normal",
+              compact ? "text-xs" : "text-sm",
+            )}
+          >
+            <CheckIcon className="h-3.5 w-3.5 shrink-0 text-[var(--ai)]" />
+            <span className="min-w-0 break-words">{summarizeActions(actions)}</span>
+            <ChevronIcon className={cx("h-3.5 w-3.5 shrink-0 transition-transform", expanded && "rotate-90")} />
+          </Button>
+          {expanded ? (
+            <ul id={listId} className="mt-1 flex min-w-0 flex-wrap gap-1" aria-label="What was done">
+              {rows.map((row) => (
+                <li key={row.action.id} className="max-w-full min-w-0">
+                  {chip(row)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      )}
+      {menu}
     </div>
   );
 }

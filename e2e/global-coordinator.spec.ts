@@ -71,6 +71,9 @@ test("phone opens the Chief of staff sheet on two pages with fresh Viewing conte
   }
   await sheet.getByRole("button", { name: "Remove page context" }).click();
   await expect(sheet.locator(".gc-context")).toHaveCount(0);
+  // Off is stated, and reversible.
+  await expect(sheet.getByText("This page is not shared.")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Share page", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(tray).toBeFocused();

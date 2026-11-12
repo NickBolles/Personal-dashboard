@@ -292,7 +292,13 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
   ]);
   await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
   const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-  expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  expect
+    .soft(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+    )
+    .toEqual([]);
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
@@ -839,11 +845,15 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await zoom();
   await tray.click();
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+  // The tray opens where its sentence points (here: the approvals under Needs you); the chat is one tab away.
+  await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
   await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
   await axe("sheet chat");
   await zoom();
-  await sheet.getByRole("tab", { name: /^Changes/ }).click();
-  await axe("sheet changes");
+  // Changes live under Activity (with runs); there is no separate tab.
+  await sheet.getByRole("tab", { name: /^Activity/ }).click();
+  await expect(sheet.getByRole("region", { name: "Changes" })).toBeVisible();
+  await axe("sheet activity");
   await zoom();
   await page.keyboard.press("Escape");
 });
@@ -955,12 +965,9 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   const desktop = info.project.name === "desktop";
   const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
   const sel = desktop ? ".gc-rail" : ".gc-sheet";
-  if (desktop) await scope.getByRole("tab", { name: /^Needs you/ }).click();
-  else
-    await page
-      .locator(".gc-tray")
-      .getByRole("button", { name: /need you, open Needs you$/ })
-      .click();
+  // The tray is one button; its status sentence says what waits. Needs you is a tab inside.
+  if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
+  await scope.getByRole("tab", { name: /^Needs you/ }).click();
   await expect(scope.getByRole("button", { name: "D-49: Ship it now", exact: true })).toBeVisible();
   await axe("needs list", sel);
   await zoom();
@@ -969,9 +976,9 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   await expect(scope.getByRole("radiogroup", { name: "Answers for D-48" })).toBeVisible();
   await axe("risk-flagged detail", sel);
   await zoom();
-  await scope.getByRole("tab", { name: /^Running/ }).click();
+  await scope.getByRole("tab", { name: /^Activity/ }).click();
   await expect(scope.getByText(/Lane 65/)).toBeVisible();
-  await axe("running", sel);
+  await axe("activity", sel);
   await zoom();
 });
 

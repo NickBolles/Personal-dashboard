@@ -9,6 +9,7 @@
 //   /github/*   GitHub REST (read-only subset for the Work hub; JARVIS_GITHUB_API_URL)
 //   /__mock/*   control plane (reset, fail, speed, google/tasks)
 import http from "node:http";
+import { pathToFileURL } from "node:url";
 import { createHermes } from "./hermes.mjs";
 import { createPaperclip } from "./paperclip.mjs";
 import { createHomeAssistant } from "./home-assistant.mjs";
@@ -150,4 +151,5 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
   return server;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) startMockServer();
+// pathToFileURL: a plain `file://${argv[1]}` never matches on Windows (drive letter, backslashes).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) startMockServer();

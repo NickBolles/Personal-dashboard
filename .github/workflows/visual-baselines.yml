@@ -30,11 +30,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # Install scripts are skipped so better-sqlite3's bundled Linux binary is used as it is, with no build
+      # tools from the Ubuntu package mirror (see the same step in ci.yml).
       - if: steps.check.outputs.skip != 'true'
-        name: Build tools for native modules (better-sqlite3)
-        run: apt-get update && apt-get install -y --no-install-recommends build-essential python3
+        run: npm ci --ignore-scripts
       - if: steps.check.outputs.skip != 'true'
-        run: npm ci
+        name: Check the bundled SQLite binary loads
+        run: |
+          node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get(); console.log('better-sqlite3 bundled binary loads')"
       - if: steps.check.outputs.skip != 'true'
         run: npm run build
       - if: steps.check.outputs.skip != 'true'

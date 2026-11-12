@@ -6,11 +6,13 @@ import type { LookSurface } from "@/lib/cw-runs";
 import type { RunsResponse } from "@/lib/coordinator/runs-view";
 
 export const COORDINATOR_RUNS_KEY = ["work", "coordinator", "runs"] as const;
-export function useCoordinatorRuns() {
+/** `live`: the runs are on screen (Activity, or run cards in Chat), so keep them current; otherwise a slow tick feeds the tray. */
+export function useCoordinatorRuns(live = false, enabled = true) {
   return useQuery({
     queryKey: COORDINATOR_RUNS_KEY,
     queryFn: ({ signal }) => api.get<RunsResponse>("/api/coordinator/runs", signal),
-    refetchInterval: 30_000,
+    enabled,
+    refetchInterval: live ? 10_000 : 30_000,
   });
 }
 
@@ -34,19 +36,23 @@ export function useMarkLooked() {
       await qc.cancelQueries({ queryKey: COORDINATOR_RUNS_KEY });
       const previous = qc.getQueryData<RunsResponse>(COORDINATOR_RUNS_KEY)?.lastLooked[surface];
       const optimistic = new Date().toISOString();
-      qc.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, (old) => (old ? { ...old, lastLooked: { ...old.lastLooked, [surface]: optimistic } } : old));
+      qc.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, (old) =>
+        old?.lastLooked ? { ...old, lastLooked: { ...old.lastLooked, [surface]: optimistic } } : old,
+      );
       return { previous, optimistic };
     },
     onError: (_error, surface, context) => {
       qc.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, (old) =>
-        old && context && old.lastLooked[surface] === context.optimistic
+        old?.lastLooked && context && old.lastLooked[surface] === context.optimistic
           ? { ...old, lastLooked: { ...old.lastLooked, [surface]: context.previous ?? null } }
           : old,
       );
     },
     onSuccess: (result, surface, context) => {
       qc.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, (old) =>
-        old && old.lastLooked[surface] === context?.optimistic ? { ...old, lastLooked: { ...old.lastLooked, [surface]: result.lastLooked[surface] } } : old,
+        old?.lastLooked && result?.lastLooked && old.lastLooked[surface] === context?.optimistic
+          ? { ...old, lastLooked: { ...old.lastLooked, [surface]: result.lastLooked[surface] } }
+          : old,
       );
     },
   });

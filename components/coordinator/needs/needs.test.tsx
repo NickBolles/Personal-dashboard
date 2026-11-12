@@ -50,7 +50,7 @@ function wrapper({ children }: { children: ReactNode }) {
   );
 }
 async function ready() {
-  await screen.findByText("1 open");
+  await screen.findByText("1 open decision");
 }
 beforeEach(() => {
   vi.mocked(api.get).mockReset();
@@ -97,7 +97,7 @@ describe("Needs you owner actions", () => {
     const invalidate = vi.spyOn(qc, "invalidateQueries");
     render(<NeedsList decisions={rows} onOpen={vi.fn()} onAnswered={onAnswered} />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "D-48: Accept" }));
-    await screen.findByText("D-48 → Accept");
+    await screen.findAllByText("Answer recorded: Accept · Question 48?");
     expect(api.post).toHaveBeenCalledWith("/api/coordinator/decisions/D-48/answer", { answer: "Accept", via: "queue", idempotencyKey: expect.any(String) });
     expect(onAnswered).toHaveBeenCalledWith(expect.objectContaining({ id: "op-D-48" }));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["work"] });
@@ -140,7 +140,7 @@ describe("Needs you owner actions", () => {
     rows = [decision(48), decision(49), decision(50)];
     render(<NeedsPanel onAsk={vi.fn()} initialRef="D-48" />, { wrapper });
     fireEvent.click(await screen.findByRole("radio", { name: /Accept/ }));
-    await screen.findByText("D-48 → Accept");
+    await screen.findAllByText("Answer recorded: Accept · Question 48?");
     expect(screen.getByRole("heading", { name: "Question 48?" })).toBeTruthy();
     await waitFor(() => expect(screen.getByRole("heading", { name: "Question 49?" })).toBeTruthy(), { timeout: 1800 });
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -237,16 +237,65 @@ describe("Needs you owner actions", () => {
     vi.mocked(api.get).mockRejectedValue(new Error("Offline"));
     render(<NeedsPanel onAsk={vi.fn()} />, { wrapper });
     expect(screen.getByRole("status", { name: "Loading decisions" })).toBeTruthy();
-    expect((await screen.findByRole("alert")).textContent).toBe("Decisions couldn't load. Retrying.");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Decisions couldn't load.");
+    expect(within(alert).getByRole("button", { name: "Try again" })).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
   });
-  it("groups ageing first and compacts only New rows in a large queue", () => {
+  it("lists what has waited over a day first; every row in a large queue keeps its ref and wraps", () => {
     const many = Array.from({ length: 13 }, (_, i) => decision(48 + i, i === 0 ? { createdAt: new Date(clock - 172_800_000).toISOString() } : {}));
     vi.spyOn(Date, "now").mockReturnValue(clock);
     const { container } = render(<NeedsList decisions={many} onOpen={vi.fn()} />, { wrapper });
-    expect(container.querySelectorAll(".gc-needs-row-compact").length).toBe(12);
-    expect(screen.getByRole("region", { name: "Ageing" }).textContent).toContain("D-48");
+    expect(screen.getByRole("region", { name: "Waiting over a day" }).textContent).toContain("D-48");
     expect(screen.getByLabelText("Decision D 48")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "New" }).querySelectorAll(".gc-needs-row").length).toBe(12);
+    // No one-line variant: it dropped the ref and overflowed sideways on phones.
+    expect(container.querySelectorAll(".gc-needs-row-title.line-clamp-2").length).toBe(13);
+    expect(screen.getByLabelText("Decision D 60")).toBeTruthy();
+  });
+  it("leads a row with the first sentence of a paragraph-long question and does not repeat the item title", () => {
+    const long = decision(70, {
+      itemTitle: "Release-clone cleanup",
+      question: "@devchief proposes: settle. This item is ready_to_settle; its record reports cleanup completed on 2026-11-02, with no dependents remaining.",
+    });
+    const echo = decision(71, { itemTitle: "Rotate the storefront DB password", question: "Rotate the storefront DB password?" });
+    vi.spyOn(Date, "now").mockReturnValue(clock);
+    render(<NeedsList decisions={[long, echo]} onOpen={vi.fn()} />, { wrapper });
+    const rowOf = (ref: string) => screen.getByRole("button", { name: new RegExp(`^Open decision ${ref}:`) });
+    expect(rowOf("D-70").querySelector(".gc-needs-row-title")?.textContent).toBe("@devchief proposes: settle.");
+    expect(rowOf("D-70").textContent).toContain("Development / Release-clone cleanup");
+    expect(rowOf("D-71").querySelector(".gc-needs-meta")?.textContent).not.toContain("Rotate the storefront DB password");
+    expect(rowOf("D-71").querySelector(".gc-needs-meta")?.textContent).toContain("Development");
+    // One-tap answers only where the whole question is on the row; otherwise the answer waits for the detail.
+    expect(screen.queryByRole("button", { name: "D-70: Accept" })).toBeNull();
+    expect(screen.getByRole("button", { name: "D-71: Accept" })).toBeTruthy();
+  });
+  it("the detail shows a short heading, the rest as body text, and plain status words", () => {
+    rows = [
+      decision(70, {
+        question: "@devchief proposes: settle. This item is ready_to_settle; its record reports cleanup completed on 2026-11-02, with no dependents remaining.",
+      }),
+    ];
+    render(<DecisionDetail decisions={rows} refId="D-70" onBack={vi.fn()} onNavigate={vi.fn()} onAsk={vi.fn()} />, { wrapper });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("@devchief proposes: settle.");
+    expect(screen.getByText(/This item is ready to settle; its record reports/)).toBeTruthy();
+    expect(screen.queryByText(/ready_to_settle/)).toBeNull();
+  });
+  it("run approvals lead the list and never sit beside an open decision on a narrow panel", async () => {
+    render(<NeedsPanel onAsk={vi.fn()} lead={<p>Other approvals</p>} />, { wrapper });
+    await ready();
+    const lead = screen.getByText("Other approvals");
+    expect(lead.closest(".gc-needs-list-pane")).toBeTruthy();
+    expect(lead.closest(".gc-needs-detail-pane")).toBeNull();
+    expect(lead.compareDocumentPosition(screen.getByText("1 open decision")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("heads a paragraph with no short first sentence by its item, and shows the text once", () => {
+    const text =
+      "The checkout refactor merged on 2026-11-06 and the item is ready_to_settle, but the smoke run on 2026-11-07 still shows one flaky coupon test that I re-ran twice";
+    rows = [decision(71, { itemTitle: "Checkout refactor", question: text })];
+    render(<DecisionDetail decisions={rows} refId="D-71" onBack={vi.fn()} onNavigate={vi.fn()} onAsk={vi.fn()} />, { wrapper });
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("Checkout refactor");
+    expect(screen.getAllByText(/The checkout refactor merged on 2026-11-06 and the item is ready to settle/)).toHaveLength(1);
   });
   it("uses safe evidence links and valid definition-list children", () => {
     rows = [
@@ -314,7 +363,8 @@ describe("Needs you owner actions", () => {
     const { container } = render(<NeedsPanel onAsk={vi.fn()} onCount={onCount} />, { wrapper });
     await ready();
     expect(onCount).toHaveBeenCalledWith(1);
-    expect(container.querySelector("[aria-live='polite']")?.textContent).toBe("New decision D-48");
+    // What was already waiting when the panel opened is not announced as new.
+    expect(container.querySelector("[aria-live='polite']")?.textContent).toBe("");
     rows = [decision(48), decision(49)];
     await act(async () => {
       await qc.invalidateQueries({ queryKey: DECISIONS_KEY });

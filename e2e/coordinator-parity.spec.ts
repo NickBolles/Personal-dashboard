@@ -104,13 +104,15 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await page.goto(`/chat/${sid}`);
   const reply = page.locator("#msg-parity-assistant");
   await expect(reply.getByTestId("actions-taken")).toBeVisible();
+  // Several actions show as one plain summary line; the individual actions open from it.
+  await reply.getByRole("button", { name: "Created 1 item, handed off to 2 agents" }).click();
   await reply.getByRole("button", { name: "Created · Retry policy" }).click();
   const menu = reply.getByRole("menu");
   await expect(menu.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Undo", exact: true })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "Focus", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await reply.getByRole("button", { name: "2 sub-agents · Audit retries" }).click();
+  await reply.getByRole("button", { name: "Handed off to 2 agents · Audit retries" }).click();
   await expect(page.getByRole("tab", { name: /Running/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tabpanel", { name: /Running/ })).toContainText("Audit retries");
   await expectNoHorizontalOverflow(page);

@@ -6,7 +6,6 @@ import { api } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { cx, useOnline, useToast } from "@/components/ui";
 import { Button, inputCls } from "@/components/ui/legacy";
-import { SendIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
 import { useAssistantChoice } from "./backend";
 import { useAskHermes } from "./useAskHermes";
@@ -100,7 +99,7 @@ export function QuickCapture({
 
   return (
     <form
-      className="card flex flex-wrap items-end justify-end gap-1.5 p-1.5"
+      className="quick-capture card flex flex-wrap items-end justify-end gap-1.5 p-1.5"
       onSubmit={(e) => {
         e.preventDefault();
         primary();
@@ -169,9 +168,9 @@ export function QuickCapture({
           aria-keyshortcuts={SEND_KEYSHORTCUTS}
           busy={asking}
           disabled={!text.trim()}
-          className="shrink-0"
+          className="quick-send shrink-0"
         >
-          {!asking ? <SendIcon className="h-5 w-5" /> : null}
+          {!asking ? <span aria-hidden="true">↑</span> : null}
         </Button>
       )}
     </form>

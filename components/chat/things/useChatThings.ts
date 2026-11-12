@@ -10,7 +10,7 @@ export function useChatThings(sessionId: string, input: Omit<ChatThingsInput, "e
     queryKey: ["chat-execution", sessionId],
     queryFn: async () => {
       const result = await api.get<ChatExecutionResponse>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/execution`);
-      if (!Array.isArray(result.records) || !Array.isArray(result.sources)) throw new Error("Couldn't load execution status");
+      if (!Array.isArray(result.records) || !Array.isArray(result.sources)) throw new Error("Couldn't check background work");
       return result;
     },
     refetchInterval: (q) => (q.state.data?.records.some(isActiveExec) ? 20_000 : 60_000),

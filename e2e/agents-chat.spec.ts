@@ -72,9 +72,11 @@ test("a chat started under a routed area runs on its profile, streamed as AG-UI"
   const before = await profileHits(page);
   await page.getByRole("button", { name: "Chat here" }).click();
   await page.waitForURL(/\/chat\/.+/);
-  const chip = page.getByTestId("agent-chip");
-  await expect(chip).toContainText("momentumchief");
-  await expect(chip).toHaveAttribute("data-routed", "1");
+  // A routed agent is named once, in the header (and the composer placeholder); the composer chip only
+  // appears when the profile asked for is NOT the one answering.
+  await expect(page.getByTestId("agent-badge")).toHaveText("@momentumchief");
+  await expect(page.locator("#composer")).toHaveAttribute("placeholder", "Message @momentumchief…");
+  await expect(page.getByTestId("agent-chip")).toHaveCount(0);
 
   // Approval round trip over the AG-UI stream (interrupt → card → answer → next run).
   const composer = page.locator("#composer");
@@ -178,7 +180,7 @@ test("the global composer asks the open area's agent, files the chat there; the 
   await page.waitForURL(/\/chat\/.+/);
   // The question shows at once, the reply streams from the area's agent.
   await expect(page.getByLabel("Conversation timeline").getByText("what should we bet on next week").first()).toBeVisible();
-  await expect(page.getByTestId("agent-chip")).toContainText("momentumchief");
+  await expect(page.getByTestId("agent-badge")).toHaveText("@momentumchief");
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await profileHits(page)).toBeGreaterThan(before);
 });

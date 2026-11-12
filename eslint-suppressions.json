@@ -225,7 +225,7 @@
   },
   "components/areas/ConversationsView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 5
+      "count": 2
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
@@ -345,7 +345,7 @@
   },
   "components/chat/Conversation.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 21
+      "count": 15
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
@@ -433,7 +433,7 @@
   },
   "components/chat/things/ChatTray.tsx": {
     "jarvis-ui/no-native-controls": {
-      "count": 2
+      "count": 1
     }
   },
   "components/chat/things/SummaryChip.tsx": {
@@ -442,11 +442,8 @@
     }
   },
   "components/coordinator/GlobalCoordinator.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
     "jarvis-ui/no-native-controls": {
-      "count": 8
+      "count": 2
     }
   },
   "components/decisions/DecisionAnswer.tsx": {

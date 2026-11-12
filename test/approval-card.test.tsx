@@ -109,3 +109,51 @@ describe("ApprovalCard send failure", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   });
 });
+
+describe("ApprovalCard wider grants", () => {
+  const wide = (requestId: string): ApprovalRequest => ({ ...req(requestId), choices: ["once", "session", "always", "deny"] });
+
+  it("shows one primary and Deny; the wider grants appear only behind More options, each with what it covers", () => {
+    render(<ApprovalCard approval={wide("r1")} onAnswer={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Approve once" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve for this session" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+    const more = screen.getByRole("button", { name: "More options" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    for (const name of ["Approve for this session", "Always allow"]) {
+      const grant = screen.getByRole("button", { name });
+      expect(document.getElementById(grant.getAttribute("aria-describedby")!)?.textContent).toMatch(/without asking again/);
+    }
+  });
+
+  it("a wider grant still waits out the undo window before it is sent", async () => {
+    const onAnswer = vi.fn();
+    render(<ApprovalCard approval={wide("r1")} onAnswer={onAnswer} />);
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    fireEvent.click(screen.getByRole("button", { name: "Always allow" }));
+    await act(async () => void vi.advanceTimersByTime((APPROVE_UNDO_SECONDS - 1) * 1000));
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await act(async () => void vi.advanceTimersByTime(30_000));
+    expect(onAnswer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve for this session" }));
+    await act(async () => void vi.advanceTimersByTime(APPROVE_UNDO_SECONDS * 1000));
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith("session");
+  });
+
+  it("a replacement prompt starts with the wider grants folded away again", () => {
+    const { rerender } = render(<ApprovalCard approval={wide("r1")} onAnswer={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    expect(screen.getByRole("button", { name: "Always allow" })).toBeTruthy();
+    rerender(<ApprovalCard approval={wide("r2")} onAnswer={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Always allow" })).toBeNull();
+  });
+
+  it("offers no More options when only one grant and Deny are possible", () => {
+    render(<ApprovalCard approval={{ ...req("r1"), choices: ["once", "deny"] }} onAnswer={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
+});

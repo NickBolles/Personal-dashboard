@@ -9,6 +9,7 @@ import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
 import { useAccess } from "@/components/access";
 import "./map.css";
 import { decisionAnswerBody, decisionAnswerPath, decisionLogText, withdrawPost, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
+import { plainStatusWords } from "@/lib/chat/display";
 
 export const DECISIONS_KEY = ["work", "decisions"] as const;
 
@@ -119,7 +120,7 @@ function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; 
         {e.areaTitle && !compact ? <span className="min-w-0 text-xs text-muted wrap-anywhere">{e.areaTitle}</span> : null}
       </div>
       <p id={qid} className="mt-1 text-sm wrap-anywhere">
-        {e.question}
+        {plainStatusWords(e.question)}
       </p>
       {e.kind === "item" ? (
         <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label={`Answer: ${e.question}`}>

@@ -17,7 +17,7 @@ function frame() {
 function Harness({ ready = true, message = true }: { ready?: boolean; message?: boolean }) {
   const content = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const { detached, jumpToLatest } = useFollowScroll(content, bottom, ready);
+  const { detached, below, jumpToLatest } = useFollowScroll(content, bottom, ready);
   return (
     <>
       {ready ? (
@@ -27,6 +27,7 @@ function Harness({ ready = true, message = true }: { ready?: boolean; message?: 
         </div>
       ) : null}
       <output>{detached ? "detached" : "following"}</output>
+      <output>{below ? "content below" : "nothing below"}</output>
       <button onClick={() => jumpToLatest()}>Focus composer</button>
       <button onClick={() => jumpToLatest(false, true)}>Send</button>
       <button onClick={() => jumpToLatest(true)}>Jump to latest</button>
@@ -162,4 +163,36 @@ it("does not recenter a late anchor after the user sends", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await act(async () => view.rerender(<Harness />));
   expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+});
+
+it("offers a jump only while there really is content under the fold", () => {
+  render(<Harness />);
+  frame();
+  // At the bottom of a long thread: scrolling up a little detaches, but there is nothing to jump to yet.
+  vi.spyOn(window, "scrollY", "get").mockReturnValue(3000 - window.innerHeight);
+  fireEvent.wheel(window, { deltaY: -100 });
+  expect(screen.getByText("detached")).toBeTruthy();
+  expect(screen.getByText("nothing below")).toBeTruthy();
+  vi.spyOn(window, "scrollY", "get").mockReturnValue(3000 - window.innerHeight - 400);
+  fireEvent.scroll(window);
+  expect(screen.getByText("content below")).toBeTruthy();
+  // New output arriving while detached keeps the offer; jumping clears it.
+  resize();
+  frame();
+  expect(screen.getByText("content below")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Jump to latest" }));
+  expect(screen.getByText("following")).toBeTruthy();
+  expect(screen.getByText("nothing below")).toBeTruthy();
+});
+
+it("an empty or short thread that fits the screen never detaches or offers a jump", () => {
+  vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(window.innerHeight);
+  render(<Harness />);
+  frame();
+  fireEvent.wheel(window, { deltaY: -100 });
+  fireEvent.touchStart(window, { touches: [{ clientY: 100 }] });
+  fireEvent.touchMove(window, { touches: [{ clientY: 200 }] });
+  fireEvent.keyDown(document.body, { key: "PageUp" });
+  expect(screen.getByText("following")).toBeTruthy();
+  expect(screen.getByText("nothing below")).toBeTruthy();
 });

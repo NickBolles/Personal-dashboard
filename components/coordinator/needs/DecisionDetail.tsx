@@ -6,7 +6,8 @@ import { Button, ButtonLink, Card, IconButton, Pill, useNow } from "@/components
 import { Markdown } from "@/components/markdown/Markdown";
 import { RISK_LABEL, type Decision } from "@/lib/cw-decisions";
 import { ageLabel, decisionKeyAction, defaultLine, deferUntil, isRisky, nextAfterAnswer, pagerState, safeEvidenceHref } from "@/lib/coordinator/needs";
-import { DecisionId, DecisionMenu, DecisionNotices } from "./NeedsList";
+import { plainStatusWords, sameLabel, splitLead } from "@/lib/chat/display";
+import { DecisionId, DecisionMenu, DecisionNotices, receiptText } from "./NeedsList";
 import { useAnswerDecision, useDecisionFeedback } from "./useCoordinatorDecisions";
 
 type Props = { decisions: Decision[]; refId: string; onBack: () => void; onNavigate: (ref: string) => void; onAsk: (ref: string) => void; arm?: string };
@@ -68,7 +69,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
         }
         onNavigate(refId);
       };
-      if (result.op) undo.current = feedback.showUndo(`${refId} → ${choice}`, returnToDecision);
+      if (result.op) undo.current = feedback.showUndo(receiptText(current, choice), returnToDecision);
       else feedback.toast(`Saved ${refId}`);
       if (mounted.current) {
         setArmed(null);
@@ -137,8 +138,14 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
   const risky = isRisky(d);
   const pending = answer.isPending || saved || feedback.deferring.includes(refId);
   const defaults = defaultLine(d, now);
+  // An agent that puts a paragraph in the one-line question gets a short heading and the rest as body text.
+  const split = splitLead(plainStatusWords(d.question));
+  // No clean first sentence to lift: head the page with the item it is about and show the whole text once, below.
+  const titled = !split.whole && !!d.itemTitle && !sameLabel(d.itemTitle, d.question);
+  const asked = titled ? { lead: d.itemTitle!, rest: split.rest } : split;
+  const where = [d.areaTitle, d.itemTitle].filter(Boolean).join(" / ") || d.itemId;
   const facts = [
-    { label: "Item / area", value: [d.areaTitle, d.itemTitle].filter(Boolean).join(" / ") || d.itemId },
+    ...(where ? [{ label: "About", value: where }] : []),
     { label: "Raised by", value: d.raisedBy.replace(/^agent:/, "@") },
     ...(defaults ? [{ label: "Default", value: defaults }] : []),
     ...(d.pack.facts ?? []),
@@ -147,11 +154,13 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
   return (
     <div className="gc-needs-detail min-w-0" ref={root} tabIndex={-1} onKeyDown={keyDown} aria-label={`Decision ${refId.replace("-", " ")}`}>
       <nav className="gc-needs-nav" aria-label="Decision navigation">
-        <Button variant="ghost" size="sm" aria-label="Back to Needs you" onClick={back}>
+        <Button variant="ghost" size="sm" icon={<ChevronIcon className="h-4 w-4 rotate-180" />} aria-label="Back to Needs you" onClick={back}>
           Back
         </Button>
-        <DecisionId refId={refId} />
-        <span className="gc-needs-meta">{ageLabel(d.createdAt, now)}</span>
+        <span className="gc-needs-meta">
+          <DecisionId refId={refId} />
+          <span>{ageLabel(d.createdAt, now)}</span>
+        </span>
         <div className="gc-needs-pager">
           <span aria-label={`Decision ${Math.max(1, pager.index + 1)} of ${pager.total}`}>
             {Math.max(1, pager.index + 1)} / {pager.total}
@@ -160,7 +169,8 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
           <IconButton label="Next decision" disabled={!pager.next} onClick={() => go(pager.next)} icon={<ChevronIcon className="h-4 w-4" />} />
         </div>
       </nav>
-      <h3 className="gc-needs-question">{d.question}</h3>
+      <h3 className="gc-needs-question">{asked.lead}</h3>
+      {asked.rest ? <p className="gc-needs-body">{asked.rest}</p> : null}
       {d.pack.why ? <p className="gc-needs-why">{d.pack.why}</p> : null}
       {d.detail ? (
         <div className="gc-needs-detail-text min-w-0">
@@ -207,7 +217,9 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
                 {evidence.ref ? <span className="gc-needs-meta">{evidence.ref}</span> : null}
                 {evidence.text ? (
                   ["diff", "code", "log"].includes(evidence.kind) ? (
-                    <pre className="overflow-x-auto">{evidence.text}</pre>
+                    <pre className="overflow-x-auto" tabIndex={0} aria-label={evidence.label}>
+                      {evidence.text}
+                    </pre>
                   ) : (
                     <p>{evidence.text}</p>
                   )
@@ -216,6 +228,13 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
             );
           })}
         </section>
+      ) : null}
+      {risky && d.choices.length ? (
+        <p className="gc-needs-flag">
+          <AlertIcon className="h-4 w-4" />
+          {d.risk.map((flag) => RISK_LABEL[flag]).join(" · ")}
+          <span>Your answer needs a second tap to confirm.</span>
+        </p>
       ) : null}
       <div role="radiogroup" aria-label={`Answers for ${refId}`} className="gc-needs-options">
         {d.choices.map((choice, index) => {
@@ -269,18 +288,20 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
       ) : null}
       {saved ? (
         <p role="status" className="gc-needs-saved">
-          Saved · {submitted?.answer}
+          Answer recorded · {submitted?.answer}
         </p>
       ) : null}
       <div className="gc-needs-actions">
         <Button
           size="sm"
+          variant="ghost"
+          aria-label={`Ask about ${refId}`}
           onClick={() => {
             cancelAdvance();
             onAsk(refId);
           }}
         >
-          Ask about {refId}
+          Ask about this
         </Button>
         <DecisionMenu
           decision={d}

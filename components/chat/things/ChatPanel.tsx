@@ -52,7 +52,7 @@ export function RunningSection({
       {loading && !execution ? <Spinner label="Loading agents and jobs…" /> : null}
       {error || (!loading && !execution) || execution?.sources.length === 0 ? (
         <p className="text-xs text-muted" role="status">
-          Couldn&apos;t load execution status.{" "}
+          Couldn&apos;t check background work.{" "}
           <Button size="sm" onClick={retry}>
             Retry
           </Button>

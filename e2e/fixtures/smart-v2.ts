@@ -136,6 +136,11 @@ export async function stubPrismV2(page: Page, cards: DynamicCard[] = [prismWeekl
   });
   await page.route("**/api/work/decisions*", (r) => r.fulfill({ json: { entries: [], count: 0 } }));
   await page.route("**/api/work/agent-runs*", (r) => r.fulfill({ json: { items: {}, active: [] } }));
+  // A newly quiet or failed run, or an open decision, outranks a smart card for the tray and the rail's line.
+  // Runs left by earlier specs go quiet 30 minutes into a full run, so these two sources are pinned empty too.
+  const never = { chat: null, needs: null, running: null, changes: null, context: null };
+  await page.route("**/api/coordinator/runs", (r) => r.fulfill({ json: { runs: [], events: [], lastLooked: never } }));
+  await page.route("**/api/coordinator/decisions*", (r) => r.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
   await page.route("**/api/work/activity**", (r) => r.fulfill({ json: { items: [], nextCursor: null, latestAt: null } }));
   await page.route("**/api/work/items*", (r) => r.fulfill({ json: { items: [], linkedConversations: [] } }));
   await page.route("**/api/work/coordinator/global", (r) => r.fulfill({ json: { area: null } }));

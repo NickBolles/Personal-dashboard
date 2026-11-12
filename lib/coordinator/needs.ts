@@ -34,7 +34,8 @@ export function defaultLine(d: Pick<Decision, "risk" | "defaultChoice" | "expire
   if (isRisky(d) || !d.defaultChoice || !d.expiresAt) return null;
   const ms = Date.parse(d.expiresAt) - timestamp(now);
   if (!Number.isFinite(ms)) return null;
-  return ms > 0 ? `Defaults to ${d.defaultChoice} in ${durationLabel(ms, Math.ceil)}` : `Defaults to ${d.defaultChoice} now`;
+  // What happens if the owner does nothing, and when: never a silent default.
+  return ms > 0 ? `No answer in ${durationLabel(ms, Math.ceil)} → ${d.defaultChoice}` : `No answer → ${d.defaultChoice} now`;
 }
 
 export type DecisionKeyContext = { typing?: boolean; armed?: boolean; canUndo?: boolean };

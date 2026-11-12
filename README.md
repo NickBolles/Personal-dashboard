@@ -24,6 +24,8 @@ A mobile-first, self-hosted PWA whose primary interface is **Hermes** and whose 
 ```bash
 npm ci
 npm run dev:demo          # mock upstreams + next dev → http://localhost:3000, setup code DEMO
+npm run demo:seed         # optional: fictional Chief of staff decisions, runs, changes and chats (re-runnable)
+npm run ux:shots          # optional: screenshots of the coordinator + chat at Z Fold 6 / phone / desktop sizes
 ```
 
 Production (home server, Traefik): see [docs/operations.md](docs/operations.md).

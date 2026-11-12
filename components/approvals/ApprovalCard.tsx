@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ApprovalRequest } from "@/lib/hermes";
 import { Button } from "@/components/ui/legacy";
+import { ChevronIcon } from "@/components/icons";
 import { AgentMark } from "@/components/brand/AgentMark";
 
 type Choice = ApprovalRequest["choices"][number];
@@ -11,6 +12,17 @@ type Choice = ApprovalRequest["choices"][number];
 export const APPROVE_UNDO_SECONDS = 8;
 
 const LABEL: Record<Choice, string> = { once: "Approve once", session: "Approve for this session", always: "Always allow", deny: "Deny" };
+
+/**
+ * What each grant covers, in plain words. Jarvis only forwards the choice; the scope is Hermes’ own
+ * (`once` answers this one prompt, `session` is its session-scoped grant, `always` its permanent one).
+ * Nothing here describes the command itself: the card shows exactly what Hermes sent.
+ */
+const COVERS: Record<Exclude<Choice, "deny">, string> = {
+  once: "Allows this one request only.",
+  session: "Allows requests like this for the rest of this session, without asking again.",
+  always: "Allows requests like this from now on, without asking again.",
+};
 
 /**
  * Hermes approval prompt: agent, exact command, why, then Approve / Deny.
@@ -34,6 +46,9 @@ export function ApprovalCard({
   // A failed send keeps the card, says so in words, and offers Retry; the raw cause stays folded.
   const [failed, setFailed] = useState<{ choice: Choice; detail: string; requestId: string }>();
   const [pending, setPending] = useState<{ choice: Choice; left: number; requestId?: string }>();
+  // The wider grants sit one step back, and fold away again when a new prompt replaces this one.
+  const [moreFor, setMoreFor] = useState<string>();
+  const moreId = useId();
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const name = agent || "Hermes";
   // Identity of the prompt; falls back to its content when Hermes sends no id.
@@ -96,6 +111,8 @@ export function ApprovalCard({
   };
 
   const primary: Choice | undefined = approval.choices.includes("once") ? "once" : approval.choices.find((c) => c !== "deny");
+  const wider = approval.choices.filter((c): c is Exclude<Choice, "deny"> => c !== "deny" && c !== primary);
+  const more = wider.length > 0 && moreFor === reqKey;
 
   return (
     <div
@@ -126,7 +143,7 @@ export function ApprovalCard({
         </pre>
       ) : null}
       {live ? (
-        <div className="mt-2.5 flex flex-wrap items-center gap-2" role="status">
+        <div className="appr-pending mt-2.5 flex flex-wrap items-center gap-2" role="status">
           <span className="text-sm">
             {LABEL[live.choice]} in <span className="tabular-nums">{live.left}</span>s
           </span>
@@ -145,21 +162,68 @@ export function ApprovalCard({
           </Button>
         </div>
       ) : (
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
-          {approval.choices.map((c) => (
-            <Button
-              key={c}
-              size="sm"
-              variant={c === "deny" ? "danger" : c === primary ? "primary" : "secondary"}
-              busy={busy === c}
-              disabled={Boolean(busy)}
-              onClick={() => choose(c)}
-            >
-              {LABEL[c]}
-            </Button>
-          ))}
-          {primary ? <span className="hidden text-xs text-muted dense:inline">⌘⏎ approves</span> : null}
-        </div>
+        // One strong control (the narrowest grant) and a quiet Deny; the wider grants are one step back, each
+        // with what it covers. Every choice keeps its name and its undo window.
+        <>
+          <div className="appr-actions mt-2.5 flex flex-wrap items-center gap-x-1 gap-y-1.5">
+            {approval.choices
+              .filter((c) => c === primary || c === "deny")
+              .map((c) => (
+                <Button
+                  key={c}
+                  size="sm"
+                  variant={c === primary ? "primary" : "ghost"}
+                  className={c === primary ? "appr-primary" : "appr-deny"}
+                  busy={busy === c}
+                  disabled={Boolean(busy)}
+                  onClick={() => choose(c)}
+                >
+                  {LABEL[c]}
+                </Button>
+              ))}
+            {wider.length ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="appr-more ml-auto"
+                aria-expanded={more}
+                aria-controls={more ? moreId : undefined}
+                onClick={() => setMoreFor(more ? undefined : reqKey)}
+              >
+                More options
+                <ChevronIcon className={more ? "h-3.5 w-3.5 shrink-0 -rotate-90" : "h-3.5 w-3.5 shrink-0 rotate-90"} />
+              </Button>
+            ) : null}
+          </div>
+          {primary ? (
+            <p className="mt-1.5 text-xs text-muted">
+              {COVERS[primary]}
+              <span className="hidden dense:inline"> ⌘⏎ approves.</span>
+            </p>
+          ) : null}
+          {more ? (
+            <ul id={moreId} className="appr-wider" aria-label="More options">
+              {wider.map((c) => (
+                <li key={c}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="appr-quiet"
+                    aria-describedby={`${moreId}-${c}`}
+                    busy={busy === c}
+                    disabled={Boolean(busy)}
+                    onClick={() => choose(c)}
+                  >
+                    {LABEL[c]}
+                  </Button>
+                  <p id={`${moreId}-${c}`} className="text-xs text-muted">
+                    {COVERS[c]}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
       )}
       {failure && !live ? (
         <div className="mt-2.5 space-y-1.5" role="alert">

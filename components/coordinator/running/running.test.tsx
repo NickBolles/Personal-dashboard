@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@/lib/client/api";
 import { Button } from "@/components/ui";
+import type { RunEvent } from "@/lib/cw-runs";
 import type { CoordinatorRunRow, RunsResponse } from "@/lib/coordinator/runs-view";
 import { RunningPanel } from "./RunningPanel";
 import { COORDINATOR_RUNS_KEY, useMarkLooked } from "./useCoordinatorRuns";
@@ -14,7 +15,9 @@ vi.mock("@/components/quick-actions/useQuickActions", () => ({ useQuickActions: 
 vi.mock("@/components/quick-actions/QuickActionChips", () => ({ QuickActionChips: () => null }));
 vi.mock("@/components/quick-actions/ProposedQuickActions", () => ({ ProposedQuickActions: () => null }));
 vi.mock("@/components/feedback/RateMessage", () => ({ RateMessage: () => null }));
-const at = "2026-11-08T20:10:00Z";
+// Relative to now: rows older than three days fold under "Older failures".
+const at = new Date(Date.now() - 2 * 3_600_000).toISOString();
+const earlier = new Date(Date.now() - 12 * 3_600_000).toISOString();
 const markers: RunsResponse["lastLooked"] = { chat: null, needs: null, running: null, changes: null, context: null };
 function run(seq: number, overrides: Partial<CoordinatorRunRow> = {}): CoordinatorRunRow {
   return {
@@ -44,8 +47,8 @@ function run(seq: number, overrides: Partial<CoordinatorRunRow> = {}): Coordinat
 let client: QueryClient;
 let onCommand = vi.fn<(text: string) => void>();
 let onSteer = vi.fn<(ref: string, title: string) => void>();
-function mount(runs: CoordinatorRunRow[], initialRef?: string, lastLooked = markers) {
-  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs, events: [], lastLooked });
+function mount(runs: CoordinatorRunRow[], initialRef?: string, lastLooked = markers, events: RunEvent[] = []) {
+  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs, events, lastLooked });
   return render(
     <QueryClientProvider client={client}>
       <RunningPanel onCommand={onCommand} onSteer={onSteer} initialRef={initialRef} />
@@ -64,25 +67,30 @@ afterEach(() => {
   client.clear();
   vi.restoreAllMocks();
 });
-it("groups attention first, failure first, then interrupted, running, done", async () => {
+it("groups stuck first, failure first, then interrupted, working, finished", async () => {
   const { container } = mount(
     [run(1), run(2, { state: "waiting" }), run(3, { state: "failed" }), run(4, { state: "interrupted" }), run(5, { state: "done", finishedAt: at })],
     undefined,
-    { ...markers, running: "2026-11-08T10:00:00Z" },
+    { ...markers, running: earlier },
   );
   expect(Array.from(container.querySelectorAll("article")).map((r) => r.getAttribute("data-run-ref"))).toEqual(["R-3", "R-2", "R-4", "R-1", "R-5"]);
   await waitFor(() => expect(api.post).toHaveBeenCalledExactlyOnceWith("/api/coordinator/looked", { surface: "running" }));
-  expect(screen.getByRole("region", { name: "Done since you looked" }).textContent).toContain("R-5");
+  expect(screen.getByRole("region", { name: "Finished since you looked" }).textContent).toContain("R-5");
 });
 it("Stop requires confirmation; cancel and confirm only prefill, never call a run API", async () => {
   mount([run(65)]);
+  // Stop is one step in: a working run's card is closed until its header is tapped.
+  expect(screen.queryByRole("button", { name: "Stop R-65" })).toBeNull();
+  fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-65"]')!);
   fireEvent.click(screen.getByRole("button", { name: "Stop R-65" }));
   expect(onCommand).not.toHaveBeenCalled();
   const confirm = screen.getByRole("group", { name: "Stop R-65 and its sub-agents?" });
   fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("group")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Stop R-65" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+  // The card says what will happen: a request is written into chat for the owner to send.
+  expect(screen.getByRole("group", { name: "Stop R-65 and its sub-agents?" }).textContent).toContain("nothing stops until you send it");
+  fireEvent.click(screen.getByRole("button", { name: "Write stop request" }));
   expect(onCommand).toHaveBeenCalledExactlyOnceWith("Stop R-65 (Work 65) and its sub-agents.");
   await waitFor(() => expect(client.isMutating()).toBe(0));
   expect(vi.mocked(api.post).mock.calls.every(([path]) => path === "/api/coordinator/looked")).toBe(true);
@@ -116,22 +124,25 @@ it("sub-runs are hidden until expanded, and logs load lazily", async () => {
   mount([run(1, { prUrl: "https://example.com/pr/1" }), child]);
   expect(screen.queryByText("R-2")).toBeNull();
   expect(api.get).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Log R-1" }));
+  // The card's header opens it; there is no separate icon to find.
+  fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
   await waitFor(() => expect(api.get).toHaveBeenCalledWith("/api/coordinator/runs/R-1/events", expect.anything()));
   expect(screen.getByRole("region", { name: "Sub-runs of R-1" }).textContent).toContain("R-2");
-  expect(screen.getByRole("link", { name: "Open pull request" }).getAttribute("href")).toBe("https://example.com/pr/1");
+  expect(screen.getByRole("link", { name: /^Pull request/ }).getAttribute("href")).toBe("https://example.com/pr/1");
   expect(api.get).toHaveBeenCalledTimes(1);
 });
 it("keyboard j/k focus rows, Enter expands, s steers, x arms stop and r prefills retry/resume", () => {
   mount([run(1), run(2, { state: "failed" }), run(3, { state: "waiting" })]);
-  const panel = screen.getByLabelText("Running runs");
+  const panel = screen.getByLabelText("Runs");
   panel.focus();
   fireEvent.keyDown(panel, { key: "j" });
   expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-2");
-  fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+  // A failed run arrives open; Enter closes and reopens it.
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
   fireEvent.keyDown(document.activeElement!, { key: "Enter" });
   expect(document.activeElement?.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.keyDown(document.activeElement!, { key: "Enter" });
+  expect(document.activeElement?.getAttribute("aria-expanded")).toBe("true");
   fireEvent.keyDown(document.activeElement!, { key: "r" });
   expect(onCommand).toHaveBeenLastCalledWith("Retry R-2 (Work 2).");
   fireEvent.keyDown(document.activeElement!, { key: "s" });
@@ -146,7 +157,7 @@ it("keyboard j/k focus rows, Enter expands, s steers, x arms stop and r prefills
 it("initialRef reveals a selected sub-run and unsafe PR URLs are not links", async () => {
   mount([run(1, { prUrl: "javascript:alert(1)" }), run(2, { parentRunId: "run-1", parentRef: "R-1" })], "R-2");
   await waitFor(() => expect(document.activeElement?.getAttribute("data-run-body")).toBe("R-2"));
-  expect(screen.queryByRole("link", { name: "Open pull request" })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Pull request/ })).toBeNull();
 });
 it("renders pipeline, lock, notices, and a non-pulsing stalled state", () => {
   const { container } = mount([
@@ -163,17 +174,94 @@ it("renders pipeline, lock, notices, and a non-pulsing stalled state", () => {
   expect(screen.getByRole("img", { name: "Pipeline: build ok, ci running" })).toBeTruthy();
   expect(screen.getByText("Holds deploy lock")).toBeTruthy();
   expect(screen.getByText("3 notices")).toBeTruthy();
-  expect(container.querySelector(".k-dot-live")).toBeNull();
+  expect(screen.queryByText("1 notices")).toBeNull();
+  expect(container.querySelector("article .k-dot-live")).toBeNull();
 });
 it("renders the empty state", () => {
   mount([]);
   expect(screen.getByText("Nothing running")).toBeTruthy();
 });
+it("says what each run is doing in a chip and plain words, and drops a summary that repeats the title", () => {
+  mount([run(1, { summary: "Work 1" }), run(2, { state: "failed", summary: "Tests failed on the ledger import" }), run(3, { stalled: true, summary: null })]);
+  const row = (ref: string) => within(document.querySelector<HTMLElement>(`[data-run-ref="${ref}"]`)!);
+  expect(row("R-1").getByText("Working")).toBeTruthy();
+  expect(row("R-1").getByText(/^updated /)).toBeTruthy();
+  expect(row("R-1").queryByText("Work 1", { selector: ".rc-summary" })).toBeNull();
+  // A working run is closed: its actions are one tap in.
+  expect(row("R-1").getAllByRole("button")).toHaveLength(1);
+  fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
+  expect(row("R-1").getByRole("button", { name: "Steer R-1" }).textContent).toBe("Steer");
+  // What needs the owner arrives open, with what it last said and what can be done about it.
+  expect(row("R-2").getByText("Failed")).toBeTruthy();
+  expect(row("R-2").getByText("Tests failed on the ledger import")).toBeTruthy();
+  expect(row("R-2").getByRole("button", { name: "Retry R-2" }).textContent).toBe("Retry");
+  expect(row("R-2").queryByRole("button", { name: "Stop R-2" })).toBeNull();
+  expect(row("R-3").getByText("Stuck")).toBeTruthy();
+  expect(row("R-3").getByText(/^no update for /)).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
+});
+it("shows the latest event on a closed card and a real timeline on an open one", async () => {
+  const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({
+    id: `e${n}`,
+    runId: "run-1",
+    runRef: "R-1",
+    type,
+    summary,
+    payload: {},
+    via: null,
+    at: new Date(Date.now() - min * 60_000).toISOString(),
+  });
+  const events = [
+    ev(1, "started", "Work 1", 50),
+    ev(2, "ci", "Checks passed", 40),
+    ev(3, "progress", "Half way", 30),
+    ev(4, "notice", "Wrote the report", 20),
+    ev(5, "failed", "Ran out of budget", 10),
+  ];
+  mount([run(1)], undefined, markers, events);
+  const card = within(document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!);
+  const list = () => within(card.getByRole("list", { name: "Events for R-1" })).getAllByRole("listitem");
+  // Closed: just the newest event, as a labelled chip and its words.
+  expect(list().map((li) => li.textContent)).toEqual([expect.stringContaining("FailedRan out of budget")]);
+  fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
+  expect(list()).toHaveLength(3);
+  fireEvent.click(card.getByRole("button", { name: "Show 2 earlier" }));
+  expect(list()).toHaveLength(5);
+  // The "started" event only repeats the title: it keeps its chip and drops the words.
+  expect(list().at(-1)!.textContent).toMatch(/^Started/);
+  expect(list().at(-1)!.textContent).not.toContain("Work 1");
+  expect(list()[3]!.querySelector(".k-t-ok")).toBeTruthy();
+});
+it("folds failures older than three days away from what is stuck now, still one tap away", () => {
+  const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
+  mount([run(1, { state: "failed" }), run(2, { state: "failed", updatedAt: old }), run(3, { state: "failed", updatedAt: old })]);
+  expect(screen.getByRole("region", { name: "Stuck" }).querySelectorAll("article").length).toBe(1);
+  const older = screen.getByRole("region", { name: "Older failures" });
+  expect(older.querySelectorAll("article").length).toBe(0);
+  fireEvent.click(within(older).getByRole("button", { name: "Show" }));
+  expect(Array.from(older.querySelectorAll("article")).map((r) => r.getAttribute("data-run-ref"))).toEqual(["R-3", "R-2"]);
+});
+it("a deep-linked old failure is shown in place, not hidden in the fold", () => {
+  const old = new Date(Date.now() - 5 * 86_400_000).toISOString();
+  mount([run(2, { state: "failed", updatedAt: old })], "R-2");
+  expect(screen.getByRole("region", { name: "Stuck" }).textContent).toContain("R-2");
+  expect(screen.queryByRole("region", { name: "Older failures" })).toBeNull();
+});
+it("uses one quiet line instead of the empty state when other activity is listed below", () => {
+  client.setQueryData<RunsResponse>(COORDINATOR_RUNS_KEY, { runs: [], events: [], lastLooked: markers });
+  render(
+    <QueryClientProvider client={client}>
+      <RunningPanel onCommand={onCommand} onSteer={onSteer} quietEmpty />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText("No agent runs right now.")).toBeTruthy();
+  expect(screen.queryByText("Nothing running")).toBeNull();
+});
 it("keeps the 24-hour done window throughout a first visit with no prior marker", async () => {
   mount([run(1, { state: "done", finishedAt: new Date().toISOString() })]);
   await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
   await waitFor(() => expect(client.isMutating()).toBe(0));
-  expect(screen.getByRole("region", { name: "Done since you looked" }).textContent).toContain("R-1");
+  expect(screen.getByRole("region", { name: "Finished since you looked" }).textContent).toContain("R-1");
 });
 it("optimistically marks looked and rolls back only that surface on failure", async () => {
   let reject!: (error: Error) => void;
@@ -240,7 +328,8 @@ it("thread has one since separator, safe mention chips and folded background not
   fireEvent.click(screen.getByRole("button", { name: "Decision D 48" }));
   expect(onRef).toHaveBeenCalledWith("D-48");
   expect(screen.queryByRole("button", { name: "Decision D 99" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "2 decisions" }));
+  fireEvent.click(screen.getByRole("button", { name: "2 new decisions" }));
+  expect(screen.getByRole("button", { name: "1 run updated" })).toBeTruthy();
   expect(onJump).toHaveBeenCalledWith("needs");
   expect(screen.queryByText(/Hidden background output/)).toBeNull();
   const notices = screen.getByRole("button", { name: "2 background notices" });

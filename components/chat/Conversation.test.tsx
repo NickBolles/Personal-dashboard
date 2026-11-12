@@ -158,3 +158,43 @@ it("blocks corrections while a reply is active", async () => {
   expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
   expect(mocks.start).not.toHaveBeenCalled();
 });
+
+it("shows a sent message as the person meant it, and keeps Copy on the text as it was sent", async () => {
+  const viewing = "[Viewing: Today — /home]\nWhat changed overnight?";
+  const receipt = 'Decision on "Rollout": Decision: Ship the rubric change now, or wait for the bisect? → Wait for the bisect';
+  client.setQueryData(["session", "wrapped"], {
+    session: { id: "wrapped", title: "Wrapped", pinned: false, archived: false, agentProfile: "chiefofstaff" },
+    timeline: [
+      { kind: "user", id: "u1", text: viewing },
+      { kind: "assistant", id: "a1", text: "Nothing much." },
+      { kind: "user", id: "u2", text: receipt },
+    ],
+    children: [],
+    links: [],
+  });
+  const writeText = vi.fn(async (text: string) => void text);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  render(
+    <QueryClientProvider client={client}>
+      <Conversation sessionId="wrapped" />
+    </QueryClientProvider>,
+  );
+  await screen.findByText("Model: chosen-model");
+  const [typed, decided] = screen.getAllByTestId("msg-bubble").filter((b) => b.getAttribute("data-who") === "user");
+  // The page context is a caption attached to the bubble, never part of the message text.
+  expect(screen.getByTestId("msg-context").textContent).toBe("Sent while Viewing: Today");
+  expect(typed.textContent).toBe("You said: What changed overnight?");
+  // A one-tap decision reads as a receipt: what was decided, the answer, the question behind a disclosure.
+  expect(decided.getAttribute("data-receipt")).toBe("decision");
+  expect(decided.textContent).toContain("You decided · Rollout");
+  expect(decided.querySelector("p.font-medium")?.textContent).toBe("Wait for the bisect");
+  expect(decided.querySelector("details")?.open).toBe(false);
+  expect(decided.querySelector("details")?.textContent).toContain("Ship the rubric change now, or wait for the bisect?");
+  // The composer names whoever answers here, like the header does.
+  expect(screen.getByRole("textbox", { name: "Message @chiefofstaff" }).getAttribute("placeholder")).toBe("Message @chiefofstaff…");
+  const copies = screen.getAllByRole("button", { name: "Copy your message" });
+  fireEvent.click(copies[0]);
+  fireEvent.click(copies[1]);
+  expect(writeText.mock.calls.map((c) => c[0])).toEqual([viewing, receipt]);
+  Reflect.deleteProperty(navigator, "clipboard");
+});
