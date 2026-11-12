@@ -130,7 +130,7 @@ export function itemCardModel(input: {
       : waiting
         ? { key: "waiting", label: "Waiting on you", tone: "wn", live: false }
         : attention.length
-          ? { key: "stuck", label: "Run stuck", tone: "wn", live: false }
+          ? { key: "stuck", label: attention.some((r) => r.state === "interrupted") ? "Run interrupted" : "Run quiet", tone: "wn", live: false }
           : working.length || agent?.live === "running"
             ? { key: "working", label: "Working", tone: "ai", live: true }
             : { key: "status", ...status, live: false };
@@ -161,26 +161,32 @@ export function itemCardModel(input: {
 
 const CHANGE_CHIP: Record<ActivityType, { label: string; tone: CardTone }> = {
   created: { label: "Created", tone: "ok" },
-  edit: { label: "Edit", tone: "inf" },
-  status: { label: "Status", tone: "ac" },
+  edit: { label: "Edited", tone: "inf" },
+  status: { label: "Moved", tone: "ac" },
   structure: { label: "Moved", tone: "neutral" },
-  link: { label: "Link", tone: "inf" },
+  link: { label: "Linked", tone: "inf" },
   github: { label: "GitHub", tone: "ac" },
-  capture: { label: "Capture", tone: "neutral" },
+  capture: { label: "Captured", tone: "neutral" },
   chat: { label: "Chat", tone: "ai" },
-  validation: { label: "Check", tone: "ok" },
+  validation: { label: "Checked", tone: "ok" },
   chore: { label: "Chore", tone: "neutral" },
 };
 const shortDate = (value: string) => {
   const date = new Date(`${value.trim().slice(0, 10)}T00:00:00`);
   return Number.isFinite(date.getTime()) ? date.toLocaleDateString([], { month: "short", day: "numeric" }) : value.trim();
 };
-/** "Dates: start — → —, target — → 2026-11-22" → "Target date Nov 22": only what actually changed, as a person would say it. */
+/**
+ * "Dates: start — → —, target — → 2026-11-22" → "Target date Nov 22": only what actually changed, as a person
+ * would say it, with the previous value when there was one (it is what Undo restores).
+ */
 function tidyDates(verb: string): string | null {
   const m = /^dates:\s*start\s+(.+?)\s*→\s*(.+?),\s*target\s+(.+?)\s*→\s*(.+)$/i.exec(verb);
   if (!m) return null;
-  const part = (name: string, from: string, to: string) =>
-    from.trim() === to.trim() ? "" : to.trim() === "—" ? `${name} date cleared` : `${name} date ${shortDate(to)}`;
+  const part = (name: string, from: string, to: string) => {
+    if (from.trim() === to.trim()) return "";
+    const was = from.trim() === "—" ? "" : ` (was ${shortDate(from)})`;
+    return to.trim() === "—" ? `${name} date cleared${was}` : `${name} date ${shortDate(to)}${was}`;
+  };
   const said = [part("start", m[1]!, m[2]!), part("target", m[3]!, m[4]!)].filter(Boolean).join(", ");
   return said ? said.charAt(0).toUpperCase() + said.slice(1) : "Dates unchanged";
 }
@@ -193,30 +199,35 @@ export function changeLabel(row: Pick<ActivityItem, "type" | "verb">): string {
   if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return "Finished agent run";
   return tidyDates(row.verb) ?? row.verb.charAt(0).toUpperCase() + row.verb.slice(1);
 }
+/**
+ * The coloured chip on a change row. It is the verb ("Edited", "Moved", "Raised decision"), so chip + object
+ * read as a sentence, the way the item pages write activity, and the colour says what kind of change it was.
+ */
 export function changeChip(row: Pick<ActivityItem, "type" | "verb">): { label: string; tone: CardTone } {
-  if (/needs your decision/i.test(row.verb)) return { label: "Decision", tone: "wn" };
-  if (/(started|finished).*run|run.*(done|finished)/i.test(row.verb)) return { label: "Run", tone: "ai" };
+  if (/needs your decision/i.test(row.verb)) return { label: "Raised decision", tone: "wn" };
+  if (/started.*run/i.test(row.verb)) return { label: "Run started", tone: "ai" };
+  if (/finished.*run|run.*(done|finished)/i.test(row.verb)) return { label: "Run finished", tone: "ok" };
   if (/^dates:/i.test(row.verb)) return { label: "Dates", tone: "inf" };
-  if (/^tagged\b/i.test(row.verb)) return { label: "Tags", tone: "inf" };
+  if (/^tagged\b/i.test(row.verb)) return { label: "Tagged", tone: "inf" };
   return CHANGE_CHIP[row.type] ?? { label: row.type, tone: "neutral" };
 }
-const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 /**
- * The words after the chip. The chip already says what kind of change it was, so the text only adds what the
- * chip cannot: which field, which link, what the decision asks, which run, why the status moved.
+ * What the chip's verb was done to: "summary", "to Exploring: predates the new checkout", "Sponsor shortlist",
+ * "target Nov 22 (was Nov 15)", the decision's question, the run's title. Empty when the chip says it all.
  */
-export function changeText(row: Pick<ActivityItem, "type" | "verb" | "detail">): string {
-  const after = /^(?:needs your decision|started agent run|finished agent run):\s*(.+)$/i.exec(row.verb)?.[1];
-  if (after) return after.trim();
+export function changeObject(row: Pick<ActivityItem, "type" | "verb" | "detail">): string {
+  const after = /^(?:needs your decision|started agent run|finished agent run):\s*(.+)$/i.exec(row.verb)?.[1]?.trim();
+  if (after) return after;
   if (row.type === "created") return "";
   const detail = row.detail?.trim() ?? "";
-  if (row.type === "link") return upper(detail.replace(/^linked\s+/i, "") || row.verb.replace(/^linked\s*/i, "")) || "";
+  if (row.type === "link") return detail.replace(/^linked\s+/i, "") || row.verb.replace(/^linked\s*/i, "");
   if (row.type === "status") {
-    const to = row.verb.replace(/^moved to\s+/i, "");
+    const to = row.verb.replace(/^moved\s+/i, "");
     const why = detail.replace(/^[^:]{1,60}→[^:]{1,60}:\s*/, "");
-    return upper(why && why !== detail ? `${to}: ${why}` : to);
+    return why && why !== detail ? `${to}: ${why}` : to;
   }
   const dates = tidyDates(row.verb);
-  if (dates) return dates.replace(/ date /g, " ");
-  return upper(row.verb.replace(/^(?:edited|tagged)\s+/i, ""));
+  if (dates) return lowerFirst(dates.replace(/ date /g, " "));
+  return row.verb.replace(/^(?:edited|tagged|moved|linked)\s+/i, "");
 }

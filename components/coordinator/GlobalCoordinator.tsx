@@ -13,6 +13,7 @@ import { coordinatorStatus } from "@/lib/coordinator/status";
 import { sinceRunCounts } from "@/lib/coordinator/run-card";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
+import { CardMenu, useCardMenu } from "./cards/CardMenu";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
@@ -48,6 +49,8 @@ const TAB_KEYS: Record<string, Tab> = { n: "needs", r: "running", a: "running", 
 const typingIn = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
+/** Which section of its tab each catch-up chip is about (the `data-land` values the panels carry). */
+const LAND: Record<string, string> = { decisions: "new", failed: "attention", stuck: "attention", waiting: "waiting", finished: "done", runs: "running" };
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
 export function GlobalCoordinator() {
   const pathname = usePathname();
@@ -203,6 +206,21 @@ export function GlobalCoordinator() {
     setTab(next);
     if (next === "running") markSeen();
   };
+  // A catch-up chip lands on the part of the tab it was about ("2 finished" on Finished, "2 new decisions" on New),
+  // marked for a moment. The tab may still be drawing, so look for it over a few frames.
+  const land = (about?: string) => {
+    const section = about ? LAND[about] : undefined;
+    if (!section) return;
+    let tries = 0;
+    const look = () => {
+      const el = document.querySelector<HTMLElement>(`[data-land="${section}"]`);
+      if (!el) return void (tries++ < 20 && requestAnimationFrame(look));
+      el.scrollIntoView?.({ block: "start" });
+      el.setAttribute("data-landed", "");
+      window.setTimeout(() => el.removeAttribute("data-landed"), 1900);
+    };
+    requestAnimationFrame(look);
+  };
   const openAt = (next: Tab, ref?: string) => {
     show();
     selectTab(next);
@@ -230,6 +248,14 @@ export function GlobalCoordinator() {
     );
   };
   const onRef = (ref: string) => openAt(ref.startsWith("D-") ? "needs" : "running", ref);
+  // Steering a run from its card sends the same one-line command the Chat tab would; with no conversation to send
+  // it to yet, the line is written into the composer instead.
+  const commandRef = useRef<((text: string) => Promise<unknown>) | null>(null);
+  const steerRun = async (ref: string, title: string, guidance?: string) => {
+    const line = `Steer ${ref} (${title.slice(0, 120)}): ${guidance?.trim() ?? ""}`;
+    if (guidance?.trim() && commandRef.current) await commandRef.current(line);
+    else prefill(line);
+  };
   // Item and project cards (changes under Activity and under a reply) read live state while the panel is on screen.
   const cardData = useItemCardData(wide ? open : phoneOpen);
   const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => prefill(`About "${title}": `) };
@@ -405,6 +431,12 @@ export function GlobalCoordinator() {
       hint: `${status.counts.working} working, ${status.counts.stuck} stuck, ${status.counts.waiting} waiting on you`,
     },
   ];
+  // The tray is one button with one sentence; a long press (or right-click) goes straight to a tab.
+  const trayMenu = useCardMenu();
+  const trayActions = [
+    { label: "Chief of staff", heading: true },
+    ...tabs.map((t) => ({ label: t.count ? `${t.label} · ${t.count}` : t.label, onSelect: () => openAt(t.id) })),
+  ];
   const content = (
     <>
       <header className="gc-head">
@@ -499,6 +531,7 @@ export function GlobalCoordinator() {
                   info={d}
                   compact
                   name="Chief of staff"
+                  commandRef={commandRef}
                   draft={draft}
                   onDraft={setDraft}
                   context={attached}
@@ -515,7 +548,10 @@ export function GlobalCoordinator() {
                   )}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
-                  onJump={(next) => selectTab(next === "needs" ? "needs" : "running")}
+                  onJump={(next, about) => {
+                    selectTab(next === "needs" ? "needs" : "running");
+                    land(about);
+                  }}
                   onRef={onRef}
                 />
               ) : null}
@@ -563,8 +599,10 @@ export function GlobalCoordinator() {
                 <RunningPanel
                   key={focusRef?.tab === "running" ? `r${focusRef.n}` : "running"}
                   initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
-                  onSteer={(ref, title) => prefill(`Steer ${ref} (${title.slice(0, 120)}): `)}
+                  onSteer={steerRun}
                   onCommand={prefill}
+                  decisions={cwDecisions.data?.decisions}
+                  onRef={onRef}
                   quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
                 />
               ) : null}
@@ -690,6 +728,7 @@ export function GlobalCoordinator() {
                 aria-describedby={statusId}
                 aria-haspopup="dialog"
                 onClick={showPriority}
+                onContextMenu={trayMenu.onContextMenu}
               >
                 <span className="gc-tray-avatar">
                   <span className="gc-orb" aria-hidden="true" />
@@ -716,6 +755,7 @@ export function GlobalCoordinator() {
               </button>
             </div>
           ) : null}
+          {!chat ? <CardMenu at={trayMenu.at} label="Open Chief of staff at" items={trayActions} onClose={trayMenu.close} className="gc-tray-menu" /> : null}
           {phoneOpen ? (
             <dialog
               ref={dialog}
@@ -842,17 +882,22 @@ function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: str
   return (
     <section id={id} className="gc-changes" aria-label="Changes">
       <SectionHeader
-        label={`Changes on ${groups.length === 1 ? "1 item" : `${groups.length} items`} · last 24 hours`}
-        count={rows.length}
+        label="Changes · last 24 hours"
         action={
           groups.length > CHANGES_SHOWN ? (
             <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
-              {all ? "Show fewer" : `All ${groups.length} items`}
+              {all ? "Show fewer" : `Show all ${groups.length}`}
             </Button>
           ) : undefined
         }
       />
       {!rows.length ? <p className="gc-hint">Nothing changed by the Chief of staff in the last day.</p> : null}
+      {rows.length ? (
+        <p className="gc-hint gc-changes-count">
+          {rows.length === 1 ? "1 change" : `${rows.length} changes`} across {groups.length === 1 ? "1 item" : `${groups.length} items`}
+          {groups.length > shown.length ? `; showing the ${shown.length} most recent.` : "."}
+        </p>
+      ) : null}
       <ul className="gc-change-groups">
         {shown.map((group) =>
           group.object ? (

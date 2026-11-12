@@ -51,9 +51,16 @@ describe("coordinatorStatus", () => {
   it("once the owner has looked, the same failure is counted but no longer shouts", () => {
     const runs = [run(7, { state: "failed", updatedAt: ago(120) }), run(8)];
     const withNeeds = coordinatorStatus({ needs: 4, runs, lastLooked: ago(60), now });
-    expect(withNeeds).toMatchObject({ state: "needs", tone: "warn", dot: "yellow", text: "4 need you", rest: "1 working · 1 stuck", target: { tab: "needs" } });
+    expect(withNeeds).toMatchObject({
+      state: "needs",
+      tone: "warn",
+      dot: "yellow",
+      text: "4 need you",
+      rest: "1 working · 1 needs a look",
+      target: { tab: "needs" },
+    });
     const alone = coordinatorStatus({ needs: 0, runs: [runs[0]], lastLooked: ago(60), now });
-    expect(alone).toMatchObject({ state: "stuck", tone: "neutral", dot: null, text: "1 run is stuck", rest: "nothing new since you looked" });
+    expect(alone).toMatchObject({ state: "stuck", tone: "neutral", dot: null, text: "1 run needs a look", rest: "nothing new since you looked" });
   });
 
   it("a stall becomes news 30 minutes after the last report, not at the last report", () => {
@@ -112,7 +119,7 @@ describe("coordinatorStatus", () => {
       lastLooked: ago(60),
       now,
     });
-    expect(s).toMatchObject({ text: "2 runs newly stuck", rest: "2 need you", counts: { stuck: 3, newStuck: 2 } });
+    expect(s).toMatchObject({ text: "2 runs failed", rest: "2 need you", counts: { stuck: 3, newStuck: 2 } });
   });
 
   it("a run waiting on the owner is counted as waiting, never as stuck or as news", () => {
@@ -152,7 +159,16 @@ describe("coordinatorStatus", () => {
       lastLooked: ago(60),
       now,
     });
-    expect(many.text).toBe("2 runs newly stuck");
+    // a mix is neither "failed" nor "quiet": it needs a look
+    expect(many.text).toBe("2 runs need a look");
+    const quiet = coordinatorStatus({
+      needs: 0,
+      runs: [run(1, { stalled: true, updatedAt: ago(3) }), run(2, { stalled: true, updatedAt: ago(2) })],
+      lastLooked: ago(60),
+      now,
+    });
+    // silence is not failure: the tray uses the cards' word for it
+    expect(quiet.text).toBe("2 runs went quiet");
     expect(coordinatorStatus({ needs: 0, runs: [run(1)], finished: 2, lastLooked: null, now })).toMatchObject({
       state: "finished",
       text: "2 finished · ready to review",

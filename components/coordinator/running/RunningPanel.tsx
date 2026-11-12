@@ -2,29 +2,40 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button, EmptyState, SectionHeader, useNow } from "@/components/ui";
+import type { Decision } from "@/lib/cw-decisions";
 import { groupRuns } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
+import { byNeed } from "@/lib/coordinator/run-card";
 import { LiveLine, RunCard, runCommand } from "./RunCard";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
 type Props = {
-  onSteer: (ref: string, title: string) => void;
+  /** With guidance: send it (resolves when sent, or written into Chat when it cannot be sent). Without: open Chat on a blank steering line. */
+  onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
   onCommand: (text: string) => void;
+  /** Open decisions, so a run waiting on the owner says which one. */
+  decisions?: readonly Decision[];
+  /** Jump to a decision (D-n). */
+  onRef?: (ref: string) => void;
   initialRef?: string;
   /** Other activity is listed below this panel: say "no runs" in one quiet line instead of a full empty state. */
   quietEmpty?: boolean;
 };
-/** The first few runs that need the owner arrive open (timeline and actions showing); the rest are one tap away. */
-const OPEN_ON_ARRIVAL = 3;
+/**
+ * Only the run that most needs the owner arrives open (timeline and actions showing). Every other card is closed
+ * and still says its state, what it needs and its latest event, so a phone screen holds an overview, not one card.
+ */
+const OPEN_ON_ARRIVAL = 1;
+// What waits on the owner first, then what needs a look.
 const SECTIONS = [
-  ["attention", "Stuck"],
   ["waiting", "Waiting on you"],
+  ["attention", "Needs a look"],
   ["interrupted", "Interrupted"],
   ["running", "Working"],
   ["done", "Finished since you looked"],
 ] as const;
 
-export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Props) {
+export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef, quietEmpty }: Props) {
   const query = useCoordinatorRuns(true);
   const { mutate: markLooked } = useMarkLooked();
   const marked = useRef(false);
@@ -57,12 +68,18 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
   const grouped = groupRuns(runs ?? [], visit ? visit.since : query.data?.lastLooked.running);
   // Failures older than a few days are history: reachable, but folded away from what is stuck now.
   const older = grouped.attention.filter((r) => isOldFailure(r, now) && r.ref !== initialRef);
-  const groups = { ...grouped, attention: grouped.attention.filter((r) => !older.includes(r)) };
+  const groups = {
+    ...grouped,
+    attention: byNeed(
+      grouped.attention.filter((r) => !older.includes(r)),
+      query.data?.events ?? [],
+    ),
+  };
   const [showOlder, setShowOlder] = useState(false);
   const [stopping, setStopping] = useState<string | null>(null);
-  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], onSteer, onCommand, initialRef, stopping, onStopping: setStopping };
-  const openFirst = new Set([...groups.waiting, ...groups.attention.slice(0, OPEN_ON_ARRIVAL)].map((r) => r.id));
-  const ordered = [...groups.attention, ...groups.waiting, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
+  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], decisions, onSteer, onCommand, onRef, initialRef, stopping, onStopping: setStopping };
+  const openFirst = new Set([...groups.waiting, ...groups.attention, ...groups.interrupted].slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
+  const ordered = [...groups.waiting, ...groups.attention, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (event.altKey || event.ctrlKey || event.metaKey || target.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -79,7 +96,7 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
     if (!run) return;
     if (event.key === "s") {
       event.preventDefault();
-      onSteer(run.ref, run.title);
+      void onSteer(run.ref, run.title);
     } else if (event.key === "x") {
       event.preventDefault();
       if (run.state === "running" || run.state === "waiting") setStopping(run.ref);
@@ -92,14 +109,12 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
     }
   };
   return (
-    <div className="gc-running" ref={root} tabIndex={0} aria-label="Runs" onKeyDown={onKeyDown}>
+    <div className="gc-running" ref={root} tabIndex={0} aria-label="Runs" data-stale={query.error && query.data ? "" : undefined} onKeyDown={onKeyDown}>
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </span>
       {query.isLoading ? <p className="text-muted">Loading runs…</p> : null}
-      {query.data ? (
-        <LiveLine updatedAt={query.dataUpdatedAt} failed={!!query.error} fetching={query.isFetching} onRetry={() => void query.refetch()} what="runs" />
-      ) : null}
+      {query.data ? <LiveLine updatedAt={query.dataUpdatedAt} failed={!!query.error} fetching={query.isFetching} onRetry={() => void query.refetch()} /> : null}
       {resumeNote ? (
         <p className="text-sm text-muted" data-dynamic>
           {resumeNote}
@@ -122,7 +137,7 @@ export function RunningPanel({ onSteer, onCommand, initialRef, quietEmpty }: Pro
       ) : null}
       {SECTIONS.map(([key, label]) =>
         groups[key].length ? (
-          <section key={key} aria-label={label}>
+          <section key={key} aria-label={label} data-land={key}>
             <SectionHeader
               label={label}
               count={groups[key].length}

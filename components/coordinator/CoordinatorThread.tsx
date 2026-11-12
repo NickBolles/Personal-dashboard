@@ -36,7 +36,7 @@ import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import { sinceChips, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { mergeBackgroundWork, sinceChips, workKey, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
 import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
@@ -72,6 +72,7 @@ export function CoordinatorThread({
   sinceCounts = { decisions: 0, runs: 0 },
   onJump,
   onRef,
+  commandRef,
 }: {
   info: CoordinatorResponse;
   compact?: boolean;
@@ -91,8 +92,14 @@ export function CoordinatorThread({
   quickContext?: QuickActionContext;
   lastLookedChat?: string | null;
   sinceCounts?: SinceCounts;
-  onJump?: (tab: "needs" | "running") => void;
+  /** A catch-up chip was tapped: the tab it points at, and which chip (so the tab can land on that part). */
+  onJump?: (tab: "needs" | "running", about?: string) => void;
   onRef?: (ref: string) => void;
+  /**
+   * Lets another panel (a run card under Activity) send a one-line command into this conversation, exactly as the
+   * background-work cards here do. Null while there is no conversation to send it to.
+   */
+  commandRef?: { current: ((text: string) => Promise<unknown>) | null };
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -261,6 +268,14 @@ export function CoordinatorThread({
     },
     onError: (err) => toast(`Not sent: ${(err as Error).message}`, "danger"),
   });
+  const { mutateAsync: sendCommand } = control;
+  useEffect(() => {
+    if (!commandRef) return;
+    commandRef.current = sid ? (text) => sendCommand(text) : null;
+    return () => {
+      commandRef.current = null;
+    };
+  }, [commandRef, sid, sendCommand]);
   const stop = useMutation({
     mutationFn: async () => {
       const runId = detail.data?.session?.activeRun?.runId;
@@ -294,7 +309,7 @@ export function CoordinatorThread({
     true,
     records.some((r) => r.source !== "subagent"),
   );
-  const runOf = (record: ExecutionRecord) => (record.source === "subagent" ? undefined : tracked.data?.runs?.find((r) => r.id === record.id));
+  const work = mergeBackgroundWork(records, tracked.data?.runs ?? []);
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
   const previous = discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid).slice(0, 5) ?? [];
   const messageGroups = groupMessages(timeline).slice(-6);
@@ -397,7 +412,7 @@ export function CoordinatorThread({
                                 className={`gc-since-chip k-t-${chip.tone}`}
                                 icon={SINCE_ICON[chip.key]}
                                 disabled={!onJump}
-                                onClick={() => onJump?.(chip.tab)}
+                                onClick={() => onJump?.(chip.tab, chip.key)}
                               >
                                 {chip.label}
                               </Button>
@@ -464,9 +479,9 @@ export function CoordinatorThread({
               </div>
             ) : null}
             <ActionsTaken actions={replyActions.get("live") ?? []} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-            {execution.error && !records.length ? (
+            {sourceDown && !records.length ? (
               <p role="alert" className="mt-2 text-xs text-danger">
-                Couldn&apos;t load coordinator runs.{" "}
+                {execution.error ? "Couldn't load coordinator runs." : "Couldn't check every source of background work."}{" "}
                 <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
                   Try again
                 </Button>
@@ -478,27 +493,23 @@ export function CoordinatorThread({
                   <p className="gc-hint">Background work</p>
                   {/* Each card is kept current here (5 s while anything runs). "stale" is the child inventory's permanent
                       caveat (server/chat/execution.ts), not news: only a source that could not be read is said out loud. */}
-                  <LiveLine
-                    updatedAt={execution.dataUpdatedAt}
-                    failed={sourceDown}
-                    fetching={execution.isFetching}
-                    onRetry={() => void execution.refetch()}
-                    what="background work"
-                  />
+                  <LiveLine updatedAt={execution.dataUpdatedAt} failed={sourceDown} fetching={execution.isFetching} onRetry={() => void execution.refetch()} />
                 </div>
-                {records.slice(0, 5).map((record) => (
+                {work.slice(0, 5).map((w) => (
                   <ExecCard
-                    key={`${sid}:${record.key}`}
-                    record={record}
+                    // Keyed by what its controls reach: a card that came to control another sub-agent is a new card,
+                    // so guidance typed for one, or a stop being confirmed, can never be sent to the other.
+                    key={`${sid}:${workKey(w)}`}
+                    work={w}
+                    events={tracked.data?.events}
                     pending={control.isPending}
                     onControl={(input) => control.mutateAsync(input)}
-                    run={runOf(record)}
-                    events={tracked.data?.events}
+                    onDraft={fill}
                   />
                 ))}
-                {records.length > 5 && sid ? (
+                {work.length > 5 && sid ? (
                   <Link href={`/chat/${encodeURIComponent(sid)}?panel=running`} className="inline-flex min-h-11 items-center text-xs text-accent sm:min-h-10">
-                    {records.length - 5} more
+                    {work.length - 5} more
                   </Link>
                 ) : null}
               </section>
@@ -800,7 +811,7 @@ const SINCE_ICON: Record<SinceChip["key"], ReactNode> = {
   failed: <AlertIcon className="h-3.5 w-3.5" />,
   decisions: <InboxIcon className="h-3.5 w-3.5" />,
   waiting: <BellIcon className="h-3.5 w-3.5" />,
-  stuck: <ClockIcon className="h-3.5 w-3.5" />,
+  stuck: <AlertIcon className="h-3.5 w-3.5" />,
   finished: <CheckIcon className="h-3.5 w-3.5" />,
   runs: <BoltIcon className="h-3.5 w-3.5" />,
 };

@@ -1,31 +1,77 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Button, ButtonLink, Dot, Input, Pill, ProgressBar, SectionHeader, useNow } from "@/components/ui";
-import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
+import { AgentMark } from "@/components/brand/AgentMark";
+import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
+import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
 import { isActiveExec, type ExecutionRecord } from "@/lib/chat-execution";
 import { plainMessageLine } from "@/lib/chat/display";
+import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import { canControl, steerText, stopText } from "@/lib/coordinator/control";
 import { ageLabel } from "@/lib/coordinator/needs";
-import { eventChip, eventClock, eventText, runStatus, timelineOf, type CardTone } from "@/lib/coordinator/run-card";
+import {
+  eventChip,
+  eventAgo,
+  eventText,
+  runNeeds,
+  runPulse,
+  runStatus,
+  syncLine,
+  tidyOutcome,
+  timelineOf,
+  controlHandle,
+  type BackgroundWork,
+  type CardTone,
+} from "@/lib/coordinator/run-card";
 import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
+import { CardMenu, useCardMenu } from "../cards/CardMenu";
 import "./run-card.css";
 
-/** How many events an open card shows before "Show earlier". */
+/** How many events (ones that say something) an open card shows before "Show earlier". */
 const PREVIEW = 3;
 
 /** The state of a piece of work as a tinted chip (dot + one or two words), then how long, in plain text. */
-export function StatusChip({ tone, live, label, detail, dotLabel }: { tone: CardTone; live?: boolean; label: string; detail?: string; dotLabel?: string }) {
+export function StatusChip({
+  tone,
+  live,
+  label,
+  detail,
+  dotLabel,
+  agent,
+  burst = 0,
+  celebrate,
+}: {
+  tone: CardTone;
+  live?: boolean;
+  label: string;
+  detail?: string;
+  dotLabel?: string;
+  /** Whose work this is: the chip then leads with that agent's mark (its arc turns while working) instead of a dot. */
+  agent?: string;
+  /** Bumped each time the state changes while on screen: the chip pops once per change. */
+  burst?: number;
+  /** With a burst: this change is good news (the work finished), so the pop comes with a few sparks. */
+  celebrate?: boolean;
+}) {
   return (
     <span className="rc-status">
-      <span className={`rc-chip k-t-${tone}`}>
-        <Dot tone={tone} live={live} label={dotLabel} />
-        {label}
+      <span key={burst} className={`rc-chip k-t-${tone}${burst ? " k-pop" : ""}`}>
+        {agent ? <AgentMark name={agent} busy={live} label={dotLabel} /> : <Dot tone={tone} live={live} label={dotLabel} />}
+        {/* One live signal per chip: the mark's arc when there is a mark, else the shimmer. */}
+        <span className={live && !agent ? "rc-shimmer" : undefined}>{label}</span>
+        {burst && celebrate ? (
+          <span className="k-spark" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, i) => (
+              <i key={i} style={{ "--a": `${i * 45}deg` } as CSSProperties} />
+            ))}
+          </span>
+        ) : null}
       </span>
       {detail ? (
         <span className="rc-status-detail" data-dynamic>
@@ -36,56 +82,55 @@ export function StatusChip({ tone, live, label, detail, dotLabel }: { tone: Card
   );
 }
 
-/** "Live · checked just now", or an honest "couldn't refresh" with a way to try again. Never a vague "may be out of date". */
-export function LiveLine({
-  updatedAt,
-  failed,
-  fetching,
-  onRetry,
-  what = "runs",
-}: {
-  updatedAt: number;
-  failed?: boolean;
-  fetching?: boolean;
-  onRetry?: () => void;
-  what?: string;
-}) {
+/**
+ * How current the cards are: "Synced just now", or, when a refresh fails, how long ago what is on screen was
+ * last good, with Retry on the same line. It describes fetching, never whether an agent is working.
+ */
+export function LiveLine({ updatedAt, failed, fetching, onRetry }: { updatedAt: number; failed?: boolean; fetching?: boolean; onRetry?: () => void }) {
   const now = useNow(10_000);
-  if (!updatedAt && !failed) return null;
-  // The clock ticks every 10 s, so a fresh check can be a moment ahead of it: under a minute is simply "just now".
-  const checked = !updatedAt ? "" : now - updatedAt < 60_000 ? "just now" : relativeTime(updatedAt, now);
+  const text = syncLine(updatedAt, !!failed, now);
+  if (!text) return null;
   return (
-    <p className="rc-live" data-state={failed ? "failed" : "live"} data-dynamic>
-      <Dot tone={failed ? "wn" : "ok"} live={!failed} />
-      {failed ? (
-        <>
-          <span>
-            Couldn&apos;t refresh {what}
-            {checked ? ` · showing what was true ${checked}` : ""}
-          </span>
-          {onRetry ? (
-            <Button size="sm" variant="ghost" className="rc-live-retry" loading={fetching} onClick={onRetry}>
-              Try again
-            </Button>
-          ) : null}
-        </>
-      ) : (
-        <span>Live · checked {checked}</span>
-      )}
+    <p
+      className="rc-live"
+      data-state={failed ? "failed" : "live"}
+      title={updatedAt ? `Last synced ${new Date(updatedAt).toLocaleTimeString()}` : undefined}
+      data-dynamic
+    >
+      <span key={failed ? "failed" : updatedAt} className={failed ? undefined : "rc-sync"}>
+        <Dot tone={failed ? "wn" : "ok"} />
+      </span>
+      <span>{text}</span>
+      {failed && onRetry ? (
+        <Button size="sm" variant="ghost" className="rc-live-retry" disabled={fetching} onClick={onRetry}>
+          Retry
+        </Button>
+      ) : null}
     </p>
   );
 }
 
+/** How long a live run's newest event keeps pulsing: after that the outline alone says the run is working. */
+const FRESH_MS = 2 * 60_000;
+
 /** Events as a real timeline: newest first, a tinted node and type chip per event, the time on the right. */
-export function RunTimeline({ events, runTitle, label }: { events: readonly RunEvent[]; runTitle: string; label: string }) {
+export function RunTimeline({ events, runTitle, label, live }: { events: readonly RunEvent[]; runTitle: string; label: string; live?: boolean }) {
   const now = useNow();
+  // Anything reported after this timeline was first drawn is news: it slides in and glows once.
+  const [since] = useState(() => Date.now());
   return (
     <ol className="rc-timeline" aria-label={label}>
       {events.map((event, index) => {
         const chip = eventChip(event);
         const text = eventText(event, runTitle);
         return (
-          <li key={event.id} className={`rc-event k-t-${chip.tone}`} data-latest={index === 0 || undefined}>
+          <li
+            key={event.id}
+            className={`rc-event k-t-${chip.tone}`}
+            data-latest={index === 0 || undefined}
+            data-live={(live && index === 0 && now - Date.parse(event.at) < FRESH_MS) || undefined}
+            data-new={Date.parse(event.at) > since || undefined}
+          >
             <span className="rc-node" aria-hidden="true" />
             <span className="rc-event-main">
               <Pill tone={chip.tone} className="rc-event-chip">
@@ -94,7 +139,7 @@ export function RunTimeline({ events, runTitle, label }: { events: readonly RunE
               {text ? <span className="rc-event-text">{text}</span> : null}
             </span>
             <time className="rc-event-time" dateTime={event.at} title={new Date(event.at).toLocaleString()} data-dynamic>
-              {eventClock(event.at, now)}
+              {eventAgo(event.at, now)}
             </time>
           </li>
         );
@@ -116,29 +161,124 @@ function Pipeline({ run }: { run: CoordinatorRunRow }) {
   );
 }
 
+/** The one guidance / reply field both kinds of card use: type it, Send. Two lines, so what is typed stays in view. */
+function SteerField({
+  label,
+  placeholder = "What should it do differently?",
+  pending,
+  onSend,
+  onClose,
+  alt,
+}: {
+  label: string;
+  placeholder?: string;
+  pending: boolean;
+  onSend: (guidance: string) => Promise<unknown>;
+  onClose: () => void;
+  /** What the field's button does while nothing is typed, e.g. resume a waiting run without an answer. */
+  alt?: { label: string; short: string; onSelect: () => void };
+}) {
+  const [guidance, setGuidance] = useState("");
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    form.current?.querySelector("textarea")?.focus();
+  }, []);
+  return (
+    <form
+      ref={form}
+      className="rc-steer"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!guidance.trim() || pending) return;
+        void onSend(guidance)
+          .then(() => {
+            setGuidance("");
+            onClose();
+          })
+          .catch(() => undefined);
+      }}
+    >
+      <Textarea
+        aria-label={label}
+        className="rc-steer-input min-w-0 flex-1"
+        rows={2}
+        placeholder={placeholder}
+        value={guidance}
+        maxLength={2000}
+        onChange={(event) => setGuidance(event.target.value)}
+      />
+      {alt && !guidance.trim() ? (
+        // One button, two jobs: with nothing typed it is the other way out (resume without an answer); as soon as
+        // there is an answer it is Send.
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          icon={<RetryIcon className="h-3.5 w-3.5" />}
+          aria-label={alt.label}
+          title={alt.label}
+          disabled={pending}
+          onClick={() => {
+            alt.onSelect();
+            onClose();
+          }}
+        >
+          {alt.short}
+        </Button>
+      ) : (
+        <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
+          Send
+        </Button>
+      )}
+    </form>
+  );
+}
+
 export type RunCardProps = {
   run: CoordinatorRunRow;
   runs: readonly CoordinatorRunRow[];
   /** Recent events for every listed run (from the runs list itself), so a card has a timeline before it is opened. */
   events: readonly RunEvent[];
-  onSteer: (ref: string, title: string) => void;
+  /** Open decisions: a run waiting on the owner says which one. */
+  decisions?: readonly Decision[];
+  /**
+   * With guidance: send it to the run now (resolves once sent or written into Chat). Without: open Chat with a
+   * blank steering line (the keyboard shortcut, and "Ask in chat" on a run that has stopped).
+   */
+  onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
   onCommand: (text: string) => void;
+  /** Jump to a decision (D-n). */
+  onRef?: (ref: string) => void;
   initialRef?: string;
   stopping: string | null;
   onStopping: (ref: string | null) => void;
-  /** Open on arrival (the first few runs that need the owner); every card can be opened by its header. */
+  /** Open on arrival (the run that most needs the owner); every card can be opened by its header. */
   defaultOpen?: boolean;
   ancestors?: string[];
 };
 export const runCommand = (run: CoordinatorRunRow) => `${run.state === "failed" ? "Retry" : "Resume"} ${run.ref} (${run.title}).`;
 
 /**
- * One run, readable without opening anything: what state it is in, who is on it, where its pipeline stands and
- * the last thing it reported. Opened, it shows its recent timeline, its sub-runs and what you can do about it.
+ * One run, readable without opening anything: what state it is in, what it needs when it is waiting, who is on
+ * it, where its pipeline stands and the last thing it reported. Opened, it shows its recent timeline, its
+ * sub-runs and what you can do about it.
  */
-export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, stopping, onStopping, defaultOpen = false, ancestors = [] }: RunCardProps) {
+export function RunCard({
+  run,
+  runs,
+  events,
+  decisions = [],
+  onSteer,
+  onCommand,
+  onRef,
+  initialRef,
+  stopping,
+  onStopping,
+  defaultOpen = false,
+  ancestors = [],
+}: RunCardProps) {
   const now = useNow();
-  const status = runStatus(run, now);
+  const reported = runStatus(run, now);
   const childRuns = childrenOf(runs, run.id).filter((r) => !ancestors.includes(r.id) && r.id !== run.id);
   const descendantSelected = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false;
@@ -147,6 +287,15 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
   };
   const [open, setOpen] = useState(defaultOpen || run.ref === initialRef || (!!initialRef && descendantSelected(run.id)));
   const [all, setAll] = useState(false);
+  const [steering, setSteering] = useState(false);
+  const [sending, setSending] = useState(false);
+  // The state changed while this card was on screen (derived during render, so it costs no extra effect).
+  const [shownState, setShownState] = useState(reported.key);
+  const [burst, setBurst] = useState(() => (reported.key === "done" && !!run.finishedAt && Date.now() - Date.parse(run.finishedAt) < 30_000 ? 1 : 0));
+  if (shownState !== reported.key) {
+    setShownState(reported.key);
+    setBurst((n) => n + 1);
+  }
   const confirmStop = stopping === run.ref;
   const detailId = useId();
   const head = useRef<HTMLButtonElement>(null);
@@ -157,22 +306,73 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
     queryKey: ["work", "coordinator", "runs", run.ref, "events"],
     queryFn: ({ signal }) => api.get<{ events: RunEvent[] }>(`/api/coordinator/runs/${encodeURIComponent(run.ref)}/events`, signal),
     enabled: open,
-    refetchInterval: open && status.live ? 10_000 : false,
+    refetchInterval: open && reported.live ? 10_000 : false,
   });
   const known = timelineOf(
     events.filter((e) => e.runId === run.id),
     run.lastEvent ? [run.lastEvent] : undefined,
     full.data?.events,
   );
-  const shown = open ? (all ? known : known.slice(0, PREVIEW)) : known.slice(0, 1);
+  // Events that say something (a bare "Started" or "Finished" under the same chip adds nothing): the newest one
+  // on a closed card, the newest two on an open one; "Show earlier" brings every event.
+  const telling = known.filter((e) => eventText(e, run.title));
+  const pulse = runPulse(run, known, now);
+  const latest = telling[0] ?? null;
+  // A run that went quiet right after reporting a failed step says so in its chip: the failure is the news, the
+  // silence is the detail. (A failed step is not a failed run; the run's own state is unchanged.)
+  const failedStep = reported.key === "stuck" && !!latest && eventChip(latest).tone === "bad";
+  const status = failedStep ? { ...reported, label: "Step failed", tone: "bad" as const } : reported;
+  const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
   const hidden = known.length - shown.length;
-  const canStop = run.state === "running" || run.state === "waiting";
+  const waiting = run.state === "waiting";
+  const canStop = run.state === "running" || waiting;
   const canRetry = ["failed", "waiting", "interrupted"].includes(run.state);
-  // A run with no event yet still says the last thing it summarised.
-  const fallback = !known.length && run.summary && eventText({ summary: run.summary }, run.title) ? run.summary : "";
+  // A working run is steered and a waiting one is answered, both in the card; one that has stopped cannot take either.
+  const canSteer = waiting || run.state === "running";
+  const needs = runNeeds(run, decisions);
+  // What the run itself last summarised: the outcome of a finished run, or all there is when it has sent no events.
+  const summary = tidyOutcome(run.summary);
+  const outcome =
+    summary &&
+    summary !== needs?.text &&
+    eventText({ summary }, run.title) &&
+    (run.state === "done" || !latest) &&
+    summary !== (latest ? eventText(latest, run.title) : "")
+      ? summary
+      : "";
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
+  // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
+  const router = useRouter();
+  const menu = useCardMenu();
+  const actions = [
+    { label: `${run.ref} · ${status.label}`, heading: true },
+    canSteer
+      ? {
+          label: waiting ? "Reply…" : "Steer…",
+          onSelect: () => {
+            setOpen(true);
+            setSteering(true);
+          },
+        }
+      : null,
+    canRetry ? { label: run.state === "failed" ? "Retry" : waiting ? "Resume without replying" : "Resume", onSelect: () => onCommand(runCommand(run)) } : null,
+    { label: "Ask in chat", onSelect: () => void onSteer(run.ref, run.title) },
+    { label: open ? "Close timeline" : "Open timeline", onSelect: () => setOpen((value) => !value) },
+    run.itemId ? { label: "Open item", onSelect: () => router.push(`/areas?item=${encodeURIComponent(run.itemId)}`) } : null,
+    prUrl ? { label: "Open pull request", onSelect: () => void window.open(prUrl, "_blank", "noopener,noreferrer") } : null,
+    { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) },
+    canStop ? { label: "Ask to stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
+  ].filter((item) => item !== null);
   return (
-    <article className="rc" data-run-ref={run.ref} data-state={status.key} data-open={open || undefined}>
+    <article
+      className="rc"
+      data-run-ref={run.ref}
+      data-state={status.key}
+      data-open={open || undefined}
+      data-live={status.live || undefined}
+      onContextMenu={menu.onContextMenu}
+    >
+      <CardMenu at={menu.at} label={`Actions for ${run.ref}`} items={actions} onClose={menu.close} />
       <Button
         ref={head}
         variant="ghost"
@@ -183,7 +383,16 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
         onClick={() => setOpen((value) => !value)}
       >
         <span className="rc-top">
-          <StatusChip tone={status.tone} live={status.live} label={status.label} detail={status.detail} dotLabel={status.key} />
+          <StatusChip
+            tone={status.tone}
+            live={status.live}
+            label={status.label}
+            detail={status.detail}
+            dotLabel={status.key}
+            agent={run.profile}
+            burst={burst}
+            celebrate={status.key === "done"}
+          />
           <span className="gc-ref rc-ref" role="img" aria-label={`Run ${run.ref.replace("-", " ")}`}>
             {run.ref}
           </span>
@@ -193,18 +402,64 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
         <span className="rc-meta">
           <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
-          {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 notice" : `${run.noticeCount} notices`}</span> : null}
           {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
+          {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 step reported" : `${run.noticeCount} steps reported`}</span> : null}
+          <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
         </span>
+        {pulse.length > 1 ? (
+          <span className="rc-pulse-row">
+            <span className="rc-pulse-label">Reports</span>
+            <span
+              className="rc-pulse"
+              role="img"
+              aria-label={`${pulse.length} reports since it started; the last one ${relativeTime(known[0]!.at, now)}`}
+              title="When it reported, from its start to now"
+            >
+              {pulse.map((tick) => (
+                <i key={tick.id} className={`k-t-${tick.tone}`} style={{ "--at": tick.at } as CSSProperties} />
+              ))}
+              {status.live ? <i className="rc-pulse-now" /> : null}
+            </span>
+            <span className="rc-pulse-label">{status.key === "done" ? "end" : "now"}</span>
+          </span>
+        ) : null}
       </Button>
+      {needs ? (
+        <p className="rc-ask">
+          <span className="rc-ask-text">
+            <span className="rc-ask-label">Needs you</span>
+            {needs.text}
+          </span>
+          {needs.decision ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rc-jump k-t-ac"
+              icon={<InboxIcon className="h-3.5 w-3.5" />}
+              disabled={!onRef}
+              aria-label={`Review decision ${needs.decision.ref.replace("-", " ")}`}
+              onClick={() => onRef?.(needs.decision!.ref)}
+            >
+              Review {needs.decision.ref}
+            </Button>
+          ) : null}
+        </p>
+      ) : null}
       <Pipeline run={run} />
       {run.lock ? <p className="rc-lock">{run.lock.mode === "waits" ? `Waiting for ${run.lock.name}` : `Holds ${run.lock.name} lock`}</p> : null}
-      {fallback ? <p className="rc-summary line-clamp-2">{fallback}</p> : null}
-      {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} /> : null}
+      {outcome ? <p className="rc-summary line-clamp-3">{outcome}</p> : null}
+      {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} live={status.live} /> : null}
       {open ? (
         <div className="rc-more" id={detailId}>
           {hidden > 0 || all ? (
-            <Button size="sm" variant="ghost" className="rc-earlier" aria-expanded={all} onClick={() => setAll((value) => !value)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-earlier"
+              icon={<ChevronIcon className={`h-3 w-3 ${all ? "-rotate-90" : "rotate-90"}`} />}
+              aria-expanded={all}
+              onClick={() => setAll((value) => !value)}
+            >
               {all ? "Show fewer" : `Show ${hidden} earlier`}
             </Button>
           ) : null}
@@ -217,7 +472,7 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
               </Button>
             </p>
           ) : null}
-          {full.isSuccess && !known.length && !fallback ? <p className="rc-note">No events yet.</p> : null}
+          {full.isSuccess && !known.length && !outcome ? <p className="rc-note">No events yet.</p> : null}
           {childRuns.length ? (
             <section aria-label={`Sub-runs of ${run.ref}`} className="rc-children">
               <SectionHeader label="Sub-runs" count={childRuns.length} />
@@ -227,8 +482,10 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
                   run={child}
                   runs={runs}
                   events={events}
+                  decisions={decisions}
                   onSteer={onSteer}
                   onCommand={onCommand}
+                  onRef={onRef}
                   initialRef={initialRef}
                   stopping={stopping}
                   onStopping={onStopping}
@@ -238,7 +495,20 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
             </section>
           ) : null}
           <div className="rc-actions">
-            {canRetry ? (
+            {canSteer ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rc-act"
+                icon={<SteerIcon className="h-3.5 w-3.5" />}
+                aria-label={`${waiting ? "Reply to" : "Steer"} ${run.ref}`}
+                aria-expanded={steering}
+                onClick={() => setSteering((value) => !value)}
+              >
+                {waiting ? "Reply" : "Steer"}
+              </Button>
+            ) : null}
+            {canRetry && !waiting ? (
               <Button
                 size="sm"
                 variant="ghost"
@@ -250,16 +520,19 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
                 {run.state === "failed" ? "Retry" : "Resume"}
               </Button>
             ) : null}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rc-act"
-              icon={canRetry ? <ChatIcon className="h-3.5 w-3.5" /> : <SteerIcon className="h-3.5 w-3.5" />}
-              aria-label={`Steer ${run.ref}`}
-              onClick={() => onSteer(run.ref, run.title)}
-            >
-              {canRetry ? "Ask" : "Steer"}
-            </Button>
+            {!canSteer ? (
+              // A run that has stopped cannot be steered: this opens Chat with a line about it.
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rc-act"
+                icon={<ChatIcon className="h-3.5 w-3.5" />}
+                aria-label={`Ask in chat about ${run.ref}`}
+                onClick={() => void onSteer(run.ref, run.title)}
+              >
+                Ask in chat
+              </Button>
+            ) : null}
             {prUrl ? (
               <ButtonLink size="sm" variant="ghost" className="rc-act" href={prUrl} external icon={<ExternalIcon className="h-3.5 w-3.5" />}>
                 Pull request
@@ -282,13 +555,30 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
                 variant="ghost"
                 className="rc-act rc-act-stop"
                 icon={<StopIcon className="h-3.5 w-3.5" />}
-                aria-label={`Stop ${run.ref}`}
+                aria-label={`Ask to stop ${run.ref}`}
                 onClick={() => onStopping(run.ref)}
               >
-                Stop
+                Ask to stop
               </Button>
             ) : null}
           </div>
+          {steering && canSteer ? (
+            <SteerField
+              label={`${waiting ? "Reply to" : "Guidance for"} ${run.ref}`}
+              placeholder={waiting ? "Your answer" : undefined}
+              pending={sending}
+              onClose={() => setSteering(false)}
+              onSend={async (guidance) => {
+                setSending(true);
+                try {
+                  await onSteer(run.ref, run.title, guidance);
+                } finally {
+                  setSending(false);
+                }
+              }}
+              alt={waiting && canRetry ? { label: "Resume without replying", short: "Resume", onSelect: () => onCommand(runCommand(run)) } : undefined}
+            />
+          ) : null}
         </div>
       ) : null}
       {confirmStop ? (
@@ -316,70 +606,136 @@ export function RunCard({ run, runs, events, onSteer, onCommand, initialRef, sto
 const EXEC_STATUS: Record<ExecutionRecord["state"], { label: string; tone: CardTone }> = {
   running: { label: "Working", tone: "ai" },
   waiting: { label: "Waiting on you", tone: "wn" },
-  completed: { label: "Done", tone: "ok" },
+  completed: { label: "Finished", tone: "ok" },
   failed: { label: "Failed", tone: "bad" },
   cancelled: { label: "Stopped", tone: "neutral" },
-  unknown: { label: "No status reported", tone: "neutral" },
+  unknown: { label: "No report yet", tone: "neutral" },
 };
 /** Longest outcome text shown before "More". */
 const OUTCOME_CHARS = 180;
 
 /**
  * Background work started from a conversation, as a card that answers "did it finish, fail or need me?" in place:
- * state chip, the current step or the outcome, progress when the source reports it, links, and Steer / Stop for a
- * sub-agent that can take them. `run` + `events` add the R-n timeline when this work is also a tracked run.
+ * state chip, the current step or the outcome or error, progress when the source reports it, links, and what you
+ * can do: Steer (or Reply, when it waits on you) and Ask to stop for a sub-agent that can take them, Reply for
+ * work that failed. When the work is also a tracked run (R-n), that run's state and latest events are what the
+ * card shows, and stopping it works as it does under Activity: the request is written for you to send.
  */
 export function ExecCard({
-  record,
+  work,
+  events = [],
   pending,
   onControl,
-  run,
-  events = [],
+  onDraft,
   children,
 }: {
-  record: ExecutionRecord;
+  work: BackgroundWork;
+  events?: readonly RunEvent[];
   pending: boolean;
   onControl: (input: string) => Promise<unknown>;
-  run?: CoordinatorRunRow;
-  events?: readonly RunEvent[];
+  /** Writes a line into the conversation's composer (never sends): the stop request for a tracked run. */
+  onDraft?: (text: string) => void;
   children?: ReactNode;
 }) {
+  const { record, run } = work;
   const [steering, setSteering] = useState(false);
-  const [guidance, setGuidance] = useState("");
-  const [confirmStop, setConfirmStop] = useState(false);
+  const [stopAsked, setStopAsked] = useState<string | null>(null);
   const [whole, setWhole] = useState(false);
+  const [shownState, setShownState] = useState(record.state);
+  const [burst, setBurst] = useState(0);
+  if (shownState !== record.state) {
+    setShownState(record.state);
+    setBurst((n) => n + 1);
+  }
   // A child discovered through the session list first keeps its child-session id as record id;
   // the coordinator steers/stops by Hermes' sub-agent handle (#251).
-  const handle = record.subagentId ?? record.id;
-  const controllable = record.source === "subagent" && canControl(handle) && isActiveExec(record);
-  const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
-  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes is stalled, not working.
+  const target = work.control ?? record;
+  const handle = controlHandle(target);
   const now = useNow();
+  const tracked = run ? runStatus(run, now) : null;
+  const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
+  const reachable = target.source === "subagent" && canControl(handle);
+  // Both must be going: the run the card shows, and the sub-agent the controls would reach (as on main).
+  const controllable = reachable && active && isActiveExec(target);
+  // A sub-agent can outlive the tracked run it belongs to. The card shows the run's state and offers no Steer or
+  // Stop for a run that has ended, but the sub-agent that is still going is one long-press away.
+  const lingering = reachable && !active && isActiveExec(target);
+  const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
+  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes has gone quiet.
   // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
-  const stalled = record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
+  const stalled = !tracked && record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
   const title = plainMessageLine(record.title).replace(/^Subagent:\s*/i, "");
-  const status = stalled ? { label: "Stuck", tone: "wn" as const } : EXEC_STATUS[record.state];
-  const detail = stalled ? `no update for ${ageLabel(record.updatedAt!, now)}` : at ? relativeTime(at, now) : "";
-  const active = isActiveExec(record);
+  const status = tracked ?? (stalled ? { label: "Quiet", tone: "wn" as const } : EXEC_STATUS[record.state]);
+  const detail = tracked ? tracked.detail : stalled ? `no update for ${ageLabel(record.updatedAt!, now)}` : at ? relativeTime(at, now) : "";
+  const dotLabel = tracked ? tracked.key : stalled ? "stalled" : record.state;
+  const waiting = tracked ? tracked.key === "waiting" : record.state === "waiting";
   // What happened, in the source's own words: the error, else the step it is on, else how it ended.
-  const outcome = (record.error || (active ? record.step : null) || record.summary || record.step || "").replace(/\s+/g, " ").trim();
+  const said = tidyOutcome(record.error || (active ? record.step : null) || record.summary || record.step);
+  const outcome =
+    said ||
+    (record.state === "unknown" && !tracked ? `${record.startedAt ? `Started ${relativeTime(record.startedAt, now)}` : "Started"} · hasn't reported yet.` : "");
   const long = outcome.length > OUTCOME_CHARS;
   const timeline = run
     ? timelineOf(
         events.filter((e) => e.runId === run.id),
         run.lastEvent ? [run.lastEvent] : undefined,
-      ).slice(0, 2)
+      )
+        .filter((e) => eventText(e, record.title))
+        .slice(0, 2)
     : [];
   const links = (record.links ?? []).filter((link) => /^https:\/\//i.test(link.url)).slice(0, 3);
+  const isLive = tracked ? tracked.live : record.state === "running" && !stalled;
+  // Work that failed cannot be steered, but it can be answered: the same field, sent as a line about it.
+  const canReply = !controllable && (record.state === "failed" || waiting);
+  const [replying, setReplying] = useState(false);
+  // A tracked run stops the way it does under Activity: the request is written for the owner to send. Once that
+  // run has ended there is nothing of it to stop: the request goes to the sub-agent itself.
+  const drafts = !!run && !!onDraft && active;
+  const steerable = controllable || lingering;
+  // Stopping a tracked run only writes the request, so it does not need a live sub-agent to send it through.
+  const stoppable = steerable || (drafts && reachable);
+  // What confirming would do is fixed when the confirmation opens. If that changes under it (the run ends, or is
+  // no longer this card's), it closes: "write the request" must never turn into "send it now" between two taps.
+  // The same goes for what it would stop: the confirmation is for one action on one target (this run's drafted
+  // request, or a stop sent to this handle), and once that is not what the card offers it is closed for good.
+  const stopOffer = !stoppable ? null : drafts ? `draft:${run!.id}` : `send:${handle}`;
+  if (stopAsked !== null && stopAsked !== stopOffer) setStopAsked(null);
+  const confirmStop = stopAsked !== null && stopAsked === stopOffer;
+  const setConfirmStop = (open: boolean) => setStopAsked(open ? stopOffer : null);
+  const router = useRouter();
+  const actions = [
+    { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },
+    steerable ? { label: lingering ? "Steer sub-agent…" : waiting ? "Reply…" : "Steer…", disabled: pending, onSelect: () => setSteering(true) } : null,
+    canReply ? { label: "Reply…", disabled: pending, onSelect: () => setReplying(true) } : null,
+    record.href ? { label: "Open conversation", onSelect: () => router.push(record.href!) } : null,
+    ...links.map((link) => ({
+      label: `Open ${link.label?.trim() || (link.kind === "github" ? "GitHub" : "link")}`,
+      onSelect: () => void window.open(link.url, "_blank", "noopener,noreferrer"),
+    })),
+    run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
+    stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
+  ].filter((item) => item !== null);
+  // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
+  const menu = useCardMenu(actions.length > 2);
   return (
-    <article className="rc rc-exec" data-state={stalled ? "stuck" : record.state} data-testid="coordinator-run-card" aria-label={record.title}>
+    <article
+      className="rc rc-exec"
+      data-state={tracked ? tracked.key : stalled ? "stuck" : record.state}
+      data-live={isLive || undefined}
+      data-testid="coordinator-run-card"
+      aria-label={record.title}
+      onContextMenu={menu.onContextMenu}
+    >
+      <CardMenu at={menu.at} label={`Actions for ${title}`} items={actions} onClose={menu.close} />
       <div className="rc-top">
         <StatusChip
           tone={status.tone}
-          live={record.state === "running" && !stalled}
+          live={isLive}
           label={status.label}
           detail={detail}
-          dotLabel={stalled ? "stalled" : record.state}
+          dotLabel={dotLabel}
+          burst={burst}
+          celebrate={record.state === "completed"}
         />
         {run ? <span className="gc-ref rc-ref">{run.ref}</span> : null}
       </div>
@@ -388,7 +744,8 @@ export function ExecCard({
       </p>
       {outcome && outcome.toLowerCase() !== title.toLowerCase() ? (
         <p className="rc-outcome" data-tone={record.error ? "bad" : undefined}>
-          <span className={whole ? undefined : "line-clamp-3"}>{whole || !long ? outcome : `${outcome.slice(0, OUTCOME_CHARS).trimEnd()}…`}</span>
+          {record.error ? <span className="rc-outcome-label">Error</span> : null}
+          <span>{whole || !long ? outcome : `${outcome.slice(0, OUTCOME_CHARS).trimEnd()}…`}</span>
           {long ? (
             <Button size="sm" variant="ghost" className="rc-earlier" aria-expanded={whole} onClick={() => setWhole((value) => !value)}>
               {whole ? "Less" : "More"}
@@ -397,14 +754,41 @@ export function ExecCard({
         </p>
       ) : null}
       {active && typeof record.progress === "number" ? (
-        <div className="rc-progress">
+        <div className="rc-progress" data-live={isLive || undefined}>
           <ProgressBar value={record.progress * 100} tone="ai" label={`${Math.round(record.progress * 100)}% done`} />
         </div>
       ) : null}
-      {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} /> : null}
+      {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
       {children}
-      {record.href || links.length || controllable ? (
+      {lingering ? <p className="rc-note">A sub-agent of this run is still working.</p> : null}
+      {record.href || links.length || stoppable || canReply ? (
         <div className="rc-actions">
+          {canReply ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act"
+              icon={<SteerIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={replying}
+              onClick={() => setReplying((value) => !value)}
+            >
+              Reply
+            </Button>
+          ) : null}
+          {steerable ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act"
+              icon={<SteerIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={steering}
+              onClick={() => setSteering((value) => !value)}
+            >
+              {lingering ? "Steer sub-agent" : waiting ? "Reply" : "Steer"}
+            </Button>
+          ) : null}
           {record.href ? (
             <ButtonLink size="sm" variant="ghost" className="rc-act" href={record.href} icon={<ChatIcon className="h-3.5 w-3.5" />}>
               Open
@@ -415,73 +799,79 @@ export function ExecCard({
               {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}
             </ButtonLink>
           ))}
-          {controllable ? (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<SteerIcon className="h-3.5 w-3.5" />}
-                disabled={pending}
-                aria-expanded={steering}
-                onClick={() => setSteering((value) => !value)}
-              >
-                Steer
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act rc-act-stop"
-                icon={confirmStop ? undefined : <StopIcon className="h-3.5 w-3.5" />}
-                disabled={pending}
-                onClick={() => setConfirmStop((value) => !value)}
-              >
-                {confirmStop ? "Cancel stop" : "Stop"}
-              </Button>
-              {confirmStop ? (
-                <Button
-                  size="sm"
-                  variant="danger"
-                  loading={pending}
-                  onClick={() =>
-                    void onControl(stopText(handle))
-                      .then(() => setConfirmStop(false))
-                      .catch(() => undefined)
-                  }
-                >
-                  Stop? Yes
-                </Button>
-              ) : null}
-            </>
+          {stoppable ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act rc-act-stop"
+              icon={<StopIcon className="h-3.5 w-3.5" />}
+              disabled={pending}
+              aria-expanded={confirmStop}
+              onClick={() => setConfirmStop(!confirmStop)}
+            >
+              Ask to stop
+            </Button>
           ) : null}
         </div>
       ) : null}
-      {controllable && steering ? (
-        <form
-          className="rc-steer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!guidance.trim() || pending) return;
-            void onControl(steerText(handle, guidance))
-              .then(() => {
-                setGuidance("");
-                setSteering(false);
-              })
-              .catch(() => undefined);
-          }}
-        >
-          <Input
-            aria-label={`Guidance for ${record.title}`}
-            className="min-w-0 flex-1"
-            placeholder="What should it do differently?"
-            value={guidance}
-            maxLength={2000}
-            onChange={(event) => setGuidance(event.target.value)}
-          />
-          <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
-            Send
+      {steerable && steering ? (
+        <SteerField
+          label={`${waiting ? "Reply to" : "Guidance for"} ${record.title}`}
+          placeholder={waiting ? "Your answer" : undefined}
+          pending={pending}
+          onClose={() => setSteering(false)}
+          onSend={(guidance) => onControl(steerText(handle, guidance))}
+        />
+      ) : null}
+      {canReply && replying ? (
+        <SteerField
+          label={`Reply about ${record.title}`}
+          placeholder="Your answer"
+          pending={pending}
+          onClose={() => setReplying(false)}
+          onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
+        />
+      ) : null}
+      {confirmStop ? (
+        <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
+          {drafts ? (
+            <>
+              <p>
+                Ask the coordinator to stop {run!.ref} and its sub-agents? This writes the request in the composer for you to send; nothing stops until you send
+                it.
+              </p>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => {
+                  onDraft?.(`Stop ${run!.ref} (${title}) and its sub-agents.`);
+                  setConfirmStop(false);
+                }}
+              >
+                Write stop request
+              </Button>
+            </>
+          ) : (
+            <>
+              <p>Send a request to stop this sub-agent? It goes to the coordinator as soon as you confirm.</p>
+              <Button
+                size="sm"
+                variant="danger"
+                loading={pending}
+                onClick={() =>
+                  void onControl(stopText(handle))
+                    .then(() => setConfirmStop(false))
+                    .catch(() => undefined)
+                }
+              >
+                Send stop request
+              </Button>
+            </>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => setConfirmStop(false)}>
+            Cancel
           </Button>
-        </form>
+        </div>
       ) : null}
     </article>
   );

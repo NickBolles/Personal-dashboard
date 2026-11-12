@@ -35,6 +35,44 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   only the words the chip cannot say ("Target Nov 22", not "Dates: start — → —, target — → 2026-11-22");
   every change keeps its own Undo. Opening a card adds its summary, the last agent report, Open item, Ask
   and the agent's conversation. Cards read the same live queries as the rest of the app.
+- **Life.** The cards move where it means something, in the app's own motion vocabulary. Work in flight has
+  light travelling round the card's outline in the theme's agent colour (an indeterminate "still going"), the
+  agent's mark turning inside the "Working" chip, and a pulsing newest event; work that has gone quiet is still. An event that arrives while you watch slides in
+  and glows once; a run that finishes pops with a few sparks; each sync blinks the dot. A thin strip on every
+  run shows when it reported from its start to now, so a steady run and one that went silent look different at
+  a glance. Item cards have their chip timeline back (the chip is the verb, in the colour of its kind), three
+  changes showing. Everything stops under "reduce motion".
+- **Times against now.** Run timelines say "12 min ago", "3 h ago", "2 d ago" (the exact time is the tooltip),
+  the same way item timelines do.
+- **Right-click or long-press a card.** Every run, item, project and background-work card opens a menu of
+  everything it can do in its current state, without opening the card first: Steer / Reply, Retry, "Resume
+  without replying", Ask in chat, open the item or pull request, jump to its decisions and runs, copy the ref
+  or link, Ask to stop (still behind its confirmation). A long press on the phone tray goes straight to Chat,
+  Needs you or Activity. The Menu key and Shift+F10 open the same menu from the keyboard.
+- **Nothing lost in the redesign.** An audit against `main` found no removed capability; what had become
+  harder to reach or stopped being shown is back: a sub-agent that outlives its tracked run can still be
+  steered and stopped (from the menu), a run says how many steps it has reported, an item that is no longer
+  listed offers "Try opening it", and a background-work source that could not be read is said even when there
+  is nothing to list.
+- **Council round 7 (the whole change, before merge).** What all three reviewers agreed on: the tray uses the
+  cards' words ("2 runs went quiet", "2 runs failed", "3 runs need a look"; silence is never called stuck);
+  the time beside "Working" is the time of the newest report, in the timeline's own format, so the two cannot
+  disagree; only a report under two minutes old pulses; the reporting strip is labelled ("Reports … now"); work
+  in flight keeps its order when one run reports; a catch-up chip lands on the section it was about and marks
+  it for a moment; a waiting run's reply button is Resume while the field is empty and Send once there is an answer; a sub-agent that outlives
+  its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
+  fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
+- **Council code review (both changes, before merge).** Fixed: background work is tied to a tracked run by title
+  only when their times overlap; a run that two live sub-agents could both be is neither's (each keeps its own
+  card and controls, in any order), and a card's Steer / Stop always go to the sub-agent it shows (they could
+  reach a different one); a card's typed guidance and stop confirmation belong to that sub-agent and never
+  carry over to another; Steer needs the sub-agent itself to be going, while a run that is still going can
+  always be asked to stop; a finished run offers "Ask in chat", not Steer; a run waiting on the owner with no
+  decision of its own leads the tray ("… is waiting on you") where it said "No agent work waiting"; the first
+  attachment and a quick Send share one new conversation and Send waits for the file; Undo in a change row no
+  longer takes taps meant for the row above; a card menu gives focus back when it closes and stays put while
+  the panel is scrolled; an item with an interrupted run says "Run interrupted"; a reply being typed on a
+  background-work card survives its sources reporting.
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
   "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
 

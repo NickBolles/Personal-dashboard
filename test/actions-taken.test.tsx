@@ -232,9 +232,11 @@ describe("coordinator parity controls", () => {
   it("requires confirmation before asking the coordinator to stop a sub-agent", async () => {
     render(<CoordinatorThread info={info} />, { wrapper });
     const card = await screen.findByTestId("coordinator-run-card");
-    fireEvent.click(within(card).getByRole("button", { name: "Stop" }));
+    fireEvent.click(within(card).getByRole("button", { name: "Ask to stop" }));
     expect(api.post).not.toHaveBeenCalled();
-    fireEvent.click(within(card).getByRole("button", { name: "Stop? Yes" }));
+    // The confirm says what the second tap does: it sends the request.
+    expect(within(card).getByRole("group", { name: "Stop Audit retry policy?" }).textContent).toContain("as soon as you confirm");
+    fireEvent.click(within(card).getByRole("button", { name: "Send stop request" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions/s1/runs", expect.objectContaining({ input: "Stop sa_1" })));
   });
   it("stops an active parent run using the direct stop endpoint", async () => {
@@ -248,19 +250,48 @@ describe("coordinator parity controls", () => {
   });
   it("caps run cards, preserves unknown status and never offers controls for registered or unsafe IDs", async () => {
     records = [
-      record({ key: "unknown", state: "unknown" }),
-      record({ key: "registered", source: "registered_run" }),
-      record({ key: "unsafe", id: "bad id" }),
-      record({ key: "jarvis", source: "jarvis_run", state: "waiting" }),
-      record({ key: "finished", state: "completed" }),
-      record({ key: "sixth", state: "completed" }),
-      record({ key: "process", source: "process" }),
+      record({ key: "unknown", id: "sa_a", title: "Work A", state: "unknown" }),
+      record({ key: "registered", id: "reg_b", title: "Work B", source: "registered_run" }),
+      record({ key: "unsafe", title: "Work C", id: "bad id" }),
+      record({ key: "jarvis", id: "run_d", title: "Work D", source: "jarvis_run", state: "waiting" }),
+      record({ key: "finished", id: "sa_e", title: "Work E", state: "completed" }),
+      record({ key: "sixth", id: "sa_f", title: "Work F", state: "completed" }),
+      record({ key: "process", id: "proc_g", title: "Work G", source: "process" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
     await waitFor(() => expect(screen.getAllByTestId("coordinator-run-card")).toHaveLength(5));
-    expect(screen.getByRole("img", { name: "unknown" })).toBeTruthy();
+    // Work that has not reported says so, instead of an empty card.
+    const quiet = within(screen.getByRole("img", { name: "unknown" }).closest("article")!);
+    expect(quiet.getByText("No report yet")).toBeTruthy();
+    expect(quiet.getByText(/hasn't reported yet/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Steer" })).toBeNull();
     expect(screen.getByRole("link", { name: "1 more" }).getAttribute("href")).toBe("/chat/s1?panel=running");
+  });
+  it("shows one card per piece of work: a record with no status folds into its twin", async () => {
+    records = [
+      record({ key: "sub", updatedAt: at }),
+      record({ key: "reg", source: "registered_run", id: "reg_1", state: "unknown" }),
+      record({ key: "other", id: "sa_2", title: "Draft the email", state: "failed", error: "(no summary — status=failed: vendor portal timed out)" }),
+    ];
+    render(<CoordinatorThread info={info} />, { wrapper });
+    await waitFor(() => expect(screen.getAllByTestId("coordinator-run-card")).toHaveLength(2));
+    expect(screen.queryByText("No report yet")).toBeNull();
+    // A raw fallback from the source reads as a sentence.
+    expect(screen.getByText("Vendor portal timed out")).toBeTruthy();
+    expect(screen.queryByText(/status=failed/)).toBeNull();
+    // Work that failed cannot be steered, but it can be answered: Reply opens the same field and sends a line about it.
+    const failed = within(screen.getByText("Draft the email").closest("article")!);
+    expect(failed.queryByRole("button", { name: "Steer" })).toBeNull();
+    fireEvent.click(failed.getByRole("button", { name: "Reply" }));
+    expect(api.post).not.toHaveBeenCalled();
+    fireEvent.change(failed.getByRole("textbox", { name: "Reply about Draft the email" }), { target: { value: " Use the  posted amount " } });
+    fireEvent.click(failed.getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith(
+        "/api/hermes/sessions/s1/runs",
+        expect.objectContaining({ input: 'About "Draft the email": Use the posted amount' }),
+      ),
+    );
   });
   it("groups actions under replies and renders a live group without parsing the Markdown footer", async () => {
     const tool = (id: string): TimelineItem => ({

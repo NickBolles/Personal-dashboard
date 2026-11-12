@@ -162,3 +162,10 @@ it("extracts word-bounded D/R references with their exact index and preserves re
   ]);
   expect(refChips("no refs r-1 D-no")).toEqual([]);
 });
+it("work in flight keeps its place when one of the runs reports", () => {
+  const at = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+  const before = groupRuns([run(1, { updatedAt: at(30) }), run(2, { updatedAt: at(20) })]).running.map((r) => r.ref);
+  const after = groupRuns([run(1, { updatedAt: at(0) }), run(2, { updatedAt: at(20) })]).running.map((r) => r.ref);
+  expect(before).toEqual(["R-2", "R-1"]);
+  expect(after).toEqual(before);
+});
