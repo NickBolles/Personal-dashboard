@@ -62,6 +62,15 @@ Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux
   it for a moment; a waiting run's reply button is Resume while the field is empty and Send once there is an answer; a sub-agent that outlives
   its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
   fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
+- **Council code review (both changes, before merge).** Fixed: background work is tied to a tracked run by title
+  only when their times overlap, two live sub-agents with one title are two cards, and a card's Steer / Stop
+  always go to the sub-agent it shows (they could reach a different one); Steer and Stop need the sub-agent
+  itself to be going; a finished run offers "Ask in chat", not Steer; a run waiting on the owner with no
+  decision of its own leads the tray ("… is waiting on you") where it said "No agent work waiting"; the first
+  attachment and a quick Send share one new conversation and Send waits for the file; Undo in a change row no
+  longer takes taps meant for the row above; a card menu gives focus back when it closes and stays put while
+  the panel is scrolled; an item with an interrupted run says "Run interrupted"; a reply being typed on a
+  background-work card survives its sources reporting.
 - **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
   "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
 

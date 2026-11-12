@@ -497,7 +497,7 @@ export function CoordinatorThread({
                 </div>
                 {work.slice(0, 5).map((w) => (
                   <ExecCard
-                    key={`${sid}:${w.record.key}`}
+                    key={`${sid}:${w.run?.id ?? w.control?.key ?? w.record.key}`}
                     work={w}
                     events={tracked.data?.events}
                     pending={control.isPending}

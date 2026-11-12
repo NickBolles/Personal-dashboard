@@ -656,6 +656,12 @@ a.ic-pr-name:hover {
   color: var(--accent);
   font-size: 0.75rem;
 }
+/* Rows are packed: the panel's tap slop (9px above and below, coordinator.css) put the bottom third of one Undo
+   inside the next row's. Sideways only here, and a pixel short of the row above and below so two Undos never
+   share an edge: the tap area is 24px tall, one per row. */
+:is(.gc-rail, .gc-sheet) .rc .ic-undo .k-btn::after {
+  inset: 1px -7px;
+}
 .ic-report {
   display: grid;
   gap: 2px;

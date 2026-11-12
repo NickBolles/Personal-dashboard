@@ -523,6 +523,83 @@ describe("global coordinator", () => {
         .getAttribute("aria-selected"),
     ).toBe("true");
   });
+  it("Steer from an Activity card sends one line to the conversation; with no conversation it only fills the composer", async () => {
+    nav.wide = false;
+    nav.path = "/home";
+    const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
+    const row = {
+      id: "run-1",
+      ref: "R-1",
+      seq: 1,
+      itemId: "item",
+      itemTitle: "Item",
+      profile: "devchief",
+      title: "Ledger import",
+      state: "running",
+      stalled: false,
+      summary: null,
+      prUrl: null,
+      parentRunId: null,
+      parentRef: null,
+      pipeline: [],
+      lock: null,
+      interruptedAt: null,
+      startedAt: iso(30),
+      updatedAt: iso(2),
+      finishedAt: null,
+      noticeCount: 0,
+    };
+    const fallback = vi.mocked(api.get).getMockImplementation()!;
+    vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
+      if (path.startsWith("/api/coordinator/decisions")) return { decisions: [], counts: { open: 0, deferred: 0 } };
+      if (path === "/api/coordinator/runs")
+        return { runs: [row], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } };
+      if (path.startsWith("/api/coordinator/runs/")) return { events: [] };
+      return fallback(path, ...rest);
+    });
+    const steer = async (guidance: string) => {
+      fireEvent.click(screen.getByRole("button", { name: "Chief of staff" }));
+      const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
+      fireEvent.click(within(sheet).getByRole("tab", { name: /Activity/ }));
+      const card = within(await waitFor(() => sheet.querySelector<HTMLElement>('[data-run-ref="R-1"]')!));
+      // a working run arrives closed: open it, then Steer
+      fireEvent.click(sheet.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
+      fireEvent.click(await card.findByRole("button", { name: "Steer R-1" }));
+      fireEvent.change(card.getByRole("textbox", { name: "Guidance for R-1" }), { target: { value: guidance } });
+      // typing sends nothing; only Send does
+      expect(vi.mocked(api.post).mock.calls.some(([path]) => String(path).includes("/runs"))).toBe(false);
+      fireEvent.click(card.getByRole("button", { name: "Send" }));
+      return sheet;
+    };
+    // a conversation exists: the line goes to it, once
+    info = { ...base, sessionId: "s1" };
+    makeClient();
+    const first = render(globalView(), { wrapper });
+    await screen.findByRole("button", { name: "Chief of staff" });
+    await steer("Skip the archive tab");
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(api.post)
+          .mock.calls.filter(([path]) => path === "/api/hermes/sessions/s1/runs")
+          .map(([, body]) => (body as { input: string }).input),
+      ).toEqual(["Steer R-1 (Ledger import): Skip the archive tab"]),
+    );
+    first.unmount();
+    vi.mocked(api.post).mockClear();
+    // no conversation yet: nothing is sent or created, the line waits in the composer
+    info = { ...base, sessionId: null };
+    makeClient();
+    render(globalView(), { wrapper });
+    await screen.findByRole("button", { name: "Chief of staff" });
+    const sheet = await steer("Skip the archive tab");
+    await waitFor(() =>
+      expect((within(sheet).getByRole("textbox", { name: "Message the coordinator" }) as HTMLTextAreaElement).value).toBe(
+        "Steer R-1 (Ledger import): Skip the archive tab",
+      ),
+    );
+    expect(vi.mocked(api.post).mock.calls.some(([path]) => String(path).startsWith("/api/hermes/"))).toBe(false);
+  });
   it("Needs you counts what Today counts: approvals and stalled runs are listed with the decisions, stalled ones link to Activity", async () => {
     info = { ...base, sessionId: "s1" };
     const fallback = vi.mocked(api.get).getMockImplementation()!;

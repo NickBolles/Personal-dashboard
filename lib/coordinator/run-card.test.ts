@@ -143,6 +143,44 @@ describe("background work", () => {
     ).toEqual(["b"]);
     expect(mergeBackgroundWork([rec({ key: "a", id: "sa_1" }), rec({ key: "b", id: "sa_2", state: "failed" })], [])).toHaveLength(2);
   });
+  it("a card never shows one sub-agent and controls another", () => {
+    const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
+    // two live sub-agents with one title and one tracked run of that title: two cards, each with its own controls
+    const two = mergeBackgroundWork([rec({ key: "a", id: "sa_1" }), rec({ key: "b", id: "sa_2", step: "Reading the logs" })], [tracked]);
+    expect(two).toHaveLength(2);
+    expect(two[0]).toMatchObject({ run: { ref: "R-9" }, record: { key: "a" }, control: { id: "sa_1" } });
+    expect(two[1]).toMatchObject({ record: { key: "b" }, control: { id: "sa_2" } });
+    expect(two[1]!.run).toBeUndefined();
+    // a record with no status folds into its twin, and the controls go to the one that is shown
+    const folded = mergeBackgroundWork([rec({ key: "a", id: "sa_1", state: "unknown" }), rec({ key: "b", id: "sa_2" })], []);
+    expect(folded).toHaveLength(1);
+    expect(folded[0]).toMatchObject({ record: { key: "b" }, control: { id: "sa_2" } });
+    // the same sub-agent seen through two sources is still one card on its run
+    const twice = mergeBackgroundWork(
+      [rec({ key: "a", id: "child_1", subagentId: "sa_1" }), rec({ key: "b", id: "sa_1", subagentId: "sa_1", summary: "Halfway" })],
+      [tracked],
+    );
+    expect(twice).toHaveLength(1);
+    expect(twice[0]).toMatchObject({ run: { ref: "R-9" }, record: { key: "b" }, control: { key: "b" } });
+  });
+  it("a shared title does not tie work to a run from another time", () => {
+    const lastWeek = run({
+      id: "run-1",
+      ref: "R-1",
+      title: "Audit previews",
+      state: "done",
+      startedAt: ago(60 * 24 * 7),
+      updatedAt: ago(60 * 24 * 7 - 30),
+      finishedAt: ago(60 * 24 * 7 - 30),
+    });
+    const today = rec({ key: "a", id: "sa_1", startedAt: ago(20) });
+    expect(mergeBackgroundWork([today], [lastWeek])[0]!.run).toBeUndefined();
+    // and of two runs with that title, the one from the same time is the one
+    const thisWeek = run({ id: "run-2", ref: "R-2", title: "Audit previews", startedAt: ago(21), updatedAt: ago(1) });
+    expect(mergeBackgroundWork([today], [lastWeek, thisWeek])[0]!.run?.ref).toBe("R-2");
+    const old = rec({ key: "o", id: "sa_0", state: "completed", startedAt: ago(60 * 24 * 7), endedAt: ago(60 * 24 * 7 - 25) });
+    expect(mergeBackgroundWork([old], [thisWeek, lastWeek])[0]!.run?.ref).toBe("R-1");
+  });
   it("says what a waiting run needs, a raw fallback as a sentence, and how fresh the view is", () => {
     const d = (id: string, over: Partial<Decision>) =>
       ({ id, ref: `D-${id}`, itemId: "i1", runId: "r1", question: "Which frame?", state: "open", createdAt: ago(5), ...over }) as Decision;

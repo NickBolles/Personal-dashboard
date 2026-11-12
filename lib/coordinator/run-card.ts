@@ -164,30 +164,58 @@ const workTitle = (title: string) =>
     .trim()
     .toLowerCase();
 const informative = (r: ExecutionRecord) => (r.state === "unknown" ? 0 : 2) + (r.error || r.summary || r.step ? 1 : 0);
+const timeOf = (at?: string | null) => {
+  const t = at ? Date.parse(at) : NaN;
+  return Number.isFinite(t) ? t : null;
+};
+const WINDOW_SLACK_MS = 10 * 60_000;
+/**
+ * A shared title is only a hint that a record and a tracked run are the same work. It is no hint at all when one
+ * ended before the other began: a weekly job reuses its title, and last week's sub-agent is not this week's run.
+ */
+function sameWindow(record: ExecutionRecord, run: CoordinatorRunRow): boolean {
+  const recordStart = timeOf(record.startedAt);
+  const recordEnd = timeOf(record.endedAt);
+  const runStart = timeOf(run.startedAt);
+  const runEnd = timeOf(run.finishedAt);
+  if (recordEnd !== null && runStart !== null && recordEnd < runStart - WINDOW_SLACK_MS) return false;
+  if (runEnd !== null && recordStart !== null && runEnd < recordStart - WINDOW_SLACK_MS) return false;
+  return true;
+}
+/** The same sub-agent seen through two sources (its child session, its delegation handle). */
+const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
+  a.id === b.id || (!!a.subagentId && a.subagentId === b.subagentId) || (!!a.childSessionId && a.childSessionId === b.childSessionId);
 /**
  * One card per piece of work. A conversation's background work arrives from several sources (the sub-agent
  * itself, its run registration, the R-n run), and they describe the same thing with different freshness:
  * records that are the same tracked run, or share a title while one of them has no status, are one card.
- * Two sub-agents that merely share a title and each report a real state stay separate.
+ *
+ * Steer and Stop go to `control`, so a card must never show one sub-agent and control another: two sub-agents
+ * that each report a real state are two cards whatever they are called (only the first is taken to be the
+ * tracked run of that title), and within a card the controls follow the best-informed sub-agent record.
  */
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
   const byId = new Map(runs.map((r) => [r.id, r]));
-  const byTitle = new Map<string, CoordinatorRunRow>();
-  for (const run of [...runs].sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt))) byTitle.set(workTitle(run.title), run);
+  const byTitle = new Map<string, CoordinatorRunRow[]>();
+  for (const run of [...runs].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))) {
+    const key = workTitle(run.title);
+    byTitle.set(key, [...(byTitle.get(key) ?? []), run]);
+  }
   const out: (BackgroundWork & { title: string })[] = [];
   for (const record of records) {
     const title = workTitle(record.title);
-    const run = (record.source === "subagent" ? undefined : byId.get(record.id)) ?? byTitle.get(title);
-    const control = record.source === "subagent" ? record : undefined;
+    const sub = record.source === "subagent";
+    const run = (sub ? undefined : byId.get(record.id)) ?? byTitle.get(title)?.find((r) => sameWindow(record, r));
     const same = out.find(
       (w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")),
     );
-    if (!same) {
-      out.push({ record, run, control, title });
+    const rival = sub && !!same?.control && !sameAgent(same.control, record) && same.control.state !== "unknown" && record.state !== "unknown";
+    if (!same || rival) {
+      out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, title });
       continue;
     }
     if (informative(record) > informative(same.record)) same.record = record;
-    same.control ??= control;
+    if (sub && (!same.control || informative(record) > informative(same.control))) same.control = record;
   }
   return out.map(({ title: _title, ...work }) => work);
 }

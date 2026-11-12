@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@/lib/client/api";
@@ -322,6 +322,33 @@ it("only the newest event of a working run pulses, and only while it is news; th
   expect(within(card()).getByText("last report just now")).toBeTruthy();
   expect(card().querySelector(".rc-event[data-live]")).toBeTruthy();
 });
+it("the newest event stops pulsing once it is no longer news, on a card that stays on screen", () => {
+  vi.useFakeTimers();
+  try {
+    const event = (id: string, minutes: number): RunEvent =>
+      ({ id, runId: "run-1", type: "progress", at: new Date(Date.now() - minutes * 60_000).toISOString(), summary: `Did ${id}`, payload: {} }) as RunEvent;
+    const older = event("older", 9);
+    const newest = event("newest", 0.5);
+    mount([run(1, { lastEvent: newest })], undefined, markers, [older, newest]);
+    fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
+    const rows = () => [...document.querySelectorAll<HTMLElement>('[data-run-ref="R-1"] .rc-event')];
+    // both events are listed, and only the first (newest) one pulses
+    expect(rows().length).toBeGreaterThanOrEqual(2);
+    expect(rows().map((row) => row.hasAttribute("data-live"))).toEqual([
+      true,
+      ...rows()
+        .slice(1)
+        .map(() => false),
+    ]);
+    // the clock ticks past two minutes with nothing new reported: the same card stops pulsing
+    act(() => {
+      vi.advanceTimersByTime(3 * 60_000);
+    });
+    expect(rows().some((row) => row.hasAttribute("data-live"))).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("right-click or long-press opens a menu with every action for that run's state", () => {
   mount([run(1), run(2, { state: "failed", prUrl: "https://example.com/pr/2" }), run(3, { state: "waiting" })]);
   const items = (ref: string) => {
@@ -422,6 +449,29 @@ it("a sub-agent still going after its tracked run ended keeps Steer and Stop on 
   fireEvent.contextMenu(screen.getByTestId("coordinator-run-card"), { clientX: 20, clientY: 20 });
   fireEvent.click(screen.getByRole("menuitem", { name: "Steer sub-agent…" }));
   expect(screen.getByRole("textbox", { name: "Guidance for Subagent: Audit the feeds" })).toBeTruthy();
+});
+it("a finished run takes no Steer, and a sub-agent that has ended is not steered through a run that is still going", () => {
+  const view = mount([run(1, { state: "done", finishedAt: at })]);
+  const card = document.querySelector<HTMLElement>('[data-run-ref="R-1"]')!;
+  fireEvent.contextMenu(card, { clientX: 30, clientY: 40 });
+  // Steer sends from the card, so a run that has ended only offers a line in chat
+  expect(menuLabels()).not.toContain("Steer…");
+  expect(menuLabels()).toContain("Ask in chat");
+  expect(within(card).queryByRole("button", { name: "Steer R-1" })).toBeNull();
+  view.unmount();
+  const onControl = vi.fn();
+  render(
+    <ExecCard
+      work={{ record: sub({ state: "completed" }), control: sub({ state: "completed" }), run: run(7) }}
+      pending={false}
+      onControl={onControl}
+      onDraft={vi.fn()}
+    />,
+  );
+  // the card shows the run (still working), but the only sub-agent it could reach has finished
+  expect(screen.queryByRole("button", { name: /^Steer/ })).toBeNull();
+  expect(screen.queryByText("A sub-agent of this run is still working.")).toBeNull();
+  expect(onControl).not.toHaveBeenCalled();
 });
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
   const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({

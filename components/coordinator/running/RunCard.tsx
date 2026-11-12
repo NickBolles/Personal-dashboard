@@ -327,7 +327,7 @@ export function RunCard({
   const canStop = run.state === "running" || waiting;
   const canRetry = ["failed", "waiting", "interrupted"].includes(run.state);
   // A working run is steered and a waiting one is answered, both in the card; one that has stopped cannot take either.
-  const canSteer = waiting || !canRetry;
+  const canSteer = waiting || run.state === "running";
   const needs = runNeeds(run, decisions);
   // What the run itself last summarised: the outcome of a finished run, or all there is when it has sent no events.
   const summary = tidyOutcome(run.summary);
@@ -654,7 +654,8 @@ export function ExecCard({
   const tracked = run ? runStatus(run, now) : null;
   const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
   const reachable = target.source === "subagent" && canControl(handle);
-  const controllable = reachable && active;
+  // Both must be going: the run the card shows, and the sub-agent the controls would reach (as on main).
+  const controllable = reachable && active && isActiveExec(target);
   // A sub-agent can outlive the tracked run it belongs to. The card shows the run's state and offers no Steer or
   // Stop for a run that has ended, but the sub-agent that is still going is one long-press away.
   const lingering = reachable && !active && isActiveExec(target);
