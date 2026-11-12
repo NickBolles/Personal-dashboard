@@ -250,13 +250,13 @@ describe("coordinator parity controls", () => {
   });
   it("caps run cards, preserves unknown status and never offers controls for registered or unsafe IDs", async () => {
     records = [
-      record({ key: "unknown", title: "Work A", state: "unknown" }),
-      record({ key: "registered", title: "Work B", source: "registered_run" }),
+      record({ key: "unknown", id: "sa_a", title: "Work A", state: "unknown" }),
+      record({ key: "registered", id: "reg_b", title: "Work B", source: "registered_run" }),
       record({ key: "unsafe", title: "Work C", id: "bad id" }),
-      record({ key: "jarvis", title: "Work D", source: "jarvis_run", state: "waiting" }),
-      record({ key: "finished", title: "Work E", state: "completed" }),
-      record({ key: "sixth", title: "Work F", state: "completed" }),
-      record({ key: "process", title: "Work G", source: "process" }),
+      record({ key: "jarvis", id: "run_d", title: "Work D", source: "jarvis_run", state: "waiting" }),
+      record({ key: "finished", id: "sa_e", title: "Work E", state: "completed" }),
+      record({ key: "sixth", id: "sa_f", title: "Work F", state: "completed" }),
+      record({ key: "process", id: "proc_g", title: "Work G", source: "process" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
     await waitFor(() => expect(screen.getAllByTestId("coordinator-run-card")).toHaveLength(5));
@@ -271,7 +271,7 @@ describe("coordinator parity controls", () => {
     records = [
       record({ key: "sub", updatedAt: at }),
       record({ key: "reg", source: "registered_run", id: "reg_1", state: "unknown" }),
-      record({ key: "other", title: "Draft the email", state: "failed", error: "(no summary — status=failed: vendor portal timed out)" }),
+      record({ key: "other", id: "sa_2", title: "Draft the email", state: "failed", error: "(no summary — status=failed: vendor portal timed out)" }),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
     await waitFor(() => expect(screen.getAllByTestId("coordinator-run-card")).toHaveLength(2));
