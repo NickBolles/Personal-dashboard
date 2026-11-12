@@ -220,6 +220,27 @@ describe("shared coordinator thread", () => {
     expect(document.querySelector('[data-testid="gc-file-input"]')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
   });
+  it("the first attachment and a quick Send share one new conversation, and Send waits for the file", async () => {
+    makeClient();
+    // The new conversation never comes back in this test: everything asserted happens while it is being created.
+    vi.mocked(api.post).mockImplementation(((path: string) =>
+      path === "/api/hermes/sessions" ? new Promise(() => undefined) : Promise.resolve({ ok: true })) as typeof api.post);
+    render(<CoordinatorThread info={base} compact name="Chief of staff" />, { wrapper });
+    fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
+    const picker = document.querySelector('[data-testid="gc-file-input"]') as HTMLInputElement;
+    fireEvent.change(picker, { target: { files: [new File(["a"], "plan.pdf", { type: "application/pdf" })] } });
+    fireEvent.change(picker, { target: { files: [new File(["b"], "quote.pdf", { type: "application/pdf" })] } });
+    const input = screen.getByRole("textbox", { name: "Message the coordinator" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "Here is the plan" } });
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const posts = vi.mocked(api.post).mock.calls.map(([path]) => String(path));
+    expect(posts.filter((path) => path === "/api/hermes/sessions")).toHaveLength(1);
+    expect(posts.some((path) => path.endsWith("/runs"))).toBe(false);
+    expect(input.value).toBe("Here is the plan");
+  });
   it("renders smart (jarvis-ui) replies through the same renderer as full chat, never as raw JSON", async () => {
     makeClient();
     const reply =
