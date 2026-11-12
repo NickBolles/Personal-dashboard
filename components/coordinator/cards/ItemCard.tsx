@@ -15,7 +15,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import { changeChip, changeObject, itemCardModel } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
 import type { RunEvent } from "@/lib/cw-runs";
-import { byNeed, eventChip, runStatus, type RunStatus, eventAgo } from "@/lib/coordinator/run-card";
+import { byNeed, cardStatus, runStatus, type RunStatus, eventAgo } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
@@ -258,19 +258,14 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
             </Button>
           ) : null}
           {runs.slice(0, chips).map((r) => {
-            const base = runStatus(r, now);
-            const last = data.events.filter((e) => e.runId === r.id).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? r.lastEvent;
-            const status =
-              base.key === "stuck" && last && eventChip(last).tone === "bad"
-                ? { ...base, key: "failed" as const, label: "Step failed", tone: "bad" as const }
-                : base;
+            const status = cardStatus(r, data.events, now);
             return (
               <Button
                 key={r.id}
                 variant="ghost"
                 size="sm"
                 className={`rc-jump k-t-${status.tone}`}
-                icon={RUN_ICON[status.key]}
+                icon={RUN_ICON[status.failedStep ? "failed" : status.key]}
                 disabled={!onRef}
                 aria-label={`Run ${r.ref.replace("-", " ")}: ${status.label}, ${r.title.slice(0, 80)}`}
                 title={r.title}

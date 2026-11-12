@@ -21,6 +21,7 @@ import {
   runNeeds,
   runPulse,
   runStatus,
+  cardStatus,
   syncLine,
   tidyOutcome,
   timelineOf,
@@ -318,10 +319,9 @@ export function RunCard({
   const telling = known.filter((e) => eventText(e, run.title));
   const pulse = runPulse(run, known, now);
   const latest = telling[0] ?? null;
-  // A run that went quiet right after reporting a failed step says so in its chip: the failure is the news, the
-  // silence is the detail. (A failed step is not a failed run; the run's own state is unchanged.)
-  const failedStep = reported.key === "stuck" && !!latest && eventChip(latest).tone === "bad";
-  const status = failedStep ? { ...reported, label: "Step failed", tone: "bad" as const } : reported;
+  // One rule for "Step failed" on every card (lib/coordinator/run-card.ts cardStatus): a quiet run whose newest
+  // event reports a failed step. A failed step is not a failed run; the run's own state is unchanged.
+  const status = cardStatus(run, known, now);
   const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
   const hidden = known.length - shown.length;
   const waiting = run.state === "waiting";

@@ -69,27 +69,133 @@ const CHIP: Record<RunEventType, { label: string; tone: CardTone }> = {
   interrupted: { label: "Interrupted", tone: "wn" },
   resumed: { label: "Resumed", tone: "ai" },
 };
-const OUTCOME: Record<string, CardTone> = { ok: "ok", success: "ok", passed: "ok", failed: "bad", failure: "bad", error: "bad", running: "ai", pending: "wn" };
+const OUTCOME: Record<string, "ok" | "bad" | "ai" | "wn"> = {
+  ok: "ok",
+  success: "ok",
+  succeeded: "ok",
+  passed: "ok",
+  pass: "ok",
+  green: "ok",
+  done: "ok",
+  completed: "ok",
+  failed: "bad",
+  failure: "bad",
+  fail: "bad",
+  error: "bad",
+  errored: "bad",
+  red: "bad",
+  timed_out: "bad",
+  cancelled: "wn",
+  canceled: "wn",
+  running: "ai",
+  in_progress: "ai",
+  pending: "wn",
+  queued: "wn",
+};
 
-/** A CI event is green or red when it says so (its pipeline chip, a state field, or plain words); otherwise neutral. */
-function ciTone(event: Pick<RunEvent, "summary" | "payload">): CardTone {
-  const pipeline = Array.isArray(event.payload?.pipeline) ? (event.payload.pipeline as { stage?: unknown; state?: unknown }[]) : [];
-  const stage = pipeline.find((p) => p?.stage === "ci");
-  const stated = [stage?.state, event.payload?.state, event.payload?.status, event.payload?.conclusion].find((v): v is string => typeof v === "string");
-  const known = stated ? OUTCOME[stated.toLowerCase()] : undefined;
-  if (known) return known;
-  if (/\b(fail(ed|ing|ure|s)?|broken|red)\b/i.test(event.summary)) return "bad";
-  if (/\b(pass(ed|ing|es)?|green|succeeded)\b/i.test(event.summary)) return "ok";
-  return "inf";
+// ---- Did this step fail? ------------------------------------------------------------------------------------
+// ONE rule, used by every surface (run card chip, item card chip, Activity ordering, timeline ticks). Structured
+// state always wins: the event type, a state/status/conclusion field, an exit code, an `ok` flag or the CI stage
+// of its pipeline. Only an event that carries none of those is read, and then only for an explicit failure that
+// the sentence does not negate or say was fixed ("Fixed the 3 failing tests", "0 errors", "error handling").
+
+/** Phrases that mention failure without reporting one: negated, counted as zero, or naming a thing. */
+const NOT_A_FAILURE: RegExp[] = [
+  // "0 errors", "no failures", "zero failing tests", "without errors", "none failed"
+  /\b(?:0|no|zero|without|nothing|none|neither|never any)\s+(?:new\s+|more\s+|other\s+|lint\s+|type\s+|test\s+|build\s+)?(?:errors?|failures?|failed|failing(?:\s+(?:tests?|checks?))?|crash(?:es)?|timeouts?)\b/gi,
+  // "not failing", "no longer fails", "didn't error", "won't break", "doesn't time out", "never crashed"
+  /\b(?:not|no longer|never|didn't|did not|doesn't|does not|don't|won't|isn't|aren't|wasn't|weren't|hasn't|haven't|stopped)\s+(?:\w+\s+){0,2}?(?:fail\w*|error\w*|broke\w*|crash\w*|time[sd]?\s?out)\b/gi,
+  // things named after failure: "error handling", "error messages", "failure mode", "fail-safe", "on error"
+  /\berrors?[- ](?:handling|handler|handlers|messages?|states?|boundar(?:y|ies)|copy|text|pages?|toasts?|paths?|cases?|budget|codes?|reporting|logging|banner|tracking|rate)\b/gi,
+  /\b(?:failures?|failing)[- ](?:modes?|cases?|paths?|handling|states?|scenarios?|branch(?:es)?)\b/gi,
+  /\bfail[- ]?(?:safe|fast|over|closed|open)\b/gi,
+  /\b(?:on|after an?|for|per|when an?|if an?)\s+(?:error|failure|timeout)\b/gi,
+  /\b(?:can't|cannot|could not|couldn't|unable to)\s+reproduce\b/gi,
+  // history, not news: "the previous run failed on a flake"
+  /\b(?:previous|earlier|prior|old|last week's|yesterday's)\s+(?:\w+\s+){0,2}?(?:fail\w*|errors?|crash\w*|broke\w*)\b/gi,
+];
+/** A failure the sentence says was dealt with: "Fixed the failing tests", "resolved 2 errors", "retrying after a timeout". */
+const DEALT_WITH =
+  /\b(?:fix(?:ed|es|ing)?|resolv\w+|repair\w*|address\w*|handl\w+|patch\w*|silenc\w+|deflak\w+|quarantin\w+|skipp?\w*|debug\w*|investigat\w+|look(?:ed|ing)? into|reproduc\w+|retr(?:y|ied|ying)|rerun\w*|re-ran|cleared|clean(?:ed)? up|recover\w*|work(?:ed)? around|triag\w+|diagnos\w+|explain\w*|document\w*|test(?:ed|ing)? for|catch(?:es|ing)?|caught)\b[^.;!?\n]{0,60}?\b(?:fail\w*|errors?|broke\w*|crash\w*|time[sd]?\s?outs?|exceptions?|red)\b/gi;
+/** Still broken overrides "fixed": "Fixed 2 of 3; 1 still failing". */
+const STILL_BROKEN = /\bstill\s+(?:fail\w*|broke\w*|red|erroring|crash\w*|timing out)\b/i;
+const SAYS_FAILED =
+  /(?:^\s*(?:fail(?:ed|ure)?|error|fatal|panic|aborted)\b)|\b(?:fail(?:ed|s|ing|ures?)?|errors?|errored|erroring|timed\s?out|crash(?:ed|es|ing)?|broken|broke|exception|panick?(?:ed)?|abort(?:ed)?|blocked|denied|rejected|non-zero exit|exit(?:ed)?\s+(?:with\s+)?(?:code|status)\s+[1-9]\d*|could(?:n't| not)|cannot|can't|unable to|(?:is|are|went|turned|goes|stays?)\s+red)\b/i;
+const SAYS_PASSED = /\b(?:pass(?:ed|ing|es)?|green|succeeded|successful(?:ly)?|all (?:\w+\s+){0,2}?(?:ok|good))\b/i;
+
+function statedOutcome(payload: Record<string, unknown> | undefined, type: string): "ok" | "bad" | "neither" | null {
+  if (!payload) return null;
+  const pipeline = Array.isArray(payload.pipeline) ? (payload.pipeline as { stage?: unknown; state?: unknown }[]) : [];
+  const stage = type === "ci" ? pipeline.find((p) => p?.stage === "ci") : undefined;
+  for (const v of [stage?.state, payload.state, payload.status, payload.conclusion, payload.outcome, payload.result]) {
+    if (typeof v !== "string") continue;
+    const t = OUTCOME[v.toLowerCase().replace(/[\s-]+/g, "_")];
+    if (t === "ok" || t === "bad") return t;
+    if (t) return "neither"; // running/pending: a stated state that is neither, so the prose is not read
+  }
+  for (const v of [payload.exitCode, payload.exit_code, payload.exitStatus]) if (typeof v === "number") return v === 0 ? "ok" : "bad";
+  if (typeof payload.ok === "boolean") return payload.ok ? "ok" : "bad";
+  if (typeof payload.success === "boolean") return payload.success ? "ok" : "bad";
+  return null;
 }
-const SAYS_FAILED = /\b(fail(ed|ing|ure|s)?|errors?|timed out|crashed|broken)\b/i;
+
+/** Whether a sentence explicitly reports a failure (prose fallback only; prefer `stepOutcome`). */
+export function proseSaysFailed(text: string | null | undefined): boolean {
+  const said = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!said) return false;
+  if (STILL_BROKEN.test(said)) return true;
+  let rest = said;
+  for (const re of NOT_A_FAILURE) rest = rest.replace(re, " ");
+  rest = rest.replace(DEALT_WITH, " ");
+  return SAYS_FAILED.test(rest);
+}
+
+/**
+ * How a step turned out: "bad" (it failed), "ok" (it says it passed), or null (no verdict: a plain progress line).
+ * The single source of truth for "Step failed" everywhere.
+ */
+export function stepOutcome(event: Pick<RunEvent, "type" | "summary" | "payload">): "ok" | "bad" | null {
+  if (event.type === "failed") return "bad";
+  if (event.type === "done" || event.type === "release.live") return "ok";
+  const stated = statedOutcome(event.payload, event.type);
+  if (stated) return stated === "neither" ? null : stated;
+  if (event.type !== "notice" && event.type !== "progress" && event.type !== "ci") return null;
+  if (proseSaysFailed(event.summary)) return "bad";
+  if (event.type === "ci" && SAYS_PASSED.test(event.summary)) return "ok";
+  return null;
+}
+
+/** True when this event reports a failed step (see `stepOutcome`). */
+export const stepFailed = (event: Pick<RunEvent, "type" | "summary" | "payload"> | null | undefined) => !!event && stepOutcome(event) === "bad";
+
 export function eventChip(event: Pick<RunEvent, "type" | "summary" | "payload">): { label: string; tone: CardTone } {
   const chip = CHIP[event.type] ?? { label: event.type, tone: "neutral" as const };
-  if (event.type === "ci") return { ...chip, tone: ciTone(event) };
-  // A step or progress report that says it failed is not a calm blue line.
-  if ((event.type === "notice" || event.type === "progress") && SAYS_FAILED.test(event.summary))
+  const outcome = stepOutcome(event);
+  if (event.type === "ci") return { ...chip, tone: outcome ?? "inf" };
+  // A step or progress report that failed is not a calm blue line.
+  if ((event.type === "notice" || event.type === "progress") && outcome === "bad")
     return { label: event.type === "notice" ? "Step failed" : chip.label, tone: "bad" };
   return chip;
+}
+
+/** The newest event of a run (by time; the later one in the list wins a tie), or the run's own last event. */
+export function latestEvent(run: Pick<CoordinatorRunRow, "id" | "lastEvent">, events: readonly RunEvent[]): RunEvent | null {
+  let latest: RunEvent | null = null;
+  for (const event of events) {
+    if (event.runId !== run.id) continue;
+    if (!latest || Date.parse(event.at) >= Date.parse(latest.at)) latest = event;
+  }
+  return latest ?? run.lastEvent ?? null;
+}
+
+/**
+ * A run's chip on any card. A run that went quiet right after reporting a failed step says so: the failure is
+ * the news, the silence is the detail. (A failed step is not a failed run: the key stays "stuck".)
+ */
+export function cardStatus(run: CoordinatorRunRow, events: readonly RunEvent[], now: number = Date.now()): RunStatus & { failedStep: boolean } {
+  const base = runStatus(run, now);
+  const failedStep = base.key === "stuck" && stepFailed(latestEvent(run, events));
+  return failedStep ? { ...base, label: "Step failed", tone: "bad", failedStep } : { ...base, failedStep };
 }
 
 /** What a waiting run needs from the owner: the open decision it raised, when there is one. */
@@ -137,16 +243,7 @@ export function runNeeds(
  * then the rest by how recently they went quiet. Silence alone never outranks a reported failure.
  */
 export function byNeed(runs: readonly CoordinatorRunRow[], events: readonly RunEvent[]): CoordinatorRunRow[] {
-  const latest = new Map<string, RunEvent>();
-  for (const event of events) {
-    const prior = latest.get(event.runId);
-    if (!prior || Date.parse(event.at) >= Date.parse(prior.at)) latest.set(event.runId, event);
-  }
-  const rank = (run: CoordinatorRunRow) => {
-    if (run.state === "failed") return 0;
-    const last = latest.get(run.id) ?? run.lastEvent;
-    return last && eventChip(last).tone === "bad" ? 1 : 2;
-  };
+  const rank = (run: CoordinatorRunRow) => (run.state === "failed" ? 0 : stepFailed(latestEvent(run, events)) ? 1 : 2);
   return [...runs].sort((x, y) => rank(x) - rank(y) || Date.parse(y.updatedAt) - Date.parse(x.updatedAt) || y.seq - x.seq);
 }
 
