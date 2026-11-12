@@ -6,6 +6,7 @@ import { HttpError } from "@/server/http/errors";
 import { audit } from "@/server/audit";
 import { currentVia } from "./actor";
 import { pushRaisedDecision } from "./cw-push";
+import { fireHook } from "@/server/hooks";
 import { event, recordOp, type OpOut } from "./store";
 import { appendDecisionToSummary, decisionLogText, parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import {
@@ -384,6 +385,8 @@ export function answerDecisionRef(
       correlationId,
       detail: { ref: decisionRef(row.seq), via },
     });
+  // Capture triage (server/capture/triage.ts): an answer to a decision it raised runs the chosen action.
+  if (!repeated) fireHook("decisionAnswered", { userId, decisionId: row.id, answer: text });
   return { decision: toDecision(row), ...(repeated ? { repeated } : {}) };
 }
 

@@ -28,6 +28,8 @@ import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
 import type { ResumeResponse } from "../lib/resume";
+import type { CaptureTriageView } from "../lib/capture-triage";
+import type { InboxEntry } from "../lib/work";
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -1060,6 +1062,74 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(800);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await expect(page).toHaveScreenshot(`inbox-${scheme}.png`, { fullPage: false, mask: MASK.map((m) => page.locator(m)) });
+  });
+}
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: capture triage chips (${scheme})`, async ({ page }) => {
+    // CaptureExtras lives in the list below the 560px two-pane threshold: exercise the owner's cover screen.
+    await page.setViewportSize({ width: 368, height: 850 });
+    await page.emulateMedia({ colorScheme: scheme });
+    const at = new Date(await freezeMiddayCT(page)).toISOString();
+    const outcomes: Pick<CaptureTriageView, "state" | "summary">[] = [
+      { state: "done", summary: "Added “Replace key battery” to House projects on Skylight" },
+      { state: "needs_input", summary: "When is the dentist appointment?" },
+      { state: "suggested", summary: "Open the garage door — do it yourself from House" },
+      { state: "failed", summary: "Could not triage the plumber reminder" },
+    ];
+    const titles = ["Replace the key battery on Skylight", "Dentist appointment", "Open the garage door", "Call the plumber"];
+    const items: InboxEntry[] = outcomes.map((outcome, i) => ({
+      id: `inb_triage_${i}`,
+      source: "capture",
+      title: titles[i],
+      note: "",
+      url: null,
+      repo: null,
+      number: null,
+      reason: "Quick capture",
+      createdAt: at,
+      capture: {
+        channel: null,
+        triageState: outcome.state === "failed" ? "failed" : "done",
+        triageSkipReason: null,
+        suggestedTitle: null,
+        suggestedKind: null,
+        suggestion: null,
+        sensitivity: "none",
+        report: null,
+        attachments: [],
+        investigating: false,
+        triage: {
+          id: `triage_${i}`,
+          inboxId: `inb_triage_${i}`,
+          ...outcome,
+          itemId: outcome.state === "done" || outcome.state === "needs_input" ? `wk_triage_${i}` : null,
+          decisionRef: outcome.state === "needs_input" ? "D-12" : null,
+          runRef: `R-${i + 1}`,
+          undoable: outcome.state === "done",
+          openHref: outcome.state === "done" ? "/skylight" : null,
+          openLabel: null,
+          error: outcome.state === "failed" ? "Triage unavailable" : null,
+          at,
+        },
+      },
+    }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { items, conversations: [], conversationsTotal: 0, unavailable: [], count: items.length } }),
+    );
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { conversations: [], total: 0, unavailable: [], updating: false, cachedAt: at } }),
+    );
+    await page.goto("/inbox");
+    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    const list = page.getByRole("region", { name: "Assigned issues and captures" });
+    await expect(list.getByTestId("capture-triage")).toHaveCount(4);
+    await expect(list.getByRole("link", { name: "D-12", exact: true })).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await withoutTray(page, () => expect(list).toHaveScreenshot(`inbox-triage-${scheme}.png`, { mask: MASK.map((m) => list.locator(m)) }));
   });
 }
 

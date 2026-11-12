@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { CaptureTriageChip } from "@/components/capture/CaptureTriageChip";
 import { api } from "@/lib/client/api";
 import { Badge, Button, OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
@@ -37,11 +38,12 @@ export function CaptureExtras({ entry, onAccepted, onChoose }: { entry: InboxEnt
     <div className="mt-1 space-y-1">
       <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
         {c.channel && c.channel !== "web" ? <Badge>{CHANNEL_LABEL[c.channel] ?? c.channel}</Badge> : null}
-        {c.triageState === "queued" ? <span className="ai-shimmer">Triaging…</span> : null}
+        {!c.triage && c.triageState === "queued" ? <span className="ai-shimmer">Triaging…</span> : null}
         {c.suggestedKind ? <Badge tone="accent">{c.suggestedKind.replace("_", " ")}</Badge> : null}
         {c.suggestedTitle && c.suggestedTitle !== entry.title ? <span>Suggested: “{c.suggestedTitle}”</span> : null}
         {c.investigating ? <span className="ai-shimmer">Investigating…</span> : null}
       </p>
+      {c.triage ? <CaptureTriageChip triage={c.triage} /> : null}
       {skip ? <p className="text-xs text-muted">{skip}</p> : null}
       {c.attachments.length ? (
         <ul className="flex flex-wrap gap-1.5" aria-label="Attachments">

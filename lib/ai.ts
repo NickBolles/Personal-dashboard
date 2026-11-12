@@ -5,10 +5,10 @@
  */
 import { z } from "zod";
 import { CONTEXT_SOURCES } from "@/lib/work";
-import { captureActionSettingsSchema, DEFAULT_CAPTURE_ACTIONS, triageActionSchema } from "@/lib/capture-triage";
+import { captureActionSettingsSchema, DEFAULT_CAPTURE_ACTIONS, triageActionSchema, type CaptureActionSettings } from "@/lib/capture-triage";
 
 /** Capture action settings with defaults (older stored settings have none). */
-export const captureActions = (s: { capture: { actions?: import("@/lib/capture-triage").CaptureActionSettings } }) => s.capture.actions ?? DEFAULT_CAPTURE_ACTIONS;
+export const captureActions = (s: { capture: { actions?: CaptureActionSettings } }) => s.capture.actions ?? DEFAULT_CAPTURE_ACTIONS;
 
 export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft", "summarize"] as const;
 export type AiActionKind = (typeof AI_ACTION_KINDS)[number];

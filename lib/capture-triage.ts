@@ -318,6 +318,8 @@ export type CaptureTriageView = {
   openHref: string | null;
   openLabel: string | null;
   error: string | null;
+  /** a suggestion Jarvis can do once the owner confirms ("Do it") */
+  canApply?: boolean;
   at: string;
 };
 

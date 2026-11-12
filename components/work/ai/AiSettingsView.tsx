@@ -9,6 +9,7 @@ import {
   BILLING_LABEL,
   BILLING_MODES,
   REASONING_EFFORTS,
+  captureActions,
   usd2,
   type ReasoningEffort,
   type AiSettings,
@@ -42,6 +43,7 @@ export function AiSettingsView() {
     );
   if (q.error) return <ErrorNote error={q.error} retry={() => q.refetch()} />;
   const s = q.data.settings;
+  const actions = captureActions(s);
   const save = async (patch: Partial<AiSettings>) => {
     setBusy(true);
     try {
@@ -182,6 +184,53 @@ export function AiSettingsView() {
             <option value="off">Nothing (file by hand)</option>
           </Select>
         </Field>
+        <div className="mt-2">
+          <Checkbox
+            checked={actions.autoHandle}
+            disabled={busy}
+            onChange={(autoHandle) => void save({ capture: { ...s.capture, actions: { ...actions, autoHandle } } })}
+            label={
+              <span id="ai-capture-actions-auto-handle">
+                Auto-handle captures
+                <span className="block text-xs text-muted">
+                  Jarvis does low-risk, undoable things itself (Skylight list items and events, Jarvis to-dos) and leaves the item ready to settle. Risky things
+                  are only suggested.
+                </span>
+              </span>
+            }
+          />
+        </div>
+        <div className="mt-2 min-w-0">
+          <Field id="ai-capture-actions-mode" label="When it can act">
+            <Select
+              id="ai-capture-actions-mode"
+              className="w-full min-w-0"
+              value={actions.mode}
+              disabled={busy || !actions.autoHandle}
+              onChange={(e) => void save({ capture: { ...s.capture, actions: { ...actions, mode: e.target.value as typeof actions.mode } } })}
+            >
+              <option value="act">Act</option>
+              <option value="triage_only">Triage only, never act</option>
+            </Select>
+          </Field>
+        </div>
+        <fieldset className="mt-2 flex min-w-0 flex-wrap gap-x-3 gap-y-1" aria-label="Capture action allowlist">
+          {(
+            [
+              ["skylightList", "Skylight list items"],
+              ["skylightEvent", "Skylight calendar events"],
+              ["jarvisTask", "Jarvis to-dos"],
+            ] as const
+          ).map(([key, label]) => (
+            <Checkbox
+              key={key}
+              label={<span id={`ai-capture-actions-${key}`}>{label}</span>}
+              checked={actions.allow[key]}
+              disabled={busy || !actions.autoHandle}
+              onChange={(checked) => void save({ capture: { ...s.capture, actions: { ...actions, allow: { ...actions.allow, [key]: checked } } } })}
+            />
+          ))}
+        </fieldset>
         <div className="mt-2">
           <Checkbox
             checked={s.capture.stripLocation}

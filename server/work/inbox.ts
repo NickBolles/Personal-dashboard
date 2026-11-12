@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { attachmentsFor, createCapture, moveCaptureToItem } from "@/server/capture";
+import { triageViewsForInbox } from "@/server/capture/triage-views";
 import { repointReports, unpointReports } from "@/server/ai/reports";
 import type { z } from "zod";
 import { getDb, schema } from "@/server/db";
@@ -47,6 +48,7 @@ const toEntry = (r: typeof I.$inferSelect, extra?: CaptureExtras): InboxEntry =>
           report: extra?.report ?? null,
           attachments: extra?.attachments ?? [],
           investigating: extra?.investigating ?? false,
+          triage: extra?.triage ?? null,
         },
       }
     : {}),
@@ -57,6 +59,7 @@ type CaptureExtras = {
   report: NonNullable<InboxEntry["capture"]>["report"];
   attachments: NonNullable<InboxEntry["capture"]>["attachments"];
   investigating: boolean;
+  triage: NonNullable<InboxEntry["capture"]>["triage"];
 };
 
 /** Suggestions are validated against the person's live tree when read; reports and attachments joined in. */
@@ -102,6 +105,7 @@ function captureExtras(userId: string, rows: (typeof I.$inferSelect)[]) {
       .all()
       .map((r) => r.s),
   );
+  const triage = triageViewsForInbox(userId, caps);
   for (const r of caps) {
     const p = r.suggestedParentId ? byId.get(r.suggestedParentId) : undefined;
     const rep = r.latestReportId ? reports.get(r.latestReportId) : undefined;
@@ -111,6 +115,7 @@ function captureExtras(userId: string, rows: (typeof I.$inferSelect)[]) {
       report: rep ? { id: rep.id, title: rep.title, summary: rep.summary.slice(0, 200) } : null,
       attachments: atts.get(r.id) ?? [],
       investigating: active.has(r.id),
+      triage: triage.get(r.id) ?? null,
     });
   }
   return out;

@@ -3,6 +3,7 @@
  * server (server/work) and the web UI. No server imports. Rules: docs/work.md.
  */
 import { z } from "zod";
+import type { CaptureTriageView } from "@/lib/capture-triage";
 import type { MapGraph } from "./work-map";
 import { decisionInputSchema, type ItemDecision } from "./decisions";
 import { TAG_COLORS, type TagColor } from "./item-tags";
@@ -1041,7 +1042,7 @@ export type InboxEntry = {
     attachments: { id: string; kind: "image" | "text"; mime: string; bytes: number; width: number | null; height: number | null; url: string }[];
     investigating: boolean;
     /** capture AI triage outcome (lib/capture-triage.ts); null = not triaged for actions */
-    triage?: import("@/lib/capture-triage").CaptureTriageView | null;
+    triage?: CaptureTriageView | null;
   };
 };
 export type InboxResponse = {
