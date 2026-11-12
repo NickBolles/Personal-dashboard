@@ -33,6 +33,8 @@ import { NeedsPanel } from "./needs/NeedsPanel";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
 import { useCoordinatorRuns, useMarkLooked } from "./running/useCoordinatorRuns";
+// The design library's sleek density tier, right before this panel's own styles (see the file's header).
+import "@/components/ui/density.css";
 import "./coordinator.css";
 
 const clamp = (width: number) => Math.min(520, Math.max(300, width));
@@ -465,6 +467,7 @@ export function GlobalCoordinator() {
           iconOnly
           icon={wide ? <ChevronIcon className="h-4 w-4" /> : "×"}
           className="gc-close"
+          data-density-skip
           aria-label={wide ? "Collapse Chief of staff" : "Close Chief of staff"}
           onClick={hide}
         >
@@ -650,6 +653,7 @@ export function GlobalCoordinator() {
         <aside
           aria-label="Chief of staff"
           className={`gc-rail ${expanded ? "" : "gc-strip"}`}
+          data-density="sleek"
           style={{ width: railWidth } as CSSProperties}
           data-testid="gc-rail"
           data-open={expanded}
@@ -690,6 +694,7 @@ export function GlobalCoordinator() {
               <Button
                 variant="ghost"
                 className="gc-strip-btn gc-expand"
+                data-density-skip
                 aria-label="Expand Chief of staff"
                 title={`Chief of staff · ${tray.text}`}
                 onClick={show}
@@ -701,6 +706,7 @@ export function GlobalCoordinator() {
                 <Button
                   variant="ghost"
                   className="gc-strip-btn"
+                  data-density-skip
                   key={t.id}
                   aria-label={`${t.label}${t.count ? `, ${t.count}` : ""}`}
                   title={t.count ? `${t.label} · ${t.hint}` : t.label}
@@ -776,6 +782,7 @@ export function GlobalCoordinator() {
             <dialog
               ref={dialog}
               className="gc-sheet"
+              data-density="sleek"
               aria-modal="true"
               aria-labelledby={`${ids}-title`}
               onCancel={() => setPhoneOpen(false)}

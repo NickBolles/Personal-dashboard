@@ -4,7 +4,8 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { AnchoredMenu, Button, ButtonLink, Dot, MenuButton, Pill, ProgressBar, SectionHeader, Textarea, useAnchoredMenu, useNow } from "@/components/ui";
+import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
+import { SummaryCard } from "../cards/SummaryCard";
 import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
@@ -342,7 +343,6 @@ export function RunCard({
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
   // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
   const router = useRouter();
-  const menu = useAnchoredMenu();
   const actions = [
     { label: `${run.ref} · ${status.label}`, heading: true },
     canSteer
@@ -363,20 +363,19 @@ export function RunCard({
     canStop ? { label: "Ask to stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
   ].filter((item) => item !== null);
   return (
-    <article
-      className="rc"
+    <SummaryCard
+      label={run.ref}
+      actions={actions}
       data-run-ref={run.ref}
       data-state={status.key}
       data-open={open || undefined}
       data-live={status.live || undefined}
-      {...menu.surfaceProps}
     >
-      <AnchoredMenu menu={menu} label={`Actions for ${run.ref}`} items={actions} />
-      <MenuButton menu={menu} label={`Actions for ${run.ref}`} className="rc-menu-btn" />
       <Button
         ref={head}
         variant="ghost"
         className="gc-run-body rc-head"
+        data-density-skip
         data-run-body={run.ref}
         aria-expanded={open}
         aria-controls={detailId}
@@ -599,7 +598,7 @@ export function RunCard({
           </Button>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }
 
@@ -715,19 +714,18 @@ export function ExecCard({
     run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
     stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
-  // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
-  const menu = useAnchoredMenu({ enabled: actions.length > 2 });
   return (
-    <article
-      className="rc rc-exec"
+    <SummaryCard
+      label={title}
+      actions={actions}
+      // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
+      menuEnabled={actions.length > 2}
+      className="rc-exec"
       data-state={tracked ? tracked.key : stalled ? "stuck" : record.state}
       data-live={isLive || undefined}
       data-testid="coordinator-run-card"
       aria-label={record.title}
-      {...menu.surfaceProps}
     >
-      <AnchoredMenu menu={menu} label={`Actions for ${title}`} items={actions} />
-      <MenuButton menu={menu} label={`Actions for ${title}`} className="rc-menu-btn" />
       <div className="rc-top">
         <StatusChip
           tone={status.tone}
@@ -874,6 +872,6 @@ export function ExecCard({
           </Button>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }

@@ -197,6 +197,17 @@ export function LibraryGallery() {
           <Toast message="Saved" action={{ label: "Undo", onClick: () => undefined }} />
         </Block>
         <MenuDemo />
+        <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
+          <div data-density="sleek" className="flex flex-wrap items-center gap-2">
+            <Button size="sm">Answer</Button>
+            <Button size="sm" variant="ghost">
+              Ask in chat
+            </Button>
+            <Button size="sm" variant="ghost" iconOnly icon={<Plus />}>
+              Add
+            </Button>
+          </div>
+        </Block>
       </div>
     </Page>
   );

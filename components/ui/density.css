@@ -1,0 +1,72 @@
+/* ==== Density tier: sleek (design library; docs/ui-library.md "Density tiers") ====
+   Owner taste: "compact, dense, premium: no chonky inputs". A container opts in with data-density="sleek"
+   (the Chief of staff rail and sheet do): every kit action inside is quiet text or a small icon, at every width,
+   while the TAP AREA stays at the house minimum — 44px on phones/tablets, 40px with a fine pointer at ≥1024px —
+   through an invisible ::after hit-slop sized from the control's own box (so a 26px icon button still answers a
+   44px tap). Sizes are rem, so they grow with text zoom. Controls that size themselves (row bodies, answer
+   options, a panel's close button) opt out with data-density-skip.
+
+   Unlayered on purpose, so it wins over the kit's own tiers in @layer components. Imported once, by the shell's
+   GlobalCoordinator just before its own stylesheet, so it sits after the kit and card styles in the cascade.
+   Never copy these rules into a surface's CSS: set data-density="sleek" on the container instead. */
+[data-density="sleek"] {
+  --k-hit: 44px;
+}
+@media (min-width: 1024px) and (pointer: fine) {
+  [data-density="sleek"] {
+    --k-hit: 40px;
+  }
+}
+[data-density="sleek"] :is(.k-btn, .k-pick, .jv-iact):not([data-density-skip]) {
+  position: relative;
+}
+[data-density="sleek"] :is(.k-btn, .k-pick, .jv-iact):not([data-density-skip])::after {
+  content: "";
+  position: absolute;
+  /* top/bottom % are of the control's own height: grow the slop until the tap area is --k-hit tall. */
+  inset-block: min(-7px, calc((100% - var(--k-hit)) / 2));
+  inset-inline: -3px;
+}
+/* Icon-only controls are narrow too: same rule sideways. */
+[data-density="sleek"] :is(.k-btn-icon, .jv-iact):not([data-density-skip])::after {
+  inset-inline: min(-3px, calc((100% - var(--k-hit)) / 2));
+}
+[data-density="sleek"] .k-btn:not([data-density-skip]) {
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+[data-density="sleek"] .k-btn-sm:not([data-density-skip]) {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 0.78125rem;
+}
+[data-density="sleek"] .k-btn-icon:not([data-density-skip]) {
+  width: 30px;
+  padding: 0;
+}
+[data-density="sleek"] .k-btn-icon.k-btn-sm:not([data-density-skip]) {
+  width: 26px;
+  padding: 0;
+}
+[data-density="sleek"] .k-pick {
+  min-height: 26px;
+  font-size: 0.75rem;
+}
+[data-density="sleek"] .jv-iact {
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: none;
+}
+[data-density="sleek"] .jv-iact:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+[data-density="sleek"] .k-menu-i {
+  min-height: 36px;
+  font-size: 0.8125rem;
+}

@@ -294,7 +294,13 @@ export function NeedsList({
                     </div>
                   ) : (
                     <div className="gc-needs-row" key={d.ref}>
-                      <Button variant="ghost" className="gc-needs-row-body" onClick={() => onOpen(d.ref)} aria-label={`Open decision ${d.ref}: ${d.question}`}>
+                      <Button
+                        variant="ghost"
+                        className="gc-needs-row-body"
+                        data-density-skip
+                        onClick={() => onOpen(d.ref)}
+                        aria-label={`Open decision ${d.ref}: ${d.question}`}
+                      >
                         <span className="gc-needs-row-title line-clamp-2">{titled ? d.itemTitle : asked.lead}</span>
                         {titled ? <span className="gc-needs-row-sub line-clamp-2">{asked.rest}</span> : null}
                         <span className="gc-needs-meta">

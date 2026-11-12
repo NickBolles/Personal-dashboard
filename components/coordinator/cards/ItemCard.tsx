@@ -6,7 +6,8 @@ import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { LiveState, useAgentRuns } from "@/components/agents/AgentRuns";
-import { AnchoredMenu, Button, ButtonLink, MenuButton, Pill, ProgressBar, useAnchoredMenu, useNow, type KTone } from "@/components/ui";
+import { Button, ButtonLink, Pill, ProgressBar, useNow, type KTone } from "@/components/ui";
+import { SummaryCard } from "./SummaryCard";
 import { AlertIcon, AreasIcon, BellIcon, BoltIcon, ChatIcon, ChevronIcon, ClockIcon, ExternalIcon, InboxIcon } from "@/components/icons";
 import type { ActivityItem } from "@/lib/activity";
 import { CHECKS_LABEL, DEPLOY_LABEL, whoLabel, type ItemAgentInfo, type PrState } from "@/lib/agent-runs";
@@ -154,7 +155,6 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const chips = open ? 2 : 1;
   // Everything this card can do, for a right-click or a long press.
   const router = useRouter();
-  const menu = useAnchoredMenu();
   const actions = [
     { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
     { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
@@ -168,18 +168,24 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       : null,
   ].filter((item) => item !== null);
   return (
-    <article
-      className="rc ic"
+    <SummaryCard
+      label={name}
+      actions={actions}
+      className="ic"
       data-item={itemId}
       data-state={model?.headline.key ?? "unknown"}
       data-open={open || undefined}
       data-live={model?.headline.live || undefined}
-      {...menu.surfaceProps}
     >
-      <AnchoredMenu menu={menu} label={`Actions for ${name}`} items={actions} />
-      <MenuButton menu={menu} label={`Actions for ${name}`} className="rc-menu-btn" />
       <div className="ic-headrow">
-        <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
+        <Button
+          variant="ghost"
+          className="gc-run-body rc-head"
+          data-density-skip
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => setOpen((value) => !value)}
+        >
           <span className="rc-top">
             {model ? (
               <StatusChip tone={model.headline.tone} live={model.headline.live} label={model.headline.label} detail={detail} />
@@ -372,6 +378,6 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           </div>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }
