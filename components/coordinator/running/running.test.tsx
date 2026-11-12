@@ -491,7 +491,16 @@ it("a stop confirmation closes when what it would do changes: writing a request 
   view.rerender(<ExecCard work={{ record: sub(), control: sub() }} pending={false} onControl={onControl} onDraft={onDraft} />);
   expect(screen.queryByRole("group", { name: /^Stop / })).toBeNull();
   expect(screen.queryByRole("button", { name: "Send stop request" })).toBeNull();
-  // asking again says what it will do now, and only then sends
+  // and it stays closed when the run comes back: it does not reopen without being asked
+  view.rerender(<ExecCard work={{ record: sub(), control: sub(), run: run(7) }} pending={false} onControl={onControl} onDraft={onDraft} />);
+  expect(screen.queryByRole("group", { name: /^Stop / })).toBeNull();
+  // a confirmation opened for one run does not carry over to another
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop" }));
+  expect(screen.getByText(/stop R-7 and its sub-agents/)).toBeTruthy();
+  view.rerender(<ExecCard work={{ record: sub(), control: sub(), run: run(8) }} pending={false} onControl={onControl} onDraft={onDraft} />);
+  expect(screen.queryByRole("group", { name: /^Stop / })).toBeNull();
+  // asking again says what it will do now, and only then does it
+  view.rerender(<ExecCard work={{ record: sub(), control: sub() }} pending={false} onControl={onControl} onDraft={onDraft} />);
   fireEvent.click(screen.getByRole("button", { name: "Ask to stop" }));
   expect(screen.getByRole("button", { name: "Send stop request" })).toBeTruthy();
   expect(onControl).not.toHaveBeenCalled();

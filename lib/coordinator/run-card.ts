@@ -183,22 +183,26 @@ function sameWindow(record: ExecutionRecord, run: CoordinatorRunRow): boolean {
   if (runEnd !== null && recordStart !== null && runEnd < recordStart - WINDOW_SLACK_MS) return false;
   return true;
 }
+/** Where Steer and Stop for a sub-agent record are addressed: Hermes' own handle when known, else the record's id. */
+export const controlHandle = (record: Pick<ExecutionRecord, "id" | "subagentId">) => record.subagentId ?? record.id;
 /** The same sub-agent seen through two sources (its child session, its delegation handle). */
 const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
-  a.id === b.id || (!!a.subagentId && a.subagentId === b.subagentId) || (!!a.childSessionId && a.childSessionId === b.childSessionId);
+  a.id === b.id || controlHandle(a) === controlHandle(b) || (!!a.childSessionId && a.childSessionId === b.childSessionId);
 /**
  * One card per piece of work. A conversation's background work arrives from several sources (the sub-agent
  * itself, its run registration, the R-n run), and they describe the same thing with different freshness:
  * records that are the same sub-agent or the same tracked run, or share a title while one of them has no
  * status, are one card.
  *
- * Steer and Stop go to `control`, so a card must never show one sub-agent and control another, and which
- * sub-agent a card controls must not depend on the order the records arrive in (it changes on every poll):
+ * Steer and Stop go to `control`, so a card must never show one sub-agent and control another, and neither
+ * what a card controls nor which run it shows may depend on the order the records arrive in (it changes on
+ * every poll):
+ * - records are grouped into sub-agents first (every view of one agent, however they are linked);
  * - a tracked run is a sub-agent's only when exactly one sub-agent can be it: the one that is still going
  *   (a failed attempt and its retry share a title; the run is the retry's), else the one that has ended.
  *   A run that two could both be is neither's: each keeps its own card and controls, and the run is shown
- *   only by its own record, if it has one;
- * - within a card the controls follow the best-informed record of the one sub-agent it is about.
+ *   only by its own record, if it has one. A sub-agent nothing is known about yet may fold into the run's card;
+ * - within a card the controls follow the best-informed record of the sub-agent it is about.
  */
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
   const byId = new Map(runs.map((r) => [r.id, r]));
@@ -209,52 +213,73 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   }
   const runOf = (record: ExecutionRecord) =>
     (record.source === "subagent" ? undefined : byId.get(record.id)) ?? byTitle.get(workTitle(record.title))?.find((r) => sameWindow(record, r));
-  const going = new Map<string, ExecutionRecord[]>();
-  const ended = new Map<string, ExecutionRecord[]>();
-  for (const record of records) {
-    if (record.source !== "subagent" || record.state === "unknown") continue;
+  // Which sub-agent each record is. "Same agent" links views pairwise (A~B by handle, B~C by child session), so
+  // the groups are closed over those links before anything is counted.
+  const subs = records.filter((r) => r.source === "subagent");
+  const agentOf = new Map<ExecutionRecord, number>();
+  subs.forEach((record, i) => {
+    agentOf.set(record, i);
+    for (const other of subs.slice(0, i)) {
+      const from = agentOf.get(record)!;
+      const to = agentOf.get(other)!;
+      if (from === to || !sameAgent(record, other)) continue;
+      for (const [member, id] of agentOf) if (id === from) agentOf.set(member, to);
+    }
+  });
+  const known = new Set(subs.filter((r) => r.state !== "unknown").map((r) => agentOf.get(r)!));
+  const going = new Map<string, Set<number>>();
+  const ended = new Map<string, Set<number>>();
+  for (const record of subs) {
+    if (record.state === "unknown") continue;
     const run = runOf(record);
     if (!run) continue;
     const claims = isActiveExec(record) ? going : ended;
-    const agents = claims.get(run.id) ?? [];
-    if (!agents.some((agent) => sameAgent(agent, record))) claims.set(run.id, [...agents, record]);
+    claims.set(run.id, (claims.get(run.id) ?? new Set<number>()).add(agentOf.get(record)!));
   }
   const ownRun = (record: ExecutionRecord, matched: CoordinatorRunRow | undefined) => {
     if (!matched) return undefined;
-    const live = going.get(matched.id) ?? [];
-    const claimants = live.length ? live : (ended.get(matched.id) ?? []);
-    if (claimants.length > 1) return undefined;
-    return record.state === "unknown" || claimants.every((agent) => sameAgent(agent, record)) ? matched : undefined;
+    const agent = agentOf.get(record)!;
+    // Nothing is known about this sub-agent yet: it claims nothing, and may fold into the run's card.
+    if (!known.has(agent)) return matched;
+    const live = going.get(matched.id);
+    const claimants = live?.size ? live : ended.get(matched.id);
+    return claimants?.size === 1 && claimants.has(agent) ? matched : undefined;
   };
-  const out: (BackgroundWork & { title: string })[] = [];
+  const out: (BackgroundWork & { title: string; agent?: number })[] = [];
   for (const record of records) {
     const title = workTitle(record.title);
     const sub = record.source === "subagent";
+    const agent = agentOf.get(record);
     const matched = runOf(record);
     const run = sub ? ownRun(record, matched) : matched;
     const same =
-      (sub ? out.find((w) => !!w.control && sameAgent(w.control, record)) : undefined) ??
+      (sub ? out.find((w) => w.agent === agent) : undefined) ??
       out.find((w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")));
-    // Cannot happen while contested runs are set aside above; kept so that no change to the matching can ever
-    // fold two live sub-agents into one card.
-    const rival = sub && !!same?.control && !sameAgent(same.control, record) && same.control.state !== "unknown" && record.state !== "unknown";
+    // Cannot happen while run ownership is decided above; kept so that no change to the matching can ever fold
+    // two sub-agents that each report a real state into one card.
+    const rival = sub && !!same?.control && same.agent !== agent && same.control.state !== "unknown" && record.state !== "unknown";
     if (!same || rival) {
-      out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, title });
+      out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, agent: sub ? agent : undefined, title });
       continue;
     }
     if (informative(record) > informative(same.record)) same.record = record;
-    if (sub && (!same.control || informative(record) > informative(same.control))) same.control = record;
+    if (sub && (!same.control || informative(record) > informative(same.control))) {
+      same.control = record;
+      same.agent = agent;
+    }
   }
-  return out.map(({ title: _title, ...work }) => work);
+  return out.map(({ title: _title, agent: _agent, ...work }) => work);
 }
 
 /**
- * A card's identity on screen: the sub-agent its controls reach, else the tracked run, else the record. What is
- * typed into a card, or a stop being confirmed on it, stays with that sub-agent through reorders and new sources,
- * and a card that comes to control another sub-agent is a new card.
+ * A card's identity on screen: where its controls are addressed, else the tracked run, else the record. What is
+ * typed into a card, or a stop being confirmed on it, stays with that address through reorders and new sources,
+ * and a card whose controls would reach anything else is a new card. (Each kind has its own prefix: a handle
+ * can never be mistaken for a run or a record key.)
  */
 export function workKey(work: BackgroundWork): string {
-  return work.control ? `agent:${work.control.subagentId ?? work.control.key}` : (work.run?.id ?? work.record.key);
+  if (work.control) return `agent:${controlHandle(work.control)}`;
+  return work.run ? `run:${work.run.id}` : `record:${work.record.key}`;
 }
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();

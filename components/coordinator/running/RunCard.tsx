@@ -24,6 +24,7 @@ import {
   syncLine,
   tidyOutcome,
   timelineOf,
+  controlHandle,
   type BackgroundWork,
   type CardTone,
 } from "@/lib/coordinator/run-card";
@@ -638,7 +639,7 @@ export function ExecCard({
 }) {
   const { record, run } = work;
   const [steering, setSteering] = useState(false);
-  const [stopAsked, setStopAsked] = useState<"draft" | "send" | null>(null);
+  const [stopAsked, setStopAsked] = useState<string | null>(null);
   const [whole, setWhole] = useState(false);
   const [shownState, setShownState] = useState(record.state);
   const [burst, setBurst] = useState(0);
@@ -649,7 +650,7 @@ export function ExecCard({
   // A child discovered through the session list first keeps its child-session id as record id;
   // the coordinator steers/stops by Hermes' sub-agent handle (#251).
   const target = work.control ?? record;
-  const handle = target.subagentId ?? target.id;
+  const handle = controlHandle(target);
   const now = useNow();
   const tracked = run ? runStatus(run, now) : null;
   const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
@@ -695,9 +696,12 @@ export function ExecCard({
   const stoppable = steerable || (drafts && reachable);
   // What confirming would do is fixed when the confirmation opens. If that changes under it (the run ends, or is
   // no longer this card's), it closes: "write the request" must never turn into "send it now" between two taps.
-  const stopKind = drafts ? "draft" : "send";
-  const confirmStop = stoppable && stopAsked === stopKind;
-  const setConfirmStop = (open: boolean) => setStopAsked(open ? stopKind : null);
+  // The same goes for what it would stop: the confirmation is for one action on one target (this run's drafted
+  // request, or a stop sent to this handle), and once that is not what the card offers it is closed for good.
+  const stopOffer = !stoppable ? null : drafts ? `draft:${run!.id}` : `send:${handle}`;
+  if (stopAsked !== null && stopAsked !== stopOffer) setStopAsked(null);
+  const confirmStop = stopAsked !== null && stopAsked === stopOffer;
+  const setConfirmStop = (open: boolean) => setStopAsked(open ? stopOffer : null);
   const router = useRouter();
   const actions = [
     { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },

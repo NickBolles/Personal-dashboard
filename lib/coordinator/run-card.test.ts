@@ -190,7 +190,13 @@ describe("background work", () => {
       workKey({ record: a, control: rec({ key: "y", id: "sa_1", subagentId: "sa_1" }) }),
     );
     expect(workKey({ record: a, control: a })).not.toBe(workKey({ record: b, control: b }));
-    expect(workKey({ record: a, run: tracked })).toBe("run-9");
+    expect(workKey({ record: a, run: tracked })).toBe("run:run-9");
+    // the key is the address the controls use, and one record's key can never pass for another's handle
+    const odd = rec({ key: "sa_B", id: "sa_A" });
+    const other = rec({ key: "child_B", id: "child_B", subagentId: "sa_B" });
+    expect(workKey({ record: odd, control: odd })).toBe("agent:sa_A");
+    expect(workKey({ record: other, control: other })).toBe("agent:sa_B");
+    expect(workKey({ record: odd })).toBe("record:sa_B");
     // a record with no status folds into its twin, and the controls go to the one that is shown
     const folded = mergeBackgroundWork([rec({ key: "a", id: "sa_1", state: "unknown" }), rec({ key: "b", id: "sa_2" })], []);
     expect(folded).toHaveLength(1);
@@ -202,6 +208,33 @@ describe("background work", () => {
     );
     expect(twice).toHaveLength(1);
     expect(twice[0]).toMatchObject({ run: { ref: "R-9" }, record: { key: "b" }, control: { key: "b" } });
+  });
+  it("which card shows a run never depends on the order of the records", () => {
+    const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
+    const orders = <T>(items: T[]): T[][] =>
+      items.length < 2 ? [items] : items.flatMap((item, i) => orders([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest]));
+    const shape = (work: ReturnType<typeof mergeBackgroundWork>) => work.map((w) => `${w.control?.id ?? "-"}:${w.record.key}:${w.run?.ref ?? "-"}`).sort();
+    // a failed attempt seen twice (once with no status yet) and its live retry: the run is the retry's
+    const stale = rec({ key: "u", id: "child_old", subagentId: "sa_old", state: "unknown" });
+    const failed = rec({ key: "f", id: "sa_old", subagentId: "sa_old", state: "failed", error: "Timed out" });
+    const retry = rec({ key: "a", id: "sa_new", subagentId: "sa_new" });
+    for (const order of orders([stale, failed, retry])) {
+      expect(shape(mergeBackgroundWork(order, [tracked]))).toEqual(["sa_new:a:R-9", "sa_old:f:-"]);
+    }
+    // one live sub-agent seen three ways, linked only pairwise (x~xy by id, xy~zy by handle): one card, with its run
+    const x = rec({ key: "x", id: "x" });
+    const xy = rec({ key: "xy", id: "x", subagentId: "y" });
+    const zy = rec({ key: "zy", id: "z", subagentId: "y" });
+    for (const order of orders([x, xy, zy])) {
+      const work = mergeBackgroundWork(order, [tracked]);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.run?.ref).toBe("R-9");
+    }
+    // a sub-agent nothing is known about yet folds into the run's card and never takes its controls
+    const nothing = rec({ key: "n", id: "sa_q", state: "unknown" });
+    for (const order of orders([nothing, retry])) {
+      expect(shape(mergeBackgroundWork(order, [tracked]))).toEqual(["sa_new:a:R-9"]);
+    }
   });
   it("a shared title does not tie work to a run from another time", () => {
     const lastWeek = run({
