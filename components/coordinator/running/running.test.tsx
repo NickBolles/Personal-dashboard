@@ -214,8 +214,9 @@ it("says what each run is doing in a chip and plain words, and drops a summary t
   expect(row("R-1").getByText("Working")).toBeTruthy();
   expect(row("R-1").getByText(/^updated /)).toBeTruthy();
   expect(row("R-1").queryByText("Work 1", { selector: ".rc-summary" })).toBeNull();
-  // A working run is closed: its actions are one tap in.
-  expect(row("R-1").getAllByRole("button")).toHaveLength(1);
+  // A working run is closed: its actions are one tap in (the head), or in its ⋯ menu.
+  expect(row("R-1").getAllByRole("button")).toHaveLength(2);
+  expect(row("R-1").getByRole("button", { name: "Actions for R-1" }).getAttribute("aria-haspopup")).toBe("menu");
   fireEvent.click(document.querySelector<HTMLElement>('[data-run-body="R-1"]')!);
   expect(row("R-1").getByRole("button", { name: "Steer R-1" }).textContent).toBe("Steer");
   // What needs the owner arrives open, with what it last said and what can be done about it.

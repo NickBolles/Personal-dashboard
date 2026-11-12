@@ -248,6 +248,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
               tabIndex={focused === index ? 0 : -1}
               disabled={pending}
               className="gc-needs-option"
+              data-density-skip
               onFocus={() => setFocused(index)}
               onClick={() => pick(choice)}
             >

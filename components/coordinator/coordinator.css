@@ -765,53 +765,10 @@ html[data-kb="open"] .gc-tray-qa {
   background: none;
 }
 
-/* ==== sleek controls ====
-   Owner taste (AGENTS.md: "compact, dense, premium: no chonky inputs"): inside the Chief of staff panel every
-   action is quiet text or a small icon, at every width. The visual box is small; the ::after hit-slop keeps the
-   tap area comfortable on a phone. Row bodies, answer options and the close button size themselves. */
-:is(.gc-rail, .gc-sheet) :is(.k-btn, .k-pick, .jv-iact):not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn) {
-  position: relative;
-}
-:is(.gc-rail, .gc-sheet) :is(.k-btn, .k-pick, .jv-iact):not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn)::after {
-  content: "";
-  position: absolute;
-  inset: -7px -3px;
-}
-:is(.gc-rail, .gc-sheet) .k-btn:not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn) {
-  min-height: 30px;
-  min-width: 0;
-  padding: 0 10px;
-  border-radius: 7px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-}
-:is(.gc-rail, .gc-sheet) .k-btn-sm:not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn) {
-  min-height: 26px;
-  padding: 0 8px;
-  font-size: 0.78125rem;
-}
-:is(.gc-rail, .gc-sheet) .k-btn-icon:not(.gc-close, .gc-strip-btn) {
-  width: 30px;
-  padding: 0;
-}
-:is(.gc-rail, .gc-sheet) .k-btn-icon.k-btn-sm:not(.gc-close, .gc-strip-btn) {
-  width: 26px;
-  padding: 0;
-}
-:is(.gc-rail, .gc-sheet) .k-pick {
-  min-height: 26px;
-  font-size: 0.75rem;
-}
-:is(.gc-rail, .gc-sheet) .jv-iact {
-  width: 30px;
-  height: 30px;
-  border-color: transparent;
-  border-radius: 7px;
-  background: none;
-}
-:is(.gc-rail, .gc-sheet) .jv-iact:hover:not(:disabled) {
-  background: var(--surface-2);
-}
+/* ==== panel controls ====
+   The rail and sheet use the design library's sleek density tier (components/ui/density.css, data-density="sleek"
+   on .gc-rail / .gc-sheet): kit buttons, pickers and icon actions are small boxes with a >=44px (phone) / 40px
+   (desktop) tap area. What follows is this panel's own layout around them. */
 /* Text actions read as links in the accent colour, never as boxes. */
 .gc-needs-actions .k-btn-ghost,
 .gc-needs-menu > .k-btn {
@@ -941,10 +898,6 @@ html[data-kb="open"] .gc-tray-qa {
   width: 30px;
   min-width: 30px;
   min-height: 30px;
-}
-:is(.gc-rail, .gc-sheet) .k-menu-i {
-  min-height: 36px;
-  font-size: 0.8125rem;
 }
 /* Who answers: reference information, not a headline. */
 .gc-head > .chip {
@@ -1081,7 +1034,7 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-bgwork-head .rc-live {
   margin: 0;
 }
-/* ==== end sleek controls ==== */
+/* ==== end panel controls ==== */
 
 /* ==== running ==== */
 @layer components {
@@ -1520,14 +1473,3 @@ html[data-kb="open"] .gc-tray-qa {
 /* ==== end needs ==== */
 
 /* Long-press / right-click on the phone tray: straight to a tab. It sits just above the tray. */
-.gc-tray-menu {
-  position: fixed;
-  left: 8px;
-  bottom: calc(142px + env(safe-area-inset-bottom));
-  z-index: 40;
-  width: 216px;
-}
-.gc-tray-menu > .k-menu {
-  min-width: 0;
-  width: 100%;
-}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
+import { SummaryCard } from "../cards/SummaryCard";
 import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
@@ -21,6 +22,7 @@ import {
   runNeeds,
   runPulse,
   runStatus,
+  cardStatus,
   syncLine,
   tidyOutcome,
   timelineOf,
@@ -30,7 +32,6 @@ import {
 } from "@/lib/coordinator/run-card";
 import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
-import { CardMenu, useCardMenu } from "../cards/CardMenu";
 import "./run-card.css";
 
 /** How many events (ones that say something) an open card shows before "Show earlier". */
@@ -318,10 +319,9 @@ export function RunCard({
   const telling = known.filter((e) => eventText(e, run.title));
   const pulse = runPulse(run, known, now);
   const latest = telling[0] ?? null;
-  // A run that went quiet right after reporting a failed step says so in its chip: the failure is the news, the
-  // silence is the detail. (A failed step is not a failed run; the run's own state is unchanged.)
-  const failedStep = reported.key === "stuck" && !!latest && eventChip(latest).tone === "bad";
-  const status = failedStep ? { ...reported, label: "Step failed", tone: "bad" as const } : reported;
+  // One rule for "Step failed" on every card (lib/coordinator/run-card.ts cardStatus): a quiet run whose newest
+  // event reports a failed step. A failed step is not a failed run; the run's own state is unchanged.
+  const status = cardStatus(run, known, now);
   const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
   const hidden = known.length - shown.length;
   const waiting = run.state === "waiting";
@@ -343,7 +343,6 @@ export function RunCard({
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
   // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
   const router = useRouter();
-  const menu = useCardMenu();
   const actions = [
     { label: `${run.ref} · ${status.label}`, heading: true },
     canSteer
@@ -364,19 +363,19 @@ export function RunCard({
     canStop ? { label: "Ask to stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
   ].filter((item) => item !== null);
   return (
-    <article
-      className="rc"
+    <SummaryCard
+      label={run.ref}
+      actions={actions}
       data-run-ref={run.ref}
       data-state={status.key}
       data-open={open || undefined}
       data-live={status.live || undefined}
-      onContextMenu={menu.onContextMenu}
     >
-      <CardMenu at={menu.at} label={`Actions for ${run.ref}`} items={actions} onClose={menu.close} />
       <Button
         ref={head}
         variant="ghost"
         className="gc-run-body rc-head"
+        data-density-skip
         data-run-body={run.ref}
         aria-expanded={open}
         aria-controls={detailId}
@@ -599,7 +598,7 @@ export function RunCard({
           </Button>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }
 
@@ -715,18 +714,18 @@ export function ExecCard({
     run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
     stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
-  // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
-  const menu = useCardMenu(actions.length > 2);
   return (
-    <article
-      className="rc rc-exec"
+    <SummaryCard
+      label={title}
+      actions={actions}
+      // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
+      menuEnabled={actions.length > 2}
+      className="rc-exec"
       data-state={tracked ? tracked.key : stalled ? "stuck" : record.state}
       data-live={isLive || undefined}
       data-testid="coordinator-run-card"
       aria-label={record.title}
-      onContextMenu={menu.onContextMenu}
     >
-      <CardMenu at={menu.at} label={`Actions for ${title}`} items={actions} onClose={menu.close} />
       <div className="rc-top">
         <StatusChip
           tone={status.tone}
@@ -873,6 +872,6 @@ export function ExecCard({
           </Button>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }

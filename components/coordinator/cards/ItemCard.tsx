@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { LiveState, useAgentRuns } from "@/components/agents/AgentRuns";
 import { Button, ButtonLink, Pill, ProgressBar, useNow, type KTone } from "@/components/ui";
+import { SummaryCard } from "./SummaryCard";
 import { AlertIcon, AreasIcon, BellIcon, BoltIcon, ChatIcon, ChevronIcon, ClockIcon, ExternalIcon, InboxIcon } from "@/components/icons";
 import type { ActivityItem } from "@/lib/activity";
 import { CHECKS_LABEL, DEPLOY_LABEL, whoLabel, type ItemAgentInfo, type PrState } from "@/lib/agent-runs";
@@ -15,14 +16,13 @@ import type { Decision } from "@/lib/cw-decisions";
 import { changeChip, changeObject, itemCardModel } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
 import type { RunEvent } from "@/lib/cw-runs";
-import { byNeed, eventChip, runStatus, type RunStatus, eventAgo } from "@/lib/coordinator/run-card";
+import { byNeed, cardStatus, runStatus, type RunStatus, eventAgo } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
 import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { useCoordinatorDecisions } from "../needs/useCoordinatorDecisions";
 import { StatusChip } from "../running/RunCard";
 import { useCoordinatorRuns } from "../running/useCoordinatorRuns";
-import { CardMenu, useCardMenu } from "./CardMenu";
 import "../running/run-card.css";
 
 /** How many changes a closed card shows; opening it shows them all. */
@@ -155,7 +155,6 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const chips = open ? 2 : 1;
   // Everything this card can do, for a right-click or a long press.
   const router = useRouter();
-  const menu = useCardMenu();
   const actions = [
     { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
     { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
@@ -169,17 +168,24 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       : null,
   ].filter((item) => item !== null);
   return (
-    <article
-      className="rc ic"
+    <SummaryCard
+      label={name}
+      actions={actions}
+      className="ic"
       data-item={itemId}
       data-state={model?.headline.key ?? "unknown"}
       data-open={open || undefined}
       data-live={model?.headline.live || undefined}
-      onContextMenu={menu.onContextMenu}
     >
-      <CardMenu at={menu.at} label={`Actions for ${name}`} items={actions} onClose={menu.close} />
       <div className="ic-headrow">
-        <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
+        <Button
+          variant="ghost"
+          className="gc-run-body rc-head"
+          data-density-skip
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => setOpen((value) => !value)}
+        >
           <span className="rc-top">
             {model ? (
               <StatusChip tone={model.headline.tone} live={model.headline.live} label={model.headline.label} detail={detail} />
@@ -258,19 +264,14 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
             </Button>
           ) : null}
           {runs.slice(0, chips).map((r) => {
-            const base = runStatus(r, now);
-            const last = data.events.filter((e) => e.runId === r.id).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? r.lastEvent;
-            const status =
-              base.key === "stuck" && last && eventChip(last).tone === "bad"
-                ? { ...base, key: "failed" as const, label: "Step failed", tone: "bad" as const }
-                : base;
+            const status = cardStatus(r, data.events, now);
             return (
               <Button
                 key={r.id}
                 variant="ghost"
                 size="sm"
                 className={`rc-jump k-t-${status.tone}`}
-                icon={RUN_ICON[status.key]}
+                icon={RUN_ICON[status.failedStep ? "failed" : status.key]}
                 disabled={!onRef}
                 aria-label={`Run ${r.ref.replace("-", " ")}: ${status.label}, ${r.title.slice(0, 80)}`}
                 title={r.title}
@@ -377,6 +378,6 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
           </div>
         </div>
       ) : null}
-    </article>
+    </SummaryCard>
   );
 }
