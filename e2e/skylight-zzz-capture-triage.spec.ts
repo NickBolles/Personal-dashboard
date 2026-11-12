@@ -139,7 +139,10 @@ test("'dentist appointment' without a time raises one D-n decision (Needs you)",
   await page.goto(`/areas?item=${encodeURIComponent(item.id)}`);
   await expect(page.getByTestId("capture-triage-card")).toContainText("Needs you");
   await expect(page.getByTestId("capture-triage-card")).toContainText(t!.decisionRef!);
-  // Clean up: archive it so the decision doesn't leak into later specs' Needs you.
+  // Answering a choice runs it (consent); this also closes the D-n so it can't leak into later specs' Needs you.
+  await api(page, "post", `/api/coordinator/decisions/${t!.decisionRef}/answer`, { answer: "Just keep it as a Jarvis to-do" });
+  await expect.poll(async () => (await triageOf(page, item.id))?.state, { timeout: 20_000 }).toBe("filed");
+  expect((await writes(page)).length).toBe(0);
   await page.request.patch(`/api/work/items/${item.id}`, { headers: H, data: { archived: true } });
 });
 

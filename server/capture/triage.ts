@@ -62,7 +62,7 @@ function setRow(id: string, patch: Partial<Row>) {
 
 const agentVia = (r: Row) => `agent:${(r.profile ?? "jarvis").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40) || "jarvis"}`;
 
-/** The capture's destination: its triage suggestion when owned, open and not AI-excluded; else Miscellaneous (null). */
+/** The capture's destination: its triage suggestion when owned, open and AI-allowed; else Miscellaneous (null). */
 function destination(userId: string, entry: typeof I.$inferSelect): string | null {
   const id = entry.suggestedParentId;
   if (!id) return null;
@@ -72,7 +72,8 @@ function destination(userId: string, entry: typeof I.$inferSelect): string | nul
     .where(and(eq(schema.workItems.id, id), eq(schema.workItems.userId, userId)))
     .get();
   if (!row || row.archived) return null;
-  return effectiveAreaPolicy(areaOf(userId, id)) === "excluded" ? null : id;
+  // Excluded and triage-only areas never receive items Jarvis made on its own.
+  return effectiveAreaPolicy(areaOf(userId, id)) === "allowed" ? id : null;
 }
 
 function skylightOp(a: Extract<ResolvedAction, { type: "skylight_list_add" | "skylight_event_create" }>): SkylightWriteOp {
