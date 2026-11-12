@@ -210,7 +210,7 @@ async function applyOne(r: Row) {
             correlationId,
           ),
         );
-    acceptInto(entry, item.id);
+    if (!r.itemId) setRow(r.id, { itemId: item.id });
     const d = withVia(via, () =>
       raiseDecision(
         user.id,
@@ -231,6 +231,7 @@ async function applyOne(r: Row) {
         { raisedBy: via, correlationId },
       ),
     );
+    acceptInto(entry, item.id);
     const summary = `Needs you: ${outcome.question}`.slice(0, 400);
     const runId = recordRun(user, r, item.id, title, `Asked ${d.ref}: ${outcome.question}`, correlationId);
     audit({
@@ -254,10 +255,12 @@ async function applyOne(r: Row) {
   // auto
   const a = outcome.action;
   const hash = sha256(`${r.inboxId}:${actionKey(a)}`);
-  if (r.actionHash === hash && r.skylightWriteId) return void setRow(r.id, { state: "done" });
+  // Idempotent: the same action on the same capture is written to Skylight at most once (a retry after a
+  // failure past the write only finishes the item).
+  const written = r.actionHash === hash && !!r.skylightWriteId;
   setRow(r.id, { actionHash: hash });
-  let writeId: string | null = null;
-  if (a.type === "skylight_list_add" || a.type === "skylight_event_create") {
+  let writeId: string | null = written ? r.skylightWriteId : null;
+  if (!written && (a.type === "skylight_list_add" || a.type === "skylight_event_create")) {
     const op = skylightOp(a);
     try {
       assertSkylightWritable();
@@ -303,6 +306,7 @@ async function applyOne(r: Row) {
         createItem(user, { kind: "thread", parentId: destination(user.id, entry), title, summary: entry.note, nextAction: a.nextAction }, correlationId),
       );
       itemId = item.id;
+      setRow(r.id, { itemId });
     } else withVia(via, () => updateItem(user, itemId!, { nextAction: a.nextAction }, correlationId));
     acceptInto(entry, itemId);
     const summary = `Filed “${title}” as a Jarvis to-do.`;
@@ -325,6 +329,7 @@ async function applyOne(r: Row) {
   if (!itemId) {
     const item = withVia(via, () => createItem(user, { kind: "thread", parentId: destination(user.id, entry), title, summary: body }, correlationId));
     itemId = item.id;
+    setRow(r.id, { itemId });
   } else withVia(via, () => updateItem(user, itemId!, { summary: body }, correlationId));
   withVia(via, () =>
     updateItem(user, itemId!, { status: "ready_to_settle", reason: done.slice(0, 500), nextAction: "Check it, then settle (or Undo)" }, correlationId),
