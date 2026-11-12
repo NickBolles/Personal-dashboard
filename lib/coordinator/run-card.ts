@@ -256,29 +256,45 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
     const newer = !!run && !!prior && (Date.parse(run.updatedAt) - Date.parse(prior.updatedAt) || run.id.localeCompare(prior.id)) > 0;
     if (run && (!prior || newer)) runOfAgent.set(agent, run);
   }
-  const out: (BackgroundWork & { title: string; agent?: number })[] = [];
-  for (const record of records) {
+  // Cards are built from what is known first: sub-agents with a known state (every view of each), then other
+  // records that report a state. Only then do records nothing is known about fold in. They add nothing to a
+  // card that knows more, so the cards, what each shows and what each controls are the same in any order of
+  // the records; only the order of the cards follows the order of the records.
+  const phase = (record: ExecutionRecord) => (record.source === "subagent" ? (known.has(agentOf.get(record)!) ? 0 : 2) : record.state === "unknown" ? 2 : 1);
+  const queue = records.map((record, index) => ({ record, index })).sort((x, y) => phase(x.record) - phase(y.record) || x.index - y.index);
+  // The better-informed record; between equals, always the same one.
+  const better = (a: ExecutionRecord, b: ExecutionRecord) => (informative(a) - informative(b) || b.key.localeCompare(a.key)) > 0;
+  const out: (BackgroundWork & { titles: Set<string>; agent?: number; index: number })[] = [];
+  for (const { record, index } of queue) {
     const title = workTitle(record.title);
     const sub = record.source === "subagent";
     const agent = agentOf.get(record);
     const run = sub ? runOfAgent.get(agent!) : runOf(record);
-    const same =
-      (sub ? out.find((w) => w.agent === agent) : undefined) ??
-      out.find((w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")));
+    // A view of a sub-agent with a known state joins that sub-agent's card or its run's, never another card
+    // that merely has its title.
+    const folds = !run && !(sub && known.has(agent!));
+    const byTitle = folds
+      ? out
+          .filter((w) => !w.run && w.titles.has(title) && (w.record.state === "unknown" || record.state === "unknown"))
+          .sort((x, y) => x.record.key.localeCompare(y.record.key))[0]
+      : undefined;
+    const same = (sub ? out.find((w) => w.agent === agent) : undefined) ?? (run ? out.find((w) => w.run?.id === run.id) : undefined) ?? byTitle;
     // Cannot happen while run ownership is decided above; kept so that no change to the matching can ever fold
     // two sub-agents that each report a real state into one card.
     const rival = sub && !!same?.control && same.agent !== agent && same.control.state !== "unknown" && record.state !== "unknown";
     if (!same || rival) {
-      out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, agent: sub ? agent : undefined, title });
+      out.push({ record, run: rival ? undefined : run, control: sub ? record : undefined, agent: sub ? agent : undefined, titles: new Set([title]), index });
       continue;
     }
-    if (informative(record) > informative(same.record)) same.record = record;
-    if (sub && (!same.control || informative(record) > informative(same.control))) {
+    same.index = Math.min(same.index, index);
+    same.titles.add(title);
+    if (better(record, same.record)) same.record = record;
+    if (sub && (!same.control || better(record, same.control))) {
       same.control = record;
       same.agent = agent;
     }
   }
-  return out.map(({ title: _title, agent: _agent, ...work }) => work);
+  return out.sort((x, y) => x.index - y.index).map(({ titles: _titles, agent: _agent, index: _index, ...work }) => work);
 }
 
 /**

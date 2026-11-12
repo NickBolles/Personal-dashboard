@@ -254,6 +254,44 @@ describe("background work", () => {
       expect(shape(mergeBackgroundWork(order, [tracked]))).toEqual(["sa_new:a:R-9"]);
     }
   });
+  it("the same cards, shown records and controls come out of every order of the records", () => {
+    const orders = <T>(items: T[]): T[][] =>
+      items.length < 2 ? [items] : items.flatMap((item, i) => orders([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [item, ...rest]));
+    const shape = (work: ReturnType<typeof mergeBackgroundWork>) => work.map((w) => `${w.control?.key ?? "-"}|${w.record.key}|${w.run?.ref ?? "-"}`).sort();
+    const same = (records: ExecutionRecord[], runs: CoordinatorRunRow[]) => {
+      const results = orders(records).map((order) => JSON.stringify(shape(mergeBackgroundWork(order, runs))));
+      expect([...new Set(results)]).toHaveLength(1);
+      return JSON.parse(results[0]!) as string[];
+    };
+    const done = run({ id: "run-1", ref: "R-1", title: "Audit previews", state: "done", startedAt: ago(30), updatedAt: ago(20), finishedAt: ago(20) });
+    const at = { startedAt: ago(30), updatedAt: ago(20) };
+    // two failed attempts contest the run; one of them is also seen with no status under a shorter title, next
+    // to an unrelated sub-agent nothing is known about with that title
+    expect(
+      same(
+        [
+          rec({ key: "u", id: "u", subagentId: "u", title: "Audit", state: "unknown", ...at }),
+          rec({ key: "au", id: "child_a", subagentId: "a", title: "Audit", state: "unknown", ...at }),
+          rec({ key: "a", id: "a", subagentId: "a", state: "failed", ...at }),
+          rec({ key: "b", id: "b", subagentId: "b", state: "failed", ...at }),
+        ],
+        [done],
+      ),
+    ).toEqual(["a|a|-", "b|b|-"]);
+    // two sub-agents nothing is known about, on one run: one card, and always the same one of them
+    expect(same([rec({ key: "a", id: "sa_a", state: "unknown", ...at }), rec({ key: "b", id: "sa_b", state: "unknown", ...at })], [done])).toEqual(["a|a|R-1"]);
+    // a live sub-agent, its registration and a stray with no status, with and without the run
+    const mix = [
+      rec({ key: "live", id: "sa_1", subagentId: "sa_1", startedAt: ago(30) }),
+      rec({ key: "reg", source: "registered_run", id: "reg_1", state: "unknown" }),
+      rec({ key: "stray", id: "sa_9", state: "unknown" }),
+      rec({ key: "job", source: "jarvis_run", id: "job_1", state: "completed", summary: "Done" }),
+    ];
+    // (the finished job's record says most, so it is what the card shows; the controls are the live sub-agent's)
+    expect(same(mix, [done])).toEqual(["live|job|R-1"]);
+    // with no run to tie them, the job is its own card; the stray folds into one of the two, always the same one
+    expect(same(mix, [])).toEqual(["live|live|-", "stray|job|-"]);
+  });
   it("a shared title does not tie work to a run from another time", () => {
     const lastWeek = run({
       id: "run-1",
