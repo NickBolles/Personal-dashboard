@@ -71,6 +71,9 @@ describe("capture triage contract (pure)", () => {
     expect(decideTriage(sure, ctx({ settings: { ...S, autoHandle: false } }))).toEqual({ kind: "skip", reason: "off" });
     expect(decideTriage(sure, ctx({ backfill: true }))).toMatchObject({ kind: "suggest", reason: "backfill" });
     expect(decideTriage(sure, ctx({ backfill: true, title: "Add milk on skylight" })).kind).toBe("auto");
+    // triage-only never creates a D-n either
+    const appt = act({ type: "skylight_event_create", confidence: 0.9, event: { summary: "Dentist" }, missing: ["time"] });
+    expect(decideTriage(appt, ctx({ settings: { ...S, mode: "triage_only" } }))).toMatchObject({ kind: "suggest", reason: "triage_only" });
     // the owner's explicit pick overrides mode/allowlist/confidence
     expect(decideTriage(list, ctx({ chosen: true, settings: { ...S, mode: "triage_only" } })).kind).toBe("auto");
     expect(decideTriage(act({ type: "note" }), ctx()).kind).toBe("file");
@@ -297,6 +300,11 @@ describe("capture triage applier", () => {
     expect(triageViewsForInbox(userId, [{ id: rl, triageState: "done", updatedAt: "" }]).get(rl)).toMatchObject({ state: "failed" });
     saveIntegration("skylight", { enabled: true, config: { writes: "true" } });
     expect(retryTriage(user(), e2, "t").state).toBe("planned");
+    // the global AI switch stops the applier: planned rows wait
+    saveAiSettings({ enabled: false });
+    expect(await applyPlannedTriage()).toBe(0);
+    expect(row(e2).state).toBe("planned");
+    saveAiSettings({ enabled: true });
     // auto-handle off → left as captured
     saveAiSettings({ capture: { auto: "triage_and_investigate", investigateMinConfidence: 0.6, stripLocation: false, actions: { ...S, autoHandle: false } } });
     const off = capture("add jam to grocery");

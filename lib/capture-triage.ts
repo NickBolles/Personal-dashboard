@@ -248,11 +248,13 @@ export function decideTriage(
   const resolved = resolveAction(action, { lists: ctx.lists, title: ctx.title });
   if (resolved === "no_list") return { kind: "suggest", summary, reason: "no_list" };
   const missing = action.missing.filter(Boolean);
+  const shown = resolved ? describeAction(resolved) : summary;
+  // Triage-only mode and the allowlist apply before anything is created or asked (no item, no D-n).
+  if (!ctx.chosen && s.mode === "triage_only") return { kind: "suggest", summary: shown, reason: "triage_only" };
+  const key = ALLOW_KEY[action.type];
+  if (!ctx.chosen && (!key || !s.allow[key])) return { kind: "suggest", summary: shown, reason: "not_allowed" };
   if (!resolved || (missing.length && !ctx.chosen)) return needsInput(action, ctx, missing);
   if (ctx.chosen) return { kind: "auto", action: resolved };
-  if (s.mode === "triage_only") return { kind: "suggest", summary: describeAction(resolved), reason: "triage_only" };
-  const key = ALLOW_KEY[action.type];
-  if (!key || !s.allow[key]) return { kind: "suggest", summary: describeAction(resolved), reason: "not_allowed" };
   if (action.confidence < s.minConfidence) return { kind: "suggest", summary: describeAction(resolved), reason: "low_confidence" };
   if (ctx.backfill && !namesTarget(ctx.text, action.type)) return { kind: "suggest", summary: describeAction(resolved), reason: "backfill" };
   return { kind: "auto", action: resolved };

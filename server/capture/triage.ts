@@ -125,6 +125,8 @@ function recordRun(user: CurrentUser, r: Row, itemId: string, title: string, sum
 /** Claim and apply due planned rows (dispatcher task + hook). Never throws. */
 export async function applyPlannedTriage(now = new Date(), limit = 4) {
   const db = getDb();
+  // The global AI switch stops the applier too: planned rows wait until AI is back on.
+  if (!getAiSettings().enabled) return 0;
   // Interrupted applies (restart mid-write): fail them so the owner can Retry, rather than re-running a write blindly.
   const stale = new Date(now.getTime() - STALE_APPLY_MS).toISOString();
   for (const r of db
@@ -255,6 +257,9 @@ async function applyOne(r: Row) {
   }
   // auto
   const a = outcome.action;
+  // Same permission as a Skylight write from the UI (capability can be revoked independently of work.ai).
+  if ((a.type === "skylight_list_add" || a.type === "skylight_event_create") && !user.capabilities.has("skylight.write"))
+    return void setRow(r.id, { state: "suggested", summary: `Suggested: ${describeAction(a)}. You don't have Skylight changes turned on.`.slice(0, 400) });
   const hash = sha256(`${r.inboxId}:${actionKey(a)}`);
   // Idempotent: the same action on the same capture is written to Skylight at most once (a retry after a
   // failure past the write only finishes the item).
