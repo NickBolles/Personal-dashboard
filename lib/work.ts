@@ -1040,6 +1040,8 @@ export type InboxEntry = {
     report: { id: string; title: string; summary: string } | null;
     attachments: { id: string; kind: "image" | "text"; mime: string; bytes: number; width: number | null; height: number | null; url: string }[];
     investigating: boolean;
+    /** capture AI triage outcome (lib/capture-triage.ts); null = not triaged for actions */
+    triage?: import("@/lib/capture-triage").CaptureTriageView | null;
   };
 };
 export type InboxResponse = {

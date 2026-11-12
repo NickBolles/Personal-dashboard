@@ -5,6 +5,10 @@
  */
 import { z } from "zod";
 import { CONTEXT_SOURCES } from "@/lib/work";
+import { captureActionSettingsSchema, DEFAULT_CAPTURE_ACTIONS, triageActionSchema } from "@/lib/capture-triage";
+
+/** Capture action settings with defaults (older stored settings have none). */
+export const captureActions = (s: { capture: { actions?: import("@/lib/capture-triage").CaptureActionSettings } }) => s.capture.actions ?? DEFAULT_CAPTURE_ACTIONS;
 
 export const AI_ACTION_KINDS = ["research", "plan", "schedule", "draft", "summarize"] as const;
 export type AiActionKind = (typeof AI_ACTION_KINDS)[number];
@@ -246,6 +250,8 @@ export const triageOutput = z
     shouldInvestigate: z.boolean().default(false),
     brief: s(600).default(""),
     sensitivity: z.enum(["none", "personal", "finance", "credentials"]).catch("none"),
+    /** triage@2: what Jarvis could do to resolve it (validated; gated server-side by decideTriage) */
+    action: triageActionSchema.nullable().catch(null).default(null),
   })
   .passthrough();
 
@@ -403,6 +409,8 @@ export const aiSettingsSchema = z
         investigateMinConfidence: z.number().min(0).max(1),
         /** owner decision 2026-10-25: remove GPS from photo metadata before saving; off by default */
         stripLocation: z.boolean().default(false),
+        /** owner request 2026-11-12: AI handles low-risk captures (lib/capture-triage.ts); default ON */
+        actions: captureActionSettingsSchema.optional(),
       })
       .strict(),
     schedule: z
@@ -454,7 +462,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
   estimatesUsd: { triage: 0.01, standard: 0.25, deep: 1 },
   concurrency: { triage: 2, work: 2 },
   timeoutsS: { triage: 90, schedule: 120, plan: 300, draft: 300, research: 900, investigate: 600 },
-  capture: { auto: "triage_and_investigate", investigateMinConfidence: 0.6, stripLocation: false },
+  capture: { auto: "triage_and_investigate", investigateMinConfidence: 0.6, stripLocation: false, actions: DEFAULT_CAPTURE_ACTIONS },
   schedule: { calendars: [], workHours: { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5] }, calendarWrite: { enabled: false, entityId: null } },
   hermes: { perRunModel: false, midRunCost: false, imageInput: false },
   dispatchSeconds: 30,
