@@ -638,7 +638,7 @@ export function ExecCard({
 }) {
   const { record, run } = work;
   const [steering, setSteering] = useState(false);
-  const [confirmStop, setConfirmStop] = useState(false);
+  const [stopAsked, setStopAsked] = useState<"draft" | "send" | null>(null);
   const [whole, setWhole] = useState(false);
   const [shownState, setShownState] = useState(record.state);
   const [burst, setBurst] = useState(0);
@@ -693,6 +693,11 @@ export function ExecCard({
   const steerable = controllable || lingering;
   // Stopping a tracked run only writes the request, so it does not need a live sub-agent to send it through.
   const stoppable = steerable || (drafts && reachable);
+  // What confirming would do is fixed when the confirmation opens. If that changes under it (the run ends, or is
+  // no longer this card's), it closes: "write the request" must never turn into "send it now" between two taps.
+  const stopKind = drafts ? "draft" : "send";
+  const confirmStop = stoppable && stopAsked === stopKind;
+  const setConfirmStop = (open: boolean) => setStopAsked(open ? stopKind : null);
   const router = useRouter();
   const actions = [
     { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },
@@ -798,7 +803,7 @@ export function ExecCard({
               icon={<StopIcon className="h-3.5 w-3.5" />}
               disabled={pending}
               aria-expanded={confirmStop}
-              onClick={() => setConfirmStop((value) => !value)}
+              onClick={() => setConfirmStop(!confirmStop)}
             >
               Ask to stop
             </Button>
@@ -823,7 +828,7 @@ export function ExecCard({
           onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
         />
       ) : null}
-      {stoppable && confirmStop ? (
+      {confirmStop ? (
         <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
           {drafts ? (
             <>

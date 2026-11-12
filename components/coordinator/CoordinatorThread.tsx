@@ -36,7 +36,7 @@ import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import { mergeBackgroundWork, sinceChips, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import { mergeBackgroundWork, sinceChips, workKey, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
 import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
@@ -499,7 +499,7 @@ export function CoordinatorThread({
                   <ExecCard
                     // Keyed by what its controls reach: a card that came to control another sub-agent is a new card,
                     // so guidance typed for one, or a stop being confirmed, can never be sent to the other.
-                    key={`${sid}:${w.control?.key ?? w.run?.id ?? w.record.key}`}
+                    key={`${sid}:${workKey(w)}`}
                     work={w}
                     events={tracked.data?.events}
                     pending={control.isPending}

@@ -481,6 +481,22 @@ it("a finished run takes no Steer, and a sub-agent that has ended is not steered
   expect(onDraft).toHaveBeenCalledExactlyOnceWith("Stop R-7 (Audit the feeds) and its sub-agents.");
   expect(onControl).not.toHaveBeenCalled();
 });
+it("a stop confirmation closes when what it would do changes: writing a request never becomes sending one", () => {
+  const onControl = vi.fn().mockResolvedValue(undefined);
+  const onDraft = vi.fn();
+  const view = render(<ExecCard work={{ record: sub(), control: sub(), run: run(7) }} pending={false} onControl={onControl} onDraft={onDraft} />);
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop" }));
+  expect(screen.getByRole("button", { name: "Write stop request" })).toBeTruthy();
+  // the next poll: the run is no longer this card's, so stopping would now go straight to the sub-agent
+  view.rerender(<ExecCard work={{ record: sub(), control: sub() }} pending={false} onControl={onControl} onDraft={onDraft} />);
+  expect(screen.queryByRole("group", { name: /^Stop / })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Send stop request" })).toBeNull();
+  // asking again says what it will do now, and only then sends
+  fireEvent.click(screen.getByRole("button", { name: "Ask to stop" }));
+  expect(screen.getByRole("button", { name: "Send stop request" })).toBeTruthy();
+  expect(onControl).not.toHaveBeenCalled();
+  expect(onDraft).not.toHaveBeenCalled();
+});
 it("shows the latest event on a closed card and a real timeline on an open one", async () => {
   const ev = (n: number, type: RunEvent["type"], summary: string, min: number): RunEvent => ({
     id: `e${n}`,

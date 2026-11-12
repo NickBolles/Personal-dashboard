@@ -17,6 +17,7 @@ import {
   syncLine,
   tidyOutcome,
   timelineOf,
+  workKey,
 } from "./run-card";
 import type { CoordinatorRunRow } from "./runs-view";
 
@@ -170,6 +171,26 @@ describe("background work", () => {
     // a second view of one of them does not become a third card
     const again = rec({ key: "b2", id: "child_2", subagentId: "sa_2" });
     expect(mergeBackgroundWork([a, { ...b, subagentId: "sa_2" }, again], [tracked]).map((w) => w.control?.id)).toEqual(["sa_1", "sa_2"]);
+    // a failed attempt and its retry share a title: the run is the one still going, in either order
+    const failed = rec({ key: "f", id: "sa_0", state: "failed", error: "Timed out" });
+    for (const order of [
+      [failed, a],
+      [a, failed],
+    ]) {
+      const retry = mergeBackgroundWork(order, [tracked]);
+      expect(retry.map((w) => [w.record.key, w.run?.ref]).sort()).toEqual([
+        ["a", "R-9"],
+        ["f", undefined],
+      ]);
+    }
+    // two that have both ended: neither
+    expect(mergeBackgroundWork([failed, rec({ key: "d", id: "sa_5", state: "completed" })], [tracked]).map((w) => w.run)).toEqual([undefined, undefined]);
+    // a card is identified by the sub-agent it controls, however that sub-agent is seen
+    expect(workKey({ record: a, control: rec({ key: "x", id: "child_1", subagentId: "sa_1" }) })).toBe(
+      workKey({ record: a, control: rec({ key: "y", id: "sa_1", subagentId: "sa_1" }) }),
+    );
+    expect(workKey({ record: a, control: a })).not.toBe(workKey({ record: b, control: b }));
+    expect(workKey({ record: a, run: tracked })).toBe("run-9");
     // a record with no status folds into its twin, and the controls go to the one that is shown
     const folded = mergeBackgroundWork([rec({ key: "a", id: "sa_1", state: "unknown" }), rec({ key: "b", id: "sa_2" })], []);
     expect(folded).toHaveLength(1);

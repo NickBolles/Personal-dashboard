@@ -2,7 +2,7 @@
  * What a run card says: its status in words, a tone and label per event type (the same tones the item
  * pages use for PR / checks / deploy pills), and the "since you last looked" breakdown. Pure and client-safe.
  */
-import type { ExecutionRecord } from "@/lib/chat-execution";
+import { isActiveExec, type ExecutionRecord } from "@/lib/chat-execution";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent, RunEventType } from "@/lib/cw-runs";
 import { relativeTime } from "@/lib/time";
@@ -194,8 +194,10 @@ const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
  *
  * Steer and Stop go to `control`, so a card must never show one sub-agent and control another, and which
  * sub-agent a card controls must not depend on the order the records arrive in (it changes on every poll):
- * - a tracked run that two different live sub-agents could both be (same title, same time) is neither's.
- *   Each keeps its own card and its own controls, and the run is shown only by its own record, if it has one;
+ * - a tracked run is a sub-agent's only when exactly one sub-agent can be it: the one that is still going
+ *   (a failed attempt and its retry share a title; the run is the retry's), else the one that has ended.
+ *   A run that two could both be is neither's: each keeps its own card and controls, and the run is shown
+ *   only by its own record, if it has one;
  * - within a card the controls follow the best-informed record of the one sub-agent it is about.
  */
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
@@ -207,20 +209,29 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   }
   const runOf = (record: ExecutionRecord) =>
     (record.source === "subagent" ? undefined : byId.get(record.id)) ?? byTitle.get(workTitle(record.title))?.find((r) => sameWindow(record, r));
-  const claims = new Map<string, ExecutionRecord[]>();
+  const going = new Map<string, ExecutionRecord[]>();
+  const ended = new Map<string, ExecutionRecord[]>();
   for (const record of records) {
     if (record.source !== "subagent" || record.state === "unknown") continue;
     const run = runOf(record);
     if (!run) continue;
+    const claims = isActiveExec(record) ? going : ended;
     const agents = claims.get(run.id) ?? [];
     if (!agents.some((agent) => sameAgent(agent, record))) claims.set(run.id, [...agents, record]);
   }
+  const ownRun = (record: ExecutionRecord, matched: CoordinatorRunRow | undefined) => {
+    if (!matched) return undefined;
+    const live = going.get(matched.id) ?? [];
+    const claimants = live.length ? live : (ended.get(matched.id) ?? []);
+    if (claimants.length > 1) return undefined;
+    return record.state === "unknown" || claimants.every((agent) => sameAgent(agent, record)) ? matched : undefined;
+  };
   const out: (BackgroundWork & { title: string })[] = [];
   for (const record of records) {
     const title = workTitle(record.title);
     const sub = record.source === "subagent";
     const matched = runOf(record);
-    const run = sub && matched && (claims.get(matched.id)?.length ?? 0) > 1 ? undefined : matched;
+    const run = sub ? ownRun(record, matched) : matched;
     const same =
       (sub ? out.find((w) => !!w.control && sameAgent(w.control, record)) : undefined) ??
       out.find((w) => (run && w.run?.id === run.id) || (!run && !w.run && w.title === title && (w.record.state === "unknown" || record.state === "unknown")));
@@ -235,6 +246,15 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
     if (sub && (!same.control || informative(record) > informative(same.control))) same.control = record;
   }
   return out.map(({ title: _title, ...work }) => work);
+}
+
+/**
+ * A card's identity on screen: the sub-agent its controls reach, else the tracked run, else the record. What is
+ * typed into a card, or a stop being confirmed on it, stays with that sub-agent through reorders and new sources,
+ * and a card that comes to control another sub-agent is a new card.
+ */
+export function workKey(work: BackgroundWork): string {
+  return work.control ? `agent:${work.control.subagentId ?? work.control.key}` : (work.run?.id ?? work.record.key);
 }
 
 const flat = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
