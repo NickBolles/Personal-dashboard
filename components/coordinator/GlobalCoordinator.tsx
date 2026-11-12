@@ -13,7 +13,6 @@ import { coordinatorStatus } from "@/lib/coordinator/status";
 import { sinceRunCounts } from "@/lib/coordinator/run-card";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
-import { CardMenu, useCardMenu } from "./cards/CardMenu";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
@@ -29,7 +28,7 @@ import { pickTrayLine, type PriorityLine } from "@/lib/coordinator/things";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { DynamicSurface } from "@/components/smart/DynamicSurface";
-import { Button, SectionHeader, useNow, useToast } from "@/components/ui";
+import { AnchoredMenu, Button, SectionHeader, useAnchoredMenu, useNow, useToast } from "@/components/ui";
 import { NeedsPanel } from "./needs/NeedsPanel";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
@@ -207,19 +206,36 @@ export function GlobalCoordinator() {
     if (next === "running") markSeen();
   };
   // A catch-up chip lands on the part of the tab it was about ("2 finished" on Finished, "2 new decisions" on New),
-  // marked for a moment. The tab may still be drawing, so look for it over a few frames.
+  // marked for a moment. The tab may still be drawing, so look for it over a few frames — inside THIS panel only
+  // (another Running/Needs list can be on the page), and every pending frame/timer is cancelled on the next landing
+  // or on unmount.
+  const landing = useRef<{ raf: number; timer: number; el: HTMLElement | null }>({ raf: 0, timer: 0, el: null });
+  const stopLanding = () => {
+    const l = landing.current;
+    cancelAnimationFrame(l.raf);
+    window.clearTimeout(l.timer);
+    l.el?.removeAttribute("data-landed");
+    landing.current = { raf: 0, timer: 0, el: null };
+  };
+  useEffect(() => stopLanding, []);
   const land = (about?: string) => {
     const section = about ? LAND[about] : undefined;
+    stopLanding();
     if (!section) return;
     let tries = 0;
     const look = () => {
-      const el = document.querySelector<HTMLElement>(`[data-land="${section}"]`);
-      if (!el) return void (tries++ < 20 && requestAnimationFrame(look));
+      const el = host.current?.querySelector<HTMLElement>(`[data-land="${section}"]`);
+      if (!el) {
+        if (tries++ < 20) landing.current.raf = requestAnimationFrame(look);
+        return;
+      }
       el.scrollIntoView?.({ block: "start" });
       el.setAttribute("data-landed", "");
-      window.setTimeout(() => el.removeAttribute("data-landed"), 1900);
+      // As long as the jv-flash animation on [data-landed] (run-card.css), then the mark goes.
+      const ms = Number.parseFloat(getComputedStyle(el).animationDuration) * 1000 || 1800;
+      landing.current = { raf: 0, el, timer: window.setTimeout(stopLanding, ms + 100) };
     };
-    requestAnimationFrame(look);
+    landing.current.raf = requestAnimationFrame(look);
   };
   const openAt = (next: Tab, ref?: string) => {
     show();
@@ -432,7 +448,7 @@ export function GlobalCoordinator() {
     },
   ];
   // The tray is one button with one sentence; a long press (or right-click) goes straight to a tab.
-  const trayMenu = useCardMenu();
+  const trayMenu = useAnchoredMenu();
   const trayActions = [
     { label: "Chief of staff", heading: true },
     ...tabs.map((t) => ({ label: t.count ? `${t.label} · ${t.count}` : t.label, onSelect: () => openAt(t.id) })),
@@ -728,7 +744,7 @@ export function GlobalCoordinator() {
                 aria-describedby={statusId}
                 aria-haspopup="dialog"
                 onClick={showPriority}
-                onContextMenu={trayMenu.onContextMenu}
+                {...trayMenu.surfaceProps}
               >
                 <span className="gc-tray-avatar">
                   <span className="gc-orb" aria-hidden="true" />
@@ -755,7 +771,7 @@ export function GlobalCoordinator() {
               </button>
             </div>
           ) : null}
-          {!chat ? <CardMenu at={trayMenu.at} label="Open Chief of staff at" items={trayActions} onClose={trayMenu.close} className="gc-tray-menu" /> : null}
+          {!chat ? <AnchoredMenu menu={trayMenu} label="Open Chief of staff at" items={trayActions} /> : null}
           {phoneOpen ? (
             <dialog
               ref={dialog}

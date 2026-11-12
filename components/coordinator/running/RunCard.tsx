@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
+import { AnchoredMenu, Button, ButtonLink, Dot, MenuButton, Pill, ProgressBar, SectionHeader, Textarea, useAnchoredMenu, useNow } from "@/components/ui";
 import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
@@ -31,7 +31,6 @@ import {
 } from "@/lib/coordinator/run-card";
 import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
-import { CardMenu, useCardMenu } from "../cards/CardMenu";
 import "./run-card.css";
 
 /** How many events (ones that say something) an open card shows before "Show earlier". */
@@ -343,7 +342,7 @@ export function RunCard({
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
   // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
   const router = useRouter();
-  const menu = useCardMenu();
+  const menu = useAnchoredMenu();
   const actions = [
     { label: `${run.ref} · ${status.label}`, heading: true },
     canSteer
@@ -370,9 +369,10 @@ export function RunCard({
       data-state={status.key}
       data-open={open || undefined}
       data-live={status.live || undefined}
-      onContextMenu={menu.onContextMenu}
+      {...menu.surfaceProps}
     >
-      <CardMenu at={menu.at} label={`Actions for ${run.ref}`} items={actions} onClose={menu.close} />
+      <AnchoredMenu menu={menu} label={`Actions for ${run.ref}`} items={actions} />
+      <MenuButton menu={menu} label={`Actions for ${run.ref}`} className="rc-menu-btn" />
       <Button
         ref={head}
         variant="ghost"
@@ -716,7 +716,7 @@ export function ExecCard({
     stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
   // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
-  const menu = useCardMenu(actions.length > 2);
+  const menu = useAnchoredMenu({ enabled: actions.length > 2 });
   return (
     <article
       className="rc rc-exec"
@@ -724,9 +724,10 @@ export function ExecCard({
       data-live={isLive || undefined}
       data-testid="coordinator-run-card"
       aria-label={record.title}
-      onContextMenu={menu.onContextMenu}
+      {...menu.surfaceProps}
     >
-      <CardMenu at={menu.at} label={`Actions for ${title}`} items={actions} onClose={menu.close} />
+      <AnchoredMenu menu={menu} label={`Actions for ${title}`} items={actions} />
+      <MenuButton menu={menu} label={`Actions for ${title}`} className="rc-menu-btn" />
       <div className="rc-top">
         <StatusChip
           tone={status.tone}

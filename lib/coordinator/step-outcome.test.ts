@@ -144,7 +144,10 @@ describe("cardStatus: every card says 'Step failed' the same way", () => {
     expect(s).toMatchObject({ key: "stuck", label: "Step failed", tone: "bad", failedStep: true });
   });
   it("a quiet run whose newest event fixed the failures stays Quiet", () => {
-    const events = [ev("Build failed", { id: "a", at: "2026-11-12T14:30:00.000Z" }), ev("Fixed the 3 failing tests", { id: "b", at: "2026-11-12T15:00:00.000Z" })];
+    const events = [
+      ev("Build failed", { id: "a", at: "2026-11-12T14:30:00.000Z" }),
+      ev("Fixed the 3 failing tests", { id: "b", at: "2026-11-12T15:00:00.000Z" }),
+    ];
     expect(cardStatus(row(), events, NOW)).toMatchObject({ key: "stuck", label: "Quiet", tone: "wn", failedStep: false });
   });
   it("a working run never says Step failed (it is still reporting)", () => {

@@ -13,6 +13,9 @@
 // Design-system kit: buttons, menus, chips, pills, form controls, rows, cards, states.
 export * from "./kit";
 
+// Anchored menu: ⋯ trigger + right-click / long-press / Menu key, collision-aware, focus returns to the opener.
+export { AnchoredMenu, MenuButton, useAnchoredMenu, type AnchoredMenuState } from "./AnchoredMenu";
+
 // Icon-only header/card actions with tooltip + live-state dot.
 export { IconAction, IconAction as IconButton, CoordinatorGlyph, FocusGlyph, type IconActionDot } from "./IconAction";
 

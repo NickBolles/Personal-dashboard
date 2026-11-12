@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import {
+  AnchoredMenu,
+  MenuButton,
+  useAnchoredMenu,
   Banner,
   Button,
   ButtonLink,
@@ -55,6 +58,29 @@ function Block({ id, title, children }: { id: string; title: string; children: R
       </h2>
       {children}
     </section>
+  );
+}
+
+/** Anchored menu: the ⋯ trigger, right-click, long press or the Menu key on the card; focus returns on close. */
+function MenuDemo() {
+  const menu = useAnchoredMenu();
+  return (
+    <Block id="menus" title="Anchored menu (⋯, right-click, long press, Menu key)">
+      <div {...menu.surfaceProps} className="relative flex items-center justify-between gap-2 rounded-lg border border-[var(--bd)] p-3">
+        <span className="text-sm">R-12 · Smoke tests on the release branch</span>
+        <MenuButton menu={menu} label="Actions for R-12" />
+        <AnchoredMenu
+          menu={menu}
+          label="Actions for R-12"
+          items={[
+            { label: "R-12 · Working", heading: true },
+            { label: "Steer…" },
+            { label: "Review D-4 · Rotate the newsletter key before the next send" },
+            { label: "Ask to stop…", danger: true },
+          ]}
+        />
+      </div>
+    </Block>
   );
 }
 
@@ -170,6 +196,7 @@ export function LibraryGallery() {
           </div>
           <Toast message="Saved" action={{ label: "Undo", onClick: () => undefined }} />
         </Block>
+        <MenuDemo />
       </div>
     </Page>
   );

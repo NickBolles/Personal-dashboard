@@ -6,7 +6,7 @@ import { useId, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { LiveState, useAgentRuns } from "@/components/agents/AgentRuns";
-import { Button, ButtonLink, Pill, ProgressBar, useNow, type KTone } from "@/components/ui";
+import { AnchoredMenu, Button, ButtonLink, MenuButton, Pill, ProgressBar, useAnchoredMenu, useNow, type KTone } from "@/components/ui";
 import { AlertIcon, AreasIcon, BellIcon, BoltIcon, ChatIcon, ChevronIcon, ClockIcon, ExternalIcon, InboxIcon } from "@/components/icons";
 import type { ActivityItem } from "@/lib/activity";
 import { CHECKS_LABEL, DEPLOY_LABEL, whoLabel, type ItemAgentInfo, type PrState } from "@/lib/agent-runs";
@@ -22,7 +22,6 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { useCoordinatorDecisions } from "../needs/useCoordinatorDecisions";
 import { StatusChip } from "../running/RunCard";
 import { useCoordinatorRuns } from "../running/useCoordinatorRuns";
-import { CardMenu, useCardMenu } from "./CardMenu";
 import "../running/run-card.css";
 
 /** How many changes a closed card shows; opening it shows them all. */
@@ -155,7 +154,7 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
   const chips = open ? 2 : 1;
   // Everything this card can do, for a right-click or a long press.
   const router = useRouter();
-  const menu = useCardMenu();
+  const menu = useAnchoredMenu();
   const actions = [
     { label: model ? `${model.kind} · ${model.headline.label}` : name, heading: true },
     { label: model ? `Open ${model.container ? model.kind.toLowerCase() : "item"}` : "Try opening it", onSelect: () => router.push(href) },
@@ -175,9 +174,10 @@ export function ItemCard({ itemId, title, data, changes = [], undo, onRef, onAsk
       data-state={model?.headline.key ?? "unknown"}
       data-open={open || undefined}
       data-live={model?.headline.live || undefined}
-      onContextMenu={menu.onContextMenu}
+      {...menu.surfaceProps}
     >
-      <CardMenu at={menu.at} label={`Actions for ${name}`} items={actions} onClose={menu.close} />
+      <AnchoredMenu menu={menu} label={`Actions for ${name}`} items={actions} />
+      <MenuButton menu={menu} label={`Actions for ${name}`} className="rc-menu-btn" />
       <div className="ic-headrow">
         <Button variant="ghost" className="gc-run-body rc-head" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>
           <span className="rc-top">

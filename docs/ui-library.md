@@ -26,6 +26,7 @@ The library implements the design system in [design-system.md](design-system.md)
 | Link styled as action                   | `ButtonLink` (`external` adds new-tab + sr text)                                                                                 |                                                                                             |
 | Icon-only header/card action            | `IconButton` (`label` = accessible name + tooltip, `icon`, `tone="primary"`, `dot` running/waiting/failed, `busy`)               | Glyph is `aria-hidden`.                                                                     |
 | Overflow / more actions                 | `Menu` + `KMenuItem[]`; split primary: `SplitButton`                                                                             | Not `OverflowMenu` (legacy).                                                                |
+| Card / row actions menu (anchored)      | `useAnchoredMenu()` + `MenuButton` (visible ⋯) + `AnchoredMenu`; spread `menu.surfaceProps` on the card/row                      | Right-click, long press (touch) and Menu key/Shift+F10 open the same menu. See below.       |
 | Choose one value (status, model, area…) | `SelectPicker` (`label`, `value`, `options[{value,label,dot?,section?}]`, `onChange`)                                            | Popover desktop / sheet phone, search appears above 7 options. Not native `<select>`.       |
 | Choose many / labels / assignee         | `MetaPicker` (`multi`, `onToggle`, `onCreate`)                                                                                   | GitHub-label style.                                                                         |
 | Due date                                | `DuePicker` (`value`, `onSave`)                                                                                                  | Quick dates + calendar.                                                                     |
@@ -41,6 +42,15 @@ The library implements the design system in [design-system.md](design-system.md)
 | Agent identity                          | `AgentMark`, `AgentCard`, `Orb`, `SpendRing`, `ProposedBox`                                                                      | Orb gradient only on the orb.                                                               |
 | Finance                                 | `LockBar`, `PermissionLock`                                                                                                      | Locked by default.                                                                          |
 | Page frame                              | `Page`, `PageHeader`                                                                                                             | Exactly one `<h1>` per page.                                                                |
+
+## Anchored menu (cards, rows, the tray)
+
+`components/ui/AnchoredMenu.tsx`, on `/dev/ui` ("Anchored menu"). One primitive for "every action of this card":
+
+- **Open:** the visible ⋯ `MenuButton` (kit icon button, full hit area) — always render it, a long press is only an accelerator; right-click; a long press on touch (500 ms, cancelled by a 10 px move, the lift is swallowed); the Menu key / Shift+F10 on a focused control inside the surface.
+- **Place:** top layer (Popover API) or fixed, at the trigger (below, end-aligned) or at the pointer, flipped/clamped to the viewport. Width is the `--k-menu-w` token (rem), labels wrap — never a hard-coded px width or ellipsis (200% text).
+- **Close:** Esc, choosing an item, a pointer outside, scroll, resize. **Focus returns** to the control that opened it (the ⋯ trigger, or the focused control in the surface, else the surface's ⋯), unless the chosen action moved focus on purpose.
+- Don't hand-roll positioned `Menu`s (`position:absolute; left: var(--x)`), outside-click listeners or `scrollIntoView` hacks around a menu.
 
 ## Superseded (lint-banned for new code, being migrated)
 
