@@ -6,6 +6,7 @@
 import { isStalled, whoLabel, type ExternalRun, type ItemAgentInfo } from "@/lib/agent-runs";
 import { AI_KIND_LABEL, KIND_VERB, TERMINAL_JOB_STATES, type JobView, type ReportView } from "@/lib/ai";
 import type { Decision } from "@/lib/cw-decisions";
+import type { RunEvent } from "@/lib/cw-runs";
 import { dueLabel, itemCardModel, subtreeIds, type ItemHeadline } from "@/lib/coordinator/item-card";
 import { ageLabel } from "@/lib/coordinator/needs";
 import { tidyOutcome } from "@/lib/coordinator/run-card";
@@ -13,6 +14,13 @@ import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
 import { isClosed, isContainer, rollup, STATUS_LABELS, type ItemPrimary, type WorkItem } from "@/lib/work";
 import { WORK_GROUP, WORK_RANK, workStateOfLive, type WorkGroup, type WorkState } from "@/lib/work-words";
+
+/**
+ * Where a D-n or R-n chip on an item or project page jumps: the Chief of staff panel, opened over this page at the
+ * decision ("needs") or at the run's report and timeline ("running").
+ */
+export const coordHref = (itemId: string, tab: "needs" | "running", ref: string) =>
+  `/areas?item=${encodeURIComponent(itemId)}&coord=${tab}&${tab === "needs" ? "d" : "r"}=${encodeURIComponent(ref)}`;
 
 /** A failed AI job stays on the page this long (then it is history: Activity has it). */
 export const FAILED_JOB_SHOWN_MS = 3_600_000;
@@ -197,6 +205,61 @@ export function logLine(events: readonly { at: string }[], now: number = Date.no
   const ms = now - Date.parse(last);
   const ago = !Number.isFinite(ms) || ms < 60_000 ? "just now" : `${ageLabel(last, now)} ago`;
   return `${events.length} change${events.length === 1 ? "" : "s"} · last one ${ago}`;
+}
+
+/**
+ * The item's timeline: what its agents have been doing, newest first, so the owner can see where it is at without
+ * opening the conversation. Every event of every tracked run on the item (started, progress, step done, CI,
+ * staged, live, failed, finished) plus each report that came back. With more than one run on the item an event is
+ * prefixed with its R-n, so it is clear whose step it was.
+ */
+export function itemTimeline(input: {
+  itemId: string;
+  runs?: readonly CoordinatorRunRow[];
+  events?: readonly RunEvent[];
+  reports?: readonly ReportView[];
+}): RunEvent[] {
+  const mine = new Map((input.runs ?? []).filter((run) => run.itemId === input.itemId).map((run) => [run.id, run]));
+  const several = [...mine.values()].filter((run) => !run.parentRunId).length > 1;
+  const seen = new Set<string>();
+  const out: RunEvent[] = [];
+  for (const event of input.events ?? []) {
+    const run = mine.get(event.runId);
+    if (!run || seen.has(event.id)) continue;
+    seen.add(event.id);
+    const summary = flat(event.summary) || run.title;
+    out.push({ ...event, summary: several ? `${run.ref} · ${summary}` : summary });
+  }
+  for (const report of input.reports ?? []) {
+    if (report.archivedAt || report.supersededBy) continue;
+    const kind = report.kind === "summarize" ? "Summary draft" : `${AI_KIND_LABEL[report.kind]} report`;
+    out.push({ id: `report:${report.id}`, runId: "", runRef: null, type: "done", summary: `${kind}: ${report.title}`, payload: {}, via: null, at: report.createdAt });
+  }
+  return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id.localeCompare(a.id));
+}
+
+/**
+ * What a link on an item is, in one word, for its row in Plan. Links are stored as a conversation, a pull request,
+ * an issue or a plain URL; a URL that points at an artifact or a design file is named for what it is, so a linked
+ * design does not read as just "Link". Display only: nothing is stored.
+ */
+export function linkKind(link: { kind: string; url?: string | null }): "Conversation" | "Pull request" | "Issue" | "Artifact" | "Design" | "Document" | "Link" {
+  if (link.kind === "chat_session") return "Conversation";
+  if (link.kind === "github_pr") return "Pull request";
+  if (link.kind === "github_issue") return "Issue";
+  let host = "";
+  let path = "";
+  try {
+    const url = new URL(link.url ?? "");
+    host = url.hostname.toLowerCase();
+    path = url.pathname.toLowerCase();
+  } catch {
+    return "Link";
+  }
+  if (host.startsWith("artifacts.") || host.endsWith("claude.site") || (host.endsWith("claude.ai") && path.includes("/artifact"))) return "Artifact";
+  if (/(^|\.)(figma\.com|excalidraw\.com|canva\.com|miro\.com|tldraw\.com)$/.test(host)) return "Design";
+  if (/(^|\.)(docs\.google\.com|notion\.so|notion\.site)$/.test(host) || /\.(pdf|md|docx?)$/.test(path)) return "Document";
+  return "Link";
 }
 
 // ---- Project / area page ---------------------------------------------------------------------------------------

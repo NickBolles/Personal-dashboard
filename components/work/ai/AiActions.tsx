@@ -33,7 +33,7 @@ import { SafeMarkdown, safeHref } from "./SafeMarkdown";
  * enforces both regardless.
  */
 
-const itemAiKey = (id: string) => ["work", "ai", id] as const;
+export const itemAiKey = (id: string) => ["work", "ai", id] as const;
 
 export function useItemAi(itemId: string, enabled = true) {
   return useQuery({

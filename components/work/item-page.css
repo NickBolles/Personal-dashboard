@@ -1,0 +1,509 @@
+/*
+ * Item page and project / area page (app/(shell)/areas/WorkView.tsx): one column, now first.
+ * Header (title, one meta line, one menu), Now, Next, then sections that are only drawn when they have content.
+ * Rows are the shared ThingRow (.k-thing, app/globals.css); this file only lays the page out around them.
+ * Unlayered on purpose, like work.css: it has to win over the shared components' size utilities.
+ */
+
+/* ---- header: title + one menu, then ONE meta line ---- */
+.ip-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+}
+.ip-title-row > h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ip-title-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.ip-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  /* Status, due, assignee and the tag picker fit one line on the Fold's cover screen (318px of content). */
+  gap: 2px;
+  margin-top: 2px;
+}
+/* Status, due, assignee and tags sit on the one line and wrap together. */
+.ip-meta .jv-meta,
+.ip-meta-in {
+  display: contents;
+}
+.ip-meta-text {
+  color: var(--t2);
+  font: 400 12.5px/1.4 var(--sans);
+  overflow-wrap: anywhere;
+}
+
+/* ---- Next: ONE section. What needs you (the decision, a chip to what waits on you), then the written next
+   action as a quiet line; or, when nothing needs you, the next action and the one primary action. ---- */
+.ip-nextsec {
+  min-width: 0;
+}
+.ip-next-head {
+  padding: 8px 0 0;
+}
+.ip-next-head + .ip-now-pointer {
+  margin-top: 2px;
+}
+.ip-now-note {
+  flex: 1 1 10rem;
+  min-width: 0;
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.ip-now-act {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 10px;
+}
+.ip-now-why {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: var(--t2);
+  font: 400 13px/1.4 var(--sans);
+  overflow-wrap: anywhere;
+}
+.ip-now-pointer {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 10px;
+  min-height: 32px;
+  font: 400 13px/1.4 var(--sans);
+}
+.ip-jump {
+  min-height: 28px;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The next action: one line, edited in place (and nowhere else). */
+.ip-next {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.ip-next > .jv-inline {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 400 14px/1.4 var(--sans);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+/* Under a decision the written next action is a quiet line. */
+.ip-next[data-quiet] > .jv-inline {
+  color: var(--t2);
+  font-size: 13px;
+}
+
+/* ---- sections ---- */
+.ip-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+}
+.ip-sec {
+  min-width: 0;
+}
+.ip-label,
+.ip-next-label {
+  flex: none;
+  color: var(--t3);
+  font: 600 11px/1.4 var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ip-label {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  padding: 0 0 6px;
+}
+.ip-count {
+  font-variant-numeric: tabular-nums;
+}
+.ip-label-note {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+}
+.ip-label-acts {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ip-sublabel {
+  margin-top: 10px;
+  color: var(--t2);
+  font: 600 12px/1.4 var(--sans);
+}
+.ip-sublabel > span {
+  color: var(--t3);
+  font-weight: 400;
+}
+
+/* Rows run edge to edge inside the section; the last one closes the list with a hairline. */
+.ip-rows {
+  min-width: 0;
+  border-bottom: 1px solid var(--bd);
+}
+.ip-rows:empty {
+  display: none;
+}
+.ip-row .k-thing-row {
+  padding-left: 4px;
+  padding-right: 0;
+}
+.ip-row .k-thing-open {
+  margin-left: 22px;
+  margin-right: 0;
+}
+.ip-chev {
+  flex: none;
+  margin-right: 8px;
+  color: var(--t3);
+  transition: transform var(--d1, 120ms) var(--ease);
+}
+.ip-unread {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* What an opened row shows: the full report line, who, links, sub-agents, ids to copy. */
+.ip-said {
+  color: var(--t1);
+  font: 400 13px/1.45 var(--sans);
+  overflow-wrap: anywhere;
+}
+.ip-detail-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: var(--t2);
+  font: 400 12px/1.4 var(--sans);
+}
+.ip-link {
+  color: var(--ac);
+  text-underline-offset: 2px;
+}
+.ip-link:hover {
+  text-decoration: underline;
+}
+.ip-subagents {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 2px solid var(--bd);
+  padding-left: 10px;
+  font: 400 13px/1.4 var(--sans);
+}
+.ip-subagents > li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ip-subagent-s {
+  display: block;
+  color: var(--t2);
+  font-size: 12px;
+}
+.ip-copies {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---- Timeline: what the agents did, newest first (the shared run timeline, .rc-timeline) ---- */
+.ip-timeline {
+  min-width: 0;
+  padding-top: 4px;
+}
+.ip-timeline-h {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.ip-timeline-h > a {
+  font-weight: 500;
+}
+/* One line per entry: the full text is one tap away in the run's log. */
+.ip-timeline .rc-event-main {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ip-more.k-btn {
+  min-height: 28px;
+  margin-left: 14px;
+  padding: 0 8px;
+  color: var(--t2);
+  font: 500 12px/1 var(--sans);
+}
+
+/* ---- Done when: a checklist; a line opens to record, waive or remove ---- */
+.ip-checks {
+  min-width: 0;
+  border-bottom: 1px solid var(--bd);
+}
+.ip-check {
+  min-width: 0;
+  border-top: 1px solid var(--bd);
+}
+.ip-check-hit.k-btn {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 0;
+  border-radius: var(--r2);
+  background: none;
+  padding: 6px 4px;
+  color: var(--t1);
+  font: 400 14px/20px var(--sans);
+  text-align: left;
+}
+.ip-check-box {
+  display: inline-flex;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--bdc, var(--t3));
+  border-radius: 5px;
+  color: var(--t3);
+  font: 700 13px/1 var(--sans);
+}
+.ip-check[data-status="pass"] .ip-check-box {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--s0, var(--s1));
+}
+.ip-check[data-status="fail"] .ip-check-box {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+.ip-check[data-status="waived"] .ip-check-box {
+  border-style: dashed;
+}
+.ip-check-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.ip-check-t {
+  overflow-wrap: anywhere;
+}
+.ip-check[data-status="pass"] .ip-check-t,
+.ip-check[data-status="waived"] .ip-check-t {
+  color: var(--t2);
+}
+.ip-check-s {
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+.ip-check[data-overdue] .ip-check-s {
+  color: var(--bad);
+}
+.ip-check-result {
+  flex: none;
+  color: var(--t2);
+  font: 500 12.5px/1.4 var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+.ip-check[data-status="pass"] .ip-check-result {
+  color: var(--ok);
+}
+.ip-check[data-status="fail"] .ip-check-result {
+  color: var(--bad);
+}
+.ip-check[data-status="pending"] .ip-check-result,
+.ip-check[data-status="waived"] .ip-check-result {
+  color: var(--t3);
+  font-weight: 400;
+}
+.ip-check-open {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px 32px;
+}
+.ip-vform {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+@media (min-width: 560px) {
+  .ip-vform {
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+.ip-vform-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.ip-note {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+  border-radius: var(--r2);
+  background: var(--bads);
+  padding: 6px 10px;
+  color: var(--bad);
+  font: 400 13px/1.4 var(--sans);
+}
+
+/* ---- Plan ---- */
+.ip-plan > .jv-inline-row:first-of-type,
+.ip-plan > .wk-summary-inline {
+  margin-top: 0;
+}
+.ip-dep {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
+  border-top: 1px solid var(--bd);
+  min-height: 44px;
+  padding: 2px 0 2px 4px;
+  font: 400 14px/1.4 var(--sans);
+}
+.ip-dep-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.ip-dep-rel {
+  flex: none;
+  color: var(--t3);
+  font-size: 12px;
+}
+.ip-dep-title {
+  min-width: 0;
+  color: var(--t1);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.ip-dep-title:hover {
+  color: var(--ac);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ip-dep-title[data-done] {
+  color: var(--t3);
+  text-decoration: line-through;
+}
+.ip-packet {
+  margin-top: 4px;
+  border-top: 1px solid var(--bd);
+  padding-top: 8px;
+}
+
+/* ---- the one row of "add" chips for what is missing ---- */
+.ip-adds {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 10px;
+}
+.ip-adds:empty {
+  display: none;
+}
+.ip-add.k-btn {
+  min-height: 32px;
+  border: 1px dashed var(--bd2, var(--bd));
+  border-radius: 999px;
+  background: transparent;
+  padding: 0 12px 0 10px;
+  color: var(--t2);
+  font: 500 13px/1 var(--sans);
+}
+.ip-add.k-btn:hover {
+  border-style: solid;
+  color: var(--t1);
+}
+
+/* ---- Log: one line that opens Activity ---- */
+.ip-log {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-top: 1px solid var(--bd);
+  background: none;
+  min-height: 44px;
+  padding: 4px 0;
+  color: var(--t1);
+  font: 400 14px/1.4 var(--sans);
+  text-align: left;
+}
+.ip-log-text {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+/* ---- project / area page ---- */
+.ip-inline-add {
+  border-bottom: 1px solid var(--bd);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ip-chev {
+    transition: none;
+  }
+}

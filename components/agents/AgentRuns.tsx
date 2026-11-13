@@ -171,7 +171,7 @@ export function StalledBadge() {
 }
 
 /** Text shown for copying (transcript path, session/delegation ids): selectable, with a Copy button. */
-function CopyField({ label, value }: { label: string; value: string }) {
+export function CopyField({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="ar-copy">
