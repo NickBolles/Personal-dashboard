@@ -146,19 +146,20 @@ const row = (over: Partial<CoordinatorRunRow> = {}): CoordinatorRunRow => ({
 });
 const NOW = Date.parse("2026-11-12T16:00:00.000Z");
 
-describe("cardStatus: every card says 'Step failed' the same way", () => {
-  it("a quiet run whose newest event failed says Step failed (key stays stuck)", () => {
+describe("cardStatus: every row says a step failed the same way", () => {
+  it("a stalled run whose newest event failed stays Stalled, in red, and leads its detail with the failed step", () => {
     const s = cardStatus(row(), [ev("Build failed: 2 errors", { at: "2026-11-12T15:00:00.000Z" })], NOW);
-    expect(s).toMatchObject({ key: "stuck", label: "Step failed", tone: "bad", failedStep: true });
+    // a failed step is not a failed run: the word is still Stalled, the key still stuck
+    expect(s).toMatchObject({ key: "stuck", label: "Stalled", detail: "a step failed · no report for 1 h", tone: "bad", failedStep: true });
   });
-  it("a quiet run whose newest event fixed the failures stays Quiet", () => {
+  it("a stalled run whose newest event fixed the failures stays plainly Stalled", () => {
     const events = [
       ev("Build failed", { id: "a", at: "2026-11-12T14:30:00.000Z" }),
       ev("Fixed the 3 failing tests", { id: "b", at: "2026-11-12T15:00:00.000Z" }),
     ];
-    expect(cardStatus(row(), events, NOW)).toMatchObject({ key: "stuck", label: "Quiet", tone: "wn", failedStep: false });
+    expect(cardStatus(row(), events, NOW)).toMatchObject({ key: "stuck", label: "Stalled", detail: "no report for 1 h", tone: "wn", failedStep: false });
   });
-  it("a working run never says Step failed (it is still reporting)", () => {
+  it("a working run never says a step failed (it is still reporting)", () => {
     expect(cardStatus(row({ stalled: false }), [ev("Build failed")], NOW)).toMatchObject({ key: "working", failedStep: false });
   });
   it("falls back to the run's own last event", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { AnchoredMenu, MenuButton, useAnchoredMenu, type KMenuItem } from "@/components/ui";
 import "../running/run-card.css";
 
@@ -18,14 +18,19 @@ export function SummaryCard({
   label,
   actions,
   menuEnabled = true,
+  trigger = true,
   className,
   children,
+  ref,
   ...rest
 }: {
+  ref?: Ref<HTMLElement>;
   /** What the card is, for the menu and its trigger: "Actions for <label>". */
   label: string;
   actions: KMenuItem[];
   menuEnabled?: boolean;
+  /** false: no visible ⋯ (a row keeps its two icon actions); right-click, long press and the Menu key still open the menu. */
+  trigger?: boolean;
   className?: string;
   children: ReactNode;
 } & Omit<HTMLAttributes<HTMLElement>, "children" | "className"> &
@@ -33,9 +38,9 @@ export function SummaryCard({
   const menu = useAnchoredMenu({ enabled: menuEnabled });
   const name = `Actions for ${label}`;
   return (
-    <article className={["rc", className].filter(Boolean).join(" ")} {...rest} {...menu.surfaceProps}>
+    <article ref={ref} className={["rc", className].filter(Boolean).join(" ")} {...rest} {...menu.surfaceProps}>
       <AnchoredMenu menu={menu} label={name} items={actions} />
-      <MenuButton menu={menu} label={name} className="rc-menu-btn" />
+      {trigger ? <MenuButton menu={menu} label={name} className="rc-menu-btn" /> : null}
       {children}
     </article>
   );

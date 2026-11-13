@@ -42,6 +42,9 @@ function slideAway(el: HTMLElement) {
  * `SheetHandle`. Controls inside the strip that must stay plain taps carry `data-sheet-nodrag`.
  * Everything a drag does is also reachable without one: tapping the handle switches height, the arrow keys move
  * between heights, and the sheet keeps its own close control.
+ *
+ * A sheet with ONE height leaves `onFull` out (and returns the same number for both heights): it can only be
+ * dragged down to close, and a tap or Arrow down on the handle closes it.
  */
 export function useSheetDrag({
   panel,
@@ -53,7 +56,7 @@ export function useSheetDrag({
   /** The element that is resized and moved. Its resting heights come from CSS; a drag only sets inline styles. */
   panel: RefObject<HTMLElement | null>;
   full: boolean;
-  onFull: (full: boolean) => void;
+  onFull?: (full: boolean) => void;
   onClose: () => void;
   /** The two resting heights in px, read when a drag starts (they depend on the viewport). */
   heights: () => { half: number; full: number };
@@ -102,8 +105,11 @@ export function useSheetDrag({
     if (!el) return;
     swallowUntil.current = performance.now() + CLICK_MS;
     if (!d.moved) {
-      // A tap on the grab bar switches height.
-      if (!cancelled && d.onHandle) onFull(!full);
+      // A tap on the grab bar switches height (or closes a sheet that has only one).
+      if (!cancelled && d.onHandle) {
+        if (onFull) onFull(!full);
+        else onClose();
+      }
       return;
     }
     // A finger that rested before lifting is not a flick.
@@ -113,11 +119,15 @@ export function useSheetDrag({
       const still = typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       slideAway(el);
       if (still) return onClose();
-      leaving.current = window.setTimeout(onClose, LEAVE_MS);
+      // The hook can outlive the sheet (a host that reopens it): the slide-away must not block the next drag.
+      leaving.current = window.setTimeout(() => {
+        leaving.current = 0;
+        onClose();
+      }, LEAVE_MS);
       return;
     }
     rest(el);
-    if ((to === "full") !== full) onFull(to === "full");
+    if ((to === "full") !== full) onFull?.(to === "full");
   };
 
   return {
@@ -137,14 +147,14 @@ export function useSheetDrag({
     },
     handleProps: {
       full,
-      onClick: () => onFull(!full),
+      onClick: () => (onFull ? onFull(!full) : onClose()),
       onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => {
-        if (e.key === "ArrowUp" && !full) {
+        if (e.key === "ArrowUp" && !full && onFull) {
           e.preventDefault();
           onFull(true);
         } else if (e.key === "ArrowDown") {
           e.preventDefault();
-          if (full) onFull(false);
+          if (full && onFull) onFull(false);
           else onClose();
         }
       },
@@ -156,14 +166,23 @@ export function useSheetDrag({
  * The grab bar at the top of a bottom sheet. It is a real button: a tap (or Enter / Space) switches between half
  * and full height, Arrow up / Arrow down move between heights, and Arrow down at half height closes the sheet.
  */
-export function SheetHandle({ full, className, ...rest }: { full: boolean } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "type">) {
+export function SheetHandle({
+  full,
+  label,
+  className,
+  ...rest
+}: {
+  full: boolean;
+  /** The handle's name when it does not switch height (a sheet with one height: what a tap does, e.g. "Close …"). */
+  label?: string;
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "type">) {
   return (
     <button
       type="button"
       {...rest}
       className={cx("k-sheet-handle", className)}
-      aria-label={full ? "Half height" : "Full height"}
-      title="Drag up for full height, down to close"
+      aria-label={label ?? (full ? "Half height" : "Full height")}
+      title={label ? "Drag down to close" : "Drag up for full height, down to close"}
     >
       <span aria-hidden="true" />
     </button>

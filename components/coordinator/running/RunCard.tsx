@@ -1,19 +1,20 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
-import { Button, ButtonLink, Dot, Pill, ProgressBar, SectionHeader, Textarea, useNow } from "@/components/ui";
+import { Button, ButtonLink, Dot, Pill, ProgressBar, RefPill, RowAction, SectionHeader, StateWord, ThingRow, useNow, type ThingState } from "@/components/ui";
 import { SummaryCard } from "../cards/SummaryCard";
-import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, InboxIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
+import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
-import { isActiveExec, type ExecutionRecord } from "@/lib/chat-execution";
+import { isActiveExec } from "@/lib/chat-execution";
 import { plainMessageLine } from "@/lib/chat/display";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
-import { canControl, steerText, stopText } from "@/lib/coordinator/control";
+import type { ComposeScope } from "@/lib/coordinator/compose";
+import { canControl, stopText } from "@/lib/coordinator/control";
 import { ageLabel } from "@/lib/coordinator/needs";
 import {
   eventChip,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/coordinator/run-card";
 import { childrenOf, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { relativeTime } from "@/lib/time";
+import { WORK_WORD, workStateOfExec, workStateOfRun } from "@/lib/work-words";
 import "./run-card.css";
 
 /** How many events (ones that say something) an open card shows before "Show earlier". */
@@ -162,115 +164,83 @@ function Pipeline({ run }: { run: CoordinatorRunRow }) {
   );
 }
 
-/** The one guidance / reply field both kinds of card use: type it, Send. Two lines, so what is typed stays in view. */
-function SteerField({
-  label,
-  placeholder = "What should it do differently?",
-  pending,
-  onSend,
-  onClose,
-  alt,
-}: {
-  label: string;
-  placeholder?: string;
-  pending: boolean;
-  onSend: (guidance: string) => Promise<unknown>;
-  onClose: () => void;
-  /** What the field's button does while nothing is typed, e.g. resume a waiting run without an answer. */
-  alt?: { label: string; short: string; onSelect: () => void };
-}) {
-  const [guidance, setGuidance] = useState("");
-  const form = useRef<HTMLFormElement>(null);
-  useEffect(() => {
-    form.current?.querySelector("textarea")?.focus();
-  }, []);
+const ic = "h-4 w-4";
+const small = "h-3.5 w-3.5";
+
+/** The state word of a row. While the work is live the word shimmers; when the state changes on screen it pops once. */
+function RowState({ state, label, live, burst, celebrate }: { state: ThingState; label: string; live?: boolean; burst: number; celebrate?: boolean }) {
+  const word = <span className={live ? "rc-shimmer" : undefined}>{label}</span>;
   return (
-    <form
-      ref={form}
-      className="rc-steer"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!guidance.trim() || pending) return;
-        void onSend(guidance)
-          .then(() => {
-            setGuidance("");
-            onClose();
-          })
-          .catch(() => undefined);
-      }}
-    >
-      <Textarea
-        aria-label={label}
-        className="rc-steer-input min-w-0 flex-1"
-        rows={2}
-        placeholder={placeholder}
-        value={guidance}
-        maxLength={2000}
-        onChange={(event) => setGuidance(event.target.value)}
-      />
-      {alt && !guidance.trim() ? (
-        // One button, two jobs: with nothing typed it is the other way out (resume without an answer); as soon as
-        // there is an answer it is Send.
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          icon={<RetryIcon className="h-3.5 w-3.5" />}
-          aria-label={alt.label}
-          title={alt.label}
-          disabled={pending}
-          onClick={() => {
-            alt.onSelect();
-            onClose();
-          }}
-        >
-          {alt.short}
-        </Button>
-      ) : (
-        <Button type="submit" size="sm" disabled={!guidance.trim()} loading={pending}>
-          Send
-        </Button>
-      )}
-    </form>
+    <span key={burst} className={`rc-state${burst ? " k-pop" : ""}`}>
+      {state === "idle" ? <span className="rc-state-idle">{word}</span> : <StateWord state={state}>{word}</StateWord>}
+      {burst && celebrate ? (
+        <span className="k-spark" aria-hidden="true">
+          {Array.from({ length: 8 }, (_, i) => (
+            <i key={i} style={{ "--a": `${i * 45}deg` } as CSSProperties} />
+          ))}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Line two of a row: the state word, then what is known, separated by middle dots. */
+function SubLine({ state, parts }: { state: ReactNode; parts: (string | null | undefined | false)[] }) {
+  return (
+    <>
+      {state}
+      {parts.filter(Boolean).map((part, index) => (
+        <span key={index} data-dynamic>
+          {" "}
+          · {part}
+        </span>
+      ))}
+    </>
   );
 }
 
 export type RunCardProps = {
   run: CoordinatorRunRow;
   runs: readonly CoordinatorRunRow[];
-  /** Recent events for every listed run (from the runs list itself), so a card has a timeline before it is opened. */
+  /** Recent events for every listed run (from the runs list itself), so a row has a timeline before it is opened. */
   events: readonly RunEvent[];
   /** Open decisions: a run waiting on the owner says which one. */
   decisions?: readonly Decision[];
-  /**
-   * With guidance: send it to the run now (resolves once sent or written into Chat). Without: open Chat with a
-   * blank steering line (the keyboard shortcut, and "Ask in chat" on a run that has stopped).
-   */
-  onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
-  onCommand: (text: string) => void;
+  /** Put this run's chip in the one composer: steer it, reply to it, retry it or ask about it. Nothing is sent. */
+  onCompose: (scope: ComposeScope) => void;
+  /** Send the stop request for this run (after the owner confirmed in place). */
+  onStop: (run: CoordinatorRunRow) => void | Promise<unknown>;
   /** Jump to a decision (D-n). */
   onRef?: (ref: string) => void;
   initialRef?: string;
   stopping: string | null;
   onStopping: (ref: string | null) => void;
-  /** Open on arrival (the run that most needs the owner); every card can be opened by its header. */
+  /** Open on arrival (a run that needs the owner); every row can be opened by its body. */
   defaultOpen?: boolean;
   ancestors?: string[];
 };
-export const runCommand = (run: CoordinatorRunRow) => `${run.state === "failed" ? "Retry" : "Resume"} ${run.ref} (${run.title}).`;
+export const steerScope = (run: CoordinatorRunRow): ComposeScope => ({ kind: run.state === "waiting" ? "reply" : "steer", ref: run.ref, title: run.title });
+export const retryScope = (run: CoordinatorRunRow): ComposeScope => ({
+  kind: "retry",
+  ref: run.ref,
+  title: run.title,
+  verb: run.state === "failed" ? "Retry" : "Resume",
+});
+export const canRetryRun = (run: CoordinatorRunRow) => ["failed", "waiting", "interrupted"].includes(run.state);
+export const canStopRun = (run: CoordinatorRunRow) => run.state === "running" || run.state === "waiting";
 
 /**
- * One run, readable without opening anything: what state it is in, what it needs when it is waiting, who is on
- * it, where its pipeline stands and the last thing it reported. Opened, it shows its recent timeline, its
- * sub-runs and what you can do about it.
+ * One run as a row: its R-n and title, then its state in the shared words with what is known (what it waits for,
+ * how long, who is on it). At most two icon actions, chosen by state. Opened in place, it shows what a card
+ * would: what it needs, its pipeline, the last things it reported, its sub-runs and every other action.
  */
 export function RunCard({
   run,
   runs,
   events,
   decisions = [],
-  onSteer,
-  onCommand,
+  onCompose,
+  onStop,
   onRef,
   initialRef,
   stopping,
@@ -288,9 +258,8 @@ export function RunCard({
   };
   const [open, setOpen] = useState(defaultOpen || run.ref === initialRef || (!!initialRef && descendantSelected(run.id)));
   const [all, setAll] = useState(false);
-  const [steering, setSteering] = useState(false);
-  const [sending, setSending] = useState(false);
-  // The state changed while this card was on screen (derived during render, so it costs no extra effect).
+  const [stopBusy, setStopBusy] = useState(false);
+  // The state changed while this row was on screen (derived during render, so it costs no extra effect).
   const [shownState, setShownState] = useState(reported.key);
   const [burst, setBurst] = useState(() => (reported.key === "done" && !!run.finishedAt && Date.now() - Date.parse(run.finishedAt) < 30_000 ? 1 : 0));
   if (shownState !== reported.key) {
@@ -298,10 +267,9 @@ export function RunCard({
     setBurst((n) => n + 1);
   }
   const confirmStop = stopping === run.ref;
-  const detailId = useId();
-  const head = useRef<HTMLButtonElement>(null);
+  const root = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (initialRef === run.ref) head.current?.focus();
+    if (initialRef === run.ref) root.current?.querySelector<HTMLElement>("[data-run-body]")?.focus();
   }, [initialRef, run.ref]);
   const full = useQuery({
     queryKey: ["work", "coordinator", "runs", run.ref, "events"],
@@ -314,22 +282,23 @@ export function RunCard({
     run.lastEvent ? [run.lastEvent] : undefined,
     full.data?.events,
   );
-  // Events that say something (a bare "Started" or "Finished" under the same chip adds nothing): the newest one
-  // on a closed card, the newest two on an open one; "Show earlier" brings every event.
+  // Events that say something (a bare "Started" or "Done" under the same word adds nothing).
   const telling = known.filter((e) => eventText(e, run.title));
   const pulse = runPulse(run, known, now);
   const latest = telling[0] ?? null;
-  // One rule for "Step failed" on every card (lib/coordinator/run-card.ts cardStatus): a quiet run whose newest
-  // event reports a failed step. A failed step is not a failed run; the run's own state is unchanged.
+  // One rule for a failed step on every surface (lib/coordinator/run-card.ts cardStatus): a silent run whose
+  // newest event reports a failed step. A failed step is not a failed run; the run's own state is unchanged.
   const status = cardStatus(run, known, now);
-  const shown = open ? (all ? known : telling.slice(0, PREVIEW)) : latest ? [latest] : [];
+  const state = workStateOfRun(status.key);
+  const shown = all ? known : telling.slice(0, PREVIEW);
   const hidden = known.length - shown.length;
   const waiting = run.state === "waiting";
-  const canStop = run.state === "running" || waiting;
-  const canRetry = ["failed", "waiting", "interrupted"].includes(run.state);
-  // A working run is steered and a waiting one is answered, both in the card; one that has stopped cannot take either.
+  const canStop = canStopRun(run);
+  const canRetry = canRetryRun(run);
+  // A working run is steered and a waiting one is answered; one that has stopped can take neither.
   const canSteer = waiting || run.state === "running";
   const needs = runNeeds(run, decisions);
+  const asks = needs?.decision ?? null;
   // What the run itself last summarised: the outcome of a finished run, or all there is when it has sent no events.
   const summary = tidyOutcome(run.summary);
   const outcome =
@@ -341,70 +310,103 @@ export function RunCard({
       ? summary
       : "";
   const prUrl = run.prUrl && /^https:\/\/[^\s]+$/i.test(run.prUrl) ? run.prUrl : null;
-  // Everything this card can do, for a right-click or a long press: nothing is reachable only by opening it.
   const router = useRouter();
+  const steer = () => onCompose(steerScope(run));
+  const retry = () => onCompose(retryScope(run));
+  const ask = () => onCompose({ kind: "ask", ref: run.ref, title: run.title });
+  const retryWord = run.state === "failed" ? "Retry" : "Resume";
+  // Everything this row can do, for a right-click or a long press: nothing is reachable only by opening it.
   const actions = [
     { label: `${run.ref} · ${status.label}`, heading: true },
-    canSteer
-      ? {
-          label: waiting ? "Reply…" : "Steer…",
-          onSelect: () => {
-            setOpen(true);
-            setSteering(true);
-          },
-        }
-      : null,
-    canRetry ? { label: run.state === "failed" ? "Retry" : waiting ? "Resume without replying" : "Resume", onSelect: () => onCommand(runCommand(run)) } : null,
-    { label: "Ask in chat", onSelect: () => void onSteer(run.ref, run.title) },
-    { label: open ? "Close timeline" : "Open timeline", onSelect: () => setOpen((value) => !value) },
+    canSteer ? { label: waiting ? "Reply…" : "Steer…", onSelect: steer } : null,
+    canRetry ? { label: waiting ? "Resume without replying" : retryWord, onSelect: retry } : null,
+    { label: "Ask in chat", onSelect: ask },
+    { label: open ? "Close log" : "Open log", onSelect: () => setOpen((value) => !value) },
+    asks && onRef ? { label: `Review ${asks.ref}`, onSelect: () => onRef(asks.ref) } : null,
     run.itemId ? { label: "Open item", onSelect: () => router.push(`/areas?item=${encodeURIComponent(run.itemId)}`) } : null,
     prUrl ? { label: "Open pull request", onSelect: () => void window.open(prUrl, "_blank", "noopener,noreferrer") } : null,
     { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) },
-    canStop ? { label: "Ask to stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
+    canStop ? { label: "Stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
   ].filter((item) => item !== null);
+  // The icons that matter for this state, in the fixed order Steer, Stop, Retry; the details toggle follows them.
+  const stopAction = (
+    <RowAction
+      label={`Stop ${run.ref}`}
+      tone="danger"
+      icon={<StopIcon className={ic} />}
+      aria-expanded={confirmStop}
+      onClick={() => onStopping(confirmStop ? null : run.ref)}
+    />
+  );
+  const rowActions =
+    status.key === "working" || status.key === "stuck" ? (
+      <>
+        <RowAction label={`Steer ${run.ref}`} icon={<SteerIcon className={ic} />} onClick={steer} />
+        {stopAction}
+      </>
+    ) : status.key === "waiting" ? (
+      asks && onRef ? (
+        <RefPill id={asks.ref} onClick={() => onRef(asks.ref)} />
+      ) : (
+        <>
+          <RowAction label={`Reply to ${run.ref}`} icon={<SteerIcon className={ic} />} onClick={steer} />
+          {stopAction}
+        </>
+      )
+    ) : status.key === "done" ? null : (
+      <RowAction label={`${retryWord} ${run.ref}`} icon={<RetryIcon className={ic} />} onClick={retry} />
+    );
+  // Line three: the one thing worth knowing without opening the row.
+  const peek = needs?.text || (latest ? eventText(latest, run.title) : "") || outcome;
   return (
     <SummaryCard
+      ref={root}
       label={run.ref}
       actions={actions}
+      trigger={false}
+      className="rc-row"
       data-run-ref={run.ref}
       data-state={status.key}
       data-open={open || undefined}
       data-live={status.live || undefined}
     >
-      <Button
-        ref={head}
-        variant="ghost"
-        className="gc-run-body rc-head"
-        data-density-skip
-        data-run-body={run.ref}
-        aria-expanded={open}
-        aria-controls={detailId}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <span className="rc-top">
-          <StatusChip
-            tone={status.tone}
-            live={status.live}
-            label={status.label}
-            detail={status.detail}
-            dotLabel={status.key}
-            agent={run.profile}
-            burst={burst}
-            celebrate={status.key === "done"}
+      <ThingRow
+        state={state}
+        refId={run.ref}
+        title={run.title}
+        status={
+          <SubLine
+            state={<RowState state={state} label={status.label} live={status.live} burst={burst} celebrate={status.key === "done"} />}
+            parts={[
+              asks ? `answer ${asks.ref}` : null,
+              status.detail,
+              childRuns.length ? (childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`) : null,
+            ]}
           />
-          <span className="gc-ref rc-ref" role="img" aria-label={`Run ${run.ref.replace("-", " ")}`}>
-            {run.ref}
-          </span>
-          <ChevronIcon className={`rc-chevron h-4 w-4 ${open ? "-rotate-90" : "rotate-90"}`} />
-        </span>
-        <span className="rc-title line-clamp-2">{run.title}</span>
-        <span className="rc-meta">
+        }
+        sub={peek || undefined}
+        // The title opens the item the run is for; the chevron opens the run's own detail in place.
+        href={run.itemId ? `/areas?item=${encodeURIComponent(run.itemId)}` : undefined}
+        expanded={open}
+        onToggle={() => setOpen((value) => !value)}
+        toggleLabel={`Details for ${run.ref}`}
+        hitProps={{ "data-run-body": run.ref, className: "k-thing-title gc-run-body" }}
+        actions={rowActions}
+      >
+        {needs ? (
+          <p className="rc-ask">
+            <span className="rc-ask-text">
+              <span className="rc-ask-label">{WORK_WORD.needs}</span>
+              {needs.text}
+            </span>
+          </p>
+        ) : null}
+        <p className="rc-meta">
           <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
-          {childRuns.length ? <span>{childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`}</span> : null}
           {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 step reported" : `${run.noticeCount} steps reported`}</span> : null}
           <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
-        </span>
+        </p>
         {pulse.length > 1 ? (
           <span className="rc-pulse-row">
             <span className="rc-pulse-label">Reports</span>
@@ -422,176 +424,127 @@ export function RunCard({
             <span className="rc-pulse-label">{status.key === "done" ? "end" : "now"}</span>
           </span>
         ) : null}
-      </Button>
-      {needs ? (
-        <p className="rc-ask">
-          <span className="rc-ask-text">
-            <span className="rc-ask-label">Needs you</span>
-            {needs.text}
-          </span>
-          {needs.decision ? (
+        <Pipeline run={run} />
+        {run.lock ? <p className="rc-lock">{run.lock.mode === "waits" ? `Waiting for ${run.lock.name}` : `Holds ${run.lock.name} lock`}</p> : null}
+        {outcome ? <p className="rc-summary line-clamp-3">{outcome}</p> : null}
+        {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} live={status.live} /> : null}
+        {hidden > 0 || all ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rc-earlier"
+            icon={<ChevronIcon className={`h-3 w-3 ${all ? "-rotate-90" : "rotate-90"}`} />}
+            aria-expanded={all}
+            onClick={() => setAll((value) => !value)}
+          >
+            {all ? "Show fewer" : `Show ${hidden} earlier`}
+          </Button>
+        ) : null}
+        {full.isLoading && !known.length ? <p className="rc-note">Loading events…</p> : null}
+        {full.error && !known.length ? (
+          <p role="alert" className="rc-note">
+            Couldn&apos;t load events.{" "}
+            <Button size="sm" variant="ghost" onClick={() => void full.refetch()}>
+              Try again
+            </Button>
+          </p>
+        ) : null}
+        {full.isSuccess && !known.length && !outcome ? <p className="rc-note">No events yet.</p> : null}
+        {childRuns.length ? (
+          <section aria-label={`Sub-runs of ${run.ref}`} className="rc-children">
+            <SectionHeader label="Sub-runs" count={childRuns.length} />
+            {childRuns.map((child) => (
+              <RunCard
+                key={child.id}
+                run={child}
+                runs={runs}
+                events={events}
+                decisions={decisions}
+                onCompose={onCompose}
+                onStop={onStop}
+                onRef={onRef}
+                initialRef={initialRef}
+                stopping={stopping}
+                onStopping={onStopping}
+                ancestors={[...ancestors, run.id]}
+              />
+            ))}
+          </section>
+        ) : null}
+        <div className="rc-actions">
+          {asks && canSteer ? (
             <Button
-              variant="ghost"
               size="sm"
-              className="rc-jump k-t-ac"
-              icon={<InboxIcon className="h-3.5 w-3.5" />}
-              disabled={!onRef}
-              aria-label={`Review decision ${needs.decision.ref.replace("-", " ")}`}
-              onClick={() => onRef?.(needs.decision!.ref)}
+              variant="ghost"
+              className="rc-act"
+              icon={<SteerIcon className={small} />}
+              aria-label={`Reply to ${run.ref} in your own words`}
+              onClick={steer}
             >
-              Review {needs.decision.ref}
+              Reply
             </Button>
           ) : null}
-        </p>
-      ) : null}
-      <Pipeline run={run} />
-      {run.lock ? <p className="rc-lock">{run.lock.mode === "waits" ? `Waiting for ${run.lock.name}` : `Holds ${run.lock.name} lock`}</p> : null}
-      {outcome ? <p className="rc-summary line-clamp-3">{outcome}</p> : null}
-      {shown.length ? <RunTimeline events={shown} runTitle={run.title} label={`Events for ${run.ref}`} live={status.live} /> : null}
-      {open ? (
-        <div className="rc-more" id={detailId}>
-          {hidden > 0 || all ? (
+          {canRetry && waiting ? (
             <Button
               size="sm"
               variant="ghost"
-              className="rc-earlier"
-              icon={<ChevronIcon className={`h-3 w-3 ${all ? "-rotate-90" : "rotate-90"}`} />}
-              aria-expanded={all}
-              onClick={() => setAll((value) => !value)}
+              className="rc-act"
+              icon={<RetryIcon className={small} />}
+              aria-label={`Resume ${run.ref} without replying`}
+              onClick={retry}
             >
-              {all ? "Show fewer" : `Show ${hidden} earlier`}
+              Resume
             </Button>
           ) : null}
-          {full.isLoading && !known.length ? <p className="rc-note">Loading events…</p> : null}
-          {full.error && !known.length ? (
-            <p role="alert" className="rc-note">
-              Couldn&apos;t load events.{" "}
-              <Button size="sm" variant="ghost" onClick={() => void full.refetch()}>
-                Try again
-              </Button>
-            </p>
+          <Button size="sm" variant="ghost" className="rc-act" icon={<ChatIcon className={small} />} aria-label={`Ask in chat about ${run.ref}`} onClick={ask}>
+            Ask in chat
+          </Button>
+          {prUrl ? (
+            <ButtonLink size="sm" variant="ghost" className="rc-act" href={prUrl} external icon={<ExternalIcon className={small} />}>
+              Pull request
+            </ButtonLink>
           ) : null}
-          {full.isSuccess && !known.length && !outcome ? <p className="rc-note">No events yet.</p> : null}
-          {childRuns.length ? (
-            <section aria-label={`Sub-runs of ${run.ref}`} className="rc-children">
-              <SectionHeader label="Sub-runs" count={childRuns.length} />
-              {childRuns.map((child) => (
-                <RunCard
-                  key={child.id}
-                  run={child}
-                  runs={runs}
-                  events={events}
-                  decisions={decisions}
-                  onSteer={onSteer}
-                  onCommand={onCommand}
-                  onRef={onRef}
-                  initialRef={initialRef}
-                  stopping={stopping}
-                  onStopping={onStopping}
-                  ancestors={[...ancestors, run.id]}
-                />
-              ))}
-            </section>
+          {run.itemId ? (
+            <ButtonLink
+              size="sm"
+              variant="ghost"
+              className="rc-act"
+              href={`/areas?item=${encodeURIComponent(run.itemId)}`}
+              icon={<AreasIcon className={small} />}
+            >
+              Open item
+            </ButtonLink>
           ) : null}
-          <div className="rc-actions">
-            {canSteer ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<SteerIcon className="h-3.5 w-3.5" />}
-                aria-label={`${waiting ? "Reply to" : "Steer"} ${run.ref}`}
-                aria-expanded={steering}
-                onClick={() => setSteering((value) => !value)}
-              >
-                {waiting ? "Reply" : "Steer"}
-              </Button>
-            ) : null}
-            {canRetry && !waiting ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<RetryIcon className="h-3.5 w-3.5" />}
-                aria-label={`${run.state === "failed" ? "Retry" : "Resume"} ${run.ref}`}
-                onClick={() => onCommand(runCommand(run))}
-              >
-                {run.state === "failed" ? "Retry" : "Resume"}
-              </Button>
-            ) : null}
-            {!canSteer ? (
-              // A run that has stopped cannot be steered: this opens Chat with a line about it.
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                icon={<ChatIcon className="h-3.5 w-3.5" />}
-                aria-label={`Ask in chat about ${run.ref}`}
-                onClick={() => void onSteer(run.ref, run.title)}
-              >
-                Ask in chat
-              </Button>
-            ) : null}
-            {prUrl ? (
-              <ButtonLink size="sm" variant="ghost" className="rc-act" href={prUrl} external icon={<ExternalIcon className="h-3.5 w-3.5" />}>
-                Pull request
-              </ButtonLink>
-            ) : null}
-            {run.itemId ? (
-              <ButtonLink
-                size="sm"
-                variant="ghost"
-                className="rc-act"
-                href={`/areas?item=${encodeURIComponent(run.itemId)}`}
-                icon={<AreasIcon className="h-3.5 w-3.5" />}
-              >
-                Open item
-              </ButtonLink>
-            ) : null}
-            {canStop ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="rc-act rc-act-stop"
-                icon={<StopIcon className="h-3.5 w-3.5" />}
-                aria-label={`Ask to stop ${run.ref}`}
-                onClick={() => onStopping(run.ref)}
-              >
-                Ask to stop
-              </Button>
-            ) : null}
-          </div>
-          {steering && canSteer ? (
-            <SteerField
-              label={`${waiting ? "Reply to" : "Guidance for"} ${run.ref}`}
-              placeholder={waiting ? "Your answer" : undefined}
-              pending={sending}
-              onClose={() => setSteering(false)}
-              onSend={async (guidance) => {
-                setSending(true);
-                try {
-                  await onSteer(run.ref, run.title, guidance);
-                } finally {
-                  setSending(false);
-                }
-              }}
-              alt={waiting && canRetry ? { label: "Resume without replying", short: "Resume", onSelect: () => onCommand(runCommand(run)) } : undefined}
-            />
+          {canStop && asks ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rc-act rc-act-stop"
+              icon={<StopIcon className={small} />}
+              aria-label={`Stop ${run.ref}`}
+              onClick={() => onStopping(run.ref)}
+            >
+              Stop
+            </Button>
           ) : null}
         </div>
-      ) : null}
+      </ThingRow>
       {confirmStop ? (
         <div role="group" aria-label={`Stop ${run.ref} and its sub-agents?`} className="rc-confirm">
-          <p>Ask the Chief of staff to stop {run.ref} and its sub-agents? This writes the request in Chat for you to send; nothing stops until you send it.</p>
+          <p>Stop {run.ref} and its sub-agents? The request goes to the Chief of staff as soon as you confirm.</p>
           <Button
             size="sm"
             variant="danger"
+            loading={stopBusy}
             onClick={() => {
-              onCommand(`Stop ${run.ref} (${run.title}) and its sub-agents.`);
-              onStopping(null);
+              setStopBusy(true);
+              void Promise.resolve(onStop(run))
+                .then(() => onStopping(null))
+                .catch(() => undefined)
+                .finally(() => setStopBusy(false));
             }}
           >
-            Write stop request
+            Stop {run.ref}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => onStopping(null)}>
             Cancel
@@ -602,42 +555,34 @@ export function RunCard({
   );
 }
 
-const EXEC_STATUS: Record<ExecutionRecord["state"], { label: string; tone: CardTone }> = {
-  running: { label: "Working", tone: "ai" },
-  waiting: { label: "Waiting on you", tone: "wn" },
-  completed: { label: "Finished", tone: "ok" },
-  failed: { label: "Failed", tone: "bad" },
-  cancelled: { label: "Stopped", tone: "neutral" },
-  unknown: { label: "No report yet", tone: "neutral" },
-};
 /** Longest outcome text shown before "More". */
 const OUTCOME_CHARS = 180;
 
 /**
- * Background work started from a conversation, as a card that answers "did it finish, fail or need me?" in place:
- * state chip, the current step or the outcome or error, progress when the source reports it, links, and what you
- * can do: Steer (or Reply, when it waits on you) and Ask to stop for a sub-agent that can take them, Reply for
- * work that failed. When the work is also a tracked run (R-n), that run's state and latest events are what the
- * card shows, and stopping it works as it does under Activity: the request is written for you to send.
+ * Work a conversation started, as the same row: did it finish, fail or need the owner? Its state in the shared
+ * words, the step it is on or how it ended, and at most two icon actions: Steer (or Reply) and Stop for a
+ * sub-agent that can take them, Reply for work that failed or waits. When the work is also a tracked run (R-n),
+ * that run's state and latest events are what the row shows. Steer and Reply put a chip in the one composer;
+ * Stop asks once in place and then sends the request.
  */
 export function ExecCard({
   work,
   events = [],
   pending,
   onControl,
-  onDraft,
+  onCompose,
   children,
 }: {
   work: BackgroundWork;
   events?: readonly RunEvent[];
   pending: boolean;
+  /** Sends a one-line command to the conversation now (the confirmed stop request). */
   onControl: (input: string) => Promise<unknown>;
-  /** Writes a line into the conversation's composer (never sends): the stop request for a tracked run. */
-  onDraft?: (text: string) => void;
+  /** Puts this work's chip in the composer (steer, reply, ask). Nothing is sent. */
+  onCompose: (scope: ComposeScope) => void;
   children?: ReactNode;
 }) {
   const { record, run } = work;
-  const [steering, setSteering] = useState(false);
   const [stopAsked, setStopAsked] = useState<string | null>(null);
   const [whole, setWhole] = useState(false);
   const [shownState, setShownState] = useState(record.state);
@@ -654,25 +599,26 @@ export function ExecCard({
   const tracked = run ? runStatus(run, now) : null;
   const active = tracked ? tracked.key === "working" || tracked.key === "stuck" || tracked.key === "waiting" : isActiveExec(record);
   const reachable = target.source === "subagent" && canControl(handle);
-  // Both must be going: the run the card shows, and the sub-agent the controls would reach (as on main).
+  // Both must be going: the run the row shows, and the sub-agent the controls would reach.
   const controllable = reachable && active && isActiveExec(target);
-  // A sub-agent can outlive the tracked run it belongs to. The card shows the run's state and offers no Steer or
-  // Stop for a run that has ended, but the sub-agent that is still going is one long-press away.
+  // A sub-agent can outlive the tracked run it belongs to. The row shows the run's state, and the sub-agent that
+  // is still going can still be steered or stopped.
   const lingering = reachable && !active && isActiveExec(target);
   const at = record.updatedAt ?? record.endedAt ?? record.startedAt;
-  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes has gone quiet.
+  // Same rule as Activity (lib/agent-runs.ts): "running" with no report for 30 minutes has stalled.
   // Only a real heartbeat can go stale: a record that carries just its start time is not evidence of a stall.
   const stalled = !tracked && record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
   const title = plainMessageLine(record.title).replace(/^Subagent:\s*/i, "");
-  const status = tracked ?? (stalled ? { label: "Quiet", tone: "wn" as const } : EXEC_STATUS[record.state]);
-  const detail = tracked ? tracked.detail : stalled ? `no update for ${ageLabel(record.updatedAt!, now)}` : at ? relativeTime(at, now) : "";
-  const dotLabel = tracked ? tracked.key : stalled ? "stalled" : record.state;
+  // Nothing is known yet: that is not "Working". The row says so in its own words and shows no state colour.
+  const unknown = !tracked && record.state === "unknown";
+  const state: ThingState = tracked ? workStateOfRun(tracked.key) : unknown ? "idle" : workStateOfExec(record.state, stalled);
+  const label = unknown ? "No report yet" : WORK_WORD[state as Exclude<ThingState, "idle">];
+  const detail = tracked ? tracked.detail : stalled ? `no report for ${ageLabel(record.updatedAt!, now)}` : at ? relativeTime(at, now) : "";
   const waiting = tracked ? tracked.key === "waiting" : record.state === "waiting";
   // What happened, in the source's own words: the error, else the step it is on, else how it ended.
   const said = tidyOutcome(record.error || (active ? record.step : null) || record.summary || record.step);
-  const outcome =
-    said ||
-    (record.state === "unknown" && !tracked ? `${record.startedAt ? `Started ${relativeTime(record.startedAt, now)}` : "Started"} · hasn't reported yet.` : "");
+  const outcome = said || (unknown ? `${record.startedAt ? `Started ${relativeTime(record.startedAt, now)}` : "Started"} · hasn't reported yet.` : "");
+  const tells = !!outcome && outcome.toLowerCase() !== title.toLowerCase();
   const long = outcome.length > OUTCOME_CHARS;
   const timeline = run
     ? timelineOf(
@@ -684,189 +630,137 @@ export function ExecCard({
     : [];
   const links = (record.links ?? []).filter((link) => /^https:\/\//i.test(link.url)).slice(0, 3);
   const isLive = tracked ? tracked.live : record.state === "running" && !stalled;
-  // Work that failed cannot be steered, but it can be answered: the same field, sent as a line about it.
+  // Work that failed cannot be steered, but it can be answered.
   const canReply = !controllable && (record.state === "failed" || waiting);
-  const [replying, setReplying] = useState(false);
-  // A tracked run stops the way it does under Activity: the request is written for the owner to send. Once that
-  // run has ended there is nothing of it to stop: the request goes to the sub-agent itself.
-  const drafts = !!run && !!onDraft && active;
   const steerable = controllable || lingering;
-  // Stopping a tracked run only writes the request, so it does not need a live sub-agent to send it through.
-  const stoppable = steerable || (drafts && reachable);
+  // While the tracked run is going, stopping asks the coordinator to stop the run and its sub-agents; once it has
+  // ended there is nothing of it to stop, and the request goes to the sub-agent itself.
+  const viaRun = !!run && active;
+  const stoppable = steerable || (viaRun && reachable);
   // What confirming would do is fixed when the confirmation opens. If that changes under it (the run ends, or is
-  // no longer this card's), it closes: "write the request" must never turn into "send it now" between two taps.
-  // The same goes for what it would stop: the confirmation is for one action on one target (this run's drafted
-  // request, or a stop sent to this handle), and once that is not what the card offers it is closed for good.
-  const stopOffer = !stoppable ? null : drafts ? `draft:${run!.id}` : `send:${handle}`;
+  // no longer this row's), it closes: a confirmation is for one action on one target.
+  const stopOffer = !stoppable ? null : viaRun ? `run:${run!.id}` : `send:${handle}`;
   if (stopAsked !== null && stopAsked !== stopOffer) setStopAsked(null);
   const confirmStop = stopAsked !== null && stopAsked === stopOffer;
   const setConfirmStop = (open: boolean) => setStopAsked(open ? stopOffer : null);
+  const hasMore = (tells && long) || timeline.length > 0 || links.length > 0 || !!children || (active && typeof record.progress === "number") || !!record.error;
+  // Open on arrival when it needs the owner; anything else opens by its body.
+  const [open, setOpen] = useState(state === "needs" || state === "failed");
+  const name = run?.ref ?? title;
+  const steer = () => onCompose({ kind: waiting ? "reply" : "steer", ref: run?.ref, title, handle });
+  const reply = () => onCompose({ kind: waiting ? "reply" : "ask", ref: run?.ref, title });
   const router = useRouter();
   const actions = [
-    { label: run ? `${run.ref} · ${status.label}` : status.label, heading: true },
-    steerable ? { label: lingering ? "Steer sub-agent…" : waiting ? "Reply…" : "Steer…", disabled: pending, onSelect: () => setSteering(true) } : null,
-    canReply ? { label: "Reply…", disabled: pending, onSelect: () => setReplying(true) } : null,
+    { label: run ? `${run.ref} · ${label}` : label, heading: true },
+    steerable ? { label: lingering ? "Steer sub-agent…" : waiting ? "Reply…" : "Steer…", disabled: pending, onSelect: steer } : null,
+    canReply ? { label: "Reply…", disabled: pending, onSelect: reply } : null,
     record.href ? { label: "Open conversation", onSelect: () => router.push(record.href!) } : null,
     ...links.map((link) => ({
       label: `Open ${link.label?.trim() || (link.kind === "github" ? "GitHub" : "link")}`,
       onSelect: () => void window.open(link.url, "_blank", "noopener,noreferrer"),
     })),
     run ? { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) } : null,
-    stoppable ? { label: lingering ? "Ask sub-agent to stop…" : "Ask to stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
+    stoppable ? { label: lingering ? "Stop sub-agent…" : "Stop…", danger: true, disabled: pending, onSelect: () => setConfirmStop(true) } : null,
   ].filter((item) => item !== null);
+  const rowActions = (
+    <>
+      {steerable ? (
+        <RowAction
+          label={`${lingering ? "Steer sub-agent of" : waiting ? "Reply to" : "Steer"} ${name}`}
+          icon={<SteerIcon className={ic} />}
+          disabled={pending}
+          onClick={steer}
+        />
+      ) : null}
+      {canReply ? <RowAction label={`Reply to ${name}`} icon={<SteerIcon className={ic} />} disabled={pending} onClick={reply} /> : null}
+      {stoppable ? (
+        <RowAction
+          label={`${lingering ? "Stop sub-agent of" : "Stop"} ${name}`}
+          tone="danger"
+          icon={<StopIcon className={ic} />}
+          disabled={pending}
+          aria-expanded={confirmStop}
+          onClick={() => setConfirmStop(!confirmStop)}
+        />
+      ) : null}
+    </>
+  );
   return (
     <SummaryCard
       label={title}
       actions={actions}
-      // Nothing to offer, or only the one button already on the card: the browser's own menu stays.
+      // Nothing to offer, or only the one action already on the row: the browser's own menu stays.
       menuEnabled={actions.length > 2}
-      className="rc-exec"
+      trigger={false}
+      className="rc-row rc-exec"
       data-state={tracked ? tracked.key : stalled ? "stuck" : record.state}
       data-live={isLive || undefined}
+      data-open={(open && hasMore) || undefined}
       data-testid="coordinator-run-card"
+      data-run-ref={run?.ref}
       aria-label={record.title}
     >
-      <div className="rc-top">
-        <StatusChip
-          tone={status.tone}
-          live={isLive}
-          label={status.label}
-          detail={detail}
-          dotLabel={dotLabel}
-          burst={burst}
-          celebrate={record.state === "completed"}
-        />
-        {run ? <span className="gc-ref rc-ref">{run.ref}</span> : null}
-      </div>
-      <p className="rc-title line-clamp-2" title={record.title}>
-        {title}
-      </p>
-      {outcome && outcome.toLowerCase() !== title.toLowerCase() ? (
-        <p className="rc-outcome" data-tone={record.error ? "bad" : undefined}>
-          {record.error ? <span className="rc-outcome-label">Error</span> : null}
-          <span>{whole || !long ? outcome : `${outcome.slice(0, OUTCOME_CHARS).trimEnd()}…`}</span>
-          {long ? (
-            <Button size="sm" variant="ghost" className="rc-earlier" aria-expanded={whole} onClick={() => setWhole((value) => !value)}>
-              {whole ? "Less" : "More"}
-            </Button>
-          ) : null}
-        </p>
-      ) : null}
-      {active && typeof record.progress === "number" ? (
-        <div className="rc-progress" data-live={isLive || undefined}>
-          <ProgressBar value={record.progress * 100} tone="ai" label={`${Math.round(record.progress * 100)}% done`} />
-        </div>
-      ) : null}
-      {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
-      {children}
-      {lingering ? <p className="rc-note">A sub-agent of this run is still working.</p> : null}
-      {record.href || links.length || stoppable || canReply ? (
-        <div className="rc-actions">
-          {canReply ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rc-act"
-              icon={<SteerIcon className="h-3.5 w-3.5" />}
-              disabled={pending}
-              aria-expanded={replying}
-              onClick={() => setReplying((value) => !value)}
-            >
-              Reply
-            </Button>
-          ) : null}
-          {steerable ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rc-act"
-              icon={<SteerIcon className="h-3.5 w-3.5" />}
-              disabled={pending}
-              aria-expanded={steering}
-              onClick={() => setSteering((value) => !value)}
-            >
-              {lingering ? "Steer sub-agent" : waiting ? "Reply" : "Steer"}
-            </Button>
-          ) : null}
-          {record.href ? (
-            <ButtonLink size="sm" variant="ghost" className="rc-act" href={record.href} icon={<ChatIcon className="h-3.5 w-3.5" />}>
-              Open
-            </ButtonLink>
-          ) : null}
-          {links.map((link) => (
-            <ButtonLink key={link.url} size="sm" variant="ghost" className="rc-act" href={link.url} external icon={<ExternalIcon className="h-3.5 w-3.5" />}>
-              {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}
-            </ButtonLink>
-          ))}
-          {stoppable ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="rc-act rc-act-stop"
-              icon={<StopIcon className="h-3.5 w-3.5" />}
-              disabled={pending}
-              aria-expanded={confirmStop}
-              onClick={() => setConfirmStop(!confirmStop)}
-            >
-              Ask to stop
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {steerable && steering ? (
-        <SteerField
-          label={`${waiting ? "Reply to" : "Guidance for"} ${record.title}`}
-          placeholder={waiting ? "Your answer" : undefined}
-          pending={pending}
-          onClose={() => setSteering(false)}
-          onSend={(guidance) => onControl(steerText(handle, guidance))}
-        />
-      ) : null}
-      {canReply && replying ? (
-        <SteerField
-          label={`Reply about ${record.title}`}
-          placeholder="Your answer"
-          pending={pending}
-          onClose={() => setReplying(false)}
-          onSend={(reply) => onControl(`About "${title}": ${reply.trim().replace(/\s+/g, " ").slice(0, 2000)}`)}
-        />
-      ) : null}
+      <ThingRow
+        state={state}
+        refId={run?.ref}
+        title={<span title={record.title}>{title}</span>}
+        status={
+          <SubLine
+            state={<RowState state={state} label={label} live={isLive} burst={burst} celebrate={record.state === "completed"} />}
+            parts={[detail, lingering ? "a sub-agent is still working" : null]}
+          />
+        }
+        sub={tells ? outcome : undefined}
+        // The title opens the work itself (its conversation or item); the chevron opens its detail in place.
+        href={record.href ?? undefined}
+        expanded={hasMore ? open : undefined}
+        onToggle={hasMore ? () => setOpen((value) => !value) : undefined}
+        toggleLabel={`Details for ${name}`}
+        actions={rowActions}
+      >
+        {tells ? (
+          <p className="rc-outcome" data-tone={record.error ? "bad" : undefined}>
+            {record.error ? <span className="rc-outcome-label">Error</span> : null}
+            <span>{whole || !long ? outcome : `${outcome.slice(0, OUTCOME_CHARS).trimEnd()}…`}</span>
+            {long ? (
+              <Button size="sm" variant="ghost" className="rc-earlier" aria-expanded={whole} onClick={() => setWhole((value) => !value)}>
+                {whole ? "Less" : "More"}
+              </Button>
+            ) : null}
+          </p>
+        ) : null}
+        {active && typeof record.progress === "number" ? (
+          <div className="rc-progress" data-live={isLive || undefined}>
+            <ProgressBar value={record.progress * 100} tone="ai" label={`${Math.round(record.progress * 100)}% done`} />
+          </div>
+        ) : null}
+        {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
+        {children}
+        {links.length ? (
+          <div className="rc-actions">
+            {links.map((link) => (
+              <ButtonLink key={link.url} size="sm" variant="ghost" className="rc-act" href={link.url} external icon={<ExternalIcon className={small} />}>
+                {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}
+              </ButtonLink>
+            ))}
+          </div>
+        ) : null}
+      </ThingRow>
       {confirmStop ? (
         <div role="group" aria-label={`Stop ${title}?`} className="rc-confirm">
-          {drafts ? (
-            <>
-              <p>
-                Ask the coordinator to stop {run!.ref} and its sub-agents? This writes the request in the composer for you to send; nothing stops until you send
-                it.
-              </p>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={() => {
-                  onDraft?.(`Stop ${run!.ref} (${title}) and its sub-agents.`);
-                  setConfirmStop(false);
-                }}
-              >
-                Write stop request
-              </Button>
-            </>
-          ) : (
-            <>
-              <p>Send a request to stop this sub-agent? It goes to the coordinator as soon as you confirm.</p>
-              <Button
-                size="sm"
-                variant="danger"
-                loading={pending}
-                onClick={() =>
-                  void onControl(stopText(handle))
-                    .then(() => setConfirmStop(false))
-                    .catch(() => undefined)
-                }
-              >
-                Send stop request
-              </Button>
-            </>
-          )}
+          <p>{viaRun ? `Stop ${run!.ref} and its sub-agents?` : "Stop this sub-agent?"} The request goes to the coordinator as soon as you confirm.</p>
+          <Button
+            size="sm"
+            variant="danger"
+            loading={pending}
+            onClick={() =>
+              void onControl(viaRun ? `Stop ${run!.ref} (${title}) and its sub-agents.` : stopText(handle))
+                .then(() => setConfirmStop(false))
+                .catch(() => undefined)
+            }
+          >
+            {viaRun ? `Stop ${run!.ref}` : "Stop sub-agent"}
+          </Button>
           <Button size="sm" variant="ghost" onClick={() => setConfirmStop(false)}>
             Cancel
           </Button>

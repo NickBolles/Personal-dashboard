@@ -135,9 +135,12 @@ function dragHandle(by: number) {
   const steps = Math.ceil(Math.abs(by) / 60);
   for (let i = 1; i <= steps; i++) fireEvent.pointerMove(handle, at(500 + (by * i) / steps));
   fireEvent.pointerUp(handle, at(500 + by));
-  clock.mockRestore();
-  // the browser's click after a drag must not toggle the height
+  // the browser's click after a drag must not toggle the height. It is timed on the mocked clock too (at a moment
+  // no later than the release), so the test never depends on how long the real suite has been running: with the
+  // real clock back, a worker older than the mocked release time saw the click as a separate, later tap.
+  clock.mockImplementation(() => 1000);
   fireEvent.click(handle, { detail: 1 });
+  clock.mockRestore();
 }
 const sheetState = () => document.querySelector(".chat-panel-sheet")?.getAttribute("data-full");
 

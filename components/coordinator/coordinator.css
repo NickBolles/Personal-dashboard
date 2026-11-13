@@ -1473,3 +1473,80 @@ html[data-kb="open"] .gc-tray-qa {
 /* ==== end needs ==== */
 
 /* Long-press / right-click on the phone tray: straight to a tab. It sits just above the tray. */
+
+/* ==== one composer ====
+   What the next message is about: a chip (R-n teal, D-n amber) and the thing's title, above the input. Steer,
+   Reply, Retry and "ask about this" on any row put it there; removing it makes the message an ordinary one. */
+.gc-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.gc-scope-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Work started by a reply sits right under it, as rows. */
+.co-msg > .gc-bgwork {
+  margin-top: 6px;
+}
+/* ==== phone sheet: grab bar ====
+   Drag the bar (or the header) down to close; the sheet follows the finger and settles when it lifts. */
+.gc-sheet {
+  transition: transform var(--d2) var(--ease);
+}
+.gc-sheet[data-dragging] {
+  transition: none;
+}
+.gc-sheet-grab {
+  flex: none;
+}
+.gc-sheet .gc-sheet-grab + .gc-head {
+  min-height: 44px;
+}
+
+/* ==== references in text, rich rows under the reply ====
+   A D-n / R-n in a reply (or in your own message) is a chip in the sentence: tap it to jump to the thing. What
+   the reply mentions is drawn under it as rows, three at most; there is no separate "Mentions" list. */
+.k-ref.gc-inline-ref {
+  display: inline;
+  padding: 1px 5px;
+  vertical-align: 1px;
+}
+.gc-mention-rows > .k-thing:first-child,
+.gc-mention-rows > .rc-row:first-child > .k-thing {
+  border-top: 0;
+}
+.gc-mention-rows .k-thing-row {
+  padding-inline: 2px 0;
+}
+.gc-mention-more.gc-mention-more {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  border-top: 1px solid var(--bd);
+  border-radius: 0;
+  padding-inline: 2px;
+  color: var(--t2);
+}
+/* Line one of a stacked row gives way from its end: the reference and the state word always fit. */
+.k-thing-eyebrow > * {
+  flex: none;
+}
+.k-thing-eyebrow > :last-child:not(:first-child) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-mention-rows > .k-thing + .rc-row > .k-thing {
+  border-top: 1px solid var(--bd);
+}

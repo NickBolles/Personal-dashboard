@@ -309,6 +309,15 @@ export const SteerIcon = ({ className }: P) =>
     </>,
     className,
   );
+/** A run's report and timeline. */
+export const LogIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="m4 17 6-5-6-5" />
+      <path d="M12 19h8" />
+    </>,
+    className,
+  );
 export const ExternalIcon = ({ className }: P) =>
   base(
     <>

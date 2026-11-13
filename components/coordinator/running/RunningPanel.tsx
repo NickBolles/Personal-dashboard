@@ -3,16 +3,19 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button, EmptyState, SectionHeader, useNow } from "@/components/ui";
 import type { Decision } from "@/lib/cw-decisions";
-import { groupRuns } from "@/lib/coordinator/runs-view";
+import type { ComposeScope } from "@/lib/coordinator/compose";
+import { groupRuns, type CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { isOldFailure } from "@/lib/coordinator/status";
 import { byNeed } from "@/lib/coordinator/run-card";
-import { LiveLine, RunCard, runCommand } from "./RunCard";
+import { WORK_GROUP_LABEL, type WorkGroup } from "@/lib/work-words";
+import { LiveLine, RunCard, canRetryRun, canStopRun, retryScope, steerScope } from "./RunCard";
 import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./useCoordinatorRuns";
 
 type Props = {
-  /** With guidance: send it (resolves when sent, or written into Chat when it cannot be sent). Without: open Chat on a blank steering line. */
-  onSteer: (ref: string, title: string, guidance?: string) => void | Promise<unknown>;
-  onCommand: (text: string) => void;
+  /** Put a run's chip in the one composer (steer, reply, retry, ask). Nothing is sent. */
+  onCompose: (scope: ComposeScope) => void;
+  /** Send the stop request for a run the owner confirmed. */
+  onStop: (run: CoordinatorRunRow) => void | Promise<unknown>;
   /** Open decisions, so a run waiting on the owner says which one. */
   decisions?: readonly Decision[];
   /** Jump to a decision (D-n). */
@@ -22,20 +25,14 @@ type Props = {
   quietEmpty?: boolean;
 };
 /**
- * Only the run that most needs the owner arrives open (timeline and actions showing). Every other card is closed
- * and still says its state, what it needs and its latest event, so a phone screen holds an overview, not one card.
+ * Only the run that most needs the owner arrives open (what it needs, its latest reports and every action
+ * showing). Every other row is two lines and still says its state, so a phone screen holds an overview.
  */
 const OPEN_ON_ARRIVAL = 1;
-// What waits on the owner first, then what needs a look.
-const SECTIONS = [
-  ["waiting", "Waiting on you"],
-  ["attention", "Needs a look"],
-  ["interrupted", "Interrupted"],
-  ["running", "Working"],
-  ["done", "Finished since you looked"],
-] as const;
+/** Finished runs shown before "Show all": the list is about what is moving. */
+const DONE_SHOWN = 3;
 
-export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef, quietEmpty }: Props) {
+export function RunningPanel({ onCompose, onStop, decisions, onRef, initialRef, quietEmpty }: Props) {
   const query = useCoordinatorRuns(true);
   const { mutate: markLooked } = useMarkLooked();
   const marked = useRef(false);
@@ -68,18 +65,25 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
   const grouped = groupRuns(runs ?? [], visit ? visit.since : query.data?.lastLooked.running);
   // Failures older than a few days are history: reachable, but folded away from what is stuck now.
   const older = grouped.attention.filter((r) => isOldFailure(r, now) && r.ref !== initialRef);
-  const groups = {
-    ...grouped,
-    attention: byNeed(
-      grouped.attention.filter((r) => !older.includes(r)),
-      query.data?.events ?? [],
-    ),
+  const attention = byNeed(
+    grouped.attention.filter((r) => !older.includes(r)),
+    query.data?.events ?? [],
+  );
+  // Every list runs Needs you, Working, Done. Under Needs you: what waits for an answer, then what failed or went
+  // silent, then what was interrupted.
+  const groups: Record<WorkGroup, CoordinatorRunRow[]> = {
+    needs: [...grouped.waiting, ...attention, ...grouped.interrupted],
+    working: grouped.running,
+    done: grouped.done,
   };
+  const interrupted = grouped.interrupted;
   const [showOlder, setShowOlder] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   const [stopping, setStopping] = useState<string | null>(null);
-  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], decisions, onSteer, onCommand, onRef, initialRef, stopping, onStopping: setStopping };
-  const openFirst = new Set([...groups.waiting, ...groups.attention, ...groups.interrupted].slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
-  const ordered = [...groups.waiting, ...groups.attention, ...groups.interrupted, ...groups.running, ...groups.done, ...older];
+  const rowProps = { runs: runs ?? [], events: query.data?.events ?? [], decisions, onCompose, onStop, onRef, initialRef, stopping, onStopping: setStopping };
+  const openFirst = new Set(groups.needs.slice(0, OPEN_ON_ARRIVAL).map((r) => r.id));
+  const ordered = [...groups.needs, ...groups.working, ...groups.done, ...older];
+  const doneShown = showDone || groups.done.some((r) => r.ref === initialRef) ? groups.done : groups.done.slice(0, DONE_SHOWN);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (event.altKey || event.ctrlKey || event.metaKey || target.closest("input, textarea, select, [contenteditable='true']")) return;
@@ -96,25 +100,28 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
     if (!run) return;
     if (event.key === "s") {
       event.preventDefault();
-      void onSteer(run.ref, run.title);
+      onCompose(run.state === "running" || run.state === "waiting" ? steerScope(run) : { kind: "ask", ref: run.ref, title: run.title });
     } else if (event.key === "x") {
       event.preventDefault();
-      if (run.state === "running" || run.state === "waiting") setStopping(run.ref);
-    } else if (event.key === "r" && ["failed", "waiting", "interrupted"].includes(run.state)) {
+      if (canStopRun(run)) setStopping(run.ref);
+    } else if (event.key === "r" && canRetryRun(run)) {
       event.preventDefault();
-      onCommand(runCommand(run));
-    } else if (event.key === "Enter" && target === body) {
+      onCompose(retryScope(run));
+    } else if (event.key === "o") {
+      // The title is a link to the item; the row's own detail opens from its chevron, or "o".
       event.preventDefault();
-      body.click();
+      body.closest("article")?.querySelector<HTMLElement>("[data-thing-toggle]")?.click();
     }
   };
+  const label = (key: WorkGroup) => (key === "done" ? "Done since you looked" : WORK_GROUP_LABEL[key]);
   return (
     <div className="gc-running" ref={root} tabIndex={0} aria-label="Runs" data-stale={query.error && query.data ? "" : undefined} onKeyDown={onKeyDown}>
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </span>
       {query.isLoading ? <p className="text-muted">Loading runs…</p> : null}
-      {query.data ? <LiveLine updatedAt={query.dataUpdatedAt} failed={!!query.error} fetching={query.isFetching} onRetry={() => void query.refetch()} /> : null}
+      {/* How fresh the list is matters only when it is not: a healthy sync says nothing. */}
+      {query.data && query.error ? <LiveLine updatedAt={query.dataUpdatedAt} failed fetching={query.isFetching} onRetry={() => void query.refetch()} /> : null}
       {resumeNote ? (
         <p className="text-sm text-muted" data-dynamic>
           {resumeNote}
@@ -132,30 +139,34 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
         quietEmpty ? (
           <p className="gc-hint">No agent runs right now.</p>
         ) : (
-          <EmptyState title="Nothing running">Work your agents start shows up here, with what is stuck first.</EmptyState>
+          <EmptyState title="Nothing running">Work your agents start shows up here, with what needs you first.</EmptyState>
         )
       ) : null}
-      {SECTIONS.map(([key, label]) =>
+      {(["needs", "working", "done"] as const).map((key) =>
         groups[key].length ? (
-          <section key={key} aria-label={label} data-land={key}>
+          <section key={key} aria-label={label(key)} data-land={key}>
             <SectionHeader
-              label={label}
+              label={label(key)}
               count={groups[key].length}
               action={
-                key === "interrupted" ? (
+                key === "needs" && interrupted.length ? (
                   <Button size="sm" variant="ghost" disabled={resumeAll.isPending} onClick={() => setConfirmResume(true)}>
-                    Resume all {groups.interrupted.length}
+                    Resume all {interrupted.length}
+                  </Button>
+                ) : key === "done" && groups.done.length > DONE_SHOWN ? (
+                  <Button size="sm" variant="ghost" aria-expanded={doneShown.length === groups.done.length} onClick={() => setShowDone((v) => !v)}>
+                    {doneShown.length === groups.done.length ? "Show fewer" : "Show all"}
                   </Button>
                 ) : undefined
               }
             />
-            {key === "interrupted" && confirmResume ? (
-              <div role="group" aria-label={`Resume ${groups.interrupted.length} interrupted runs?`} className="gc-run-confirm">
-                <p>Send a resume prompt to the session of {groups.interrupted.map((r) => r.ref).join(", ")}?</p>
+            {key === "needs" && confirmResume && interrupted.length ? (
+              <div role="group" aria-label={`Resume ${interrupted.length} interrupted runs?`} className="gc-run-confirm">
+                <p>Send a resume prompt to the session of {interrupted.map((r) => r.ref).join(", ")}?</p>
                 <Button
                   size="sm"
                   onClick={() => {
-                    const refs = groups.interrupted.map((r) => r.ref);
+                    const refs = interrupted.map((r) => r.ref);
                     setConfirmResume(false);
                     resumeAll.mutate(refs, {
                       onSuccess: ({ results }) => {
@@ -178,7 +189,7 @@ export function RunningPanel({ onSteer, onCommand, decisions, onRef, initialRef,
                 </Button>
               </div>
             ) : null}
-            {groups[key].map((run) => (
+            {(key === "done" ? doneShown : groups[key]).map((run) => (
               <RunCard key={run.id} run={run} defaultOpen={openFirst.has(run.id)} {...rowProps} />
             ))}
           </section>

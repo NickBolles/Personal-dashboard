@@ -128,9 +128,9 @@ export function itemCardModel(input: {
     : failed
       ? { key: "failed", label: "Run failed", tone: "bad", live: false }
       : waiting
-        ? { key: "waiting", label: "Waiting on you", tone: "wn", live: false }
+        ? { key: "waiting", label: "Needs you", tone: "wn", live: false }
         : attention.length
-          ? { key: "stuck", label: attention.some((r) => r.state === "interrupted") ? "Run interrupted" : "Run quiet", tone: "wn", live: false }
+          ? { key: "stuck", label: "Run stalled", tone: "wn", live: false }
           : working.length || agent?.live === "running"
             ? { key: "working", label: "Working", tone: "ai", live: true }
             : { key: "status", ...status, live: false };

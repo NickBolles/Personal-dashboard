@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-11-13 — One shape per thing: chat and Activity
+
+The same thing was drawn several ways and mentioned several times on one screen. This change applies the
+shared rules to the Chief of staff's Chat and Activity tabs (decisions and item pages follow in their own changes).
+
+- **One row.** A run in Activity and a piece of background work in Chat are the same row (`ThingRow` in
+  `@/components/ui`): its R-n and state on top, the title under it (tap it to open the item), then a one-line
+  peek at its latest report. A chevron opens it in place for the pipeline, the reports, sub-runs and the other
+  actions. About five runs fit one phone screen where two and a half cards did.
+- **References you can tap.** A D-n or R-n written in a reply is a chip in the sentence. The "Mentions" row is
+  gone; what a reply mentions is drawn under it as rows, three at most, then "N more".
+- **Five state words.** Needs you, Working, Stalled, Failed, Done (`lib/work-words.ts`). "Quiet", "went quiet",
+  "Finished", "Waiting on you" and "Interrupted" are gone from run status, the tray line, tab hints, catch-up
+  chips and item-card headlines.
+- **Lists run Needs you, Working, Done.** Under Needs you: what waits for an answer, then what failed or
+  stalled, then what was interrupted. Done shows the last three.
+- **Icon actions.** At most two per row, chosen by state, in the order Steer, Stop, Retry, Log. Everything else
+  is in the opened row and in the long-press / right-click menu.
+- **One composer.** Steer, Reply, Retry and "ask about this" put a chip in the Chat composer; you type and send
+  there. No card has its own text box. Stop is the exception: it asks once on the row and then sends the
+  request (a tracked run used to write the request into the composer for you to send).
+- **Each thing once.** Work is drawn under the reply that started it. The "Background work" list, the item
+  cards under a reply and the repeated hand-off chips are gone. Your own messages are no longer listed as
+  finished background work, and a sub-agent registered as a run under a different title is one row, linked by
+  its delegation id.
+- **Sheets.** The phone sheet has a grab bar: drag it down to close. The "In this chat" sheet drags up for full
+  height and down to close; its "Full height" and "Done" buttons are gone.
+
 ## 2026-11-10 — Chief of staff and chat clarity pass
 
 What changed for the owner (details in the PR):

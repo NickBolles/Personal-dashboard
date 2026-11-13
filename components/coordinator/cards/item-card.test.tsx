@@ -109,7 +109,9 @@ it("what needs the owner leads, and its chips jump to the decision and the run",
   expect(card().getByText(/^waiting /)).toBeTruthy();
   expect(card().getByText("Stage: In progress")).toBeTruthy();
   fireEvent.click(card().getByRole("button", { name: "Review decision D 14: Use last year's dates?" }));
-  fireEvent.click(card().getByRole("button", { name: "Run R 3: Quiet, Smoke tests" }));
+  // the run chip says the run's state in the shared words (silence for 30 minutes is "Stalled")
+  expect(card().getByRole("button", { name: "Run R 3: Stalled, Smoke tests" }).textContent).toBe("R-3 stalled");
+  fireEvent.click(card().getByRole("button", { name: "Run R 3: Stalled, Smoke tests" }));
   expect(onRef.mock.calls).toEqual([["D-14"], ["R-3"]]);
   // who is on it, progress and the pull request with its checks; the run chip already says it is running
   expect(card().getByText("@devchief")).toBeTruthy();

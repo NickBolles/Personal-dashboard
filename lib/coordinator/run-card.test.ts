@@ -4,10 +4,12 @@ import type { ExecutionRecord } from "@/lib/chat-execution";
 import type { Decision } from "@/lib/cw-decisions";
 import {
   byNeed,
+  cardStatus,
   eventChip,
   eventAgo,
   eventText,
   mergeBackgroundWork,
+  placeWork,
   runAsk,
   runNeeds,
   runPulse,
@@ -59,18 +61,46 @@ const event = (over: Partial<RunEvent> = {}): RunEvent => ({
 });
 
 describe("runStatus", () => {
-  it("says what a run is doing in a chip and a duration", () => {
-    expect(runStatus(run(), now)).toMatchObject({ key: "working", label: "Working", tone: "ai", live: true, attention: false });
+  it("says what a run is doing in one of the five shared words and a duration", () => {
+    expect(runStatus(run(), now)).toMatchObject({ key: "working", label: "Working", detail: "updated 2 min ago", tone: "ai", live: true, attention: false });
     expect(runStatus(run({ stalled: true, updatedAt: ago(47) }), now)).toMatchObject({
       key: "stuck",
-      label: "Quiet",
-      detail: "no update for 47 min",
+      label: "Stalled",
+      detail: "no report for 47 min",
       tone: "wn",
       attention: true,
     });
     expect(runStatus(run({ state: "failed" }), now)).toMatchObject({ label: "Failed", tone: "bad", attention: true });
-    expect(runStatus(run({ state: "waiting" }), now)).toMatchObject({ label: "Waiting on you", tone: "wn", attention: true });
-    expect(runStatus(run({ state: "done", finishedAt: ago(1) }), now)).toMatchObject({ label: "Finished", tone: "ok", attention: false, live: false });
+    expect(runStatus(run({ state: "waiting" }), now)).toMatchObject({ key: "waiting", label: "Needs you", detail: "for 2 min", tone: "wn", attention: true });
+    expect(runStatus(run({ state: "done", finishedAt: ago(1) }), now)).toMatchObject({ label: "Done", tone: "ok", attention: false, live: false });
+  });
+  it("an interrupted run is Stalled too, and its detail says it was interrupted and when", () => {
+    expect(runStatus(run({ state: "interrupted", interruptedAt: ago(12), updatedAt: ago(40) }), now)).toMatchObject({
+      key: "interrupted",
+      label: "Stalled",
+      detail: "interrupted 12 min ago",
+      tone: "wn",
+      live: false,
+      attention: true,
+    });
+    // no interruption time recorded: its last update stands in
+    expect(runStatus(run({ state: "interrupted", updatedAt: ago(40) }), now).detail).toBe("interrupted 40 min ago");
+  });
+  it("a stalled run whose last report was a failed step keeps its word and leads the detail with the failure", () => {
+    const failedStep = event({ type: "notice", summary: "Re-run of the coupon test: failed again", at: ago(47) });
+    expect(cardStatus(run({ stalled: true, updatedAt: ago(47) }), [failedStep], now)).toMatchObject({
+      key: "stuck",
+      label: "Stalled",
+      detail: "a step failed · no report for 47 min",
+      tone: "bad",
+      failedStep: true,
+    });
+    expect(cardStatus(run({ stalled: true, updatedAt: ago(47) }), [], now)).toMatchObject({
+      label: "Stalled",
+      detail: "no report for 47 min",
+      tone: "wn",
+      failedStep: false,
+    });
   });
 });
 
@@ -122,6 +152,45 @@ describe("background work", () => {
     title: "Audit previews",
     state: "running",
     ...over,
+  });
+  it("a sub-agent registered as a run under another title is still one card (linked by its delegation id)", () => {
+    const tracked = run({ id: "run-37", ref: "R-37", title: "Add dentist booking reminder to the House list" });
+    const records = [
+      rec({
+        key: "subagent:sa_7",
+        id: "sa_7",
+        subagentId: "sa_7",
+        delegationId: "del_1",
+        title: "Subagent: Add 'Schedule dentist appointment' to the existing list, deduplicated",
+      }),
+      rec({ key: "registered_run:run-37", source: "registered_run", id: "run-37", delegationId: "del_1:sa_7", title: tracked.title }),
+    ];
+    for (const order of [records, [...records].reverse()]) {
+      const work = mergeBackgroundWork(order, [tracked]);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.run?.ref).toBe("R-37");
+      expect(work[0]!.control?.id).toBe("sa_7");
+    }
+  });
+  it("a bare batch id links a run only when one sub-agent carries it; a specific id beats a shared title", () => {
+    const tracked = run({ id: "run-40", ref: "R-40", title: "Price lumber" });
+    const reg = (delegationId: string) => rec({ key: "registered_run:run-40", source: "registered_run", id: "run-40", delegationId, title: "Price lumber" });
+    const a = rec({ key: "subagent:sa_a", id: "sa_a", subagentId: "sa_a", delegationId: "batch", title: "Call supplier A" });
+    const b = rec({ key: "subagent:sa_b", id: "sa_b", subagentId: "sa_b", delegationId: "batch", title: "Call supplier B" });
+    // two sub-agents share the batch id: the run is neither's, and keeps its own card
+    const shared = mergeBackgroundWork([a, b, reg("batch")], [tracked]);
+    expect(shared).toHaveLength(3);
+    expect(shared.filter((w) => w.control).every((w) => !w.run)).toBe(true);
+    // one sub-agent carries it: linked
+    const single = mergeBackgroundWork([a, reg("batch")], [tracked]);
+    expect(single).toHaveLength(1);
+    expect(single[0]!.control?.id).toBe("sa_a");
+    // registered for sub-agent B by id, while sub-agent C merely shares the run's title: the run is B's only
+    const c = rec({ key: "subagent:sa_c", id: "sa_c", subagentId: "sa_c", title: "Price lumber", startedAt: tracked.startedAt });
+    const work = mergeBackgroundWork([c, b, reg("batch:sa_b")], [tracked]);
+    expect(work.find((w) => w.control?.id === "sa_b")?.run?.ref).toBe("R-40");
+    expect(work.find((w) => w.control?.id === "sa_c")?.run).toBeUndefined();
+    expect(work).toHaveLength(2);
   });
   it("the sub-agent, its registration and the tracked run are one card; the run is the authority", () => {
     const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
@@ -358,6 +427,92 @@ describe("background work", () => {
   });
 });
 
+describe("placeWork: each piece of work is drawn once, under the reply that started it", () => {
+  const rec = (over: Partial<ExecutionRecord>): ExecutionRecord => ({
+    key: "k",
+    source: "subagent",
+    id: "sa",
+    title: "Audit previews",
+    state: "running",
+    ...over,
+  });
+  const msg = (id: string, kind: "user" | "assistant", min: number) => ({ id, kind, at: ago(min) });
+  const placed = (work: Parameters<typeof placeWork>[0], messages: Parameters<typeof placeWork>[1]) =>
+    Object.fromEntries([...placeWork(work, messages)].map(([key, list]) => [key, list.map((w) => w.record.key)]));
+  const thread = [msg("u1", "user", 60), msg("a1", "assistant", 58), msg("u2", "user", 30), msg("a2", "assistant", 28)];
+
+  it("puts work under the first reply that finished at or after the work began", () => {
+    const first = { record: rec({ key: "first", startedAt: ago(59) }) };
+    const second = { record: rec({ key: "second", state: "completed", startedAt: ago(29), endedAt: ago(20) }) };
+    // a run's own start time is the authority when the work is a tracked run
+    const tracked = { record: rec({ key: "tracked", startedAt: ago(5) }), run: run({ id: "run-2", ref: "R-2", startedAt: ago(29) }) };
+    expect(placed([first, second, tracked], thread)).toEqual({ a1: ["first"], a2: ["second", "tracked"] });
+    // a reply stamped a few seconds before the work's own start still started it (clocks differ by source)
+    expect(placed([{ record: rec({ key: "skew", startedAt: ago(27.5) }) }], thread)).toEqual({ a2: ["skew"] });
+    // a record that carries only its last update is placed by that
+    expect(placed([{ record: rec({ key: "bare", updatedAt: ago(40) }) }], thread)).toEqual({ a2: ["bare"] });
+  });
+  it("work whose turn has produced no reply yet goes under live, after the messages", () => {
+    const started = { record: rec({ key: "new", startedAt: ago(10) }) };
+    expect(placed([started], thread)).toEqual({ live: ["new"] });
+    // the owner's own message is never what work hangs under
+    expect(placed([started], [...thread, msg("u3", "user", 5)])).toEqual({ live: ["new"] });
+    // even work that has already ended: its reply has not arrived, so it is still drawn
+    expect(placed([{ record: rec({ key: "quick", state: "completed", startedAt: ago(10), endedAt: ago(9) }) }], thread)).toEqual({ live: ["quick"] });
+  });
+  it("work from before the visible messages is drawn only while it is still going, under live", () => {
+    const visible = thread.slice(2);
+    const old = (key: string, over: Partial<ExecutionRecord>) => ({ record: rec({ key, startedAt: ago(200), ...over }) });
+    expect(
+      placed(
+        [
+          old("ended", { state: "completed", endedAt: ago(150) }),
+          old("failed", { state: "failed", error: "Timed out" }),
+          old("cancelled", { state: "cancelled" }),
+          old("going", {}),
+          old("waiting", { state: "waiting" }),
+        ],
+        visible,
+      ),
+    ).toEqual({ live: ["going", "waiting"] });
+    // a tracked run decides for its row: a finished run is dropped though its sub-agent record lingers, and a
+    // run that waits on the owner is kept though its record has ended
+    const done = run({ id: "run-3", ref: "R-3", state: "done", startedAt: ago(200), finishedAt: ago(150) });
+    const waits = run({ id: "run-4", ref: "R-4", state: "waiting", startedAt: ago(200) });
+    expect(
+      placed(
+        [
+          { record: rec({ key: "lingering" }), run: done },
+          { record: rec({ key: "asks", state: "completed" }), run: waits },
+        ],
+        visible,
+      ),
+    ).toEqual({ live: ["asks"] });
+    // work that says nothing about when it started cannot be placed: shown only while going
+    expect(placed([{ record: rec({ key: "undated" }) }, { record: rec({ key: "undated-done", state: "completed" }) }], visible)).toEqual({
+      live: ["undated"],
+    });
+  });
+  it("with no messages on screen everything dated is under live, and nothing is listed twice", () => {
+    const work = [
+      { record: rec({ key: "a", startedAt: ago(200) }) },
+      { record: rec({ key: "b", state: "completed", startedAt: ago(100), endedAt: ago(90) }) },
+      { record: rec({ key: "c", state: "failed", startedAt: ago(5) }) },
+    ];
+    expect(placed(work, [])).toEqual({ live: ["a", "b", "c"] });
+    // messages without a time cannot anchor anything either
+    expect(
+      placed(work, [
+        { id: "a1", kind: "assistant", at: null },
+        { id: "u1", kind: "user" },
+      ]),
+    ).toEqual({ live: ["a", "b", "c"] });
+    const all = [...placeWork(work, thread).values()].flat();
+    expect(all).toHaveLength(new Set(all).size);
+    expect(placeWork([], thread).size).toBe(0);
+  });
+});
+
 describe("runPulse", () => {
   it("places each report in the run's lifetime, oldest first, with its tone", () => {
     const r = run({ startedAt: ago(100), finishedAt: null });
@@ -389,7 +544,12 @@ describe("since you last looked", () => {
       since,
     );
     expect(counts).toEqual({ runs: 4, failed: 1, stuck: 1, waiting: 0, finished: 1 });
-    expect(sinceChips({ decisions: 2, ...counts }).map((c) => c.label)).toEqual(["1 failed", "2 new decisions", "1 went quiet", "1 finished", "1 run updated"]);
+    expect(sinceChips({ decisions: 2, ...counts }).map((c) => c.label)).toEqual(["1 failed", "2 new decisions", "1 stalled", "1 finished", "1 run updated"]);
+    // a run that waits on the owner is its own chip, in the shared words, and lands on Activity
+    expect(sinceChips({ decisions: 0, runs: 3, waiting: 2, stuck: 1 })).toEqual([
+      { key: "waiting", label: "2 need you", tone: "wn", tab: "running" },
+      { key: "stuck", label: "1 stalled", tone: "wn", tab: "running" },
+    ]);
   });
   it("without a breakdown it still counts runs", () => {
     expect(sinceChips({ decisions: 0, runs: 3 })).toEqual([{ key: "runs", label: "3 runs updated", tone: "ai", tab: "running" }]);

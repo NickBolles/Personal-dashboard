@@ -10,7 +10,10 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
 import { sortByUrgency } from "@/lib/cw-decisions";
 import { coordinatorStatus } from "@/lib/coordinator/status";
-import { sinceRunCounts } from "@/lib/coordinator/run-card";
+import { runStatus, sinceRunCounts } from "@/lib/coordinator/run-card";
+import { ageLabel } from "@/lib/coordinator/needs";
+import type { Decision } from "@/lib/cw-decisions";
+import type { RunEvent } from "@/lib/cw-runs";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
@@ -28,10 +31,14 @@ import { pickTrayLine, type PriorityLine } from "@/lib/coordinator/things";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { DynamicSurface } from "@/components/smart/DynamicSurface";
-import { AnchoredMenu, Button, SectionHeader, useAnchoredMenu, useNow, useToast } from "@/components/ui";
+import { AnchoredMenu, Button, SectionHeader, SheetHandle, StateWord, ThingRow, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
+import type { ComposeScope } from "@/lib/coordinator/compose";
+import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
+import { WORK_RANK, WORK_WORD, workStateOfRun } from "@/lib/work-words";
 import { NeedsPanel } from "./needs/NeedsPanel";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
+import { RunCard } from "./running/RunCard";
 import { useCoordinatorRuns, useMarkLooked } from "./running/useCoordinatorRuns";
 // The design library's sleek density tier, right before this panel's own styles (see the file's header).
 import "@/components/ui/density.css";
@@ -51,7 +58,7 @@ const typingIn = (t: EventTarget | null) => t instanceof HTMLElement && (t.isCon
 const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
 /** Which section of its tab each catch-up chip is about (the `data-land` values the panels carry). */
-const LAND: Record<string, string> = { decisions: "new", failed: "attention", stuck: "attention", waiting: "waiting", finished: "done", runs: "running" };
+const LAND: Record<string, string> = { decisions: "new", failed: "needs", stuck: "needs", waiting: "needs", finished: "done", runs: "working" };
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
 export function GlobalCoordinator() {
   const pathname = usePathname();
@@ -66,12 +73,24 @@ export function GlobalCoordinator() {
   const [removedOn, setRemovedOn] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
   const [draft, setDraft] = useState("");
+  /** The chip in the one composer: what the next message is about (a run to steer, retry or ask about, a decision). */
+  const [scope, setScope] = useState<ComposeScope | null>(null);
   /** D-n / R-n a tray tap, deep link or chip opened (the panel starts on it). */
   const [focusRef, setFocusRef] = useState<{ tab: Tab; ref?: string; n: number } | null>(null);
   const [chatSince, setChatSince] = useState<string | null>(null);
   const gPending = useRef(false);
   const host = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  // The phone sheet has one height: its grab bar (and header) drag it down to close; a tap on the bar closes too.
+  const sheetDrag = useSheetDrag({
+    panel: dialog,
+    full: true,
+    onClose: () => setPhoneOpen(false),
+    heights: () => {
+      const h = dialog.current?.getBoundingClientRect().height ?? window.innerHeight;
+      return { half: h, full: h };
+    },
+  });
   const ids = useId();
   const { things, line: priority, awayLine, markSeen, error } = useCoordinatorThings();
   const smart = useSmartSettings();
@@ -266,17 +285,55 @@ export function GlobalCoordinator() {
     );
   };
   const onRef = (ref: string) => openAt(ref.startsWith("D-") ? "needs" : "running", ref);
-  // Steering a run from its card sends the same one-line command the Chat tab would; with no conversation to send
-  // it to yet, the line is written into the composer instead.
+  const focusComposer = () =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
+    );
+  // One composer: Steer, Reply, Retry and "ask about this" on any row put that thing's chip in the Chat composer
+  // and hand over the keyboard. Nothing is sent until the owner sends it there.
+  const compose = (next: ComposeScope) => {
+    setActiveCard(undefined);
+    setTab("chat");
+    setScope(next);
+    focusComposer();
+  };
+  // Stop is the one action that does not go through the composer: it is confirmed on the row, then the request is
+  // sent as the same one-line command. With no conversation to send it through, it is written into the composer.
   const commandRef = useRef<((text: string) => Promise<unknown>) | null>(null);
-  const steerRun = async (ref: string, title: string, guidance?: string) => {
-    const line = `Steer ${ref} (${title.slice(0, 120)}): ${guidance?.trim() ?? ""}`;
-    if (guidance?.trim() && commandRef.current) await commandRef.current(line);
+  const stopRun = async (run: CoordinatorRunRow) => {
+    const line = `Stop ${run.ref} (${run.title}) and its sub-agents.`;
+    if (commandRef.current) await commandRef.current(line);
     else prefill(line);
   };
   // Item and project cards (changes under Activity and under a reply) read live state while the panel is on screen.
   const cardData = useItemCardData(wide ? open : phoneOpen);
-  const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => prefill(`About "${title}": `) };
+  // What a reply mentions, as rows under it in Chat: open decisions first, then runs by how much they need a look.
+  const openDecision = (ref: string) => (cwDecisions.data?.decisions ?? []).find((x) => x.ref === ref && x.state === "open");
+  const runByRef = (ref: string) => runRows.find((r) => r.ref === ref);
+  const mentions = {
+    rank: (ref: string) => {
+      if (ref.startsWith("D-")) return openDecision(ref) ? -1 : null;
+      const run = runByRef(ref);
+      return run ? WORK_RANK[workStateOfRun(runStatus(run, now).key)] : null;
+    },
+    render: (ref: string) => {
+      const decision = ref.startsWith("D-") ? openDecision(ref) : undefined;
+      if (decision) return <MentionedDecision decision={decision} now={now} onOpen={() => onRef(ref)} />;
+      const run = runByRef(ref);
+      return run ? (
+        <MentionedRun
+          run={run}
+          runs={runRows}
+          events={cwRuns.data?.events ?? []}
+          decisions={cwDecisions.data?.decisions}
+          onCompose={compose}
+          onStop={stopRun}
+          onRef={onRef}
+        />
+      ) : null;
+    },
+  };
+  const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => compose({ kind: "ask", title }) };
   const onPanelKey = (e: ReactKeyboardEvent) => {
     if (typingIn(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
     if (gPending.current) {
@@ -446,7 +503,7 @@ export function GlobalCoordinator() {
       label: "Activity",
       count: inFlight,
       tone: status.counts.newStuck ? "bad" : undefined,
-      hint: `${status.counts.working} working, ${status.counts.stuck} stuck, ${status.counts.waiting} waiting on you`,
+      hint: `${status.counts.working} working, ${status.counts.stuck} stalled or failed, ${status.counts.waiting} need you`,
     },
   ];
   // The tray is one button with one sentence; a long press (or right-click) goes straight to a tab.
@@ -457,7 +514,7 @@ export function GlobalCoordinator() {
   ];
   const content = (
     <>
-      <header className="gc-head">
+      <header className="gc-head" {...(wide ? {} : sheetDrag.zoneProps)}>
         <h2 id={`${ids}-title`}>Chief of staff</h2>
         {d && (!d.agent.routed || d.agent.profile !== d.agent.requested) ? <AgentChip agent={d.agent} prefix="Answers" /> : null}
         <Button
@@ -465,9 +522,10 @@ export function GlobalCoordinator() {
           variant="ghost"
           size="sm"
           iconOnly
-          icon={wide ? <ChevronIcon className="h-4 w-4" /> : "×"}
+          icon={<ChevronIcon className={wide ? "h-4 w-4" : "h-4 w-4 rotate-90"} />}
           className="gc-close"
           data-density-skip
+          data-sheet-nodrag
           aria-label={wide ? "Collapse Chief of staff" : "Close Chief of staff"}
           onClick={hide}
         >
@@ -562,9 +620,9 @@ export function GlobalCoordinator() {
                     prefill(ASK_PAGE);
                   }}
                   quickContext={quickContext}
-                  inlineActions={(lastUserAt) => (
-                    <ActionCards rows={things.changes.filter((a) => !lastUserAt || a.at > lastUserAt).slice(0, 3)} {...cardHooks} />
-                  )}
+                  scope={scope}
+                  onScope={setScope}
+                  mentions={mentions}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
                   onJump={(next, about) => {
@@ -579,7 +637,7 @@ export function GlobalCoordinator() {
                   hasOther={otherAsks.length + stalledAsks.length > 0}
                   key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
                   initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
-                  onAsk={(ref, question) => prefill(`About ${ref} (${question.slice(0, 160)}): `)}
+                  onAsk={(ref, question) => compose({ kind: "ask", ref, title: question })}
                   lead={
                     otherAsks.length || stalledAsks.length ? (
                       <>
@@ -597,8 +655,8 @@ export function GlobalCoordinator() {
                         {stalledAsks.length ? (
                           <section className="gc-list" aria-label="Runs to check">
                             <Button variant="ghost" className="gc-stalled-row" onClick={() => selectTab("running")}>
-                              <strong>{stalledAsks.length === 1 ? "1 run has" : `${stalledAsks.length} runs have`} not reported for over 30 minutes</strong>
-                              <span>Counted here as on Today · check them in Activity</span>
+                              <strong>{stalledAsks.length === 1 ? "1 run stalled" : `${stalledAsks.length} runs stalled`}</strong>
+                              <span>No report for over 30 minutes · check in Activity</span>
                             </Button>
                           </section>
                         ) : null}
@@ -618,8 +676,8 @@ export function GlobalCoordinator() {
                 <RunningPanel
                   key={focusRef?.tab === "running" ? `r${focusRef.n}` : "running"}
                   initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
-                  onSteer={steerRun}
-                  onCommand={prefill}
+                  onCompose={compose}
+                  onStop={stopRun}
                   decisions={cwDecisions.data?.decisions}
                   onRef={onRef}
                   quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
@@ -794,6 +852,9 @@ export function GlobalCoordinator() {
                 }
               }}
             >
+              <div {...sheetDrag.zoneProps} className="gc-sheet-grab">
+                <SheetHandle {...sheetDrag.handleProps} label="Close Chief of staff sheet" />
+              </div>
               {content}
               <div data-quick-action-notices className="shrink-0" />
             </dialog>
@@ -804,11 +865,45 @@ export function GlobalCoordinator() {
   );
 }
 
+/** A run a reply mentions, as its row in Chat. Its stop confirmation is its own. */
+function MentionedRun(props: {
+  run: CoordinatorRunRow;
+  runs: readonly CoordinatorRunRow[];
+  events: readonly RunEvent[];
+  decisions?: readonly Decision[];
+  onCompose: (scope: ComposeScope) => void;
+  onStop: (run: CoordinatorRunRow) => void | Promise<unknown>;
+  onRef: (ref: string) => void;
+}) {
+  const [stopping, setStopping] = useState<string | null>(null);
+  return <RunCard {...props} stopping={stopping} onStopping={setStopping} />;
+}
+/** An open decision a reply mentions, as its row in Chat: the title opens it under Needs you. */
+function MentionedDecision({ decision, now, onOpen }: { decision: Decision; now: number; onOpen: () => void }) {
+  return (
+    <ThingRow
+      className="gc-mention-decision"
+      data-ref-row={decision.ref}
+      state="needs"
+      refId={decision.ref}
+      status={
+        <>
+          <StateWord state="needs" />
+          <span data-dynamic> · {ageLabel(decision.createdAt, now)}</span>
+        </>
+      }
+      title={decision.question}
+      sub={decision.itemTitle && decision.itemTitle !== decision.question ? decision.itemTitle : undefined}
+      onOpen={onOpen}
+    />
+  );
+}
+
 const OTHER_STATE: Record<"running" | "stalled" | "failed" | "waiting", string> = {
-  running: "Working",
-  stalled: "No update for a while",
-  failed: "Failed",
-  waiting: "Waiting",
+  running: WORK_WORD.working,
+  stalled: WORK_WORD.stalled,
+  failed: WORK_WORD.failed,
+  waiting: WORK_WORD.needs,
 };
 
 function AttentionDot({ dot }: { dot: "red" | "yellow" | null }) {
@@ -827,27 +922,6 @@ function byItem(rows: ActivityItem[]) {
     else groups.push({ key, object: row.object, rows: [row] });
   }
   return groups;
-}
-/** What the Chief of staff just changed, under its reply: one card per item touched. */
-function ActionCards({ rows, ...hooks }: { rows: ActivityItem[] } & CardHooks) {
-  return (
-    <div className="gc-action-list">
-      {byItem(rows).map((group) =>
-        group.object ? (
-          <ItemCard
-            key={group.key}
-            itemId={group.object.id}
-            title={group.object.title}
-            changes={group.rows}
-            undo={(row) => <UndoButton row={row} />}
-            {...hooks}
-          />
-        ) : (
-          group.rows.map((row) => <ActionCard key={row.id} row={row} />)
-        ),
-      )}
-    </div>
-  );
 }
 function UndoButton({ row }: { row: ActivityItem }) {
   const qc = useQueryClient();
@@ -880,22 +954,6 @@ function UndoButton({ row }: { row: ActivityItem }) {
     </Button>
   ) : null;
 }
-function ActionCard({ row }: { row: ActivityItem }) {
-  return (
-    <article className="gc-action">
-      <span className="gc-action-icon" aria-hidden="true">
-        {row.type === "created" ? "+" : row.type === "chat" ? "↻" : "✦"}
-      </span>
-      <div>
-        <strong>{actionLabel(row)}</strong>
-        {row.object ? <Link href={`/areas?item=${encodeURIComponent(row.object.id)}`}>{row.object.title}</Link> : null}
-        <span className="gc-hint">{relativeTime(row.at)}</span>
-      </div>
-      <UndoButton row={row} />
-    </article>
-  );
-}
-
 const CHANGES_SHOWN = 5;
 /** What the Chief of staff changed in the last day, grouped by item so three edits to one item read as one entry. */
 function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: string } & CardHooks) {
