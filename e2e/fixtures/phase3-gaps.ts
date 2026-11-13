@@ -13,6 +13,11 @@ export const phase3Decision: DecisionEntry = {
   at: "2026-10-29T12:00:00.000Z",
   areaTitle: "Workshop",
   askedBy: "devchief",
+  // A decision row (D-n) flagged as public exposure: its answer takes a second, explicit tap.
+  ref: "D-7",
+  recommended: null,
+  risk: ["public"],
+  pack: {},
 };
 export const phase3Coordinators: CoordinatorsResponse = {
   budget: { spentUsd: 1.25, reservedUsd: 0.25, budgetUsd: 5 },
