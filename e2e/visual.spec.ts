@@ -50,8 +50,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.goto("/home");
     await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), scheme);
     const recap = page.locator("main#main").getByTestId("while-away");
-    await expect(recap).toContainText("1 chores completed");
-    await expect(recap).toContainText("1 chores skipped");
+    await expect(recap).toContainText("1 chore completed");
+    await expect(recap).toContainText("1 chore skipped");
     await expect(recap.getByTestId("away-chore")).toHaveCount(2);
     await withoutTray(page, () => expect(recap).toHaveScreenshot(`task-ux-recap-${scheme}.png`, { animations: "disabled" }));
   });

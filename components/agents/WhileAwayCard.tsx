@@ -5,7 +5,7 @@ import { useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { EMPTY_AWAY, useAway } from "@/lib/client/away";
-import type { AwayDigest, AwayRun } from "@/lib/away";
+import { choreCount, type AwayDigest, type AwayRun } from "@/lib/away";
 import { Button, ChipButton, Dot, Pill, useToast } from "@/components/ui";
 
 const linkCls = "inline-flex min-h-11 min-w-0 items-center text-[var(--ai)] underline-offset-2 hover:underline sm:min-h-10 dense:min-h-6";
@@ -66,10 +66,10 @@ export function WhileAwayCard({ compact = false }: { compact?: boolean }) {
           ) : null}
           {counts.failed > 0 ? <Pill tone="bad">{counts.failed} failed</Pill> : null}
           {q.data.chores?.some((c) => c.status === "completed") ? (
-            <Pill tone="ok">{q.data.chores.filter((c) => c.status === "completed").length} chores completed</Pill>
+            <Pill tone="ok">{choreCount(q.data.chores.filter((c) => c.status === "completed").length, "completed")}</Pill>
           ) : null}
           {q.data.chores?.some((c) => c.status === "skipped") ? (
-            <Pill tone="neutral">{q.data.chores.filter((c) => c.status === "skipped").length} chores skipped</Pill>
+            <Pill tone="neutral">{choreCount(q.data.chores.filter((c) => c.status === "skipped").length, "skipped")}</Pill>
           ) : null}
         </div>
       </header>

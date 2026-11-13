@@ -77,8 +77,8 @@ it("shows skipped chores as distinct outcomes even when no agent ran", async () 
   away = skylightTaskUxFixture().away;
   render(<WhileAwayCard />, { wrapper });
   const card = await screen.findByTestId("while-away");
-  expect(within(card).getByText("1 chores completed")).toBeDefined();
-  expect(within(card).getByText("1 chores skipped")).toBeDefined();
+  expect(within(card).getByText("1 chore completed")).toBeDefined();
+  expect(within(card).getByText("1 chore skipped")).toBeDefined();
   const rows = within(card).getAllByTestId("away-chore");
   expect(rows.map((r) => r.textContent)).toEqual(["CompletedCompleted kitchen routineSkylight", "SkippedSkipped routine, not completedSkylight"]);
   expect(within(card).queryByText("0 ran")).toBeNull();

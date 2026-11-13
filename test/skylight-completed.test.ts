@@ -154,7 +154,7 @@ describe("skipped outcome history and recap", () => {
     expect(homePulse(u, now).trend!.completed.at(-1)).toBe(1);
     const recap = awayDigest(u, new Date(now.getTime() + 60_000));
     expect(recap.chores?.map((c) => c.status).sort()).toEqual(["completed", "skipped"]);
-    expect(recap.line).toContain("1 chores completed · 1 chores skipped");
+    expect(recap.line).toContain("1 chore completed · 1 chore skipped");
     // A repeated sync preserves first sight, not a new away item on every refresh.
     const later = new Date(now.getTime() + 120_000);
     dismissAway(u, new Date(now.getTime() + 90_000));

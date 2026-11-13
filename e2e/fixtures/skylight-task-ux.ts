@@ -34,7 +34,7 @@ export function skylightTaskUxFixture(instant: string = TASK_UX_CLOCKS[0]) {
   const away: AwayDigest = {
     runs: [],
     since: `${day}T00:00:00.000Z`,
-    line: "While you were away: 1 chores completed · 1 chores skipped",
+    line: "While you were away: 1 chore completed · 1 chore skipped",
     counts: { ran: 0, failed: 0, changes: 0, needsYou: 0, running: 0, waiting: 0 },
     chores: [
       { id: "done-recap", title: "Completed kitchen routine", status: "completed", at: instant },

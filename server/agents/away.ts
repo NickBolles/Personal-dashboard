@@ -6,7 +6,7 @@ import { can } from "@/server/access";
 import { getSetting, setSetting } from "@/server/settings";
 import { listItems } from "@/server/work/store";
 import { localMinutes } from "@/lib/time";
-import { effectiveAutonomy, WAITING_SUMMARY, type AwayDigest, type AwayRun } from "@/lib/away";
+import { choreCount, effectiveAutonomy, WAITING_SUMMARY, type AwayDigest, type AwayRun } from "@/lib/away";
 import { J, R, assertAwayOwner, jobRow, scheduleTimezone, type RunRow } from "./schedules";
 import { audit } from "@/server/audit";
 const dismissKey = (id: string) => `away_digest_dismissed_at:${id}`;
@@ -81,7 +81,7 @@ export function awayDigest(user: CurrentUser, now = new Date()): AwayDigest {
     : [];
   const completed = chores.filter((c) => c.status === "completed").length;
   const skipped = chores.filter((c) => c.status === "skipped").length;
-  const choreParts = [...(completed ? [`${completed} chores completed`] : []), ...(skipped ? [`${skipped} chores skipped`] : [])];
+  const choreParts = [...(completed ? [choreCount(completed, "completed")] : []), ...(skipped ? [choreCount(skipped, "skipped")] : [])];
   return {
     runs,
     since,
