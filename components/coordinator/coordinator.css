@@ -1473,3 +1473,41 @@ html[data-kb="open"] .gc-tray-qa {
 /* ==== end needs ==== */
 
 /* Long-press / right-click on the phone tray: straight to a tab. It sits just above the tray. */
+
+/* ==== one composer ====
+   What the next message is about: a chip (R-n teal, D-n amber) and the thing's title, above the input. Steer,
+   Reply, Retry and "ask about this" on any row put it there; removing it makes the message an ordinary one. */
+.gc-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.gc-scope-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Work started by a reply sits right under it, as rows. */
+.co-msg > .gc-bgwork {
+  margin-top: 6px;
+}
+/* ==== phone sheet: grab bar ====
+   Drag the bar (or the header) down to close; the sheet follows the finger and settles when it lifts. */
+.gc-sheet {
+  transition: transform var(--d2) var(--ease);
+}
+.gc-sheet[data-dragging] {
+  transition: none;
+}
+.gc-sheet-grab {
+  flex: none;
+}
+.gc-sheet .gc-sheet-grab + .gc-head {
+  min-height: 44px;
+}

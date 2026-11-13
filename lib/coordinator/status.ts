@@ -71,7 +71,7 @@ const short = (text: string, max = 64) => {
   const line = text.replace(/\s+/g, " ").trim();
   return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
 };
-const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "went quiet", waiting: "is waiting", interrupted: "was interrupted" };
+const VERB: Record<StuckKind, string> = { failed: "failed", stalled: "stalled", waiting: "needs you", interrupted: "was interrupted" };
 
 export function stuckRuns(input: Pick<StatusInput, "runs" | "otherRuns" | "lastLooked" | "now">): StuckRun[] {
   const looked = input.lastLooked ? Date.parse(input.lastLooked) : NaN;
@@ -115,9 +115,9 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
 
   if (fresh.length) {
     const first = fresh[0];
-    // The same words as the cards: silence is "quiet", only a reported failure is "failed".
+    // The same words as the rows: silence is "stalled", only a reported failure is "failed".
     const all = (kind: StuckKind) => fresh.every((r) => r.kind === kind);
-    const many = all("failed") ? "runs failed" : all("stalled") ? "runs went quiet" : "runs need a look";
+    const many = all("failed") ? "runs failed" : all("stalled") ? "runs stalled" : "runs need a look";
     const text = fresh.length === 1 ? `${short(first.title, 48)} ${VERB[first.kind]}` : `${fresh.length} ${many}`;
     return { state: "failed", tone: "bad", dot: "red", text, rest: rest("needs", "working"), target: { tab: "running", ref: first.ref ?? undefined }, counts };
   }
@@ -138,7 +138,7 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
   // "needs", so without this the tray said "No agent work waiting" while Activity showed it waiting.
   if (counts.waiting) {
     const first = attention.find((r) => r.kind === "waiting");
-    const text = counts.waiting === 1 && first ? `${short(first.title, 44)} ${VERB.waiting} on you` : `${counts.waiting} runs are waiting on you`;
+    const text = counts.waiting === 1 && first ? `${short(first.title, 44)} ${VERB.waiting}` : `${counts.waiting} runs need you`;
     return {
       state: "needs",
       tone: "warn",
@@ -154,7 +154,7 @@ export function coordinatorStatus(input: StatusInput): CoordinatorStatus {
       state: "finished",
       tone: "ok",
       dot: "yellow",
-      text: `${counts.finished} finished · ready to review`,
+      text: `${counts.finished} done · ready to review`,
       rest: rest("working", "stuck"),
       target: { tab: "running" },
       counts,

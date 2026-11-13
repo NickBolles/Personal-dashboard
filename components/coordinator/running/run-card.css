@@ -925,3 +925,60 @@ a.ic-pr-name:hover {
     color: inherit;
   }
 }
+
+/* ==== rows ====
+   A run or a piece of background work as the shared two-line row (components/ui ThingRow): what it is, then its
+   state; two icon actions; it opens in place to show what a card would. The card shell stays for its menu and
+   state attributes, without the card's box: a list of rows is a list, not a stack of cards. */
+.rc.rc-row {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.rc.rc-row + .rc.rc-row {
+  margin-top: 0;
+}
+/* No travelling outline on a row: its dot pulses and its state word shimmers instead. */
+.rc.rc-row[data-live]::before {
+  content: none;
+}
+.rc-row > .k-thing {
+  border-top-color: var(--bd);
+}
+:is(.gc-running section, .gc-bgwork) > .rc-row:first-of-type > .k-thing,
+.rc-children > .rc-row:first-of-type > .k-thing {
+  border-top: 0;
+}
+.rc-row .k-thing-row {
+  padding-inline: 2px 0;
+}
+.rc-row .k-thing-open {
+  margin-inline: 20px 0;
+}
+.rc-row > .rc-confirm {
+  margin: 0 0 10px 20px;
+}
+.rc-state {
+  position: relative;
+  display: inline-flex;
+}
+.rc-state-idle {
+  color: var(--t2);
+  font-weight: 600;
+}
+/* A state word that shimmers keeps its own colour as the base of the sweep. */
+.k-sw[data-state="working"] .rc-shimmer {
+  --k-fg: var(--ai);
+}
+.rc-row .rc-ask {
+  margin: 0;
+}
+.rc-row .rc-meta {
+  margin: 0;
+}
+/* Sub-runs sit inside their parent's opened panel: rows on the panel's surface. */
+.rc-row .rc-children {
+  margin-top: 2px;
+}

@@ -6,6 +6,7 @@ import { isActiveExec, type ExecutionRecord } from "@/lib/chat-execution";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent, RunEventType } from "@/lib/cw-runs";
 import { relativeTime } from "@/lib/time";
+import { WORK_WORD } from "@/lib/work-words";
 import { ageLabel } from "./needs";
 import type { CoordinatorRunRow } from "./runs-view";
 
@@ -13,7 +14,7 @@ export type CardTone = "ok" | "wn" | "bad" | "ai" | "inf" | "ac" | "neutral";
 
 export type RunStatus = {
   key: "failed" | "interrupted" | "waiting" | "done" | "stuck" | "working";
-  /** One or two words: the chip. */
+  /** The state in the shared words (lib/work-words.ts): Needs you, Working, Stalled, Failed, Done. */
   label: string;
   /** How long, in words, next to the chip. */
   detail: string;
@@ -26,28 +27,29 @@ export type RunStatus = {
 
 export function runStatus(run: CoordinatorRunRow, now: number = Date.now()): RunStatus {
   const ago = eventAgo(run.updatedAt, now);
-  if (run.state === "failed") return { key: "failed", label: "Failed", detail: ago, tone: "bad", live: false, attention: true };
+  if (run.state === "failed") return { key: "failed", label: WORK_WORD.failed, detail: ago, tone: "bad", live: false, attention: true };
   if (run.state === "interrupted")
     return {
       key: "interrupted",
-      label: "Interrupted",
-      detail: eventAgo(run.interruptedAt ?? run.updatedAt, now),
+      label: WORK_WORD.stalled,
+      detail: `interrupted ${eventAgo(run.interruptedAt ?? run.updatedAt, now)}`,
       tone: "wn",
       live: false,
       attention: true,
     };
   if (run.state === "waiting")
-    return { key: "waiting", label: "Waiting on you", detail: `for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
+    return { key: "waiting", label: WORK_WORD.needs, detail: `for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
   if (run.state === "done")
-    return { key: "done", label: "Finished", detail: eventAgo(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
-  // A quiet run is not a failed run: say what is known (how long since it last reported), in amber, not red.
-  if (run.stalled) return { key: "stuck", label: "Quiet", detail: `no update for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
+    return { key: "done", label: WORK_WORD.done, detail: eventAgo(run.finishedAt ?? run.updatedAt, now), tone: "ok", live: false, attention: false };
+  // A silent run is not a failed run: say what is known (how long since it last reported), in amber, not red.
+  if (run.stalled)
+    return { key: "stuck", label: WORK_WORD.stalled, detail: `no report for ${ageLabel(run.updatedAt, now)}`, tone: "wn", live: false, attention: true };
   // The time beside "Working" is the time of its newest report when there is one, in the same words as the
   // timeline under it: the chip and the timeline can never disagree about how fresh the run is.
   const report = run.lastEvent?.at;
   return {
     key: "working",
-    label: "Working",
+    label: WORK_WORD.working,
     detail: report ? `last report ${eventAgo(report, now)}` : `updated ${ago}`,
     tone: "ai",
     live: true,
@@ -196,13 +198,13 @@ export function latestEvent(run: Pick<CoordinatorRunRow, "id" | "lastEvent">, ev
 }
 
 /**
- * A run's chip on any card. A run that went quiet right after reporting a failed step says so: the failure is
- * the news, the silence is the detail. (A failed step is not a failed run: the key stays "stuck".)
+ * A run's status on any row or card. A run that went silent right after reporting a failed step says so first:
+ * the failure is the news, the silence is the detail. (A failed step is not a failed run: it stays Stalled.)
  */
 export function cardStatus(run: CoordinatorRunRow, events: readonly RunEvent[], now: number = Date.now()): RunStatus & { failedStep: boolean } {
   const base = runStatus(run, now);
   const failedStep = base.key === "stuck" && stepFailed(latestEvent(run, events));
-  return failedStep ? { ...base, label: "Step failed", tone: "bad", failedStep } : { ...base, failedStep };
+  return failedStep ? { ...base, detail: `a step failed · ${base.detail}`, tone: "bad", failedStep } : { ...base, failedStep };
 }
 
 /** What a waiting run needs from the owner: the open decision it raised, when there is one. */
@@ -433,6 +435,35 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
 }
 
 /**
+ * Where a conversation draws each piece of work it started: under the reply that started it (the first reply that
+ * finished after the work began), so the stream reads in order and nothing is listed twice. Work whose turn has
+ * not produced a reply yet goes under "live" (after the last message). Work from before the messages on screen is
+ * drawn only while it is still going or waiting, also under "live"; what ended back there is in Activity.
+ */
+export function placeWork(
+  work: readonly BackgroundWork[],
+  messages: readonly { id: string; kind: string; at?: string | null }[],
+): Map<string, BackgroundWork[]> {
+  const out = new Map<string, BackgroundWork[]>();
+  const put = (key: string, w: BackgroundWork) => out.set(key, [...(out.get(key) ?? []), w]);
+  const replies = messages.flatMap((m) => {
+    const at = m.kind === "assistant" ? timeOf(m.at) : null;
+    return at === null ? [] : [{ id: m.id, at }];
+  });
+  const windowStart = messages.map((m) => timeOf(m.at)).find((at) => at !== null) ?? null;
+  for (const w of work) {
+    const going = w.run ? ["running", "waiting"].includes(w.run.state) : isActiveExec(w.record);
+    const started = timeOf(w.run?.startedAt ?? w.record.startedAt ?? w.record.updatedAt);
+    if (started === null || (windowStart !== null && started < windowStart - WINDOW_SLACK_MS)) {
+      if (going) put("live", w);
+      continue;
+    }
+    put(replies.find((r) => r.at >= started - WINDOW_SLACK_MS)?.id ?? "live", w);
+  }
+  return out;
+}
+
+/**
  * A card's identity on screen: where its controls are addressed, else the tracked run, else the record. What is
  * typed into a card, or a stop being confirmed on it, stays with that address through reorders and new sources,
  * and a card whose controls would reach anything else is a new card. (Each kind has its own prefix: a handle
@@ -474,8 +505,8 @@ export function sinceChips(counts: SinceCounts): SinceChip[] {
   const { failed = 0, stuck = 0, waiting = 0, finished = 0 } = counts;
   if (failed) chips.push({ key: "failed", label: `${failed} failed`, tone: "bad", tab: "running" });
   if (counts.decisions) chips.push({ key: "decisions", label: count(counts.decisions, "new decision", "new decisions"), tone: "ac", tab: "needs" });
-  if (waiting) chips.push({ key: "waiting", label: `${waiting} waiting on you`, tone: "wn", tab: "running" });
-  if (stuck) chips.push({ key: "stuck", label: `${stuck} went quiet`, tone: "wn", tab: "running" });
+  if (waiting) chips.push({ key: "waiting", label: `${waiting} need you`, tone: "wn", tab: "running" });
+  if (stuck) chips.push({ key: "stuck", label: `${stuck} stalled`, tone: "wn", tab: "running" });
   if (finished) chips.push({ key: "finished", label: `${finished} finished`, tone: "ok", tab: "running" });
   const rest = Math.max(0, counts.runs - failed - stuck - waiting - finished);
   if (rest) chips.push({ key: "runs", label: count(rest, "run updated", "runs updated"), tone: "ai", tab: "running" });
