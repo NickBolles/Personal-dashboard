@@ -6,24 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { ChipButton, Dot, Pill, ProgressBar, type KTone } from "@/components/ui";
-import {
-  CHECKS_LABEL,
-  DEPLOY_LABEL,
-  STALL_AFTER_MIN,
-  isStalled,
-  liveLabel,
-  liveOfAgentRun,
-  stalledRuns,
-  type ExternalRun,
-  progressPct,
-  whoLabel,
-  type AgentRunsResponse,
-  type ItemAgentInfo,
-  type PrState,
-  type RunLive,
-} from "@/lib/agent-runs";
+import { STALL_AFTER_MIN, liveLabel, stalledRuns, progressPct, whoLabel, type AgentRunsResponse, type ItemAgentInfo, type RunLive } from "@/lib/agent-runs";
 import { relativeTime } from "@/lib/time";
-import { AgentChip } from "@/components/work/AgentChip";
 import "./agents.css";
 
 export const AGENT_RUNS_KEY = ["work", "agent-runs"] as const;
@@ -79,88 +63,6 @@ export function AgentLine({ info }: { info: ItemAgentInfo }) {
   );
 }
 
-const PR_TONE = (p: PrState): KTone => (p.state === "merged" ? "ai" : p.state === "closed" ? "neutral" : "ac");
-const CHECK_TONE: Record<string, KTone> = { success: "ok", failure: "bad", pending: "wn" };
-
-function PrRow({ pr }: { pr: PrState }) {
-  const name = pr.title || pr.ref;
-  return (
-    <li className="ar-pr" data-testid="agent-pr">
-      {pr.url ? (
-        <a href={pr.url} target="_blank" rel="noreferrer" className="min-w-0 truncate font-medium hover:underline">
-          {name}
-        </a>
-      ) : (
-        <span className="min-w-0 truncate font-medium">{name}</span>
-      )}
-      <span className="flex flex-wrap items-center gap-1">
-        <Pill tone={PR_TONE(pr)}>{pr.state ? pr.state[0]!.toUpperCase() + pr.state.slice(1) : "Not read yet"}</Pill>
-        {pr.checks ? <Pill tone={CHECK_TONE[pr.checks] ?? "neutral"}>{CHECKS_LABEL[pr.checks] ?? pr.checks}</Pill> : null}
-        {pr.deploy ? <Pill tone={pr.deploy === "live" ? "ok" : "wn"}>{DEPLOY_LABEL[pr.deploy]}</Pill> : null}
-      </span>
-    </li>
-  );
-}
-
-/**
- * Item agent panel: who is on it, the live state of its runs (from linked Hermes
- * conversations and AI jobs), its PRs with CI/merge/deploy state and the last
- * report. Read-only.
- */
-export function ItemAgentPanel({ itemId }: { itemId: string }) {
-  const q = useAgentRuns();
-  const info = q.data?.items[itemId];
-  if (!info) return null;
-  const pct = progressPct(info.progress);
-  return (
-    <section className="ar-panel" aria-labelledby={`ar-h-${itemId}`} data-testid="item-agent-panel">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <h3 id={`ar-h-${itemId}`} className="wk-label">
-          Agent
-        </h3>
-        {info.who ? <AgentMark name={info.who.kind === "person" ? null : info.who.name} busy={info.live === "running"} /> : null}
-        <span className="min-w-0 text-sm font-medium [overflow-wrap:anywhere]" data-testid="agent-who">
-          {whoLabel(info.who)}
-        </span>
-        <LiveState live={info.live} at={info.liveAt} approval={info.approval} />
-        {info.sessionId ? (
-          <Link href={`/chat/${encodeURIComponent(info.sessionId)}`} className="ml-auto text-xs text-accent hover:underline">
-            Open conversation
-          </Link>
-        ) : null}
-      </div>
-      {pct !== null ? (
-        <div className="mt-2">
-          <ProgressBar value={pct} tone="orb" label={`${info.progress!.done} of ${info.progress!.total} done`} />
-        </div>
-      ) : null}
-      {info.prs.length ? (
-        <ul className="mt-2 space-y-1.5" aria-label="Pull requests">
-          {info.prs.map((p, n) => (
-            <PrRow key={n} pr={p} />
-          ))}
-        </ul>
-      ) : null}
-      {info.agentRuns?.length ? (
-        <ul className="mt-2 space-y-2" aria-label="Agent runs" data-testid="agent-runs-list">
-          {info.agentRuns.map((r) => (
-            <AgentRunRow key={r.id} run={r} />
-          ))}
-        </ul>
-      ) : null}
-      {info.report ? (
-        <div className="ar-report mt-2" data-testid="agent-report">
-          <p className="text-sm font-medium [overflow-wrap:anywhere]">{info.report.title}</p>
-          {info.report.summary ? <p className="mt-0.5 text-sm [overflow-wrap:anywhere]">{info.report.summary}</p> : null}
-          <p className="mt-0.5 text-xs text-muted" data-dynamic>
-            Last report · {relativeTime(info.report.at)}
-          </p>
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
 /** "Stalled": a run still running with no update for STALL_AFTER_MIN. A nudge only; nothing is changed. */
 export function StalledBadge() {
   return (
@@ -191,49 +93,6 @@ export function CopyField({ label, value }: { label: string; value: string }) {
         {copied ? "Copied" : "Copy"}
       </ChipButton>
     </span>
-  );
-}
-
-const CHILD_LIVE = (c: { state: ExternalRun["state"] }) => liveOfAgentRun(c.state);
-
-/** One registered agent run: title, profile, state (+ Stalled), PR, summary, delegation ids, transcript path and child summaries. */
-function AgentRunRow({ run: r }: { run: ExternalRun }) {
-  const stalled = isStalled(r, useMinuteTick());
-  return (
-    <li className="min-w-0 text-sm" data-testid="agent-run" data-stalled={stalled || undefined}>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="agent-run-head">
-        <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{r.title}</span>
-        <AgentChip profile={r.profile} />
-        <LiveState live={liveOfAgentRun(r.state)} at={r.updatedAt} compact />
-        {stalled ? <StalledBadge /> : null}
-        {r.prUrl ? (
-          <a href={r.prUrl} target="_blank" rel="noreferrer" className="text-xs text-accent hover:underline">
-            PR
-          </a>
-        ) : null}
-      </div>
-      {r.summary ? <p className="mt-0.5 text-sm text-muted [overflow-wrap:anywhere]">{r.summary}</p> : null}
-      {r.children?.length ? (
-        <ul className="ar-children mt-1 space-y-0.5" aria-label={`Sub-agents of ${r.title}`} data-testid="agent-run-children">
-          {r.children.map((c, n) => (
-            <li key={n} className="min-w-0">
-              <span className="flex min-w-0 flex-wrap items-center gap-x-2">
-                <span className="min-w-0 [overflow-wrap:anywhere]">{c.title}</span>
-                <LiveState live={CHILD_LIVE(c)} compact />
-              </span>
-              {c.summary ? <span className="block text-xs text-muted [overflow-wrap:anywhere]">{c.summary}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {r.delegationId || r.hermesSessionId || r.transcriptPath ? (
-        <div className="mt-1 flex min-w-0 flex-col gap-1">
-          {r.delegationId ? <CopyField label="Delegation" value={r.delegationId} /> : null}
-          {r.hermesSessionId ? <CopyField label="Hermes session" value={r.hermesSessionId} /> : null}
-          {r.transcriptPath ? <CopyField label="Transcript" value={r.transcriptPath} /> : null}
-        </div>
-      ) : null}
-    </li>
   );
 }
 

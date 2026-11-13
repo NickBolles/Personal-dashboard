@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GetStarted, ReportViewer, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
-import { ItemAiChips } from "@/components/work/ItemAiChips";
 import { api } from "@/lib/client/api";
 import { ToastProvider } from "@/components/ui";
 import { OverflowMenu } from "@/components/ui/legacy";
@@ -50,12 +49,7 @@ function mount(children: ReactNode) {
 function ItemMenu({ onPick }: { onPick: (kind: string) => void }) {
   const items = useAiMenuItems("wk_item", onPick);
   const summary = useSummaryMenuItem("wk_item", onPick);
-  return (
-    <>
-      <ItemAiChips aiActions={items} itemActions={[]} />
-      <OverflowMenu label="More item actions" items={summary ? [...items, summary] : items} />
-    </>
-  );
+  return <OverflowMenu label="More item actions" items={summary ? [...items, summary] : items} />;
 }
 beforeEach(() => {
   access.ai = true;
@@ -110,7 +104,6 @@ it("offers Summarize in the item overflow menu, with a reason when policy refuse
   const disabled = await screen.findByRole("menuitem", { name: /Summarize/ });
   expect((disabled as HTMLButtonElement).disabled).toBe(true);
   expect(disabled.textContent).toContain("AI is excluded here");
-  expect(screen.queryByRole("group", { name: "AI shortcuts" })).toBeNull();
 });
 
 it("does not promote Summarize to the Get started primary button or expose it without work.ai", async () => {

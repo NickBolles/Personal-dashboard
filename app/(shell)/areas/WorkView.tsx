@@ -42,7 +42,7 @@ import { WorkTree } from "@/components/work/WorkTree";
 import { CheckIcon, ChevronIcon, PlusIcon } from "@/components/icons";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
-import { useNodeAgent } from "@/components/agents/NodeAgentChip";
+import { NodeAgentChip, useNodeAgent } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { AreaCoordinator, AreaProjects } from "@/components/map/AreaPage";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
@@ -75,7 +75,17 @@ import { agentChipLabel } from "@/lib/agents";
 import type { AiActionKind } from "@/lib/ai";
 import type { DecisionsResponse } from "@/lib/decisions";
 import { selectEscalation } from "@/lib/item-escalation";
-import { containerRollup, coordHref, itemNow, linkKind, logLine, type ContainerRollup, type ItemNow, type ItemWorkRow, type RollupItemRow } from "@/lib/item-page";
+import {
+  containerRollup,
+  coordHref,
+  itemNow,
+  linkKind,
+  logLine,
+  type ContainerRollup,
+  type ItemNow,
+  type ItemWorkRow,
+  type RollupItemRow,
+} from "@/lib/item-page";
 import {
   areaValidationDefault,
   COMPARATORS,
@@ -739,7 +749,11 @@ type CloseStatus = "abandoned" | "superseded";
 type OnOp = (op: UndoOp | null | undefined) => void;
 
 /** A dashed "add" chip: one per thing the page does not have yet (rule: empty sections are not drawn). */
-function AddChip({ label, name, ...rest }: { label: string; name: string; ref?: Ref<HTMLButtonElement> } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">) {
+function AddChip({
+  label,
+  name,
+  ...rest
+}: { label: string; name: string; ref?: Ref<HTMLButtonElement> } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">) {
   return (
     <KButton variant="ghost" size="sm" className="ip-add" aria-label={name} icon={<PlusIcon className="h-3.5 w-3.5" />} {...rest}>
       {label}
@@ -1045,7 +1059,7 @@ function ItemDetail({
 
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
-    <span className="ip-meta-in" data-status={item.status}>
+    <span className="ip-meta-status" data-status={item.status}>
       <SelectPicker
         id="work-status"
         label="Status"
@@ -1068,14 +1082,18 @@ function ItemDetail({
 
   const adds = leaf
     ? [
-        needsOwner && !item.nextAction && editing !== "next" ? <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} /> : null,
-        !item.summary && !item.builtIn && editing !== "summary" ? <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} /> : null,
+        needsOwner && !item.nextAction && editing !== "next" ? (
+          <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} />
+        ) : null,
+        !item.summary && !item.builtIn && editing !== "summary" ? (
+          <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
+        ) : null,
         !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-item" name="Add sub-item" onClick={() => onAdd("thread", item)} /> : null,
         !d.links.length ? (
           <AddMenuChip
             key="link"
             label="Link"
-            name="Add link"
+            name="Add a link"
             items={[
               { label: "Link PR", onSelect: () => setDialog("github_pr") },
               ...(canChat ? [{ label: "Link conversation", onSelect: () => setDialog("chat_session") }] : []),
@@ -1089,8 +1107,12 @@ function ItemDetail({
       ].filter(Boolean)
     : [
         // Containers: the summary and (areas) the next step are edited in place once they exist.
-        !item.summary && !item.builtIn && editing !== "summary" ? <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} /> : null,
-        isArea && !item.nextAction && editing !== "next" ? <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} /> : null,
+        !item.summary && !item.builtIn && editing !== "summary" ? (
+          <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
+        ) : null,
+        isArea && !item.nextAction && editing !== "next" ? (
+          <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} />
+        ) : null,
       ].filter(Boolean);
   const summary =
     item.summary || editing === "summary" ? (
@@ -1169,6 +1191,8 @@ function ItemDetail({
               {rollup.meta}
             </span>
           ) : null}
+          {/* The agent mode is set on areas and projects, so they say who answers here; an item says it in ⋯. */}
+          {container && canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
         </div>
         {/* Next: ONE section. What needs you is the next step (the decision, or a chip that jumps to what waits on
             you), with the written next action under it as a quiet line. When nothing needs you: the next action,
@@ -1328,7 +1352,7 @@ function ItemDetail({
                     onToggle={toggleWork}
                     onOp={onOp}
                   />
-                  <DoneWhen d={d} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} recording={action === "record"} />
+                  <DoneWhen d={d} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} recording={item.status === "awaiting_validation"} />
                   {summary || kidCount || hasBlockers || d.links.length || d.packets.length || adds.length ? (
                     <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
                       <h3 id="ip-plan-h" className="ip-label">
@@ -1336,15 +1360,7 @@ function ItemDetail({
                       </h3>
                       {summary}
                       {kidCount ? (
-                        <ItemsSection
-                          sub
-                          label="Sub-items"
-                          testId="sub-items"
-                          parent={item}
-                          open={kids.items}
-                          done={kids.done}
-                          onSelect={onSelect}
-                        />
+                        <ItemsSection sub label="Sub-items" testId="sub-items" parent={item} open={kids.items} done={kids.done} onSelect={onSelect} />
                       ) : null}
                       <Blockers d={d} onSelect={onSelect} />
                       <Links d={d} canChat={canChat} />
@@ -1474,7 +1490,7 @@ function ContainerBody({
         )}
         {usedAsWork ? (
           <>
-            <DoneWhen d={d} onReopen={() => onDialog("reopen")} recording={false} />
+            <DoneWhen d={d} onReopen={() => onDialog("reopen")} recording={item.status === "awaiting_validation"} />
             <PacketCard d={d} onCopy={onCopy} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
           </>
         ) : null}
@@ -1515,7 +1531,6 @@ function ContainerBody({
     </div>
   );
 }
-
 
 /**
  * Compact node header for the Board / Activity / Graph tabs: the breadcrumb and
@@ -1601,7 +1616,14 @@ function ItemsSection({
               {label} <span className="ip-count">{count}</span>
               {/* The header's "+ Item" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
               <span className="ip-label-acts">
-                <KButton variant="ghost" size="sm" iconOnly icon={<PlusIcon className="h-4 w-4" />} title="Add item, sub-project or path" onClick={() => setAdding(true)}>
+                <KButton
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  icon={<PlusIcon className="h-4 w-4" />}
+                  title="Add item, sub-project or path"
+                  onClick={() => setAdding(true)}
+                >
                   Add item, sub-project or path
                 </KButton>
               </span>
@@ -1813,7 +1835,7 @@ function PacketRow({ label, value }: { label: string; value: string }) {
 
 /**
  * Done when (the item's validations): a checklist. Not drawn while there are none. A row opens to record a
- * result, waive or remove it; while recording is the page's next step the pending rows are already open.
+ * result, waive or remove it; while the item is awaiting validation the lines still to measure are already open.
  * Settling is the page's one primary action (the Now slot), never a button here.
  */
 function DoneWhen({ d, onReopen, focusRecord, recording }: { d: WorkDetail; onReopen: () => void; focusRecord?: boolean; recording: boolean }) {
@@ -1851,7 +1873,8 @@ function DoneWhen({ d, onReopen, focusRecord, recording }: { d: WorkDetail; onRe
       <ul className="ip-checks">
         {d.validations.map((v, i) => {
           const focus = !!focusRecord && i === first;
-          const shown = open[v.id] ?? (focus || (recording && v.status === "pending"));
+          // While the item waits on validation, what still has to be measured (or measured again) is open.
+          const shown = open[v.id] ?? (focus || (recording && (v.status === "pending" || v.status === "fail")));
           return <ValidationRow key={v.id} v={v} focus={focus} open={shown} onToggle={() => setOpen((o) => ({ ...o, [v.id]: !shown }))} />;
         })}
       </ul>

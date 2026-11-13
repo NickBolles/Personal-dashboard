@@ -15,7 +15,10 @@ export function useNodeAgent(nodeId: string, version?: string, enabled = true) {
   }).data;
 }
 
-/** Area/project/item pages: which Hermes agent answers new chats and AI actions here. Hidden when nothing sets an agent. */
+/**
+ * Area and project pages (where the agent mode is set): which Hermes agent answers new chats and AI actions here,
+ * on the header's meta line. Hidden when nothing sets an agent. An item names it in its ⋯ menu's "Ask" heading.
+ */
 export function NodeAgentChip({ nodeId, version }: { nodeId: string; version?: string }) {
   const agent = useNodeAgent(nodeId, version);
   if (!agent?.requested) return null;

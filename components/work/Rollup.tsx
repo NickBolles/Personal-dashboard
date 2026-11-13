@@ -34,7 +34,9 @@ export function RollupGroups({ id, rollup, onSelect }: { id: string; rollup: Pic
         </>
       }
       onOpen={() => onSelect(row.itemId)}
-      actions={<RowAction label={`Log of ${row.refId}`} icon={<LogIcon className="h-4 w-4" />} onClick={() => router.push(coordHref(id, "running", row.refId))} />}
+      actions={
+        <RowAction label={`Log of ${row.refId}`} icon={<LogIcon className="h-4 w-4" />} onClick={() => router.push(coordHref(id, "running", row.refId))} />
+      }
     />
   );
   return (
@@ -55,7 +57,11 @@ export function RollupGroups({ id, rollup, onSelect }: { id: string; rollup: Pic
                   refId={row.refId}
                   title={row.title}
                   // A decision often asks about the item by name: the item is only named when it adds something.
-                  sub={<span data-dynamic>{dot(["Decision", row.itemTitle.trim().toLowerCase() === row.title.trim().toLowerCase() ? "" : row.itemTitle, row.age])}</span>}
+                  sub={
+                    <span data-dynamic>
+                      {dot(["Decision", row.itemTitle.trim().toLowerCase() === row.title.trim().toLowerCase() ? "" : row.itemTitle, row.age])}
+                    </span>
+                  }
                   href={coordHref(id, "needs", row.refId)}
                   actions={<ChevronIcon className="ip-chev h-4 w-4" />}
                 />

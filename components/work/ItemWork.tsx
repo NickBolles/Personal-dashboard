@@ -148,7 +148,11 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
             />
           ) : null}
           {row.refId ? (
-            <RowAction label={`Log of ${row.refId}`} icon={<LogIcon className="h-4 w-4" />} onClick={() => router.push(coordHref(itemId, "running", row.refId!))} />
+            <RowAction
+              label={`Log of ${row.refId}`}
+              icon={<LogIcon className="h-4 w-4" />}
+              onClick={() => router.push(coordHref(itemId, "running", row.refId!))}
+            />
           ) : null}
         </>
       }
@@ -168,7 +172,8 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
         <ul className="ip-subagents" aria-label={`Sub-agents of ${run.title}`} data-testid="agent-run-children">
           {run.children.map((child, n) => (
             <li key={n}>
-              <span className="ip-subagent-t">{child.title}</span> <StateWord state={runWorkState({ state: child.state, updatedAt: new Date(now).toISOString() }, now)} />
+              <span className="ip-subagent-t">{child.title}</span>{" "}
+              <StateWord state={runWorkState({ state: child.state, updatedAt: new Date(now).toISOString() }, now)} />
               {child.summary ? <span className="ip-subagent-s">{child.summary}</span> : null}
             </li>
           ))}
@@ -243,7 +248,12 @@ function JobRow({ row, itemId }: { row: JobWorkRow; itemId: string }) {
             ) : null}
             {stoppable ? <RowAction label={`Stop ${row.title}`} tone="danger" icon={<StopIcon className="h-4 w-4" />} onClick={() => setAsking(true)} /> : null}
             {job.state === "failed" ? (
-              <RowAction label={`Retry ${row.title}`} icon={<RetryIcon className="h-4 w-4" />} disabled={retry.isPending} onClick={() => retry.mutate(job.id)} />
+              <RowAction
+                label={`Retry ${row.title}`}
+                icon={<RetryIcon className="h-4 w-4" />}
+                disabled={retry.isPending}
+                onClick={() => retry.mutate(job.id)}
+              />
             ) : null}
           </>
         )
@@ -281,9 +291,8 @@ function ReportRow({ row, now, onOpen }: { row: ReportWorkRow; now: number; onOp
   );
 }
 
+/** A linked conversation's own run: the row is the link to that conversation. */
 function ChatRow({ row, now }: { row: ChatWorkRow; now: number }) {
-  const router = useRouter();
-  const open = row.sessionId ? () => router.push(`/chat/${encodeURIComponent(row.sessionId!)}`) : undefined;
   return (
     <ThingRow
       id={workRowId(row.key)}
@@ -292,8 +301,8 @@ function ChatRow({ row, now }: { row: ChatWorkRow; now: number }) {
       state={row.state}
       title={row.title}
       sub={<Line row={row} now={now} />}
-      onOpen={open}
-      actions={open ? <RowAction label="Open conversation" icon={<ChatIcon className="h-4 w-4" />} onClick={open} /> : undefined}
+      href={row.sessionId ? `/chat/${encodeURIComponent(row.sessionId)}` : undefined}
+      actions={row.sessionId ? <ChatIcon className="ip-chev h-4 w-4" /> : undefined}
     />
   );
 }

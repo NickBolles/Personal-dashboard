@@ -177,9 +177,7 @@ export function groupWork<R extends { state: WorkState }>(rows: readonly R[]): R
  * - "action": nothing needs the owner, so the page shows its one primary action for the item's state.
  */
 export type ItemNow =
-  | { kind: "escalation" }
-  | { kind: "pointer"; decisions: Pick<Decision, "ref" | "question">[]; rows: ItemWorkRow[] }
-  | { kind: "action"; action: ItemPrimary };
+  { kind: "escalation" } | { kind: "pointer"; decisions: Pick<Decision, "ref" | "question">[]; rows: ItemWorkRow[] } | { kind: "action"; action: ItemPrimary };
 
 export function itemNow(input: {
   itemId: string;
@@ -233,7 +231,16 @@ export function itemTimeline(input: {
   for (const report of input.reports ?? []) {
     if (report.archivedAt || report.supersededBy) continue;
     const kind = report.kind === "summarize" ? "Summary draft" : `${AI_KIND_LABEL[report.kind]} report`;
-    out.push({ id: `report:${report.id}`, runId: "", runRef: null, type: "done", summary: `${kind}: ${report.title}`, payload: {}, via: null, at: report.createdAt });
+    out.push({
+      id: `report:${report.id}`,
+      runId: "",
+      runRef: null,
+      type: "done",
+      summary: `${kind}: ${report.title}`,
+      payload: {},
+      via: null,
+      at: report.createdAt,
+    });
   }
   return out.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id.localeCompare(a.id));
 }
@@ -325,17 +332,15 @@ export function containerRollup(input: {
   const decisions = (input.decisions ?? [])
     .filter((d) => d.state === "open" && scope.has(d.itemId))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-    .map(
-      (d): RollupDecisionRow => ({
-        kind: "decision",
-        key: `d:${d.ref}`,
-        refId: d.ref,
-        title: d.question,
-        itemId: d.itemId,
-        itemTitle: titleOf(d.itemId) || d.itemTitle || "",
-        age: ageLabel(d.createdAt, now),
-      }),
-    );
+    .map((d): RollupDecisionRow => ({
+      kind: "decision",
+      key: `d:${d.ref}`,
+      refId: d.ref,
+      title: d.question,
+      itemId: d.itemId,
+      itemTitle: titleOf(d.itemId) || d.itemTitle || "",
+      age: ageLabel(d.createdAt, now),
+    }));
   // Sub-agents are folded into their parent run: one row per piece of work.
   const top = (input.runs ?? []).filter((run) => scope.has(run.itemId) && !run.parentRunId);
   const runRow = (run: CoordinatorRunRow): RollupRunRow => {

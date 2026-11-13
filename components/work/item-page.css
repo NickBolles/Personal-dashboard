@@ -32,6 +32,13 @@
   gap: 2px;
   margin-top: 2px;
 }
+.ip-meta-status {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
 /* Status, due, assignee and tags sit on the one line and wrap together. */
 .ip-meta .jv-meta,
 .ip-meta-in {
@@ -554,6 +561,10 @@ a.ip-linkrow-name:hover {
 /* ---- project / area page ---- */
 .ip-inline-add {
   border-bottom: 1px solid var(--bd);
+}
+/* Nothing for the side column to show: the main column takes the page. */
+.wk-cpage[data-side="none"] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { Button, Checkbox, ChipButton, Dialog, Field, Input, KSpinner, Select, Textarea, cx, useNow, useToast, Pill, ProposedBox } from "@/components/ui";
+import { Button, Checkbox, ChipButton, Dialog, Field, Input, KSpinner, Select, Textarea, cx, useToast, ProposedBox } from "@/components/ui";
 import { OverflowMenu } from "@/components/ui/legacy";
 import { useAccess } from "@/components/access";
 import { ModelCombobox, type ModelChoice } from "@/components/areas/ModelPicker";
@@ -28,7 +28,8 @@ import { SafeMarkdown, safeHref } from "./SafeMarkdown";
 
 /**
  * Phase 5 AI task actions in the item workspace: "✦ Get started" split button
- * + action sheet, the job chip, the Reports section and the report viewer.
+ * + action sheet and the report viewer. Jobs still going and finished reports
+ * are rows in the item page's Work list (components/work/ItemWork.tsx).
  * Hidden without work.ai or when the area excludes AI; the API
  * enforces both regardless.
  */
@@ -294,155 +295,6 @@ export function ActionSheet({
         ) : null}
       </div>
     </Dialog>
-  );
-}
-
-function elapsed(from: string | null, now: number) {
-  if (!from) return "";
-  const s = Math.max(0, Math.round((now - Date.parse(from)) / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-/** Status of the newest active (or just failed) job on the item. */
-export function JobChip({ itemId }: { itemId: string }) {
-  const can = useAccess().can("work.ai");
-  const q = useItemAi(itemId, can);
-  const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: itemAiKey(itemId) });
-  const cancel = useWorkMutation((id: string) => api.post<JobView>(`/api/ai/jobs/${id}/cancel`, {}), { onSuccess: refresh });
-  const retry = useWorkMutation((id: string) => api.post<JobView>(`/api/ai/jobs/${id}/retry`, {}), { onSuccess: refresh });
-  const anyway = useWorkMutation((id: string) => api.post<JobView>(`/api/ai/jobs/${id}/run-anyway`, {}), { onSuccess: refresh });
-  const now = useNow(1000);
-  const job =
-    q.data?.jobs.find((j) => !TERMINAL_JOB_STATES.includes(j.state)) ??
-    q.data?.jobs.find((j) => j.state === "failed" && now - Date.parse(j.finishedAt ?? j.createdAt) < 3600_000);
-  if (!job) return null;
-  const label = AI_KIND_LABEL[job.kind];
-  return (
-    <div
-      role="status"
-      data-testid="ai-job-chip"
-      className="mt-2 flex min-w-0 flex-wrap items-center gap-2 rounded-lg border border-line bg-bg px-3 py-1.5 text-sm wrap-anywhere"
-    >
-      {job.state === "queued" || job.state === "running" ? (
-        <>
-          <KSpinner />
-          <span>
-            {KIND_VERB[job.kind]}
-            <span className="text-muted" data-dynamic>
-              {job.state === "running" ? ` · ${elapsed(job.startedAt, now)}` : " · queued"}
-            </span>
-          </span>
-          <Button size="sm" variant="ghost" onClick={() => cancel.mutate(job.id)}>
-            Cancel
-          </Button>
-        </>
-      ) : job.state === "cancelling" ? (
-        <span>Stopping…</span>
-      ) : job.state === "waiting_approval" ? (
-        <>
-          <span>Hermes needs approval</span>
-          {job.conversationId ? (
-            <a className="tap underline" href={`/chat/${encodeURIComponent(job.conversationId)}`}>
-              Open conversation
-            </a>
-          ) : null}
-          <Button size="sm" variant="ghost" onClick={() => cancel.mutate(job.id)}>
-            Cancel
-          </Button>
-        </>
-      ) : job.state === "budget_blocked" ? (
-        <>
-          <span>Waiting for budget</span>
-          <Button size="sm" variant="danger" onClick={() => anyway.mutate(job.id)}>
-            Run anyway
-          </Button>
-        </>
-      ) : (
-        <>
-          <span>
-            {label} failed: {job.errorMessage ?? "unknown error"}
-          </span>
-          <Button size="sm" variant="ghost" onClick={() => retry.mutate(job.id)}>
-            Retry
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}
-
-const CONF_TONE = { low: "wn", medium: "neutral", high: "ok" } as const;
-
-function ago(iso: string) {
-  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
-  return m < 60 ? `${Math.max(1, m)}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
-}
-
-export function ReportsSection({ itemId, areaId }: { itemId: string; areaId: string | null }) {
-  const q = useItemAi(itemId);
-  const [open, setOpen] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("report");
-  });
-  const [showOld, setShowOld] = useState(false);
-  const reports = q.data?.reports ?? [];
-  const current = reports.filter((r) => !r.supersededBy);
-  const older = reports.filter((r) => r.supersededBy);
-  if (!reports.length) return null;
-  const row = (r: ReportView) => (
-    <li key={r.id}>
-      <button
-        type="button"
-        className="tap flex w-full min-w-0 flex-col items-start gap-0.5 py-2 text-left hover:bg-surface-2"
-        onClick={() => setOpen(r.id)}
-        data-testid="ai-report-row"
-      >
-        <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
-          {!r.readAt ? <span className="ai-unread-dot" aria-label="Unread" /> : null}
-          {r.kind === "summarize" ? (
-            <Pill tone="ai" className="max-w-full whitespace-normal">
-              Summary draft
-            </Pill>
-          ) : (
-            <Pill tone="ai" className="max-w-full whitespace-normal">
-              {AI_KIND_LABEL[r.kind]}
-            </Pill>
-          )}
-          <span className="min-w-0 truncate text-sm font-medium">{r.title}</span>
-          <Pill tone={CONF_TONE[r.confidence]} className="pill-dot">
-            {r.confidence}
-          </Pill>
-        </span>
-        {r.summary ? <span className="line-clamp-2 text-sm text-muted">{r.summary}</span> : null}
-        <span className="text-xs text-muted" data-dynamic>
-          {r.sourceCount} sources · {r.model ?? "default model"} · {usd2(r.costUsd)} · {ago(r.createdAt)}
-        </span>
-      </button>
-    </li>
-  );
-  return (
-    <section aria-labelledby="ai-reports-h" className="card" id="work-reports">
-      <h3 id="ai-reports-h" className="font-semibold">
-        Reports
-      </h3>
-      <ul className="wk-rows">{current.map(row)}</ul>
-      {older.length ? (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            className="max-w-full whitespace-normal text-xs text-muted underline"
-            aria-expanded={showOld}
-            onClick={() => setShowOld((v) => !v)}
-          >
-            {showOld ? "Hide" : "Show"} {older.length} earlier report{older.length === 1 ? "" : "s"}
-          </Button>
-          {showOld ? <ul className="wk-rows opacity-80">{older.map(row)}</ul> : null}
-        </>
-      ) : null}
-      {open ? <ReportViewer reportId={open} itemId={itemId} areaId={areaId} onClose={() => setOpen(null)} /> : null}
-    </section>
   );
 }
 
