@@ -210,9 +210,16 @@ test("coordinator chat: one Since divider after 2 h away, D-n/R-n chips, run not
   const divider = scope.getByRole("separator", { name: /^Since / });
   await expect(divider).toHaveCount(1);
   await expect(divider).toContainText("2 h");
-  // The mention chip opens the run under Activity.
+  // R-7 is a chip in the reply's text, and the run it names is drawn as a row right under that reply: the chip
+  // lands on the row and stays in Chat.
+  const row = scope.locator('article[data-run-ref="R-7"]');
+  await expect(row).toContainText("Sedge ledger build");
+  await expect(scope.getByText("Mentions:")).toHaveCount(0);
   await scope.getByRole("button", { name: "Run R 7", exact: true }).last().click();
-  await expect(scope.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
-  await expect(scope.getByText("Sedge ledger build")).toBeVisible();
+  await expect(row).toHaveAttribute("data-landed", "");
+  await expect(scope.getByRole("tab", { name: "Chat", exact: true })).toHaveAttribute("aria-selected", "true");
+  // A reference with no row in the conversation opens its tab: the decision goes to Needs you.
+  await scope.getByRole("button", { name: "Decision D 48", exact: true }).click();
+  await expect(scope.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
   await expectNoHorizontalOverflow(page);
 });
