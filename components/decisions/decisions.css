@@ -47,8 +47,10 @@
 .dcs-row .k-ref {
   margin-top: 1px;
 }
+/* The list sits in its host's gutter: the state dot lines up with the heading above it. */
 .dcs-row .k-thing-row {
   padding-block: 8px;
+  padding-inline: 2px 0;
 }
 .dcs-meta {
   display: block;
@@ -84,7 +86,7 @@
   flex-wrap: wrap;
   gap: 8px 6px;
   min-width: 0;
-  padding: 0 12px 10px 30px;
+  padding: 0 0 10px 20px;
 }
 .dcs-chips .dcs-chip.k-pick {
   min-height: 30px;
@@ -384,6 +386,7 @@
 }
 .dcs-receipt .k-thing-row {
   min-height: 44px;
+  padding-inline: 2px 0;
 }
 .dcs-receipt .k-thing-title {
   flex: 1 1 auto;
@@ -466,14 +469,6 @@
 }
 .gc-needs-rows > :first-child .k-thing {
   border-top: 0;
-}
-/* The panel already has its own gutter. */
-.gc-needs-panel .dcs-row .k-thing-row,
-.gc-needs-panel .dcs-receipt .k-thing-row {
-  padding-inline: 2px 0;
-}
-.gc-needs-panel .dcs-chips {
-  padding-inline: 20px 0;
 }
 /* A receipt whose row is out of sight (the detail is open on a narrow panel) is shown with the notices. */
 .dcs-floating {
