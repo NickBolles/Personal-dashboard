@@ -1765,7 +1765,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
   test.skip(info.project.name === "desktop", "Phone tray");
   const frozen = await stubGlobalCoordinator(page);
   // Prod state that overflowed release 65: 21 stalled runs + 44 decisions. They stalled since the owner last looked, so the
-  // tray leads with them: "21 runs went quiet · 44 need you" (one sentence, no count badges).
+  // tray leads with them: "21 runs stalled · 44 need you" (one sentence, no count badges).
   // 45 minutes before the browser's frozen clock, not the real one: after 12:15 CT the real clock is ahead of the
   // frozen midday, the runs looked freshly updated and the tray said "21 working".
   const stale = new Date(frozen - 45 * 60_000).toISOString();
@@ -1807,7 +1807,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
-    await expect(tray).toContainText("21 runs went quiet");
+    await expect(tray).toContainText("21 runs stalled");
     await expect(tray.locator(".gc-tray-status")).toContainText("44 need you");
     await expect(page.locator(".gc-tray").getByRole("button")).toHaveCount(1);
     await page.waitForTimeout(200);

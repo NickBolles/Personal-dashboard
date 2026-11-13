@@ -1511,3 +1511,42 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-sheet .gc-sheet-grab + .gc-head {
   min-height: 44px;
 }
+
+/* ==== references in text, rich rows under the reply ====
+   A D-n / R-n in a reply (or in your own message) is a chip in the sentence: tap it to jump to the thing. What
+   the reply mentions is drawn under it as rows, three at most; there is no separate "Mentions" list. */
+.k-ref.gc-inline-ref {
+  display: inline;
+  padding: 1px 5px;
+  vertical-align: 1px;
+}
+.gc-mention-rows > .k-thing:first-child,
+.gc-mention-rows > .rc-row:first-child > .k-thing {
+  border-top: 0;
+}
+.gc-mention-rows .k-thing-row {
+  padding-inline: 2px 0;
+}
+.gc-mention-more.gc-mention-more {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  border-top: 1px solid var(--bd);
+  border-radius: 0;
+  padding-inline: 2px;
+  color: var(--t2);
+}
+/* Line one of a stacked row gives way from its end: the reference and the state word always fit. */
+.k-thing-eyebrow > * {
+  flex: none;
+}
+.k-thing-eyebrow > :last-child:not(:first-child) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-mention-rows > .k-thing + .rc-row > .k-thing {
+  border-top: 1px solid var(--bd);
+}

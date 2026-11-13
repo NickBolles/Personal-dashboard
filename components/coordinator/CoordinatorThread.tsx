@@ -9,7 +9,7 @@ import { api, newIdempotencyKey } from "@/lib/client/api";
 import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
-import { Markdown } from "@/components/markdown/Markdown";
+import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
 import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
 import {
   AttachButton,
@@ -24,7 +24,7 @@ import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
 import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PlusIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, Menu, Textarea, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, Menu, RefPill, Textarea, useOnline, useToast } from "@/components/ui";
 import { scopeChip, scopeIsCommand, scopeLabel, scopeMessage, scopePlaceholder, scopeSendsEmpty, type ComposeScope } from "@/lib/coordinator/compose";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
@@ -76,6 +76,7 @@ export function CoordinatorThread({
   commandRef,
   scope: scopeProp,
   onScope,
+  mentions,
 }: {
   /**
    * What the next message is about (the chip in the composer): set by Steer, Reply, Retry or "ask about this" on
@@ -83,6 +84,11 @@ export function CoordinatorThread({
    */
   scope?: ComposeScope | null;
   onScope?: (scope: ComposeScope | null) => void;
+  /**
+   * The rich rows for what a reply mentions (D-n / R-n). `rank` says whether a reference can be drawn here and
+   * where it sorts (lower first; null = not drawable, it stays a chip in the text); `render` draws its row.
+   */
+  mentions?: { rank: (ref: string) => number | null; render: (ref: string) => ReactNode };
   info: CoordinatorResponse;
   compact?: boolean;
   /** Who the owner is talking to, as shown on replies ("Chief of staff" in the global rail). */
@@ -367,6 +373,22 @@ export function CoordinatorThread({
     const actions = replyActions.get(id) ?? [];
     return placed.get(id)?.length ? actions.filter((a) => a.kind !== "delegated" && a.kind !== "run_started") : actions;
   };
+  // What a reply mentions is drawn once too: as a row under the LATEST reply that mentions it, unless it already
+  // has its row as work a reply started. Everywhere else it is only the chip in the text.
+  const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
+  const mentionedBy = new Map<string, string>();
+  for (const m of msgs) if (m.kind === "assistant") for (const ref of proseRefs(m.text)) mentionedBy.set(ref, m.id);
+  const mentionRows = (id: string) =>
+    mentions
+      ? [...mentionedBy]
+          .filter(([ref, at]) => at === id && !drawn.has(ref))
+          .flatMap(([ref]) => {
+            const rank = mentions.rank(ref);
+            return rank === null ? [] : [{ ref, rank }];
+          })
+          .sort((x, y) => x.rank - y.rank)
+          .map((x) => x.ref)
+      : [];
   const divider = sinceDivider(lastLookedChat, new Date(), sinceCounts);
   const caughtUp = divider ? sinceChips(divider.jumps) : [];
   const dividerIndex = divider ? messageGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat!))) : -1;
@@ -389,6 +411,16 @@ export function CoordinatorThread({
     if (first && sinceRef.current) body.scrollTop = Math.max(0, sinceRef.current.offsetTop - body.offsetTop - 4);
     else body.scrollTop = body.scrollHeight;
   }, [compact, sid, lastId, running, hasDivider]);
+  // A reference chip in the text jumps to the thing's row when it is on screen here, else to its tab.
+  const jumpTo = (ref: string) => {
+    const target = bodyRef.current?.querySelector<HTMLElement>(`[data-run-ref="${ref}"], [data-ref-row="${ref}"]`);
+    if (!target) return onRef?.(ref);
+    target.scrollIntoView?.({ block: "nearest" });
+    target.setAttribute("data-landed", "");
+    window.setTimeout(() => target.removeAttribute("data-landed"), 1900);
+    target.querySelector<HTMLElement>(".k-thing-title, [data-thing-toggle]")?.focus({ preventScroll: true });
+  };
+  const refChip = onRef ? (ref: string) => <RefPill id={ref} onClick={() => jumpTo(ref)} className="gc-inline-ref" /> : null;
   return (
     <SmartSession.Provider value={sid}>
       <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
@@ -446,81 +478,82 @@ export function CoordinatorThread({
               </p>
             ) : null}
             {sid && msgs.length ? (
-              <ol aria-label="Latest messages">
-                {msgs.map((m, index) => (
-                  <Fragment key={m.id}>
-                    {index === dividerIndex && divider ? (
-                      <li className="gc-since" ref={sinceRef}>
-                        <div role="separator" aria-label={divider.label} className="gc-since-label">
-                          <ClockIcon className="h-3.5 w-3.5" />
-                          <span>{divider.label}</span>
-                        </div>
-                        {caughtUp.length ? (
-                          <div className="gc-since-jumps">
-                            {caughtUp.map((chip) => (
-                              <Button
-                                key={chip.key}
-                                variant="ghost"
-                                size="sm"
-                                className={`gc-since-chip k-t-${chip.tone}`}
-                                icon={SINCE_ICON[chip.key]}
-                                disabled={!onJump}
-                                onClick={() => onJump?.(chip.tab, chip.key)}
-                              >
-                                {chip.label}
-                              </Button>
-                            ))}
+              <MarkdownRefRenderer.Provider value={refChip}>
+                <ol aria-label="Latest messages">
+                  {msgs.map((m, index) => (
+                    <Fragment key={m.id}>
+                      {index === dividerIndex && divider ? (
+                        <li className="gc-since" ref={sinceRef}>
+                          <div role="separator" aria-label={divider.label} className="gc-since-label">
+                            <ClockIcon className="h-3.5 w-3.5" />
+                            <span>{divider.label}</span>
                           </div>
-                        ) : null}
-                      </li>
-                    ) : null}
-                    {isBackgroundNotice(m.text) ? (
-                      <li className="co-msg">
-                        <BackgroundNotices messages={messageGroups[index]} />
-                      </li>
-                    ) : m.kind === "assistant" ? (
-                      <li key={m.id} className="co-msg" data-who="assistant">
-                        <div className="co-msg-head flex items-center justify-between gap-1">
-                          <p className="text-xs font-semibold text-muted">{name}</p>
-                          {sid ? (
-                            <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
-                              <RateMessage
-                                sessionId={sid}
-                                messageId={m.id}
-                                surface="coordinator"
-                                text={m.text}
-                                who="the coordinator's message"
-                                model={detail.data?.session?.model ?? null}
-                                onAskFix={async (prompt) => {
-                                  if (send.isPending || detail.data?.session?.activeRun) {
-                                    toast("Wait for the coordinator to finish, then ask again.", "warn");
-                                    return false;
-                                  }
-                                  await send.mutateAsync({ input: prompt, correction: true });
-                                  return true;
-                                }}
-                              />
-                            </span>
+                          {caughtUp.length ? (
+                            <div className="gc-since-jumps">
+                              {caughtUp.map((chip) => (
+                                <Button
+                                  key={chip.key}
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`gc-since-chip k-t-${chip.tone}`}
+                                  icon={SINCE_ICON[chip.key]}
+                                  disabled={!onJump}
+                                  onClick={() => onJump?.(chip.tab, chip.key)}
+                                >
+                                  {chip.label}
+                                </Button>
+                              ))}
+                            </div>
                           ) : null}
-                        </div>
-                        <AssistantText text={m.text} />
-                        <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                        {placed.get(m.id)?.length ? (
-                          <section aria-label="Work started by this reply" className="gc-bgwork">
-                            {placed.get(m.id)!.map(row)}
-                          </section>
-                        ) : null}
-                        {onRef ? <Mentions text={m.text} onRef={onRef} skip={placed.get(m.id)?.flatMap((w) => (w.run ? [w.run.ref] : []))} /> : null}
-                      </li>
-                    ) : (
-                      <li key={m.id} className="co-msg" data-who="user">
-                        <UserMessage text={m.text} sessionId={sid} />
-                        {onRef ? <Mentions text={m.text} onRef={onRef} /> : null}
-                      </li>
-                    )}
-                  </Fragment>
-                ))}
-              </ol>
+                        </li>
+                      ) : null}
+                      {isBackgroundNotice(m.text) ? (
+                        <li className="co-msg">
+                          <BackgroundNotices messages={messageGroups[index]} />
+                        </li>
+                      ) : m.kind === "assistant" ? (
+                        <li key={m.id} className="co-msg" data-who="assistant">
+                          <div className="co-msg-head flex items-center justify-between gap-1">
+                            <p className="text-xs font-semibold text-muted">{name}</p>
+                            {sid ? (
+                              <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
+                                <RateMessage
+                                  sessionId={sid}
+                                  messageId={m.id}
+                                  surface="coordinator"
+                                  text={m.text}
+                                  who="the coordinator's message"
+                                  model={detail.data?.session?.model ?? null}
+                                  onAskFix={async (prompt) => {
+                                    if (send.isPending || detail.data?.session?.activeRun) {
+                                      toast("Wait for the coordinator to finish, then ask again.", "warn");
+                                      return false;
+                                    }
+                                    await send.mutateAsync({ input: prompt, correction: true });
+                                    return true;
+                                  }}
+                                />
+                              </span>
+                            ) : null}
+                          </div>
+                          <AssistantText text={m.text} />
+                          <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+                          {placed.get(m.id)?.length ? (
+                            <section aria-label="Work started by this reply" className="gc-bgwork">
+                              {placed.get(m.id)!.map(row)}
+                            </section>
+                          ) : null}
+                          {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
+                        </li>
+                      ) : (
+                        <li key={m.id} className="co-msg" data-who="user">
+                          <UserMessage text={m.text} sessionId={sid} onRef={onRef ? jumpTo : undefined} />
+                        </li>
+                      )}
+                    </Fragment>
+                  ))}
+                </ol>
+              </MarkdownRefRenderer.Provider>
             ) : sid && detail.isSuccess ? (
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
@@ -774,7 +807,7 @@ export function CoordinatorThread({
 }
 
 /** What the owner sent: their words in a bubble; machine wrappers become a quiet caption or a compact receipt. */
-function UserMessage({ text, sessionId }: { text: string; sessionId?: string | null }) {
+function UserMessage({ text, sessionId, onRef }: { text: string; sessionId?: string | null; onRef?: (ref: string) => void }) {
   const { body, attached } = splitAttachedContext(text);
   const parts = parseUserMessage(body);
   const fileIds = parseFileMarkers(attached);
@@ -796,7 +829,7 @@ function UserMessage({ text, sessionId }: { text: string; sessionId?: string | n
     <>
       <span className="sr-only">You said: </span>
       <div className="gc-bubble">
-        <p className={`whitespace-pre-wrap${long && !open ? " line-clamp-4" : ""}`}>{parts.text}</p>
+        <p className={`whitespace-pre-wrap${long && !open ? " line-clamp-4" : ""}`}>{onRef ? withRefs(parts.text, onRef) : parts.text}</p>
         {long ? (
           <Button variant="ghost" size="sm" className="gc-bubble-more" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
             {open ? "Show less" : "Show all"}
@@ -851,21 +884,47 @@ function BackgroundNotices({ messages }: { messages: ThreadMessage[] }) {
     </div>
   );
 }
-function Mentions({ text, onRef, skip = [] }: { text: string; onRef: (ref: string) => void; skip?: string[] }) {
-  // Keep the Markdown renderer untouched; code and link destinations are not prose mentions.
+/** The D-n / R-n references in a message's prose (code and link destinations are not mentions), in order, once each. */
+function proseRefs(text: string): string[] {
   const prose = text.replace(/```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`]*`|\]\([^)]*\)/g, " ");
-  // A run that already has its row under this message is not also a mention chip.
-  const mentions = [...new Set(refChips(prose).map((chip) => chip.ref))].filter((ref) => !skip.includes(ref));
-  return mentions.length ? (
-    <div className="gc-mentions" aria-label="Mentions">
-      <span>Mentions:</span>
-      {mentions.map((ref) => (
-        <ChipButton key={ref} aria-label={`${ref.startsWith("D") ? "Decision" : "Run"} ${ref.replace("-", " ")}`} onClick={() => onRef(ref)}>
-          {ref}
-        </ChipButton>
+  return [...new Set(refChips(prose).map((chip) => chip.ref))];
+}
+/** The owner's own words with any D-n / R-n in them as chips that jump to the thing. */
+function withRefs(text: string, onRef: (ref: string) => void): ReactNode[] {
+  return text
+    .split(/\b([DR]-\d{1,9})\b/)
+    .map((part, index) => (index % 2 ? <RefPill key={index} id={part} onClick={() => onRef(part)} className="gc-inline-ref" /> : part));
+}
+/** How many of a reply's mentioned things are drawn as rows before "N more". */
+const MENTIONS_SHOWN = 3;
+/**
+ * What a reply mentions, as rich rows right under it: three at most, the rest behind one line that names them.
+ * The references themselves are chips in the reply's text; there is no separate list of mentions.
+ */
+function MentionRows({ refs, render }: { refs: string[]; render: (ref: string) => ReactNode }) {
+  const [all, setAll] = useState(false);
+  if (!refs.length) return null;
+  const shown = all ? refs : refs.slice(0, MENTIONS_SHOWN);
+  const rest = refs.slice(shown.length);
+  return (
+    <section aria-label="Mentioned in this reply" className="gc-bgwork gc-mention-rows">
+      {shown.map((ref) => (
+        <Fragment key={ref}>{render(ref)}</Fragment>
       ))}
-    </div>
-  ) : null;
+      {refs.length > MENTIONS_SHOWN ? (
+        <Button variant="ghost" size="sm" className="gc-mention-more" aria-expanded={all} onClick={() => setAll((value) => !value)}>
+          {all ? "Show fewer" : `${rest.length} more`}
+          {all
+            ? null
+            : rest.map((ref) => (
+                <span key={ref} className="k-ref" data-kind={ref.startsWith("D") ? "d" : "r"}>
+                  {ref}
+                </span>
+              ))}
+        </Button>
+      ) : null}
+    </section>
+  );
 }
 
 /** Background work in the order the owner needs it. */

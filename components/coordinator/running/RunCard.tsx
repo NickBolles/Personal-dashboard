@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AgentMark } from "@/components/brand/AgentMark";
 import { Button, ButtonLink, Dot, Pill, ProgressBar, RefPill, RowAction, SectionHeader, StateWord, ThingRow, useNow, type ThingState } from "@/components/ui";
 import { SummaryCard } from "../cards/SummaryCard";
-import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, LogIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
+import { AreasIcon, ChatIcon, ChevronIcon, ExternalIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { api } from "@/lib/client/api";
 import { STALL_AFTER_MIN } from "@/lib/agent-runs";
 import { isActiveExec } from "@/lib/chat-execution";
@@ -328,8 +328,7 @@ export function RunCard({
     { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) },
     canStop ? { label: "Stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
   ].filter((item) => item !== null);
-  // The two icons that matter for this state, in the fixed order Steer, Stop, Retry, Log.
-  const log = <RowAction label={`Log for ${run.ref}`} icon={<LogIcon className={ic} />} aria-expanded={open} onClick={() => setOpen((value) => !value)} />;
+  // The icons that matter for this state, in the fixed order Steer, Stop, Retry; the details toggle follows them.
   const stopAction = (
     <RowAction
       label={`Stop ${run.ref}`}
@@ -354,14 +353,11 @@ export function RunCard({
           {stopAction}
         </>
       )
-    ) : status.key === "done" ? (
-      log
-    ) : (
-      <>
-        <RowAction label={`${retryWord} ${run.ref}`} icon={<RetryIcon className={ic} />} onClick={retry} />
-        {log}
-      </>
+    ) : status.key === "done" ? null : (
+      <RowAction label={`${retryWord} ${run.ref}`} icon={<RetryIcon className={ic} />} onClick={retry} />
     );
+  // Line three: the one thing worth knowing without opening the row.
+  const peek = needs?.text || (latest ? eventText(latest, run.title) : "") || outcome;
   return (
     <SummaryCard
       ref={root}
@@ -378,21 +374,23 @@ export function RunCard({
         state={state}
         refId={run.ref}
         title={run.title}
-        tight={status.key === "done" && !open}
-        sub={
+        status={
           <SubLine
             state={<RowState state={state} label={status.label} live={status.live} burst={burst} celebrate={status.key === "done"} />}
             parts={[
               asks ? `answer ${asks.ref}` : null,
               status.detail,
-              status.key === "done" ? null : run.profile,
               childRuns.length ? (childRuns.length === 1 ? "1 sub-run" : `${childRuns.length} sub-runs`) : null,
             ]}
           />
         }
+        sub={peek || undefined}
+        // The title opens the item the run is for; the chevron opens the run's own detail in place.
+        href={run.itemId ? `/areas?item=${encodeURIComponent(run.itemId)}` : undefined}
         expanded={open}
-        onOpen={() => setOpen((value) => !value)}
-        hitProps={{ "data-run-body": run.ref, className: "k-thing-hit gc-run-body" }}
+        onToggle={() => setOpen((value) => !value)}
+        toggleLabel={`Details for ${run.ref}`}
+        hitProps={{ "data-run-body": run.ref, className: "k-thing-title gc-run-body" }}
         actions={rowActions}
       >
         {needs ? (
@@ -404,6 +402,7 @@ export function RunCard({
           </p>
         ) : null}
         <p className="rc-meta">
+          <span>{run.profile}</span>
           {run.itemTitle && run.itemTitle !== run.title ? <span className="rc-meta-item">{run.itemTitle}</span> : null}
           {run.noticeCount ? <span>{run.noticeCount === 1 ? "1 step reported" : `${run.noticeCount} steps reported`}</span> : null}
           <span data-dynamic>started {relativeTime(run.startedAt, now)}</span>
@@ -644,7 +643,7 @@ export function ExecCard({
   if (stopAsked !== null && stopAsked !== stopOffer) setStopAsked(null);
   const confirmStop = stopAsked !== null && stopAsked === stopOffer;
   const setConfirmStop = (open: boolean) => setStopAsked(open ? stopOffer : null);
-  const hasMore = tells || timeline.length > 0 || links.length > 0 || !!record.href || !!children || (active && typeof record.progress === "number");
+  const hasMore = (tells && long) || timeline.length > 0 || links.length > 0 || !!children || (active && typeof record.progress === "number") || !!record.error;
   // Open on arrival when it needs the owner; anything else opens by its body.
   const [open, setOpen] = useState(state === "needs" || state === "failed");
   const name = run?.ref ?? title;
@@ -684,9 +683,6 @@ export function ExecCard({
           onClick={() => setConfirmStop(!confirmStop)}
         />
       ) : null}
-      {!steerable && !canReply && !stoppable && hasMore ? (
-        <RowAction label={`Log for ${name}`} icon={<LogIcon className={ic} />} aria-expanded={open} onClick={() => setOpen((value) => !value)} />
-      ) : null}
     </>
   );
   return (
@@ -701,21 +697,25 @@ export function ExecCard({
       data-live={isLive || undefined}
       data-open={(open && hasMore) || undefined}
       data-testid="coordinator-run-card"
+      data-run-ref={run?.ref}
       aria-label={record.title}
     >
       <ThingRow
         state={state}
         refId={run?.ref}
         title={<span title={record.title}>{title}</span>}
-        tight={(state === "done" || state === "stopped") && !open}
-        sub={
+        status={
           <SubLine
             state={<RowState state={state} label={label} live={isLive} burst={burst} celebrate={record.state === "completed"} />}
-            parts={[detail, active && record.step ? tidyOutcome(record.step) : null, lingering ? "a sub-agent is still working" : null]}
+            parts={[detail, lingering ? "a sub-agent is still working" : null]}
           />
         }
+        sub={tells ? outcome : undefined}
+        // The title opens the work itself (its conversation or item); the chevron opens its detail in place.
+        href={record.href ?? undefined}
         expanded={hasMore ? open : undefined}
-        onOpen={hasMore ? () => setOpen((value) => !value) : undefined}
+        onToggle={hasMore ? () => setOpen((value) => !value) : undefined}
+        toggleLabel={`Details for ${name}`}
         actions={rowActions}
       >
         {tells ? (
@@ -736,13 +736,8 @@ export function ExecCard({
         ) : null}
         {timeline.length ? <RunTimeline events={timeline} runTitle={record.title} label={`Latest events for ${run!.ref}`} live={isLive} /> : null}
         {children}
-        {record.href || links.length ? (
+        {links.length ? (
           <div className="rc-actions">
-            {record.href ? (
-              <ButtonLink size="sm" variant="ghost" className="rc-act" href={record.href} icon={<ChatIcon className={small} />}>
-                Open
-              </ButtonLink>
-            ) : null}
             {links.map((link) => (
               <ButtonLink key={link.url} size="sm" variant="ghost" className="rc-act" href={link.url} external icon={<ExternalIcon className={small} />}>
                 {link.label?.trim() || (link.kind === "github" ? "GitHub" : "Link")}

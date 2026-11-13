@@ -2529,6 +2529,64 @@ button:active > .dock-orb {
     padding: 10px 12px;
     min-width: 0;
   }
+  /* Stacked form (ThingRow with `status`): reference and state on top, the title under it (a link to the thing),
+     a one-line peek under that. Icon actions and the details toggle sit on the right. */
+  .k-thing-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .k-thing-eyebrow {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    color: var(--t2);
+    font: 400 12px/18px var(--sans);
+    white-space: nowrap;
+  }
+  .k-thing-eyebrow > .k-sd {
+    margin-inline: 1px;
+  }
+  .k-thing[data-stacked] .k-thing-row {
+    min-height: 0;
+    padding-block: 8px;
+  }
+  .k-thing[data-stacked] .k-thing-title {
+    display: block;
+    border: 0;
+    border-radius: var(--r1);
+    background: none;
+    padding: 0;
+    color: var(--t1);
+    font: 500 14px/20px var(--sans);
+    text-align: left;
+    text-decoration: none;
+  }
+  a.k-thing-title,
+  button.k-thing-title {
+    cursor: pointer;
+  }
+  a.k-thing-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .k-thing[data-stacked]:is([data-state="done"], [data-state="stopped"]) .k-thing-title {
+    color: var(--t2);
+    font-weight: 400;
+  }
+  .k-thing[data-stacked] .k-thing-open {
+    margin-inline: 12px 8px;
+  }
+  .k-thing-chev {
+    transition: transform var(--d1) var(--ease);
+  }
+  [aria-expanded="true"] .k-thing-chev {
+    transform: rotate(180deg);
+  }
   /* State mark: filled = yours to act on, ring = went silent, pulse = working, tick = done. */
   .k-sd {
     position: relative;

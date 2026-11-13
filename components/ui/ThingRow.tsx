@@ -84,15 +84,21 @@ export function RowAction({
  *
  * - `onOpen`: the row body is a button (it toggles `expanded`, or opens the thing). `href`: the body is a link.
  * - `tight`: one line (title, then `sub` beside it): finished work, collapsed groups.
+ * - `status`: the stacked form. Line one is the reference, the state mark and `status` (the state word and its
+ *   time); line two is the title, which is then the link or button (`href` / `onOpen`) that opens the thing itself;
+ *   line three is `sub`, a one-line peek. Opening in place is a separate control: pass `onToggle`.
  * - A screen draws each thing as a row once. Any other mention of it is a `RefPill`.
  */
 export function ThingRow({
   state,
   refId,
   title,
+  status,
   sub,
   actions,
   onOpen,
+  onToggle,
+  toggleLabel = "Details",
   href,
   expanded,
   tight,
@@ -104,9 +110,14 @@ export function ThingRow({
   state: ThingState;
   refId?: string;
   title: ReactNode;
+  /** Stacked form: what follows the state mark on line one (state word, time). */
+  status?: ReactNode;
   sub?: ReactNode;
   actions?: ReactNode;
   onOpen?: () => void;
+  /** Stacked form: toggles `expanded` from its own chevron button, named `toggleLabel`. */
+  onToggle?: () => void;
+  toggleLabel?: string;
   href?: string;
   /** Set (true or false) on a row that opens in place; leave undefined on one that does not. */
   expanded?: boolean;
@@ -119,6 +130,67 @@ export function ThingRow({
   DataAttrs) {
   const panel = useId();
   const open = !!expanded && children != null;
+  if (status !== undefined) {
+    const titleProps = { className: "k-thing-title", ...hitProps };
+    return (
+      <div {...rest} className={cx("k-thing", className)} data-state={state} data-open={open || undefined} data-stacked="">
+        <div className="k-thing-row">
+          <div className="k-thing-main">
+            <span className="k-thing-eyebrow">
+              {refId ? <RefPill id={refId} /> : null}
+              <StateDot state={state} />
+              {status}
+            </span>
+            {href ? (
+              <Link href={href} {...titleProps}>
+                {title}
+              </Link>
+            ) : onOpen ? (
+              <button type="button" onClick={onOpen} {...titleProps}>
+                {title}
+              </button>
+            ) : (
+              <span {...titleProps}>{title}</span>
+            )}
+            {sub ? <span className="k-thing-s">{sub}</span> : null}
+          </div>
+          {actions || onToggle ? (
+            <span className="k-thing-acts">
+              {actions}
+              {onToggle ? (
+                <RowAction
+                  label={toggleLabel}
+                  data-thing-toggle=""
+                  aria-expanded={open}
+                  aria-controls={open ? panel : undefined}
+                  onClick={onToggle}
+                  icon={
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="k-thing-chev h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  }
+                />
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+        {open ? (
+          <div className="k-thing-open" id={panel}>
+            {children}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   const body = (
     <>
       <span className="k-thing-t">

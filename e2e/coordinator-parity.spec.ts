@@ -121,16 +121,26 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await expect(pane.getByTestId("actions-taken")).toBeVisible();
   const run = pane.getByTestId("coordinator-run-card");
   await expect(run).toContainText("Audit retries");
-  await expect(run.getByRole("button", { name: "Ask to stop", exact: true })).toBeVisible();
-  await run.getByRole("button", { name: "Steer", exact: true }).click();
-  await run.getByRole("textbox", { name: "Guidance for Audit retries" }).fill("Focus on cancellation tests");
-  await run.getByRole("button", { name: "Send", exact: true }).click();
+  // One composer: Steer on the row puts the work's chip in the pane's composer; nothing is sent until Send there.
+  await expect(run.getByRole("button", { name: "Stop Audit retries", exact: true })).toBeVisible();
+  await expect(run.getByRole("textbox")).toHaveCount(0);
+  await run.getByRole("button", { name: "Steer Audit retries", exact: true }).click();
+  expect(sent).toHaveLength(0);
+  await expect(pane.getByTestId("gc-scope")).toContainText("Audit retries");
+  const input = pane.getByTestId("coordinator-input");
+  await expect(input).toBeFocused();
+  await expect(input).toHaveAttribute("placeholder", "Steer this work…");
+  await input.fill("Focus on cancellation tests");
+  await pane.getByTestId("coordinator-send").click();
   await expect.poll(() => sent[0]?.input).toBe("Steer sa_retry: Focus on cancellation tests");
   expect(sent[0].input.startsWith("Steer ")).toBe(true);
   await expect(page.getByText("Sent to the coordinator", { exact: true })).toBeVisible();
-  await run.getByRole("button", { name: "Ask to stop", exact: true }).click();
+  await expect(pane.getByTestId("gc-scope")).toHaveCount(0);
+  await expect(input).toHaveValue("");
+  // Stop asks once on the row, then sends.
+  await run.getByRole("button", { name: "Stop Audit retries", exact: true }).click();
   expect(sent).toHaveLength(1);
-  await run.getByRole("button", { name: "Send stop request", exact: true }).click();
+  await run.getByRole("button", { name: "Stop sub-agent", exact: true }).click();
   await expect.poll(() => sent[1]?.input).toBe("Stop sa_retry");
   await expectNoHorizontalOverflow(page);
 });
@@ -151,9 +161,9 @@ test("coordinator parity: active parent receives steering and can be stopped dir
   const pane = await openAreaPane(page);
   await expect(pane.getByText("Working…", { exact: true })).toBeVisible();
   const run = pane.getByTestId("coordinator-run-card");
-  await run.getByRole("button", { name: "Steer", exact: true }).click();
-  await run.getByRole("textbox").fill("Keep the audit bounded");
-  await run.getByRole("button", { name: "Send", exact: true }).click();
+  await run.getByRole("button", { name: "Steer Audit retries", exact: true }).click();
+  await pane.getByTestId("coordinator-input").fill("Keep the audit bounded");
+  await pane.getByTestId("coordinator-send").click();
   await expect.poll(() => steers).toEqual(["Steer sa_retry: Keep the audit bounded"]);
   await pane.getByText("Working…", { exact: true }).locator("..").getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => stops).toBe(1);

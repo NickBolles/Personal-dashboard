@@ -90,7 +90,7 @@ export function pushRunTransition(run: Pick<RunRow, "userId" | "seq" | "title" |
         category: "hermes_complete",
         severity: "high",
         title: `Session ended · ${interrupted} ${interrupted === 1 ? "run" : "runs"} stopped`,
-        body: `Resume all ${interrupted} from Running.`,
+        body: `Resume all ${interrupted} from Activity.`,
         source: "jarvis",
         deepLink: coordLink({ coord: "running", f: "interrupted" }),
         dedupeKey: `cw:interrupted:${new Date().toISOString().slice(0, 13)}`,

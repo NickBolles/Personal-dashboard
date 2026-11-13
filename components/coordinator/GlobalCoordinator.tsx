@@ -10,7 +10,10 @@ import type { ItemsResponse, WorkItem } from "@/lib/work";
 import { relativeTime } from "@/lib/time";
 import { sortByUrgency } from "@/lib/cw-decisions";
 import { coordinatorStatus } from "@/lib/coordinator/status";
-import { sinceRunCounts } from "@/lib/coordinator/run-card";
+import { runStatus, sinceRunCounts } from "@/lib/coordinator/run-card";
+import { ageLabel } from "@/lib/coordinator/needs";
+import type { Decision } from "@/lib/cw-decisions";
+import type { RunEvent } from "@/lib/cw-runs";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
 import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
@@ -28,13 +31,14 @@ import { pickTrayLine, type PriorityLine } from "@/lib/coordinator/things";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { DynamicSurface } from "@/components/smart/DynamicSurface";
-import { AnchoredMenu, Button, SectionHeader, SheetHandle, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
+import { AnchoredMenu, Button, SectionHeader, SheetHandle, StateWord, ThingRow, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
 import type { ComposeScope } from "@/lib/coordinator/compose";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
-import { WORK_WORD } from "@/lib/work-words";
+import { WORK_RANK, WORK_WORD, workStateOfRun } from "@/lib/work-words";
 import { NeedsPanel } from "./needs/NeedsPanel";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
+import { RunCard } from "./running/RunCard";
 import { useCoordinatorRuns, useMarkLooked } from "./running/useCoordinatorRuns";
 // The design library's sleek density tier, right before this panel's own styles (see the file's header).
 import "@/components/ui/density.css";
@@ -303,6 +307,32 @@ export function GlobalCoordinator() {
   };
   // Item and project cards (changes under Activity and under a reply) read live state while the panel is on screen.
   const cardData = useItemCardData(wide ? open : phoneOpen);
+  // What a reply mentions, as rows under it in Chat: open decisions first, then runs by how much they need a look.
+  const openDecision = (ref: string) => (cwDecisions.data?.decisions ?? []).find((x) => x.ref === ref && x.state === "open");
+  const runByRef = (ref: string) => runRows.find((r) => r.ref === ref);
+  const mentions = {
+    rank: (ref: string) => {
+      if (ref.startsWith("D-")) return openDecision(ref) ? -1 : null;
+      const run = runByRef(ref);
+      return run ? WORK_RANK[workStateOfRun(runStatus(run, now).key)] : null;
+    },
+    render: (ref: string) => {
+      const decision = ref.startsWith("D-") ? openDecision(ref) : undefined;
+      if (decision) return <MentionedDecision decision={decision} now={now} onOpen={() => onRef(ref)} />;
+      const run = runByRef(ref);
+      return run ? (
+        <MentionedRun
+          run={run}
+          runs={runRows}
+          events={cwRuns.data?.events ?? []}
+          decisions={cwDecisions.data?.decisions}
+          onCompose={compose}
+          onStop={stopRun}
+          onRef={onRef}
+        />
+      ) : null;
+    },
+  };
   const cardHooks: CardHooks = { data: cardData, onRef, onAsk: (title) => compose({ kind: "ask", title }) };
   const onPanelKey = (e: ReactKeyboardEvent) => {
     if (typingIn(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -592,6 +622,7 @@ export function GlobalCoordinator() {
                   quickContext={quickContext}
                   scope={scope}
                   onScope={setScope}
+                  mentions={mentions}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
                   onJump={(next, about) => {
@@ -831,6 +862,40 @@ export function GlobalCoordinator() {
         </>
       )}
     </div>
+  );
+}
+
+/** A run a reply mentions, as its row in Chat. Its stop confirmation is its own. */
+function MentionedRun(props: {
+  run: CoordinatorRunRow;
+  runs: readonly CoordinatorRunRow[];
+  events: readonly RunEvent[];
+  decisions?: readonly Decision[];
+  onCompose: (scope: ComposeScope) => void;
+  onStop: (run: CoordinatorRunRow) => void | Promise<unknown>;
+  onRef: (ref: string) => void;
+}) {
+  const [stopping, setStopping] = useState<string | null>(null);
+  return <RunCard {...props} stopping={stopping} onStopping={setStopping} />;
+}
+/** An open decision a reply mentions, as its row in Chat: the title opens it under Needs you. */
+function MentionedDecision({ decision, now, onOpen }: { decision: Decision; now: number; onOpen: () => void }) {
+  return (
+    <ThingRow
+      className="gc-mention-decision"
+      data-ref-row={decision.ref}
+      state="needs"
+      refId={decision.ref}
+      status={
+        <>
+          <StateWord state="needs" />
+          <span data-dynamic> · {ageLabel(decision.createdAt, now)}</span>
+        </>
+      }
+      title={decision.question}
+      sub={decision.itemTitle && decision.itemTitle !== decision.question ? decision.itemTitle : undefined}
+      onOpen={onOpen}
+    />
   );
 }
 

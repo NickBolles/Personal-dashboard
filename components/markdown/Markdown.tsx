@@ -4,6 +4,16 @@ import { createContext, Fragment, useContext, useState, type ReactNode } from "r
 
 /** Optional surface-specific renderer. Receives only already-sanitized hrefs. */
 export const MarkdownLinkRenderer = createContext<((href: string, label: ReactNode) => ReactNode) | null>(null);
+/**
+ * Optional surface-specific renderer for a D-n / R-n reference in prose (a decision or a run). Without one the
+ * reference stays plain text, exactly as written. With one (the Chief of staff thread), it becomes a chip that
+ * jumps to the thing. Never applied inside code or link labels.
+ */
+export const MarkdownRefRenderer = createContext<((ref: string) => ReactNode) | null>(null);
+function InlineRef({ id }: { id: string }) {
+  const render = useContext(MarkdownRefRenderer);
+  return render ? render(id) : id;
+}
 function RenderedLink({ href, children }: { href: string; children: ReactNode }) {
   const render = useContext(MarkdownLinkRenderer);
   if (render) return render(href, children);
@@ -93,6 +103,11 @@ export function renderInline(text: string, key: string, ctx: Ctx): ReactNode[] {
     if (c === "\\" && i + 1 < text.length && ESCAPABLE.test(text[i + 1]!)) {
       buf += text[i + 1];
       i += 2;
+      continue;
+    }
+    if ((c === "D" || c === "R") && !ctx.noLinks && !isWord(text[i - 1]) && (m = /^[DR]-\d{1,9}(?![\p{L}\p{N}-])/u.exec(rest))) {
+      push(<InlineRef key={k} id={m[0]} />);
+      i += m[0].length;
       continue;
     }
     if (c === "`") {

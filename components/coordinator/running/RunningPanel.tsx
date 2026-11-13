@@ -107,9 +107,10 @@ export function RunningPanel({ onCompose, onStop, decisions, onRef, initialRef, 
     } else if (event.key === "r" && canRetryRun(run)) {
       event.preventDefault();
       onCompose(retryScope(run));
-    } else if (event.key === "Enter" && target === body) {
+    } else if (event.key === "o") {
+      // The title is a link to the item; the row's own detail opens from its chevron, or "o".
       event.preventDefault();
-      body.click();
+      body.closest("article")?.querySelector<HTMLElement>("[data-thing-toggle]")?.click();
     }
   };
   const label = (key: WorkGroup) => (key === "done" ? "Done since you looked" : WORK_GROUP_LABEL[key]);
