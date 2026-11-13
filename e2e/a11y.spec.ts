@@ -79,6 +79,10 @@ for (const path of PAGES) {
   });
 }
 
+// a11y tests stub or seed what they check, so CI spreads them test-by-test across workers and shards (each
+// worker has its own server, e2e/servers.ts); a test that needs an earlier one's state belongs in a serial describe.
+test.describe.configure({ mode: "parallel" });
+
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   // One page per entry; the list outgrew the 60 s default on mobile-320 (Phase 4 added /areas?tab=portfolio).
   test.setTimeout(120_000);

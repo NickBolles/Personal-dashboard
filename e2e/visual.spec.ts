@@ -43,6 +43,10 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
+// Visual tests stub or seed what they check, so CI spreads them test-by-test across workers and shards (each
+// worker has its own server, e2e/servers.ts); a test that needs an earlier one's state belongs in a serial describe.
+test.describe.configure({ mode: "parallel" });
+
 test.beforeEach(async ({ request, page }) => {
   await page.route("**/api/work/resume", (route) =>
     route.fulfill({

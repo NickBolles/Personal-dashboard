@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { appPost, mock, setHa } from "./helpers";
+import { appPost, mock, MOCK_URL, setHa } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await mock(request, "/reset");
@@ -30,7 +30,7 @@ test("state changed since the user looked → rejected, nothing sent", async ({ 
   await dialog.getByRole("checkbox", { name: /I mean it/ }).check();
   await dialog.getByRole("button", { name: /Yes, lock/ }).click();
   await expect(page.getByRole("status").filter({ hasText: /State changed/ })).toBeVisible();
-  const state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
+  const state = await (await request.get(`${MOCK_URL}/__mock/state`)).json();
   expect(state.haCalls.filter((c: { service: string }) => c.service === "lock")).toHaveLength(0);
 });
 
@@ -47,7 +47,7 @@ test("lock and unlock are high-risk: the confirm card names the device and needs
   await yes.click();
   const done = page.getByRole("status").filter({ hasText: "Front door lock: Confirmed: unlocked" });
   await expect(done).toBeVisible({ timeout: 15_000 });
-  const state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
+  const state = await (await request.get(`${MOCK_URL}/__mock/state`)).json();
   expect(state.haCalls.filter((c: { service: string }) => c.service === "unlock")).toHaveLength(1);
   // Undo = lock again, still high-risk → the confirm card comes back.
   await done.getByRole("button", { name: "Undo" }).click();
@@ -82,7 +82,7 @@ test("lights: a tap switches with readback and Undo switches back", async ({ pag
   await expect(page.getByRole("switch", { name: "Porch light: on, turn off" })).toBeVisible();
   await done.getByRole("button", { name: "Undo" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Porch light: Confirmed: off" })).toBeVisible({ timeout: 15_000 });
-  const state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
+  const state = await (await request.get(`${MOCK_URL}/__mock/state`)).json();
   expect(state.haCalls.filter((c: { domain: string }) => c.domain === "light").map((c: { service: string }) => c.service)).toEqual(["turn_on", "turn_off"]);
 });
 
@@ -114,7 +114,7 @@ test("an agent's device proposal becomes a decision and only the owner's confirm
     const body = await r.json();
     expect(body.result.isError).toBeFalsy();
     expect(body.result.structuredContent).toMatchObject({ proposed: true, executed: false, risk: "high" });
-    let state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
+    let state = await (await request.get(`${MOCK_URL}/__mock/state`)).json();
     expect(state.haCalls.filter((c: { domain: string }) => c.domain === "lock")).toHaveLength(0);
     // #238: the decision carries a tappable "Confirm on House" action that opens the confirm card;
     // nothing runs until the owner ticks and confirms.
@@ -127,7 +127,7 @@ test("an agent's device proposal becomes a decision and only the owner's confirm
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: /Yes, unlock/ })).toBeDisabled();
     await dialog.getByRole("button", { name: "Cancel" }).click();
-    state = await (await request.get("http://127.0.0.1:4020/__mock/state")).json();
+    state = await (await request.get(`${MOCK_URL}/__mock/state`)).json();
     expect(state.haCalls.filter((c: { domain: string }) => c.domain === "lock")).toHaveLength(0);
   } finally {
     await page.request.delete(`/api/settings/agents/tokens/${view.id}`, { headers: { "x-jarvis-csrf": "1" } });
