@@ -119,7 +119,11 @@ export function useSheetDrag({
       const still = typeof window.matchMedia !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       slideAway(el);
       if (still) return onClose();
-      leaving.current = window.setTimeout(onClose, LEAVE_MS);
+      // The hook can outlive the sheet (a host that reopens it): the slide-away must not block the next drag.
+      leaving.current = window.setTimeout(() => {
+        leaving.current = 0;
+        onClose();
+      }, LEAVE_MS);
       return;
     }
     rest(el);

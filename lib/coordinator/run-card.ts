@@ -452,7 +452,8 @@ export function placeWork(
   });
   const windowStart = messages.map((m) => timeOf(m.at)).find((at) => at !== null) ?? null;
   for (const w of work) {
-    const going = w.run ? ["running", "waiting"].includes(w.run.state) : isActiveExec(w.record);
+    // Interrupted counts as going: it waits to be resumed, and must not drop out of the conversation.
+    const going = w.run ? ["running", "waiting", "interrupted"].includes(w.run.state) : isActiveExec(w.record);
     const started = timeOf(w.run?.startedAt ?? w.record.startedAt ?? w.record.updatedAt);
     if (started === null || (windowStart !== null && started < windowStart - WINDOW_SLACK_MS)) {
       if (going) put("live", w);

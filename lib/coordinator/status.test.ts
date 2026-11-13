@@ -137,7 +137,7 @@ describe("coordinatorStatus", () => {
     expect(one).toMatchObject({
       state: "needs",
       dot: "yellow",
-      text: "Order the filters is waiting on you",
+      text: "Order the filters needs you",
       rest: "1 working",
       target: { tab: "running", ref: "R-1" },
       counts: { needs: 0, waiting: 1 },
@@ -148,7 +148,7 @@ describe("coordinatorStatus", () => {
       lastLooked: ago(1),
       now,
     });
-    expect(two).toMatchObject({ state: "needs", text: "2 runs are waiting on you", target: { tab: "running" } });
+    expect(two).toMatchObject({ state: "needs", text: "2 runs need you", target: { tab: "running" } });
     expect(two.target.ref).toBeUndefined();
   });
 
@@ -159,19 +159,22 @@ describe("coordinatorStatus", () => {
       lastLooked: ago(60),
       now,
     });
-    // a mix is neither "failed" nor "quiet": it needs a look
+    // a mix is neither "failed" nor "stalled": it needs a look
     expect(many.text).toBe("2 runs need a look");
-    const quiet = coordinatorStatus({
+    // a stall begins 30 minutes after the last report: these two stalled after the owner last looked
+    const stalled = coordinatorStatus({
       needs: 0,
-      runs: [run(1, { stalled: true, updatedAt: ago(3) }), run(2, { stalled: true, updatedAt: ago(2) })],
+      runs: [run(1, { stalled: true, updatedAt: ago(33) }), run(2, { stalled: true, updatedAt: ago(32) })],
       lastLooked: ago(60),
       now,
     });
-    // silence is not failure: the tray uses the cards' word for it
-    expect(quiet.text).toBe("2 runs went quiet");
+    // silence is not failure: the tray uses the rows' word for it
+    expect(stalled.text).toBe("2 runs stalled");
+    const one = coordinatorStatus({ needs: 0, runs: [run(1, { stalled: true, title: "Ledger import", updatedAt: ago(33) })], lastLooked: ago(60), now });
+    expect(one).toMatchObject({ state: "failed", text: "Ledger import stalled", target: { tab: "running", ref: "R-1" } });
     expect(coordinatorStatus({ needs: 0, runs: [run(1)], finished: 2, lastLooked: null, now })).toMatchObject({
       state: "finished",
-      text: "2 finished · ready to review",
+      text: "2 done · ready to review",
       rest: "1 working",
     });
   });

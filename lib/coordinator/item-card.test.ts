@@ -111,13 +111,16 @@ describe("itemCardModel", () => {
     expect(m.due?.label).toMatch(/^Due/);
     expect(m.progress).toBeNull();
   });
-  it("what needs the owner outranks everything; then a failed run, a quiet run, then work in flight", () => {
+  it("what needs the owner outranks everything; then a failed run, a stalled run, then work in flight", () => {
     const runs = [run("1", "b"), run("2", "b", { stalled: true }), run("3", "b", { state: "failed" })];
     const base = { item: tree[3]!, items: tree, now };
     expect(itemCardModel({ ...base, runs, decisions: [decision("1", "b")] }).headline).toMatchObject({ key: "needs", label: "Needs you", tone: "wn" });
     expect(itemCardModel({ ...base, runs }).headline).toMatchObject({ key: "failed", tone: "bad" });
-    expect(itemCardModel({ ...base, runs: runs.slice(0, 2) }).headline).toMatchObject({ key: "stuck", label: "Run quiet", tone: "wn" });
-    expect(itemCardModel({ ...base, runs: [run("5", "b", { state: "interrupted" })] }).headline).toMatchObject({ key: "stuck", label: "Run interrupted" });
+    expect(itemCardModel({ ...base, runs: runs.slice(0, 2) }).headline).toMatchObject({ key: "stuck", label: "Run stalled", tone: "wn" });
+    // interrupted is stalled too: one word for work that stopped reporting, however it stopped
+    expect(itemCardModel({ ...base, runs: [run("5", "b", { state: "interrupted" })] }).headline).toMatchObject({ key: "stuck", label: "Run stalled" });
+    // a run that waits on the owner says so in the same words as a decision does
+    expect(itemCardModel({ ...base, runs: [run("6", "b", { state: "waiting" })] }).headline).toMatchObject({ key: "waiting", label: "Needs you", tone: "wn" });
     expect(itemCardModel({ ...base, runs: runs.slice(0, 1) }).headline).toMatchObject({ key: "working", live: true });
     // an answered decision and a failure from last week are history
     const old = run("4", "b", { state: "failed", updatedAt: iso(now - 6 * 86_400_000) });

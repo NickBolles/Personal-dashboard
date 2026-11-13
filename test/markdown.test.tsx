@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Markdown, safeHref } from "@/components/markdown/Markdown";
+import { Markdown, MarkdownRefRenderer, safeHref } from "@/components/markdown/Markdown";
 import { MARKDOWN_FIXTURE } from "@/lib/markdown-fixture";
 
 const html = (t: string, opts: { sourceCount?: number; headingOffset?: number } = {}) => renderToStaticMarkup(<Markdown text={t} {...opts} />);
@@ -92,5 +92,67 @@ describe("Markdown renderer", () => {
   it("keeps an unterminated fence (a streaming reply) as code, and escapes", () => {
     expect(html("```\nconst a = 1;")).toContain("<code>const a = 1;</code>");
     expect(html("\\*not em\\* and snake_case_name")).toBe('<div class="md"><p>*not em* and snake_case_name</p></div>');
+  });
+});
+
+describe("D-n / R-n references in prose (MarkdownRefRenderer)", () => {
+  /** A surface that draws references as chips (the Chief of staff thread does, with a button that jumps to the thing). */
+  const chips = (t: string) =>
+    renderToStaticMarkup(
+      <MarkdownRefRenderer.Provider value={(ref) => <mark data-ref={ref}>{ref}</mark>}>
+        <Markdown text={t} />
+      </MarkdownRefRenderer.Provider>,
+    );
+  const refs = (t: string) => Array.from(chips(t).matchAll(/<mark data-ref="([^"]+)">/g), (m) => m[1]);
+
+  it("with no provider the output is unchanged: a reference is the text that was written", () => {
+    expect(html("See R-7 and **D-12**.")).toBe('<div class="md"><p>See R-7 and <strong>D-12</strong>.</p></div>');
+    expect(html("- R-7 is done\n- D-12 waits")).toContain("<li><p>R-7 is done</p></li><li><p>D-12 waits</p></li>");
+    // a provider that is explicitly null (a thread with nowhere to jump to) is the same as none
+    expect(
+      renderToStaticMarkup(
+        <MarkdownRefRenderer.Provider value={null}>
+          <Markdown text="See R-7." />
+        </MarkdownRefRenderer.Provider>,
+      ),
+    ).toBe(html("See R-7."));
+  });
+
+  it("with a provider each reference in prose is drawn by it, wherever prose is: bold, lists, headings, tables, quotes", () => {
+    expect(chips("See R-7 and **D-12**.")).toBe(
+      '<div class="md"><p>See <mark data-ref="R-7">R-7</mark> and <strong><mark data-ref="D-12">D-12</mark></strong>.</p></div>',
+    );
+    expect(refs("# About R-1\n\n- D-2 waits\n- _R-3_ is done\n\n> R-4 said so\n\n| Run | State |\n| --- | --- |\n| R-5 | done |")).toEqual([
+      "R-1",
+      "D-2",
+      "R-3",
+      "R-4",
+      "R-5",
+    ]);
+    // punctuation and brackets around a reference do not hide it; the same one twice is two chips
+    expect(refs("(R-7), R-8; D-9: “R-7”. R-10?")).toEqual(["R-7", "R-8", "D-9", "R-7", "R-10"]);
+    expect(refs("R-1")).toEqual(["R-1"]);
+  });
+
+  it("never draws a reference inside inline code, a code fence or a link label, or out of a URL", () => {
+    expect(chips("Run `R-7` then ``D-8``")).toBe('<div class="md"><p>Run <code>R-7</code> then <code>D-8</code></p></div>');
+    expect(refs("```\nfix R-7 and D-8\n```")).toEqual([]);
+    expect(refs("~~~sh\necho R-7\n~~~")).toEqual([]);
+    const linked = chips("[R-7 notes](https://example.com/notes) and [the log](/areas?item=R-8), then https://example.com/runs/R-9 and R-10");
+    expect(linked).toContain('<a href="https://example.com/notes" target="_blank" rel="noopener noreferrer nofollow">R-7 notes</a>');
+    expect(linked).toContain('<a href="/areas?item=R-8">the log</a>');
+    expect(linked).toContain(">https://example.com/runs/R-9</a>");
+    // only the one written as prose is a chip
+    expect(Array.from(linked.matchAll(/<mark data-ref="([^"]+)">/g), (m) => m[1])).toEqual(["R-10"]);
+  });
+
+  it("only a whole D-n / R-n is a reference: PR-7, R-7b, R-7-beta, r-7 and R- 7 are words", () => {
+    for (const text of ["PR-7 merged", "see R-7b", "tag R-7-beta", "r-7 and d-3", "R- 7", "R-", "D-x1", "XD-4", "R-12345678901", "R–7", "aR-7"]) {
+      expect(refs(text), text).toEqual([]);
+      expect(chips(text), text).toBe(html(text));
+    }
+    // right next to them, a real one still is
+    expect(refs("PR-7 closes R-7; R-7b follows D-3.")).toEqual(["R-7", "D-3"]);
+    expect(refs("R-0 and D-123456789")).toEqual(["R-0", "D-123456789"]);
   });
 });
