@@ -423,14 +423,6 @@
       "count": 1
     }
   },
-  "components/chat/things/ChatSheet.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
   "components/chat/things/ChatTray.tsx": {
     "jarvis-ui/no-native-controls": {
       "count": 1

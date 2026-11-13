@@ -219,7 +219,7 @@ export function ChatPanel(props: Props) {
   const content = <PanelContent {...props} />;
   if (!wide)
     return (
-      <ChatSheet onClose={onClose} full={full} onFull={() => setFull(!full)}>
+      <ChatSheet onClose={onClose} full={full} onFull={setFull}>
         {content}
       </ChatSheet>
     );

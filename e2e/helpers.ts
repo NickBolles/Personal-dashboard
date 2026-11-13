@@ -106,7 +106,7 @@ export async function openChatPanel(page: Page, tab = "Links") {
 }
 export async function closeChatPanel(page: Page) {
   const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });
-  if (await sheet.isVisible()) await sheet.getByRole("button", { name: "Done", exact: true }).click();
+  if (await sheet.isVisible()) await sheet.getByRole("button", { name: "Collapse", exact: true }).click();
 }
 
 /** Reveals a chat message's time + actions (hidden until tapped on touch screens). */

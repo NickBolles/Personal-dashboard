@@ -150,8 +150,17 @@
   .chat-panel-resizer:hover {
     border-left: 2px solid var(--ai);
   }
+  /* Two resting heights; a drag sets inline height/transform and these take over again when the finger lifts
+     (ChatSheet's sheetHeights mirrors the numbers). */
   .chat-panel-sheet .chat-sheet-body {
     height: min(60dvh, 560px);
+    max-height: 90dvh;
+    transition:
+      height var(--d2) var(--ease),
+      transform var(--d2) var(--ease);
+  }
+  .chat-panel-sheet .chat-sheet-body[data-dragging] {
+    transition: none;
   }
   .chat-panel-sheet[data-full="true"] .chat-sheet-body {
     height: 90dvh;

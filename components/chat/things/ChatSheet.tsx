@@ -1,12 +1,20 @@
 "use client";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Button } from "@/components/ui/legacy";
+import { Button, SheetHandle, useSheetDrag } from "@/components/ui";
+import { ChevronIcon } from "@/components/icons";
 
-/** ContextSheet's bottom-sheet pattern, portalled beyond the chat query container. */
-export function ChatSheet({ children, onClose, full, onFull }: { children: ReactNode; onClose: () => void; full: boolean; onFull: () => void }) {
+/** The sheet's two resting heights in px. Keep in step with `.chat-sheet-body` in things.css. */
+const sheetHeights = () => ({ half: Math.min(window.innerHeight * 0.6, 560), full: window.innerHeight * 0.9 });
+
+/**
+ * ContextSheet's bottom-sheet pattern, portalled beyond the chat query container.
+ * Drag the top of it up for full height and down to close; the grab bar is also a button that switches height.
+ */
+export function ChatSheet({ children, onClose, full, onFull }: { children: ReactNode; onClose: () => void; full: boolean; onFull: (full: boolean) => void }) {
   const panel = useRef<HTMLDivElement>(null);
   const title = useId();
+  const { zoneProps, handleProps } = useSheetDrag({ panel, full, onFull, onClose, heights: sheetHeights });
   useEffect(() => {
     const restore = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
@@ -53,20 +61,19 @@ export function ChatSheet({ children, onClose, full, onFull }: { children: React
         role="dialog"
         aria-modal="true"
         aria-labelledby={title}
-        className="chat-sheet-body safe-bottom absolute inset-x-0 bottom-0 flex max-h-[90dvh] flex-col rounded-t-2xl border border-line bg-surface shadow-xl"
+        className="chat-sheet-body safe-bottom absolute inset-x-0 bottom-0 flex flex-col rounded-t-2xl border border-line bg-surface shadow-xl"
       >
-        <div aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line" />
-        <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1">
-          <h2 id={title} className="min-w-0 flex-1 text-sm font-semibold">
-            In this chat
-          </h2>
-          <Button size="sm" variant="ghost" onClick={onFull}>
-            {full ? "Half height" : "Full height"}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Done
-          </Button>
-        </header>
+        <div {...zoneProps} className="shrink-0 border-b border-line">
+          <SheetHandle {...handleProps} />
+          <header className="flex items-center gap-2 pr-1 pb-1 pl-3">
+            <h2 id={title} className="min-w-0 flex-1 text-sm font-semibold">
+              In this chat
+            </h2>
+            <Button data-sheet-nodrag size="sm" variant="ghost" iconOnly icon={<ChevronIcon className="h-4 w-4 rotate-90" />} onClick={onClose}>
+              Collapse
+            </Button>
+          </header>
+        </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </div>,

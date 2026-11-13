@@ -124,3 +124,76 @@ it("shows a bottom sheet with detents and restores focus when dismissed", () => 
   expect(document.activeElement).toBe(trigger);
   trigger.remove();
 });
+
+/** A slow drag on the sheet's grab bar: press, move in steps of at most 60 px (400 ms apart), release. */
+function dragHandle(by: number) {
+  const handle = screen.getByRole("button", { name: /^(Full|Half) height$/ });
+  let t = 1000;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => (t += 400));
+  const at = (clientY: number) => ({ pointerId: 1, pointerType: "touch", button: 0, clientY });
+  fireEvent.pointerDown(handle, at(500));
+  const steps = Math.ceil(Math.abs(by) / 60);
+  for (let i = 1; i <= steps; i++) fireEvent.pointerMove(handle, at(500 + (by * i) / steps));
+  fireEvent.pointerUp(handle, at(500 + by));
+  clock.mockRestore();
+  // the browser's click after a drag must not toggle the height
+  fireEvent.click(handle, { detail: 1 });
+}
+const sheetState = () => document.querySelector(".chat-panel-sheet")?.getAttribute("data-full");
+
+it("the sheet's grab bar: drag up for full height, down for half, further down to close", async () => {
+  const close = vi.fn();
+  mount({ wide: false, onClose: close });
+  expect(sheetState()).toBe("false");
+  dragHandle(-240);
+  expect(sheetState()).toBe("true");
+  expect(screen.getByRole("button", { name: "Half height" })).toBeTruthy();
+  dragHandle(180);
+  expect(sheetState()).toBe("false");
+  expect(close).not.toHaveBeenCalled();
+  // a small dip settles back at half height and leaves no inline size behind
+  dragHandle(60);
+  expect(sheetState()).toBe("false");
+  const body = document.querySelector<HTMLElement>(".chat-sheet-body")!;
+  expect(body.style.height).toBe("");
+  expect(body.style.transform).toBe("");
+  expect(body.hasAttribute("data-dragging")).toBe(false);
+  dragHandle(320);
+  await vi.waitFor(() => expect(close).toHaveBeenCalledOnce());
+});
+
+it("the sheet's grab bar works without dragging: tap, arrow keys, and one Collapse control", () => {
+  const close = vi.fn();
+  mount({ wide: false, onClose: close });
+  const dialog = screen.getByRole("dialog", { name: "In this chat" });
+  // the old text buttons are gone
+  expect(within(dialog).queryByRole("button", { name: "Done" })).toBeNull();
+  const handle = screen.getByRole("button", { name: "Full height" });
+  // a press that barely moves is a tap, not a drag
+  fireEvent.pointerDown(handle, { pointerId: 1, clientY: 500 });
+  fireEvent.pointerMove(handle, { pointerId: 1, clientY: 503 });
+  fireEvent.pointerUp(handle, { pointerId: 1, clientY: 503 });
+  // the click the browser derives from that tap is not a second toggle
+  fireEvent.click(handle, { detail: 1 });
+  expect(sheetState()).toBe("true");
+  // a keyboard or screen-reader click still toggles
+  fireEvent.click(screen.getByRole("button", { name: "Half height" }));
+  expect(sheetState()).toBe("false");
+  fireEvent.click(screen.getByRole("button", { name: "Full height" }));
+  expect(sheetState()).toBe("true");
+  fireEvent.keyDown(screen.getByRole("button", { name: "Half height" }), { key: "ArrowDown" });
+  expect(sheetState()).toBe("false");
+  fireEvent.keyDown(screen.getByRole("button", { name: "Full height" }), { key: "ArrowUp" });
+  expect(sheetState()).toBe("true");
+  // a press on Collapse never starts a drag
+  const collapse = within(dialog).getByRole("button", { name: "Collapse" });
+  fireEvent.pointerDown(collapse, { pointerId: 2, clientY: 500 });
+  fireEvent.pointerMove(collapse, { pointerId: 2, clientY: 700 });
+  fireEvent.pointerUp(collapse, { pointerId: 2, clientY: 700 });
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.click(collapse);
+  expect(close).toHaveBeenCalledOnce();
+  fireEvent.keyDown(screen.getByRole("button", { name: "Half height" }), { key: "ArrowDown" });
+  fireEvent.keyDown(screen.getByRole("button", { name: "Full height" }), { key: "ArrowDown" });
+  expect(close).toHaveBeenCalledTimes(2);
+});

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AnchoredMenu,
   MenuButton,
   useAnchoredMenu,
+  useSheetDrag,
   Banner,
   Button,
   ButtonLink,
@@ -25,6 +26,7 @@ import {
   SectionHeader,
   Select,
   SelectPicker,
+  SheetHandle,
   StatusPickerDot,
   Tabs,
   TagIcon,
@@ -79,6 +81,39 @@ function MenuDemo() {
             { label: "Ask to stop…", danger: true },
           ]}
         />
+      </div>
+    </Block>
+  );
+}
+
+/** Bottom-sheet grab bar: drag up for full height, down for half, further down to close (here it reopens). */
+function SheetDemo() {
+  const panel = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [closed, setClosed] = useState(0);
+  const { zoneProps, handleProps } = useSheetDrag({
+    panel,
+    full,
+    onFull: setFull,
+    onClose: () => setClosed((n) => n + 1),
+    heights: () => ({ half: 120, full: 240 }),
+  });
+  return (
+    <Block id="sheets" title="Bottom-sheet grab bar (drag up, swipe down, tap, arrow keys)">
+      <div className="flex h-64 items-end rounded-lg border border-[var(--bd)] bg-[var(--s0)]">
+        <div
+          key={closed}
+          ref={panel}
+          className="w-full rounded-t-2xl border border-[var(--bd2)] bg-[var(--s1)] data-[dragging]:transition-none"
+          style={{ height: full ? 240 : 120, transition: "height var(--d2) var(--ease), transform var(--d2) var(--ease)" }}
+        >
+          <div {...zoneProps}>
+            <SheetHandle {...handleProps} />
+            <p className="px-3 text-sm">
+              {full ? "Full height" : "Half height"} · closed {closed} times
+            </p>
+          </div>
+        </div>
       </div>
     </Block>
   );
@@ -197,6 +232,7 @@ export function LibraryGallery() {
           <Toast message="Saved" action={{ label: "Undo", onClick: () => undefined }} />
         </Block>
         <MenuDemo />
+        <SheetDemo />
         <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
           <div data-density="sleek" className="flex flex-wrap items-center gap-2">
             <Button size="sm">Answer</Button>
