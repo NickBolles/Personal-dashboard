@@ -19,6 +19,9 @@ export { AnchoredMenu, MenuButton, useAnchoredMenu, type AnchoredMenuState } fro
 // Icon-only header/card actions with tooltip + live-state dot.
 export { IconAction, IconAction as IconButton, CoordinatorGlyph, FocusGlyph, type IconActionDot } from "./IconAction";
 
+// The one row for a decision (D-n), a piece of work (R-n) or an item: what it is, then its state; icon actions; opens in place.
+export { ThingRow, StateDot, StateWord, RefPill, RowAction, type ThingState } from "./ThingRow";
+
 // Bottom-sheet grab bar: drag up for full height, down to close; the bar is also a button and takes arrow keys.
 export { SheetHandle, useSheetDrag } from "./SheetDrag";
 
