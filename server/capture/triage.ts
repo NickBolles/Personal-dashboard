@@ -16,7 +16,7 @@ import { assertSkylightWritable, runSkylightWrite } from "@/integrations/skyligh
 import { getAiSettings } from "@/server/ai/settings";
 import { triageSkylightLists } from "@/server/ai/context";
 import { areaOf, enqueue } from "@/server/ai/jobs";
-import { effectiveAreaPolicy } from "@/server/ai/rules";
+import { captureFollowUp, effectiveAreaPolicy } from "@/server/ai/rules";
 import { moveCaptureToItem } from "@/server/capture";
 import { readChosen, readPlan, toView, writeUndoable, type Row } from "./triage-views";
 
@@ -480,6 +480,8 @@ export function backfillCaptureTriage(now = new Date()) {
   if (getSetting<string>(BACKFILL_KEY)) return { queued: 0 };
   const ai = getAiSettings();
   if (!ai.enabled || !captureActions(ai).autoHandle) return { queued: 0 };
+  // "After a capture: Nothing" turns capture AI off entirely; the back-fill must not override it.
+  if (captureFollowUp(ai.capture.auto, undefined, undefined) === "off") return { queued: 0 };
   const db = getDb();
   const since = new Date(now.getTime() - 14 * 86_400_000).toISOString();
   const rows = db
@@ -489,7 +491,8 @@ export function backfillCaptureTriage(now = new Date()) {
     .all();
   let queued = 0;
   for (const e of rows) {
-    if (e.sensitivity === "credentials" || e.triageState === "queued") continue;
+    // Per-capture / capture-token opt-outs are persisted as triageState "skipped" (createCapture).
+    if (e.sensitivity === "credentials" || e.triageState === "queued" || e.triageState === "skipped") continue;
     if (db.select({ id: C.id }).from(C).where(eq(C.inboxId, e.id)).get()) continue;
     const user = userById(e.userId);
     if (!user?.capabilities.has("work.ai")) continue;

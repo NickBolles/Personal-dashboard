@@ -816,6 +816,13 @@ const TIDE_O1 = "rgb(59, 128, 112)";
 for (const theme of ["light", "dark"] as const) {
   test(`visual: tide orb phone bar + radial (${theme})`, async ({ page }, info) => {
     test.skip(info.project.name !== "mobile", "phone bar orb is shot once at 390");
+    // A failed/quiet run or open decision left by another spec on this worker adds the orb's attention dot
+    // and a red Chief of staff tray line to both shots: pin the coordinator sources empty.
+    const never = { chat: null, needs: null, running: null, changes: null, context: null };
+    await page.route("**/api/coordinator/runs", (r) => r.fulfill({ json: { runs: [], events: [], lastLooked: never } }));
+    await page.route("**/api/coordinator/decisions*", (r) => r.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+    await page.route("**/api/work/decisions*", (r) => r.fulfill({ json: { entries: [], count: 0 } }));
+    await page.route("**/api/work/agent-runs*", (r) => r.fulfill({ json: { items: {}, active: [] } }));
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/more");
