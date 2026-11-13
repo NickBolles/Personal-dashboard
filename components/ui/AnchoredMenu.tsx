@@ -214,6 +214,15 @@ export function AnchoredMenu({ menu, label, items, className }: { menu: Anchored
     setPos((p) => (p && p.left === left && p.top === top ? p : { left, top }));
   }, [at]);
 
+  // The menu stays hidden until it is placed, and a hidden element cannot take focus: in a real browser Menu's own
+  // focus-on-mount runs too early on the first open, leaving focus on the trigger (so Esc and the arrows did
+  // nothing). Once placed, move focus to the first item unless it is already inside.
+  useEffect(() => {
+    const el = box.current;
+    if (!at || !pos || !el || el.contains(document.activeElement)) return;
+    el.querySelector<HTMLElement>("[role=menuitem]:not([disabled])")?.focus({ preventScroll: true });
+  }, [at, pos]);
+
   useEffect(() => {
     if (!at) return;
     const outside = (event: Event) => {

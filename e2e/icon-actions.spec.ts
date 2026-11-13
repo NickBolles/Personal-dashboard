@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { appPost, expectNoHorizontalOverflow } from "./helpers";
 
 /**
- * N5 icon-button entry points: the Areas card coordinator ✦, and the item header's
- * Chat here / Start focused work icons beside ⋯. Each keeps its accessible name, has a
- * tooltip, a ≥40px hit target (44 on phones), and still opens what the old text button did.
+ * N5 icon-button entry points: the Areas card coordinator ✦, and the item header's one ⋯ menu (the kit's
+ * menu button: a light icon whose tap area is kept by hit-slop) with the page's one primary action in the
+ * Next section. Chat here is a menu entry.
  * Words "Wrenfold"/"Tamarisk" are unique to this spec (filing suggestions are word matches).
  */
 
@@ -17,30 +17,23 @@ async function makeItem(page: Page, nonce: string) {
   return { areaId, id: ((await r.json()) as { item: { id: string } }).item.id };
 }
 
-async function expectTarget(page: Page, name: string | RegExp) {
-  const btn = page.getByRole("button", { name });
-  await expect(btn).toBeVisible();
-  const box = await btn.boundingBox();
-  const min = (page.viewportSize()?.width ?? 1280) < 640 ? 44 : 40;
-  expect(box!.width).toBeGreaterThanOrEqual(min - 0.5);
-  expect(box!.height).toBeGreaterThanOrEqual(min - 0.5);
-  expect(await btn.getAttribute("title")).toBeTruthy();
-  return btn;
-}
-
-test("item header: Chat here and Start focused work are icon buttons next to ⋯, one primary", async ({ page }) => {
+test("item header: one ⋯ menu and one primary action; Chat here lives in the menu", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");
   const { id } = await makeItem(page, nonce);
   await page.goto(`/areas?item=${id}`);
   const header = page.locator("article section").first();
   await expect(page.locator("#work-item-title")).toHaveText(`Tamarisk plan ${nonce}`);
-  await expectTarget(page, "Chat here");
-  const focus = await expectTarget(page, "Start focused work");
-  await expect(header.getByRole("button", { name: "More item actions" })).toBeVisible();
-  // No leftover text buttons for the same actions.
-  await expect(header.getByRole("button", { name: "Start focused work" })).toHaveCount(1);
-  await expect(header.getByRole("button", { name: "Chat here" })).toHaveCount(1);
+  // The page's one primary action sits in the Next section; there is no second or third header button.
+  const focus = header.getByRole("button", { name: "Start focused work" });
+  await expect(focus).toHaveCount(1);
+  await expect(header.getByRole("button", { name: "Chat here" })).toHaveCount(0);
+  const more = header.getByRole("button", { name: "More item actions" });
+  await expect(more).toBeVisible();
+  await more.click();
+  await expect(page.getByRole("menuitem", { name: "Chat here", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
   // Keyboard reachable and still opens the packet dialog.
   await focus.focus();

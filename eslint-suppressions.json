@@ -12,13 +12,13 @@
   },
   "app/(shell)/areas/WorkView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 34
+      "count": 18
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 55
+      "count": 38
     }
   },
   "app/(shell)/areas/activity/ActivityView.tsx": {
@@ -722,14 +722,6 @@
       "count": 6
     }
   },
-  "components/work/ItemAiChips.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
   "components/work/ItemMeta.tsx": {
     "jarvis-ui/no-native-controls": {
       "count": 1
@@ -774,9 +766,6 @@
   },
   "components/work/ai/AiActions.tsx": {
     "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
       "count": 1
     }
   },
