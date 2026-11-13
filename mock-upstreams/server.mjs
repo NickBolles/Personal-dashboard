@@ -99,6 +99,7 @@ export function startMockServer({ port = Number(process.env.MOCK_PORT ?? 4010), 
           });
         if (path === "/health") return json(res, 200, { ok: true });
         if (path === "/skylight/writes" && req.method === "GET") return json(res, 200, { writes: services.skylight.state.writes });
+        if (path === "/skylight/write-times" && req.method === "GET") return json(res, 200, { times: services.skylight.writeTimes, now: Date.now() });
         if (path === "/skylight/chores" && req.method === "POST") {
           const ok = services.skylight.addChore(await readBody(req));
           return json(res, ok ? 200 : 400, { ok });

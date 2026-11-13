@@ -3,13 +3,15 @@ import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { expectNoHorizontalOverflow } from "./helpers";
+import { authState, usageFile } from "./servers";
 
 /**
  * Settings → AI → Usage meter: subscription billing (Codex) reads the Hermes usage
  * snapshot (playwright.config.ts JARVIS_HERMES_USAGE_FILE). States: ok, stop (≥48%),
  * stale (> 2 h) and missing (fail closed); each one is accessible and doesn't overflow.
  */
-const FILE = path.resolve("e2e/.tmp/hermes-usage.json");
+// This worker's server reads its own snapshot (e2e/servers.ts usageFile).
+const FILE = usageFile();
 
 function writeUsage(pct: number, at = new Date()) {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
@@ -35,7 +37,7 @@ test.describe.configure({ mode: "serial" });
 
 test.afterAll(async ({ browser }, testInfo) => {
   fs.rmSync(FILE, { force: true });
-  const ctx = await browser.newContext({ storageState: "e2e/.auth/state.json", baseURL: testInfo.project.use.baseURL });
+  const ctx = await browser.newContext({ storageState: authState(), baseURL: testInfo.project.use.baseURL });
   const page = await ctx.newPage();
   await putAi(page, { billing: { mode: "api", stopAtPct: 48 } });
   await ctx.close();

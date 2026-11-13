@@ -306,6 +306,8 @@ async function items(page: Page) {
 async function dragTo(page: Page, from: ReturnType<Page["locator"]>, to: ReturnType<Page["locator"]>, at: { x: number; y: number } = { x: 0.5, y: 0.5 }) {
   // Both ends must be on screen: earlier tests can leave the target below the fold (order-sensitive flake).
   // The tree re-renders after a refetch (e.g. right after Undo), so a row can detach mid-scroll: retry until both are stable.
+  // The fixed Chief of staff tray can sit over a row once other specs' areas push the tree down: hide it for the drag.
+  const hideTray = await page.addStyleTag({ content: ".gc-tray, .gc-tray-qa { visibility: hidden !important; }" });
   let a!: NonNullable<Awaited<ReturnType<typeof from.boundingBox>>>;
   let b!: NonNullable<Awaited<ReturnType<typeof to.boundingBox>>>;
   await expect(async () => {
@@ -333,6 +335,7 @@ async function dragTo(page: Page, from: ReturnType<Page["locator"]>, to: ReturnT
   await page.mouse.move(a.x + a.width / 2 + 8, a.y + a.height / 2 + 8, { steps: 3 });
   await page.mouse.move(tx, ty, { steps: 12 });
   await page.mouse.up();
+  await hideTray.evaluate((el) => (el as Element).remove());
 }
 
 test("work: conversation picker, unfiled filing, continue in a new conversation (draft only), drag-and-drop and undo", async ({ page }) => {

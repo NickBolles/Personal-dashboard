@@ -1,14 +1,27 @@
-import { expect, test as setup } from "@playwright/test";
+import { expect, test as setup, type Page } from "@playwright/test";
 import fs from "node:fs";
-import { PASSCODE, mock } from "./helpers";
+import { PASSCODE } from "./helpers";
+import { appUrl, authState, mockUrl, serverCount } from "./servers";
 
 /**
  * Full first-run flow through the UI: claim with the setup code, connect and
  * test every integration against the demo server, notifications, install,
  * verify, finish. Saves the signed-in state for the other projects.
+ *
+ * Each worker has its own server (e2e/servers.ts): one onboarding per server, run side by side, each saving
+ * e2e/.auth/state-<i>.json for the worker that owns server i.
  */
-setup("onboarding: claim, connect, test, finish", async ({ page, request }) => {
-  await mock(request, "/reset");
+for (let i = 0; i < serverCount(); i++) {
+  setup.describe(`server ${i}`, () => {
+    setup.use({ baseURL: appUrl(i) });
+    setup("onboarding: claim, connect, test, finish", async ({ page, request }) => {
+      expect((await request.post(`${mockUrl(i)}/__mock/reset`, { data: {} })).ok()).toBeTruthy();
+      await onboard(page, i);
+    });
+  });
+}
+
+async function onboard(page: Page, i: number) {
   await page.goto("/");
   await expect(page).toHaveURL(/\/onboarding/);
   await expect(page.getByRole("heading", { name: "Claim this Jarvis" })).toBeVisible();
@@ -53,5 +66,5 @@ setup("onboarding: claim, connect, test, finish", async ({ page, request }) => {
   await expect(page.getByRole("heading", { name: "Now" })).toBeVisible();
 
   fs.mkdirSync("e2e/.auth", { recursive: true });
-  await page.context().storageState({ path: "e2e/.auth/state.json" });
-});
+  await page.context().storageState({ path: authState(i) });
+}

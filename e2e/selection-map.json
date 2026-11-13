@@ -1,0 +1,134 @@
+{
+  "$comment": "Smart e2e selection for pull requests (scripts/e2e-select.mjs, docs/ci.md). Globs: ** = any path, * = one segment. Specs are file names under e2e/.",
+  "maxFraction": 0.6,
+  "fullSuite": {
+    "why": "shared harness, global chrome or build inputs: anything can break",
+    "files": [
+      "package.json",
+      "package-lock.json",
+      "playwright.config.ts",
+      "next.config.ts",
+      "tsconfig.json",
+      "postcss.config.mjs",
+      "instrumentation.ts",
+      "middleware.ts",
+      "proxy.ts",
+      "app/layout.tsx",
+      "app/globals.css",
+      "app/(shell)/layout.tsx",
+      "components/ui/**",
+      "components/ui.tsx",
+      "lib/ui*",
+      "public/sw.js",
+      "drizzle/**",
+      "server/db/**",
+      "mock-upstreams/**",
+      "scripts/e2e-server.mjs",
+      "scripts/prepare-standalone.mjs",
+      "scripts/e2e-select.mjs",
+      "e2e/helpers.ts",
+      "e2e/servers.ts",
+      "e2e/onboarding.setup.ts",
+      "e2e/fixtures/**",
+      "e2e/selection-map.json",
+      ".github/workflows/ci.yml",
+      ".github/workflows/visual-baselines.yml"
+    ]
+  },
+  "ignore": {
+    "why": "never changes what the browser sees",
+    "files": [
+      "**/*.md",
+      "docs/**",
+      "test/**",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "android/**",
+      "hermes/**",
+      "contracts/**",
+      "eslint-rules/**",
+      "eslint.config.mjs",
+      "eslint-suppressions.json",
+      "vitest.config.mts",
+      "Dockerfile",
+      "Dockerfile.mock",
+      "docker-compose*.yml",
+      ".github/workflows/android.yml",
+      ".dockerignore",
+      ".gitignore",
+      ".prettierrc*",
+      ".prettierignore",
+      "e2e/__screenshots__/**",
+      "scripts/**"
+    ]
+  },
+  "rules": [
+    {
+      "why": "Skylight chores also render on Today, Todos and the tray (writes go through the confirm card)",
+      "files": ["integrations/skylight/**", "components/skylight/**", "app/(shell)/skylight/**", "app/api/skylight/**"],
+      "specs": ["skylight-*.spec.ts", "home.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "skylight|todos|home",
+        "a11y.spec.ts": "skylight"
+      }
+    },
+    {
+      "why": "Chief of staff / coordinator: app-shell chrome, so only its own specs and shots",
+      "replaceGraph": true,
+      "files": ["components/coordinator/**", "lib/coordinator/**"],
+      "specs": ["coordinator-*.spec.ts", "cw-global-coordinator.spec.ts", "global-coordinator.spec.ts", "smart-ui-v2.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "coordinator|chief of staff|tray|rail|needs you",
+        "a11y.spec.ts": "coordinator|chief of staff|tray|rail|needs you|Prismv2"
+      }
+    },
+    {
+      "why": "Sidebar, command dock and navigation: app-shell chrome",
+      "replaceGraph": true,
+      "files": ["components/navigation/**"],
+      "specs": ["sidebar.spec.ts", "keyboard.spec.ts", "palette-raycast.spec.ts", "pages.spec.ts", "orb-hold.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "tide orb|dock|sidebar|more$|home$",
+        "a11y.spec.ts": "touch targets|200% text zoom (?:does|at 1024)"
+      }
+    },
+    {
+      "why": "Search palette: app-shell chrome",
+      "replaceGraph": true,
+      "files": ["components/search/**"],
+      "specs": ["search-palette.spec.ts", "palette-raycast.spec.ts", "keyboard.spec.ts", "people.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "palette",
+        "a11y.spec.ts": "palette"
+      }
+    },
+    {
+      "why": "Chat: conversation pages also open from the tray and Areas",
+      "files": ["components/chat/**", "server/chat/**", "app/(shell)/chat/**"],
+      "specs": ["chat*.spec.ts", "smart-chat.spec.ts", "assistant.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "chat",
+        "a11y.spec.ts": "chat|composer|approval"
+      }
+    },
+    {
+      "why": "Workflows run from the palette, chats and Areas",
+      "files": ["components/workflows/**", "server/workflows/**", "lib/workflows/**"],
+      "specs": ["workflow*.spec.ts", "smart-workflows.spec.ts"],
+      "titles": {
+        "visual.spec.ts": "workflow|drive|bible",
+        "a11y.spec.ts": "workflow|drive"
+      }
+    }
+  ],
+  "smoke": {
+    "why": "always run: sign-in (setup), sending a chat, the global coordinator, the phone width guard and one shot per main page",
+    "grep": [
+      "chat\\.spec\\.ts the Send button sends a multi-line message",
+      "global-coordinator\\.spec\\.ts phone opens the Chief of staff sheet on two pages",
+      "a11y\\.spec\\.ts phone width guard",
+      "visual\\.spec\\.ts visual: (?:home|chat|alerts|more)$",
+      "visual\\.spec\\.ts visual: (?:settings|todos) page \\(light\\)$"
+    ]
+  }
+}
