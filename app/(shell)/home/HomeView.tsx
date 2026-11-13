@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { HOME_SECTIONS, type AttentionSummary, type HomePayload, type HomeSectionId, type NextAction, type SourceStatus } from "@/lib/contracts";
 import { relativeTime } from "@/lib/time";
@@ -299,8 +299,7 @@ export function HomeView() {
   });
   const layout = prefs.data?.layout?.homeSections ?? HOME_SECTIONS.map((s) => ({ id: s.id as HomeSectionId, visible: true }));
   const visible = (id: HomeSectionId) => layout.find((s) => s.id === id)?.visible ?? true;
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const { greeting, today } = useGreeting();
   const att = data?.attention;
   const router = useRouter();
   // Skylight chores in the ranked feed complete in place too (confirm card + Undo), never via /api/actions.
@@ -364,7 +363,7 @@ export function HomeView() {
       <header className="mb-3 flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="eyebrow" data-dynamic>
-            {new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+            {today}
           </p>
           <h1 className="mt-0.5 text-[1.375rem] leading-8 font-semibold tracking-[-0.015em]">
             <span className="k-greet">{greeting}</span>
@@ -547,4 +546,26 @@ function Glance({ data }: { data: HomePayload }) {
       </ul>
     </section>
   );
+}
+
+const noopSubscribe = () => () => {};
+
+/**
+ * Greeting + date from the BROWSER clock and time zone. The server renders in its own zone (container TZ),
+ * so computing these during SSR made the hydrated text differ (React #418) whenever the device's zone or
+ * hour differed from the server's. The server snapshot is neutral; the client snapshot fills in on hydration.
+ */
+export function useGreeting(): { greeting: string; today: string } {
+  const snap = useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+      return `${greeting}|${now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}`;
+    },
+    () => "Hello|",
+  );
+  const [greeting, today] = snap.split("|");
+  return { greeting, today };
 }

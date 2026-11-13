@@ -3,7 +3,8 @@ import type { ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AssistCard, HomePayload, HomeSectionId, NextAction } from "@/lib/contracts";
-import { HomeView } from "./HomeView";
+import { renderToString } from "react-dom/server";
+import { HomeView, useGreeting } from "./HomeView";
 import { selectAttention } from "@/server/ranking/attention";
 
 const state = vi.hoisted(() => ({
@@ -183,4 +184,18 @@ it("keeps the reviewed tasks and results dialog alive after refetch removes the 
   expect(screen.getByRole("dialog").textContent).toContain("Reviewed task");
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("renders a zone-neutral greeting on the server and the browser clock's greeting on the client (React #418)", () => {
+  function Probe() {
+    const { greeting, today } = useGreeting();
+    return (
+      <p>
+        {greeting}/{today}
+      </p>
+    );
+  }
+  expect(renderToString(<Probe />)).toBe("<p>Hello<!-- -->/</p>");
+  render(<Probe />);
+  expect(screen.getByText(/^Good (morning|afternoon|evening)\/\w+/)).toBeTruthy();
 });
