@@ -1,25 +1,48 @@
 "use client";
 
-import { LoadingState, SectionHeader, Dialog, ErrorNote, Field, cx, useToast, FocusGlyph, IconAction } from "@/components/ui";
-import { Badge, Button, ButtonLink, Card, Empty, OverflowMenu, Spinner, inputCls, type MenuItem } from "@/components/ui/legacy";
-import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
+import {
+  AnchoredMenu,
+  Button as KButton,
+  ButtonLink as KButtonLink,
+  ChipButton,
+  Dialog,
+  ErrorNote,
+  Field,
+  Input,
+  LoadingState,
+  MenuButton,
+  Pill,
+  RefPill,
+  Select,
+  StateWord,
+  Textarea,
+  useAnchoredMenu,
+  useNow,
+  useToast,
+  type KMenuItem,
+} from "@/components/ui";
+import { Badge, Button, Card, Empty, Spinner, inputCls } from "@/components/ui/legacy";
+import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
-import { ItemAiChips } from "@/components/work/ItemAiChips";
+import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
+import { ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
+import { ItemRows, RollupGroups } from "@/components/work/Rollup";
+import "@/components/work/item-page.css";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type ButtonHTMLAttributes, type Ref } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { daysBetween } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { Markdown } from "@/components/markdown/Markdown";
 import { WorkTree } from "@/components/work/WorkTree";
-import { ChatIcon, ChevronIcon } from "@/components/icons";
+import { CheckIcon, ChevronIcon, PlusIcon } from "@/components/icons";
 import { AreasNav, Block, StatusBadge, fmtDate, useGithubAutoRefresh, useWorkMutation } from "@/components/work/common";
 import { AreaSettingsDialog } from "@/components/areas/AreaSettings";
-import { NodeAgentChip } from "@/components/agents/NodeAgentChip";
+import { NodeAgentChip, useNodeAgent } from "@/components/agents/NodeAgentChip";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { AreaCoordinator, AreaProjects } from "@/components/map/AreaPage";
 import { ContinueDialog } from "@/components/work/ContinueDialog";
@@ -36,7 +59,7 @@ import { ConversationLinkDialog, fmtWhen, itemPaths, useConversations } from "@/
 import { InlineAdd, QuickAddDialog } from "@/components/work/QuickAdd";
 import { NEW_WORK_EVENT } from "@/components/navigation/commands";
 import { useShowArchived } from "@/lib/client/show-archived";
-import { AreasOverview, MoveToDialog, NewMenu, NodeRow } from "@/components/work/structure";
+import { AreasOverview, MoveToDialog, NewMenu } from "@/components/work/structure";
 import { useInbox } from "@/components/work/today";
 import { MapView } from "@/components/map/MapView";
 import "@/components/map/map.css";
@@ -46,8 +69,23 @@ import { GraphTab } from "@/components/areas/GraphTab";
 import { PortfolioTab } from "@/components/areas/PortfolioTab";
 import { areasHref, parseTab, type AreaTab } from "@/lib/areas-view";
 import { CaptureDialog } from "@/components/work/inbox";
-import { ActionSheet, JobChip, ReportsSection, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
+import { ActionSheet, useAiMenuItems, useSummaryMenuItem } from "@/components/work/ai/AiActions";
+import { deployOf } from "@/lib/agent-runs";
+import { agentChipLabel } from "@/lib/agents";
 import type { AiActionKind } from "@/lib/ai";
+import type { DecisionsResponse } from "@/lib/decisions";
+import { selectEscalation } from "@/lib/item-escalation";
+import {
+  containerRollup,
+  coordHref,
+  itemNow,
+  linkKind,
+  logLine,
+  type ContainerRollup,
+  type ItemNow,
+  type ItemWorkRow,
+  type RollupItemRow,
+} from "@/lib/item-page";
 import {
   areaValidationDefault,
   COMPARATORS,
@@ -56,7 +94,6 @@ import {
   KIND_LABELS,
   handoffMarkdown,
   itemPrimary,
-  rollup,
   todayIso,
   STATUS_LABELS,
   type Comparator,
@@ -530,58 +567,6 @@ function usePhone() {
   );
 }
 
-/**
- * A secondary item section. Desktop: a compact card with its heading and
- * actions. Phones: a disclosure (summary shows a one-line status) so the item
- * page leads with the next action, actions and validation.
- */
-function Section({
-  title,
-  meta,
-  aside,
-  phone,
-  open,
-  onToggle,
-  testId,
-  children,
-}: {
-  title: string;
-  meta?: ReactNode;
-  aside?: ReactNode;
-  phone: boolean;
-  open: boolean;
-  onToggle: (open: boolean) => void;
-  testId?: string;
-  children: ReactNode;
-}) {
-  if (phone)
-    return (
-      <details className="card wk-disclosure" open={open} onToggle={(e) => onToggle(e.currentTarget.open)} data-testid={testId}>
-        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 select-none">
-          <ChevronIcon className="wk-disclosure-chev h-4 w-4 shrink-0 text-muted" />
-          <h3 className="font-semibold">{title}</h3>
-          {meta ? <span className="ml-auto min-w-0 truncate text-xs text-muted">{meta}</span> : null}
-        </summary>
-        <div className="pt-1">
-          {aside ? <div className="mb-2 flex flex-wrap gap-2">{aside}</div> : null}
-          {children}
-        </div>
-      </details>
-    );
-  return (
-    <Card data-testid={testId}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-baseline gap-2 font-semibold">
-          {title}
-          {meta ? <span className="text-xs font-normal text-muted">{meta}</span> : null}
-        </h3>
-        {aside ? <div className="flex flex-wrap items-center gap-2">{aside}</div> : null}
-      </div>
-      {children}
-    </Card>
-  );
-}
-
 const RAIL_RELATION: Record<string, string> = {
   forked_from: "↖ Forked from",
   split_from: "↖ Split from",
@@ -590,20 +575,13 @@ const RAIL_RELATION: Record<string, string> = {
 };
 const CMP_TEXT: Record<string, string> = { "<=": "≤", ">=": "≥", "<": "<", ">": ">", "=": "=" };
 
-function prRef(l: WorkLink) {
-  const m = l.url?.match(/github\.com\/([^/]+)\/([^/]+)\/(?:pull|issues)\/(\d+)/);
-  return m ? { repo: m[2]!, number: m[3]! } : null;
-}
-
 /**
- * The item's context rail (wide screens, design Direction C): validation, PR,
- * lineage, dates and conversations, always visible next to the workspace.
- * Read-only summaries; every action stays in the workspace itself.
+ * The item's context rail (wide screens, design Direction C): only what the page's one column does not already
+ * say. Where it sits (area, repo, settle policy), when it is planned and closed, and its lineage. Status, due,
+ * pull requests, blockers and conversations are on the page itself (header, Plan), so they are not repeated here.
  */
 function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => void }) {
   const { item } = d;
-  const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue");
-  const convs = d.links.filter((l) => l.kind === "chat_session");
   const lineage = d.lineage
     .map((l) => {
       const mine = l.childId === item.id;
@@ -619,8 +597,6 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
     <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail">
       <Block label="Properties">
         <dl className="wk-kv">
-          <dt>Status</dt>
-          <dd>{STATUS_LABELS[item.status]}</dd>
           {d.area ? (
             <>
               <dt>Area</dt>
@@ -651,76 +627,8 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
               <dd>{shortDate(item.completedAt)}</dd>
             </>
           ) : null}
-          {d.blockedBy.length ? (
-            <>
-              <dt>Waits on</dt>
-              <dd>
-                {d.blockedBy.filter((b) => b.open).length} open of {d.blockedBy.length}
-              </dd>
-            </>
-          ) : null}
         </dl>
       </Block>
-      {prs.length ? (
-        <Block label="Pull requests">
-          <ul className="space-y-2">
-            {prs.map((l) => {
-              const ref = prRef(l);
-              // Auto titles ("owner/repo#123") repeat the reference: show "#123 repo" instead.
-              const named =
-                l.title && l.title !== l.targetId && !/^[\w.-]+\/[\w.-]+#\d+$/.test(l.title) ? l.title.replace(/^#\d+\s*[:·-]?\s*/, "") || null : null;
-              return (
-                <li key={l.id} className="text-[13px]">
-                  <div className="flex items-start justify-between gap-2">
-                    <a
-                      href={l.url ?? "#"}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="min-w-0 break-words hover:underline"
-                      aria-label={`${l.kind === "github_pr" ? "Pull request" : "Issue"} ${ref ? `${ref.repo} number ${ref.number}` : ""}${named ? `, ${named}` : ""} (opens in a new tab)`}
-                    >
-                      <span className="font-mono text-xs font-semibold">#{ref?.number ?? "?"}</span> {named ?? ref?.repo ?? ""}
-                    </a>
-                    {l.externalState ? (
-                      <span
-                        className="status-pill shrink-0 text-[11px]"
-                        data-s={l.externalState === "merged" ? "settled" : l.externalState === "open" ? "in_review" : "on_hold"}
-                      >
-                        {l.externalState}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-muted">
-                    {ref && named ? `${ref.repo} · ` : ""}
-                    {l.role}
-                    {l.checkedAt ? ` · ${l.checkError ? "check failed" : "checked"} ${fmtWhen(l.checkedAt)}` : ""}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-        </Block>
-      ) : null}
-      {/* IT4: rail order Properties → Pull requests → Dependencies (what this waits on / what waits on it). */}
-      {d.blockedBy.length || d.blocking.length ? (
-        <Block label="Dependencies">
-          <ul className="space-y-1 text-[13px]">
-            {[...d.blockedBy.map((x) => ({ ...x, rel: "Waits on" })), ...d.blocking.map((x) => ({ ...x, rel: "Blocks" }))].slice(0, 8).map((x) => (
-              <li key={`${x.rel}-${x.dependencyId}`} className="flex min-w-0 items-baseline gap-1.5">
-                <span className="shrink-0 text-xs text-muted">{x.rel}</span>
-                <button
-                  type="button"
-                  className={cx("min-w-0 truncate text-left text-accent underline-offset-2 hover:underline", !x.open && "text-muted line-through")}
-                  aria-label={`${x.rel} ${x.title}${x.open ? "" : " (done)"}`}
-                  onClick={() => onSelect(x.id)}
-                >
-                  {x.title}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      ) : null}
       {lineage.length ? (
         <Block label="Lineage">
           <ul className="space-y-1 text-[13px]">
@@ -735,24 +643,6 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
                 >
                   {l.otherTitle}
                 </button>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      ) : null}
-      {convs.length ? (
-        <Block label="Conversations">
-          <ul className="space-y-1 text-[13px]">
-            {convs.map((l) => (
-              <li key={l.id} className="min-w-0">
-                <Link
-                  href={`/chat/${encodeURIComponent(l.targetId ?? "")}`}
-                  className="block truncate text-accent hover:underline"
-                  aria-label={`Chat: ${l.title || l.targetId}`}
-                >
-                  {l.title || <span className="font-mono text-xs">{l.targetId}</span>}
-                </Link>
-                <span className="text-xs text-muted">{l.role}</span>
               </li>
             ))}
           </ul>
@@ -831,76 +721,77 @@ function Summary({ text }: { text: string }) {
   );
 }
 
-/** The next-action strip, edited in place: Edit → input, Enter saves, Esc cancels. */
-function NextActionStrip({ value, busy, onSave }: { value: string; busy: boolean; onSave: (v: string) => void }) {
-  const [draft, setDraft] = useState<string | null>(null);
-  if (draft !== null)
-    return (
-      <form
-        className="wk-next"
-        data-editing=""
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (draft.trim() !== value) onSave(draft.trim());
-          setDraft(null);
-        }}
-      >
-        <span className="wk-label shrink-0">Next action</span>
-        <input
-          aria-label="Edit next action"
-          className="wk-next-input"
-          autoFocus
-          value={draft}
-          placeholder="The very next concrete step"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={(e) => {
-            // Blur saves, except when focus moves to this strip's own Save/Cancel.
-            if (e.currentTarget.form?.contains(e.relatedTarget as Node | null)) return;
-            if (draft.trim() !== value) onSave(draft.trim());
-            setDraft(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setDraft(null);
-          }}
-        />
-        <span className="flex shrink-0 gap-1">
-          <Button type="submit" size="sm" variant="primary" busy={busy}>
-            Save
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setDraft(null)}>
-            Cancel
-          </Button>
-        </span>
-      </form>
-    );
-  return (
-    <div className="wk-next">
-      <span className="wk-label wk-next-label shrink-0">Next action</span>
-      <p className="min-w-0 flex-1 text-[14px] break-words">{value || <span className="text-muted">Not set: add the very next step</span>}</p>
-      <button type="button" className="wk-next-edit" onClick={() => setDraft(value)} aria-label="Edit next action">
-        Edit
-      </button>
-    </div>
-  );
-}
-
 function shortDate(d: string) {
   const [y, m, day] = d.slice(0, 10).split("-").map(Number);
   return new Date(Date.UTC(y!, m! - 1, day!)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-type DialogKind = null | "adopt" | "fork" | "split" | "packet" | "settle" | "reopen" | "continue" | CloseStatus | LinkKind;
+type DialogKind =
+  | null
+  | "adopt"
+  | "fork"
+  | "split"
+  | "packet"
+  | "settle"
+  | "reopen"
+  | "continue"
+  | "blocker"
+  | "validation"
+  | "templates"
+  | "dates"
+  | "handoff"
+  | CloseStatus
+  | LinkKind;
 
 /** Terminal statuses set from ⋯ with an optional reason (Settle keeps its own gated dialog). */
 type CloseStatus = "abandoned" | "superseded";
 
 type OnOp = (op: UndoOp | null | undefined) => void;
 
+/** A dashed "add" chip: one per thing the page does not have yet (rule: empty sections are not drawn). */
+function AddChip({
+  label,
+  name,
+  ...rest
+}: { label: string; name: string; ref?: Ref<HTMLButtonElement> } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">) {
+  return (
+    <KButton variant="ghost" size="sm" className="ip-add" aria-label={name} icon={<PlusIcon className="h-3.5 w-3.5" />} {...rest}>
+      {label}
+    </KButton>
+  );
+}
+
+/** An "add" chip for something that comes in kinds (a link: pull request, conversation, URL): it opens a menu. */
+function AddMenuChip({ label, name, items }: { label: string; name: string; items: KMenuItem[] }) {
+  const menu = useAnchoredMenu();
+  const { open, close, openFromTrigger, setTrigger } = menu;
+  return (
+    <>
+      <AddChip label={label} name={name} ref={setTrigger} aria-haspopup="menu" aria-expanded={open} onClick={() => (open ? close() : openFromTrigger())} />
+      <AnchoredMenu menu={menu} label={name} items={items} />
+    </>
+  );
+}
+
+/** Log: one line that opens the Activity view (the feed is drawn there, once). */
+function LogLine({ d, onOpen }: { d: WorkDetail; onOpen: () => void }) {
+  const now = useNow();
+  return (
+    <KButton variant="ghost" className="ip-log" onClick={onOpen} data-testid="item-log">
+      <span className="ip-next-label">Log</span>
+      <span className="ip-log-text">
+        <span data-dynamic>{logLine(d.events, now) ?? "No changes yet"}</span>
+        {itemAgentChip(d.item)}
+      </span>
+      <ChevronIcon className="ip-chev h-4 w-4" />
+    </KButton>
+  );
+}
+
 /**
- * A node's page. Containers (areas, projects) get an overview: progress,
- * children with inline add, recent changes; areas keep their settings behind
- * a disclosure. Work (threads, investigations, notes, conversations) gets the
- * workspace: one context-aware primary action, chat, and everything else in ⋯.
+ * A node's page. Work (threads, investigations, notes) reads top to bottom: what needs you (Now), what is next,
+ * what is running (Work), what proves it is done (Done when), the plan, and one Log line. Containers (areas,
+ * projects) get the same three groups rolled up from their items. Everything that is not on the page is in ⋯.
  */
 function ItemDetail({
   id,
@@ -952,27 +843,32 @@ function ItemDetail({
   const aiItems = useAiMenuItems(id, setAiSheet);
   const summaryItem = useSummaryMenuItem(id, setAiSheet);
   const wide = useWide();
-  const phone = usePhone();
   const [renaming, setRenaming] = useState<string | null>(null);
+  // An add chip opens the field's own inline editor: nothing is edited in two places.
+  const [editing, setEditing] = useState<"summary" | "next" | null>(null);
   // A3: area settings and the archive confirmation open from the area header's ⋯.
   const [areaSheet, setAreaSheet] = useState<"settings" | "archive" | null>(null);
-  // Phone disclosures (Details, Dependencies, Links). Held here so saving the details form (which
-  // remounts it) doesn't fold it; a section opens itself when something is added to it.
-  const [sections, setSections] = useState<{ details?: boolean; deps?: boolean; links?: boolean }>({});
-  const toggle = (k: "details" | "deps" | "links") => (open: boolean) => setSections((o) => (o[k] === open ? o : { ...o, [k]: open }));
-  const counts = q.data ? { links: q.data.links.length, deps: q.data.blockedBy.length + q.data.blocking.length } : null;
-  const [seen, setSeen] = useState(counts);
-  if (counts && (counts.links !== seen?.links || counts.deps !== seen?.deps)) {
-    setSeen(counts);
-    if (seen && counts.links > seen.links) setSections((o) => ({ ...o, links: true }));
-    if (seen && counts.deps > seen.deps) setSections((o) => ({ ...o, deps: true }));
-  }
   // Conversations are Hermes/Claude chats: only offered to people who can chat (the API checks too).
   const canChat = useAccess().can("hermes.chat");
   const isOwner = useAccess().isAdmin;
   const newChat = useAskHermes();
   if (dialog === "continue" && !canChat) setDialog(null);
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
+  const menu = useAnchoredMenu();
+  // Runs, jobs and reports on the item (and, for a project, under it): the Work list, the Now slot, the roll-up.
+  const work = useItemWork(id, !!q.data);
+  const asked = useQuery({
+    queryKey: ["work", "decisions"],
+    queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"),
+    enabled: !!q.data,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+  const nowMs = useNow();
+  const nodeAgent = useNodeAgent(id, q.data?.item.updatedAt, !!q.data && canChat);
+  // Work rows opened in place: held here so a "jump to it" chip in the Now slot can open one.
+  const [workOpen, setWorkOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const copyHandoff = useCopyHandoff(q.data);
 
   if (q.isPending)
     return (
@@ -990,12 +886,34 @@ function ItemDetail({
   const { item } = d;
   const isArea = item.parentId === null;
   const container = isContainer(item) && item.kind !== "conversation";
+  /** A piece of work with its own page: everything but containers and conversations. */
+  const leaf = !container && item.kind !== "conversation";
   const chat = d.links.find((l) => l.kind === "chat_session");
-  const showValidations = () => {
+  const scrollTo = (selector: string) => {
     setTab("overview");
-    requestAnimationFrame(() => document.getElementById("work-validations")?.scrollIntoView({ block: "start", behavior: "smooth" }));
+    requestAnimationFrame(() => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  };
+  const toggleWork = (key: string) =>
+    setWorkOpen((open) => {
+      const next = new Set(open);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const jumpToWork = (key: string) => {
+    setTab("overview");
+    setWorkOpen((open) => new Set(open).add(key));
+    requestAnimationFrame(() => document.getElementById(workRowId(key))?.scrollIntoView({ block: "center", behavior: "smooth" }));
   };
   const action = itemPrimary(d, canChat);
+  // Now: the escalation, else a pointer to what waits on the owner, else the one primary action for this state.
+  const escalated = leaf && !!selectEscalation(item.id, asked.data?.entries ?? [], work.info, nowMs);
+  const now: ItemNow = leaf
+    ? itemNow({ itemId: item.id, escalation: escalated, action, rows: work.rows, decisions: work.decisions })
+    : { kind: "action", action };
+  const needsOwner = now.kind !== "action";
+  /** The state action the page shows as its primary; null while something needs the owner (it is in ⋯ then). */
+  const shown = container || now.kind !== "action" ? null : now.action;
   // Links come oldest first: prefer the newest open PR (implementation role first), else the newest PR.
   const prLinks = d.links.filter((l) => l.kind === "github_pr" && l.url).reverse();
   const openPr =
@@ -1004,32 +922,60 @@ function ItemDetail({
     prLinks.find((l) => l.externalState !== "merged" && l.externalState !== "closed") ??
     prLinks[0];
   const chats = itemChatRows(d);
-  const showBlockers = () => {
-    setTab("overview");
-    setSections((o) => ({ ...o, deps: true }));
-    requestAnimationFrame(() => document.querySelector('[data-testid="work-deps"]')?.scrollIntoView({ block: "start", behavior: "smooth" }));
-  };
   const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
   const childLabel = isArea ? "Project" : "Item";
-  const has = (x: MenuItem | false | null | undefined): x is MenuItem => !!x;
-  const menu: MenuItem[] = (
-    [
+  const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
+  const hasBlockers = d.blockedBy.length + d.blocking.length > 0;
+  const rollup = containerRollup({ item, items, agents: work.agents, runs: work.runs, decisions: work.decisions, now: nowMs });
+  // Sub-items of a work item: the same rows as a project's items.
+  const kids = container ? { items: [], done: [] } : rollup;
+  const kidCount = kids.items.length + kids.done.length;
+
+  // ⋯ holds everything that is not on the page, grouped. A group with nothing to offer is not drawn.
+  const group = (label: string, entries: (KMenuItem | false | null | undefined)[]): KMenuItem[] => {
+    const list = entries.filter((x): x is KMenuItem => !!x);
+    return list.length ? [{ label, heading: true }, ...list] : [];
+  };
+  const answers = nodeAgent?.requested ? agentChipLabel(nodeAgent) : null;
+  const menuItems: KMenuItem[] = [
+    ...group(answers ? `Ask · ${answers.startsWith("@") ? answers : `@${answers}`} answers here` : "Ask", [
+      leaf && canChat ? { label: "Chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+      container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+      isArea && canChat && isOwner ? { label: "Adopt existing chat…", onSelect: () => setDialog("adopt") } : null,
+      ...aiItems,
+      summaryItem,
+    ]),
+    ...group("Work", [
+      // A project with no items yet can still be worked directly.
+      (item.kind === "project" && !isArea) || (leaf && shown !== "packet")
+        ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
+        : null,
+      (leaf && shown !== "settle" && item.status !== "settled") || (container && usedAsWork && item.status !== "settled")
+        ? { label: "Settle…", onSelect: () => setDialog("settle") }
+        : null,
+      !container && reopenable && shown !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
+      // The packet block carries these once a packet exists.
+      !container && !d.packets.length ? { label: "Copy handoff", onSelect: () => void copyHandoff() } : null,
+      !container && !d.packets.length ? { label: "Preview handoff", onSelect: () => setDialog("handoff") } : null,
+      !container && canChat && !d.packets.length ? { label: "Continue in new conversation", onSelect: () => setDialog("continue") } : null,
+    ]),
+    ...group("Add", [
       container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
       // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
       isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
-      container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
-      isArea && canChat && isOwner ? { label: "Adopt existing chat…", onSelect: () => setDialog("adopt") } : null,
-      // A project with no items yet can still be worked directly.
-      (item.kind === "project" && !isArea) || (!container && item.kind !== "conversation" && action !== "packet")
-        ? { label: d.packets.length ? "Revise work packet" : "Start focused work", onSelect: () => setDialog("packet") }
-        : null,
+      isArea ? null : { label: "Add blocker…", onSelect: () => setDialog("blocker") },
+      !container || usedAsWork ? { label: "Add validation", onSelect: () => setDialog("validation") } : null,
+      !container || usedAsWork ? { label: "Add from template", onSelect: () => setDialog("templates") } : null,
+    ]),
+    ...group("Organise", [
       { label: "Rename", hint: "F2", onSelect: () => setRenaming(item.title), disabled: item.builtIn },
       { label: "Move…", hint: "M", onSelect: () => onMove([item.id]), disabled: item.builtIn },
       { label: "Move up", onSelect: () => reorder.mutate("up") },
       { label: "Move down", onSelect: () => reorder.mutate("down") },
+      { label: isArea ? "Area details…" : "Planned dates…", onSelect: () => setDialog("dates") },
       item.kind === "project" && !isArea
         ? { label: "Convert to item", onSelect: () => patch.mutate({ kind: "thread" }) }
         : !isArea && item.kind !== "conversation"
@@ -1037,13 +983,12 @@ function ItemDetail({
           : null,
       isArea ? null : { label: "Fork", onSelect: () => setDialog("fork") },
       container ? null : { label: "Split into child", onSelect: () => setDialog("split") },
-      ...aiItems,
-      summaryItem,
-      !container && reopenable && action !== "reopen" ? { label: "Reopen", onSelect: () => setDialog("reopen") } : null,
-      isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
-      isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
       isArea && !item.builtIn ? { label: "Area settings…", onSelect: () => setAreaSheet("settings") } : null,
       isArea && isOwner ? { label: "Scheduled jobs", onSelect: () => router.push(`/settings/agents?area=${encodeURIComponent(item.id)}#schedules`) } : null,
+    ]),
+    ...group("Close", [
+      isArea || isClosed(item.status) ? null : { label: "Abandon…", onSelect: () => setDialog("abandoned"), disabled: item.builtIn },
+      isArea || isClosed(item.status) ? null : { label: "Mark superseded…", onSelect: () => setDialog("superseded"), disabled: item.builtIn },
       {
         label: item.archived ? "Unarchive" : isArea ? "Archive area…" : "Archive",
         // Archiving a whole area hides everything under it: confirm first.
@@ -1051,60 +996,70 @@ function ItemDetail({
         disabled: item.builtIn,
         danger: !item.archived,
       },
-    ] as (MenuItem | null)[]
-  ).filter(has);
+    ]),
+  ];
 
+  const pending = d.validations.filter((v) => v.status === "pending").length;
+  const openBlockers = d.blockedBy.filter((b) => b.open);
+  // The page's ONE primary action, and (only where it says something the button does not) why it is next.
   const primary =
-    action === "open_chat" && item.sessionId ? (
-      <ButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
+    shown === "open_chat" && item.sessionId ? (
+      <KButtonLink href={`/chat/${encodeURIComponent(item.sessionId)}`} variant="primary" size="sm">
         Open conversation
-      </ButtonLink>
-    ) : action === "settle" ? (
-      <Button size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed} title={d.settle.reason ?? undefined}>
+      </KButtonLink>
+    ) : shown === "settle" ? (
+      <KButton size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed} title={d.settle.reason ?? undefined}>
         Settle…
-      </Button>
-    ) : action === "record" ? (
-      <Button size="sm" variant="primary" onClick={showValidations}>
+      </KButton>
+    ) : shown === "record" ? (
+      <KButton size="sm" variant="primary" onClick={() => scrollTo("#work-validations")}>
         Record result
-      </Button>
-    ) : action === "reopen" ? (
+      </KButton>
+    ) : shown === "reopen" ? (
       // Settled work: reopening is possible but not the expected next step, so it is not styled as the primary.
-      <Button size="sm" variant={item.status === "settled" ? "secondary" : "primary"} onClick={() => setDialog("reopen")}>
+      <KButton size="sm" variant={item.status === "settled" ? "secondary" : "primary"} onClick={() => setDialog("reopen")}>
         Reopen
-      </Button>
-    ) : action === "continue" ? (
-      <Button size="sm" variant="primary" onClick={() => setDialog("continue")}>
+      </KButton>
+    ) : shown === "continue" ? (
+      <KButton size="sm" variant="primary" onClick={() => setDialog("continue")}>
         Continue in chat
-      </Button>
-    ) : action === "open_pr" && openPr?.url ? (
-      <ButtonLink href={openPr.url} external variant="primary" size="sm">
+      </KButton>
+    ) : shown === "open_pr" && openPr?.url ? (
+      <KButtonLink href={openPr.url} external variant="primary" size="sm">
         Open PR
-      </ButtonLink>
-    ) : action === "resolve_blocker" ? (
-      <Button size="sm" variant="primary" onClick={showBlockers}>
+      </KButtonLink>
+    ) : shown === "resolve_blocker" ? (
+      <KButton size="sm" variant="primary" onClick={() => scrollTo('[data-testid="work-deps"]')}>
         Resolve blocker
-      </Button>
+      </KButton>
+    ) : shown === "packet" && leaf ? (
+      <KButton
+        size="sm"
+        variant="primary"
+        onClick={() => setDialog("packet")}
+        title={d.packets.length ? "Start focused work (revise the work packet)" : undefined}
+      >
+        Start focused work
+      </KButton>
     ) : null;
-  // N5: "Start focused work" (the default next step) and "Chat here" are icon buttons in the header's
-  // action group next to ⋯, so the header keeps exactly one primary and no wall of text buttons.
-  const focusPrimary = !container && primary === null && item.kind !== "conversation";
-  const chatIcon =
-    canChat && item.kind !== "conversation" ? (
-      <IconAction
-        label="Chat here"
-        title="Chat here: starts a conversation filed here"
-        icon={<ChatIcon className="h-[17px] w-[17px]" />}
-        busy={newChat.busy}
-        onClick={() => newChat.start({ areaId: item.id })}
-      />
-    ) : null;
+  const why =
+    shown === "settle"
+      ? d.settle.allowed
+        ? item.status === "ready_to_settle"
+          ? "Ready to settle: nothing left to validate."
+          : "Every check is in."
+        : d.settle.reason
+      : shown === "record"
+        ? `${pending} check${pending === 1 ? " still needs" : "s still need"} a result.`
+        : shown === "resolve_blocker"
+          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} items`}.`
+          : shown === "reopen"
+            ? item.settledReason
+            : null;
 
-  const kids = d.children.filter((c) => !c.archived);
-  // "PR merged — settle?" carries the Settle action itself; nothing else repeats it.
-  const settlePrompt = item.status === "ready_to_settle" && !container;
   // One status control: the pill is the select (dot + label + caret), not a pill plus a second dropdown.
   const statusSelect = isArea ? null : (
-    <span className="inline-flex min-w-0 items-center gap-1" data-status={item.status}>
+    <span className="ip-meta-status" data-status={item.status}>
       <SelectPicker
         id="work-status"
         label="Status"
@@ -1125,8 +1080,59 @@ function ItemDetail({
     </span>
   );
 
-  // Extra badges (or container actions) may wrap; a plain item keeps status · due · ⋯ on one line.
-  const pinActions = !container && !(item.archived || d.validations.some((v) => v.overdue) || d.blockedBy.some((b) => b.open));
+  const adds = leaf
+    ? [
+        needsOwner && !item.nextAction && editing !== "next" ? (
+          <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} />
+        ) : null,
+        !item.summary && !item.builtIn && editing !== "summary" ? (
+          <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
+        ) : null,
+        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-item" name="Add sub-item" onClick={() => onAdd("thread", item)} /> : null,
+        !d.links.length ? (
+          <AddMenuChip
+            key="link"
+            label="Link"
+            name="Add a link"
+            items={[
+              { label: "Link PR", onSelect: () => setDialog("github_pr") },
+              ...(canChat ? [{ label: "Link conversation", onSelect: () => setDialog("chat_session") }] : []),
+              { label: "Link URL", onSelect: () => setDialog("url") },
+            ]}
+          />
+        ) : null,
+        !hasBlockers ? <AddChip key="blocker" label="Blocker" name="Add blocker" onClick={() => setDialog("blocker")} /> : null,
+        !d.validations.length ? <AddChip key="validation" label="Validation" name="Add validation" onClick={() => setDialog("validation")} /> : null,
+        !d.packets.length && shown !== "packet" ? <AddChip key="packet" label="Packet" name="Add work packet" onClick={() => setDialog("packet")} /> : null,
+      ].filter(Boolean)
+    : [
+        // Containers: the summary and (areas) the next step are edited in place once they exist.
+        !item.summary && !item.builtIn && editing !== "summary" ? (
+          <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
+        ) : null,
+        isArea && !item.nextAction && editing !== "next" ? (
+          <AddChip key="next" label="Next step" name="Add the next step" onClick={() => setEditing("next")} />
+        ) : null,
+      ].filter(Boolean);
+  const summary =
+    item.summary || editing === "summary" ? (
+      <InlineText
+        field="summary"
+        multiline
+        value={item.summary}
+        disabled={item.builtIn}
+        editButton
+        editing={editing === "summary" ? true : undefined}
+        onEditingChange={(on) => setEditing(on ? "summary" : null)}
+        className="wk-summary-inline"
+        placeholder="Add a summary"
+        onSave={(text) => inline.mutate({ summary: text })}
+      >
+        {item.summary ? <Summary key={item.id} text={item.summary} /> : undefined}
+      </InlineText>
+    ) : null;
+  // While something needs the owner, an unwritten next action is not drawn (its "add" chip offers it instead).
+  const showNext = item.kind !== "conversation" && (!!item.nextAction || editing === "next" || (!isArea && !needsOwner));
 
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
@@ -1149,11 +1155,9 @@ function ItemDetail({
             </li>
           </ol>
         </nav>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <h2
-            id="work-item-title"
-            className={`min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px] ${renaming !== null ? "flex-1 basis-60" : ""}`}
-          >
+        {/* Header: the title, ONE menu, then ONE meta line (status, due, assignee and tags; a container's counts). */}
+        <div className="ip-title-row">
+          <h2 id="work-item-title" className="min-w-0 text-lg leading-snug font-semibold tracking-tight break-words lg:text-[21px]">
             <InlineText
               field="title"
               value={item.title}
@@ -1164,98 +1168,101 @@ function ItemDetail({
               onSave={(title) => inline.mutate({ title })}
             />
           </h2>
-          {/* A plain item keeps status · due · ⋯ on one line (the due chip truncates) so ⋯ never drops to its own row;
-              containers and badge rows keep the old wrapping layout (the wrapper is display: contents). */}
-          <div className={pinActions ? "flex min-w-0 flex-auto flex-wrap items-center gap-x-2.5 gap-y-1.5" : "contents"}>
-            {statusSelect}
-            {item.archived ? <Badge>Archived</Badge> : null}
-            {d.validations.some((v) => v.overdue) ? <Badge tone="danger">Validation overdue</Badge> : null}
-            {d.blockedBy.some((b) => b.open) ? <Badge tone="warn">Blocked</Badge> : null}
-            <div className={`ml-auto flex items-center gap-1 ${pinActions ? "shrink-0" : "flex-wrap"}`}>
-              {chatIcon}
-              {focusPrimary ? (
-                <IconAction
-                  label="Start focused work"
-                  title={d.packets.length ? "Start focused work (revise the work packet)" : "Start focused work"}
-                  tone="primary"
-                  icon={<FocusGlyph />}
-                  onClick={() => setDialog("packet")}
-                />
-              ) : null}
-              {container ? (
-                <Button size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
-                  + {childLabel}
-                </Button>
-              ) : null}
-              <OverflowMenu label="More item actions" items={menu} />
-            </div>
+          <div className="ip-title-acts">
+            {container ? (
+              <KButton size="sm" variant="primary" onClick={() => onAdd(isArea ? "project" : "thread", item)}>
+                + {childLabel}
+              </KButton>
+            ) : null}
+            <MenuButton menu={menu} label="More item actions" />
+            <AnchoredMenu menu={menu} label="More item actions" items={menuItems} />
           </div>
         </div>
-        {container ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <ContainerMeta d={d} items={items} />
-            {canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
-          </div>
-        ) : null}
-        {!container && item.kind !== "conversation" ? <ItemAiChips aiActions={aiItems} itemActions={menu} /> : null}
-        {container || item.kind === "conversation" ? null : (
-          <div className="mt-2" data-testid="work-item-meta">
-            <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(patch) => inline.mutate(patch)} />
-          </div>
-        )}
-        {item.summary || !container ? (
-          <InlineText
-            field="summary"
-            multiline
-            value={item.summary}
-            disabled={item.builtIn}
-            editButton
-            className="wk-summary-inline"
-            placeholder="Add a summary"
-            onSave={(summary) => inline.mutate({ summary })}
-          >
-            {item.summary ? <Summary key={item.id} text={item.summary} /> : undefined}
-          </InlineText>
-        ) : null}
-        {item.settledReason ? <p className="mt-1 text-[13px] text-muted">{item.settledReason}</p> : null}
-        {settlePrompt ? (
-          <div
-            role="status"
-            data-testid="settle-prompt"
-            className="mt-2.5 flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-ok bg-ok-soft px-3 py-2 text-[13px]"
-          >
-            <span className="min-w-0">
-              <strong>PR merged — settle?</strong> Nothing needs validating. Jarvis never settles on its own: settle when you&apos;re satisfied.
+        <div className="ip-meta">
+          {statusSelect}
+          {item.archived ? <Badge>Archived</Badge> : null}
+          {leaf ? (
+            <div className="ip-meta-in" data-testid="work-item-meta">
+              <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(change) => inline.mutate(change)} />
+            </div>
+          ) : null}
+          {container ? (
+            <span className="ip-meta-text wk-cmeta" data-dynamic>
+              {rollup.meta}
             </span>
-            <Button size="sm" variant="primary" onClick={() => setDialog("settle")} disabled={!d.settle.allowed}>
-              Settle now
-            </Button>
-          </div>
+          ) : null}
+          {/* The agent mode is set on areas and projects, so they say who answers here; an item says it in ⋯. */}
+          {container && canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+        </div>
+        {/* Next: ONE section. What needs you is the next step (the decision, or a chip that jumps to what waits on
+            you), with the written next action under it as a quiet line. When nothing needs you: the next action,
+            then the page's one primary action for this state. */}
+        <div className="ip-nextsec" role="group" aria-labelledby="ip-next-h" data-testid="item-next" data-needs={needsOwner || undefined}>
+          {needsOwner || !showNext ? (
+            <h3 id="ip-next-h" className={needsOwner ? "ip-label ip-next-head" : "sr-only"}>
+              Next
+            </h3>
+          ) : null}
+          {leaf ? <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => setDialog("continue") : undefined} /> : null}
+          {leaf ? <CaptureTriageCard itemId={item.id} /> : null}
+          {now.kind === "pointer" ? (
+            <p className="ip-now-pointer" data-testid="now-pointer">
+              <StateWord state={now.decisions.length ? "needs" : now.rows[0]!.state} />
+              {now.decisions.map((x) => (
+                <RefPill key={x.ref} id={x.ref} onClick={() => router.push(coordHref(item.id, "needs", x.ref))} />
+              ))}
+              {now.rows.map((row) =>
+                row.kind === "run" && row.refId ? (
+                  <RefPill key={row.key} id={row.refId} onClick={() => jumpToWork(row.key)} />
+                ) : (
+                  <ChipButton key={row.key} className="ip-jump" onClick={() => jumpToWork(row.key)}>
+                    {row.title}
+                  </ChipButton>
+                ),
+              )}
+              {/* One thing waiting: say what it waits for, so the next step reads without opening anything. */}
+              {now.decisions.length + now.rows.length === 1 ? <span className="ip-now-note">{now.decisions[0]?.question ?? now.rows[0]!.note}</span> : null}
+            </p>
+          ) : null}
+          {showNext ? (
+            <div className="ip-next" data-quiet={needsOwner || undefined} data-testid="next-action">
+              {needsOwner ? (
+                <span className="ip-next-label">Then</span>
+              ) : (
+                <h3 id="ip-next-h" className="ip-next-label">
+                  Next
+                </h3>
+              )}
+              <InlineText
+                key={item.updatedAt}
+                field="nextAction"
+                value={item.nextAction}
+                status={item.status}
+                disabled={item.builtIn}
+                editing={editing === "next" ? true : undefined}
+                onEditingChange={(on) => setEditing(on ? "next" : null)}
+                placeholder="Add the very next step"
+                onSave={(nextAction) => inline.mutate({ nextAction })}
+              />
+            </div>
+          ) : null}
+          {primary ? (
+            <div className="ip-now-act" data-testid={item.status === "ready_to_settle" ? "settle-prompt" : "item-primary"}>
+              {why ? <p className="ip-now-why">{why}</p> : null}
+              {primary}
+            </div>
+          ) : item.settledReason ? (
+            <p className="ip-now-why mt-2">{item.settledReason}</p>
+          ) : null}
+        </div>
+        {container ? (
+          <>
+            {summary}
+            <div className="ip-adds" role="group" aria-label={`Add to this ${isArea ? "area" : "project"}`}>
+              {adds}
+            </div>
+          </>
         ) : null}
-        {isArea && !item.nextAction ? null : (
-          <NextActionStrip key={item.updatedAt} value={item.nextAction} busy={inline.isPending} onSave={(nextAction) => inline.mutate({ nextAction })} />
-        )}
-        {!container && item.kind !== "conversation" ? (
-          <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => setDialog("continue") : undefined} />
-        ) : null}
-        {item.createdVia || item.updatedVia ? <div className="mt-1.5 flex min-w-0 flex-wrap">{itemAgentChip(item)}</div> : null}
-        {container ? null : <JobChip itemId={item.id} />}
-        {container || ((settlePrompt || !primary) && !(canChat && item.kind !== "conversation")) ? null : (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {settlePrompt ? null : primary}
-            {canChat && item.kind !== "conversation" ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
-          </div>
-        )}
-        {!container && aiItems.length ? (
-          <div className="wk-ai-chips" role="group" aria-label="AI actions">
-            {aiItems.map((a) => (
-              <button key={a.label} type="button" className="wk-ai-chip" onClick={a.onSelect}>
-                {a.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {!container && item.kind !== "conversation" ? <ItemAgentPanel itemId={item.id} /> : null}
       </section>
       {isArea && !item.builtIn && areaSheet === "settings" ? (
         <AreaSettingsDialog key={`s-${item.updatedAt}`} area={item} open onClose={() => setAreaSheet(null)} />
@@ -1278,7 +1285,19 @@ function ItemDetail({
       />
 
       {container ? (
-        <ContainerBody d={d} items={items} onSelect={onSelect} phone={phone} sections={sections} toggle={toggle} canChat={canChat} onDialog={setDialog} />
+        <ContainerBody
+          d={d}
+          items={items}
+          rollup={rollup}
+          reports={work.rows.filter((row) => row.kind === "job" || row.kind === "report")}
+          workOpen={workOpen}
+          onToggleWork={toggleWork}
+          onSelect={onSelect}
+          onOp={onOp}
+          canChat={canChat}
+          onDialog={setDialog}
+          onCopy={() => void copyHandoff()}
+        />
       ) : (
         <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
           <div className="min-w-0">
@@ -1318,61 +1337,51 @@ function ItemDetail({
               role={section ? undefined : "tabpanel"}
               id={section ? undefined : `panel-${tab}`}
               aria-labelledby={section ? undefined : `tab-${tab}`}
-              className="wk-panel space-y-3 px-3 py-3 sm:px-5 lg:px-6 lg:py-4"
+              className="wk-panel ip-body px-3 py-3 sm:px-5 lg:px-6 lg:py-4"
             >
               {tab === "overview" ? (
                 <>
-                  {(() => {
-                    const edit = (
-                      <EditItem
-                        key={item.updatedAt}
-                        item={item}
-                        validationDefault={d.validationDefault}
-                        phone={phone}
-                        open={sections.details ?? false}
-                        onToggle={toggle("details")}
-                      />
-                    );
-                    const packet = <PacketCard d={d} onRevise={() => setDialog("packet")} onContinue={canChat ? () => setDialog("continue") : undefined} />;
-                    const validations = (
-                      <Validations
-                        d={d}
-                        onSettle={settlePrompt ? undefined : () => setDialog("settle")}
-                        onReopen={() => setDialog("reopen")}
-                        focusRecord={initialAction === "validate"}
-                      />
-                    );
-                    const children = kids.length ? (
-                      <ChildrenCard label="Sub-items" parent={item} list={kids} items={items} onSelect={onSelect} addLabel="Add a sub-item" />
-                    ) : null;
-                    // Phones lead with proof; desktop with the packet (the rail summarises proof). The details form
-                    // folds away everywhere: the header already shows the title, summary and next action.
-                    return phone ? (
-                      <>
-                        {validations}
-                        {packet}
-                        {children}
-                        {edit}
-                      </>
-                    ) : (
-                      <>
-                        {packet}
-                        {validations}
-                        {children}
-                        {edit}
-                      </>
-                    );
-                  })()}
-                  <Dependencies
-                    d={d}
-                    items={items}
-                    onSelect={onSelect}
-                    phone={phone}
-                    open={sections.deps ?? d.blockedBy.some((b) => b.open)}
-                    onToggle={toggle("deps")}
+                  {/* Work: every run, job and report, once. Then what proves it is done, the plan, and one Log line. */}
+                  <ItemWorkList
+                    itemId={item.id}
+                    areaId={d.area?.id ?? null}
+                    rows={work.rows}
+                    timeline={work.timeline}
+                    sessionId={work.sessionId}
+                    open={workOpen}
+                    onToggle={toggleWork}
+                    onOp={onOp}
                   />
-                  <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
-                  <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
+                  <DoneWhen
+                    d={d}
+                    onReopen={() => setDialog("reopen")}
+                    focusRecord={initialAction === "validate"}
+                    recording={item.status === "awaiting_validation"}
+                  />
+                  {summary || kidCount || hasBlockers || d.links.length || d.packets.length || adds.length ? (
+                    <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
+                      <h3 id="ip-plan-h" className="ip-label">
+                        Plan
+                      </h3>
+                      {summary}
+                      {kidCount ? (
+                        <ItemsSection sub label="Sub-items" testId="sub-items" parent={item} open={kids.items} done={kids.done} onSelect={onSelect} />
+                      ) : null}
+                      <Blockers d={d} onSelect={onSelect} />
+                      <Links d={d} canChat={canChat} />
+                      <PacketCard
+                        d={d}
+                        onCopy={() => void copyHandoff()}
+                        onRevise={() => setDialog("packet")}
+                        // "Continue in chat" is the page's primary while a packet is ready: not offered twice.
+                        onContinue={canChat && shown !== "continue" ? () => setDialog("continue") : undefined}
+                      />
+                      <div className="ip-adds" role="group" aria-label="Add to this item">
+                        {adds}
+                      </div>
+                    </section>
+                  ) : null}
+                  <LogLine d={d} onOpen={() => setTab("activity")} />
                 </>
               ) : tab === "chats" ? (
                 <ItemChats chats={chats} canChat={canChat} onNew={() => newChat.start({ areaId: item.id })} busy={newChat.busy} />
@@ -1395,6 +1404,15 @@ function ItemDetail({
       <ReopenDialog open={dialog === "reopen"} onClose={close} item={item} onFollowUp={onSelect} />
       {dialog === "github_pr" || dialog === "url" ? <LinkDialog kind={dialog} onClose={close} item={item} /> : null}
       {dialog === "adopt" ? <AdoptDialog item={item} onClose={close} /> : null}
+      {dialog === "blocker" ? <BlockerDialog d={d} items={items} onClose={close} /> : null}
+      {dialog === "dates" ? <DatesDialog key={item.updatedAt} item={item} onClose={close} onOp={onOp} /> : null}
+      {dialog === "handoff" ? <HandoffPreviewDialog d={d} onClose={close} /> : null}
+      {dialog === "validation" ? (
+        <Dialog open onClose={close} title="Add validation" description="What has to be true for this to count as done.">
+          <AddValidation itemId={item.id} onDone={close} onTemplate={() => setDialog("templates")} />
+        </Dialog>
+      ) : null}
+      {dialog === "templates" ? <TemplatesDialog itemId={item.id} onClose={close} /> : null}
       {dialog === "chat_session" ? (
         <ConversationLinkDialog
           item={item}
@@ -1406,30 +1424,39 @@ function ItemDetail({
   );
 }
 
-/** Area / project body: progress, children (with inline add), recent changes, settings and details. */
+/**
+ * Area / project body: Needs you and Working rolled up from everything under it, then its items (an area keeps
+ * its project cards and item tree), then whatever it has of its own (checks, packet, blockers, links, reports).
+ * No inline Activity: the Activity tab is the one feed.
+ */
 function ContainerBody({
   d,
   items,
+  rollup,
+  reports,
+  workOpen,
+  onToggleWork,
   onSelect,
-  phone,
-  sections,
-  toggle,
+  onOp,
   canChat,
   onDialog,
+  onCopy,
 }: {
   d: WorkDetail;
   items: WorkItem[];
+  rollup: ContainerRollup;
+  /** The container's own AI jobs and reports (e.g. a summary of the project). */
+  reports: ItemWorkRow[];
+  workOpen: ReadonlySet<string>;
+  onToggleWork: (key: string) => void;
   onSelect: (id: string) => void;
-  phone: boolean;
-  sections: { details?: boolean; deps?: boolean; links?: boolean };
-  toggle: (k: "details" | "deps" | "links") => (open: boolean) => void;
+  onOp: OnOp;
   canChat: boolean;
   onDialog: (k: DialogKind) => void;
+  onCopy: () => void;
 }) {
   const { item } = d;
   const isArea = item.parentId === null;
-  const r = rollup(items, item.id);
-  const kids = items.filter((i) => i.parentId === item.id && !i.archived);
   // Recently changed anywhere below this node.
   const below = new Set<string>([item.id]);
   for (let grew = true; grew;) {
@@ -1453,129 +1480,60 @@ function ContainerBody({
     isArea && canChat && item.settings?.aiPolicy !== "excluded"
       ? { area: { id: item.id, title: item.title }, chats: itemChatRows(d), onNew: () => newChat.start({ areaId: item.id }), busy: newChat.busy }
       : null;
+  // The side column is only drawn when it has something to show.
+  const side = !!coord || recent.length > 0 || reports.length > 0 || (!isArea && (d.links.length > 0 || d.blockedBy.length + d.blocking.length > 0));
   return (
-    <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
-      <div className="wk-cpage-main min-w-0 space-y-3">
-        <div className="wk-kpis" aria-label="Progress">
-          <div>
-            <b>{isArea ? r.containers : `${r.done}/${r.total}`}</b>
-            <span>{isArea ? "Projects" : "Done"}</span>
-          </div>
-          <div>
-            <b>{r.open}</b>
-            <span>Open</span>
-          </div>
-          <div>
-            <b>{r.active}</b>
-            <span>Active</span>
-          </div>
-          <div>
-            <b>{r.proofDue}</b>
-            <span>Proof due</span>
-          </div>
-        </div>
+    <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4" data-side={side ? undefined : "none"}>
+      <div className="wk-cpage-main ip-body min-w-0">
+        <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} />
         {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
-        {isArea ? <AreaProjects areaId={item.id} onOpen={onSelect} /> : null}
         {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
-        {isArea ? null : (
-          <ChildrenCard
-            label="Work"
-            parent={item}
-            list={kids}
-            items={items}
-            onSelect={onSelect}
-            addLabel={kids.length ? "Add item, sub-project or path" : "Add the first item"}
-            empty="Break the project into items. Type “Sub-project / item” to nest."
-          />
+        {isArea ? (
+          <AreaProjects areaId={item.id} onOpen={onSelect} />
+        ) : (
+          <ItemsSection label="Items" testId="work" parent={item} open={rollup.items} done={rollup.done} onSelect={onSelect} />
         )}
         {usedAsWork ? (
           <>
-            <PacketCard d={d} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
-            <Validations d={d} onSettle={() => onDialog("settle")} onReopen={() => onDialog("reopen")} />
+            <DoneWhen d={d} onReopen={() => onDialog("reopen")} recording={item.status === "awaiting_validation"} />
+            <PacketCard d={d} onCopy={onCopy} onRevise={() => onDialog("packet")} onContinue={canChat ? () => onDialog("continue") : undefined} />
           </>
         ) : null}
-        <details className="wk-disclosure card">
-          <summary className="tap cursor-pointer font-semibold">Activity</summary>
-          <div className="mt-2 space-y-3">
-            <Activity d={d} onSelect={onSelect} />
-          </div>
-        </details>
       </div>
-      {/* Side column (≥1100): settings, details, dependencies, links, reports. Stacks below on narrower screens. */}
-      <aside className="wk-cpage-side min-w-0 space-y-3" aria-label={isArea ? "Area settings and details" : "Project details"}>
-        {/* Map is Areas: the area coordinator leads the side column at ≥1280 (a sheet below that). */}
-        {coord ? <AreaCoordinator variant="column" {...coord} /> : null}
-        {/* A3: the side column leads with what moved; settings and details follow. */}
-        {recent.length ? (
-          <section aria-labelledby="recent-h">
-            <SectionHeader id="recent-h" label="Recent activity" count={recent.length} />
-            <ul className="wk-recent">
-              {recent.map((i) => (
-                <li key={i.id}>
-                  <button type="button" className="tap min-w-0 flex-[1_1_6rem] truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
-                    {i.title}
-                  </button>
-                  <span className="max-w-full shrink-0 truncate text-xs text-muted" data-dynamic>
-                    {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        <EditItem
-          key={item.updatedAt}
-          item={item}
-          validationDefault={d.validationDefault}
-          phone={phone}
-          open={sections.details ?? false}
-          onToggle={toggle("details")}
-        />
-        {isArea ? null : (
-          <>
-            <Dependencies
-              d={d}
-              items={items}
-              onSelect={onSelect}
-              phone={phone}
-              open={sections.deps ?? d.blockedBy.some((b) => b.open)}
-              onToggle={toggle("deps")}
-            />
-            <Links d={d} canChat={canChat} phone={phone} open={sections.links ?? false} onToggle={toggle("links")} />
-          </>
-        )}
-        <ReportsSection itemId={item.id} areaId={d.area?.id ?? null} />
-      </aside>
+      {/* Side column (≥1100): the coordinator, what moved deeper down, blockers, links, reports. Stacks below on narrower screens. */}
+      {side ? (
+        <aside className="wk-cpage-side ip-body min-w-0" aria-label={isArea ? "Area coordinator and activity" : "Project details"}>
+          {/* Map is Areas: the area coordinator leads the side column at ≥1280 (a sheet below that). */}
+          {coord ? <AreaCoordinator variant="column" {...coord} /> : null}
+          {recent.length ? (
+            <section aria-labelledby="recent-h" className="ip-sec">
+              <h3 id="recent-h" className="ip-label">
+                Recent activity <span className="ip-count">· {recent.length}</span>
+              </h3>
+              <ul className="wk-recent">
+                {recent.map((i) => (
+                  <li key={i.id}>
+                    <button type="button" className="tap min-w-0 flex-[1_1_6rem] truncate text-left hover:text-accent" onClick={() => onSelect(i.id)}>
+                      {i.title}
+                    </button>
+                    <span className="max-w-full shrink-0 truncate text-xs text-muted" data-dynamic>
+                      {STATUS_LABELS[i.status]} · {fmtWhen(i.updatedAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {isArea ? null : (
+            <>
+              <Blockers d={d} onSelect={onSelect} />
+              <Links d={d} canChat={canChat} />
+            </>
+          )}
+          <ItemWorkList label="Reports" itemId={item.id} areaId={d.area?.id ?? null} rows={reports} open={workOpen} onToggle={onToggleWork} onOp={onOp} />
+        </aside>
+      ) : null}
     </div>
-  );
-}
-
-function ProgressMini({ items, id }: { items: WorkItem[]; id: string }) {
-  const r = rollup(items, id);
-  if (!r.total) return null;
-  const pct = Math.round((r.done / r.total) * 100);
-  return (
-    <span className="wk-pmini max-sm:hidden" role="img" aria-label={`${r.done} of ${r.total} done`} title={`${r.done} of ${r.total} done`}>
-      <span style={{ width: `${pct}%` }} />
-    </span>
-  );
-}
-
-/** One meta line under a container title: what's inside and what's moving (design: agent · validation · settle). */
-function ContainerMeta({ d, items }: { d: WorkDetail; items: WorkItem[] }) {
-  const { item } = d;
-  const isArea = item.parentId === null;
-  const r = rollup(items, item.id);
-  const parts = [
-    isArea ? `${r.containers} ${r.containers === 1 ? "project" : "projects"}` : `${r.done} of ${r.total} done`,
-    `${r.open} open`,
-    r.active ? `${r.active} active` : null,
-    r.proofDue ? `${r.proofDue} need proof` : null,
-  ].filter(Boolean);
-  return (
-    <p className="wk-cmeta" data-dynamic>
-      {parts.join(" · ")}
-    </p>
   );
 }
 
@@ -1615,301 +1573,256 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
   );
 }
 
-/** Children of a node as dense rows; closed work folds away; ends with an inline "+ Add" row. */
-function ChildrenCard({
+/**
+ * The items under a project (or the sub-items under an item): one row per open item with its one headline, then
+ * "Done · N" as one tight row that expands. A tag / assignee filter appears once rows carry either. A project's
+ * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Item" adds).
+ */
+function ItemsSection({
   label,
-  parent,
-  list,
-  items,
-  onSelect,
-  addLabel,
-  addKind,
-  empty,
   testId,
+  parent,
+  open,
+  done,
+  onSelect,
+  sub,
 }: {
   label: string;
-  testId?: string;
+  testId: string;
   parent: WorkItem;
-  list: WorkItem[];
-  items: WorkItem[];
+  open: readonly RollupItemRow[];
+  done: readonly RollupItemRow[];
   onSelect: (id: string) => void;
-  addLabel: string;
-  addKind?: CreatableKind;
-  empty?: string;
+  /** Sub-items inside an item's Plan: a smaller heading and no add row (the page's add chips and ⋯ add them). */
+  sub?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
-  const [showDone, setShowDone] = useState(false);
   const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
-  const shown = filterItems(list, filter);
-  const open = shown.filter((i) => !isClosed(i.status) || i.kind === "project" || i.kind === "conversation");
-  const done = shown.filter((i) => !open.includes(i));
-  const rows = showDone ? [...open, ...done] : open;
-  const slug = testId ?? label.toLowerCase().replace(/[^a-z]+/g, "-");
+  const all = [...open, ...done];
+  const kept = new Set(
+    filterItems(
+      all.map((row) => row.item),
+      filter,
+    ).map((i) => i.id),
+  );
+  const shownOpen = open.filter((row) => kept.has(row.item.id));
+  const shownDone = done.filter((row) => kept.has(row.item.id));
+  const count = `· ${open.length} open${done.length ? ` · ${done.length} done` : ""}`;
   return (
-    <section aria-labelledby={`kids-${slug}`} data-testid={`children-${slug}`}>
-      <SectionHeader id={`kids-${slug}`} label={label} count={list.length || undefined} />
-      <ItemFilterBar rows={list} value={filter} onChange={setFilter} idPrefix={`kids-${slug}`} className="mb-1.5" />
-      <div className="k-card overflow-hidden">
-        {rows.length ? (
-          <ul className="wk-node-rows">
-            {rows.map((c) => (
-              <li key={c.id}>
-                <NodeRow
-                  i={c}
-                  items={items}
-                  onSelect={(x) => onSelect(x.id)}
-                  status={
-                    c.kind === "conversation" ? (
-                      <span className="text-xs text-muted" data-dynamic>
-                        {fmtWhen(c.updatedAt)}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        {/* A2: containers show a 4px progress mini-bar beside the right-aligned pill. */}
-                        {isContainer(c) ? <ProgressMini items={items} id={c.id} /> : null}
-                        <StatusBadge status={c.status} auto={c.settledKind === "auto"} />
-                      </span>
-                    )
-                  }
-                />
-              </li>
-            ))}
-          </ul>
-        ) : !adding && empty ? (
-          <p className="px-3 py-2 text-[13px] text-muted">{empty}</p>
-        ) : null}
-        {done.length ? (
-          <button
-            type="button"
-            className="tap w-full border-t border-line px-3 py-1.5 text-left text-xs text-muted hover:text-text"
-            onClick={() => setShowDone((s) => !s)}
-          >
-            {showDone ? "Hide done" : `${done.length} done · show`}
-          </button>
-        ) : null}
-        <div className="border-t border-line">
-          {adding ? (
-            <InlineAdd
-              parent={parent}
-              kind={addKind}
-              onDone={() => setAdding(false)}
-              placeholder={addKind === "project" ? "Project name, or Project / item…" : undefined}
-            />
+    <section aria-labelledby={`kids-${testId}`} className={sub ? "min-w-0" : "ip-sec"} data-testid={`children-${testId}`}>
+      {all.length ? (
+        <>
+          {sub ? (
+            <h4 id={`kids-${testId}`} className="ip-sublabel">
+              {label} <span>{count}</span>
+            </h4>
           ) : (
-            <button type="button" className="wk-node-row wk-add-row" onClick={() => setAdding(true)}>
-              <span aria-hidden="true" className="wk-plus">
-                +
+            <h3 id={`kids-${testId}`} className="ip-label">
+              {label} <span className="ip-count">{count}</span>
+              {/* The header's "+ Item" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
+              <span className="ip-label-acts">
+                <KButton
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  icon={<PlusIcon className="h-4 w-4" />}
+                  title="Add item, sub-project or path"
+                  onClick={() => setAdding(true)}
+                >
+                  Add item, sub-project or path
+                </KButton>
               </span>
-              {addLabel}
-            </button>
+            </h3>
           )}
+          <ItemFilterBar rows={all.map((row) => row.item)} value={filter} onChange={setFilter} idPrefix={`kids-${testId}`} className="mb-1.5" />
+          <div className="ip-rows">
+            <ItemRows open={shownOpen} done={shownDone} onSelect={onSelect} />
+          </div>
+        </>
+      ) : (
+        <h3 id={`kids-${testId}`} className="sr-only">
+          {label}
+        </h3>
+      )}
+      {!sub && adding ? (
+        <div className="ip-inline-add">
+          <InlineAdd parent={parent} onDone={() => setAdding(false)} />
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }
 
-type SectionProps = { phone: boolean; open: boolean; onToggle: (open: boolean) => void };
-
-function EditItem({ item, validationDefault, open, onToggle }: { item: WorkItem; validationDefault: WorkDetail["validationDefault"] } & SectionProps) {
+/**
+ * ⋯ "Planned dates…": when the work starts and when it is due (and, on an area, its validation default). The
+ * title, next action and summary are edited in place on the page, so no form repeats them.
+ */
+function DatesDialog({ item, onClose, onOp }: { item: WorkItem; onClose: () => void; onOp: OnOp }) {
   const isArea = item.parentId === null;
   const [f, setF] = useState({
-    title: item.title,
-    summary: item.summary,
-    nextAction: item.nextAction,
     startDate: item.startDate ?? "",
     targetDate: item.targetDate ?? "",
     validationDefault: (item.validationDefault ?? "") as "" | "required" | "optional",
   });
   const save = useWorkMutation(
-    () => {
-      const { validationDefault: vd, ...rest } = f;
-      return api.patch(`/api/work/items/${encodeURIComponent(item.id)}`, {
-        ...rest,
+    () =>
+      api.patch<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(item.id)}`, {
         startDate: f.startDate || null,
         targetDate: f.targetDate || null,
-        ...(isArea && vd !== (item.validationDefault ?? "") ? { validationDefault: vd || null } : {}),
-      });
+        ...(isArea && f.validationDefault !== (item.validationDefault ?? "") ? { validationDefault: f.validationDefault || null } : {}),
+      }),
+    {
+      ok: "Saved",
+      onSuccess: (r) => {
+        onOp(r.op);
+        onClose();
+      },
     },
-    { ok: "Saved" },
   );
   const ruleDefault = areaValidationDefault({ ...item, validationDefault: null, systemKey: item.builtIn ? "misc" : null });
   const dirty =
-    f.title !== item.title ||
-    f.summary !== item.summary ||
-    f.nextAction !== item.nextAction ||
-    f.startDate !== (item.startDate ?? "") ||
-    f.targetDate !== (item.targetDate ?? "") ||
-    (isArea && f.validationDefault !== (item.validationDefault ?? ""));
-  const planned =
-    item.startDate || item.targetDate
-      ? `${item.startDate ? shortDate(item.startDate) : "—"} → ${item.targetDate ? shortDate(item.targetDate) : "—"}`
-      : "Not planned";
-  const saveButton = (
-    <Button type="submit" form="wi-form" size="sm" variant="primary" disabled={!dirty} busy={save.isPending}>
-      Save details
-    </Button>
-  );
+    f.startDate !== (item.startDate ?? "") || f.targetDate !== (item.targetDate ?? "") || (isArea && f.validationDefault !== (item.validationDefault ?? ""));
   return (
-    <Section
-      title="Details"
-      meta={dirty ? "Unsaved changes" : `Planned ${planned === "Not planned" ? "—" : planned}`}
-      phone
-      open={open}
-      onToggle={onToggle}
-      testId="work-details"
+    <Dialog
+      open
+      onClose={onClose}
+      title={isArea ? "Area details" : "Planned dates"}
+      footer={
+        <>
+          <KButton onClick={onClose}>Cancel</KButton>
+          <KButton variant="primary" type="submit" form="wi-form" disabled={!dirty} loading={save.isPending}>
+            Save
+          </KButton>
+        </>
+      }
     >
-      {/* A property sheet: label column + quiet inline fields on desktop; stacked on phones. */}
       <form
         id="wi-form"
-        className="wk-props"
+        className="grid gap-3 sm:grid-cols-2"
+        data-testid="work-details"
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate(undefined);
         }}
       >
-        <label htmlFor="wi-title">Title</label>
-        <input id="wi-title" required className={inputCls} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
-        <label htmlFor="wi-next">Next action</label>
-        <input
-          id="wi-next"
-          className={inputCls}
-          value={f.nextAction}
-          placeholder="The very next concrete step"
-          onChange={(e) => setF({ ...f, nextAction: e.target.value })}
-        />
-        <label htmlFor="wi-summary">Summary</label>
-        <textarea
-          id="wi-summary"
-          rows={2}
-          className={`${inputCls} wk-autogrow`}
-          value={f.summary}
-          placeholder="What this is and why it matters"
-          onChange={(e) => setF({ ...f, summary: e.target.value })}
-        />
-        <span id="wi-dates-label">Planned</span>
-        <div role="group" aria-labelledby="wi-dates-label" className="wk-props-dates">
-          <label htmlFor="wi-start" className="sr-only">
-            Start date
-          </label>
-          <input id="wi-start" type="date" className={inputCls} value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
-          <span aria-hidden="true" className="text-muted">
-            →
-          </span>
-          <label htmlFor="wi-target" className="sr-only">
-            Target date
-          </label>
-          <input id="wi-target" type="date" className={inputCls} value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
-        </div>
+        <Field id="wi-start" label="Start date">
+          <Input id="wi-start" type="date" className="w-full min-w-0" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} />
+        </Field>
+        <Field id="wi-target" label="Target date">
+          <Input id="wi-target" type="date" className="w-full min-w-0" value={f.targetDate} onChange={(e) => setF({ ...f, targetDate: e.target.value })} />
+        </Field>
         {isArea ? (
-          <>
-            <label htmlFor="wi-vdefault">Validation</label>
-            <div>
-              <select
+          <div className="sm:col-span-2">
+            <Field
+              id="wi-vdefault"
+              label="Validation"
+              hint="What “Start focused work” preselects for new packets in this area. You can override it per packet."
+            >
+              <Select
                 id="wi-vdefault"
-                className={inputCls}
-                aria-describedby="wi-vdefault-hint"
+                className="w-full min-w-0"
                 value={f.validationDefault}
                 onChange={(e) => setF({ ...f, validationDefault: e.target.value as "" | "required" | "optional" })}
               >
                 <option value="">Default for this area ({ruleDefault === "required" ? "required" : "optional"})</option>
                 <option value="required">Required</option>
                 <option value="optional">Optional</option>
-              </select>
-              <p id="wi-vdefault-hint" className="mt-1 text-xs text-muted">
-                What “Start focused work” preselects for new packets in this area. You can override it per packet.
-              </p>
-            </div>
-          </>
-        ) : (
-          <p className="wk-props-note text-xs text-muted" data-testid="validation-default-note">
-            New packets here {validationDefault.value === "required" ? "require" : "don't require"} validation by default
-            {validationDefault.areaTitle ? ` (set on ${validationDefault.areaTitle})` : ""}.
-          </p>
-        )}
-        <div className="wk-props-note flex justify-end">{saveButton}</div>
+              </Select>
+            </Field>
+          </div>
+        ) : null}
       </form>
-    </Section>
+    </Dialog>
   );
 }
 
-function PacketCard({ d, onRevise, onContinue }: { d: WorkDetail; onRevise: () => void; onContinue?: () => void }) {
+/** Copies the item's handoff (packet, links and validations as Markdown) for pasting into another tool. */
+function useCopyHandoff(d: WorkDetail | undefined) {
   const { toast } = useToast();
-  // Client-only: this card renders after the detail query resolves in the browser.
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
-  const p = d.packets[0];
-  const md = handoffMarkdown(d, origin);
-  const copy = async () => {
+  return async () => {
+    if (!d) return;
     try {
-      await navigator.clipboard.writeText(md);
+      await navigator.clipboard.writeText(handoffMarkdown(d, window.location.origin));
       toast("Handoff copied", "ok");
     } catch {
-      toast("Couldn't copy. Use the preview below.", "warn");
+      toast("Couldn't copy. Use Preview handoff.", "warn");
     }
   };
+}
+
+/** ⋯ "Preview handoff" while the item has no packet yet (the packet block carries its own preview). */
+function HandoffPreviewDialog({ d, onClose }: { d: WorkDetail; onClose: () => void }) {
   return (
-    <Card className="wk-packet">
+    <Dialog open onClose={onClose} size="lg" title="Handoff preview" description="What Copy handoff and Continue in new conversation send.">
+      <pre data-testid="handoff-preview" className="max-h-96 overflow-auto rounded-lg bg-surface-2 p-3 text-xs break-words whitespace-pre-wrap">
+        {handoffMarkdown(d, window.location.origin)}
+      </pre>
+    </Dialog>
+  );
+}
+
+/**
+ * Plan > Work packet: the hand-off snapshot. Drawn only once a packet exists; before that the ⋯ menu covers copy,
+ * preview and continue, and "Start focused work" writes the first one.
+ */
+function PacketCard({ d, onCopy, onRevise, onContinue }: { d: WorkDetail; onCopy: () => void; onRevise: () => void; onContinue?: () => void }) {
+  const p = d.packets[0];
+  if (!p) return null;
+  // Client-only: this block renders after the detail query resolves in the browser.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  return (
+    <div className="ip-packet wk-packet">
       <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <h3 className="flex items-baseline gap-2 font-semibold">
-          Work packet
-          {p ? (
-            <span className="text-xs font-normal text-muted" data-dynamic>
-              v{p.version} · {fmtDate(p.createdAt)}
-            </span>
-          ) : null}
-        </h3>
+        <h4 className="ip-sublabel mt-0">
+          Work packet{" "}
+          <span data-dynamic>
+            v{p.version} · {fmtDate(p.createdAt)}
+          </span>
+        </h4>
         <div className="flex flex-wrap items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={copy}>
+          <KButton size="sm" variant="ghost" onClick={onCopy}>
             Copy handoff
-          </Button>
-          {p ? (
-            <Button size="sm" variant="ghost" onClick={onRevise}>
-              New revision
-            </Button>
-          ) : null}
+          </KButton>
+          <KButton size="sm" variant="ghost" onClick={onRevise}>
+            New revision
+          </KButton>
           {onContinue ? (
-            <Button size="sm" onClick={onContinue}>
+            <KButton size="sm" variant="ghost" onClick={onContinue}>
               Continue in new conversation
-            </Button>
+            </KButton>
           ) : null}
         </div>
       </div>
-      {p ? (
-        <>
-          <dl className="wk-packet-dl">
-            <PacketRow label="Objective" value={p.objective} />
-            <PacketRow label="In scope" value={p.inScope} />
-            <PacketRow label="Out of scope" value={p.outOfScope} />
-            <PacketRow label="Acceptance criteria" value={p.acceptanceCriteria} />
-            <PacketRow label="Decisions" value={p.decisions} />
-            <PacketRow label="Open questions" value={p.openQuestions} />
-            <PacketRow label="Context" value={p.context} />
-            <PacketRow label="Validation" value={p.validationRequired ? "Required before settling" : `Not required: ${p.noValidationReason ?? ""}`} />
-          </dl>
-          <p className="sr-only">Packets are immutable; changes make a new version.</p>
-          {d.packets.length > 1 ? (
-            <details className="mt-2 text-sm">
-              <summary className="tap cursor-pointer text-accent">Version history ({d.packets.length})</summary>
-              <ol className="mt-2 space-y-2">
-                {d.packets.map((v) => (
-                  <li key={v.id} className="rounded-lg bg-surface-2 p-2">
-                    <span className="font-medium">v{v.version}</span> · {fmtDate(v.createdAt)} · <span className="break-words">{v.objective}</span>
-                  </li>
-                ))}
-              </ol>
-            </details>
-          ) : null}
-        </>
-      ) : (
-        <p className="text-sm text-muted">No packet yet. Start focused work to write one.</p>
-      )}
+      <dl className="wk-packet-dl">
+        <PacketRow label="Objective" value={p.objective} />
+        <PacketRow label="In scope" value={p.inScope} />
+        <PacketRow label="Out of scope" value={p.outOfScope} />
+        <PacketRow label="Acceptance criteria" value={p.acceptanceCriteria} />
+        <PacketRow label="Decisions" value={p.decisions} />
+        <PacketRow label="Open questions" value={p.openQuestions} />
+        <PacketRow label="Context" value={p.context} />
+        <PacketRow label="Validation" value={p.validationRequired ? "Required before settling" : `Not required: ${p.noValidationReason ?? ""}`} />
+      </dl>
+      <p className="sr-only">Packets are immutable; changes make a new version.</p>
+      {d.packets.length > 1 ? (
+        <details className="mt-2 text-sm">
+          <summary className="tap cursor-pointer text-accent">Version history ({d.packets.length})</summary>
+          <ol className="mt-2 space-y-2">
+            {d.packets.map((v) => (
+              <li key={v.id} className="rounded-lg bg-surface-2 p-2">
+                <span className="font-medium">v{v.version}</span> · {fmtDate(v.createdAt)} · <span className="break-words">{v.objective}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      ) : null}
       <details className="mt-2 text-sm">
         <summary className="tap cursor-pointer text-accent">Preview handoff</summary>
         <pre data-testid="handoff-preview" className="mt-2 max-h-80 overflow-auto rounded-lg bg-surface-2 p-3 text-xs break-words whitespace-pre-wrap">
-          {md}
+          {handoffMarkdown(d, origin)}
         </pre>
       </details>
-    </Card>
+    </div>
   );
 }
 
@@ -1925,83 +1838,56 @@ function PacketRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** `onSettle` undefined: the page's primary action (or the settle prompt) already offers Settle. */
-function Validations({ d, onSettle, onReopen, focusRecord }: { d: WorkDetail; onSettle?: () => void; onReopen: () => void; focusRecord?: boolean }) {
-  const [adding, setAdding] = useState(false);
-  const [templates, setTemplates] = useState(false);
+/**
+ * Done when (the item's validations): a checklist. Not drawn while there are none. A row opens to record a
+ * result, waive or remove it; while the item is awaiting validation the lines still to measure are already open.
+ * Settling is the page's one primary action (the Now slot), never a button here.
+ */
+function DoneWhen({ d, onReopen, focusRecord, recording }: { d: WorkDetail; onReopen: () => void; focusRecord?: boolean; recording: boolean }) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  if (!d.validations.length) return null;
   const failed = d.validations.some((v) => v.status === "fail");
   const overdue = d.validations.filter((v) => v.overdue).length;
+  const met = d.validations.filter((v) => v.status === "pass" || v.status === "waived").length;
+  const first = Math.max(
+    0,
+    d.validations.findIndex((x) => x.status === "pending" || x.status === "fail"),
+  );
   return (
-    <Card id="work-validations" className="scroll-mt-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-baseline gap-2 font-semibold">
-          Validation
-          {d.validations.length ? (
-            <span className="text-xs font-normal text-muted">
-              {d.validations.filter((v) => v.status === "pass" || v.status === "waived").length}/{d.validations.length} met
-            </span>
-          ) : null}
-          {/* IT3: overdue is a compact header note + red due text on the row, not a banner. */}
-          {overdue ? (
-            <span className="text-xs font-normal text-danger" data-testid="validation-overdue">
-              · {overdue} validation{overdue === 1 ? " is" : "s are"} overdue
-            </span>
-          ) : null}
-        </h3>
-        <div className="flex flex-wrap items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
-            Add validation
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setTemplates(true)}>
-            Add from template
-          </Button>
-          {d.item.status !== "settled" && onSettle ? (
-            <Button size="sm" variant="primary" disabled={!d.settle.allowed} onClick={onSettle} aria-describedby={d.settle.allowed ? undefined : "settle-why"}>
-              Settle
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      {!d.settle.allowed && d.item.status !== "settled" ? (
-        <p id="settle-why" className="mb-2 text-[13px] text-muted">
-          {d.settle.reason}
-        </p>
-      ) : null}
+    <section id="work-validations" className="ip-sec scroll-mt-4" aria-labelledby="ip-done-h">
+      <h3 id="ip-done-h" className="ip-label">
+        Done when{" "}
+        <span className="ip-count">
+          · {met} of {d.validations.length}
+        </span>
+        {/* IT3: overdue is a compact header note + red due text on the row, not a banner. */}
+        {overdue ? (
+          <span className="ip-label-note text-danger" data-testid="validation-overdue">
+            · {overdue} overdue
+          </span>
+        ) : null}
+      </h3>
       {failed && d.item.status !== "reopened" ? (
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-soft p-2 text-sm text-danger">
+        <div className="ip-note">
           <span>A validation failed.</span>
-          <Button size="sm" onClick={onReopen}>
+          <KButton size="sm" onClick={onReopen}>
             Reopen with failed evidence
-          </Button>
+          </KButton>
         </div>
       ) : null}
-      {adding ? <AddValidation itemId={d.item.id} onDone={() => setAdding(false)} /> : null}
-      {templates ? <TemplatesDialog itemId={d.item.id} onClose={() => setTemplates(false)} /> : null}
-      {d.validations.length ? (
-        <ul className="wk-vlist">
-          {d.validations.map((v, i) => (
-            <ValidationRow
-              key={v.id}
-              v={v}
-              focus={
-                !!focusRecord &&
-                i ===
-                  Math.max(
-                    0,
-                    d.validations.findIndex((x) => x.status === "pending" || x.status === "fail"),
-                  )
-              }
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[13px] text-muted">None yet. A merged PR isn&apos;t proof the outcome happened: declare what you&apos;ll measure.</p>
-      )}
-    </Card>
+      <ul className="ip-checks">
+        {d.validations.map((v, i) => {
+          const focus = !!focusRecord && i === first;
+          // While the item waits on validation, what still has to be measured (or measured again) is open.
+          const shown = open[v.id] ?? (focus || (recording && (v.status === "pending" || v.status === "fail")));
+          return <ValidationRow key={v.id} v={v} focus={focus} open={shown} onToggle={() => setOpen((o) => ({ ...o, [v.id]: !shown }))} />;
+        })}
+      </ul>
+    </section>
   );
 }
 
-function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void }) {
+function AddValidation({ itemId, onDone, onTemplate }: { itemId: string; onDone: () => void; onTemplate: () => void }) {
   const [f, setF] = useState({ metric: "", comparator: "<=" as Comparator, threshold: "", unit: "", baseline: "", dueDate: "" });
   const [asTemplate, setAsTemplate] = useState(false);
   const add = useWorkMutation(
@@ -2029,12 +1915,17 @@ function AddValidation({ itemId, onDone }: { itemId: string; onDone: () => void 
   );
   return (
     <form
-      className="mb-3 grid gap-3 rounded-lg border border-line p-3 sm:grid-cols-2"
+      className="grid gap-3 sm:grid-cols-2"
       onSubmit={(e) => {
         e.preventDefault();
         add.mutate(undefined);
       }}
     >
+      <div className="flex justify-end sm:col-span-2">
+        <KButton size="sm" variant="ghost" onClick={onTemplate}>
+          Add from template
+        </KButton>
+      </div>
       <Field id="va-metric" label="Metric">
         <input
           id="va-metric"
@@ -2218,9 +2109,14 @@ function TemplatesDialog({ itemId, onClose }: { itemId: string; onClose: () => v
   );
 }
 
-const V_TONE = { pending: "neutral", pass: "ok", fail: "danger", waived: "warn" } as const;
+const V_WORD = { pending: "Pending", pass: "Pass", fail: "Fail", waived: "Waived" } as const;
 
-function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
+/**
+ * One "done when" check, as a checklist line: a box (ticked when it passed, crossed when it failed, struck when
+ * waived), what must hold, and what was measured. It opens in place to record a result, waive or remove it.
+ */
+function ValidationRow({ v, focus, open, onToggle }: { v: WorkValidation; focus?: boolean; open: boolean; onToggle: () => void }) {
+  const panel = useId();
   const [observed, setObserved] = useState(v.observed?.toString() ?? "");
   const [evidence, setEvidence] = useState(v.evidenceUrl ?? "");
   const [waiving, setWaiving] = useState(false);
@@ -2231,84 +2127,83 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
   });
   const waive = useWorkMutation(() => api.patch(url, { waive: true, waiverReason: reason }), { ok: "Waived", onSuccess: () => setWaiving(false) });
   const remove = useWorkMutation(() => api.del(url), { ok: "Validation removed" });
-  const label = `${v.metric} ${CMP_TEXT[v.comparator] ?? v.comparator} ${v.threshold}${v.unit ? ` ${v.unit}` : ""}`;
+  const unit = v.unit ? ` ${v.unit}` : "";
+  const label = `${v.metric} ${CMP_TEXT[v.comparator] ?? v.comparator} ${v.threshold}${unit}`;
+  // Line two only says what line one cannot: the baseline, when it is due, why it was waived.
+  const second = [
+    v.baseline !== null ? `baseline ${v.baseline}${unit}` : "",
+    v.status === "pending" && v.dueDate ? `${v.overdue ? "overdue since" : "due"} ${shortDate(v.dueDate)}` : "",
+    v.waiverReason ? `waived: ${v.waiverReason}` : "",
+  ].filter(Boolean);
   return (
-    <li className="wk-vrow" data-overdue={v.overdue || undefined}>
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-        <p className="min-w-0 font-medium break-words">{label}</p>
-        <span className="flex flex-wrap gap-1">
-          {v.overdue ? <Badge tone="danger">Overdue</Badge> : null}
-          <Badge tone={V_TONE[v.status]}>{v.status === "pass" ? "Pass" : v.status === "fail" ? "Fail" : v.status === "waived" ? "Waived" : "Pending"}</Badge>
+    <li className="ip-check" data-testid="validation-row" data-status={v.status} data-overdue={v.overdue || undefined} data-open={open || undefined}>
+      <KButton variant="ghost" className="ip-check-hit" aria-expanded={open} aria-controls={open ? panel : undefined} onClick={onToggle}>
+        <span className="ip-check-box" aria-hidden="true">
+          {v.status === "pass" ? <CheckIcon className="h-3.5 w-3.5" /> : v.status === "fail" ? "×" : v.status === "waived" ? "–" : null}
         </span>
-      </div>
-      <p className="text-xs text-muted" data-dynamic>
-        {v.baseline !== null ? `Baseline ${v.baseline}${v.unit ? ` ${v.unit}` : ""} · ` : ""}
-        {v.observed !== null ? `Observed ${v.observed}${v.unit ? ` ${v.unit}` : ""}` : "Not measured yet"}
-        {v.dueDate ? (
-          <span className={cx(v.overdue && "font-medium text-danger")}>
-            {" · "}
-            {v.overdue ? "overdue since" : "due"} {shortDate(v.dueDate)}
-          </span>
-        ) : null}
-        {v.waiverReason ? ` · waived: ${v.waiverReason}` : ""}
-      </p>
-      {v.evidenceUrl ? (
-        <a href={v.evidenceUrl} target="_blank" rel="noreferrer noopener" className="text-xs text-accent underline break-all">
-          Evidence<span className="sr-only"> for {v.metric} (opens in a new tab)</span>
-        </a>
-      ) : null}
-      <form
-        className="wk-vform"
-        onSubmit={(e) => {
-          e.preventDefault();
-          record.mutate(undefined);
-        }}
-      >
-        <div>
-          <input
-            id={`obs-${v.id}`}
-            ref={(el) => {
-              // "Record result" from Today or the command palette lands here.
-              if (el && focus && document.activeElement !== el && !el.dataset.focused) {
-                el.dataset.focused = "1";
-                el.scrollIntoView({ block: "center" });
-                el.focus({ preventScroll: true });
-              }
+        <span className="ip-check-main">
+          <span className="ip-check-t">{label}</span>
+          {second.length ? (
+            <span className="ip-check-s" data-dynamic>
+              {second.join(" · ")}
+            </span>
+          ) : null}
+        </span>
+        <span className="ip-check-result" data-dynamic>
+          <span className="sr-only">{V_WORD[v.status]}: </span>
+          {v.status === "waived" ? "Waived" : v.observed !== null ? `${v.observed}${unit}` : "Not measured"}
+        </span>
+      </KButton>
+      {open ? (
+        <div className="ip-check-open" id={panel}>
+          {v.evidenceUrl ? (
+            <a href={v.evidenceUrl} target="_blank" rel="noreferrer noopener" className="ip-link text-xs break-all">
+              Evidence<span className="sr-only"> for {v.metric} (opens in a new tab)</span>
+            </a>
+          ) : null}
+          <form
+            className="ip-vform"
+            onSubmit={(e) => {
+              e.preventDefault();
+              record.mutate(undefined);
             }}
-            inputMode="decimal"
-            aria-label={`Observed value for ${v.metric}`}
-            type="number"
-            step="any"
-            className={inputCls}
-            placeholder={`Observed${v.unit ? ` (${v.unit})` : ""}`}
-            value={observed}
-            onChange={(e) => setObserved(e.target.value)}
-          />
+          >
+            <Input
+              id={`obs-${v.id}`}
+              // "Record result" from Today or the command palette lands here.
+              autoFocus={focus}
+              inputMode="decimal"
+              aria-label={`Observed value for ${v.metric}`}
+              type="number"
+              step="any"
+              className="w-full min-w-0"
+              placeholder={`Observed${v.unit ? ` (${v.unit})` : ""}`}
+              value={observed}
+              onChange={(e) => setObserved(e.target.value)}
+            />
+            <Input
+              id={`ev-${v.id}`}
+              type="url"
+              aria-label={`Evidence link for ${v.metric}`}
+              className="w-full min-w-0"
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              placeholder="Evidence link (https://…)"
+            />
+            <span className="ip-vform-acts">
+              <KButton type="submit" size="sm" loading={record.isPending} aria-label={`Record ${v.metric}`}>
+                Record
+              </KButton>
+              <KButton size="sm" variant="ghost" onClick={() => setWaiving(true)} aria-label={`Waive ${v.metric}`}>
+                Waive…
+              </KButton>
+              <KButton size="sm" variant="ghost" loading={remove.isPending} onClick={() => remove.mutate(undefined)} aria-label={`Remove ${v.metric}`}>
+                Remove
+              </KButton>
+            </span>
+          </form>
         </div>
-        <div>
-          <input
-            id={`ev-${v.id}`}
-            type="url"
-            aria-label="Evidence link"
-            className={inputCls}
-            value={evidence}
-            onChange={(e) => setEvidence(e.target.value)}
-            placeholder="Evidence link (https://…)"
-          />
-        </div>
-        <div className="flex items-center gap-1">
-          <Button type="submit" size="sm" busy={record.isPending} aria-label={`Record ${v.metric}`}>
-            Record
-          </Button>
-          <OverflowMenu
-            label={`More for ${v.metric}`}
-            items={[
-              { label: "Waive…", onSelect: () => setWaiving(true) },
-              { label: "Remove", onSelect: () => remove.mutate(undefined), danger: true },
-            ]}
-          />
-        </div>
-      </form>
+      ) : null}
       <Dialog
         open={waiving}
         onClose={() => setWaiving(false)}
@@ -2316,137 +2211,152 @@ function ValidationRow({ v, focus }: { v: WorkValidation; focus?: boolean }) {
         description="Waivers are recorded with your reason."
         footer={
           <>
-            <Button onClick={() => setWaiving(false)}>Cancel</Button>
-            <Button variant="primary" disabled={!reason.trim()} busy={waive.isPending} onClick={() => waive.mutate(undefined)}>
+            <KButton onClick={() => setWaiving(false)}>Cancel</KButton>
+            <KButton variant="primary" disabled={!reason.trim()} loading={waive.isPending} onClick={() => waive.mutate(undefined)}>
               Waive
-            </Button>
+            </KButton>
           </>
         }
       >
         <Field id={`wv-${v.id}`} label="Reason">
-          <textarea id={`wv-${v.id}`} data-autofocus className={textareaCls} value={reason} onChange={(e) => setReason(e.target.value)} />
+          <Textarea id={`wv-${v.id}`} data-autofocus className="w-full min-w-0" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
       </Dialog>
     </li>
   );
 }
 
-function Dependencies({ d, items, onSelect, open, onToggle }: { d: WorkDetail; items: WorkItem[]; onSelect: (id: string) => void } & SectionProps) {
+/** Plan > Blockers: what this waits on, and what waits on it. Drawn only when there is one. */
+function Blockers({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => void }) {
+  const remove = useWorkMutation((depId: string) => api.del(`/api/work/dependencies/${encodeURIComponent(depId)}`), { ok: "Dependency removed" });
+  if (!d.blockedBy.length && !d.blocking.length) return null;
+  const openBlockers = d.blockedBy.filter((b) => b.open).length;
+  const row = (r: DependencyRef, label: string) => (
+    <li key={r.dependencyId} className="ip-dep">
+      <span className="ip-dep-main">
+        <span className="ip-dep-rel">{label}</span>
+        <Link
+          href={`/areas?item=${encodeURIComponent(r.id)}`}
+          className="ip-dep-title"
+          data-done={r.open ? undefined : ""}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            onSelect(r.id);
+          }}
+        >
+          {r.title}
+        </Link>
+        <StatusBadge status={r.status} />
+      </span>
+      <KButton size="sm" variant="ghost" onClick={() => remove.mutate(r.dependencyId)} aria-label={`${label} ${r.title}: remove`}>
+        Remove
+      </KButton>
+    </li>
+  );
+  return (
+    <div data-testid="work-deps" className="scroll-mt-4">
+      <h4 className="ip-sublabel">
+        Blockers <span>· {openBlockers ? `${openBlockers} open` : "none open"}</span>
+      </h4>
+      <ul className="ip-deps">
+        {d.blockedBy.map((r) => row(r, "Blocked by"))}
+        {d.blocking.map((r) => row(r, "Blocks"))}
+      </ul>
+    </div>
+  );
+}
+
+/** "Blocker" add chip / ⋯ "Add blocker…": pick the work this has to wait for. */
+function BlockerDialog({ d, items, onClose }: { d: WorkDetail; items: WorkItem[]; onClose: () => void }) {
   const [dest, setDest] = useState("");
   const add = useWorkMutation(() => api.post(`/api/work/items/${encodeURIComponent(d.item.id)}/dependencies`, { dependsOnId: dest }), {
     ok: "Dependency added",
-    onSuccess: () => setDest(""),
+    onSuccess: onClose,
   });
-  const remove = useWorkMutation((depId: string) => api.del(`/api/work/dependencies/${encodeURIComponent(depId)}`), { ok: "Dependency removed" });
   const taken = new Set([d.item.id, ...d.blockedBy.map((b) => b.id)]);
   const options = itemPaths(
     items.filter((i) => i.parentId !== null && !i.archived),
     taken,
   );
-  const openBlockers = d.blockedBy.filter((b) => b.open).length;
-  const row = (r: DependencyRef, label: string) => (
-    <li key={r.dependencyId} className="flex flex-wrap items-center justify-between gap-2 py-1">
-      <span className="flex min-w-0 flex-wrap items-center gap-2">
-        <button type="button" className="tap min-w-0 text-left break-words text-accent underline" onClick={() => onSelect(r.id)}>
-          {r.title}
-        </button>
-        <StatusBadge status={r.status} />
-      </span>
-      <Button size="sm" variant="ghost" onClick={() => remove.mutate(r.dependencyId)} aria-label={`${label} ${r.title}: remove`}>
-        Remove
-      </Button>
-    </li>
-  );
   return (
-    <Section
-      title="Dependencies"
-      testId="work-deps"
-      meta={openBlockers ? `Blocked by ${openBlockers}` : d.blockedBy.length + d.blocking.length ? `${d.blockedBy.length + d.blocking.length} linked` : "None"}
-      phone
-      open={open}
-      onToggle={onToggle}
-    >
-      <h4 className="text-xs font-medium tracking-wide text-muted uppercase">Blocked by</h4>
-      {d.blockedBy.length ? (
-        <ul className="divide-y divide-line">{d.blockedBy.map((r) => row(r, "Blocked by"))}</ul>
-      ) : (
-        <p className="text-[13px] text-muted">Nothing. Add work this has to wait for.</p>
-      )}
-      {d.blocking.length ? (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Add a blocker"
+      description="Work this has to wait for."
+      footer={
         <>
-          <h4 className="mt-3 text-xs font-medium tracking-wide text-muted uppercase">Blocks</h4>
-          <ul className="divide-y divide-line">{d.blocking.map((r) => row(r, "Blocks"))}</ul>
+          <KButton onClick={onClose}>Cancel</KButton>
+          <KButton variant="primary" type="submit" form="dep-form" disabled={!dest} loading={add.isPending}>
+            Add dependency
+          </KButton>
         </>
-      ) : null}
+      }
+    >
       <form
-        className="mt-3 flex flex-wrap items-end gap-2"
+        id="dep-form"
         onSubmit={(e) => {
           e.preventDefault();
           if (dest) add.mutate(undefined);
         }}
       >
-        <div className="min-w-0 flex-1">
-          <Field id="dep-add" label="Depends on">
-            <select id="dep-add" className={inputCls} value={dest} onChange={(e) => setDest(e.target.value)}>
-              <option value="">Choose…</option>
-              {options.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <Button type="submit" size="sm" disabled={!dest} busy={add.isPending}>
-          Add dependency
-        </Button>
+        <Field id="dep-add" label="Depends on">
+          <Select id="dep-add" data-autofocus className="w-full min-w-0" value={dest} onChange={(e) => setDest(e.target.value)}>
+            <option value="">Choose…</option>
+            {options.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
       </form>
-    </Section>
+    </Dialog>
   );
 }
 
-function linkLabel(l: WorkLink) {
-  return l.kind === "chat_session" ? "Conversation" : l.kind === "github_pr" ? "Pull request" : l.kind === "github_issue" ? "Issue" : "Link";
-}
-
-function Links({ d, canChat, open, onToggle }: { d: WorkDetail; canChat: boolean } & SectionProps) {
+/** Plan > Links: conversations, pull requests (state, checks, live or not) and URLs. Drawn only when there is one. */
+function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
   const hasChat = d.links.some((l) => l.kind === "chat_session");
   const convs = useConversations(canChat && hasChat);
+  if (!d.links.length) return null;
   const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
   const prs = d.links.filter((l) => l.kind === "github_pr" || l.kind === "github_issue").length;
   const chats = d.links.filter((l) => l.kind === "chat_session").length;
-  const meta = d.links.length
-    ? [
-        prs ? `${prs} PR${prs === 1 ? "" : "s"}` : "",
-        chats ? `${chats} chat${chats === 1 ? "" : "s"}` : "",
-        d.links.length - prs - chats ? `${d.links.length - prs - chats} other` : "",
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "None";
+  const meta = [
+    prs ? `${prs} PR${prs === 1 ? "" : "s"}` : "",
+    chats ? `${chats} chat${chats === 1 ? "" : "s"}` : "",
+    d.links.length - prs - chats ? `${d.links.length - prs - chats} other` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
-    <Section title="Links" meta={meta} phone open={open} onToggle={onToggle} testId="work-links">
-      {d.links.length ? (
-        <ul className="wk-rows">
-          {d.links.map((l) => (
-            <LinkRow key={l.id} l={l} refresh={d.githubRefresh} lastActive={l.kind === "chat_session" ? activity.get(l.targetId ?? "") : undefined} />
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[13px] text-muted">Link the source conversation, the implementing PR, or evidence (⋯ menu above).</p>
-      )}
-      {!d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
+    <div data-testid="work-links">
+      <h4 className="ip-sublabel">
+        Links <span>· {meta}</span>
+      </h4>
+      <ul className="ip-links">
+        {d.links.map((l) => (
+          <LinkRow
+            key={l.id}
+            l={l}
+            refresh={d.githubRefresh}
+            deploy={l.kind === "github_pr" ? deployOf(l.externalState, d.item) : null}
+            lastActive={l.kind === "chat_session" ? activity.get(l.targetId ?? "") : undefined}
+          />
+        ))}
+      </ul>
+      {!d.githubRefresh && prs ? (
         <p className="mt-1.5 text-xs text-muted">
           Add a GitHub token (Settings → Connections → GitHub) to refresh PR state from GitHub (read-only). Until then, mark it yourself.
         </p>
-      ) : d.githubRefresh && d.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue") ? (
-        <p className="mt-1.5 text-xs text-muted">States refresh from GitHub (read-only), at most every 5 minutes per link.</p>
       ) : null}
-    </Section>
+    </div>
   );
 }
 
-function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; lastActive?: string | null }) {
+function LinkRow({ l, refresh, lastActive, deploy }: { l: WorkLink; refresh: boolean; lastActive?: string | null; deploy?: "live" | "waiting" | null }) {
   const url = `/api/work/links/${encodeURIComponent(l.id)}`;
   const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), {
     ok: l.kind === "github_issue" ? "Issue state updated" : "PR state updated",
@@ -2454,25 +2364,51 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
   const remove = useWorkMutation(() => api.del(url), { ok: "Link removed" });
   const pull = useWorkMutation(() => api.post(`${url}/refresh`), { ok: "Refreshed from GitHub" });
   const name = l.title || l.targetId || l.url || "";
+  const kind = linkKind(l);
   const smart = useSmartSettings();
   const [reviewing, setReviewing] = useState(false);
+  const menu = useAnchoredMenu();
+  // PR state can be set by hand until GitHub is connected; everything rarer is in the row's ⋯.
+  const more: KMenuItem[] = [
+    ...(l.kind === "github_pr" && l.targetId && smart.data?.enabled ? [{ label: "Review card", onSelect: () => setReviewing(true) }] : []),
+    ...(l.kind === "github_pr" && l.externalState === "open" ? [{ label: "Mark closed", onSelect: () => state.mutate("closed") }] : []),
+    ...(l.kind === "github_issue"
+      ? [
+          {
+            label: l.externalState === "closed" ? "Mark open" : "Mark closed",
+            onSelect: () => state.mutate(l.externalState === "closed" ? "open" : "closed"),
+          },
+        ]
+      : []),
+    ...((l.kind === "github_pr" || l.kind === "github_issue") && refresh ? [{ label: "Refresh from GitHub", onSelect: () => pull.mutate(undefined) }] : []),
+    { label: "Remove link", onSelect: () => remove.mutate(undefined), danger: true },
+  ];
   return (
-    <li className="py-2 first:pt-0.5 last:pb-0.5">
-      <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-        <div className="min-w-0 flex-1 basis-56">
-          <p className="text-xs text-muted">
-            {linkLabel(l)} · {l.role}
+    <li className="ip-linkrow" data-testid="link-row" data-kind={kind}>
+      <div className="ip-linkrow-main">
+        {/* Line one: what it is (Artifact, Design, Pull request, Conversation…), then its name, which opens it. */}
+        <p className="ip-linkrow-t">
+          <Pill tone={kind === "Pull request" || kind === "Issue" ? "ac" : kind === "Conversation" ? "ai" : kind === "Link" ? "neutral" : "inf"}>
+            <span data-testid="link-kind">{kind}</span>
+          </Pill>
+          {l.kind === "chat_session" ? (
+            <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="ip-linkrow-name" aria-label={`Open conversation: ${name}`}>
+              {name}
+            </Link>
+          ) : l.url ? (
+            <a href={l.url} target="_blank" rel="noreferrer noopener" className="ip-linkrow-name" aria-label={`Open: ${name} (opens in a new tab)`}>
+              {name}
+            </a>
+          ) : (
+            <span className="ip-linkrow-name">{name}</span>
+          )}
+        </p>
+        {/* Line two: its role on the item and how it stands. */}
+        <p className="ip-linkrow-s">
+          <span>
+            {l.role}
             {l.lineage === "handoff_from" ? " · started from the handoff" : ""}
-          </p>
-          <p className="text-[13.5px] font-medium break-words">{name}</p>
-          {(l.kind === "github_pr" || l.kind === "github_issue") && l.checkedAt ? (
-            <p className={`text-xs ${l.checkError ? "text-danger" : "text-muted"}`}>
-              {l.checkError ? `GitHub check failed ${fmtWhen(l.checkedAt)}: ${l.checkError}` : `Checked on GitHub ${fmtWhen(l.checkedAt)}`}
-            </p>
-          ) : null}
-          {l.kind === "chat_session" ? <p className="text-xs text-muted">Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</p> : null}
-        </div>
-        <span className="flex flex-wrap items-center gap-1">
+          </span>
           {l.externalState ? (
             <Badge tone={l.externalState === "merged" ? "ok" : l.externalState === "closed" ? "neutral" : "accent"}>{l.externalState}</Badge>
           ) : null}
@@ -2483,47 +2419,28 @@ function LinkRow({ l, refresh, lastActive }: { l: WorkLink; refresh: boolean; la
               </span>
             </Badge>
           ) : null}
-        </span>
+          {deploy ? (
+            <Badge tone={deploy === "live" ? "ok" : "warn"}>
+              <span data-testid="link-deploy">{deploy === "live" ? "live" : "not live yet"}</span>
+            </Badge>
+          ) : null}
+          {(l.kind === "github_pr" || l.kind === "github_issue") && l.checkedAt ? (
+            <span className={l.checkError ? "text-danger" : undefined} data-dynamic>
+              {l.checkError ? `GitHub check failed ${fmtWhen(l.checkedAt)}: ${l.checkError}` : `Checked on GitHub ${fmtWhen(l.checkedAt)}`}
+            </span>
+          ) : null}
+          {l.kind === "chat_session" ? <span data-dynamic>Last activity {lastActive ? fmtWhen(lastActive) : "unknown"}</span> : null}
+        </p>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
-        {l.kind === "chat_session" ? (
-          <Link href={`/chat/${encodeURIComponent(l.targetId ?? "")}`} className="tap inline-flex items-center px-1 text-[13px] text-accent hover:underline">
-            Open conversation<span className="sr-only">: {name}</span>
-          </Link>
-        ) : l.url ? (
-          <a href={l.url} target="_blank" rel="noreferrer noopener" className="tap inline-flex items-center px-1 text-[13px] text-accent hover:underline">
-            Open<span className="sr-only">: {name} (opens in a new tab)</span>
-          </a>
-        ) : null}
-        {l.kind === "github_pr" && l.targetId && smart.data?.enabled ? (
-          <Button size="sm" variant="ghost" onClick={() => setReviewing(true)} aria-label={`Review card: ${name}`}>
-            Review card
-          </Button>
-        ) : null}
+      <span className="ip-linkrow-acts">
         {l.kind === "github_pr" && l.externalState !== "merged" ? (
-          <Button size="sm" variant="ghost" onClick={() => state.mutate("merged")} busy={state.isPending}>
+          <KButton size="sm" variant="ghost" onClick={() => state.mutate("merged")} loading={state.isPending}>
             Mark merged
-          </Button>
+          </KButton>
         ) : null}
-        <OverflowMenu
-          label={`More for ${name}`}
-          items={[
-            ...(l.kind === "github_pr" && l.externalState === "open" ? [{ label: "Mark closed", onSelect: () => state.mutate("closed") }] : []),
-            ...(l.kind === "github_issue"
-              ? [
-                  {
-                    label: l.externalState === "closed" ? "Mark open" : "Mark closed",
-                    onSelect: () => state.mutate(l.externalState === "closed" ? "open" : "closed"),
-                  },
-                ]
-              : []),
-            ...((l.kind === "github_pr" || l.kind === "github_issue") && refresh
-              ? [{ label: "Refresh from GitHub", onSelect: () => pull.mutate(undefined) }]
-              : []),
-            { label: "Remove link", onSelect: () => remove.mutate(undefined), danger: true },
-          ]}
-        />
-      </div>
+        <MenuButton menu={menu} label={`More for ${name}`} />
+        <AnchoredMenu menu={menu} label={`More for ${name}`} items={more} />
+      </span>
       {reviewing && l.targetId ? (
         <Dialog open onClose={() => setReviewing(false)} title="Pull request" size="lg">
           <WorkflowSurface kind="pr" prRef={`pr:${l.targetId}`} compact />

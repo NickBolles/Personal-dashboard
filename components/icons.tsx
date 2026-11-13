@@ -284,3 +284,45 @@ export const ThumbDownIcon = ({ className }: P) =>
     </>,
     className,
   );
+export const ClockIcon = ({ className }: P) =>
+  base(
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>,
+    className,
+  );
+export const RetryIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M4 12a8 8 0 1 0 2.6-5.9" />
+      <path d="M4 4.5V9h4.5" />
+    </>,
+    className,
+  );
+/** Give direction to something in flight. */
+export const SteerIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M5 5v6a4 4 0 0 0 4 4h10" />
+      <path d="m15 11 4 4-4 4" />
+    </>,
+    className,
+  );
+/** A run's report and timeline. */
+export const LogIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="m4 17 6-5-6-5" />
+      <path d="M12 19h8" />
+    </>,
+    className,
+  );
+export const ExternalIcon = ({ className }: P) =>
+  base(
+    <>
+      <path d="M10 5H5v14h14v-5" />
+      <path d="M14 4h6v6M20 4l-9 9" />
+    </>,
+    className,
+  );

@@ -27,14 +27,16 @@ export function ageLabel(createdAt: string, now: NeedsNow): string {
   return Number.isFinite(ms) ? durationLabel(Math.max(0, ms), Math.floor) : "Unknown age";
 }
 export const isRisky = (d: Pick<Decision, "risk">): boolean => d.risk.length > 0;
+/** The agent's recommendation when it is one of the choices; null otherwise. Never the first choice as a stand-in: that reads as a recommendation nobody made. */
 export function recommendedChoice(d: Pick<Decision, "recommended" | "choices">): string | null {
-  return d.recommended && d.choices.includes(d.recommended) ? d.recommended : (d.choices[0] ?? null);
+  return d.recommended && d.choices.includes(d.recommended) ? d.recommended : null;
 }
 export function defaultLine(d: Pick<Decision, "risk" | "defaultChoice" | "expiresAt">, now: NeedsNow): string | null {
   if (isRisky(d) || !d.defaultChoice || !d.expiresAt) return null;
   const ms = Date.parse(d.expiresAt) - timestamp(now);
   if (!Number.isFinite(ms)) return null;
-  return ms > 0 ? `Defaults to ${d.defaultChoice} in ${durationLabel(ms, Math.ceil)}` : `Defaults to ${d.defaultChoice} now`;
+  // What happens if the owner does nothing, and when: never a silent default.
+  return ms > 0 ? `No answer in ${durationLabel(ms, Math.ceil)} → ${d.defaultChoice}` : `No answer → ${d.defaultChoice} now`;
 }
 
 export type DecisionKeyContext = { typing?: boolean; armed?: boolean; canUndo?: boolean };

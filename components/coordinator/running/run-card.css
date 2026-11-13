@@ -1,0 +1,984 @@
+/* ==== run cards ====
+   One card per piece of agent work, in Activity and in Chat: a tinted state chip, the title, who is on it, its
+   pipeline, a real timeline (newest first) and a quiet action bar. Tones come from the library's k-t-* classes
+   (--k-fg / --k-bg), the same ones the item pages use for PR, checks and deploy pills. */
+.rc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  background: var(--s1, var(--surface));
+  color: var(--t1);
+  overflow-wrap: anywhere;
+}
+.rc + .rc {
+  margin-top: 8px;
+}
+.rc[data-state="failed"] {
+  border-color: color-mix(in oklab, var(--bad) 32%, var(--bd));
+}
+.rc:is([data-state="stuck"], [data-state="waiting"], [data-state="interrupted"]) {
+  border-color: color-mix(in oklab, var(--wn) 32%, var(--bd));
+}
+.rc > p {
+  margin: 0;
+}
+
+/* Header: the whole block toggles the card. */
+.rc .k-btn.rc-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-weight: 400;
+  text-align: start;
+  white-space: normal;
+}
+.rc .k-btn.rc-head:hover:not(:disabled) {
+  background: none;
+}
+.rc-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.rc-status {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 7px;
+  min-width: 0;
+}
+.rc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px 2px 7px;
+  border-radius: 999px;
+  background: var(--k-bg, var(--s3));
+  color: var(--k-fg, var(--t2));
+  font: 600 0.75rem/1rem var(--sans);
+  white-space: nowrap;
+}
+.rc-chip > .k-dot {
+  width: 6px;
+  height: 6px;
+}
+.rc-status-detail {
+  color: var(--t3);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.rc-ref {
+  flex: none;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.rc-chevron {
+  flex: none;
+  color: var(--t3);
+}
+.rc-title {
+  margin: 0;
+  color: var(--t1);
+  font: 600 0.875rem/1.35 var(--sans);
+}
+.rc-meta {
+  display: block;
+  color: var(--t3);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.rc-meta > * {
+  display: inline;
+  margin-inline-end: 0.3em;
+}
+.rc-meta > *:not(:last-child)::after {
+  /* No-break space: the dot stays with the item it follows. */
+  content: "\00a0·";
+}
+.rc-summary,
+.rc-outcome {
+  color: var(--t2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.rc-outcome[data-tone="bad"] {
+  color: var(--t1);
+}
+.rc-outcome-label {
+  margin-inline-end: 6px;
+  color: var(--bad);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* What a waiting run needs from you, with the way to answer it. */
+.rc-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  color: var(--t1);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.rc-ask-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.rc-ask-label {
+  margin-inline-end: 6px;
+  color: var(--wn);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.rc-lock {
+  color: var(--wn);
+  font-size: 0.75rem;
+}
+.rc-note {
+  color: var(--t3);
+  font-size: 0.75rem;
+}
+
+/* Pipeline: a row of small stage pills joined by a hairline; colour and a glyph carry the state. */
+.rc-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.rc-stage {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--s3);
+  color: var(--t3);
+  font: 500 0.6875rem/1rem var(--sans);
+}
+.rc-stage:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(100% + 1px);
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--bd2, var(--bd));
+}
+.rc-stage[data-state="ok"] {
+  background: var(--oks);
+  color: var(--ok);
+}
+.rc-stage[data-state="ok"]::before {
+  content: "✓";
+}
+.rc-stage[data-state="running"] {
+  background: var(--ais);
+  color: var(--ai);
+}
+.rc-stage[data-state="running"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.rc-stage[data-state="failed"] {
+  background: var(--bads);
+  color: var(--bad);
+}
+.rc-stage[data-state="failed"]::before {
+  content: "✕";
+}
+.rc-stage[data-state="skipped"] {
+  border-color: var(--bd);
+  border-style: dashed;
+  background: none;
+}
+
+/* Timeline: a rail with one node per event. */
+.rc-timeline {
+  display: grid;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rc-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  padding: 3px 0;
+  color: var(--t2);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+.rc-event::before {
+  content: "";
+  position: absolute;
+  left: 6.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bd);
+}
+.rc-event:first-child::before {
+  top: 10px;
+}
+.rc-event:last-child::before {
+  bottom: calc(100% - 10px);
+}
+.rc-event:only-child::before {
+  display: none;
+}
+.rc-node {
+  position: relative;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  margin: 5px 3px 0;
+  border-radius: 999px;
+  background: var(--k-fg, var(--t3));
+  box-shadow: 0 0 0 2px var(--s1, var(--surface));
+}
+.rc-event[data-latest] {
+  color: var(--t1);
+}
+.rc-event[data-latest] .rc-node {
+  box-shadow:
+    0 0 0 2px var(--s1, var(--surface)),
+    0 0 0 4px var(--k-bg, var(--s3));
+}
+.rc-event-main {
+  min-width: 0;
+}
+.rc-event .k-pill.rc-event-chip {
+  margin-inline-end: 6px;
+  padding: 0 6px;
+  font-size: 0.6875rem;
+  line-height: 0.9375rem;
+  vertical-align: 1px;
+}
+.rc-event-time {
+  padding-top: 1px;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rc-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.rc .k-btn.rc-earlier {
+  align-self: flex-start;
+  gap: 4px;
+  margin-inline-start: 14px;
+  color: var(--accent);
+}
+.rc-outcome .k-btn.rc-earlier {
+  margin-inline-start: 2px;
+  vertical-align: baseline;
+}
+
+/* Action bar: the card's bottom edge. Quiet icon + word buttons; Stop sits apart at the end. */
+.rc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 2px -6px -4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bd);
+}
+.rc .rc-actions .k-btn.rc-act {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--t2);
+  font: 500 0.78125rem/1 var(--sans);
+  text-decoration: none;
+}
+.rc .rc-actions .k-btn.rc-act:hover:not(:disabled) {
+  background: var(--s3);
+  color: var(--t1);
+}
+.rc .rc-actions .k-btn.rc-act-stop {
+  margin-inline-start: auto;
+}
+/* Stop stays a quiet control even while pointed at or opened: the confirm below carries the weight. */
+.rc .rc-actions .k-btn.rc-act-stop:hover:not(:disabled),
+.rc .rc-actions .k-btn.rc-act-stop[aria-expanded="true"] {
+  background: none;
+  color: var(--bad);
+}
+.rc-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--wn) 45%, var(--bd));
+  border-radius: 8px;
+  background: var(--s2);
+}
+.rc-confirm p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--t2);
+  font-size: 0.78125rem;
+  line-height: 1.45;
+}
+.rc-steer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.rc-steer {
+  align-items: flex-end;
+}
+.rc .rc-steer .rc-steer-input {
+  min-height: 2.75rem;
+  padding: 6px 8px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  resize: none;
+}
+/* While refreshes are failing, ages on the cards are measured against stale data: step them back. */
+.gc-running[data-stale] .rc-status-detail,
+.gc-running[data-stale] .rc-event-time {
+  opacity: 0.55;
+}
+/* Where a catch-up chip lands: the section it was about, marked for a moment. */
+[data-landed] {
+  border-radius: 8px;
+  animation: jv-flash 1.8s ease-out;
+}
+.rc-progress {
+  padding-block: 2px;
+}
+
+/* Sub-runs sit inside their parent: rows, not cards in a card. */
+.rc-children .rc {
+  padding: 8px 0 0;
+  border: 0;
+  border-top: 1px solid var(--bd);
+  border-radius: 0;
+  background: none;
+}
+.rc-children .rc + .rc {
+  margin-top: 8px;
+}
+
+/* "Live · checked just now" */
+.rc-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  margin: 0 0 6px;
+  color: var(--t3);
+  font-size: 0.71875rem;
+  line-height: 1.25rem;
+}
+.rc-live > .k-dot {
+  width: 6px;
+  height: 6px;
+}
+.rc-live[data-state="failed"] {
+  color: var(--wn);
+}
+.rc-live .k-btn.rc-live-retry {
+  min-height: 20px;
+  margin-block: -2px;
+  padding: 0 6px;
+  color: var(--accent);
+}
+
+/* ==== catch-up ("Since you last looked") ====
+   A small card in the thread: when you last looked, then what moved, as tinted chips that jump to it. */
+.gc-since {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 14px 0 8px;
+  padding: 8px 10px 9px;
+  border-radius: 12px;
+  background: var(--s2);
+  list-style: none;
+}
+.gc-since-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t2);
+  font: 600 0.71875rem/1rem var(--sans);
+  letter-spacing: 0.01em;
+}
+.gc-since-label > svg {
+  flex: none;
+  color: var(--t3);
+}
+/* Nothing moved: just the marker, as a hairline. */
+.gc-since:not(:has(.gc-since-jumps)) {
+  padding: 0;
+  background: none;
+}
+.gc-since:not(:has(.gc-since-jumps)) .gc-since-label {
+  color: var(--t3);
+  font-weight: 500;
+}
+.gc-since:not(:has(.gc-since-jumps)) .gc-since-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bd);
+}
+.gc-since-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gc-since .gc-since-jumps .k-btn.gc-since-chip,
+.rc :is(.ic-jumps, .rc-ask) .k-btn.rc-jump {
+  min-height: 24px;
+  padding: 0 9px 0 7px;
+  gap: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--k-bg, var(--s3));
+  color: var(--k-fg, var(--t2));
+  font: 500 0.71875rem/1 var(--sans);
+}
+.gc-since .gc-since-jumps .k-btn.gc-since-chip:hover:not(:disabled),
+.rc :is(.ic-jumps, .rc-ask) .k-btn.rc-jump:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--k-fg, var(--t2)) 18%, var(--s1, var(--surface)));
+}
+
+/* ==== item and project cards ====
+   The same card, for a work item: next step and due date, who is on it, progress, pull requests, chips that jump
+   to its open decision or run, and what was just changed (each change keeps its Undo). */
+.ic-label {
+  margin-inline-end: 6px;
+  color: var(--t3);
+  font: 600 0.6875rem/1 var(--sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ic-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 8px;
+  color: var(--t1);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.ic-next-text {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.ic-next .k-pill.ic-due {
+  flex: none;
+  gap: 4px;
+  font-size: 0.6875rem;
+}
+.ic-agent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.ic-who {
+  font-weight: 500;
+}
+.ic-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--t3);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ic-progress > .k-prog {
+  flex: 1;
+  min-width: 0;
+}
+.ic-jumps,
+.gc-since-jumps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+/* "+4 decisions": opens the card, where the rest are. */
+.rc .ic-jumps .k-btn.ic-more {
+  min-height: 24px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--t2);
+  font: 500 0.71875rem/1 var(--sans);
+}
+.rc .ic-jumps .k-btn.ic-more:disabled {
+  color: var(--t3);
+  opacity: 1;
+}
+.ic-prs {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ic-pr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+.ic-pr-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  color: var(--t1);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+a.ic-pr-name:hover {
+  text-decoration: underline;
+}
+.ic-pr-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ic-pr-pills .k-pill {
+  padding: 0 6px;
+  font-size: 0.6875rem;
+}
+.ic-headrow {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+.ic-headrow > .rc-head {
+  flex: 1;
+}
+/* Straight to the item, without opening the card first. */
+.ic-open {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -3px -6px 0 0;
+  border-radius: 7px;
+  color: var(--t3);
+}
+.ic-open::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.ic-open:hover {
+  background: var(--s3);
+  color: var(--t1);
+}
+.ic-changes .rc-event {
+  grid-template-columns: 14px minmax(0, 1fr) auto 2.75rem;
+  align-items: baseline;
+}
+.ic-changes .rc-node {
+  align-self: start;
+}
+/* No Undo on any row of this card: no empty column. */
+.ic-changes:not(:has(.ic-undo .k-btn)) .rc-event {
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+}
+.ic-changes:not(:has(.ic-undo .k-btn)) .ic-undo {
+  display: none;
+}
+.ic-undo {
+  display: flex;
+  justify-content: flex-end;
+}
+.rc .ic-undo .k-btn {
+  min-height: 22px;
+  margin-block: -3px;
+  padding: 0 6px;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+/* Rows are packed: the panel's tap slop (9px above and below, coordinator.css) put the bottom third of one Undo
+   inside the next row's. Sideways only here, and a pixel short of the row above and below so two Undos never
+   share an edge: the tap area is 24px tall, one per row. */
+:is(.gc-rail, .gc-sheet) .rc .ic-undo .k-btn::after {
+  inset: 1px -7px;
+}
+.ic-report {
+  display: grid;
+  gap: 2px;
+  color: var(--t2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+.ic-report-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rc.ic > .k-btn.rc-earlier {
+  margin-top: -4px;
+}
+
+/* ==== life ====
+   Motion that means something, in the app's own vocabulary (the agent mark's working arc, the live dot's ping,
+   the orb gradient, the checkbox's pop and sparks): work in flight moves, work that has gone quiet is still,
+   and anything that changes while you watch says so once. All of it stops under prefers-reduced-motion. */
+.rc {
+  position: relative;
+}
+/* Cards arrive one after another. */
+:is(.gc-running, .gc-changes, .gc-bgwork, .gc-action-list) .rc {
+  animation: rc-rise 280ms var(--ease) both;
+}
+:is(.gc-running section, .gc-change-groups, .gc-bgwork) > :nth-child(2):is(.rc, li) {
+  animation-delay: 40ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(3),
+.gc-change-groups > li:nth-child(2) > .rc {
+  animation-delay: 80ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(4),
+.gc-change-groups > li:nth-child(3) > .rc {
+  animation-delay: 120ms;
+}
+:is(.gc-running section, .gc-bgwork) > .rc:nth-child(n + 5),
+.gc-change-groups > li:nth-child(n + 4) > .rc {
+  animation-delay: 160ms;
+}
+/* Work in flight: the card's outline is the theme's agent colour with light travelling along it, an
+   indeterminate "still going" in place of a progress bar. Under reduced motion it is the same outline, still. */
+.rc[data-live] {
+  border-color: transparent;
+}
+.rc[data-live]::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1.5px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 0%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 30%,
+    var(--ai) 45%,
+    var(--o2, var(--ac)) 50%,
+    var(--ai) 55%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 70%,
+    color-mix(in oklab, var(--ai) 38%, var(--bd)) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-mask:
+    linear-gradient(black 0 0) content-box,
+    linear-gradient(black 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: k-shimmer 3.6s linear infinite;
+  pointer-events: none;
+}
+/* Every action of the card is in its menu (kit AnchoredMenu): the visible ⋯ trigger sits in the top corner, and
+   right-click / long press / the Menu key open the same menu. The head row leaves room for it. */
+/* Repeated class: beats the sleek tier's `position: relative` on kit buttons (components/ui/density.css). */
+.rc > .rc-menu-btn.rc-menu-btn.rc-menu-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 1;
+}
+.rc:has(> .rc-menu-btn) > :is(.rc-head, .ic-headrow, .rc-top) {
+  padding-inline-end: 36px;
+}
+/* "Working" shimmers the way it does in a conversation. */
+.rc-chip {
+  position: relative;
+}
+.rc-shimmer {
+  background: linear-gradient(90deg, var(--k-fg, var(--ai)) 30%, var(--o2, var(--ac)) 50%, var(--k-fg, var(--ai)) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-work-shimmer 2s linear infinite;
+}
+/* Whose work it is: the agent's mark leads the chip, and its arc turns while the agent works. */
+.rc-chip > .agent-mark[data-size="18"] {
+  width: 15px;
+  height: 15px;
+  margin-inline: -2px 3px;
+  font-size: 8.5px;
+  background: var(--s1, var(--surface));
+}
+.rc-chip > .agent-mark[data-busy]::after {
+  inset: -2.5px;
+}
+/* When it reported, start to now: evenly spaced ticks are a steady run, a gap at the right is silence. */
+/* The strip is labelled at both ends, so it reads as "when it reported" and not as progress. */
+.rc-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.rc-pulse-label {
+  flex: none;
+  color: var(--t2);
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+.rc-pulse {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+}
+.rc-pulse::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--bd);
+}
+.rc-pulse > i {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at, 0) * (100% - 3px));
+  width: 3px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 2px;
+  background: var(--k-fg, var(--t3));
+  animation: rc-tick 320ms var(--ease-pop) both;
+}
+.rc-pulse > .rc-pulse-now {
+  left: calc(100% - 6px);
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 999px;
+  background: var(--ai);
+}
+.rc-event[data-live] .rc-node::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: k-ping 2.4s var(--ease) infinite;
+}
+/* The timeline draws itself when a card opens; an event that arrives while you watch slides in and glows once. */
+.rc[data-open] .rc-event {
+  animation: rc-rise 240ms var(--ease) both;
+}
+.rc[data-open] .rc-event:nth-child(2) {
+  animation-delay: 45ms;
+}
+.rc[data-open] .rc-event:nth-child(3) {
+  animation-delay: 90ms;
+}
+.rc[data-open] .rc-event:nth-child(n + 4) {
+  animation-delay: 135ms;
+}
+.rc .rc-event[data-new] {
+  border-radius: 6px;
+  animation:
+    rc-arrive 420ms var(--ease) both,
+    jv-flash 1.8s ease-out;
+}
+.rc-more {
+  animation: rc-rise 220ms var(--ease) both;
+}
+.rc-chevron {
+  transition: transform 180ms var(--ease);
+}
+/* Progress that is still moving has light running through it. */
+.rc-progress[data-live] .k-prog-f,
+.rc[data-live] .ic-progress .k-prog-f {
+  background-image: linear-gradient(90deg, transparent 0%, color-mix(in oklab, var(--s1, var(--surface)) 45%, transparent) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: k-shimmer 1.8s linear infinite;
+}
+/* Each successful sync blinks the dot once. */
+.rc-sync {
+  display: inline-flex;
+  animation: k-pop 320ms var(--ease-pop);
+}
+/* Chips and actions answer a press. */
+.rc :is(.rc-act, .rc-jump, .ic-open),
+.gc-since-chip {
+  transition:
+    transform 120ms var(--ease),
+    background-color 120ms var(--ease),
+    color 120ms var(--ease);
+}
+.rc :is(.rc-act, .rc-jump, .ic-open):active:not(:disabled),
+.gc-since-chip:active:not(:disabled) {
+  transform: scale(0.95);
+}
+/* The catch-up card's chips arrive one by one. */
+.gc-since-chip {
+  animation: rc-rise 260ms var(--ease) both;
+}
+.gc-since-chip:nth-child(2) {
+  animation-delay: 50ms;
+}
+.gc-since-chip:nth-child(3) {
+  animation-delay: 100ms;
+}
+.gc-since-chip:nth-child(n + 4) {
+  animation-delay: 150ms;
+}
+/* Entrances move, they do not fade: text part-way through a fade is briefly below contrast, and a glance (or an
+   accessibility scan) can land on exactly that frame. */
+@keyframes rc-rise {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes rc-arrive {
+  from {
+    transform: translateY(-8px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes rc-tick {
+  from {
+    transform: scaleY(0.2);
+  }
+  to {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc,
+  .rc *,
+  .rc::before,
+  .rc *::before,
+  .rc *::after,
+  .rc-sync,
+  .gc-since-chip {
+    animation: none !important;
+    transition: none !important;
+  }
+  .rc-shimmer {
+    background: none;
+    color: inherit;
+  }
+}
+
+/* ==== rows ====
+   A run or a piece of background work as the shared two-line row (components/ui ThingRow): what it is, then its
+   state; two icon actions; it opens in place to show what a card would. The card shell stays for its menu and
+   state attributes, without the card's box: a list of rows is a list, not a stack of cards. */
+.rc.rc-row {
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.rc.rc-row + .rc.rc-row {
+  margin-top: 0;
+}
+/* No travelling outline on a row: its dot pulses and its state word shimmers instead. */
+.rc.rc-row[data-live]::before {
+  content: none;
+}
+.rc-row > .k-thing {
+  border-top-color: var(--bd);
+}
+:is(.gc-running section, .gc-bgwork) > .rc-row:first-of-type > .k-thing,
+.rc-children > .rc-row:first-of-type > .k-thing {
+  border-top: 0;
+}
+.rc-row .k-thing-row {
+  padding-inline: 2px 0;
+}
+.rc-row .k-thing-open {
+  margin-inline: 20px 0;
+}
+.rc-row > .rc-confirm {
+  margin: 0 0 10px 20px;
+}
+.rc-state {
+  position: relative;
+  display: inline-flex;
+}
+.rc-state-idle {
+  color: var(--t2);
+  font-weight: 600;
+}
+/* A state word that shimmers keeps its own colour as the base of the sweep. */
+.k-sw[data-state="working"] .rc-shimmer {
+  --k-fg: var(--ai);
+}
+.rc-row .rc-ask {
+  margin: 0;
+}
+.rc-row .rc-meta {
+  margin: 0;
+}
+/* Sub-runs sit inside their parent's opened panel: rows on the panel's surface. */
+.rc-row .rc-children {
+  margin-top: 2px;
+}

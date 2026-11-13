@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { appPost } from "./helpers";
 
 /**
- * Work from Jarvis batch 2: agent runs on items (mock run states), the area
+ * Work from Jarvis batch 2: agent runs on items (mock run states, the item page's Work list), the area
  * coordinator pane ("Catch me up" composes, nothing is sent until Send) and
  * #167 (Undo withdraws the pending conversation post). Titles use
  * Plover/Curlew/Dunlin/Whimbrel words no other spec uses.
@@ -19,7 +19,7 @@ async function make(page: Page, body: Record<string, unknown>, patch?: Record<st
   return id;
 }
 
-test("item agent panel: who, live state from mock runs, PRs with CI/merge/deploy and the last report", async ({ page }) => {
+test("item Work list: a linked conversation's run is one row in the shared state words, and follows the runs", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/home");
   const area = await make(page, { kind: "area", title: `Plover quay ${nonce}` });
@@ -47,24 +47,32 @@ test("item agent panel: who, live state from mock runs, PRs with CI/merge/deploy
     return route.fulfill({ json: { items: { [id]: info }, active: live === "running" || live === "waiting" ? [info] : [] } });
   });
   await page.goto(`/areas?item=${id}`);
+  // The six agent surfaces are one list now: Work. No registered run or job explains "waiting", so the linked
+  // conversation is the row; it says who and what it waits for, and opens the conversation.
   const panel = page.getByTestId("item-agent-panel");
   await expect(panel).toBeVisible();
-  await expect(panel.getByTestId("agent-who")).toHaveText("@devchief");
-  await expect(panel.getByTestId("agent-live")).toContainText("Waiting for approval");
-  await expect(panel.getByTestId("agent-pr")).toHaveCount(2);
-  await expect(panel.getByTestId("agent-pr").first()).toContainText("CI failing");
-  await expect(panel.getByTestId("agent-pr").nth(1)).toContainText("Merged · not live yet");
-  await expect(panel.getByTestId("agent-report")).toContainText(`Curlew findings ${nonce}`);
-  await expect(panel.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "33");
-  await expect(panel.getByRole("link", { name: "Open conversation" })).toHaveAttribute("href", "/chat/sess_morning");
+  const row = panel.getByTestId("agent-chat");
+  await expect(row).toHaveCount(1);
+  await expect(row.getByTestId("agent-live")).toHaveText("Needs you");
+  await expect(row).toContainText("approval");
+  await expect(row).toContainText("@devchief");
+  await expect(row.getByRole("link")).toHaveAttribute("href", "/chat/sess_morning");
+  // What waits on the owner leads the page: the Next section points at the row instead of offering a primary action.
+  const next = page.getByTestId("item-next");
+  await expect(next.getByTestId("now-pointer")).toContainText("Needs you");
+  await expect(next.getByRole("button", { name: "Start focused work" })).toHaveCount(0);
+  // Pull requests are drawn once, as the item's own link rows in Plan (state, checks, live or not), and the last
+  // report is a Done row from the item's AI reports: neither is repeated from the agent summary any more.
+  await expect(panel.getByTestId("agent-pr")).toHaveCount(0);
 
-  // The state follows the runs (polling/refetch): running, then failed.
+  // The state follows the runs (polling/refetch): working, then failed. Never "Running" or "Waiting".
   live = "running";
   await page.reload();
-  await expect(page.getByTestId("item-agent-panel").getByTestId("agent-live")).toContainText("Running");
+  await expect(page.getByTestId("item-agent-panel").getByTestId("agent-live")).toHaveText("Working");
+  await expect(page.getByTestId("item-next").getByRole("button", { name: "Start focused work" })).toBeVisible();
   live = "failed";
   await page.reload();
-  await expect(page.getByTestId("item-agent-panel").getByTestId("agent-live")).toContainText("Failed");
+  await expect(page.getByTestId("item-agent-panel").getByTestId("agent-live")).toHaveText("Failed");
 });
 
 test("coordinator pane: Catch me up composes the prompt but sends nothing until Send; Undo withdraws the post offer (#167)", async ({ page }) => {
@@ -124,13 +132,15 @@ test("coordinator pane: Catch me up composes the prompt but sends nothing until 
   const row = page.getByTestId("decision-row").filter({ hasText: `Whimbrel net ${nonce}?` });
   await expect(row).toBeVisible();
   const before = sent.length;
-  await row.getByRole("button", { name: "Coarse" }).click();
-  const confirm = page.getByTestId("decision-post-confirm");
-  await expect(confirm).toContainText("coordinator");
+  await row.getByRole("button", { name: /: Coarse$/ }).click();
+  // The row becomes its receipt, which quietly offers to post the answer to the coordinator chat.
+  const receipt = page.getByTestId("decision-receipt").filter({ hasText: `Whimbrel net ${nonce}?` });
+  const offer = receipt.getByRole("button", { name: "Post to coordinator", exact: true });
+  await expect(offer).toBeVisible();
   // #167: Undo withdraws the offer, nothing is posted.
-  await page.getByRole("status").filter({ hasText: "Saved" }).getByRole("button", { name: "Undo" }).click();
+  await receipt.getByRole("button", { name: /^Undo D-\d+$/ }).click();
   await expect(row).toBeVisible();
-  await expect(confirm).toBeHidden();
+  await expect(offer).toBeHidden();
   expect(sent.length).toBe(before);
 
   const clear = await page.request.patch(`/api/work/items/${item}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });

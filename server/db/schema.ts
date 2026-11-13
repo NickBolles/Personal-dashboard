@@ -2029,3 +2029,46 @@ export const messageFeedback = sqliteTable(
     index("message_feedback_user_status_idx").on(t.userId, t.status, t.createdAt),
   ],
 );
+
+/**
+ * Capture AI triage (owner request 2026-11-12, lib/capture-triage.ts): one row per capture, so a
+ * capture is acted on at most once (unique inbox_id; retries reuse the row). `plan_json` is the
+ * VALIDATED action block of the triage output (no prompt, no raw model text); the outcome links the
+ * work item the capture became, the Skylight write (Undo) or the D-n decision it raised.
+ */
+export const captureTriage = sqliteTable(
+  "capture_triage",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inboxId: text("inbox_id").notNull(),
+    /** planned | applying | done | needs_input | suggested | filed | failed | undone | skipped */
+    state: text("state").notNull().default("planned"),
+    planJson: text("plan_json").notNull().default("{}"),
+    /** sha256 of the executed action (idempotency across retries) */
+    actionHash: text("action_hash"),
+    /** back-filled capture: only acts when the capture names the target system */
+    backfill: integer("backfill", { mode: "boolean" }).notNull().default(false),
+    /** the action the owner picked in the decision (JSON ResolvedAction) */
+    chosenJson: text("chosen_json"),
+    summary: text("summary").notNull().default(""),
+    itemId: text("item_id"),
+    skylightWriteId: text("skylight_write_id"),
+    decisionId: text("decision_id"),
+    runId: text("run_id"),
+    profile: text("profile"),
+    errorCode: text("error_code"),
+    attempts: integer("attempts").notNull().default(0),
+    notBefore: text("not_before").notNull().default(now),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [
+    uniqueIndex("capture_triage_inbox_idx").on(t.inboxId),
+    index("capture_triage_state_idx").on(t.state, t.notBefore),
+    index("capture_triage_item_idx").on(t.itemId),
+    index("capture_triage_decision_idx").on(t.decisionId),
+  ],
+);

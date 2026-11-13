@@ -29,6 +29,8 @@ import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
 import type { ResumeResponse } from "../lib/resume";
 import { skylightTaskUxFixture } from "./fixtures/skylight-task-ux";
+import type { CaptureTriageView } from "../lib/capture-triage";
+import type { InboxEntry } from "../lib/work";
 
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: task UX skipped recap and daily filtering (${scheme})`, async ({ page }) => {
@@ -69,6 +71,10 @@ async function withoutTray(page: Page, shoot: () => Promise<void>) {
  * Visual snapshots of primary screens. Dynamic text (times, relative dates)
  * is masked. Update with: npm run test:e2e -- --update-snapshots
  */
+// Visual tests stub or seed what they check, so CI spreads them test-by-test across workers and shards (each
+// worker has its own server, e2e/servers.ts); a test that needs an earlier one's state belongs in a serial describe.
+test.describe.configure({ mode: "parallel" });
+
 test.beforeEach(async ({ request, page }) => {
   await page.route("**/api/work/resume", (route) =>
     route.fulfill({
@@ -631,6 +637,11 @@ test("visual: chat (dark)", async ({ page }) => {
   const timeline = [...chatVisual.timeline, { kind: "assistant" as const, id: "visual-markdown", text: MARKDOWN_FIXTURE, at: visualNow }];
   await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: alertsVisual.unread } }));
   await page.route(/\/api\/hermes\/sessions\/sess_morning$/, (route) => route.fulfill({ json: { ...chatVisual, timeline } }));
+  // The composer's status tray only appears when the conversation has background work. Earlier specs leave runs
+  // on this session, so in a full run the tray showed ("Finished · keyboard hello") and moved the thread: pin it.
+  await page.route(/\/api\/hermes\/sessions\/sess_morning\/execution$/, (route) =>
+    route.fulfill({ json: { sessionId: "sess_morning", parent: null, records: [], sources: [{ source: "hermes_children", state: "ok", at: visualNow }] } }),
+  );
   await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
   await page.goto("/chat/sess_morning");
@@ -831,6 +842,13 @@ const TIDE_O1 = "rgb(59, 128, 112)";
 for (const theme of ["light", "dark"] as const) {
   test(`visual: tide orb phone bar + radial (${theme})`, async ({ page }, info) => {
     test.skip(info.project.name !== "mobile", "phone bar orb is shot once at 390");
+    // A failed/quiet run or open decision left by another spec on this worker adds the orb's attention dot
+    // and a red Chief of staff tray line to both shots: pin the coordinator sources empty.
+    const never = { chat: null, needs: null, running: null, changes: null, context: null };
+    await page.route("**/api/coordinator/runs", (r) => r.fulfill({ json: { runs: [], events: [], lastLooked: never } }));
+    await page.route("**/api/coordinator/decisions*", (r) => r.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
+    await page.route("**/api/work/decisions*", (r) => r.fulfill({ json: { entries: [], count: 0 } }));
+    await page.route("**/api/work/agent-runs*", (r) => r.fulfill({ json: { items: {}, active: [] } }));
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: theme });
     await page.goto("/more");
@@ -1084,6 +1102,74 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: capture triage chips (${scheme})`, async ({ page }) => {
+    // CaptureExtras lives in the list below the 560px two-pane threshold: exercise the owner's cover screen.
+    await page.setViewportSize({ width: 368, height: 850 });
+    await page.emulateMedia({ colorScheme: scheme });
+    const at = new Date(await freezeMiddayCT(page)).toISOString();
+    const outcomes: Pick<CaptureTriageView, "state" | "summary">[] = [
+      { state: "done", summary: "Added “Replace key battery” to House projects on Skylight" },
+      { state: "needs_input", summary: "When is the dentist appointment?" },
+      { state: "suggested", summary: "Open the garage door — do it yourself from House" },
+      { state: "failed", summary: "Could not triage the plumber reminder" },
+    ];
+    const titles = ["Replace the key battery on Skylight", "Dentist appointment", "Open the garage door", "Call the plumber"];
+    const items: InboxEntry[] = outcomes.map((outcome, i) => ({
+      id: `inb_triage_${i}`,
+      source: "capture",
+      title: titles[i],
+      note: "",
+      url: null,
+      repo: null,
+      number: null,
+      reason: "Quick capture",
+      createdAt: at,
+      capture: {
+        channel: null,
+        triageState: outcome.state === "failed" ? "failed" : "done",
+        triageSkipReason: null,
+        suggestedTitle: null,
+        suggestedKind: null,
+        suggestion: null,
+        sensitivity: "none",
+        report: null,
+        attachments: [],
+        investigating: false,
+        triage: {
+          id: `triage_${i}`,
+          inboxId: `inb_triage_${i}`,
+          ...outcome,
+          itemId: outcome.state === "done" || outcome.state === "needs_input" ? `wk_triage_${i}` : null,
+          decisionRef: outcome.state === "needs_input" ? "D-12" : null,
+          runRef: `R-${i + 1}`,
+          undoable: outcome.state === "done",
+          openHref: outcome.state === "done" ? "/skylight" : null,
+          openLabel: null,
+          error: outcome.state === "failed" ? "Triage unavailable" : null,
+          at,
+        },
+      },
+    }));
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
+    await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { items, conversations: [], conversationsTotal: 0, unavailable: [], count: items.length } }),
+    );
+    await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) =>
+      route.fulfill({ json: { conversations: [], total: 0, unavailable: [], updating: false, cachedAt: at } }),
+    );
+    await page.goto("/inbox");
+    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    const list = page.getByRole("region", { name: "Assigned issues and captures" });
+    await expect(list.getByTestId("capture-triage")).toHaveCount(4);
+    await expect(list.getByRole("link", { name: "D-12", exact: true })).toBeVisible();
+    await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
+    await page.waitForTimeout(800);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await withoutTray(page, () => expect(list).toHaveScreenshot(`inbox-triage-${scheme}.png`, { mask: MASK.map((m) => list.locator(m)) }));
+  });
+}
+
 /** Raycast palette (PR #102): stub every list the palette loads so other specs' data never leaks in. */
 async function openPaletteVisual(page: Page) {
   await freezeMiddayCT(page);
@@ -1220,8 +1306,9 @@ for (const theme of ["light", "dark"] as const) {
     const panel = page.getByTestId("item-agent-panel");
     await expect(panel.getByTestId("agent-run")).toHaveCount(2);
     if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-    await expect(panel.getByTestId("agent-run").nth(1).getByTestId("agent-stalled")).toHaveText("Stalled");
-    await expect(panel.getByTestId("agent-run").first().getByTestId("agent-stalled")).toHaveCount(0);
+    // The Work list runs Needs you (the stalled run) before Working, so the rows are found by name, not position.
+    await expect(panel.getByTestId("agent-run").filter({ hasText: "Paint colour options" }).getByTestId("agent-stalled")).toHaveText("Stalled");
+    await expect(panel.getByTestId("agent-run").filter({ hasText: "Shelf bracket research" }).getByTestId("agent-stalled")).toHaveCount(0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(400);
@@ -1527,7 +1614,8 @@ const gcQuickActions = [
 const GC_HIDE = 'nav[aria-label="Primary"].fixed, .chat-dock, .k-dock, [data-command-dock], .gc-tablet-dock { visibility: hidden !important; }';
 async function stubGlobalCoordinator(page: Page) {
   // Relative to the frozen browser clock: the sheet is a top-layer dialog, so masks can't cover its times.
-  const at = new Date((await freezeMiddayCT(page)) - 20 * 60_000).toISOString();
+  const frozen = await freezeMiddayCT(page);
+  const at = new Date(frozen - 20 * 60_000).toISOString();
   await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: mapDemoDecisions }));
   await page.route(/\/api\/quick-actions(?:\?.*)?$/, (route) => route.fulfill({ json: { actions: gcQuickActions } }));
   await page.route(/\/api\/work\/activity\?actor=agent&q=chiefofstaff/, (route) =>
@@ -1565,8 +1653,10 @@ async function stubGlobalCoordinator(page: Page) {
   );
   // Never a real coordinator/Hermes write from a visual test.
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
+  /** The browser's frozen "now": fixture times must be relative to this, never to the real clock. */
+  return frozen;
 }
-const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint"].map((m) => scope.locator(m));
+const gcMask = (scope: import("@playwright/test").Locator) => [...MASK, ".gc-action .gc-hint", ".gc-change-row .gc-hint"].map((m) => scope.locator(m));
 async function gcTheme(page: Page, scheme: "light" | "dark") {
   await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -1662,10 +1752,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
-    await sheet.getByRole("tab", { name: /^Changes/ }).click();
+    // Activity = runs + what the Chief of staff changed (the old Changes tab).
+    await sheet.getByRole("tab", { name: /^Activity/ }).click();
     await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
     await page.waitForTimeout(200);
-    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-changes-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-activity-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
 }
 
@@ -1699,9 +1790,12 @@ test("chief of staff tray never overlaps the tablet dock (640–900px)", async (
 
 test("chief of staff phone tray: a long failing line truncates inside the viewport and the composer stays reachable (#257)", async ({ page }, info) => {
   test.skip(info.project.name === "desktop", "Phone tray");
-  await stubGlobalCoordinator(page);
-  // Prod state that overflowed release 65: 21 stalled runs + 44 decisions → "Failing · Chief of staff / 21 runs need attention" + badges.
-  const stale = new Date(Date.now() - 26 * 3600_000).toISOString();
+  const frozen = await stubGlobalCoordinator(page);
+  // Prod state that overflowed release 65: 21 stalled runs + 44 decisions. They stalled since the owner last looked, so the
+  // tray leads with them: "21 runs stalled · 44 need you" (one sentence, no count badges).
+  // 45 minutes before the browser's frozen clock, not the real one: after 12:15 CT the real clock is ahead of the
+  // frozen midday, the runs looked freshly updated and the tray said "21 working".
+  const stale = new Date(frozen - 45 * 60_000).toISOString();
   const items = Object.fromEntries(
     Array.from({ length: 21 }, (_, i) => {
       const itemId = `wk_tray_${i}`;
@@ -1740,12 +1834,13 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     await page.goto("/home");
     if (zoom) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const tray = page.getByRole("button", { name: "Chief of staff", exact: true });
-    await expect(tray).toContainText("21 runs need attention");
-    await expect(page.locator(".gc-tray .gc-tray-counts")).toContainText("44");
+    await expect(tray).toContainText("21 runs stalled");
+    await expect(tray.locator(".gc-tray-status")).toContainText("44 need you");
+    await expect(page.locator(".gc-tray").getByRole("button")).toHaveCount(1);
     await page.waitForTimeout(200);
     const m = await tray.evaluate((el) => {
       const r = el.getBoundingClientRect();
-      const line = el.querySelector(".gc-priority") as HTMLElement;
+      const line = el.querySelector(".gc-tray-status") as HTMLElement;
       return {
         left: r.left,
         right: r.right,
@@ -1765,6 +1860,8 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     // The sheet's composer is on screen and takes a tap (nothing is sent).
     await tray.click();
     const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+    // The tray opens where its sentence points (Activity, for stuck runs); the composer is on the Chat tab.
+    await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
     const input = sheet.getByTestId("gc-input");
     await expect(input).toBeVisible();
     const box = (await input.boundingBox())!;
@@ -2572,8 +2669,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.evaluate((value) => document.documentElement.setAttribute("data-theme", value), scheme);
     const message = page.locator("#msg-actions-answer");
     await expect(message.getByTestId("actions-taken")).toBeVisible();
+    // Several actions collapse into one plain summary line; the snapshot shows it opened.
+    await message.getByRole("button", { name: "Created 1 item, handed off to 2 agents" }).click();
     await expect(message.getByRole("button", { name: "Created · Retry policy" })).toBeVisible();
-    await expect(message.getByRole("button", { name: "2 sub-agents · Audit retries" })).toBeVisible();
+    await expect(message.getByRole("button", { name: "Handed off to 2 agents · Audit retries" })).toBeVisible();
+    await page.mouse.move(0, 0);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(message).toHaveScreenshot(`chat-actions-taken-${scheme}.png`, { animations: "disabled" }));
   });

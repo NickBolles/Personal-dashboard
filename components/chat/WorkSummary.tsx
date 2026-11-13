@@ -64,12 +64,14 @@ function readOpen(id: string): boolean | null {
  * The collapsed "✦ Worked for 14s · ran 3 commands" line for one assistant turn's
  * tool use. Expands to the step list (children). Failed steps passed as `alwaysShown`
  * stay visible while collapsed. Expand state is remembered per message (session).
+ * While the run is blocked on the owner (`waiting`), the line says so in the warn tone instead of "Working".
  */
 export function WorkSummary({
   id,
   steps,
   seconds,
   live,
+  waiting,
   defaultOpen = false,
   alwaysShown,
   children,
@@ -78,6 +80,8 @@ export function WorkSummary({
   steps: StepLike[];
   seconds?: number;
   live?: boolean;
+  /** The live run is paused until the owner approves a command or answers a question. */
+  waiting?: "approval" | "answer";
   defaultOpen?: boolean;
   alwaysShown?: ReactNode;
   children: ReactNode;
@@ -93,7 +97,8 @@ export function WorkSummary({
   }
   const failed = steps.filter((s) => s.error).length;
   const what = summarizeSteps(steps);
-  const head = live ? "Working" : formatWorked(seconds);
+  const paused = live ? waiting : undefined;
+  const head = paused ? (paused === "approval" ? "Waiting for your approval" : "Waiting for your answer") : live ? "Working" : formatWorked(seconds);
   const label = `${head}${what ? ` · ${what}` : ""}${failed ? ` · ${failed} failed` : ""}`;
   const toggle = () => {
     const next = !open;
@@ -105,12 +110,12 @@ export function WorkSummary({
     }
   };
   return (
-    <div className="chat-work" data-live={live || undefined}>
+    <div className="chat-work" data-live={live || undefined} data-waiting={paused}>
       <button type="button" className="chat-work-head" aria-expanded={open} onClick={toggle}>
         <span aria-hidden="true" className="chat-work-mark">
           ✦
         </span>
-        <span className={cx("min-w-0 flex-1 break-words", live && "chat-work-shimmer")} data-dynamic>
+        <span className={cx("min-w-0 flex-1 break-words", paused ? "font-medium text-warn" : live && "chat-work-shimmer")} data-dynamic>
           {label}
         </span>
         {failed ? <span className="sr-only">Includes a failed step.</span> : null}

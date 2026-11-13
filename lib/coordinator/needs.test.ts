@@ -33,9 +33,9 @@ describe("age and defaults", () => {
   });
   const base = { risk: [], defaultChoice: "Accept", expiresAt: "2026-11-08T15:00:00Z" };
   it("formats an upcoming safe default and an elapsed one", () => {
-    expect(defaultLine(base, now)).toBe("Defaults to Accept in 3 h");
-    expect(defaultLine({ ...base, expiresAt: "2026-11-08T11:00:00Z" }, now)).toBe("Defaults to Accept now");
-    expect(defaultLine({ ...base, expiresAt: "2026-11-11T12:00:00Z" }, now)).toBe("Defaults to Accept in 3 d");
+    expect(defaultLine(base, now)).toBe("No answer in 3 h → Accept");
+    expect(defaultLine({ ...base, expiresAt: "2026-11-08T11:00:00Z" }, now)).toBe("No answer → Accept now");
+    expect(defaultLine({ ...base, expiresAt: "2026-11-11T12:00:00Z" }, now)).toBe("No answer in 3 d → Accept");
   });
   it("never offers a risky, incomplete or invalid default", () => {
     for (const risk of RISK_FLAGS) expect(defaultLine({ ...base, risk: [risk] }, now)).toBeNull();
@@ -49,10 +49,10 @@ describe("age and defaults", () => {
   });
 });
 describe("recommended answer", () => {
-  it("prefers a valid recommendation and otherwise the first option", () => {
+  it("is the agent's valid recommendation, and never the first option standing in for one", () => {
     expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Yes" })).toBe("Yes");
-    expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Maybe" })).toBe("No");
-    expect(recommendedChoice({ choices: ["No"], recommended: null })).toBe("No");
+    expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Maybe" })).toBeNull();
+    expect(recommendedChoice({ choices: ["No"], recommended: null })).toBeNull();
     expect(recommendedChoice({ choices: [], recommended: "Yes" })).toBeNull();
   });
 });

@@ -4,7 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-execFileSync(process.execPath, ["scripts/prepare-standalone.mjs"], { stdio: "inherit" });
+// Several servers (one per Playwright worker) start from the same build: copy the assets once per build.
+const buildId = fs.readFileSync(".next/BUILD_ID", "utf8").trim();
+const stamp = ".next/standalone/.prepared";
+if (!fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8").trim() !== buildId) {
+  execFileSync(process.execPath, ["scripts/prepare-standalone.mjs"], { stdio: "inherit" });
+  fs.writeFileSync(stamp, buildId);
+}
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jarvis-e2e-"));
 const env = { ...process.env, JARVIS_DATA_DIR: dir, HOSTNAME: "127.0.0.1", PORT: process.env.PORT ?? "3200", NODE_ENV: "production" };
 console.log(`[e2e] data dir ${dir}`);

@@ -180,9 +180,13 @@ export function createSkylight({ refreshToken }) {
     state.nextEvent = 1;
   }
   seed();
+  // When each Skylight write arrived (survives /__mock/reset): e2e waits for a fresh 12/min write budget from these
+  // instead of a fixed minute (e2e/helpers.ts freshSkylightBudget).
+  const writeTimes = [];
 
   async function handle(req, res, path, url, control) {
     if (path === "/__mock/skylight/writes" && req.method === "GET") return json(res, 200, { writes: state.writes });
+    if (path.startsWith("/api/frames/") && ["POST", "PUT", "DELETE"].includes(req.method)) writeTimes.push(Date.now());
     if (control.fail.has("skylight")) return json(res, 503, { errors: ["unavailable"] });
     const m = req.method;
     let match;
@@ -377,5 +381,5 @@ export function createSkylight({ refreshToken }) {
     state.chores.set(c.id, { status: "pending", start_time: null, ...c });
     return true;
   }
-  return { handle, reset: seed, state, addChore };
+  return { handle, reset: seed, state, addChore, writeTimes };
 }

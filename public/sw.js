@@ -1,5 +1,7 @@
 /* Jarvis service worker.
  * - App shell: hashed static assets cache-first; pages network-first with an offline fallback.
+ *   A cached page from an older build than the newest known release is not served on a merely
+ *   slow network (it would boot an outdated app); see handleNavigate.
  * - Private pages (Finance, Chat, Settings, People) are never cached, and the page
  *   cache is wiped on sign-out (postMessage "CLEAR_PRIVATE" from the page).
  * - API responses are never cached here (auth + live data). Bounded snapshots live in IndexedDB.
@@ -34,6 +36,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("message", (event) => {
   if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data && event.data.type === "BUILD") event.waitUntil(noteBuild(String(event.data.build || "").trim()));
   if (event.data === "CLEAR_PRIVATE") {
     // Signed out: forget every cached page (they're one person's data).
     event.waitUntil(caches.delete(PAGES).then(() => event.source?.postMessage?.("CLEARED_PRIVATE")));
@@ -134,6 +137,81 @@ self.addEventListener("sync", (event) => {
   if (event.tag === "capture-flush") event.waitUntil(flushCaptureQueue());
 });
 
+/*
+ * Newest release build this worker has seen: from the `x-jarvis-build` header of a page that came
+ * from the network, or from the page itself (`{type: "BUILD"}` after `/api/health` reported a new
+ * deploy). Persisted in a tiny meta cache so it survives the worker being stopped.
+ */
+const META = `${VERSION}-meta`;
+const BUILD_KEY = "/__jarvis-build";
+let latestBuild = null;
+
+function validBuild(id) {
+  return typeof id === "string" && /^[0-9a-f]{7,64}$/i.test(id);
+}
+
+async function noteBuild(id) {
+  if (!validBuild(id) || id === latestBuild) return;
+  latestBuild = id;
+  try {
+    const meta = await caches.open(META);
+    await meta.put(BUILD_KEY, new Response(id));
+  } catch {
+    // storage full / unavailable: the in-memory value still applies
+  }
+}
+
+async function knownBuild() {
+  if (latestBuild) return latestBuild;
+  try {
+    const meta = await caches.open(META);
+    const hit = await meta.match(BUILD_KEY);
+    const id = hit ? (await hit.text()).trim() : "";
+    if (validBuild(id)) latestBuild = id;
+  } catch {
+    // ignore
+  }
+  return latestBuild;
+}
+
+/** A cached page from an older (or unknown) build than the newest one we know is live. */
+function staleShell(res, known) {
+  return !!(res && known && res.headers.get("x-jarvis-build") !== known);
+}
+
+/**
+ * Pages: network first. After 4 s a cached copy stands in, EXCEPT when that copy is from an older
+ * build than the newest one known to be live: on a slow (not offline) network we keep waiting for
+ * the server instead of booting an outdated shell. Offline (fetch rejects) still gets the cache.
+ */
+async function handleNavigate(req, url) {
+  const cache = await caches.open(PAGES);
+  const network = fetch(req).then((res) => {
+    const build = res.headers.get("x-jarvis-build");
+    if (res.ok && build) noteBuild(build);
+    // Only cache successful, same-page responses (not login redirects).
+    if (res.ok && !res.redirected && cacheable(url.pathname)) {
+      cache.put(url.pathname, res.clone()).then(trimPages, () => undefined);
+    }
+    return res;
+  });
+  network.catch(() => undefined); // answered from cache meanwhile: no unhandled rejection
+  try {
+    return await Promise.race([network, timeout(4000)]);
+  } catch (err) {
+    const hit = cacheable(url.pathname) ? (await cache.match(url.pathname)) || (await cache.match("/home")) : undefined;
+    if (err && err.message === "timeout" && staleShell(hit, await knownBuild())) {
+      try {
+        return await network;
+      } catch {
+        // went offline while waiting: an old page beats none
+      }
+    }
+    if (hit) return hit;
+    return (await caches.match("/offline")) || new Response("Offline", { status: 503 });
+  }
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method === "POST" && new URL(req.url).pathname === "/share-target" && new URL(req.url).origin === self.location.origin) {
@@ -161,24 +239,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (req.mode === "navigate") {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(PAGES);
-        try {
-          const res = await Promise.race([fetch(req), timeout(4000)]);
-          // Only cache successful, same-page responses (not login redirects).
-          if (res.ok && !res.redirected && cacheable(url.pathname)) {
-            cache.put(url.pathname, res.clone());
-            trimPages();
-          }
-          return res;
-        } catch {
-          const hit = cacheable(url.pathname) ? (await cache.match(url.pathname)) || (await cache.match("/home")) : undefined;
-          if (hit) return hit;
-          return (await caches.match("/offline")) || new Response("Offline", { status: 503 });
-        }
-      })(),
-    );
+    event.respondWith(handleNavigate(req, url));
   }
 });
 

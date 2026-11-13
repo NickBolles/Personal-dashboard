@@ -73,7 +73,7 @@ describe("CW-5 push", () => {
     finishRegisteredRun(owner, b.runId, "interrupted", "session ended", new Date());
     finishRegisteredRun(owner, c.runId, "done", "ok", new Date());
     expect(notes("cw.run_failed").map((n) => n.deepLink)).toEqual([`/home?coord=running&r=${a.ref}`]);
-    expect(notes("cw.session_ended")[0]).toMatchObject({ deepLink: "/home?coord=running&f=interrupted", body: "Resume all 1 from Running." });
+    expect(notes("cw.session_ended")[0]).toMatchObject({ deepLink: "/home?coord=running&f=interrupted", body: "Resume all 1 from Activity." });
     expect(getDb().select().from(schema.notifications).where(eq(schema.notifications.type, "cw.run_done")).all()).toHaveLength(0);
   });
 });

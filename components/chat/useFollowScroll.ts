@@ -6,6 +6,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 const REATTACH_GAP = 48;
 
 const gap = () => document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
+/** The page has nowhere to scroll. */
+const fits = () => document.documentElement.scrollHeight - window.innerHeight <= 1;
 
 function isTypingTarget(t: EventTarget | null) {
   const el = t as HTMLElement | null;
@@ -18,14 +20,34 @@ function isTypingTarget(t: EventTarget | null) {
  * following, any growth of the thread — streamed text, tool cards expanding, late image loads,
  * reconciled history — keeps the latest content in view (ResizeObserver, not a text-length heuristic).
  * When detached, nothing scrolls the page: the browser's scroll anchoring keeps their place, and
- * "Jump to latest" resumes following.
+ * "Jump to latest" resumes following. `below` says whether there really is content under the fold:
+ * the jump button is only offered then (never on a thread that fits the screen).
  */
 export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, bottomRef: RefObject<HTMLElement | null>, ready: boolean) {
   const follow = useRef(true);
   // A message permalink holds its place through transcript growth and composer focus.
   const anchor = useRef<string | null>(null);
   const [detached, setDetached] = useState(false);
+  const [below, setBelow] = useState(false);
   const last = useRef({ y: 0 });
+  /**
+   * How far (px) the thread's end sits under the fold: the top edge of the sticky composer dock, else the viewport
+   * bottom. Page-level scroll room is not enough to go by: tablets keep a gutter under the dock, so an empty thread
+   * still scrolls. Null when the end marker has no layout yet (then the page gap decides).
+   */
+  const hidden = useCallback(() => {
+    const marker = bottomRef.current;
+    if (!marker || !marker.getClientRects().length) return null;
+    const dock = contentRef.current?.parentElement?.querySelector<HTMLElement>(".chat-dock");
+    return marker.getBoundingClientRect().top - (dock ? dock.getBoundingClientRect().top : window.innerHeight);
+  }, [bottomRef, contentRef]);
+  /** An empty or short thread shows whole even from the top of the page: scrolling up there is not "leaving the latest". */
+  const short = useCallback(() => {
+    if (fits()) return true;
+    const h = hidden();
+    return h !== null && h + window.scrollY <= 1;
+  }, [hidden]);
+  const measure = useCallback(() => setBelow((hidden() ?? gap()) > REATTACH_GAP), [hidden]);
 
   const setFollow = useCallback((on: boolean) => {
     follow.current = on;
@@ -44,7 +66,11 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
     const releaseAnchor = () => {
       anchor.current = null;
     };
-    const up = () => setFollow(false);
+    const up = () => {
+      if (short()) return;
+      setFollow(false);
+      measure();
+    };
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY) releaseAnchor();
       if (e.deltaY < 0) up();
@@ -77,6 +103,7 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       // Following only ever scrolls DOWN, so programmatic scrolls never trip this.
       if (y < last.current.y - 2 && y < max - 2) up();
       else if (!follow.current && gap() <= REATTACH_GAP) setFollow(true);
+      measure();
       last.current = { y };
     };
     const onPointerDown = (e: PointerEvent) => {
@@ -96,7 +123,7 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [setFollow]);
+  }, [setFollow, measure, short]);
 
   // Resolve only after the transcript mounts. Cached/partial transcripts may add the target later.
   // Lock following before ResizeObserver can schedule a bottom scroll; state updates run in a frame.
@@ -145,23 +172,28 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
   }, [contentRef, ready, setFollow, toBottom]);
 
   // Any size change of the thread while following → stay at the bottom (one scroll per frame at most).
+  // The composer dock counts too: when its tray appears or a draft grows, the latest lines must not slide under it.
   useLayoutEffect(() => {
     const el = contentRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
     let raf = 0;
     const ro = new ResizeObserver(() => {
-      if (!follow.current || raf) return;
+      if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
         if (follow.current && gap() > 1) toBottom();
+        // Detached: content that arrived (or collapsed) under the fold decides whether a jump is on offer.
+        else if (!follow.current) measure();
       });
     });
     ro.observe(el);
+    const dock = el.parentElement?.querySelector(".chat-dock");
+    if (dock) ro.observe(dock);
     return () => {
       ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [contentRef, toBottom, ready]);
+  }, [contentRef, toBottom, ready, measure]);
 
   /** Composer focus/keyboard may follow, but only a send or explicit jump overrides a permalink. */
   const jumpToLatest = useCallback(
@@ -169,10 +201,11 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       if (anchor.current && !smooth && !sent) return;
       anchor.current = null;
       setFollow(true);
+      setBelow(false);
       toBottom(smooth);
     },
     [setFollow, toBottom],
   );
 
-  return { detached, jumpToLatest, following: follow };
+  return { detached, below: detached && below, jumpToLatest, following: follow };
 }

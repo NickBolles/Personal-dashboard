@@ -131,7 +131,7 @@ test("areas landing: card opens the area in place, Back returns; /map redirects 
   expect(clear.ok()).toBeTruthy();
 });
 
-test("decisions: answer with one tap → activity row + undo, then a typed answer", async ({ page }) => {
+test("decisions: answer with one tap → activity row + undo, then answer from the card", async ({ page }) => {
   const nonce = `d${Date.now().toString(36)}`;
   await page.goto("/home");
   const { gannet } = await seed(page, nonce);
@@ -141,8 +141,11 @@ test("decisions: answer with one tap → activity row + undo, then a typed answe
   const row = page.getByTestId("decision-row").filter({ hasText: question });
   await expect(row).toBeVisible();
 
-  await row.getByRole("button", { name: "Coral" }).click();
+  await row.getByRole("button", { name: /: Coral$/ }).click();
+  // The row becomes its receipt: what was asked, then what was answered.
   await expect(row).toBeHidden();
+  const receipt = page.getByTestId("decision-receipt").filter({ hasText: question });
+  await expect(receipt).toContainText("Coral");
   const activity = async () =>
     ((await page.request.get(`/api/work/activity?item=${gannet}`).then((r) => r.json())) as { items: { detail: string | null }[] }).items;
   await expect.poll(async () => (await activity()).some((a) => a.detail === `Decision: ${question} → Coral`)).toBe(true);
@@ -153,13 +156,17 @@ test("decisions: answer with one tap → activity row + undo, then a typed answe
   expect(item.item.status).toBe("captured");
 
   // Undo brings the question back.
-  const bar = page.getByRole("status").filter({ hasText: "Saved" });
-  await bar.getByRole("button", { name: "Undo" }).click();
+  await receipt.getByRole("button", { name: /^Undo D-\d+$/ }).click();
   await expect(row).toBeVisible();
 
-  // A typed answer works too.
-  await row.getByLabel("Short answer").fill("Navy");
-  await row.getByRole("button", { name: "Answer" }).click();
-  await expect(row).toBeHidden();
-  await expect.poll(async () => (await activity()).some((a) => a.detail === `Decision: ${question} → Navy`)).toBe(true);
+  // The row opens the decision card in place. It has no text box of its own (free text goes through the
+  // Chief of staff composer); a choice there answers in one tap too.
+  await row.getByRole("button", { name: /^Open decision D-\d+:/ }).click();
+  const card = page.getByTestId("decision-card").filter({ hasText: question });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("textbox")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: /^Something else/ })).toBeVisible();
+  await card.getByRole("button", { name: "Teal", exact: true }).click();
+  await expect(card).toBeHidden();
+  await expect.poll(async () => (await activity()).some((a) => a.detail === `Decision: ${question} → Teal`)).toBe(true);
 });

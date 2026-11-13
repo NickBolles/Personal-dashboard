@@ -79,6 +79,10 @@ for (const path of PAGES) {
   });
 }
 
+// a11y tests stub or seed what they check, so CI spreads them test-by-test across workers and shards (each
+// worker has its own server, e2e/servers.ts); a test that needs an earlier one's state belongs in a serial describe.
+test.describe.configure({ mode: "parallel" });
+
 test("200% text zoom does not cause horizontal scrolling", async ({ page }) => {
   // One page per entry; the list outgrew the 60 s default on mobile-320 (Phase 4 added /areas?tab=portfolio).
   test.setTimeout(120_000);
@@ -293,7 +297,13 @@ test("chat composer with attachments: axe clean and no overflow at 200% text zoo
   ]);
   await expect(page.getByTestId("attachment-chip").nth(1)).toHaveAttribute("data-status", "ready", { timeout: 15_000 });
   const results = await new AxeBuilder({ page: page as never }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
-  expect.soft(results.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => v.id)).toEqual([]);
+  expect
+    .soft(
+      results.violations
+        .filter((v) => v.impact === "serious" || v.impact === "critical")
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
+    )
+    .toEqual([]);
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
@@ -440,7 +450,8 @@ test("inline edits: axe clean and no overflow at 200% text zoom (read, title edi
   const fits = () => header.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
   expect.soft(await fits(), "title editor at 200%").toBe(true);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Edit summary" }).click();
+  // No summary yet: its "add" chip (Plan) opens the in-place editor.
+  await page.getByRole("button", { name: "Add a summary" }).click();
   await expect(page.getByRole("textbox", { name: "Edit summary" })).toBeFocused();
   await axe("summary editor");
   expect.soft(await fits(), "summary editor at 200%").toBe(true);
@@ -615,8 +626,10 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
       .toEqual([]);
   };
   await page.goto(`/areas?item=${id}`);
-  await expect(page.getByTestId("item-agent-panel")).toBeVisible();
-  await axe("item agent panel");
+  // Nothing has run on it, so no Work list is drawn; who is on it is the assignee on the header's one meta line.
+  await expect(page.getByRole("button", { name: "Assignee: @momentumchief" })).toBeVisible();
+  await expect(page.getByTestId("item-agent-panel")).toHaveCount(0);
+  await axe("item page");
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
@@ -840,11 +853,15 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await zoom();
   await tray.click();
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
+  // The tray opens where its sentence points (here: the approvals under Needs you); the chat is one tab away.
+  await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
   await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
   await axe("sheet chat");
   await zoom();
-  await sheet.getByRole("tab", { name: /^Changes/ }).click();
-  await axe("sheet changes");
+  // Changes live under Activity (with runs); there is no separate tab.
+  await sheet.getByRole("tab", { name: /^Activity/ }).click();
+  await expect(sheet.getByRole("region", { name: "Changes" })).toBeVisible();
+  await axe("sheet activity");
   await zoom();
   await page.keyboard.press("Escape");
 });
@@ -956,23 +973,25 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   const desktop = info.project.name === "desktop";
   const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
   const sel = desktop ? ".gc-rail" : ".gc-sheet";
-  if (desktop) await scope.getByRole("tab", { name: /^Needs you/ }).click();
-  else
-    await page
-      .locator(".gc-tray")
-      .getByRole("button", { name: /need you, open Needs you$/ })
-      .click();
-  await expect(scope.getByRole("button", { name: "D-49: Ship it now", exact: true })).toBeVisible();
+  // The tray is one button; its status sentence says what waits. Needs you is a tab inside.
+  if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
+  await scope.getByRole("tab", { name: /^Needs you/ }).click();
+  await expect(scope.getByRole("button", { name: "D-49: Ship it now (recommended)", exact: true })).toBeVisible();
+  // A risky decision offers no one-tap chips: its row opens the card.
+  await expect(scope.getByRole("button", { name: /^D-48: / })).toHaveCount(0);
   await axe("needs list", sel);
   await zoom();
-  await scope.getByRole("button", { name: "D-48: Rotate", exact: true }).click();
+  await scope.getByRole("button", { name: /^Open decision D-48:/ }).click();
+  const answers = scope.getByRole("group", { name: "Answers for D-48" });
+  await expect(answers).toBeVisible();
+  // A risky choice arms first; the in-place Confirm is what would send it.
+  await answers.getByRole("button", { name: /^Rotate/ }).click();
   await expect(scope.getByRole("group", { name: "Confirm answer" })).toBeVisible();
-  await expect(scope.getByRole("radiogroup", { name: "Answers for D-48" })).toBeVisible();
   await axe("risk-flagged detail", sel);
   await zoom();
-  await scope.getByRole("tab", { name: /^Running/ }).click();
+  await scope.getByRole("tab", { name: /^Activity/ }).click();
   await expect(scope.getByText(/Lane 65/)).toBeVisible();
-  await axe("running", sel);
+  await axe("activity", sel);
   await zoom();
 });
 
@@ -1113,13 +1132,19 @@ test("phone width guard: long real-shaped data never widens key pages past the v
       key: "item:mi_long",
       kind: "item",
       title: `${unbroken} item`,
-      question: `Which option should we take? See ${url}`,
+      // Short enough to be read whole on the row, so the row offers its (long) choices as chips; the approval
+      // below carries the unbreakable URL in its headline.
+      question: "Which option should we take?",
       choices: [long, `Fold into run cards and drop the separate list ${url}`, "Later"],
       href: "/areas?item=mi_long",
       at,
       itemId: "mi_long",
       areaTitle: unbroken,
       sessionId: null,
+      ref: "D-900",
+      recommended: null,
+      risk: [],
+      pack: {},
     },
     {
       key: "approval:r_long",

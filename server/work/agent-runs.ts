@@ -33,24 +33,27 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
   ensureRunSeqs(user.id);
   const db = getDb();
   const ids = [sessionId, ...childIds.slice(0, EXECUTION_LIMIT)];
-  const jarvis: ExecutionRecord[] = db
+  const runRows = db
     .select()
     .from(schema.runs)
     .where(and(eq(schema.runs.userId, user.id), inArray(schema.runs.sessionId, ids)))
     .orderBy(desc(schema.runs.startedAt))
     .limit(EXECUTION_LIMIT)
-    .all()
-    .map((r) => ({
-      key: `jarvis_run:${r.runId}`,
-      source: "jarvis_run",
-      id: r.runId,
-      title: executionText(r.inputPreview, 300) ?? "Chat run",
-      state: executionState(r.status),
-      startedAt: r.startedAt,
-      endedAt: r.completedAt,
-      updatedAt: r.lastCheckedAt ?? r.startedAt,
-      href: `/chat/${encodeURIComponent(r.sessionId)}`,
-    }));
+    .all();
+  // The conversation's own turns (every message the owner sends starts a run in this session, and so does a
+  // steer or stop command) are the conversation, not work it started. They stay out unless an AI job backs one.
+  const ownTurns = new Set(runRows.filter((r) => r.sessionId === sessionId).map((r) => r.runId));
+  const jarvis: ExecutionRecord[] = runRows.map((r) => ({
+    key: `jarvis_run:${r.runId}`,
+    source: "jarvis_run",
+    id: r.runId,
+    title: executionText(r.inputPreview, 300) ?? "Chat run",
+    state: executionState(r.status),
+    startedAt: r.startedAt,
+    endedAt: r.completedAt,
+    updatedAt: r.lastCheckedAt ?? r.startedAt,
+    href: `/chat/${encodeURIComponent(r.sessionId)}`,
+  }));
   for (const j of db
     .select()
     .from(schema.aiJobs)
@@ -79,6 +82,7 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
     const backing = j.hermesRunId ? jarvis.findIndex((r) => r.id === j.hermesRunId) : -1;
     if (backing >= 0) {
       const run = jarvis[backing];
+      ownTurns.delete(run.id);
       jarvis[backing] = {
         ...run,
         title: executionText(item?.title, 300) ?? run.title,
@@ -137,7 +141,7 @@ export function executionRuns(user: CurrentUser, sessionId: string, childIds: st
         },
       ];
     });
-  return { jarvis, registered };
+  return { jarvis: jarvis.filter((r) => !ownTurns.has(r.id)), registered };
 }
 
 /** Each item's Hermes conversations: conversation children + chat_session links. */

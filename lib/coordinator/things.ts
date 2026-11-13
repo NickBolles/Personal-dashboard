@@ -56,11 +56,10 @@ export function priorityLine(input: PriorityInput): PriorityLine {
       text: `${input.needsYou} ${input.needsYou === 1 ? "thing needs" : "things need"} you`,
       count: input.needsYou,
     };
-  if (input.doneUnseen > 0)
-    return { state: "done", tone: "ok", dot: "yellow", text: `${input.doneUnseen} finished · ready to review`, count: input.doneUnseen };
+  if (input.doneUnseen > 0) return { state: "done", tone: "ok", dot: "yellow", text: `${input.doneUnseen} done · ready to review`, count: input.doneUnseen };
   if (input.running > 0)
     return { state: "running", tone: "ai", dot: null, text: `${input.running} ${input.running === 1 ? "run" : "runs"} in progress`, count: input.running };
-  return { state: "idle", tone: "neutral", dot: null, text: "All quiet · ask anything", count: 0 };
+  return { state: "idle", tone: "neutral", dot: null, text: "Nothing running · ask anything", count: 0 };
 }
 
 /** sinceMs is when the pending downward transition was first observed. */

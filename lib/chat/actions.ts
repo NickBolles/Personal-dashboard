@@ -242,6 +242,85 @@ export function actionsByReply(timeline: readonly TimelineItem[]): ReplyActions[
   return out;
 }
 
+/**
+ * How an action reads to the owner (display only: `ChatAction.label` stays the parser's stable label).
+ * `one` labels a single action's row; `many` is the counted phrase used in a summary line.
+ */
+const PLAIN: Record<ActionKind, { one: string; many: (n: number) => string }> = {
+  created: { one: "Created", many: (n) => `created ${n} ${n === 1 ? "item" : "items"}` },
+  updated: { one: "Updated", many: (n) => `updated ${n} ${n === 1 ? "item" : "items"}` },
+  note: { one: "Added a note", many: (n) => `added ${n} ${n === 1 ? "note" : "notes"}` },
+  linked: { one: "Linked", many: (n) => `added ${n} ${n === 1 ? "link" : "links"}` },
+  decision: { one: "Asked you to decide", many: (n) => `asked you for ${n} ${n === 1 ? "decision" : "decisions"}` },
+  change_request: { one: "Requested a change", many: (n) => `requested ${n} ${n === 1 ? "change" : "changes"}` },
+  run_started: { one: "Started a run", many: (n) => `started ${n} ${n === 1 ? "run" : "runs"}` },
+  run_updated: { one: "Updated a run", many: (n) => `updated ${n} ${n === 1 ? "run" : "runs"}` },
+  filed: { one: "Filed this chat", many: () => "filed this chat" },
+  device_proposal: { one: "Proposed a device change", many: (n) => `proposed ${n} device ${n === 1 ? "change" : "changes"}` },
+  quick_action: { one: "Proposed a quick action", many: (n) => `proposed ${n} quick ${n === 1 ? "action" : "actions"}` },
+  delegated: { one: "Handed off", many: (n) => `handed off to ${n} ${n === 1 ? "agent" : "agents"}` },
+};
+
+const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** A delegation counts its agents; everything else counts as one. */
+const weight = (a: ChatAction) => (a.kind === "delegated" ? Math.max(1, a.count ?? 1) : 1);
+
+/** The plain verb for one action: "Created", "Started a run", "Handed off to 2 agents". */
+export function plainActionLabel(a: Pick<ChatAction, "kind" | "count">): string {
+  return a.kind === "delegated" ? sentence(PLAIN.delegated.many(Math.max(1, a.count ?? 1))) : PLAIN[a.kind].one;
+}
+
+/** One row of the actions list: a single action, or identical ones folded together ("Started 2 runs"). */
+export type ActionRow = {
+  /** the first action of the row: its id keys the row and its links are the row's links */
+  action: ChatAction;
+  count: number;
+  /** plain verb, counted when folded */
+  label: string;
+  /** what assistive technology and the tooltip read: label + full title */
+  full: string;
+};
+
+/**
+ * Folds repeats so a reply's list never shows the same line twice. Two actions fold only when
+ * nothing distinguishes them for the owner: same kind, title and destination, and neither carries
+ * its own Undo (each undoable write keeps its own row). Order of first appearance is kept.
+ */
+export function actionRows(actions: readonly ChatAction[]): ActionRow[] {
+  const rows: ActionRow[] = [];
+  const byKey = new Map<string, ActionRow>();
+  for (const a of actions) {
+    const foldable = a.kind !== "delegated" && !a.undoOpId;
+    const key = foldable ? JSON.stringify([a.kind, a.title, a.href, focusTarget(a)]) : a.id;
+    const row = byKey.get(key);
+    if (row) row.count++;
+    else {
+      const next: ActionRow = { action: a, count: 1, label: "", full: "" };
+      byKey.set(key, next);
+      rows.push(next);
+    }
+  }
+  for (const row of rows) {
+    row.label = row.count > 1 ? sentence(PLAIN[row.action.kind].many(row.count)) : plainActionLabel(row.action);
+    row.full = row.action.title ? `${row.label} · ${row.action.title}` : row.label;
+  }
+  return rows;
+}
+
+/**
+ * One plain line for everything a reply did: "Created 1 item, started 2 runs, handed off to 2 agents".
+ * Kinds are counted together in order of first appearance; past `max` kinds the rest is "+N more".
+ * Empty when there are no actions.
+ */
+export function summarizeActions(actions: readonly ChatAction[], max = 3): string {
+  const counts = new Map<ActionKind, number>();
+  for (const a of actions) counts.set(a.kind, (counts.get(a.kind) ?? 0) + weight(a));
+  const kinds = [...counts.keys()];
+  const shown = kinds.slice(0, max).map((k) => PLAIN[k].many(counts.get(k)!));
+  const rest = kinds.slice(max).reduce((n, k) => n + counts.get(k)!, 0);
+  return sentence([...shown, ...(rest ? [`+${rest} more`] : [])].join(", "));
+}
+
 /** Every action in a conversation, newest first (for a conversation-level Actions list). */
 export function conversationActions(timeline: readonly TimelineItem[]): ChatAction[] {
   return actionsByReply(timeline)

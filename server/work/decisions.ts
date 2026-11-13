@@ -10,6 +10,26 @@ import { areaIndex, type MapExport, type MapExportNode, areaRollups, bucketOf } 
 import { listItems } from "./store";
 import { coordinatorSessions } from "./coordinator";
 import { listDecisionRows } from "./decision-store";
+import { runRef } from "@/lib/cw-runs";
+
+/** R-n of each given agent run (owner-scoped): what a decision row shows as "blocks R-n". Runs without a number are left out. */
+export function runRefsById(userId: string, runIds: (string | null | undefined)[]): Map<string, string> {
+  const ids = [...new Set(runIds.filter((id): id is string => !!id))];
+  const out = new Map<string, string>();
+  const db = getDb();
+  for (let i = 0; i < ids.length; i += 500) {
+    const rows = db
+      .select({ id: schema.agentRuns.id, seq: schema.agentRuns.seq })
+      .from(schema.agentRuns)
+      .where(and(eq(schema.agentRuns.userId, userId), inArray(schema.agentRuns.id, ids.slice(i, i + 500))))
+      .all();
+    for (const r of rows) {
+      const ref = runRef(r.seq);
+      if (ref) out.set(r.id, ref);
+    }
+  }
+  return out;
+}
 
 function approvalText(raw: string | null): string {
   if (!raw) return "A running task is waiting for your approval.";
@@ -46,6 +66,10 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
     const itemIds = [...new Set(rows.map((d) => d.itemId))];
     const links = linksByItem(itemIds);
     const coord = coordinatorSessions(items);
+    const runRefs = runRefsById(
+      user.id,
+      rows.map((d) => d.runId),
+    );
     for (const d of rows) {
       const i = live.get(d.itemId)!;
       const head = i.decision?.ref === d.ref;
@@ -73,6 +97,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         defaultChoice: d.defaultChoice,
         expiresAt: d.expiresAt,
         runId: d.runId,
+        ...(d.runId && runRefs.has(d.runId) ? { runRef: runRefs.get(d.runId) } : {}),
       });
     }
   }
@@ -137,6 +162,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         title: schema.agentRuns.title,
         profile: schema.agentRuns.profile,
         updatedAt: schema.agentRuns.updatedAt,
+        seq: schema.agentRuns.seq,
       })
       .from(schema.agentRuns)
       .where(and(eq(schema.agentRuns.userId, user.id), eq(schema.agentRuns.state, "running"), lt(schema.agentRuns.updatedAt, cutoff)))
@@ -159,6 +185,7 @@ export function listDecisions(user: CurrentUser, items: WorkItem[] = can(user, "
         at: r.updatedAt,
         itemId: item.id,
         areaTitle: live.get(areaOf!.get(item.id) ?? "")?.title,
+        ...(runRef(r.seq) ? { runRef: runRef(r.seq) } : {}),
       });
     }
   }

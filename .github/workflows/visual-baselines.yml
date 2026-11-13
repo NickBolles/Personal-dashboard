@@ -1,52 +1,137 @@
 name: Update visual baselines
 
-# Regenerates Playwright screenshot baselines inside the pinned container and
-# commits them to the branch it runs on. Run manually after intentional UI changes.
+# Regenerates Playwright screenshot baselines inside the pinned container and commits them to the branch it runs on.
+# Run manually after intentional UI changes. Sharded like CI (one build, N runners × E2E_WORKERS isolated servers);
+# each shard uploads only the PNGs it changed or added, and one job commits them all in a single commit.
 on:
   workflow_dispatch:
+    inputs:
+      update:
+        description: "changed = re-record only shots that differ beyond the tolerance (and new ones); all = re-record every shot"
+        type: choice
+        options: [changed, all]
+        default: changed
   push:
     paths: ["e2e/visual.spec.ts", ".github/workflows/visual-baselines.yml"]
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: visual-baselines-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  E2E_WORKERS: 3
 
 jobs:
-  update:
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.56.1-noble
-    env:
-      HOME: /root
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
     steps:
-      - name: Ensure git (checkout needs it to allow committing)
-        run: command -v git || (apt-get update && apt-get install -y --no-install-recommends git)
       - uses: actions/checkout@v4
       - name: Skip if baselines already exist (push trigger bootstraps only)
         id: check
         run: |
           if [ "${{ github.event_name }}" = "push" ] && [ -d e2e/__screenshots__/ci ]; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.check.outputs.skip != 'true'
-        uses: actions/setup-node@v4
+
+  build:
+    name: Build (Next standalone)
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - if: steps.check.outputs.skip != 'true'
-        name: Build tools for native modules (better-sqlite3)
-        run: apt-get update && apt-get install -y --no-install-recommends build-essential python3
-      - if: steps.check.outputs.skip != 'true'
-        run: npm ci
-      - if: steps.check.outputs.skip != 'true'
-        run: npm run build
-      - if: steps.check.outputs.skip != 'true'
-        run: npx playwright test e2e/visual.spec.ts e2e/onboarding.setup.ts --update-snapshots=all
+      # Install scripts are skipped so better-sqlite3's bundled Linux binary is used as it is (see ci.yml).
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Pack the standalone server
+        run: |
+          node scripts/prepare-standalone.mjs
+          cp .next/BUILD_ID .next/standalone/.prepared
+          tar -cf next-build.tar .next/BUILD_ID .next/standalone
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baselines-next-build
+          path: next-build.tar
+          retention-days: 1
+          compression-level: 1
+
+  update:
+    name: Baselines shard ${{ matrix.shard }}/3
+    needs: build
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
+    env:
+      HOME: /root
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - name: Ensure git (the changed-file list needs it)
+        run: command -v git || (apt-get update && apt-get install -y --no-install-recommends git)
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check the bundled SQLite binary loads
+        run: |
+          node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get(); console.log('better-sqlite3 bundled binary loads')"
+      - uses: actions/download-artifact@v4
+        with:
+          name: baselines-next-build
+      - run: tar -xf next-build.tar && rm next-build.tar
+      - name: Record baselines (shard ${{ matrix.shard }}/3)
         env:
           VISUAL_BASELINE_SET: ci
-      - name: Commit baselines
-        if: steps.check.outputs.skip != 'true'
+          UPDATE: ${{ inputs.update || 'all' }}
+        run: npx playwright test e2e/visual.spec.ts --shard "${{ matrix.shard }}/3" --workers "$E2E_WORKERS" --update-snapshots="$UPDATE"
+      - name: Collect changed and new PNGs
+        shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p "$GITHUB_WORKSPACE/baselines-out"
+          { git diff --name-only -- e2e/__screenshots__/ci; git ls-files --others --exclude-standard -- e2e/__screenshots__/ci; } | sort -u > changed.txt
+          echo "$(wc -l < changed.txt) PNGs changed in this shard"
+          if [ -s changed.txt ]; then tar -cf "$GITHUB_WORKSPACE/baselines-out/shard.tar" -T changed.txt; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baselines-${{ matrix.shard }}
+          path: baselines-out
+          if-no-files-found: ignore
+          retention-days: 1
+
+  commit:
+    name: Commit baselines
+    needs: update
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: baselines-[0-9]*
+          path: baselines-in
+      - name: Commit only the PNGs the shards changed
+        run: |
+          shopt -s nullglob
+          for t in baselines-in/*/shard.tar; do tar -xf "$t"; done
+          rm -rf baselines-in
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add e2e/__screenshots__/ci
+          git diff --cached --stat | tail -n 3
           git diff --cached --quiet || git commit -m "test: update visual baselines"
           git push

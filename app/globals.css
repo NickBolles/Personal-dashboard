@@ -24,6 +24,8 @@
   --d1: 120ms;
   --d2: 160ms;
   --d3: 200ms;
+  /* Anchored menus (cards, tray): wide enough for "Review D-12 · <question>" in two lines, rem so it grows with text. */
+  --k-menu-w: 18rem;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --ease-pop: cubic-bezier(0.3, 1.6, 0.5, 1);
   /* Orb: pine → sea → periwinkle (Tide). Gradient lives ONLY on the orb, agent glyph and agent progress. */
@@ -1646,6 +1648,46 @@ button:active > .dock-orb {
   .k-btn-icon.k-btn-sm {
     width: 36px;
   }
+  /* Bottom-sheet grab bar (SheetHandle + useSheetDrag): the whole strip is the target, the pill is only the mark. */
+  .k-sheet-handle {
+    display: flex;
+    width: 100%;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: grab;
+    border-radius: 16px 16px 0 0;
+  }
+  .k-sheet-handle > span {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line-strong);
+    transition:
+      background-color var(--d1) var(--ease),
+      width var(--d1) var(--ease);
+  }
+  .k-sheet-handle:hover > span,
+  .k-sheet-handle:focus-visible > span {
+    width: 52px;
+    background: var(--muted);
+  }
+  .k-sheet-handle:focus-visible {
+    outline-offset: -3px;
+  }
+  /* The draggable strip: the browser must not turn the drag into a scroll or pull-to-refresh. */
+  [data-sheet-drag] {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  [data-dragging] .k-sheet-handle {
+    cursor: grabbing;
+  }
   .k-btn-glyph {
     display: inline-flex;
   }
@@ -1716,6 +1758,41 @@ button:active > .dock-orb {
   }
   .k-menu-danger {
     color: var(--bad);
+  }
+  /* Anchored menu (components/ui/AnchoredMenu.tsx): top layer when the browser has popovers, else fixed. The
+     width is a token (rem-based, never wider than the viewport) and labels wrap, so 200% text never truncates. */
+  .k-amenu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    overflow: visible;
+    z-index: 60;
+    width: var(--k-menu-w);
+    max-width: calc(100vw - 16px);
+    animation: k-amenu-in var(--d2, 160ms) var(--ease) both;
+  }
+  .k-amenu > .k-menu {
+    min-width: 0;
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+  }
+  .k-amenu .k-menu-i {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding-block: 6px;
+  }
+  .k-amenu .k-menu-h {
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  @keyframes k-amenu-in {
+    from {
+      opacity: 0;
+    }
   }
   .k-pill {
     display: inline-flex;
@@ -2351,6 +2428,250 @@ button:active > .dock-orb {
     color: var(--ac);
     font: 600 14px var(--sans);
     cursor: pointer;
+  }
+  /* ThingRow: the one two-line row for a decision, a piece of work or an item (components/ui/ThingRow.tsx).
+     Line one: what it is. Line two: its state. Icon actions on the right. It can open in place. */
+  .k-thing {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-top: 1px solid var(--bd);
+  }
+  .k-thing-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 56px;
+    padding: 6px 6px 6px 12px;
+  }
+  .k-thing[data-tight] .k-thing-row {
+    min-height: 44px;
+    padding-block: 2px;
+  }
+  .k-thing-hit {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    align-self: stretch;
+    border: 0;
+    border-radius: var(--r2);
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+  }
+  button.k-thing-hit,
+  a.k-thing-hit {
+    cursor: pointer;
+  }
+  .k-thing-t {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    color: var(--t1);
+    font: 500 14px/20px var(--sans);
+  }
+  .k-thing-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .k-thing-s,
+  .k-thing-inline {
+    overflow: hidden;
+    color: var(--t2);
+    font: 400 12px/18px var(--sans);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .k-thing-s {
+    display: block;
+  }
+  /* One-line rows: the title keeps its room, the note beside it gives way first. */
+  .k-thing-inline {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .k-thing[data-tight] .k-thing-title {
+    flex: 0 1 auto;
+  }
+  .k-thing[data-state="done"] .k-thing-t,
+  .k-thing[data-state="stopped"] .k-thing-t {
+    color: var(--t2);
+    font-weight: 400;
+  }
+  .k-thing-acts {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+  }
+  .k-thing-act {
+    color: var(--t2);
+  }
+  .k-thing-act-danger {
+    color: var(--bad);
+  }
+  .k-thing-open {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0 8px 10px 30px;
+    border-radius: var(--r3);
+    background: var(--s2);
+    padding: 10px 12px;
+    min-width: 0;
+  }
+  /* Stacked form (ThingRow with `status`): reference and state on top, the title under it (a link to the thing),
+     a one-line peek under that. Icon actions and the details toggle sit on the right. */
+  .k-thing-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .k-thing-eyebrow {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    color: var(--t2);
+    font: 400 12px/18px var(--sans);
+    white-space: nowrap;
+  }
+  .k-thing-eyebrow > .k-sd {
+    margin-inline: 1px;
+  }
+  .k-thing[data-stacked] .k-thing-row {
+    min-height: 0;
+    padding-block: 8px;
+  }
+  .k-thing[data-stacked] .k-thing-title {
+    display: block;
+    border: 0;
+    border-radius: var(--r1);
+    background: none;
+    padding: 0;
+    color: var(--t1);
+    font: 500 14px/20px var(--sans);
+    text-align: left;
+    text-decoration: none;
+  }
+  a.k-thing-title,
+  button.k-thing-title {
+    cursor: pointer;
+  }
+  a.k-thing-title:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .k-thing[data-stacked]:is([data-state="done"], [data-state="stopped"]) .k-thing-title {
+    color: var(--t2);
+    font-weight: 400;
+  }
+  .k-thing[data-stacked] .k-thing-open {
+    margin-inline: 12px 8px;
+  }
+  .k-thing-chev {
+    transition: transform var(--d1) var(--ease);
+  }
+  [aria-expanded="true"] .k-thing-chev {
+    transform: rotate(180deg);
+  }
+  /* State mark: filled = yours to act on, ring = went silent, pulse = working, tick = done. */
+  .k-sd {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    width: 8px;
+    height: 8px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--t3);
+  }
+  .k-sd[data-state="needs"] {
+    background: var(--wn);
+  }
+  .k-sd[data-state="failed"] {
+    background: var(--bad);
+  }
+  .k-sd[data-state="stalled"] {
+    box-shadow: inset 0 0 0 2px var(--wn);
+  }
+  .k-sd[data-state="idle"],
+  .k-sd[data-state="stopped"] {
+    box-shadow: inset 0 0 0 2px var(--t3);
+  }
+  .k-sd[data-state="working"] {
+    background: var(--ai);
+  }
+  .k-sd[data-state="working"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: k-ping 2.4s var(--ease) infinite;
+  }
+  .k-sd[data-state="done"] {
+    width: 12px;
+    height: 12px;
+    margin-inline: -2px;
+  }
+  .k-sw {
+    font-weight: 600;
+  }
+  .k-sw[data-state="needs"],
+  .k-sw[data-state="stalled"] {
+    color: var(--wn);
+  }
+  .k-sw[data-state="working"] {
+    color: var(--ai);
+  }
+  .k-sw[data-state="failed"] {
+    color: var(--bad);
+  }
+  .k-sw[data-state="done"],
+  .k-sw[data-state="stopped"] {
+    color: var(--t2);
+  }
+  /* D-n (amber) and R-n (teal): the label on a thing's own row, or the chip that jumps to it. */
+  .k-ref {
+    flex: none;
+    border: 0;
+    border-radius: var(--r1);
+    padding: 1px 5px;
+    font: 500 11px/16px var(--mono);
+    white-space: nowrap;
+  }
+  .k-ref[data-kind="d"] {
+    background: var(--wns);
+    color: var(--wn);
+  }
+  .k-ref[data-kind="r"] {
+    background: var(--ais);
+    color: var(--ai);
+  }
+  button.k-ref {
+    position: relative;
+    padding: 4px 6px;
+    cursor: pointer;
+  }
+  /* A jump chip is small on purpose; its tap area is not. */
+  button.k-ref::after {
+    content: "";
+    position: absolute;
+    inset: -12px -8px;
   }
   .k-row {
     display: flex;

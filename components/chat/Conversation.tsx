@@ -11,9 +11,9 @@ import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
 import { isTerminal, maskedNotice, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { formatTime } from "@/components/actions/format";
-import { ErrorNote, cx, useOnline, useToast } from "@/components/ui";
+import { ErrorNote, IconButton, cx, useOnline, useToast } from "@/components/ui";
 import { Badge, Button, OverflowMenu, Spinner, type Tone } from "@/components/ui/legacy";
-import { BrainIcon, ChevronIcon, ForkIcon, PlusIcon, SendIcon, StopIcon } from "@/components/icons";
+import { BrainIcon, ChevronIcon, ForkIcon, PanelIcon, PlusIcon, StopIcon } from "@/components/icons";
 import { ToolStep } from "./ToolStep";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
@@ -33,7 +33,7 @@ import { ChatTray } from "./things/ChatTray";
 import { ChatLinkProvider } from "./things/ChatLinkProvider";
 import { useChatThings } from "./things/useChatThings";
 import { useChatPanelLayout } from "./things/useChatPanelLayout";
-import type { ThingsTab } from "@/lib/chat/things";
+import type { ChatThings, ThingsTab } from "@/lib/chat/things";
 import "./things/things.css";
 import {
   AttachButton,
@@ -63,6 +63,7 @@ import { CompactionDivider, NoticeCard } from "./Notice";
 import { parseNotice } from "@/lib/chat-notices";
 import { RateMessage } from "@/components/feedback/RateMessage";
 import { actionsByReply } from "@/lib/chat/actions";
+import { answererName, parseUserMessage, sameLabel } from "@/lib/chat/display";
 import { ActionsTaken, OPEN_CHAT_RUNNING } from "./ActionsTaken";
 
 /** GET /api/hermes/sessions/:id/area */
@@ -154,6 +155,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     () => new Map(actionsByReply(detail?.timeline ?? NO_TIMELINE).map((group) => [group.replyId, group.actions])),
     [detail?.timeline],
   );
+  /** This chat handed work off or started a run: only then is a failed background-work check worth a line in the tray. */
+  const startedBackground = useMemo(
+    () => [...replyActions.values()].some((actions) => actions.some((a) => a.kind === "delegated" || a.kind === "run_started")),
+    [replyActions],
+  );
   const [pendingInput, setPendingInput] = useState<string>();
   /** A first message that failed to send goes back into the mounted composer. */
   const [restore, setRestore] = useState<{ text: string; key: string; at: number }>();
@@ -190,6 +196,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
       setLastOutcome(s.phase);
       refreshSessionLists(qc);
       qc.invalidateQueries({ queryKey: ["home"] });
+      // The tray must not keep saying "Running" under a header that says "Done": re-check background work now.
+      qc.invalidateQueries({ queryKey: ["chat-execution", sessionId] });
       // Once the durable transcript includes this turn, drop the live copy (keeps failure notices).
       qc.refetchQueries({ queryKey: ["session", sessionId] }).then(() => {
         setPendingInput(undefined);
@@ -271,9 +279,20 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const workflowChips = (wfRun?.panel.find((e) => e.type === "QuickAddChips")?.props.chips ?? []) as { label: string; field: string }[];
   const chatThings = useChatThings(sessionId, {
     links: panel.links,
-    pending: { approval: !!run.state.approval, clarify: !!run.state.clarify && run.active },
+    pending: {
+      approval: !!run.state.approval,
+      clarify: !!run.state.clarify && run.active,
+      // The tray names what is being asked (the request’s own words), and the run’s own record is not listed beside it.
+      detail: run.state.approval
+        ? run.state.approval.description || run.state.approval.command
+        : run.state.clarify && run.active
+          ? run.state.clarify.question
+          : undefined,
+      runId: run.state.runId,
+    },
     parentRunning: run.active,
     parentFailed: run.state.phase === "failed" || run.state.phase === "interrupted",
+    expectsBackground: startedBackground || Boolean(detail?.session.subagentCount),
     filesCount: filesQ.data ? filesQ.data.filter((f) => f.sentAt).length : null,
     contextPercent: null,
     workflow:
@@ -470,7 +489,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   // --- scrolling: follow the latest output until the person scrolls up (useFollowScroll) ---
   const bottomRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
-  const { detached, jumpToLatest } = useFollowScroll(threadRef, bottomRef, Boolean(detail));
+  const { below, jumpToLatest } = useFollowScroll(threadRef, bottomRef, Boolean(detail));
   // Keyboard open (phones): the bottom bar hides and the composer sits right above the keyboard; jump to the latest message.
   const toLatest = useCallback(() => {
     setTimeout(() => jumpToLatest(), 60);
@@ -520,6 +539,16 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
   const readOnly = Boolean(session!.readOnly);
+  /** Who answers here: "@profile", "Claude" or the assistant. The empty state and the composer name the same one. */
+  const answerer = answererName({ agentProfile: areaCtx?.agent?.profile ?? session!.agentProfile, assistant: who });
+  const trayLine: ChatThings["line"] | undefined = chatThings.things.line;
+  const jump = below ? (
+    <div className="chat-jump">
+      <Button size="sm" onClick={() => jumpToLatest(true)}>
+        Jump to latest
+      </Button>
+    </div>
+  ) : null;
   // Time dividers: shown before the first message and after gaps over 5 minutes (per-message times are on tap).
   const dividerIds = timeDividerIds(detail.timeline);
   const fork = { label: "Fork latest state", onSelect: () => (setForkFrom(undefined), setDialog("fork")), disabled: !online };
@@ -625,11 +654,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                 <div className="chat-things-layout">
                   <div className="chat-page relative mx-auto flex w-full max-w-[880px] min-w-0 flex-1 flex-col" data-testid="conversation-drop" {...drop.props}>
                     <DropOverlay show={drop.over} />
-                    <header className="sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
+                    <header className="chat-head sticky top-0 z-20 border-b border-line bg-bg/95 px-3 py-1.5 backdrop-blur sm:px-6 sm:py-2.5">
                       <div className="flex items-center gap-1.5 sm:items-start sm:gap-2">
                         <Link
                           href="/chat"
-                          className="tap -ml-2 inline-flex items-center justify-center rounded-xl text-muted lg:hidden"
+                          className="chat-head-btn -ml-2 inline-flex items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text lg:hidden"
                           aria-label="Back to conversations"
                         >
                           <ChevronIcon className="h-5 w-5 rotate-180" />
@@ -639,10 +668,12 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                             {session!.title}
                           </h1>
                           <ParentChatLink parent={chatThings.execution?.parent} />
-                          {/* One line of context chips: phones scroll it sideways instead of stacking three rows. */}
+                          {/* One quiet line of context: status, where the chat is filed, one filing suggestion. Phones keep
+                              it to one line that scrolls sideways (a wrapped header at large text leaves no room between
+                              it and the composer); wider screens wrap when it has more to say (forks, links). */}
                           <div
                             data-scroll-x
-                            className="chat-head-chips scroll-x-clean mt-0.5 flex items-center gap-1.5 text-xs whitespace-nowrap text-muted sm:flex-wrap"
+                            className="chat-head-chips scroll-x-clean mt-0.5 flex min-w-0 items-center gap-x-2 gap-y-0.5 text-xs whitespace-nowrap text-muted sm:flex-wrap sm:whitespace-normal"
                           >
                             {/* Opaque surface under the translucent tone: the desktop header is surface-2, where ok/warn tints drop below 4.5:1. */}
                             {phase ? (
@@ -678,11 +709,11 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                               </span>
                             ) : null}
                             {areaCtx ? (
-                              <span className="inline-flex shrink-0 items-center gap-1" data-testid="area-chip">
+                              <span className="contents" data-testid="area-chip">
                                 {/* C1: the area path reads as a breadcrumb (tap to file elsewhere), not another chip. */}
                                 <button
                                   type="button"
-                                  className="inline-flex max-w-[32ch] min-w-0 cursor-pointer items-center gap-0.5 rounded-[6px] px-1 text-muted hover:bg-surface-2 hover:text-text"
+                                  className="chat-head-area"
                                   title={areaCtx.placement?.path ?? "Not in Areas yet"}
                                   onClick={() => setDialog("file")}
                                   aria-label={`In ${areaCtx.placement?.path || "no area"}. File elsewhere`}
@@ -690,16 +721,19 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                                   <span className="truncate">{areaCtx.placement?.path || "Not in Areas"}</span>
                                   <ChevronIcon className="h-3 w-3 shrink-0 rotate-90" />
                                 </button>
-                                {areaCtx.suggestions.slice(0, 2).map((sg) => (
+                                {/* Filing suggestions are quiet text links: two at most, one while a run is live. Phones show
+                                    one, and none while a run needs the line for its status. The ▾ dialog and the ⋯ menu
+                                    always offer every destination. */}
+                                {areaCtx.suggestions.slice(0, liveActive ? 1 : 2).map((sg, i) => (
                                   <button
                                     key={sg.id}
                                     type="button"
-                                    className="chip cursor-pointer"
-                                    data-tone="accent"
+                                    className="chat-head-suggest"
+                                    data-hide={i > 0 || liveActive ? "phone" : undefined}
                                     title={`${sg.path} — shares: ${sg.matched.join(", ")}`}
                                     onClick={() => fileTo(sg.id, sg.title)}
                                   >
-                                    File under {sg.title}
+                                    <span className="truncate">File under {sg.title}</span>
                                   </button>
                                 ))}
                                 {/* Properties lives in the header ⋯ menu. */}
@@ -743,31 +777,48 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                             {fromCache ? <span className="text-warn">Saved copy</span> : null}
                           </div>
                         </div>
-                        <OverflowMenu label="Conversation actions" items={menu} />
+                        {/* The chat panel (links, files, background work) opens from here, so an idle chat needs no tray. */}
+                        {surface.wide && surface.open ? null : (
+                          <span className="relative inline-flex shrink-0">
+                            <IconButton
+                              label="Open chat panel"
+                              icon={<PanelIcon className="h-5 w-5" />}
+                              className="chat-head-btn border-transparent bg-transparent"
+                              onClick={() => openPanel(trayLine && trayLine.state !== "quiet" ? trayLine.tab : surface.tab)}
+                            />
+                            {trayLine?.dot ? (
+                              <span aria-hidden="true" className="chat-attention-dot absolute top-1.5 right-1.5" data-dot={trayLine.dot} />
+                            ) : null}
+                          </span>
+                        )}
+                        <OverflowMenu
+                          label="Conversation actions"
+                          items={menu}
+                          triggerClassName="chat-head-btn inline-flex items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
+                        />
                       </div>
                     </header>
 
                     <div ref={threadRef} className="chat-tl flex-1 space-y-3 px-3 py-3 sm:px-6 sm:py-4" aria-label="Conversation timeline">
                       {detail.timeline.length === 0 && !showLive && !pendingInput ? (
                         <div className="mx-auto max-w-md py-10 text-center" data-testid="chat-empty">
-                          <p className="text-[0.9375rem] font-semibold">
-                            Message {areaCtx?.agent?.profile ? `@${areaCtx.agent.profile}` : session?.agentProfile ? `@${session.agentProfile}` : "Jarvis"}
-                          </p>
+                          <p className="text-[0.9375rem] font-semibold">Message {answerer}</p>
                           <p className="mt-1 text-sm text-muted">Ask anything, or pull in context while you type:</p>
-                          <ul className="mt-3 inline-flex flex-wrap justify-center gap-1.5 text-xs text-muted">
-                            <li className="chip">
+                          {/* Hints, not controls: plain text with the key to type, so nothing here looks tappable. */}
+                          <ul className="mt-3 inline-flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-muted">
+                            <li className="inline-flex items-center gap-1.5">
                               <kbd className="kbd">@</kbd> people, devices, work
                             </li>
-                            <li className="chip">
+                            <li className="inline-flex items-center gap-1.5">
                               <kbd className="kbd">#</kbd> PRs and issues
                             </li>
-                            <li className="chip">
+                            <li className="inline-flex items-center gap-1.5">
                               <kbd className="kbd">/</kbd> commands
                             </li>
                           </ul>
                         </div>
                       ) : null}
-                      <ol className="space-y-2.5">
+                      <ol className="chat-turns">
                         {groupTimeline(detail.timeline).map((g) => {
                           const row = (item: TimelineItem, stepSec?: number) => (
                             <TimelineRow
@@ -786,7 +837,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                             return dividerIds.has(g.id) ? [<TimeDivider key={`t-${g.id}`} at={g.at!} />, row(g)] : row(g);
                           }
                           return (
-                            <li key={`work-${g.tools[0].id}`}>
+                            <li key={`work-${g.tools[0].id}`} data-row="work">
                               <WorkSummary
                                 id={g.tools[0].id}
                                 steps={g.tools}
@@ -799,10 +850,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                           );
                         })}
                         {showPendingUser ? (
-                          <li className="flex justify-end">
-                            <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2">
-                              <p className="[overflow-wrap:anywhere] whitespace-pre-wrap">{unwrapBrokenLines(pendingInput)}</p>
-                            </div>
+                          <li className="flex flex-col items-end" data-turn="start">
+                            <SentMessage text={pendingInput} testId="msg-pending" />
                           </li>
                         ) : null}
                       </ol>
@@ -811,17 +860,10 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                       <div ref={bottomRef} />
                     </div>
 
-                    {detached ? (
-                      <div className="pointer-events-none sticky bottom-[132px] z-10 flex justify-center sm:bottom-[76px]">
-                        <Button size="sm" className="pointer-events-auto shadow" onClick={() => jumpToLatest(true)}>
-                          Jump to latest
-                        </Button>
-                      </div>
-                    ) : null}
-
                     {readOnly ? (
-                      <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg/95 px-4 py-3 text-sm text-muted sm:px-6">
-                        <ChatTray things={chatThings.things} onOpen={openPanel} />
+                      <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg px-4 py-3 text-sm text-muted sm:bg-bg/95 sm:px-6">
+                        {jump}
+                        <ChatTray things={chatThings.things} onOpen={openPanel} onRetry={chatThings.retry} />
                         This conversation was shared with you.{" "}
                         <button type="button" className="font-medium text-accent underline" onClick={() => (setForkFrom(undefined), setDialog("fork"))}>
                           Fork it
@@ -830,10 +872,13 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
                       </div>
                     ) : (
                       <Composer
+                        jump={jump}
+                        answerer={answerer}
                         tray={
                           <ChatTray
                             things={chatThings.things}
                             onOpen={openPanel}
+                            onRetry={chatThings.retry}
                             compact={phase === "waiting_for_approval" || !!run.state.clarify}
                             accessory={
                               wfRun?.status === "live" ? (
@@ -1083,29 +1128,17 @@ function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; o
     );
   if (notice?.kind === "steer" && item.kind === "user") {
     return (
-      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined}>
-        <span className="mb-0.5 text-[11px] text-muted">Sent while it was working</span>
-        <div className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2" data-testid="msg-bubble" data-who="user" onClick={onClick}>
-          <span className="sr-only">You said mid-run: </span>
-          <UserText text={notice.text} />
-        </div>
+      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined} data-turn="start">
+        <SentMessage text={notice.text} caption="Sent while it was working" srPrefix="You said mid-run: " onClick={onClick} />
         <MessageMeta time={time} onFork={onFork} who="your message" text={notice.text} />
       </li>
     );
   }
   if (item.kind === "user") {
     return (
-      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined}>
-        <div
-          className="max-w-[85%] rounded-[10px] rounded-br-[2px] bg-s3 px-3 py-1.5 sm:py-2"
-          data-testid="msg-bubble"
-          data-who="user"
-          onClick={onClick}
-          onContextMenu={() => setMeta(true)}
-        >
-          <span className="sr-only">You said: </span>
-          <UserText text={item.text} />
-        </div>
+      <li className="chat-msg group flex flex-col items-end" data-meta={meta || undefined} data-turn="start">
+        <SentMessage text={item.text} onClick={onClick} onContextMenu={() => setMeta(true)} />
+        {/* Copy / fork keep working on the message exactly as it was sent. */}
         <MessageMeta time={time} onFork={onFork} who="your message" text={item.text} />
       </li>
     );
@@ -1141,14 +1174,78 @@ function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; o
   );
 }
 
+const USER_BUBBLE = "max-w-[85%] rounded-[10px] rounded-br-[2px] px-3 py-1.5 sm:py-2";
+
 /**
- * A sent message: reference tokens render as chips; the context Jarvis
+ * A message the person sent, shown as they meant it (lib/chat/display `parseUserMessage`; the stored text is untouched):
+ * the "[Viewing: Today — /home]" page context becomes a quiet caption above the bubble, and a one-tap decision
+ * answer becomes a compact receipt (answer first, the question behind a disclosure) instead of a typed paragraph.
+ */
+function SentMessage({
+  text,
+  caption,
+  srPrefix = "You said: ",
+  testId = "msg-bubble",
+  onClick,
+  onContextMenu,
+}: {
+  text: string;
+  /** the just-sent copy shown until the transcript has the message is not a transcript bubble */
+  testId?: string;
+  /** e.g. "Sent while it was working" */
+  caption?: string;
+  srPrefix?: string;
+  onClick?: (e: React.MouseEvent) => void;
+  onContextMenu?: () => void;
+}) {
+  const at = text.indexOf(CONTEXT_MARK);
+  const parts = parseUserMessage(at >= 0 ? text.slice(0, at) : text);
+  const ctx = at >= 0 ? text.slice(at + CONTEXT_MARK.length).trim() : "";
+  const d = parts.decision;
+  return (
+    <>
+      {caption ? <span className="chat-msg-caption">{caption}</span> : null}
+      {parts.context ? (
+        <span className="chat-msg-caption" data-testid="msg-context" title={parts.context.path}>
+          <span className="sr-only">Sent while </span>
+          <span className="truncate">Viewing: {parts.context.label}</span>
+        </span>
+      ) : null}
+      <div
+        className={cx(USER_BUBBLE, d ? "chat-receipt" : "bg-s3")}
+        data-testid={testId}
+        data-who="user"
+        data-receipt={d ? "decision" : undefined}
+        onClick={onClick}
+        onContextMenu={onContextMenu}
+      >
+        {d ? (
+          <>
+            <p className="text-xs break-words text-muted">You decided · {d.title}</p>
+            <p className="font-medium break-words select-text">{d.answer}</p>
+            {sameLabel(d.title, d.question) ? null : (
+              <details className="text-xs text-muted">
+                <summary>Question</summary>
+                <p className="pb-1 break-words whitespace-pre-wrap select-text">{d.question}</p>
+              </details>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="sr-only">{srPrefix}</span>
+            <UserText body={parts.text} ctx={ctx} />
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The typed part of a sent message: reference tokens render as chips; the context Jarvis
  * attached (snapshots of references and sources) folds into a disclosure.
  */
-function UserText({ text }: { text: string }) {
-  const at = text.indexOf(CONTEXT_MARK);
-  const body = at >= 0 ? text.slice(0, at) : text;
-  const ctx = at >= 0 ? text.slice(at + CONTEXT_MARK.length).trim() : "";
+function UserText({ body, ctx }: { body: string; ctx: string }) {
   const fileIds = parseFileMarkers(ctx);
   const chatFiles = useContext(ChatFiles);
   return (
@@ -1258,6 +1355,7 @@ function LiveRun({
           id={`live-${state.runId ?? "run"}`}
           steps={state.activity}
           live={!isTerminal(state.phase)}
+          waiting={state.phase === "waiting_for_approval" ? "approval" : state.clarify ? "answer" : undefined}
           seconds={liveSeconds(state.activity)}
           defaultOpen={!text && !isTerminal(state.phase)}
           alwaysShown={state.activity
@@ -1322,8 +1420,13 @@ function LiveRun({
   );
 }
 
+/** The profile was asked for but another one answers (routing off, no route, missing key…): worth saying next to the composer. */
+const agentNeedsNote = (agent: AgentResolution | null | undefined): agent is AgentResolution => !!agent && !agent.routed && !!agent.requested;
+
 function Composer({
   tray,
+  jump,
+  answerer,
   sessionId,
   phase,
   online,
@@ -1344,6 +1447,10 @@ function Composer({
   clarifying,
 }: {
   tray: ReactNode;
+  /** "Jump to latest", anchored to the dock so it always clears the composer */
+  jump?: ReactNode;
+  /** who answers: "@profile", "Claude" or the assistant name */
+  answerer: string;
   sessionId: string;
   restore?: { text: string; key: string; at: number };
   phase?: RunPhase;
@@ -1367,7 +1474,6 @@ function Composer({
   /** who answers (Settings → Agents); shown when an agent is involved */
   agent?: AgentResolution | null;
 }) {
-  const who = useContext(AssistantName);
   const { toast } = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1520,18 +1626,20 @@ function Composer({
   const placeholder = !online
     ? "Offline — drafts are saved, not sent"
     : phase === "waiting_for_approval"
-      ? "Answer the approval first"
+      ? "Approve or deny first"
       : running
         ? "Add guidance…"
-        : `Message ${who}…`;
+        : `Message ${answerer}…`;
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
 
   return (
-    <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg/95 px-2 py-1.5 backdrop-blur sm:px-6 sm:py-2">
+    <div className="chat-dock safe-bottom sticky z-20 border-t border-line bg-bg px-2 py-1.5 sm:bg-bg/95 sm:px-6 sm:py-2 sm:backdrop-blur">
+      {jump}
       <div className="chat-composer-card mx-auto max-w-[760px] rounded-xl border border-line bg-surface">
         {tray}
         <div className="chat-composer-context flex flex-wrap items-center gap-1 px-2" data-compact={compact || undefined}>
-          {agent && (agent.routed || agent.requested) ? <AgentChip agent={agent} /> : null}
+          {/* The header and the placeholder already name a routed agent; the chip appears only when it has news. */}
+          {agentNeedsNote(agent) ? <AgentChip agent={agent} /> : null}
           {context.map((c) => (
             <button key={c.ref} type="button" onClick={() => onRemoveContext(c.ref)} className="chip cursor-pointer" aria-label={`Remove context ${c.label}`}>
               {c.label} ✕
@@ -1580,15 +1688,15 @@ function Composer({
             onCamera={() => cameraInput.current?.click()}
             onLibrary={attachments.add}
           />
-          <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="shrink-0 px-3 max-sm:hidden">
-            +
+          <Button type="button" variant="ghost" onClick={onAttach} aria-label="Attach context" className="chat-add shrink-0 max-sm:hidden">
+            <PlusIcon className="h-5 w-5" />
           </Button>
           {/* While an approval waits nothing can be sent: keep the composer one compact row (pre-attachments layout),
             so on small phones at large text sizes it doesn't cover the approval card's buttons. */}
           {!compact ? <AttachButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={fileInput} /> : null}
           {!compact ? <CameraButton onFiles={attachments.add} disabled={!online} buttonClassName="max-sm:hidden" inputRef={cameraInput} /> : null}
           <label htmlFor="composer" className="sr-only">
-            {running ? "Guidance for the current run" : `Message ${who}`}
+            {running ? "Guidance for the current run" : `Message ${answerer}`}
           </label>
           <textarea
             id="composer"
@@ -1647,11 +1755,11 @@ function Composer({
                 onStop();
               }
             }}
-            className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
+            className={`block max-h-[200px] min-h-11 w-full min-w-0 flex-1 resize-none ${running && !compact ? "max-[400px]:order-first max-[400px]:basis-full" : ""} rounded-[6px] border-0 bg-transparent px-2 py-2.5 text-base placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap focus:outline-none sm:min-h-10 sm:py-2 sm:text-[0.875rem] dense:min-h-8 dense:py-1.5`}
           />
           <button
             type="button"
-            className="chip mb-1.5 shrink-0 cursor-pointer self-end hover:border-line-strong max-sm:hidden"
+            className="chip chat-model shrink-0 cursor-pointer self-end max-sm:hidden"
             onClick={onModel}
             aria-label={`Model: ${modelLabel}. Change`}
             data-testid="model-chip"
@@ -1661,11 +1769,11 @@ function Composer({
           {running ? (
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               onClick={onStop}
               aria-label="Stop the run (Escape)"
               disabled={phase === "stopping"}
-              className="shrink-0 max-[400px]:ml-auto"
+              className="chat-stop shrink-0 max-[400px]:ml-auto"
             >
               <StopIcon className="h-5 w-5" />
             </Button>
@@ -1680,13 +1788,14 @@ function Composer({
             aria-label={running ? "Send guidance" : "Send"}
             title={`${running ? "Send guidance" : "Send"} (${sendHint(mod)})`}
             aria-keyshortcuts={SEND_KEYSHORTCUTS}
-            className={running ? "shrink-0" : "shrink-0 max-[400px]:ml-auto"}
+            className={running ? "chat-send shrink-0" : "chat-send shrink-0 max-[400px]:ml-auto"}
           >
-            {!busy ? <SendIcon className="h-5 w-5" /> : null}
+            {/* Same send control as the Chief of staff sheet: a small accent circle with an up arrow. */}
+            {!busy ? <span aria-hidden="true">↑</span> : null}
           </Button>
         </form>
         {!compact ? (
-          <p className="data-dynamic hidden px-3 pb-2 text-xs text-muted sm:block" data-dynamic>
+          <p className="chat-composer-hint px-3 pb-2 text-xs text-muted" data-dynamic>
             @ context · # PR · / command · {mod === "⌘" ? "⌘" : "Ctrl"}+Enter send
           </p>
         ) : null}
@@ -1780,7 +1889,7 @@ function ComposerAddMenu({
           setByKeyboard(e.detail === 0);
           setOpen((o) => !o);
         }}
-        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-[8px] text-muted hover:bg-surface-2 hover:text-text"
+        className="chat-add inline-flex items-center justify-center rounded-lg text-muted hover:bg-surface-2 hover:text-text"
         data-testid="composer-add"
       >
         <PlusIcon className="h-5 w-5" />

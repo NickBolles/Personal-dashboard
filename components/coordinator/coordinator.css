@@ -23,8 +23,9 @@
   inset: auto 0 0;
   width: 100%;
   max-width: 100%;
-  height: min(82dvh, 760px);
-  max-height: 90dvh;
+  /* Nearly full height: a strip of the page stays visible (and tappable) above it. */
+  height: min(calc(100dvh - 56px), 900px);
+  max-height: calc(100dvh - 40px);
   margin: 0;
   padding: 0 0 env(safe-area-inset-bottom);
   border-radius: 12px 12px 0 0;
@@ -34,19 +35,34 @@
   background: var(--scrim);
 }
 .gc-head {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
+  gap: 2px 8px;
+  min-height: 56px;
+  /* Room for the close button, which stays pinned top-right however the title and chip wrap. */
+  padding: 6px 56px 6px 14px;
 }
 .gc-head h2 {
   min-width: 0;
   /* 8rem basis: on a narrow sheet the agent chip wraps below instead of splitting the title. */
   flex: 1 1 8rem;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.gc-head .gc-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 1.125rem;
+}
+.gc-rail .gc-head .gc-close svg {
+  /* points right: "tuck the rail away" */
+  transform: none;
 }
 .gc-head > .chip {
   max-width: 100%;
@@ -54,11 +70,11 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.gc-icon,
 .gc-tabs button,
-.gc-action button,
-.gc-page button,
-.gc-context button,
+.gc-action .k-btn,
+.gc-change-row .k-btn,
+.gc-context .k-btn,
+.gc-strip-btn,
 .gc-send {
   min-height: 44px;
   min-width: 44px;
@@ -86,7 +102,11 @@
 }
 .gc-rail > .gc-priority,
 .gc-sheet > .gc-priority {
-  padding: 6px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 4px 14px;
   border-bottom: 1px solid var(--line);
 }
 .gc-host [data-tone="bad"] {
@@ -103,32 +123,49 @@
 }
 .gc-tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 2px;
-  padding: 4px 6px;
+  padding: 0 8px;
   border-bottom: 1px solid var(--line);
 }
 .gc-tabs button {
   min-width: 0;
+  flex: 1 1 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
   padding: 0 6px;
+  border-radius: 6px 6px 0 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: inset 0 -2px 0 transparent;
 }
 .gc-tabs button[aria-selected="true"] {
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .gc-badge {
   display: inline-block;
-  padding: 0 4px;
-  border-radius: 6px;
+  min-width: 1.25rem;
+  padding: 0 5px;
+  border-radius: 999px;
   background: var(--surface-2);
-  color: var(--ai);
+  color: var(--muted);
   font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+  text-align: center;
   font-variant-numeric: tabular-nums;
+}
+.gc-badge[data-tone="warn"] {
+  background: var(--wns);
+  color: var(--wn);
+}
+.gc-badge[data-tone="bad"] {
+  background: var(--bads);
+  color: var(--bad);
 }
 .gc-panel-content {
   min-height: 0;
@@ -144,12 +181,75 @@
   flex-direction: column;
   overflow: hidden;
 }
+.gc-away {
+  max-height: 45%;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 0 10px;
+}
+.gc-away:empty {
+  display: none;
+}
 .gc-thread-body {
   flex: 1;
   min-height: 0;
   min-width: 0;
   overflow-y: auto;
-  padding: 8px 10px;
+  padding: 10px 14px;
+}
+/* A turn reads as a unit: your words in a bubble on the right, the reply plain on the left. */
+.gc-thread-body .co-msg {
+  padding: 0;
+  margin-top: 14px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.gc-thread-body .co-msg + .co-msg {
+  border-top: 0;
+}
+.gc-thread-body .co-msg[data-who="assistant"] {
+  margin-top: 8px;
+}
+.co-msg[data-who="user"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.gc-bubble {
+  max-width: 88%;
+  padding: 6px 10px;
+  border-radius: 10px 10px 2px 10px;
+  background: var(--s3);
+  overflow-wrap: anywhere;
+}
+.gc-msg-context {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+.gc-receipt {
+  max-width: 88%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px 10px 2px 10px;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.gc-receipt-head,
+.gc-receipt summary {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+.gc-receipt-answer {
+  font-weight: 600;
+}
+.gc-receipt summary {
+  min-height: 24px;
+  cursor: pointer;
+}
+.gc-receipt details p {
+  color: var(--t2);
+  font-size: 0.75rem;
 }
 .gc-thread-body .md {
   min-width: 0;
@@ -160,8 +260,15 @@
 }
 .gc-composer {
   border-top: 1px solid var(--line);
-  padding: 6px 8px;
+  padding: 6px 10px 8px;
   flex-shrink: 0;
+}
+/* Quick prompts scroll sideways without a scrollbar stealing a row. */
+.gc-composer .qa-scroll {
+  scrollbar-width: none;
+}
+.gc-composer .qa-scroll::-webkit-scrollbar {
+  display: none;
 }
 .gc-compose-row {
   display: flex;
@@ -194,17 +301,45 @@
 }
 .gc-context {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-  padding-left: 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  gap: 2px;
+  margin-bottom: 2px;
   color: var(--muted);
+  font-size: 0.75rem;
 }
-.gc-context > span {
+.gc-context-off {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.gc-context > span,
+.gc-context-off > span {
   min-width: 0;
-  flex: 1;
+  /* 6rem basis: at 200% text the actions wrap under the label instead of squeezing it to nothing. */
+  flex: 1 1 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gc-context .k-btn,
+.gc-context-off .k-btn {
+  color: var(--accent);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.gc-context-none {
+  margin: 0 0 4px;
+}
+/* Keyboard hint only where there is a keyboard. */
+@media (pointer: coarse) {
+  .gc-hint.gc-keys {
+    display: none;
+  }
 }
 .gc-hint {
   display: block;
@@ -213,10 +348,45 @@
   margin: 4px 0 0;
 }
 .gc-empty,
-.gc-page,
-.gc-changes,
 .gc-error {
-  padding: 10px;
+  padding: 10px 14px;
+}
+.gc-changes {
+  padding: 4px 14px 14px;
+}
+.gc-change-groups {
+  display: grid;
+  gap: 8px;
+}
+.gc-change-group {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.gc-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.gc-change-row .gc-hint {
+  display: inline;
+  margin: 0;
+}
+.gc-change-row .k-btn,
+.gc-action .k-btn {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+/* Handles agents use in chat (D-7, R-12): present for reference, never the headline. */
+.gc-ref {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--t3);
+  white-space: nowrap;
 }
 .gc-empty a,
 .gc-action a {
@@ -228,7 +398,7 @@
   color: var(--bad);
 }
 .gc-list {
-  padding: 0 10px;
+  padding: 4px 14px;
 }
 .gc-list > a {
   display: flex;
@@ -276,16 +446,7 @@
 .gc-action-icon {
   color: var(--ai);
 }
-.gc-action button {
-  padding: 0 6px;
-  color: var(--accent);
-  font-size: 0.75rem;
-}
-.gc-page button {
-  padding: 0 8px;
-  border: 1px solid var(--line-strong);
-  margin-top: 8px;
-}
+
 .gc-tray {
   position: fixed;
   right: 8px;
@@ -307,7 +468,7 @@
 .gc-tray-main > span:nth-child(2) {
   min-width: 0;
 }
-/* v3: the tray is a pill holding the main button (line → its target) and the !N / ↻N count buttons. */
+/* The tray is one button: who, then one sentence of status. A tap opens the sheet where that status points. */
 .gc-tray-main {
   display: flex;
   flex: 1 1 auto;
@@ -323,26 +484,54 @@
   text-align: left;
   cursor: pointer;
 }
-.gc-tray-counts .k-btn {
-  min-width: 44px;
-  padding-inline: 6px;
-  font-variant-numeric: tabular-nums;
+.gc-tray-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
 }
-.gc-tray-counts .k-btn[data-tone="warn"] {
-  color: var(--warn);
+.gc-tray-avatar .gc-dot {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  box-shadow: 0 0 0 2px var(--surface);
 }
-.gc-tray-counts .k-btn[data-tone="bad"],
-.gc-badge[data-tone="bad"],
-.gc-strip [data-tone="bad"] {
-  color: var(--bad);
+.gc-tray-copy {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 .gc-tray strong,
-.gc-tray .gc-priority {
+.gc-tray-status {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .gc-tray strong {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.gc-tray-status {
+  color: var(--muted);
   font-size: 0.75rem;
+}
+.gc-tray-status > [data-tone] {
   font-weight: 500;
+}
+.gc-tray-action {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+.gc-tray-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transform: rotate(-90deg);
+}
+.gc-tray[data-state="failed"] {
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
+  background: color-mix(in srgb, var(--bad) 7%, var(--surface));
 }
 .gc-orb {
   display: inline-block;
@@ -368,13 +557,17 @@
   padding: 8px 2px;
   gap: 6px;
 }
-.gc-strip .gc-icon {
+.gc-strip .gc-strip-btn {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  gap: 2px;
   width: 44px;
+  height: auto;
+  padding: 6px 0;
+  color: var(--muted);
 }
 .gc-strip .gc-dot {
   position: absolute;
@@ -454,11 +647,12 @@ html[data-kb="open"] .gc-tray-qa {
   display: none;
 }
 @media (min-width: 640px) {
-  .gc-icon,
   .gc-tabs button,
-  .gc-action button,
-  .gc-page button,
-  .gc-context button,
+  .gc-action .k-btn,
+  .gc-change-row .k-btn,
+  .gc-context .k-btn,
+  .gc-strip-btn,
+  .gc-head .gc-close,
   .gc-send {
     min-height: 40px;
     min-width: 40px;
@@ -499,14 +693,18 @@ html[data-kb="open"] .gc-tray-qa {
   }
 }
 @media (min-width: 1100px) and (pointer: fine) {
-  .gc-icon,
   .gc-tabs button,
-  .gc-action button,
-  .gc-page button,
-  .gc-context button,
+  .gc-action .k-btn,
+  .gc-change-row .k-btn,
+  .gc-context .k-btn,
+  .gc-head .gc-close,
   .gc-send {
     min-height: 34px;
     min-width: 34px;
+  }
+  .gc-change-row .k-btn,
+  .gc-context .k-btn {
+    min-height: 26px;
   }
   .gc-tabs button {
     min-width: 0;
@@ -527,57 +725,8 @@ html[data-kb="open"] .gc-tray-qa {
     min-height: 52px;
     border-radius: 14px;
   }
-  .gc-tray[data-state="failing"] {
-    border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
-    background: color-mix(in srgb, var(--bad) 7%, var(--surface));
-  }
-  .gc-tray-avatar {
-    position: relative;
-    display: inline-flex;
-    flex-shrink: 0;
-  }
-  .gc-tray-avatar .gc-dot {
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    box-shadow: 0 0 0 2px var(--surface);
-  }
-  .gc-tray-copy {
-    flex: 1;
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
-  }
-  .gc-tray-copy strong {
-    font-weight: 600;
-  }
-  .gc-tray .gc-priority {
-    color: var(--muted);
-  }
-  .gc-tray .gc-tray-phone {
-    display: inline-flex;
-  }
-  .gc-tray .gc-tray-tablet-dot {
-    display: none;
-  }
-  .gc-tray-copy strong,
-  .gc-tray-copy .gc-priority {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .gc-tray .gc-tray-counts {
-    display: inline-flex;
-    gap: 2px;
-    flex-shrink: 0;
-    min-width: 0;
-    font-size: 0.75rem;
-  }
-  .gc-tray-counts .k-btn {
+  .gc-tray-main {
     min-height: 44px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    white-space: nowrap;
   }
   .gc-tray-qa {
     bottom: calc(142px + env(safe-area-inset-bottom));
@@ -590,11 +739,308 @@ html[data-kb="open"] .gc-tray-qa {
   }
 }
 
+@media (min-width: 640px) {
+  .gc-head {
+    min-height: 48px;
+    padding-right: 50px;
+  }
+}
+@media (min-width: 1100px) and (pointer: fine) {
+  .gc-head {
+    min-height: 44px;
+    padding-right: 44px;
+  }
+  .gc-head .gc-close {
+    top: 5px;
+    right: 5px;
+  }
+}
+/* Unlayered so they beat the generic .gc-list / button rules above. */
+.gc-needs-panel .gc-list {
+  padding-inline: 0;
+}
+/* The row's "more" menu is secondary: no box until hovered or focused. */
+.gc-needs-row-actions .jv-iact {
+  border-color: transparent;
+  background: none;
+}
+
+/* ==== panel controls ====
+   The rail and sheet use the design library's sleek density tier (components/ui/density.css, data-density="sleek"
+   on .gc-rail / .gc-sheet): kit buttons, pickers and icon actions are small boxes with a >=44px (phone) / 40px
+   (desktop) tap area. What follows is this panel's own layout around them. */
+/* Text actions read as links in the accent colour, never as boxes. */
+.gc-needs-actions .k-btn-ghost,
+.gc-needs-menu > .k-btn {
+  color: var(--accent);
+}
+.gc-head .gc-close {
+  min-width: 40px;
+  min-height: 40px;
+}
+/* Composer: one calm row. */
+.gc-composer .qa-root .qa-hit {
+  min-height: 28px;
+  min-width: 28px;
+}
+.gc-composer .qa-root .qa-chip {
+  padding-inline: 10px;
+  white-space: nowrap;
+}
+:is(.gc-rail, .gc-sheet) .gc-input {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+}
+:is(.gc-rail, .gc-sheet) .gc-send {
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  margin-bottom: 2px;
+  border-radius: 999px;
+  font-size: 1rem;
+}
+.gc-add {
+  margin-bottom: 4px;
+  color: var(--muted);
+}
+.gc-compose-row {
+  align-items: flex-end;
+  gap: 6px;
+}
+/* Answer options: compact cards, text aligned to one left edge. */
+:is(.gc-rail, .gc-sheet) .gc-needs-options {
+  gap: 6px;
+}
+:is(.gc-rail, .gc-sheet) .gc-needs-options .gc-needs-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 2px;
+  height: auto;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--bd2);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+}
+:is(.gc-rail, .gc-sheet) .gc-needs-options .gc-needs-option:hover:not(:disabled) {
+  border-color: var(--bdc);
+  background: var(--surface-2);
+}
+:is(.gc-rail, .gc-sheet) .gc-needs-options .gc-needs-option[aria-checked="true"] {
+  border-color: var(--ai);
+  background: var(--ais);
+}
+.gc-needs-option .gc-needs-meta {
+  color: var(--t2);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.gc-needs-option .k-pill {
+  font-size: 0.6875rem;
+}
+.gc-needs-row .gc-needs-row-body,
+.gc-running .gc-run-body {
+  font-size: 0.875rem;
+}
+.gc-add-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.gc-add-menu > .k-menu {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  z-index: 5;
+  width: 13rem;
+  max-width: 80vw;
+}
+.gc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.gc-composer [aria-label="Attachments"] {
+  scrollbar-width: none;
+}
+.gc-bubble-more.k-btn {
+  margin: 2px 0 -2px -8px;
+  color: var(--accent);
+}
+/* The sheet never scrolls as a whole (its panels do). Visually-hidden labels inside messages are absolutely
+   positioned: give them a containing block here, or they stretch the sheet’s own scroll height. */
+.gc-sheet {
+  overflow: hidden;
+}
+.gc-panel-content,
+.gc-thread-body,
+.co-msg {
+  position: relative;
+}
+:is(.gc-rail, .gc-sheet) .k-btn.gc-send {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+:is(.gc-rail, .gc-sheet) .gc-add-menu .k-btn.gc-add.k-btn-icon {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+}
+/* Who answers: reference information, not a headline. */
+.gc-head > .chip {
+  background: none;
+  padding-inline: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.gc-needs-note,
+.gc-jump {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.gc-needs-note {
+  padding-top: 8px;
+}
+.gc-jump {
+  padding: 6px 12px 0;
+  text-align: end;
+}
+.gc-needs-note .k-btn,
+.gc-jump .k-btn {
+  color: var(--accent);
+}
+/* Background-work titles: two lines beat an ellipsis that hides the distinguishing words. */
+:is(.gc-rail, .gc-sheet) [data-testid="coordinator-run-card"] .truncate {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+}
+/* Generous tap area for the small controls (visual 26-30px + slop ≈ 44px). */
+:is(.gc-rail, .gc-sheet) :is(.k-btn, .k-pick, .jv-iact):not(.gc-needs-row-body, .gc-run-body, .gc-needs-option, .gc-close, .gc-strip-btn)::after {
+  inset: -9px -7px;
+}
+.gc-list > .gc-stalled-row.k-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  height: auto;
+  padding: 8px 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+  white-space: normal;
+}
+.gc-needs-row-sub {
+  color: var(--t2);
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+/* Evidence wraps on a phone instead of hiding its right-hand side behind a sideways scroll. */
+:is(.gc-rail, .gc-sheet) .gc-needs-evidence-row pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gc-list > .gc-stalled-row.k-btn strong {
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+.gc-list > .gc-stalled-row.k-btn span {
+  font-weight: 400;
+}
+/* Less chrome above the content on a phone: title row and tabs give 16px back. */
+@media (max-width: 639.98px) {
+  .gc-head {
+    min-height: 48px;
+    padding-block: 2px;
+  }
+  .gc-head .gc-close {
+    top: 4px;
+  }
+  .gc-tabs button {
+    min-height: 40px;
+  }
+}
+/* Unfolded and wide rails: keep prose to a readable measure. */
+.gc-thread-body > ol,
+.gc-thread-body > details,
+.gc-composer > * {
+  max-width: 42rem;
+  margin-inline: auto;
+}
+.gc-jump {
+  text-align: start;
+  padding-inline: 8px;
+}
+.gc-older-preview {
+  padding: 0 0 6px;
+}
+/* Unfolded phone / tablet: the tray is a pill; give its sentence room. */
+@media (min-width: 640px) {
+  .gc-tray {
+    max-width: min(420px, calc(100vw - 16px));
+  }
+}
+.gc-needs-error .k-btn,
+.gc-running [role="alert"] .k-btn,
+.gc-thread-body [role="alert"] .k-btn {
+  color: var(--accent);
+}
+.gc-changes-count {
+  margin: 0 0 6px;
+}
+/* Item cards in the changes list and under a reply. */
+.gc-change-groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gc-action-list:has(.rc) {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.gc-action-list .rc + .rc {
+  margin-top: 0;
+}
+/* Background work in the chat: a labelled group of run cards. */
+.gc-bgwork {
+  margin-top: 12px;
+}
+.gc-bgwork-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 8px;
+}
+.gc-bgwork-head .rc-live {
+  margin: 0;
+}
+/* ==== end panel controls ==== */
+
 /* ==== running ==== */
 @layer components {
   .gc-running {
     min-width: 0;
-    padding: 0.5rem;
+    padding: 0.25rem 0.875rem 0.5rem;
     color: var(--t1);
     overflow-wrap: anywhere;
   }
@@ -606,35 +1052,6 @@ html[data-kb="open"] .gc-tray-qa {
     flex-wrap: wrap;
     gap: 0.25rem;
   }
-  .gc-run-row {
-    min-width: 0;
-    border-bottom: 1px solid var(--bd);
-  }
-  .gc-run-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    min-width: 0;
-    gap: 0.25rem;
-  }
-  .gc-running .gc-run-body {
-    display: flex;
-    flex: 1 1 12rem;
-    flex-direction: column;
-    align-items: stretch;
-    min-width: 0;
-    max-width: 100%;
-    height: auto;
-    padding: 0.375rem 0.25rem;
-    text-align: start;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .gc-run-title,
-  .gc-run-meta,
-  .gc-run-actions,
-  .gc-run-confirm,
-  .gc-run-pipeline,
   .gc-mentions {
     display: flex;
     flex-wrap: wrap;
@@ -643,85 +1060,39 @@ html[data-kb="open"] .gc-tray-qa {
     max-width: 100%;
     gap: 0.25rem;
   }
-  .gc-run-title {
-    color: var(--t1);
+  .gc-running > section + section,
+  .gc-list .k-sh,
+  .gc-changes .k-sh {
+    margin-top: 0.5rem;
   }
-  .gc-run-meta {
+  .gc-needs-panel .gc-needs-meta {
+    display: block;
     color: var(--t3);
     font-size: 0.75rem;
     font-weight: normal;
+    line-height: 1.5;
   }
-  .gc-run-summary {
-    min-width: 0;
-    flex: 0 1 auto;
+  /* The dot trails its item and items never break inside, so a wrapped line never starts with a separator. */
+  .gc-needs-meta > * {
+    display: inline;
+    margin-inline-end: 0.3em;
   }
-  .gc-run-actions {
-    margin-inline-start: auto;
+  .gc-needs-meta > .gc-ref {
+    white-space: nowrap;
   }
-  .gc-run-stage {
-    padding: 0 0.25rem;
-    border-radius: 0.25rem;
-    border-bottom: 2px solid var(--bd);
-    background: var(--s2);
+  .gc-needs-meta > *:not(:last-child)::after {
+    /* No-break space: the dot stays with the item it follows. */
+    content: "\00a0·";
     color: var(--t3);
-  }
-  .gc-run-stage-ok {
-    border-color: var(--ok);
-    color: var(--ok);
-  }
-  .gc-run-stage-running {
-    border-color: var(--ai);
-    color: var(--ai);
-  }
-  .gc-run-stage-failed {
-    border-color: var(--bad);
-    color: var(--bad);
-  }
-  .gc-run-stage-skipped {
-    border-bottom-style: dashed;
-  }
-  .gc-run-lock {
-    flex-basis: 100%;
-    color: var(--wn);
-  }
-  .gc-run-confirm {
-    border: 1px solid var(--wn);
-    border-radius: 0.375rem;
-    padding: 0.375rem;
-    background: var(--s2);
-  }
-  .gc-run-confirm p {
-    flex-basis: 100%;
-  }
-  .gc-run-log {
-    min-width: 0;
-    padding: 0.375rem;
-    font-size: 0.75rem;
-    color: var(--t2);
-    animation: gc-run-reveal 140ms ease-out;
-  }
-  .gc-run-log li {
-    overflow-wrap: anywhere;
-  }
-  .gc-run-pr {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
-    color: var(--ac);
-    text-decoration: underline;
-  }
-  .gc-since {
-    min-width: 0;
-    margin-block: 0.5rem;
-    padding-block: 0.375rem;
-    border-block: 1px solid var(--bd);
-    color: var(--t3);
-    font-size: 0.75rem;
-    overflow-wrap: anywhere;
+    font-family: var(--sans);
+    font-weight: normal;
   }
   .gc-mentions {
     color: var(--t3);
     font-size: 0.75rem;
+  }
+  .co-msg[data-who="user"] > .gc-mentions {
+    justify-content: flex-end;
   }
   .gc-background-notices {
     min-width: 0;
@@ -737,18 +1108,7 @@ html[data-kb="open"] .gc-tray-qa {
   .gc-thread-input {
     font-size: 1rem;
   }
-  @keyframes gc-run-reveal {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
   @media (prefers-reduced-motion: reduce) {
-    .gc-run-log {
-      animation: gc-run-reveal 80ms linear;
-    }
     .gc-running .k-dot-live {
       animation: none;
     }
@@ -763,7 +1123,11 @@ html[data-kb="open"] .gc-tray-qa {
     color: var(--t1);
     min-width: 0;
     max-width: 100%;
+    padding: 0.5rem 0.875rem;
     overflow-wrap: anywhere;
+  }
+  .gc-needs-error {
+    color: var(--bad);
   }
   .gc-needs-layout,
   .gc-needs-list,
@@ -817,25 +1181,24 @@ html[data-kb="open"] .gc-tray-qa {
     display: flex;
     align-items: stretch;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 0.125rem;
     min-width: 0;
     max-width: 100%;
-    padding-inline: 0.25rem;
+    height: auto;
+    padding: 0.375rem 0;
     white-space: normal;
     text-align: start;
     font-weight: 400;
     color: var(--t1);
   }
-  .gc-needs-row-title > .line-clamp-2,
-  .gc-needs-one-line {
-    flex: 1 1 6rem;
+  .gc-needs-row .gc-needs-row-title {
+    display: -webkit-box;
     min-width: 0;
+    font-weight: 500;
+    line-height: 1.35;
   }
-  .gc-needs-one-line {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  .gc-needs-default {
+    color: var(--t2);
   }
   .gc-needs-row-actions {
     justify-content: flex-end;
@@ -850,9 +1213,6 @@ html[data-kb="open"] .gc-tray-qa {
     overflow-wrap: anywhere;
     color: var(--ai);
   }
-  .gc-needs-row-compact .gc-needs-row-body {
-    flex-basis: 6rem;
-  }
   .gc-needs-meta {
     color: var(--t3);
     font-size: 0.75rem;
@@ -860,15 +1220,26 @@ html[data-kb="open"] .gc-tray-qa {
     overflow-wrap: anywhere;
     white-space: normal;
   }
-  .gc-needs-meta > span {
-    margin-inline-start: 0.25rem;
-  }
   .gc-needs-risk {
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 0.25rem;
     color: var(--wn);
+    font-weight: 500;
+  }
+  .gc-needs-flag {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.375rem;
+    color: var(--wn);
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+  .gc-needs-flag > span {
+    color: var(--t2);
+    font-weight: 400;
   }
   .gc-needs-risk svg,
   .gc-needs-receipt svg {
@@ -911,18 +1282,26 @@ html[data-kb="open"] .gc-tray-qa {
     animation: gc-needs-collapse 140ms ease-out;
   }
   .gc-needs-detail {
-    padding: 0.25rem;
     animation: gc-needs-push 160ms ease-out;
     outline-offset: -2px;
+  }
+  .gc-needs-nav {
+    margin-inline-start: -0.5rem;
+  }
+  .gc-needs-body {
+    color: var(--t2);
+    font-size: 0.875rem;
+    line-height: 1.5;
   }
   .gc-needs-pager {
     margin-inline-start: auto;
     color: var(--t2);
   }
   .gc-needs-question {
-    font-size: 1rem;
+    font-size: 1.0625rem;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
   .gc-needs-why,
@@ -1024,14 +1403,32 @@ html[data-kb="open"] .gc-tray-qa {
   }
   @container gc-needs (min-width: 640px) {
     .gc-needs-layout {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      align-items: start;
+      /* The decision being read gets the wider column. */
+      grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+      align-items: stretch;
+      gap: 0.875rem;
     }
+
     .gc-needs-layout[data-detail] > .gc-needs-list-pane,
     .gc-needs-layout[data-detail] > .gc-needs-detail-pane {
       display: block;
     }
+    .gc-needs-nav > .k-btn:first-child {
+      display: none;
+    }
+    /* Without Back leading the row, its first word lines up with the question below it. */
+    .gc-needs-nav {
+      margin-inline-start: 0;
+    }
+    /* The decision stays in view while the list beside it scrolls; long ones scroll inside their own column. */
     .gc-needs-detail-pane {
+      position: sticky;
+      top: 0.5rem;
+      align-self: start;
+      max-height: calc(100dvh - 11rem);
+      overflow-y: auto;
+      /* The pager's tap area reaches past the column edge; that is not something to scroll to. */
+      overflow-x: hidden;
       border-inline-start: 1px solid var(--bd);
       padding-inline-start: 0.5rem;
     }
@@ -1074,3 +1471,96 @@ html[data-kb="open"] .gc-tray-qa {
   }
 }
 /* ==== end needs ==== */
+
+/* Long-press / right-click on the phone tray: straight to a tab. It sits just above the tray. */
+
+/* ==== one composer ====
+   What the next message is about: a chip (R-n teal, D-n amber) and the thing's title, above the input. Steer,
+   Reply, Retry and "ask about this" on any row put it there; removing it makes the message an ordinary one. */
+.gc-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 4px;
+  color: var(--t2);
+  font-size: 0.75rem;
+}
+.gc-scope-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Work started by a reply sits right under it, as rows. */
+.co-msg > .gc-bgwork {
+  margin-top: 6px;
+}
+/* ==== phone sheet: grab bar ====
+   Drag the bar (or the header) down to close; the sheet follows the finger and settles when it lifts. */
+.gc-sheet {
+  transition: transform var(--d2) var(--ease);
+}
+.gc-sheet[data-dragging] {
+  transition: none;
+}
+.gc-sheet-grab {
+  flex: none;
+}
+.gc-sheet .gc-sheet-grab + .gc-head {
+  min-height: 44px;
+}
+
+/* ==== references in text, rich rows under the reply ====
+   A D-n / R-n in a reply (or in your own message) is a chip in the sentence: tap it to jump to the thing. What
+   the reply mentions is drawn under it as rows, three at most; there is no separate "Mentions" list. */
+.k-ref.gc-inline-ref {
+  display: inline;
+  padding: 1px 5px;
+  vertical-align: 1px;
+}
+.gc-mention-rows > .k-thing:first-child,
+.gc-mention-rows > .rc-row:first-child > .k-thing {
+  border-top: 0;
+}
+.gc-mention-rows .k-thing-row {
+  padding-inline: 2px 0;
+}
+.gc-mention-more.gc-mention-more {
+  display: flex;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 6px;
+  border-top: 1px solid var(--bd);
+  border-radius: 0;
+  padding-inline: 2px;
+  color: var(--t2);
+}
+/* Line one of a stacked row gives way from its end: the reference and the state word always fit. */
+.k-thing-eyebrow > * {
+  flex: none;
+}
+.k-thing-eyebrow > :last-child:not(:first-child) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gc-mention-rows > .k-thing + .rc-row > .k-thing {
+  border-top: 1px solid var(--bd);
+}
+
+/* ==== answering a decision from the composer ==== */
+.gc-scope-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: var(--wn);
+  font-size: 0.75rem;
+}
+.gc-chat-receipts {
+  margin-top: 8px;
+}

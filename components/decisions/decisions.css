@@ -1,0 +1,514 @@
+/* The decision block (components/decisions/DecisionBlock.tsx): one row, one card, one receipt for a D-n on every
+   surface. Built on the kit (ThingRow, RefPill, Button, ChipButton); what follows is only the block's own layout.
+   Hosts set data-density="sleek" (components/ui/density.css), so controls stay small with a full tap area.
+   Unlayered on purpose: these few rules must win over the kit's row defaults they refine (a question wraps). */
+
+.dcs-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dcs-list > li {
+  min-width: 0;
+}
+.dcs-list > li:first-child .k-thing {
+  border-top: 0;
+}
+.dcs-item {
+  min-width: 0;
+}
+.dcs-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ---- row ---- */
+/* A question is read, not skimmed: it wraps inside the kit row's one-line title instead of ending in an ellipsis. */
+.dcs-wrap {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* A row that can be answered from its chips shows the whole question: nobody answers half a sentence. */
+.dcs-wrap-all {
+  display: block;
+  -webkit-line-clamp: unset;
+}
+.dcs-row .k-thing-t {
+  align-items: flex-start;
+}
+.dcs-row .k-ref {
+  margin-top: 1px;
+}
+/* The list sits in its host's gutter: the state dot lines up with the heading above it. */
+.dcs-row .k-thing-row {
+  padding-block: 8px;
+  padding-inline: 2px 0;
+}
+.dcs-meta {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.dcs-meta > span {
+  margin-inline-end: 0.3em;
+}
+/* The dot trails its part and never starts a wrapped line. */
+.dcs-meta > span:not(:last-child, .dcs-ask)::after {
+  content: "\00a0·";
+  color: var(--t3);
+  font-weight: 400;
+}
+.dcs-meta .k-ref {
+  margin: 0;
+  vertical-align: baseline;
+}
+.dcs-ask {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin: 0;
+}
+.dcs-risk {
+  color: var(--bad);
+  font-weight: 600;
+}
+.dcs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 6px;
+  min-width: 0;
+  padding: 0 0 10px 2px;
+}
+.dcs-chips .dcs-chip.k-pick {
+  min-height: 30px;
+  overflow: visible;
+  border-color: var(--bd2);
+  border-radius: 15px;
+  background: transparent;
+  padding: 5px 12px;
+  color: var(--t1);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.dcs-chips .dcs-chip.k-pick:hover:not(:disabled) {
+  background: var(--s2);
+}
+/* The agent's recommendation: outlined in the "you act" colour. Nothing is outlined when there is none. */
+.dcs-chips .dcs-chip-rec.k-pick {
+  border-color: var(--ac);
+  color: var(--ac);
+}
+/* A 30px chip answers a 44px tap. */
+.dcs-chips .dcs-chip.k-pick::after {
+  content: "";
+  position: absolute;
+  inset: -7px -3px;
+}
+
+/* ---- card ---- */
+.dcs-card-host {
+  min-width: 0;
+  border-radius: 12px;
+}
+.dcs-card-host:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+/* The card is the decision sheet wherever it is drawn: a title bar, the context line, the question, the options. */
+.dcs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  border: 1px solid var(--bd2);
+  border-radius: 14px;
+  background: var(--s1);
+  padding: 4px 12px 12px;
+  color: var(--t1);
+  overflow-wrap: anywhere;
+}
+.dcs-bar {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: center;
+  gap: 2px;
+  margin-inline: -8px -6px;
+}
+.dcs-bar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--t1);
+  font: 600 15px/20px var(--sans);
+}
+/* No back arrow: the title starts at the card's own left edge. */
+.dcs-bar > .dcs-bar-title:first-child {
+  padding-inline-start: 8px;
+}
+.dcs-pager {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.dcs-pager .dcs-position {
+  margin-inline: 0 4px;
+}
+.dcs-next {
+  margin-inline-start: auto;
+  color: var(--t2);
+  font: 400 12px/18px var(--sans);
+}
+.dcs-item-open {
+  padding-block: 6px 10px;
+}
+.dcs-ctx {
+  display: flex;
+  min-width: 0;
+  min-height: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  color: var(--t2);
+  font: 400 12px/18px var(--sans);
+}
+.dcs-ctx-text {
+  min-width: 0;
+}
+.dcs-age {
+  margin-inline-start: auto;
+  color: var(--t3);
+  white-space: nowrap;
+}
+.dcs-q {
+  margin: 0;
+  color: var(--t1);
+  font: 600 15px/1.35 var(--sans);
+  letter-spacing: -0.005em;
+}
+.dcs-body,
+.dcs-why,
+.dcs-facts {
+  margin: 0;
+  color: var(--t2);
+  font: 400 13px/1.5 var(--sans);
+}
+.dcs-detail {
+  min-width: 0;
+  border-radius: var(--r3);
+  background: var(--s2);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.dcs-action {
+  align-self: flex-start;
+}
+.dcs-facts > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin-block: 2px;
+}
+.dcs-facts dt {
+  flex: 0 1 6rem;
+  color: var(--t3);
+}
+.dcs-facts dd {
+  flex: 1 1 8rem;
+  min-width: 0;
+  margin: 0;
+}
+.dcs-evidence {
+  min-width: 0;
+  font-size: 13px;
+}
+.dcs-evidence h4 {
+  margin: 0;
+  color: var(--t3);
+  font: 500 12px/18px var(--sans);
+}
+.dcs-evidence-row {
+  min-width: 0;
+  border-bottom: 1px solid var(--bd);
+  padding-block: 6px;
+}
+.dcs-evidence-row a {
+  color: var(--ai);
+  text-decoration: underline;
+}
+.dcs-evidence-ref {
+  margin-inline-start: 6px;
+  color: var(--t3);
+  font-size: 12px;
+}
+.dcs-evidence-row p {
+  margin: 2px 0 0;
+  color: var(--t2);
+}
+/* Evidence wraps on a phone instead of hiding its right-hand side behind a sideways scroll. */
+.dcs-evidence-row pre {
+  max-width: 100%;
+  margin: 4px 0 0;
+  border-radius: var(--r2);
+  background: var(--s2);
+  padding: 8px;
+  color: var(--t2);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.dcs-flag {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin: 0;
+  color: var(--t2);
+  font: 400 12.5px/1.4 var(--sans);
+}
+.dcs-options {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.dcs-option-slot {
+  min-width: 0;
+}
+/* Each choice is a full-width option: its words, then what choosing it does. */
+.dcs-options .dcs-option.k-btn {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid var(--bd2);
+  border-radius: var(--r3);
+  background: transparent;
+  padding: 8px 12px;
+  color: var(--t1);
+  font: 500 14px/1.35 var(--sans);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.dcs-options .dcs-option.k-btn:hover:not(:disabled) {
+  border-color: var(--bdc);
+  background: var(--s2);
+}
+.dcs-options .dcs-option.k-btn[data-recommended] {
+  border-color: var(--ac);
+}
+/* Armed: chosen, not sent. The confirm sits right under it. */
+.dcs-options .dcs-option.k-btn[data-armed],
+.dcs-options .dcs-option.k-btn[data-armed]:hover:not(:disabled) {
+  border-color: var(--bad);
+  background: var(--bads);
+}
+.dcs-option-title {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 8px;
+}
+.dcs-option-title > span:first-child {
+  min-width: 0;
+}
+.dcs-tag {
+  flex: none;
+  color: var(--ac);
+  font: 600 11.5px/1.35 var(--sans);
+}
+.dcs-tag-risk {
+  color: var(--bad);
+}
+.dcs-option-effect {
+  color: var(--t2);
+  font: 400 12.5px/1.4 var(--sans);
+}
+.dcs-confirm {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-block: 8px 2px;
+  animation: dcs-in 140ms ease-out;
+}
+.dcs-confirm .k-btn {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: start;
+}
+.dcs-foot {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+/* Text actions read as links, never as boxes. */
+.dcs-foot .dcs-link.k-btn,
+.dcs-receipt .dcs-undo.k-btn,
+.dcs-receipt .dcs-post.k-btn {
+  padding-inline: 2px;
+  color: var(--ac);
+}
+.dcs-position {
+  margin-inline-start: auto;
+  color: var(--t2);
+  font: 400 12px/18px var(--sans);
+}
+
+/* ---- receipt ---- */
+.dcs-receipt {
+  min-width: 0;
+  animation: dcs-in 140ms ease-out;
+}
+.dcs-receipt .k-thing-row {
+  min-height: 44px;
+  padding-inline: 2px 0;
+}
+.dcs-receipt .k-thing-title {
+  flex: 1 1 auto;
+}
+/* One line: what was asked gives way first, what was answered stays readable. */
+.dcs-rc {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+.dcs-rc-q {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dcs-rc-a {
+  flex: 0 0 auto;
+  max-width: 62%;
+  overflow: hidden;
+  color: var(--t1);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+.dcs-receipt .k-thing-acts {
+  gap: 10px;
+}
+
+/* ---- notices (a staged defer, a confirmed batch) ---- */
+.dcs-notices {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: 4px;
+}
+.dcs-notices > .k-toast {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  background: var(--s2);
+  color: var(--t1);
+  animation: dcs-fade 120ms ease-out;
+}
+.dcs-notices .k-toast > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- inside the Chief of staff panel: the card is the pane, so it needs no box of its own ---- */
+.gc-needs-detail .dcs-card {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  padding: 0;
+}
+.gc-needs-detail .dcs-bar {
+  margin-inline: -6px 0;
+}
+/* Beside the list on a wide panel there is nothing to go back to. */
+@container gc-needs (min-width: 640px) {
+  .gc-needs-detail .dcs-bar-back {
+    display: none;
+  }
+  .gc-needs-detail .dcs-bar {
+    margin-inline: 0;
+  }
+  .gc-needs-detail .dcs-bar-title {
+    padding-inline-start: 0;
+  }
+}
+.gc-needs-rows {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gc-needs-rows > :first-child .k-thing {
+  border-top: 0;
+}
+/* A receipt whose row is out of sight (the detail is open on a narrow panel) is shown with the notices. */
+.dcs-floating {
+  border-radius: var(--r3);
+  background: var(--s2);
+}
+.dcs-floating .k-thing {
+  border-top: 0;
+}
+.dcs-floating .k-thing-row {
+  padding-inline: 10px 6px;
+}
+@container gc-needs (min-width: 640px) {
+  .dcs-floating {
+    display: none;
+  }
+}
+
+@keyframes dcs-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes dcs-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dcs-confirm,
+  .dcs-receipt,
+  .dcs-notices > .k-toast {
+    animation: none;
+  }
+}

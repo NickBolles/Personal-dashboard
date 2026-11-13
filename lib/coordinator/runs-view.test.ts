@@ -57,7 +57,7 @@ function decision(seq: number, overrides: Partial<Decision> = {}): Decision {
 }
 afterEach(() => vi.useRealTimers());
 describe("groupRuns", () => {
-  it("folds sub-runs, separates interruptions, puts failures before waiting and stalled", () => {
+  it("folds sub-runs, separates interruptions and waiting-on-you, puts failures before stalled", () => {
     const child = run(5, { parentRunId: "run-1", parentRef: "R-1", state: "failed" });
     const runs = [
       run(1),
@@ -68,7 +68,9 @@ describe("groupRuns", () => {
       run(6, { state: "interrupted", stalled: true }),
     ];
     const groups = groupRuns(runs);
-    expect(groups.attention.map((r) => r.ref)).toEqual(["R-3", "R-4", "R-2"]);
+    expect(groups.attention.map((r) => r.ref)).toEqual(["R-3", "R-4"]);
+    // A run waiting on the owner is not stuck: it gets its own section.
+    expect(groups.waiting.map((r) => r.ref)).toEqual(["R-2"]);
     expect(groups.running.map((r) => r.ref)).toEqual(["R-1"]);
     expect(groups.interrupted.map((r) => r.ref)).toEqual(["R-6"]);
     expect(childrenOf(runs, "run-1")).toEqual([child]);
@@ -159,4 +161,11 @@ it("extracts word-bounded D/R references with their exact index and preserves re
     { ref: "D-48", kind: "decision", index: 27 },
   ]);
   expect(refChips("no refs r-1 D-no")).toEqual([]);
+});
+it("work in flight keeps its place when one of the runs reports", () => {
+  const at = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+  const before = groupRuns([run(1, { updatedAt: at(30) }), run(2, { updatedAt: at(20) })]).running.map((r) => r.ref);
+  const after = groupRuns([run(1, { updatedAt: at(0) }), run(2, { updatedAt: at(20) })]).running.map((r) => r.ref);
+  expect(before).toEqual(["R-2", "R-1"]);
+  expect(after).toEqual(before);
 });

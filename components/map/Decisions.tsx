@@ -2,195 +2,214 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { cx, useToast, Button, ChipButton, EmptyState, Pill } from "@/components/ui";
-import { UndoBar, type UndoOp } from "@/components/work/UndoBar";
+import { Button, EmptyState, StateWord, ThingRow, useNow, useToast } from "@/components/ui";
 import { useAccess } from "@/components/access";
+import { DecisionNotices, DecisionReceiptLine, DecisionThing, type AskAbout } from "@/components/decisions/DecisionBlock";
+import { INBOX_KEY, isReceipt, useDecisionFlow, useInboxDecisions, withReceipts, type DecisionReceipt } from "@/components/decisions/useAnswerDecision";
 import "./map.css";
-import { decisionAnswerBody, decisionAnswerPath, decisionLogText, withdrawPost, type DecisionEntry, type DecisionsResponse } from "@/lib/decisions";
+import { sortByUrgency } from "@/lib/cw-decisions";
+import { decisionLogText, type DecisionEntry } from "@/lib/decisions";
+import { viewOfEntry, type DecisionView } from "@/lib/decision-view";
+import { ageLabel } from "@/lib/coordinator/needs";
+import { plainStatusWords } from "@/lib/chat/display";
 
-export const DECISIONS_KEY = ["work", "decisions"] as const;
-
+export const DECISIONS_KEY = INBOX_KEY;
 /** The "Needs you" list (sidebar badge, /decisions, Map and Today). */
-export function useDecisions(enabled = true) {
-  // Approvals and workflow proposals change outside work mutations (Hermes
-  // events, the chat approval handler), so poll while the app is visible.
-  return useQuery({
-    queryKey: DECISIONS_KEY,
-    queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"),
-    enabled,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
+export const useDecisions = useInboxDecisions;
+
+type PostOffer = { sessionId: string; coordinator: boolean; text: string };
+
+const seqOf = (ref: string) => Number(ref.slice(2)) || 0;
+
+/** Decisions first in the queue's own urgency order, then what waits on a tap elsewhere, then work that went silent. */
+export function orderEntries(entries: DecisionEntry[], now = new Date()) {
+  const decisions = sortByUrgency(
+    entries.flatMap((entry) => {
+      const view = viewOfEntry(entry);
+      return view ? [{ ...view, seq: seqOf(view.ref), entry }] : [];
+    }),
+    now,
+  );
+  const drawn = new Set(decisions.map((d) => d.entry.key));
+  const rest = entries.filter((e) => !drawn.has(e.key));
+  return { decisions, waiting: rest.filter((e) => e.kind !== "stalled"), stalled: rest.filter((e) => e.kind === "stalled") };
 }
 
-const KIND_LABEL: Record<DecisionEntry["kind"], string> = { item: "Decision", approval: "Approval", workflow: "Workflow", stalled: "Stalled" };
-
 /**
- * One row per open decision. Item decisions are answered in place (a choice
- * button or a short answer); the answer is logged as activity, appended to the
- * item and undoable. If the item has a Hermes conversation, posting the answer
- * there is offered afterwards and only happens on an explicit tap. Approvals and
- * workflow proposals open where they are answered (never auto-settled).
+ * The "Needs you" list: one row per thing, in one order. A decision is the shared decision block (row, card in
+ * place, receipt: components/decisions); an approval or a workflow proposal is a row that opens where it is
+ * answered (never settled from here); a run that stopped reporting is a row with the word Stalled.
  */
 export function DecisionsList({
   entries,
-  compact,
   emptyText,
   emptyHint,
+  onAsk,
 }: {
   entries: DecisionEntry[];
-  compact?: boolean;
   emptyText?: string;
   /** Page-level empty state (kit EmptyState) instead of the compact one-line note. */
   emptyHint?: string;
+  onAsk?: AskAbout;
 }) {
-  const [op, setOp] = useState<UndoOp | null>(null);
-  const [posted, setPosted] = useState<{ key: string; opId: string; sessionId: string; text: string; coordinator: boolean } | null>(null);
-  // Undo and "post to conversation" stay mounted after the last entry is answered.
+  // A receipt outlives its Undo here while it still offers to post the answer to the item's conversation.
+  const { flow, shared } = useDecisionFlow({ keepReceipts: true });
+  const now = useNow();
+  const [openRef, setOpenRef] = useState<string | null>(null);
+  const [offers, setOffers] = useState<Record<string, PostOffer>>({});
+  const { decisions, waiting, stalled } = orderEntries(entries, new Date(now));
+  const shown = (receipt: DecisionReceipt) => receipt.undoable || !!offers[receipt.view.ref];
+  const receipts = Object.fromEntries(Object.entries(flow.receipts).filter(([, receipt]) => shown(receipt)));
+  const rows = withReceipts<DecisionView & { entry: DecisionEntry }>(decisions, receipts);
+  const dropOffer = (ref: string) =>
+    setOffers((all) => {
+      const copy = { ...all };
+      delete copy[ref];
+      return copy;
+    });
+  // The open card pages through the decisions still waiting, in the list's order.
+  const openRefs = rows.flatMap((row) => (isReceipt(row) ? [] : [row.ref]));
+  const pagerOf = (ref: string) => {
+    const index = openRefs.indexOf(ref);
+    return {
+      index,
+      total: openRefs.length,
+      onPrev: index > 0 ? () => setOpenRef(openRefs[index - 1]) : undefined,
+      onNext: index < openRefs.length - 1 ? () => setOpenRef(openRefs[index + 1]) : undefined,
+    };
+  };
+  const empty = !rows.length && !waiting.length && !stalled.length;
   return (
     <>
-      {posted ? (
-        <PostConfirm key={posted.key} sessionId={posted.sessionId} text={posted.text} coordinator={posted.coordinator} onDone={() => setPosted(null)} />
-      ) : null}
-      {entries.length ? (
-        <ul className="dc-list" data-testid="decisions-list">
-          {entries.map((e) => (
-            <DecisionRow
-              key={e.key}
-              entry={e}
-              compact={compact}
-              onAnswered={(o, text) => {
-                setOp(o);
-                const sessionId = e.sessionId ?? e.coordinatorSessionId ?? null;
-                setPosted(sessionId ? { key: e.key, opId: o.id, sessionId, text, coordinator: !e.sessionId } : null);
-              }}
-            />
+      {empty ? (
+        emptyHint ? (
+          <div data-testid="decisions-empty">
+            <EmptyState title={emptyText ?? "Nothing needs you right now."}>{emptyHint}</EmptyState>
+          </div>
+        ) : (
+          <p className="text-sm text-muted" data-testid="decisions-empty">
+            {emptyText ?? "Nothing needs you right now."}
+          </p>
+        )
+      ) : (
+        <ul className="dcs-list" data-testid="decisions-list">
+          {rows.map((row) =>
+            isReceipt(row) ? (
+              <li key={row.view.ref}>
+                <DecisionReceiptLine
+                  receipt={row}
+                  action={offers[row.view.ref] ? <PostAnswer offer={offers[row.view.ref]} onPosted={() => dropOffer(row.view.ref)} /> : undefined}
+                  onUndo={() => {
+                    // #167: taking the answer back withdraws the offer to post it.
+                    void flow.undo(row.view.ref).then((undone) => {
+                      if (undone) dropOffer(row.view.ref);
+                    });
+                  }}
+                />
+              </li>
+            ) : (
+              <li key={row.ref}>
+                <DecisionThing
+                  view={row}
+                  flow={flow}
+                  now={now}
+                  index={decisions.findIndex((d) => d.ref === row.ref)}
+                  open={openRef === row.ref}
+                  onToggle={(ref, open) => setOpenRef(open ? ref : null)}
+                  pager={pagerOf(row.ref)}
+                  onAsk={onAsk}
+                  onAnswered={(result, choice) => {
+                    const e = row.entry;
+                    const sessionId = e.sessionId ?? e.coordinatorSessionId ?? null;
+                    if (!sessionId || !result.op) return;
+                    const text = `Decision on "${e.title}": ${decisionLogText(e.question, choice)}`;
+                    setOffers((all) => ({ ...all, [row.ref]: { sessionId, coordinator: !e.sessionId, text } }));
+                  }}
+                />
+              </li>
+            ),
+          )}
+          {[...waiting, ...stalled].map((e) => (
+            <li key={e.key}>
+              <OtherRow entry={e} now={now} />
+            </li>
           ))}
         </ul>
-      ) : posted ? null : emptyHint ? (
-        <div data-testid="decisions-empty">
-          <EmptyState title={emptyText ?? "Nothing needs you right now."}>{emptyHint}</EmptyState>
-        </div>
-      ) : (
-        <p className="text-sm text-muted" data-testid="decisions-empty">
-          {emptyText ?? "Nothing needs you right now."}
-        </p>
       )}
-      {op ? (
-        <UndoBar
-          key={op.id}
-          op={op}
-          onDone={() => setOp(null)}
-          // #167: undoing the answer withdraws the pending "post to conversation" offer.
-          onUndone={() => setPosted((p) => withdrawPost(p, op.id))}
-        />
-      ) : null}
+      {!shared ? <DecisionNotices notices={flow.notices} /> : null}
     </>
   );
 }
 
-function DecisionRow({ entry: e, compact, onAnswered }: { entry: DecisionEntry; compact?: boolean; onAnswered: (op: UndoOp, text: string) => void }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [text, setText] = useState("");
-  const answer = useMutation({
-    mutationFn: (a: string) => api.post<{ op: UndoOp | null }>(decisionAnswerPath(e), decisionAnswerBody(e, a)),
-    onSuccess: (r, a) => {
-      toast("Answered");
-      if (r.op) onAnswered(r.op, `Decision on "${e.title}": ${decisionLogText(e.question, a)}`);
-    },
-    onError: (err) => toast(`Not saved: ${(err as Error).message}`, "danger"),
-    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ["work"] }), qc.invalidateQueries({ queryKey: ["activity"] })]),
-  });
-  const qid = `dc-q-${e.key.replace(/[^a-z0-9]/gi, "-")}`;
+/** Where a row that is not a decision opens, in words (the row says it before the tap). */
+function opensWhere(e: DecisionEntry) {
+  if (e.kind === "approval") return "opens the conversation";
+  if (e.kind === "workflow") return e.href.startsWith("/chat/") ? "opens the conversation" : "opens Workflows";
+  return "opens the item";
+}
+
+/** An approval, a workflow proposal or a stalled run: same row shape; it opens where it is dealt with. */
+function OtherRow({ entry: e, now }: { entry: DecisionEntry; now: number }) {
+  const question = plainStatusWords(e.question);
+  const stalled = e.kind === "stalled";
+  // An approval has no title of its own: what the run wants to do is the headline.
+  const title = e.kind === "approval" ? question : e.title;
+  const kind = e.kind === "approval" ? "Approval" : e.kind === "workflow" ? "Workflow" : e.kind === "item" ? "Decision" : null;
   return (
-    <li className="dc-row" data-testid="decision-row" aria-labelledby={qid}>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-        <Pill tone={e.kind === "approval" || e.kind === "stalled" ? "wn" : e.kind === "workflow" ? "ai" : "ac"}>{KIND_LABEL[e.kind]}</Pill>
-        {e.itemId ? (
-          <Link href={e.href} className="min-w-0 truncate text-[13px] font-medium hover:underline">
-            {e.title}
-          </Link>
-        ) : (
-          <span className="min-w-0 truncate text-[13px] font-medium">{e.title}</span>
-        )}
-        {e.areaTitle && !compact ? <span className="min-w-0 text-xs text-muted wrap-anywhere">{e.areaTitle}</span> : null}
-      </div>
-      <p id={qid} className="mt-1 text-sm wrap-anywhere">
-        {e.question}
-      </p>
-      {e.kind === "item" ? (
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5" role="group" aria-label={`Answer: ${e.question}`}>
-          {e.choices.map((c) => (
-            // Choices are free text from agents (often a whole sentence): let a long one wrap inside the row
-            // instead of running past a phone viewport (#257: an 81-char choice widened prod /home to 445 px).
-            <ChipButton key={c} className="whitespace-normal py-1.5 text-left wrap-anywhere" disabled={answer.isPending} onClick={() => answer.mutate(c)}>
-              {c}
-            </ChipButton>
-          ))}
-          <form
-            className="flex min-w-0 flex-1 basis-48 items-center gap-1.5"
-            onSubmit={(ev) => {
-              ev.preventDefault();
-              if (text.trim()) answer.mutate(text.trim());
-            }}
-          >
-            <label htmlFor={`${qid}-a`} className="sr-only">
-              Short answer
-            </label>
-            <input
-              id={`${qid}-a`}
-              className="k-pick min-w-0 flex-1 px-2"
-              value={text}
-              maxLength={2000}
-              placeholder={e.choices.length ? "Or type an answer" : "Type an answer"}
-              onChange={(ev) => setText(ev.target.value)}
-            />
-            <Button type="submit" size="sm" variant="primary" disabled={!text.trim()} loading={answer.isPending}>
-              Answer
-            </Button>
-          </form>
-        </div>
-      ) : (
-        <div className="mt-2">
-          <Link href={e.href} className="k-pick inline-flex items-center px-3 text-[13px]">
-            {e.kind === "approval" ? "Open the conversation to approve or deny" : e.kind === "stalled" ? "Open the item" : "Review proposals"}
-          </Link>
-        </div>
-      )}
-    </li>
+    <ThingRow
+      className="dcs-row"
+      data-testid="decision-row"
+      data-kind={e.kind}
+      state={stalled ? "stalled" : "needs"}
+      refId={e.runRef ?? undefined}
+      title={<span className="dcs-wrap">{title}</span>}
+      sub={
+        <span className="dcs-meta">
+          {stalled ? (
+            <span>
+              <StateWord state="stalled" />
+            </span>
+          ) : null}
+          {kind ? <span>{kind}</span> : null}
+          {e.kind !== "approval" ? <span>{question}</span> : null}
+          <span>{opensWhere(e)}</span>
+          {stalled ? null : <span>{ageLabel(e.at, now)}</span>}
+        </span>
+      }
+      href={e.href}
+    />
   );
 }
 
-/** Explicit confirm before an answer is posted to the item's Hermes conversation (writes confirmed). */
-function PostConfirm({ sessionId, text, coordinator, onDone }: { sessionId: string; text: string; coordinator?: boolean; onDone: () => void }) {
+/**
+ * The quiet follow-up on a receipt: post the answer to the item's conversation (or the area's coordinator chat),
+ * so the agent there picks it up. Only on this explicit tap; undoing the answer withdraws it.
+ */
+function PostAnswer({ offer, onPosted }: { offer: PostOffer; onPosted: () => void }) {
   const { toast } = useToast();
   const post = useMutation({
     mutationFn: () =>
-      api.post(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/runs`, {
-        input: text,
-        idempotencyKey: `decision-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      api.post(`/api/hermes/sessions/${encodeURIComponent(offer.sessionId)}/runs`, {
+        input: offer.text,
+        idempotencyKey: `decision-${offer.sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       }),
-    onSuccess: () => (toast("Posted to the conversation"), onDone()),
+    onSuccess: () => (toast("Posted to the conversation"), onPosted()),
     onError: (err) => toast(`Not posted: ${(err as Error).message}`, "danger"),
   });
   return (
-    <div role="group" aria-label="Post your answer to the conversation?" className={cx("dc-confirm mb-2")} data-testid="decision-post-confirm">
-      <p className="text-sm">
-        {coordinator ? "Post your answer to the area's coordinator chat too?" : "This item has a Hermes conversation. Post your answer there too?"}
-      </p>
-      <p className="mt-1 text-xs break-words text-muted">{text}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button size="sm" variant="primary" loading={post.isPending} onClick={() => post.mutate()}>
-          {coordinator ? "Post to coordinator" : "Post to conversation"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onDone}>
-          Not now
-        </Button>
-      </div>
-    </div>
+    <Button
+      size="sm"
+      variant="ghost"
+      className="dcs-post"
+      data-testid="decision-post"
+      title={offer.text}
+      loading={post.isPending}
+      onClick={() => post.mutate()}
+    >
+      {offer.coordinator ? "Post to coordinator" : "Post to conversation"}
+    </Button>
   );
 }
 
@@ -199,11 +218,14 @@ export function NeedsYouSection({ entries, id = "needs-you-h", limit }: { entrie
   const access = useAccess();
   const q = useDecisions(entries === undefined && (access.can("work.use") || access.can("hermes.chat")));
   const list = entries ?? q.data?.entries ?? [];
-  // Once shown, stay mounted so answering the last entry keeps its Undo / post controls.
+  // Once shown, stay mounted so answering the last entry keeps its receipt and Undo.
   const [shownOnce, setShownOnce] = useState(false);
   if (list.length && !shownOnce) setShownOnce(true);
   if (!list.length && !shownOnce) return null;
-  const shown = limit ? list.slice(0, limit) : list;
+  // The first few in the list's own order (decisions by urgency), not the first few that happened to arrive.
+  const ordered = orderEntries(list);
+  const sorted = [...ordered.decisions.map((d) => d.entry), ...ordered.waiting, ...ordered.stalled];
+  const shown = limit ? sorted.slice(0, limit) : sorted;
   return (
     <section aria-labelledby={id} className="mb-5" data-testid="needs-you">
       <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -216,7 +238,7 @@ export function NeedsYouSection({ entries, id = "needs-you-h", limit }: { entrie
           </Link>
         ) : null}
       </div>
-      <DecisionsList entries={shown} compact />
+      <DecisionsList entries={shown} />
     </section>
   );
 }

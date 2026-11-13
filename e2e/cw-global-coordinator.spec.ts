@@ -30,18 +30,17 @@ async function decisionState(page: Page, ref: string) {
   return body.decisions.find((d) => d.ref === ref);
 }
 
-/** Opens Needs you: the tray's "!N" count on phones, the rail tab on desktop. Returns the panel scope. */
+/** Opens Needs you: the tray (phones) then the tab; the rail tab on desktop. Returns the panel scope. */
 async function openNeeds(page: Page, desktop: boolean): Promise<Locator> {
-  if (desktop) {
-    const rail = page.getByRole("complementary", { name: "Chief of staff" });
-    await rail.getByRole("tab", { name: /^Needs you/ }).click();
-    return rail;
+  if (!desktop) {
+    const tray = page.locator(".gc-tray");
+    // The tray's one sentence says something is waiting before we open it.
+    await expect(tray.locator(".gc-tray-status")).toContainText(/needs? you|Needs you:/);
+    await tray.getByRole("button", { name: "Chief of staff", exact: true }).click();
   }
-  await page
-    .locator(".gc-tray")
-    .getByRole("button", { name: /need you, open Needs you$/ })
-    .click();
-  return page.getByRole("dialog", { name: "Chief of staff" });
+  const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
+  await scope.getByRole("tab", { name: /^Needs you/ }).click();
+  return scope;
 }
 
 let areaId: string | null = null;
@@ -87,18 +86,25 @@ test("MCP-raised decisions: tray → answer in 2 taps with Undo; risk-flagged ne
   expect(low.ref).toMatch(/^D-\d+$/);
 
   await page.goto("/home");
-  // Tap 1: the tray count (phone) / the rail tab (desktop). Tap 2: the recommended answer on the row.
+  // Open Needs you (tray → tab on phones, the rail tab on desktop), then one tap on the recommended answer.
   const scope = await openNeeds(page, desktop);
-  await scope.getByRole("button", { name: `${low.ref}: Ship it`, exact: true }).click();
-  await expect(scope.getByRole("button", { name: "Undo" }).first()).toBeVisible();
+  await scope.getByRole("button", { name: `${low.ref}: Ship it (recommended)`, exact: true }).click();
+  // The row becomes its receipt: what was asked, what was answered, and Undo.
+  await expect(scope.getByTestId("decision-receipt").filter({ hasText: "Ship it" }).first()).toBeVisible();
+  await expect(scope.getByRole("button", { name: `Undo ${low.ref}`, exact: true }).first()).toBeVisible();
   await expect.poll(async () => (await decisionState(page, low.ref))?.state).toBe("answered");
 
-  // Risk-flagged: the chip opens the detail with Confirm armed; nothing is answered until Confirm.
-  await scope.getByRole("button", { name: `${risky.ref}: Rotate`, exact: true }).click();
+  // Risk-flagged: the row has no one-tap chips. It opens the card, a choice arms, and nothing is answered until Confirm.
+  await expect(scope.getByRole("button", { name: new RegExp(`^${risky.ref}: `) })).toHaveCount(0);
+  await scope.getByRole("button", { name: new RegExp(`^Open decision ${risky.ref}:`) }).click();
+  await scope
+    .getByRole("group", { name: `Answers for ${risky.ref}` })
+    .getByRole("button", { name: /^Rotate/ })
+    .click();
   const confirm = scope.getByRole("group", { name: "Confirm answer" });
-  await expect(confirm).toContainText("Confirm Rotate?");
+  await expect(confirm.getByRole("button", { name: "Confirm: Rotate", exact: true })).toBeVisible();
   expect((await decisionState(page, risky.ref))?.state).toBe("open");
-  await confirm.getByRole("button", { name: "Confirm Rotate", exact: true }).click();
+  await confirm.getByRole("button", { name: "Confirm: Rotate", exact: true }).click();
   await expect.poll(async () => (await decisionState(page, risky.ref))?.answeredChoice).toBe("Rotate");
   await expectNoHorizontalOverflow(page);
 });
@@ -204,10 +210,16 @@ test("coordinator chat: one Since divider after 2 h away, D-n/R-n chips, run not
   const divider = scope.getByRole("separator", { name: /^Since / });
   await expect(divider).toHaveCount(1);
   await expect(divider).toContainText("2 h");
-  // The mention chip opens the run in Running.
+  // R-7 is a chip in the reply's text, and the run it names is drawn as a row right under that reply: the chip
+  // lands on the row and stays in Chat.
+  const row = scope.locator('article[data-run-ref="R-7"]');
+  await expect(row).toContainText("Sedge ledger build");
+  await expect(scope.getByText("Mentions:")).toHaveCount(0);
   await scope.getByRole("button", { name: "Run R 7", exact: true }).last().click();
-  await expect(scope.getByRole("tab", { name: /^Running/ })).toHaveAttribute("aria-selected", "true");
-  await expect(scope.getByText("Sedge ledger build")).toBeVisible();
-  await expect(scope.getByText(/2 notices/)).toBeVisible();
+  await expect(row).toHaveAttribute("data-landed", "");
+  await expect(scope.getByRole("tab", { name: "Chat", exact: true })).toHaveAttribute("aria-selected", "true");
+  // A reference with no row in the conversation opens its tab: the decision goes to Needs you.
+  await scope.getByRole("button", { name: "Decision D 48", exact: true }).click();
+  await expect(scope.getByRole("tab", { name: /^Needs you/ })).toHaveAttribute("aria-selected", "true");
   await expectNoHorizontalOverflow(page);
 });

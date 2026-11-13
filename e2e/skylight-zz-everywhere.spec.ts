@@ -4,7 +4,7 @@
  * prefers-reduced-motion. Runs on the strict Skylight mock only — nothing is written to real Skylight.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { MOCK_URL, mock } from "./helpers";
+import { freshSkylightBudget, MOCK_URL, mock } from "./helpers";
 import { addDays, localDate } from "../lib/time";
 import { prismWeekly } from "./fixtures/smart-v2";
 
@@ -37,11 +37,11 @@ async function addChores(page: Page, chores: Record<string, unknown>[]) {
 const completions = async (page: Page, id: string) =>
   (await writes(page)).filter((w) => w.method === "PUT" && w.path.endsWith(`/chores/${id}/completions`)).map((w) => w.body.status);
 
-// 12 writes/min per user (integrations/skylight/write.ts) are shared with the skylight-write* specs that run just
-// before this file: start with a fresh budget so Undo is never rate limited.
-test.beforeAll(async () => {
+// 12 writes/min per user (integrations/skylight/write.ts) are shared with the skylight-write* specs when they ran
+// earlier on this worker's server: start with a fresh budget so Undo is never rate limited.
+test.beforeAll(async ({ request }) => {
   test.setTimeout(90_000);
-  await new Promise((resolve) => setTimeout(resolve, 61_000));
+  await freshSkylightBudget(request);
 });
 
 test.beforeEach(async ({ page, request }) => {

@@ -3,7 +3,7 @@
  * suggested actions (Do now, Skip) write through the confirm card and undo. Nothing is written to real Skylight.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { MOCK_URL, mock } from "./helpers";
+import { freshSkylightBudget, MOCK_URL, mock } from "./helpers";
 import { addDays, localDate } from "../lib/time";
 
 const H = { "x-jarvis-csrf": "1" };
@@ -65,11 +65,11 @@ test.afterEach(async ({ page, request }) => {
   }
 });
 
-// Writes are budgeted at 12/min per user (integrations/skylight/write.ts) and skylight-write.spec (runs just
-// before this file) spends ~11: start with a fresh budget so Undo is never rate limited.
-test.beforeAll(async () => {
+// Writes are budgeted at 12/min per user (integrations/skylight/write.ts) and skylight-write.spec spends ~11 when it
+// ran earlier on this worker's server: start with a fresh budget so Undo is never rate limited.
+test.beforeAll(async ({ request }) => {
   test.setTimeout(90_000);
-  await new Promise((resolve) => setTimeout(resolve, 61_000));
+  await freshSkylightBudget(request);
 });
 
 /** Seed chores in the strict mock (frame-local dates) and resync the source. */

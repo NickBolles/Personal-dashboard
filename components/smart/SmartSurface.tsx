@@ -7,6 +7,7 @@ import type { Spec } from "@json-render/core";
 import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { LIMITS, type JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import { describeIntent, intentInSpec, intentKey, intentSchema, intentTarget, isExternal, type Intent } from "@/lib/jarvis-ui/intents";
+import { smartLabel } from "@/lib/jarvis-ui/labels";
 import { canonicalJson, specRefs } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, ApplyResult, HydrateResponse, SurfaceView } from "@/lib/jarvis-ui/types";
 import { Dialog, cx, useToast } from "@/components/ui";
@@ -243,7 +244,8 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
     <SurfaceContext.Provider value={ctx}>
       <div className="smart-surface my-2" data-testid="smart-surface">
         <div className="svh border-b border-line">
-          <span className="sv-tag">{spec.elements[spec.root]?.type === "Stack" ? "Jarvis" : spec.elements[spec.root]?.type}</span>
+          {/* The root's human label; never the component's internal name. */}
+          <span className="sv-tag">{smartLabel(spec.elements[spec.root]?.type) ?? "Jarvis"}</span>
           <span className="sv-label">{stageable ? "Proposed changes" : "Jarvis view"}</span>
           <span className="sv-meta">
             Proposed by <span className="text-ai">@jarvis</span>

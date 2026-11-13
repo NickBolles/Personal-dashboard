@@ -1,7 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ChevronIcon, LogIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import {
+  AnchoredMenu,
+  MenuButton,
+  useAnchoredMenu,
+  useSheetDrag,
   Banner,
   Button,
   ButtonLink,
@@ -21,10 +26,15 @@ import {
   Pill,
   SectionHeader,
   Select,
+  RefPill,
+  RowAction,
   SelectPicker,
+  SheetHandle,
+  StateWord,
   StatusPickerDot,
   Tabs,
   TagIcon,
+  ThingRow,
   Textarea,
   Toast,
   CoordinatorGlyph,
@@ -55,6 +65,132 @@ function Block({ id, title, children }: { id: string; title: string; children: R
       </h2>
       {children}
     </section>
+  );
+}
+
+/** Anchored menu: the ⋯ trigger, right-click, long press or the Menu key on the card; focus returns on close. */
+function MenuDemo() {
+  const menu = useAnchoredMenu();
+  return (
+    <Block id="menus" title="Anchored menu (⋯, right-click, long press, Menu key)">
+      <div {...menu.surfaceProps} className="relative flex items-center justify-between gap-2 rounded-lg border border-[var(--bd)] p-3">
+        <span className="text-sm">R-12 · Smoke tests on the release branch</span>
+        <MenuButton menu={menu} label="Actions for R-12" />
+        <AnchoredMenu
+          menu={menu}
+          label="Actions for R-12"
+          items={[
+            { label: "R-12 · Working", heading: true },
+            { label: "Steer…" },
+            { label: "Review D-4 · Rotate the newsletter key before the next send" },
+            { label: "Ask to stop…", danger: true },
+          ]}
+        />
+      </div>
+    </Block>
+  );
+}
+
+/** The one row for a decision, a piece of work or an item; lists run Needs you, Working, Done. */
+function ThingRowDemo() {
+  const [open, setOpen] = useState(true);
+  const ic = "h-4 w-4";
+  return (
+    <Block id="thing-rows" title="ThingRow (decision, work, item) with state words and icon actions">
+      <div className="rounded-lg border border-[var(--bd)]">
+        <ThingRow
+          state="needs"
+          refId="D-52"
+          title="What is the budget ceiling for the desk?"
+          sub="Standing desk · blocks R-41 · 2 d"
+          onOpen={() => undefined}
+          actions={<RowAction label="Open D-52" icon={<ChevronIcon className={ic} />} />}
+        />
+        <ThingRow
+          state="stalled"
+          refId="R-37"
+          title="Price lumber for the garage shelving"
+          sub={
+            <>
+              <StateWord state="stalled" /> · no report for 34 min
+            </>
+          }
+          onOpen={() => undefined}
+          actions={
+            <>
+              <RowAction label="Steer R-37" icon={<SteerIcon className={ic} />} />
+              <RowAction label="Retry R-37" icon={<RetryIcon className={ic} />} />
+            </>
+          }
+        />
+        <ThingRow
+          state="working"
+          refId="R-39"
+          title="Checkout refactor: smoke tests"
+          sub={
+            <>
+              <StateWord state="working" /> · 4 of 6 checks · @devchief
+            </>
+          }
+          expanded={open}
+          onOpen={() => setOpen((v) => !v)}
+          actions={
+            <>
+              <RowAction label="Steer R-39" icon={<SteerIcon className={ic} />} />
+              <RowAction label="Stop R-39" tone="danger" icon={<StopIcon className={ic} />} />
+            </>
+          }
+        >
+          <p className="text-xs text-[var(--t2)]">12:41 · e2e: 212 of 340 passed, none failed.</p>
+          <p className="text-xs">
+            Blocks <RefPill id="D-48" onClick={() => undefined} />
+          </p>
+        </ThingRow>
+        <ThingRow state="idle" title="Renew car registration" sub="Next · upload the insurance card · due Mon" href="/dev/ui" />
+        <ThingRow
+          state="done"
+          refId="R-36"
+          title="Recipe box dedupe"
+          sub="· merged 14 duplicates"
+          tight
+          onOpen={() => undefined}
+          actions={<RowAction label="Log for R-36" icon={<LogIcon className={ic} />} />}
+        />
+      </div>
+    </Block>
+  );
+}
+
+/** Bottom-sheet grab bar: drag up for full height, down for half, further down to close (here it reopens). */
+function SheetDemo() {
+  const panel = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [closed, setClosed] = useState(0);
+  const { zoneProps, handleProps } = useSheetDrag({
+    panel,
+    full,
+    onFull: setFull,
+    onClose: () => setClosed((n) => n + 1),
+    heights: () => ({ half: 120, full: 240 }),
+  });
+  return (
+    <Block id="sheets" title="Bottom-sheet grab bar (drag up, swipe down, tap, arrow keys)">
+      <div className="flex h-64 items-end rounded-lg border border-[var(--bd)] bg-[var(--s0)]">
+        <div
+          key={closed}
+          ref={panel}
+          className="w-full rounded-t-2xl border border-[var(--bd2)] bg-[var(--s1)] data-[dragging]:transition-none"
+          style={{ height: full ? 240 : 120, transition: "height var(--d2) var(--ease), transform var(--d2) var(--ease)" }}
+        >
+          <div {...zoneProps}>
+            <SheetHandle {...handleProps} />
+            <p className="px-3 text-sm">
+              {full ? "Full height" : "Half height"} · closed {closed} times
+            </p>
+          </div>
+        </div>
+      </div>
+    </Block>
   );
 }
 
@@ -169,6 +305,20 @@ export function LibraryGallery() {
             <Pill tone="prop">Proposed</Pill>
           </div>
           <Toast message="Saved" action={{ label: "Undo", onClick: () => undefined }} />
+        </Block>
+        <MenuDemo />
+        <SheetDemo />
+        <ThingRowDemo />
+        <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
+          <div data-density="sleek" className="flex flex-wrap items-center gap-2">
+            <Button size="sm">Answer</Button>
+            <Button size="sm" variant="ghost">
+              Ask in chat
+            </Button>
+            <Button size="sm" variant="ghost" iconOnly icon={<Plus />}>
+              Add
+            </Button>
+          </div>
         </Block>
       </div>
     </Page>

@@ -50,7 +50,12 @@ test("save chat as workflow: review parts, drop one, save as a draft", async ({ 
 test("describe it drafts a proposal; test a turn is a discarded sandbox", async ({ page }) => {
   const nonce = Date.now().toString(36);
   await page.goto("/workflows/new");
-  await page.getByRole("button", { name: "Describe it" }).click();
+  // A tap before hydration is lost (seen under parallel CI load): tap again until the form opens.
+  const describeIt = page.getByRole("button", { name: "Describe it" });
+  await expect(async () => {
+    if (await describeIt.isVisible()) await describeIt.click();
+    await expect(page.locator("#wf-describe")).toBeVisible({ timeout: 2_000 });
+  }).toPass();
   await page.locator("#wf-describe").fill("Weekly study group notes: passage, questions, my takeaways.");
   await page.getByRole("button", { name: "Draft it" }).click();
   const review = page.getByTestId("proposal-review");

@@ -55,7 +55,9 @@ test("chat list: unread dot, filter chips, mark read on open and Mark all read",
   await page.getByRole("group", { name: "Show" }).getByRole("button", { name: "Agents" }).click();
   await expect(row(`Unread alpha ${nonce}`)).toHaveCount(0);
   await page.getByRole("button", { name: "All conversations" }).click();
-  await expect(row(`Unread alpha ${nonce}`).getByTestId("agent-mark")).toHaveText("Hermes");
+  // The default assistant is not repeated on every row; only an agent profile or another backend gets a mark.
+  await expect(row(`Unread alpha ${nonce}`)).toBeVisible();
+  await expect(row(`Unread alpha ${nonce}`).getByTestId("agent-mark")).toHaveCount(0);
   // Opening marks it read.
   await page.goto(`/chat/${a.id}`);
   await expect(page.getByRole("heading", { level: 1, name: `Unread alpha ${nonce}` })).toBeVisible();

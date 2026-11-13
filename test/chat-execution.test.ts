@@ -273,7 +273,7 @@ describe("durable execution identity", () => {
 });
 
 describe("execution endpoint", () => {
-  it("merges persisted children, forks, registered runs and exact-session Jarvis runs with bounded safe output", async () => {
+  it("merges persisted children, forks, registered runs and child-session Jarvis runs with bounded safe output; the chat's own turns are not background work", async () => {
     upsertExecution(
       "parent-1",
       {
@@ -308,11 +308,21 @@ describe("execution endpoint", () => {
         { id: "unrelated", userId: owner, itemId: item.id, profile: "devchief", title: "Task", hermesSessionId: "other-session" },
       ])
       .run();
-    getDb().insert(schema.runs).values({ runId: "jrun", sessionId: "parent-1", userId: owner, idempotencyKey: "jrun", status: "failed" }).run();
+    getDb()
+      .insert(schema.runs)
+      .values([
+        // every message the owner sends is a run in the conversation itself: that is the chat, not work it started
+        { runId: "jrun", sessionId: "parent-1", userId: owner, idempotencyKey: "jrun", status: "failed", inputPreview: "Walk me through decisions" },
+        { runId: "jrun-2", sessionId: "parent-1", userId: owner, idempotencyKey: "jrun-2", status: "completed", inputPreview: "Steer sub_1: go faster" },
+        // a run in the child's session is the delegated work
+        { runId: "crun", sessionId: "child-1", userId: owner, idempotencyKey: "crun", status: "running" },
+      ])
+      .run();
     const res = await call(executionRoute.GET);
     expect(res.status).toBe(200);
     const out: ChatExecutionResponse = await res.json();
     expect(out.records.map((r) => r.source).sort()).toEqual(["fork", "jarvis_run", "registered_run", "subagent"]);
+    expect(out.records.filter((r) => r.source === "jarvis_run").map((r) => r.id)).toEqual(["crun"]);
     expect(out.records.find((r) => r.id === "reg-1")).toMatchObject({
       state: "completed",
       href: `/areas?item=${item.id}`,

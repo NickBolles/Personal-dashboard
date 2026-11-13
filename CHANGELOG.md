@@ -1,5 +1,109 @@
 # Changelog
 
+## 2026-11-13 — One shape per thing: chat and Activity
+
+The same thing was drawn several ways and mentioned several times on one screen. This change applies the
+shared rules to the Chief of staff's Chat and Activity tabs (decisions and item pages follow in their own changes).
+
+- **One row.** A run in Activity and a piece of background work in Chat are the same row (`ThingRow` in
+  `@/components/ui`): its R-n and state on top, the title under it (tap it to open the item), then a one-line
+  peek at its latest report. A chevron opens it in place for the pipeline, the reports, sub-runs and the other
+  actions. About five runs fit one phone screen where two and a half cards did.
+- **References you can tap.** A D-n or R-n written in a reply is a chip in the sentence. The "Mentions" row is
+  gone; what a reply mentions is drawn under it as rows, three at most, then "N more".
+- **Five state words.** Needs you, Working, Stalled, Failed, Done (`lib/work-words.ts`). "Quiet", "went quiet",
+  "Finished", "Waiting on you" and "Interrupted" are gone from run status, the tray line, tab hints, catch-up
+  chips and item-card headlines.
+- **Lists run Needs you, Working, Done.** Under Needs you: what waits for an answer, then what failed or
+  stalled, then what was interrupted. Done shows the last three.
+- **Icon actions.** At most two per row, chosen by state, in the order Steer, Stop, Retry, Log. Everything else
+  is in the opened row and in the long-press / right-click menu.
+- **One composer.** Steer, Reply, Retry and "ask about this" put a chip in the Chat composer; you type and send
+  there. No card has its own text box. Stop is the exception: it asks once on the row and then sends the
+  request (a tracked run used to write the request into the composer for you to send).
+- **Each thing once.** Work is drawn under the reply that started it. The "Background work" list, the item
+  cards under a reply and the repeated hand-off chips are gone. Your own messages are no longer listed as
+  finished background work, and a sub-agent registered as a run under a different title is one row, linked by
+  its delegation id.
+- **Sheets.** The phone sheet has a grab bar: drag it down to close. The "In this chat" sheet drags up for full
+  height and down to close; its "Full height" and "Done" buttons are gone.
+
+## 2026-11-10 — Chief of staff and chat clarity pass
+
+What changed for the owner (details in the PR):
+
+- **One honest status.** The phone tray is one button with one sentence ("Checkout smoke tests stalled · 21 need you · 2 working") instead of "Failing · Chief of staff" plus `!23` / `↻14` badges. A run that got stuck _after_ you last opened Activity turns it red; once you have looked it is still counted ("3 stuck") but no longer shouts, and failures older than three days fold under "Older failures". Rules: `lib/coordinator/status.ts`.
+- **Three tabs, not five.** Chat · Needs you · Activity. Activity is what agents are doing (Stuck, Working, Finished since you looked) plus what the Chief of staff changed (grouped by item, with Undo). The Context tab is now the page chip in the composer (Ask about this page · remove · share again).
+- **Needs you reads like a list of questions.** The question is the headline, the D-n ref is a quiet handle, an item title that only repeats the question is dropped, paragraph-long agent "questions" get a short heading and the rest as body text, raw statuses (`ready_to_settle`) read as words, run approvals lead the list, and stalled runs are no longer listed here a second time (they are in Activity). No more sideways overflow.
+- **Sleeker controls.** Inside the panel, actions are quiet text or small icons at every width (tap areas stay generous through hit-slop); decision answers are compact, aligned option cards with the risk stated before the second tap.
+- **Coordinator composer parity.** The Chief of staff composer has the full chat’s add menu (photo or file, camera, context) and paste-to-attach, and its replies render smart (`jarvis-ui`) blocks through the same renderer as full chat.
+- **Full chat.** An idle conversation no longer carries a status tray of zeros; your messages show your words (page context becomes a caption, one-tap decisions a receipt); the conversation list gives titles the row.
+
+Optimised for a Galaxy Z Fold 6 at normal zoom, closed and unfolded (`scripts/ux-shots.mjs` has both sizes). Demo data for all of this: `node scripts/demo-seed-coordinator.mjs`.
+
+- **Run cards.** Every run in Activity, and every piece of background work in Chat, is one card that reads
+  without opening anything: a tinted state chip ("Stuck · no update for 47 min", "Waiting on you", "Failed",
+  "Working", "Done"), the title, who is on it, pipeline stage pills, and a real timeline (newest first, a
+  coloured node and type chip per event: Progress, Notice, CI, Lock, Staged, Live, Failed…, in the tones the
+  item pages use for PR / checks / deploy). The first few runs that need you arrive open with their last three
+  events; "Show N earlier" loads the rest. Steer / Retry / Ask / Pull request / Open item / Stop live in one
+  quiet icon-and-word bar at the card's bottom edge.
+- **Kept current in place.** Activity polls every 10 s while it is on screen and says so ("Live · checked just
+  now"); background work in Chat polls every 5 s while anything runs, 15 s otherwise. If a refresh fails the
+  line says exactly that, with the age of what is shown and "Try again", instead of "may be out of date".
+  Background-work cards show the step in progress, the outcome or the error, progress when the source
+  reports it, and their links, ordered failed → waiting → working → done.
+- **Item and project cards.** Wherever the Chief of staff lists what it changed (Activity → Changes, and under
+  a reply in Chat), each item or project is a card in the same family as the run cards: one state chip for
+  what matters now ("Needs you" when a decision is open on it, "Run failed", "Run stuck", "Working", else its
+  own status), where it sits, the next step and a due chip ("Due Nov 22", "Overdue 3 d"), who is on it when
+  someone is working, progress, pull requests with their state / checks / deploy pills, and chips that jump
+  straight to the open decision (D-n) or run (R-n). A project gathers the decisions and runs under it. The
+  changes are a timeline with a chip per kind (Created, Edit, Status, Dates, Tags, Link, Decision, Run) and
+  only the words the chip cannot say ("Target Nov 22", not "Dates: start — → —, target — → 2026-11-22");
+  every change keeps its own Undo. Opening a card adds its summary, the last agent report, Open item, Ask
+  and the agent's conversation. Cards read the same live queries as the rest of the app.
+- **Life.** The cards move where it means something, in the app's own motion vocabulary. Work in flight has
+  light travelling round the card's outline in the theme's agent colour (an indeterminate "still going"), the
+  agent's mark turning inside the "Working" chip, and a pulsing newest event; work that has gone quiet is still. An event that arrives while you watch slides in
+  and glows once; a run that finishes pops with a few sparks; each sync blinks the dot. A thin strip on every
+  run shows when it reported from its start to now, so a steady run and one that went silent look different at
+  a glance. Item cards have their chip timeline back (the chip is the verb, in the colour of its kind), three
+  changes showing. Everything stops under "reduce motion".
+- **Times against now.** Run timelines say "12 min ago", "3 h ago", "2 d ago" (the exact time is the tooltip),
+  the same way item timelines do.
+- **Right-click or long-press a card.** Every run, item, project and background-work card opens a menu of
+  everything it can do in its current state, without opening the card first: Steer / Reply, Retry, "Resume
+  without replying", Ask in chat, open the item or pull request, jump to its decisions and runs, copy the ref
+  or link, Ask to stop (still behind its confirmation). A long press on the phone tray goes straight to Chat,
+  Needs you or Activity. The Menu key and Shift+F10 open the same menu from the keyboard.
+- **Nothing lost in the redesign.** An audit against `main` found no removed capability; what had become
+  harder to reach or stopped being shown is back: a sub-agent that outlives its tracked run can still be
+  steered and stopped (from the menu), a run says how many steps it has reported, an item that is no longer
+  listed offers "Try opening it", and a background-work source that could not be read is said even when there
+  is nothing to list.
+- **Council round 7 (the whole change, before merge).** What all three reviewers agreed on: the tray uses the
+  cards' words ("2 runs went quiet", "2 runs failed", "3 runs need a look"; silence is never called stuck);
+  the time beside "Working" is the time of the newest report, in the timeline's own format, so the two cannot
+  disagree; only a report under two minutes old pulses; the reporting strip is labelled ("Reports … now"); work
+  in flight keeps its order when one run reports; a catch-up chip lands on the section it was about and marks
+  it for a moment; a waiting run's reply button is Resume while the field is empty and Send once there is an answer; a sub-agent that outlives
+  its run keeps Steer and Stop on its card; menu entries name what a D-n or R-n is; ages dim while refreshes
+  fail. Nothing a card can do is menu-only any more (the tray's long-press jump is the one accelerator).
+- **Council code review (both changes, before merge).** Fixed: background work is tied to a tracked run by title
+  only when their times overlap; a run that two live sub-agents could both be is neither's (each keeps its own
+  card and controls, in any order), and a card's Steer / Stop always go to the sub-agent it shows (they could
+  reach a different one); a card's typed guidance and stop confirmation belong to that sub-agent and never
+  carry over to another; Steer needs the sub-agent itself to be going, while a run that is still going can
+  always be asked to stop; a finished run offers "Ask in chat", not Steer; a run waiting on the owner with no
+  decision of its own leads the tray ("… is waiting on you") where it said "No agent work waiting"; the first
+  attachment and a quick Send share one new conversation and Send waits for the file; Undo in a change row no
+  longer takes taps meant for the row above; a card menu gives focus back when it closes and stays put while
+  the panel is scrolled; an item with an interrupted run says "Run interrupted"; a reply being typed on a
+  background-work card survives its sources reporting.
+- **Catch-up card.** "Since 8:39 AM · 2 h" is a small card whose chips say what moved and jump to it:
+  "1 failed", "2 new decisions", "1 waiting on you", "1 stuck", "2 finished", "2 runs updated".
+
 ## 2026-11-07 — Home Assistant control + Finance in AI (owner-approved policy changes)
 
 Both changes were explicitly approved by the owner on 2026-11-07:

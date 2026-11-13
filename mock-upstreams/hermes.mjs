@@ -254,6 +254,40 @@ export function createHermes({ apiKey }) {
     return null;
   }
 
+  /**
+   * Capture triage@2 actions for E2E, from the capture text inside the <data> block:
+   * "add <x> to grocery" → Skylight list add on the shopping list; "dentist" → an appointment
+   * without a time (needs input); "garage" → a device action (suggest only). Else no action.
+   */
+  function triageAction(input) {
+    const data = (input.match(/<data[^>]*>([\s\S]*?)<\/data>/) || [])[1] || "";
+    const lists = [...input.matchAll(/^(\S+) — (.+) \((\w+)\)$/gm)].map((m) => ({ id: m[1], label: m[2], kind: m[3] }));
+    const add = data.match(/\badd ([a-z ]{1,40}?) to (?:the )?grocer(?:y|ies)\b/i);
+    if (add) {
+      const shop = lists.find((l) => l.kind === "shopping") || lists[0];
+      const label = add[1].trim().replace(/^\w/, (c) => c.toUpperCase());
+      return {
+        type: "skylight_list_add",
+        confidence: 0.93,
+        summary: `Add “${label}” to ${shop ? shop.label : "the list"} on Skylight`,
+        listId: shop ? shop.id : null,
+        label,
+      };
+    }
+    if (/\bdentist\b/i.test(data))
+      return {
+        type: "skylight_event_create",
+        confidence: 0.88,
+        summary: "Add the dentist appointment to the family calendar",
+        event: { summary: "Dentist appointment", date: null, time: null },
+        missing: ["date", "time"],
+        question: null,
+        choices: [],
+      };
+    if (/\bgarage\b/i.test(data)) return { type: "ha_device", confidence: 0.95, summary: "Open the garage door" };
+    return null;
+  }
+
   function aiJobAnswer(kind, input) {
     if (/FORCE_ERROR/.test(input)) return JSON.stringify({ error: "tool missing" });
     if (/FORCE_PROSE/.test(input)) return "Here is a prose answer instead of JSON.";
@@ -316,6 +350,7 @@ export function createHermes({ apiKey }) {
           shouldInvestigate: true,
           brief: "Find the key facts",
           sensitivity: "none",
+          action: triageAction(input),
         });
       default:
         return JSON.stringify(common);
@@ -571,6 +606,34 @@ export function createHermes({ apiKey }) {
     const m = req.method;
     let match;
     if (profile) state.profileRequests[profile] = (state.profileRequests[profile] ?? 0) + 1;
+
+    // Demo/UX seeding hook (scripts/demo-seed-coordinator.mjs): create or replace whole sessions with an
+    // exact transcript (roles, tool calls, timestamps). Additive: Jarvis and the tests never call it, and
+    // /__mock/reset still clears everything. Under /p/<profile>/ the sessions land on that profile's store.
+    if (path === "/__mock/seed" && m === "POST") {
+      const body = await readBody(req);
+      const seeded = [];
+      for (const s of [].concat(body.sessions ?? [])) {
+        if (!s || typeof s.id !== "string" || !s.id) continue;
+        const prior = state.sessions.get(s.id);
+        if (prior && !mine(prior)) continue; // never touch another profile's session
+        const session = addSession({
+          id: s.id,
+          title: s.title,
+          source: s.source,
+          model: s.model,
+          parent_session_id: s.parent_session_id,
+          started_at: s.started_at,
+        });
+        if (profile) session.profile = profile;
+        // `timestamp` (unix seconds) on a message overrides "now"; last_active follows the last message.
+        for (const msg of [].concat(s.messages ?? [])) if (msg && typeof msg.role === "string") addMessage(session.id, msg);
+        session.tool_call_count = state.messages.get(session.id).filter((x) => x.role === "tool").length;
+        for (const k of ["last_active", "ended_at", "end_reason", "pinned", "archived", "hidden", "preview"]) if (k in s) session[k] = s[k];
+        seeded.push({ id: session.id, message_count: session.message_count });
+      }
+      return json(res, 200, { object: "hermes.mock.seed", seeded });
+    }
 
     if (path === "/v1/capabilities" && m === "GET") {
       return json(res, 200, {
