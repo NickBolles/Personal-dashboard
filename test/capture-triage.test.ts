@@ -7,11 +7,11 @@ import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, userById } from "@/server/auth";
 import { saveIntegration } from "@/integrations/store";
 import { updatePreferences } from "@/server/settings";
-import { saveAiSettings } from "@/server/ai/settings";
+import { getAiSettings, saveAiSettings } from "@/server/ai/settings";
 import { createItem } from "@/server/work/store";
 import { answerDecisionRef } from "@/server/work/decision-store";
 import { hooks } from "@/server/hooks";
-import { applyPlannedTriage, applySuggestion, registerCaptureTriage, retryTriage, undoTriage } from "@/server/capture/triage";
+import { applyPlannedTriage, applySuggestion, backfillCaptureTriage, registerCaptureTriage, retryTriage, undoTriage } from "@/server/capture/triage";
 import { triageForItem, triageViewsForInbox } from "@/server/capture/triage-views";
 import { inboxEntries } from "@/server/work/inbox";
 import { DEFAULT_CAPTURE_ACTIONS, decideTriage, pickList, stripRouting, triageActionSchema, type CaptureActionSettings } from "@/lib/capture-triage";
@@ -247,6 +247,28 @@ describe("capture triage applier", () => {
     const views = triageViewsForInbox(userId, [{ id: inboxId, triageState: "done", updatedAt: "" }]);
     expect(views.get(inboxId)).toMatchObject({ state: "suggested", canApply: false });
     expect(inboxEntries(userId).find((e) => e.id === inboxId)!.capture!.triage).toMatchObject({ state: "suggested" });
+  });
+
+  it("back-fill honours capture AI opt-outs: global 'Nothing' and per-capture skips are never queued", () => {
+    const db = getDb();
+    const resetKey = () => db.delete(schema.settings).where(eq(schema.settings.key, "capture_triage:backfill:v1")).run();
+    const optedOut = capture("Add batteries on skylight (opted out)", { triageState: "skipped", triageSkipReason: "off" });
+    const normal = capture("Add light bulbs on skylight");
+    const state = (id: string) => db.select().from(schema.workInbox).where(eq(schema.workInbox.id, id)).get()!.triageState;
+    resetKey();
+    const ai = getAiSettings();
+    saveAiSettings({ capture: { ...ai.capture, auto: "off" } });
+    try {
+      expect(backfillCaptureTriage()).toEqual({ queued: 0 });
+      expect(state(normal)).toBe("done");
+    } finally {
+      saveAiSettings({ capture: ai.capture });
+    }
+    resetKey();
+    const out = backfillCaptureTriage();
+    expect(out.queued).toBeGreaterThanOrEqual(1);
+    expect(state(optedOut)).toBe("skipped");
+    expect(state(normal)).toBe("queued");
   });
 
   it("back-fill acts only on captures that name Skylight; the rest are suggestions with Do it", async () => {
