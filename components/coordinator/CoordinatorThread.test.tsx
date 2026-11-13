@@ -538,11 +538,14 @@ it("work that already has its row under the reply that started it is not drawn a
   mount({ mentions, onRef: vi.fn() });
   const work = await screen.findByTestId("coordinator-run-card");
   await waitFor(() => expect(work.getAttribute("data-run-ref")).toBe("R-7"));
-  expect(
-    within(screen.getByText(/^Started/).closest("li")!)
-      .getByRole("region", { name: "Work started by this reply" })
-      .contains(work),
-  ).toBe(true);
+  // (the messages and the work load separately: until both are in, the row waits after the last message)
+  await waitFor(() =>
+    expect(
+      within(screen.getByText(/^Started/).closest("li")!)
+        .getByRole("region", { name: "Work started by this reply" })
+        .contains(work),
+    ).toBe(true),
+  );
   // the later reply mentions R-7 too, and the host could draw it: it has its row already, so it is not drawn twice
   expect(mentionSection(/^Started/)).toBeNull();
   expect(rowsIn(mentionSection(/is half way/))).toEqual(["D-2", "R-8"]);
@@ -591,4 +594,60 @@ it("a chip in the text jumps to the thing's row when it is on screen in the thre
   } finally {
     Reflect.deleteProperty(Element.prototype, "scrollIntoView");
   }
+});
+
+// ---- answering a decision in your own words -------------------------------------------------------------------
+
+const answerD5: ComposeScope = { kind: "answer", ref: "D-5", title: "Which day works for the furnace visit?" };
+
+it("a decision's chip records what is typed as its answer: nothing goes to the conversation", async () => {
+  const onAnswer = vi.fn(async () => true);
+  mountScoped(answerD5, { onAnswer });
+  expect(chip()?.getAttribute("aria-label")).toBe("Answering D-5: Which day works for the furnace visit?");
+  expect(field().placeholder).toBe("Answer D-5 in your own words…");
+  // nothing to record yet
+  fireEvent.click(sendButton());
+  expect(onAnswer).not.toHaveBeenCalled();
+  fireEvent.change(field(), { target: { value: "  Thursday before noon  " } });
+  fireEvent.click(sendButton());
+  expect(onAnswer).toHaveBeenCalledExactlyOnceWith(answerD5, "Thursday before noon", false);
+  await waitFor(() => expect(chip()).toBeNull());
+  expect(field().value).toBe("");
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+it("an answer that could not be recorded keeps the words and the chip", async () => {
+  const onAnswer = vi.fn(async () => false);
+  mountScoped(answerD5, { onAnswer });
+  fireEvent.change(field(), { target: { value: "Thursday" } });
+  fireEvent.click(sendButton());
+  await waitFor(() => expect(onAnswer).toHaveBeenCalledOnce());
+  expect(chip()).toBeTruthy();
+  expect(field().value).toBe("Thursday");
+});
+
+it("a risky decision's typed answer takes a second send, for exactly those words", async () => {
+  const onAnswer = vi.fn(async () => true);
+  const risky: ComposeScope = { ...answerD5, risky: true };
+  mountScoped(risky, { onAnswer });
+  fireEvent.change(field(), { target: { value: "Pay the deposit" } });
+  fireEvent.click(sendButton());
+  // the first send only arms it
+  expect(onAnswer).not.toHaveBeenCalled();
+  expect(screen.getByRole("status").textContent).toContain("D-5 is flagged risky");
+  // changing the words disarms: the confirmation was for the other answer
+  fireEvent.change(field(), { target: { value: "Pay the deposit tomorrow" } });
+  expect(screen.queryByText(/is flagged risky/)).toBeNull();
+  fireEvent.click(sendButton());
+  expect(onAnswer).not.toHaveBeenCalled();
+  // Cancel disarms too
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByText(/is flagged risky/)).toBeNull();
+  fireEvent.click(sendButton());
+  expect(onAnswer).not.toHaveBeenCalled();
+  // the second send, with the same words, records it as confirmed
+  fireEvent.click(sendButton());
+  expect(onAnswer).toHaveBeenCalledExactlyOnceWith(risky, "Pay the deposit tomorrow", true);
+  await waitFor(() => expect(chip()).toBeNull());
+  expect(api.post).not.toHaveBeenCalled();
 });

@@ -18,7 +18,21 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronIcon } from "@/components/icons";
-import { AnchoredMenu, Button, ButtonLink, ChipButton, MenuButton, RefPill, RowAction, ThingRow, Toast, cx, useAnchoredMenu, useNow } from "@/components/ui";
+import {
+  AnchoredMenu,
+  Button,
+  ButtonLink,
+  ChipButton,
+  MenuButton,
+  RefPill,
+  RowAction,
+  StateWord,
+  ThingRow,
+  Toast,
+  cx,
+  useAnchoredMenu,
+  useNow,
+} from "@/components/ui";
 import { Markdown } from "@/components/markdown/Markdown";
 import { ageLabel, decisionKeyAction, defaultLine, deferUntil, safeEvidenceHref } from "@/lib/coordinator/needs";
 import { isAppPath } from "@/lib/decisions";
@@ -201,6 +215,8 @@ export function DecisionRow({
         className="dcs-row"
         state="needs"
         refId={view.ref}
+        // The same stacked shape as a run's row: the D-n and its state on top, the question under it.
+        status={<StateWord state="needs" />}
         title={<span className={cx("dcs-wrap", chips.length > 0 && "dcs-wrap-all")}>{q.title}</span>}
         sub={<RowMeta view={view} now={now} ask={q.titled ? q.rest : null} about={aboutItem(view, q.titled)} />}
         onOpen={() => onOpen(view.ref)}

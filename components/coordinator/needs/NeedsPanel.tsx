@@ -5,7 +5,7 @@ import { Button, EmptyState, Skeleton } from "@/components/ui";
 import { DecisionNotices, DecisionReceiptLine } from "@/components/decisions/DecisionBlock";
 import { DecisionDetail } from "./DecisionDetail";
 import { NeedsList } from "./NeedsList";
-import { DecisionFlowContext, useCoordinatorDecisions, useDecisionFlowController, type NeedsOpenOptions } from "./useCoordinatorDecisions";
+import { DecisionFlowContext, useCoordinatorDecisions, useDecisionFlow, type NeedsOpenOptions } from "./useCoordinatorDecisions";
 
 type Props = {
   onAsk: (ref: string, question: string) => void;
@@ -18,8 +18,9 @@ type Props = {
 };
 export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props) {
   const query = useCoordinatorDecisions();
-  // One flow for the list and the detail: a receipt and its Undo survive moving between them.
-  const flow = useDecisionFlowController();
+  // One flow for the list and the detail: a receipt and its Undo survive moving between them. The panel host
+  // shares its own when it has one, so an answer typed in the Chat composer leaves its receipt here too.
+  const { flow } = useDecisionFlow();
   const [selected, setSelected] = useState<{ ref: string; arm?: string; visit: number } | null>(() => (initialRef ? { ref: initialRef, visit: 0 } : null));
   const [announcement, setAnnouncement] = useState("");
   const seen = useRef(new Set<string>());

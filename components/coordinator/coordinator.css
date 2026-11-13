@@ -1550,3 +1550,17 @@ html[data-kb="open"] .gc-tray-qa {
 .gc-mention-rows > .k-thing + .rc-row > .k-thing {
   border-top: 1px solid var(--bd);
 }
+
+/* ==== answering a decision from the composer ==== */
+.gc-scope-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 4px;
+  color: var(--wn);
+  font-size: 0.75rem;
+}
+.gc-chat-receipts {
+  margin-top: 8px;
+}

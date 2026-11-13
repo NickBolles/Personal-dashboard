@@ -129,8 +129,11 @@ describe("Needs you owner actions", () => {
     render(<NeedsList decisions={[decision(48, { risk: ["money"] })]} onOpen={onOpen} />, { wrapper });
     expect(screen.queryByRole("button", { name: /^D-48: / })).toBeNull();
     const row = screen.getByRole("button", { name: /^Open decision D-48/ });
-    expect(row.textContent).toContain("Money");
-    expect(row.textContent).toContain("open to answer");
+    // The button is the question; its risk and "open to answer" sit on the line under it, in the same row.
+    const item = row.closest('[data-testid="decision-row"]')!;
+    expect(item.textContent).toContain("Needs you");
+    expect(item.textContent).toContain("Money");
+    expect(item.textContent).toContain("open to answer");
     fireEvent.click(row);
     expect(onOpen).toHaveBeenCalledWith("D-48");
     expect(api.post).not.toHaveBeenCalled();
@@ -309,10 +312,11 @@ describe("Needs you owner actions", () => {
     vi.spyOn(Date, "now").mockReturnValue(clock);
     render(<NeedsList decisions={[long, echo]} onOpen={vi.fn()} />, { wrapper });
     const rowOf = (ref: string) => screen.getByRole("button", { name: new RegExp(`^Open decision ${ref}:`) });
-    expect(rowOf("D-70").querySelector(".k-thing-title")?.textContent).toBe("@devchief proposes: settle.");
-    expect(rowOf("D-70").querySelector(".dcs-meta")?.textContent).toContain("Release-clone cleanup");
-    expect(rowOf("D-71").querySelector(".dcs-meta")?.textContent).not.toContain("Rotate the storefront DB password");
-    expect(rowOf("D-71").querySelector(".dcs-meta")?.textContent).toContain("Development");
+    const metaOf = (ref: string) => rowOf(ref).closest('[data-testid="decision-row"]')!.querySelector(".dcs-meta");
+    expect(rowOf("D-70").textContent).toBe("@devchief proposes: settle.");
+    expect(metaOf("D-70")?.textContent).toContain("Release-clone cleanup");
+    expect(metaOf("D-71")?.textContent).not.toContain("Rotate the storefront DB password");
+    expect(metaOf("D-71")?.textContent).toContain("Development");
     // One-tap answers only where the whole question is on the row; otherwise the answer waits for the card.
     expect(screen.queryByRole("button", { name: /^D-70: / })).toBeNull();
     expect(screen.getByRole("button", { name: "D-71: Accept (recommended)" })).toBeTruthy();
