@@ -441,6 +441,60 @@
   color: var(--t3);
   text-decoration: line-through;
 }
+.ip-links,
+.ip-deps {
+  margin-top: 4px;
+  border-bottom: 1px solid var(--bd);
+}
+/* A link: its kind and name on line one (the name opens it), its role and state on line two. */
+.ip-linkrow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--bd);
+  min-height: 52px;
+  padding: 4px 0 4px 4px;
+}
+.ip-linkrow-main {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+.ip-linkrow-t {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  font: 500 14px/20px var(--sans);
+}
+.ip-linkrow-name {
+  min-width: 0;
+  color: var(--t1);
+  overflow-wrap: anywhere;
+}
+a.ip-linkrow-name:hover {
+  color: var(--ac);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.ip-linkrow-s {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  color: var(--t2);
+  font: 400 12px/18px var(--sans);
+}
+.ip-linkrow-acts {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
 .ip-packet {
   margin-top: 4px;
   border-top: 1px solid var(--bd);
