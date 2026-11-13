@@ -5,7 +5,8 @@ import type { Decision } from "@/lib/cw-decisions";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import type { WorkItem } from "@/lib/work";
 import { WORK_WORD } from "@/lib/work-words";
-import { containerRollup, groupWork, itemNow, itemWorkRows, logLine, runWorkState } from "./item-page";
+import type { RunEvent } from "@/lib/cw-runs";
+import { containerRollup, coordHref, groupWork, itemNow, itemTimeline, itemWorkRows, linkKind, logLine, runWorkState } from "./item-page";
 
 const now = new Date(2026, 10, 10, 12).getTime();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -73,7 +74,20 @@ const tracked = (id: string, itemId: string, over: Partial<CoordinatorRunRow> = 
   ...over,
 });
 const decision = (id: string, itemId: string, over: Partial<Decision> = {}): Decision =>
-  ({ id, ref: `D-${id}`, seq: 1, itemId, runId: null, question: "Ship it?", choices: ["Yes", "No"], state: "open", risk: [], createdAt: iso(now - 60 * MIN), updatedAt: iso(now), ...over }) as Decision;
+  ({
+    id,
+    ref: `D-${id}`,
+    seq: 1,
+    itemId,
+    runId: null,
+    question: "Ship it?",
+    choices: ["Yes", "No"],
+    state: "open",
+    risk: [],
+    createdAt: iso(now - 60 * MIN),
+    updatedAt: iso(now),
+    ...over,
+  }) as Decision;
 const info = (over: Partial<ItemAgentInfo> = {}): ItemAgentInfo => ({
   itemId: "a",
   areaId: null,
@@ -89,9 +103,34 @@ const info = (over: Partial<ItemAgentInfo> = {}): ItemAgentInfo => ({
   ...over,
 });
 const job = (id: string, over: Partial<JobView> = {}): JobView =>
-  ({ id, kind: "research", subjectType: "work_item", subjectId: "a", state: "running", createdAt: iso(now - 5 * MIN), startedAt: iso(now - 4 * MIN), finishedAt: null, errorMessage: null, conversationId: null, ...over }) as JobView;
+  ({
+    id,
+    kind: "research",
+    subjectType: "work_item",
+    subjectId: "a",
+    state: "running",
+    createdAt: iso(now - 5 * MIN),
+    startedAt: iso(now - 4 * MIN),
+    finishedAt: null,
+    errorMessage: null,
+    conversationId: null,
+    ...over,
+  }) as JobView;
 const report = (id: string, over: Partial<ReportView> = {}): ReportView =>
-  ({ id, jobId: `j${id}`, kind: "research", title: `Report ${id}`, summary: "", confidence: "medium", createdAt: iso(now - 30 * MIN), sourceCount: 3, supersededBy: null, archivedAt: null, readAt: null, ...over }) as ReportView;
+  ({
+    id,
+    jobId: `j${id}`,
+    kind: "research",
+    title: `Report ${id}`,
+    summary: "",
+    confidence: "medium",
+    createdAt: iso(now - 30 * MIN),
+    sourceCount: 3,
+    supersededBy: null,
+    archivedAt: null,
+    readAt: null,
+    ...over,
+  }) as ReportView;
 
 describe("runWorkState", () => {
   it("uses the five shared words, never a synonym", () => {
@@ -111,7 +150,11 @@ describe("itemWorkRows", () => {
     const rows = itemWorkRows({
       info: info({
         live: "waiting",
-        agentRuns: [ext("done", { state: "done", summary: "Renamed the flags" }), ext("work"), ext("wait", { state: "waiting", summary: "Waiting on your budget ceiling." })],
+        agentRuns: [
+          ext("done", { state: "done", summary: "Renamed the flags" }),
+          ext("work"),
+          ext("wait", { state: "waiting", summary: "Waiting on your budget ceiling." }),
+        ],
       }),
       runs: [tracked("wait", "a", { state: "waiting" }), tracked("work", "a", { lastEvent: { summary: "4 of 6 checks" } as CoordinatorRunRow["lastEvent"] })],
       jobs: [job("j1"), job("j2", { state: "succeeded", finishedAt: iso(now - MIN) })],
@@ -139,7 +182,13 @@ describe("itemWorkRows", () => {
 
   it("says how long a stalled run has been silent and ranks a failure above it", () => {
     const rows = itemWorkRows({
-      info: info({ live: "failed", agentRuns: [ext("quiet", { updatedAt: iso(now - 34 * MIN) }), ext("bad", { state: "failed", summary: "(no summary — status=failed: vendor portal timed out)" })] }),
+      info: info({
+        live: "failed",
+        agentRuns: [
+          ext("quiet", { updatedAt: iso(now - 34 * MIN) }),
+          ext("bad", { state: "failed", summary: "(no summary — status=failed: vendor portal timed out)" }),
+        ],
+      }),
       now,
     });
     expect(rows.map((r) => r.state)).toEqual(["failed", "stalled"]);
@@ -166,7 +215,10 @@ describe("itemWorkRows", () => {
   });
 
   it("adds the linked conversation only when no run, job or report explains the item's state", () => {
-    const chat = itemWorkRows({ info: info({ live: "waiting", approval: true, sessionId: "sess_1", who: { kind: "agent", name: "devchief" }, liveAt: iso(now - MIN) }), now });
+    const chat = itemWorkRows({
+      info: info({ live: "waiting", approval: true, sessionId: "sess_1", who: { kind: "agent", name: "devchief" }, liveAt: iso(now - MIN) }),
+      now,
+    });
     expect(chat).toHaveLength(1);
     expect(chat[0]).toMatchObject({ kind: "chat", state: "needs", title: "Conversation", note: "approval · @devchief", sessionId: "sess_1" });
     // The registered run already says "Working": no second row for the same work.
@@ -176,7 +228,10 @@ describe("itemWorkRows", () => {
   });
 
   it("marks a superseded report and hides an archived one", () => {
-    const rows = itemWorkRows({ reports: [report("old", { supersededBy: "new", createdAt: iso(now - MIN) }), report("new"), report("gone", { archivedAt: iso(now) })], now });
+    const rows = itemWorkRows({
+      reports: [report("old", { supersededBy: "new", createdAt: iso(now - MIN) }), report("new"), report("gone", { archivedAt: iso(now) })],
+      now,
+    });
     expect(rows.map((r) => r.key)).toEqual(["report:new", "report:old"]);
     expect(rows[1]!.note).toContain("earlier version");
   });
@@ -198,7 +253,13 @@ describe("itemNow", () => {
     expect(itemNow({ itemId: "a", escalation: true, action: "settle", rows })).toEqual({ kind: "escalation" });
   });
   it("points at what waits on the owner instead of offering a primary action", () => {
-    const result = itemNow({ itemId: "a", escalation: false, action: "packet", rows, decisions: [decision("5", "a"), decision("9", "other"), decision("7", "a", { state: "answered" })] });
+    const result = itemNow({
+      itemId: "a",
+      escalation: false,
+      action: "packet",
+      rows,
+      decisions: [decision("5", "a"), decision("9", "other"), decision("7", "a", { state: "answered" })],
+    });
     expect(result.kind).toBe("pointer");
     if (result.kind !== "pointer") return;
     expect(result.decisions.map((d) => d.ref)).toEqual(["D-5"]);
@@ -207,6 +268,75 @@ describe("itemNow", () => {
   it("shows the one primary action only when nothing needs the owner", () => {
     const calm = itemWorkRows({ info: info({ live: "running", agentRuns: [ext("2")] }), now });
     expect(itemNow({ itemId: "a", escalation: false, action: "settle", rows: calm })).toEqual({ kind: "action", action: "settle" });
+  });
+});
+
+describe("itemTimeline", () => {
+  const event = (id: string, runId: string, over: Partial<RunEvent> = {}): RunEvent => ({
+    id,
+    runId,
+    runRef: `R-${runId}`,
+    type: "progress",
+    summary: `Event ${id}`,
+    payload: {},
+    via: null,
+    at: iso(now - 10 * MIN),
+    ...over,
+  });
+  it("lists what the item's runs did, newest first, and leaves other items' runs out", () => {
+    const timeline = itemTimeline({
+      itemId: "a",
+      runs: [tracked("1", "a", { title: "Compare frames" }), tracked("9", "other")],
+      events: [
+        event("e1", "1", { type: "started", summary: "", at: iso(now - 60 * MIN) }),
+        event("e2", "1", { summary: "Shortlisted 4 frames", at: iso(now - 20 * MIN) }),
+        event("e3", "9", { summary: "Someone else's step" }),
+        event("e2", "1", { summary: "duplicate row", at: iso(now - 20 * MIN) }),
+      ],
+    });
+    expect(timeline.map((e) => [e.type, e.summary])).toEqual([
+      ["progress", "Shortlisted 4 frames"],
+      // A "started" event with no words of its own is named for its run.
+      ["started", "Compare frames"],
+    ]);
+  });
+  it("says whose step it was once the item has more than one run, and adds each report that came back", () => {
+    const timeline = itemTimeline({
+      itemId: "a",
+      runs: [tracked("1", "a"), tracked("2", "a")],
+      events: [event("e1", "1", { summary: "11 of 12 checks passed", at: iso(now - 30 * MIN) }), event("e2", "2", { type: "failed", summary: "Timed out", at: iso(now - 5 * MIN) })],
+      reports: [report("r1", { title: "Three frames compared", createdAt: iso(now - MIN) }), report("old", { supersededBy: "r1" }), report("gone", { archivedAt: iso(now) })],
+    });
+    expect(timeline.map((e) => e.summary)).toEqual(["Research report: Three frames compared", "R-2 · Timed out", "R-1 · 11 of 12 checks passed"]);
+    expect(timeline[0]).toMatchObject({ id: "report:r1", type: "done" });
+  });
+  it("is empty when nothing has run", () => {
+    expect(itemTimeline({ itemId: "a" })).toEqual([]);
+  });
+});
+
+describe("linkKind", () => {
+  it("names a link for what it is, so a linked design or artifact does not read as just a link", () => {
+    expect(linkKind({ kind: "chat_session" })).toBe("Conversation");
+    expect(linkKind({ kind: "github_pr", url: "https://github.com/o/r/pull/1" })).toBe("Pull request");
+    expect(linkKind({ kind: "github_issue", url: "https://github.com/o/r/issues/1" })).toBe("Issue");
+    expect(linkKind({ kind: "url", url: "https://claude.ai/artifacts/abc" })).toBe("Artifact");
+    expect(linkKind({ kind: "url", url: "https://artifacts.example.com/a/plan/" })).toBe("Artifact");
+    expect(linkKind({ kind: "url", url: "https://www.figma.com/file/abc/Layout" })).toBe("Design");
+    expect(linkKind({ kind: "url", url: "https://docs.google.com/document/d/1" })).toBe("Document");
+    expect(linkKind({ kind: "url", url: "https://example.com/spec.pdf" })).toBe("Document");
+    expect(linkKind({ kind: "url", url: "https://example.com/prices" })).toBe("Link");
+    // A lookalike host is not the real thing, and a broken URL is still a link.
+    expect(linkKind({ kind: "url", url: "https://notfigma.com.example.org/x" })).toBe("Link");
+    expect(linkKind({ kind: "url", url: "not a url" })).toBe("Link");
+    expect(linkKind({ kind: "url", url: null })).toBe("Link");
+  });
+});
+
+describe("coordHref", () => {
+  it("opens the Chief of staff panel over the page at the decision or the run", () => {
+    expect(coordHref("wk_1", "needs", "D-5")).toBe("/areas?item=wk_1&coord=needs&d=D-5");
+    expect(coordHref("wk 1", "running", "R-11")).toBe("/areas?item=wk%201&coord=running&r=R-11");
   });
 });
 

@@ -22,12 +22,6 @@ async function itemAction(page: Page, name: string) {
   await page.getByRole("button", { name: "More item actions" }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
 }
-/** Phones fold secondary item sections (Details, Dependencies, Links) into disclosures. */
-async function openSection(page: Page, testId: string) {
-  const section = page.getByTestId(testId);
-  if ((await section.evaluate((el) => el.tagName)) === "DETAILS" && !(await section.evaluate((el) => (el as HTMLDetailsElement).open)))
-    await section.locator("summary").click();
-}
 async function pick(page: Page, title: string) {
   await showTree(page);
   // Click the row itself, not the centre of the <li> (which may be a nested child).
@@ -127,11 +121,13 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(page.getByRole("button", { name: "Refresh", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Mark merged" }).click();
   await expect(badge("awaiting_validation")).toBeVisible();
-  const settle = page.getByRole("button", { name: "Settle", exact: true });
+  // Settling has ONE entry point on the page: the primary action in the Next section (with why it is not ready).
+  const settle = header.getByRole("button", { name: "Settle…", exact: true });
   await expect(settle).toBeDisabled();
   await expect(page.getByText("The work packet requires validation. Add one first.", { exact: true })).toBeVisible();
 
-  // Declare the measurement contract and record evidence.
+  // Declare the measurement contract and record evidence ("Done when" is not drawn until there is a check: the
+  // "+ Validation" add chip opens the form).
   await page.getByRole("button", { name: "Add validation" }).click();
   await page.getByLabel("Metric").fill("p95 hydration");
   await page.getByLabel("Comparator").selectOption("<=");
@@ -142,13 +138,15 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await expect(page.getByText("p95 hydration ≤ 800 ms", { exact: true })).toBeVisible();
   await page.getByLabel("Observed value for p95 hydration").fill("950");
   await page.getByRole("button", { name: "Record p95 hydration" }).click();
-  await expect(page.getByText("Fail", { exact: true })).toBeVisible();
+  // The checklist line carries the result: crossed and red when it failed, ticked when it passed.
+  const check = page.getByTestId("validation-row").filter({ hasText: "p95 hydration" });
+  await expect(check).toHaveAttribute("data-status", "fail");
   await expect(page.getByRole("button", { name: "Reopen with failed evidence" })).toBeVisible();
   await expect(settle).toBeDisabled();
   await page.getByLabel("Observed value for p95 hydration").fill("640");
   await page.getByLabel("Evidence link").fill("https://example.com/hydration-run");
   await page.getByRole("button", { name: "Record p95 hydration" }).click();
-  await expect(page.getByText("Pass", { exact: true })).toBeVisible();
+  await expect(check).toHaveAttribute("data-status", "pass");
   await expect(settle).toBeEnabled();
   await settle.click();
   await page.getByLabel("Outcome (optional)").fill("p95 hydration 640 ms on the evaluator page");
@@ -381,8 +379,9 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect(page.getByRole("treeitem", { name: `Picker check ${nonce}, linked conversation` })).toBeVisible();
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
 
-  // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent.
-  await page.getByRole("button", { name: "Continue in new conversation" }).click();
+  // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent. With no packet yet
+  // the packet block is not drawn, so the action is in the ⋯ menu.
+  await itemAction(page, "Continue in new conversation");
   const cont = page.getByRole("dialog", { name: "Continue in a new conversation" });
   await expect(cont.getByTestId("continue-preview")).toContainText("Handoff: V5 evaluator contract");
   await cont.getByRole("button", { name: "Create conversation" }).click();
@@ -395,8 +394,7 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   const detail = (await (await page.request.get(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`)).json()) as { timeline: unknown[] };
   expect(detail.timeline).toEqual([]);
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
-  await openSection(page, "work-links");
-  await expect(page.getByRole("article").getByText("started from the handoff", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("work-links").getByText("started from the handoff", { exact: false })).toBeVisible();
   await page.getByRole("tab", { name: "Activity" }).click();
   await expect(page.getByRole("tabpanel")).toContainText("Continued in a new conversation (handoff, no packet yet)");
   await expect(page.getByRole("tabpanel")).toContainText("Handed off to");
@@ -485,8 +483,8 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   // Item detail: blocked-by, date events, a validation from a template, overdue highlighting.
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
   await expect(page.getByRole("article")).toContainText("Blocked by");
-  await expect(page.getByRole("article").getByRole("button", { name: "V4 lessons", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Add from template" }).click();
+  await expect(page.getByTestId("work-deps").getByRole("link", { name: "V4 lessons", exact: true })).toBeVisible();
+  await itemAction(page, "Add from template");
   const td = page.getByRole("dialog", { name: "Add from template" });
   await td.getByText("New template").click();
   await td.getByLabel("Template metric").fill("p95 hydration");
@@ -504,7 +502,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
     dueDate: day(-2),
   });
   await page.reload();
-  await expect(page.getByTestId("validation-overdue")).toContainText("1 validation is overdue");
+  await expect(page.getByTestId("validation-overdue")).toContainText("1 overdue");
   await expect(page.locator("[data-overdue]")).toContainText("error rate");
   await page.getByRole("tab", { name: "Activity" }).click();
   await expect(page.getByRole("tabpanel")).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
