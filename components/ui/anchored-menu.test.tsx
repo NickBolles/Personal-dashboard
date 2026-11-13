@@ -132,3 +132,26 @@ it("a viewport resize closes the menu (no throw on the window target)", () => {
   fireEvent(window, new Event("resize"));
   expect(screen.queryByRole("menu")).toBeNull();
 });
+
+it("a page scroll that was already under way when the menu opened does not close it; a later one does", () => {
+  let now = 1_000;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+  try {
+    render(<Card onCopy={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for R-1" }));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // the scroll that brought the trigger into view is delivered a frame after the tap
+    now += 16;
+    fireEvent.scroll(document);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // scrolling inside the menu never closes it
+    now += 2_000;
+    fireEvent.scroll(screen.getByRole("menu"));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // scrolling the page under an open menu does
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("menu")).toBeNull();
+  } finally {
+    clock.mockRestore();
+  }
+});

@@ -89,16 +89,31 @@ function ItemRow({ row, people, onSelect }: { row: RollupItemRow; people: readon
   const { item } = row;
   const done = row.state === "done";
   const who = assigneeLabel(item.assignee, people);
-  const tags = (item.tags ?? []).slice(0, 2).map((t) => `#${t}`);
+  const tags = (item.tags ?? []).slice(0, 2);
   const rest = dot([
     row.refs.join(" "),
     row.progress,
     row.state === "idle" || done ? row.status : "",
     row.next ? `Next · ${row.next}` : "",
     row.due.replace(/^Due /, "due "),
-    who,
-    ...tags,
   ]);
+  // Who has it and its tags stay addressable on the row (the list filters by both).
+  const marks = (
+    <>
+      {who ? (
+        <span data-assignee={item.assignee ?? undefined}>
+          {rest ? " · " : ""}
+          {who}
+        </span>
+      ) : null}
+      {tags.map((t, index) => (
+        <span key={t} data-tag={t}>
+          {rest || who || index ? " · " : ""}#{t}
+        </span>
+      ))}
+    </>
+  );
+  const more = !!who || tags.length > 0;
   return (
     <ThingRow
       className="ip-row"
@@ -112,8 +127,9 @@ function ItemRow({ row, people, onSelect }: { row: RollupItemRow; people: readon
         ) : (
           <>
             {row.state === "idle" ? null : <StateWord state={row.state} />}
-            {row.state !== "idle" && rest ? " · " : ""}
+            {row.state !== "idle" && (rest || more) ? " · " : ""}
             {rest}
+            {marks}
           </>
         )
       }

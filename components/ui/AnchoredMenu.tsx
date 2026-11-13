@@ -183,6 +183,9 @@ function DotsIcon() {
 }
 
 /** The menu itself, placed at `menu.at` and kept inside the viewport. */
+/** How long after opening a page scroll is taken as one that began before the menu opened. */
+const SCROLL_GRACE_MS = 250;
+
 export function AnchoredMenu({ menu, label, items, className }: { menu: AnchoredMenuState; label: string; items: KMenuItem[]; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -232,8 +235,13 @@ export function AnchoredMenu({ menu, label, items, className }: { menu: Anchored
       if (isTrigger(t)) return;
       closeRef.current();
     };
+    // Scroll events are delivered a frame late: a scroll that brought the trigger into view just before the tap
+    // (or the tail of a flick) would otherwise close the menu the moment it opens.
+    const openedAt = performance.now();
     const onScroll = (event: Event) => {
-      if (!box.current?.contains(event.target as Node)) closeRef.current();
+      if (box.current?.contains(event.target as Node)) return;
+      if (performance.now() - openedAt < SCROLL_GRACE_MS) return;
+      closeRef.current();
     };
     document.addEventListener("pointerdown", outside, true);
     window.addEventListener("scroll", onScroll, true);
