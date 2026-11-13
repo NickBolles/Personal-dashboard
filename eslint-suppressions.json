@@ -438,19 +438,6 @@
       "count": 2
     }
   },
-  "components/decisions/DecisionAnswer.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/decisions/DecisionDetail.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
   "components/feedback/FeedbackInbox.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 2
@@ -513,14 +500,6 @@
   "components/map/AreaPage.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 5
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/map/Decisions.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 3
     },
     "jarvis-ui/no-native-controls": {
       "count": 1
@@ -721,11 +700,6 @@
   },
   "components/work/DestinationPicker.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    }
-  },
-  "components/work/EscalationBanner.tsx": {
-    "jarvis-ui/no-legacy-imports": {
       "count": 1
     }
   },

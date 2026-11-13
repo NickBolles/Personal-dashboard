@@ -121,6 +121,8 @@ export type DecisionEntry = {
   defaultChoice?: string | null;
   expiresAt?: string | null;
   runId?: string | null;
+  /** "R-n" of the piece of work this entry is about: the run a decision pauses, or the stalled run itself */
+  runRef?: string | null;
 };
 
 export type DecisionsResponse = { entries: DecisionEntry[]; count: number };
@@ -130,19 +132,6 @@ export function sortDecisions(entries: DecisionEntry[]): DecisionEntry[] {
   return [...entries].sort((a, b) => (a.at === b.at ? a.key.localeCompare(b.key) : a.at < b.at ? 1 : -1));
 }
 
-/** Body for decisionAnswerPath: head entries carry their D-n so a stale confirm can't answer a newer head. */
-export function decisionAnswerBody(e: Pick<DecisionEntry, "key" | "ref">, answer: string, extra: { postToConversation?: boolean } = {}) {
-  return e.key.startsWith("decision:") ? { answer } : { answer, ...extra, ...(e.ref ? { ref: e.ref } : {}) };
-}
-
-/** Where an item entry is answered: the item's head keeps the legacy route; other open D-n rows use the CW-2 route. */
-export function decisionAnswerPath(e: Pick<DecisionEntry, "key" | "itemId" | "ref">): string {
-  return e.ref && e.key.startsWith("decision:")
-    ? `/api/coordinator/decisions/${encodeURIComponent(e.ref)}/answer`
-    : `/api/work/items/${encodeURIComponent(e.itemId ?? "")}/decision`;
-}
-
-/** Undo of an answer withdraws its pending conversation post (#167); other offers stay. */
-export function withdrawPost<T extends { opId: string }>(posted: T | null, undoneOpId: string): T | null {
-  return posted && posted.opId === undoneOpId ? null : posted;
-}
+// Answering: every surface posts to /api/coordinator/decisions/<D-n>/answer through the one hook
+// (components/decisions/useAnswerDecision.ts). The item route (POST /api/work/items/<id>/decision) still
+// answers an item's head for older clients; nothing in the web app calls it.

@@ -8,7 +8,6 @@ import { coordinatorFor } from "@/server/work/coordinator";
 import { listDecisions } from "@/server/work/decisions";
 import { aggregateRunState, deployOf, liveOfJob, liveOfRun, whoIsOn, type RunSample } from "@/lib/agent-runs";
 import { buildCatchUpPrompt } from "@/lib/catch-up";
-import { withdrawPost } from "@/lib/decisions";
 import { detectSensitivity } from "@/server/ai/rules";
 import { breadcrumbFor } from "@/components/navigation/AppShell";
 
@@ -199,13 +198,6 @@ function db_conv(userId: string, parentId: string, sessionId: string) {
 }
 
 describe("decisions + navigation fixes", () => {
-  it("#167: Undo withdraws only the post offer of the undone answer", () => {
-    const p = { opId: "op1", key: "item:a" };
-    expect(withdrawPost(p, "op1")).toBeNull();
-    expect(withdrawPost(p, "op2")).toBe(p);
-    expect(withdrawPost(null, "op1")).toBeNull();
-  });
-
   it("/decisions has its own top-bar title (not Areas)", () => {
     expect(breadcrumbFor("/decisions")[0]!.label).toBe("Needs you");
     expect(breadcrumbFor("/areas")[0]!.label).toBe("Areas");
