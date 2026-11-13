@@ -9,7 +9,7 @@ test("alder approvals tab opens a decision deep link and reviews an option witho
   await page.route(/\/api\/work\/decisions\/item(?::|%3A)wk_alder_review$/i, (r) => r.fulfill({ json: { entry: phase3Decision } }));
   const writes: string[] = [];
   page.on("request", (r) => {
-    if (r.url().includes("/api/work/") && !["GET", "HEAD"].includes(r.method())) writes.push(r.url());
+    if (/\/api\/(work|coordinator)\//.test(r.url()) && !["GET", "HEAD"].includes(r.method())) writes.push(r.url());
   });
   await page.goto("/alerts");
   await page.getByRole("radio", { name: /^Approvals\s*1$/ }).click();
@@ -18,11 +18,15 @@ test("alder approvals tab opens a decision deep link and reviews an option witho
   await approval.click();
   await expect(page.getByRole("heading", { name: phase3Decision.question })).toBeVisible();
   await expect(page.getByRole("link", { name: "Open item", exact: true })).toHaveAttribute("href", phase3Decision.href);
-  await page.getByRole("button", { name: "Alder pilot", exact: true }).click();
-  const confirm = page.getByRole("dialog", { name: "Confirm decision" });
-  await expect(confirm).toContainText("Alder pilot");
+  // The decision is risk-flagged: a choice arms in place (no dialog) and nothing is written until Confirm.
+  const card = page.getByTestId("decision-card");
+  await card.getByRole("button", { name: /^Alder pilot/ }).click();
+  const confirm = card.getByRole("group", { name: "Confirm answer" });
+  await expect(confirm.getByRole("button", { name: "Confirm: Alder pilot", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Confirm decision" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
   await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(confirm).toHaveCount(0);
   expect(writes).toEqual([]);
 });
 

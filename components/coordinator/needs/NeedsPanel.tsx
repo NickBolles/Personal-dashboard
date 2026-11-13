@@ -2,10 +2,10 @@
 
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { Button, EmptyState, Skeleton } from "@/components/ui";
-import { pagerState } from "@/lib/coordinator/needs";
+import { DecisionNotices, DecisionReceiptLine } from "@/components/decisions/DecisionBlock";
 import { DecisionDetail } from "./DecisionDetail";
-import { DecisionNotices, NeedsList } from "./NeedsList";
-import { DecisionFeedbackContext, useCoordinatorDecisions, useDecisionFeedbackController, type NeedsOpenOptions } from "./useCoordinatorDecisions";
+import { NeedsList } from "./NeedsList";
+import { DecisionFlowContext, useCoordinatorDecisions, useDecisionFlowController, type NeedsOpenOptions } from "./useCoordinatorDecisions";
 
 type Props = {
   onAsk: (ref: string, question: string) => void;
@@ -18,9 +18,9 @@ type Props = {
 };
 export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props) {
   const query = useCoordinatorDecisions();
-  const feedback = useDecisionFeedbackController();
+  // One flow for the list and the detail: a receipt and its Undo survive moving between them.
+  const flow = useDecisionFlowController();
   const [selected, setSelected] = useState<{ ref: string; arm?: string; visit: number } | null>(() => (initialRef ? { ref: initialRef, visit: 0 } : null));
-  const visit = useRef(0);
   const [announcement, setAnnouncement] = useState("");
   const seen = useRef(new Set<string>());
   const primed = useRef(false);
@@ -43,20 +43,26 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props
   }, [query.data]);
   function ask(ref: string) {
     const d = decisions.find((row) => row.ref === ref);
-    onAsk(ref, d?.question ?? ref);
+    onAsk(ref, d?.question ?? flow.receipts[ref]?.view.question ?? ref);
   }
   function open(ref: string, options?: NeedsOpenOptions) {
     if (options?.ask) {
       ask(ref);
       return;
     }
-    visit.current += 1;
-    setSelected({ ref, arm: options?.arm, visit: visit.current });
+    // A new visit remounts the detail, so a previous decision's armed choice never carries over.
+    setSelected((was) => ({ ref, arm: options?.arm, visit: (was?.visit ?? 0) + 1 }));
   }
-  const nextRef = selected ? pagerState(decisions, selected.ref).next : null;
-  const next = decisions.find((d) => d.ref === nextRef);
+  /** Taking an answer back returns to the decision it reopened. */
+  function undoAndReturn(ref: string) {
+    void flow.undo(ref).then((undone) => {
+      if (undone) open(ref);
+    });
+  }
+  // With a decision open on a narrow panel the list is out of sight: its receipts follow the owner here.
+  const floating = selected ? Object.values(flow.receipts).filter((r) => r.view.ref !== selected.ref) : [];
   return (
-    <DecisionFeedbackContext.Provider value={feedback}>
+    <DecisionFlowContext.Provider value={flow}>
       <div className="gc-needs-panel min-w-0">
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {announcement}
@@ -88,35 +94,30 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props
             </div>
             <div className="gc-needs-detail-pane min-w-0">
               {selected ? (
-                <>
-                  <DecisionDetail
-                    key={selected.visit}
-                    decisions={decisions}
-                    refId={selected.ref}
-                    arm={selected.arm}
-                    onBack={() => setSelected(null)}
-                    onNavigate={(ref) => open(ref)}
-                    onAsk={ask}
-                  />
-                  {next ? (
-                    <div className="gc-needs-up-next">
-                      <span>Up next</span>
-                      <Button variant="ghost" size="sm" className="min-w-0" onClick={() => open(next.ref)}>
-                        <span className="line-clamp-2">
-                          {next.ref} · {next.question}
-                        </span>
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
+                // What comes next is said by the card itself ("Moves to D-n after you answer") and its pager.
+                <DecisionDetail
+                  key={selected.visit}
+                  decisions={decisions}
+                  refId={selected.ref}
+                  arm={selected.arm}
+                  onBack={() => setSelected(null)}
+                  onNavigate={(ref) => open(ref)}
+                  onAsk={ask}
+                />
               ) : (
                 <EmptyState title="Choose a decision">See the question, consequences and evidence here.</EmptyState>
               )}
             </div>
           </div>
         ) : null}
-        <DecisionNotices notices={feedback.notices} />
+        <DecisionNotices notices={flow.notices}>
+          {floating.length
+            ? floating.map((receipt) => (
+                <DecisionReceiptLine key={receipt.view.ref} className="dcs-floating" receipt={receipt} onUndo={() => undoAndReturn(receipt.view.ref)} />
+              ))
+            : null}
+        </DecisionNotices>
       </div>
-    </DecisionFeedbackContext.Provider>
+    </DecisionFlowContext.Provider>
   );
 }

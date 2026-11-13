@@ -49,10 +49,10 @@ describe("age and defaults", () => {
   });
 });
 describe("recommended answer", () => {
-  it("prefers a valid recommendation and otherwise the first option", () => {
+  it("is the agent's valid recommendation, and never the first option standing in for one", () => {
     expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Yes" })).toBe("Yes");
-    expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Maybe" })).toBe("No");
-    expect(recommendedChoice({ choices: ["No"], recommended: null })).toBe("No");
+    expect(recommendedChoice({ choices: ["No", "Yes"], recommended: "Maybe" })).toBeNull();
+    expect(recommendedChoice({ choices: ["No"], recommended: null })).toBeNull();
     expect(recommendedChoice({ choices: [], recommended: "Yes" })).toBeNull();
   });
 });

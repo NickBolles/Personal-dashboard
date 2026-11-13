@@ -124,13 +124,15 @@ test("coordinator pane: Catch me up composes the prompt but sends nothing until 
   const row = page.getByTestId("decision-row").filter({ hasText: `Whimbrel net ${nonce}?` });
   await expect(row).toBeVisible();
   const before = sent.length;
-  await row.getByRole("button", { name: "Coarse" }).click();
-  const confirm = page.getByTestId("decision-post-confirm");
-  await expect(confirm).toContainText("coordinator");
+  await row.getByRole("button", { name: /: Coarse$/ }).click();
+  // The row becomes its receipt, which quietly offers to post the answer to the coordinator chat.
+  const receipt = page.getByTestId("decision-receipt").filter({ hasText: `Whimbrel net ${nonce}?` });
+  const offer = receipt.getByRole("button", { name: "Post to coordinator", exact: true });
+  await expect(offer).toBeVisible();
   // #167: Undo withdraws the offer, nothing is posted.
-  await page.getByRole("status").filter({ hasText: "Saved" }).getByRole("button", { name: "Undo" }).click();
+  await receipt.getByRole("button", { name: /^Undo D-\d+$/ }).click();
   await expect(row).toBeVisible();
-  await expect(confirm).toBeHidden();
+  await expect(offer).toBeHidden();
   expect(sent.length).toBe(before);
 
   const clear = await page.request.patch(`/api/work/items/${item}`, { data: { decision: null }, headers: { "x-jarvis-csrf": "1" } });

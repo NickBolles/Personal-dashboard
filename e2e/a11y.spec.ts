@@ -972,12 +972,17 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   // The tray is one button; its status sentence says what waits. Needs you is a tab inside.
   if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
   await scope.getByRole("tab", { name: /^Needs you/ }).click();
-  await expect(scope.getByRole("button", { name: "D-49: Ship it now", exact: true })).toBeVisible();
+  await expect(scope.getByRole("button", { name: "D-49: Ship it now (recommended)", exact: true })).toBeVisible();
+  // A risky decision offers no one-tap chips: its row opens the card.
+  await expect(scope.getByRole("button", { name: /^D-48: / })).toHaveCount(0);
   await axe("needs list", sel);
   await zoom();
-  await scope.getByRole("button", { name: "D-48: Rotate", exact: true }).click();
+  await scope.getByRole("button", { name: /^Open decision D-48:/ }).click();
+  const answers = scope.getByRole("group", { name: "Answers for D-48" });
+  await expect(answers).toBeVisible();
+  // A risky choice arms first; the in-place Confirm is what would send it.
+  await answers.getByRole("button", { name: /^Rotate/ }).click();
   await expect(scope.getByRole("group", { name: "Confirm answer" })).toBeVisible();
-  await expect(scope.getByRole("radiogroup", { name: "Answers for D-48" })).toBeVisible();
   await axe("risk-flagged detail", sel);
   await zoom();
   await scope.getByRole("tab", { name: /^Activity/ }).click();
@@ -1123,13 +1128,19 @@ test("phone width guard: long real-shaped data never widens key pages past the v
       key: "item:mi_long",
       kind: "item",
       title: `${unbroken} item`,
-      question: `Which option should we take? See ${url}`,
+      // Short enough to be read whole on the row, so the row offers its (long) choices as chips; the approval
+      // below carries the unbreakable URL in its headline.
+      question: "Which option should we take?",
       choices: [long, `Fold into run cards and drop the separate list ${url}`, "Later"],
       href: "/areas?item=mi_long",
       at,
       itemId: "mi_long",
       areaTitle: unbroken,
       sessionId: null,
+      ref: "D-900",
+      recommended: null,
+      risk: [],
+      pack: {},
     },
     {
       key: "approval:r_long",

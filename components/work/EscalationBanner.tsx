@@ -1,64 +1,43 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
-import { useNow, Banner } from "@/components/ui";
-import { Button, ButtonLink } from "@/components/ui/legacy";
-import { api } from "@/lib/client/api";
-import type { DecisionsResponse } from "@/lib/decisions";
-import { decisionHref } from "@/lib/decision-route";
+import { useNow, Banner, Button, ButtonLink } from "@/components/ui";
+import { ItemDecisions } from "@/components/decisions/DecisionBlock";
+import { useInboxDecisions } from "@/components/decisions/useAnswerDecision";
 import { selectEscalation } from "@/lib/item-escalation";
+import { WORK_WORD } from "@/lib/work-words";
 
+/**
+ * What an item needs from the owner, at the top of its page: every open decision as the shared decision card
+ * (answered in place, components/decisions), or, when no agent is asking, the run that failed or stalled.
+ */
 export function EscalationBanner({ itemId, onAskAgain }: { itemId: string; onAskAgain?: () => void }) {
-  const decisions = useQuery({
-    queryKey: ["work", "decisions"],
-    queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"),
-    staleTime: 30_000,
-    refetchInterval: 30_000,
-  });
+  const decisions = useInboxDecisions();
   const runs = useAgentRuns();
   const escalation = selectEscalation(itemId, decisions.data?.entries ?? [], runs.data?.items[itemId], useNow());
-  if (!escalation) return null;
-  const question =
-    escalation.kind === "decision"
-      ? escalation.decision.question
-      : escalation.kind === "run"
-        ? `${escalation.stalled ? "Stalled" : "Failed"}: ${escalation.run.title}`
-        : "A run failed. Review it before trying again.";
-  const session = escalation.kind === "run" ? escalation.run.hermesSessionId : escalation.kind === "failed" ? escalation.sessionId : null;
+  // An agent's question wins over run trouble: the cards say it; the run banner waits.
+  const trouble = escalation && escalation.kind !== "decision" ? escalation : null;
+  const session = trouble ? (trouble.kind === "run" ? trouble.run.hermesSessionId : trouble.sessionId) : null;
   return (
-    <div className="mt-2" data-testid="item-escalation">
-      <Banner tone="wn">
-        <div className="min-w-0">
-          <p className="text-sm font-medium [overflow-wrap:anywhere]">
-            {escalation.agent} needs you: {question}
-          </p>
-          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            {escalation.kind === "decision" ? (
-              <>
-                {escalation.decision.choices.slice(0, 3).map((choice) => (
-                  <ButtonLink
-                    size="sm"
-                    key={choice}
-                    href={`${decisionHref(escalation.decision)}?choice=${encodeURIComponent(choice)}`}
-                    aria-label={`Review decision option: ${choice}`}
-                  >
-                    {choice}
-                  </ButtonLink>
-                ))}
-                <ButtonLink size="sm" href={decisionHref(escalation.decision)}>
-                  Open decision
-                </ButtonLink>
-              </>
-            ) : (
-              <>
+    <>
+      <ItemDecisions itemId={itemId} className="mt-2" />
+      {trouble ? (
+        <div className="mt-2" data-testid="item-escalation">
+          <Banner tone="wn">
+            <div className="min-w-0">
+              <p className="text-sm font-medium wrap-anywhere">
+                {trouble.agent} needs you:{" "}
+                {trouble.kind === "run"
+                  ? `${WORK_WORD[trouble.stalled ? "stalled" : "failed"]}: ${trouble.run.title}`
+                  : "A run failed. Review it before trying again."}
+              </p>
+              <div className="mt-2 flex min-w-0 flex-wrap gap-2">
                 {session ? (
                   <ButtonLink size="sm" href={`/chat/${encodeURIComponent(session)}`} aria-label="Open escalated run">
                     Open run
                   </ButtonLink>
                 ) : (
                   <Button
-                    type="button"
                     size="sm"
                     aria-label="Open escalated run"
                     onClick={() => document.querySelector('[data-testid="item-agent-panel"]')?.scrollIntoView({ block: "center" })}
@@ -67,15 +46,15 @@ export function EscalationBanner({ itemId, onAskAgain }: { itemId: string; onAsk
                   </Button>
                 )}
                 {onAskAgain ? (
-                  <Button type="button" size="sm" onClick={onAskAgain}>
+                  <Button size="sm" onClick={onAskAgain}>
                     Ask again…
                   </Button>
                 ) : null}
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          </Banner>
         </div>
-      </Banner>
-    </div>
+      ) : null}
+    </>
   );
 }
