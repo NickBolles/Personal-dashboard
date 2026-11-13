@@ -1352,7 +1352,12 @@ function ItemDetail({
                     onToggle={toggleWork}
                     onOp={onOp}
                   />
-                  <DoneWhen d={d} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} recording={item.status === "awaiting_validation"} />
+                  <DoneWhen
+                    d={d}
+                    onReopen={() => setDialog("reopen")}
+                    focusRecord={initialAction === "validate"}
+                    recording={item.status === "awaiting_validation"}
+                  />
                   {summary || kidCount || hasBlockers || d.links.length || d.packets.length || adds.length ? (
                     <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
                       <h3 id="ip-plan-h" className="ip-label">

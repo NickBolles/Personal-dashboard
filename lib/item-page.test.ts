@@ -167,6 +167,8 @@ describe("itemWorkRows", () => {
     const [wait, work] = rows;
     expect(wait).toMatchObject({ refId: "R-wait", note: "Waiting on your budget ceiling." });
     expect(work).toMatchObject({ refId: "R-work", note: "4 of 6 checks" });
+    // A summary that only repeats the title is not said twice.
+    expect(itemWorkRows({ info: info({ live: "finished", agentRuns: [ext("9", { state: "done", summary: "Run 9" })] }), now })[0]!.note).toBe("");
     // A finished job is its report, not a second row.
     expect(rows.filter((r) => r.kind === "job")).toHaveLength(1);
   });
@@ -223,6 +225,15 @@ describe("itemWorkRows", () => {
     expect(chat[0]).toMatchObject({ kind: "chat", state: "needs", title: "Conversation", note: "approval · @devchief", sessionId: "sess_1" });
     // The registered run already says "Working": no second row for the same work.
     expect(itemWorkRows({ info: info({ live: "running", sessionId: "sess_1", agentRuns: [ext("1")] }), now })).toHaveLength(1);
+    // A run that went silent is still "running" to the server: it explains the item's state, so no phantom
+    // "Working" row appears beside the Stalled one.
+    const silent = itemWorkRows({
+      info: info({ live: "running", agentRuns: [ext("1", { updatedAt: iso(now - 90 * MIN) }), ext("2", { state: "done" })] }),
+      now,
+    });
+    expect(silent.map((r) => `${r.kind}:${r.state}`)).toEqual(["run:stalled", "run:done"]);
+    // An interrupted run is what the server calls "waiting".
+    expect(itemWorkRows({ info: info({ live: "waiting", agentRuns: [ext("1", { state: "interrupted" })] }), now })).toHaveLength(1);
     // Nothing has run: nothing is drawn.
     expect(itemWorkRows({ info: info(), now })).toEqual([]);
   });
@@ -304,8 +315,15 @@ describe("itemTimeline", () => {
     const timeline = itemTimeline({
       itemId: "a",
       runs: [tracked("1", "a"), tracked("2", "a")],
-      events: [event("e1", "1", { summary: "11 of 12 checks passed", at: iso(now - 30 * MIN) }), event("e2", "2", { type: "failed", summary: "Timed out", at: iso(now - 5 * MIN) })],
-      reports: [report("r1", { title: "Three frames compared", createdAt: iso(now - MIN) }), report("old", { supersededBy: "r1" }), report("gone", { archivedAt: iso(now) })],
+      events: [
+        event("e1", "1", { summary: "11 of 12 checks passed", at: iso(now - 30 * MIN) }),
+        event("e2", "2", { type: "failed", summary: "Timed out", at: iso(now - 5 * MIN) }),
+      ],
+      reports: [
+        report("r1", { title: "Three frames compared", createdAt: iso(now - MIN) }),
+        report("old", { supersededBy: "r1" }),
+        report("gone", { archivedAt: iso(now) }),
+      ],
     });
     expect(timeline.map((e) => e.summary)).toEqual(["Research report: Three frames compared", "R-2 · Timed out", "R-1 · 11 of 12 checks passed"]);
     expect(timeline[0]).toMatchObject({ id: "report:r1", type: "done" });

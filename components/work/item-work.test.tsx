@@ -31,7 +31,18 @@ const run = (id: string, over: Partial<ExternalRun> = {}): ExternalRun => ({
   ...over,
 });
 const tracked = (id: string): CoordinatorRunRow =>
-  ({ id, ref: `R-${id}`, seq: 1, itemId: "a", title: `Run ${id}`, state: "running", stalled: false, parentRunId: null, pipeline: [], noticeCount: 0 }) as unknown as CoordinatorRunRow;
+  ({
+    id,
+    ref: `R-${id}`,
+    seq: 1,
+    itemId: "a",
+    title: `Run ${id}`,
+    state: "running",
+    stalled: false,
+    parentRunId: null,
+    pipeline: [],
+    noticeCount: 0,
+  }) as unknown as CoordinatorRunRow;
 const info = (over: Partial<ItemAgentInfo>): ItemAgentInfo => ({
   itemId: "a",
   areaId: null,
@@ -47,9 +58,29 @@ const info = (over: Partial<ItemAgentInfo>): ItemAgentInfo => ({
   ...over,
 });
 const job = (over: Partial<JobView> = {}): JobView =>
-  ({ id: "job1", kind: "research", state: "running", createdAt: iso(now - 5 * MIN), startedAt: iso(now - 4 * MIN), finishedAt: null, errorMessage: null, conversationId: null, ...over }) as JobView;
+  ({
+    id: "job1",
+    kind: "research",
+    state: "running",
+    createdAt: iso(now - 5 * MIN),
+    startedAt: iso(now - 4 * MIN),
+    finishedAt: null,
+    errorMessage: null,
+    conversationId: null,
+    ...over,
+  }) as JobView;
 const report = (id: string, over: Partial<ReportView> = {}): ReportView =>
-  ({ id, kind: "research", title: `Report ${id}`, createdAt: iso(now - 30 * MIN), sourceCount: 2, supersededBy: null, archivedAt: null, readAt: iso(now), ...over }) as ReportView;
+  ({
+    id,
+    kind: "research",
+    title: `Report ${id}`,
+    createdAt: iso(now - 30 * MIN),
+    sourceCount: 2,
+    supersededBy: null,
+    archivedAt: null,
+    readAt: iso(now),
+    ...over,
+  }) as ReportView;
 
 let client: QueryClient;
 function mount(children: ReactNode) {
@@ -143,7 +174,11 @@ it("opens a run in place for its report line, sub-agents and the ids to copy", (
   fireEvent.click(within(row).getByRole("button", { expanded: false }));
   expect(within(row).getByTestId("agent-run-children").textContent).toContain("3/8 inch fits");
   expect(within(row).getByTestId("agent-run-children").textContent).toContain("Done");
-  expect(within(row).getAllByTestId("agent-run-copy").map((el) => el.textContent)).toEqual(["dlg_1", "/tmp/run.jsonl"]);
+  expect(
+    within(row)
+      .getAllByTestId("agent-run-copy")
+      .map((el) => el.textContent),
+  ).toEqual(["dlg_1", "/tmp/run.jsonl"]);
 });
 
 it("Stop on a job asks once in place before anything is sent, and Keep backs out", async () => {
@@ -203,7 +238,11 @@ it("the timeline shows the newest four entries, then Show earlier, and links to 
   const timeline = itemTimeline({ itemId: "a", runs: [tracked("1")], events });
   mount(<ItemTimeline events={timeline} sessionId="sess_1" />);
   const list = screen.getByRole("list", { name: /newest first/ });
-  expect(within(list).getAllByRole("listitem").map((li) => li.textContent?.includes("Step 0"))).toEqual([true, false, false, false]);
+  expect(
+    within(list)
+      .getAllByRole("listitem")
+      .map((li) => li.textContent?.includes("Step 0")),
+  ).toEqual([true, false, false, false]);
   expect(screen.getByRole("link", { name: "Open conversation" }).getAttribute("href")).toBe("/chat/sess_1");
   fireEvent.click(screen.getByRole("button", { name: "Show earlier (2)" }));
   expect(within(list).getAllByRole("listitem")).toHaveLength(6);

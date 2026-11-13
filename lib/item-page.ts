@@ -3,7 +3,7 @@
  * on an item as ONE list of rows in the shared vocabulary (lib/work-words.ts), the one thing the page leads with
  * ("Now"), and a project's three groups rolled up from its items. Pure and client-safe.
  */
-import { isStalled, whoLabel, type ExternalRun, type ItemAgentInfo } from "@/lib/agent-runs";
+import { isStalled, liveOfAgentRun, liveOfJob, whoLabel, type ExternalRun, type ItemAgentInfo } from "@/lib/agent-runs";
 import { AI_KIND_LABEL, KIND_VERB, TERMINAL_JOB_STATES, type JobView, type ReportView } from "@/lib/ai";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
@@ -60,7 +60,9 @@ export function runWorkState(run: Pick<ExternalRun, "state" | "updatedAt">, now:
 const flat = (text: string | null | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
 
 function runNote(run: ExternalRun, state: WorkState, decision: RunWorkRow["decision"], tracked: CoordinatorRunRow | undefined, now: number): string {
-  const said = tidyOutcome(run.summary);
+  // A summary that only repeats the run's title says nothing line one has not said.
+  const summary = tidyOutcome(run.summary);
+  const said = summary.toLowerCase() === flat(run.title).toLowerCase() ? "" : summary;
   if (state === "needs") return decision ? `answer ${decision.ref}` : said;
   if (state === "stalled") return run.state === "interrupted" ? "interrupted, waiting to be resumed" : `no report for ${ageLabel(run.updatedAt, now)}`;
   if (state === "working") return flat(tracked?.lastEvent?.summary) || said;
@@ -144,8 +146,12 @@ export function itemWorkRows(input: {
       report,
     });
   }
+  // The item's live state is the server's own summary of the same runs and jobs. A row "explains" it by the
+  // state the server saw (a run that went silent still counts as running there), not by the word the row shows:
+  // otherwise a stalled run would get a second, phantom "Working" row beside it.
   const live = input.info ? workStateOfLive(input.info.live) : null;
-  if (input.info && live && !rows.some((r) => WORK_GROUP[r.state] === WORK_GROUP[live])) {
+  const seen = (row: ItemWorkRow) => (row.kind === "run" ? liveOfAgentRun(row.run.state) : row.kind === "job" ? liveOfJob(row.job.state) : "finished");
+  if (input.info && live && !rows.some((row) => seen(row) === input.info!.live)) {
     const who = input.info.who && input.info.who.kind !== "person" ? whoLabel(input.info.who) : "";
     rows.push({
       kind: "chat",
