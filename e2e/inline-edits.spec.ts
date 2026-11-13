@@ -85,7 +85,8 @@ test("detail: status select excludes Settle; due date and summary save in place"
   }).toPass();
   await expect(page.getByRole("button", { name: /^Due date:/ })).toHaveText(/^Due Dec 4/);
 
-  await page.getByRole("button", { name: "Edit summary" }).click();
+  // No summary yet: it is not drawn, and its "add" chip opens the same in-place editor.
+  await page.getByRole("button", { name: "Add a summary" }).click();
   const box = page.getByRole("textbox", { name: "Edit summary" });
   await box.fill(`Inkwell summary ${nonce}`);
   await box.blur(); // blur saves
@@ -143,9 +144,11 @@ test("undoing a next-action edit after Start focused work is refused with a clea
   await page.goto("/home");
   const { id } = await makeItem(page, nonce);
   await page.goto(`/areas?item=${id}`);
-  await page.getByRole("button", { name: "Edit next action" }).click();
-  await page.getByRole("textbox", { name: "Edit next action" }).fill(`Ink the Quillon ${nonce}`);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // The Next line is edited in place: tap it, type, Enter saves.
+  await page.locator('[data-inline-field="nextAction"]').click();
+  const next = page.getByRole("textbox", { name: "Edit next action" });
+  await next.fill(`Ink the Quillon ${nonce}`);
+  await next.press("Enter");
   const bar = page.getByRole("status").filter({ has: page.getByRole("button", { name: "Undo" }) });
   await expect(bar).toBeVisible();
   // Start focused work (→ in progress) happens before the Undo tap.

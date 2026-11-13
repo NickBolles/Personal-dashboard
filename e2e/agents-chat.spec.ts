@@ -70,7 +70,9 @@ test("a chat started under a routed area runs on its profile, streamed as AG-UI"
   await expect(nodeChip).toHaveAttribute("data-routed", "1");
 
   const before = await profileHits(page);
-  await page.getByRole("button", { name: "Chat here" }).click();
+  // Chatting here is in the page's one menu (its "Ask" group names the agent that answers).
+  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("menuitem", { name: "New chat here", exact: true }).click();
   await page.waitForURL(/\/chat\/.+/);
   // A routed agent is named once, in the header (and the composer placeholder); the composer chip only
   // appears when the profile asked for is NOT the one answering.

@@ -493,6 +493,20 @@ describe("placeWork: each piece of work is drawn once, under the reply that star
       live: ["undated"],
     });
   });
+  it("when the messages on screen begin with a reply, the work of that reply's own turn is still its work", () => {
+    // The owner's question scrolled out of the window; the reply that answered it is the first message shown.
+    const cut = [msg("a1", "assistant", 58), msg("u2", "user", 30), msg("a2", "assistant", 28)];
+    const work = [
+      // began five minutes into the turn that a1 ended: a1's work, although it predates everything on screen
+      { record: rec({ key: "turn", startedAt: ago(63) }) },
+      // began long before: some earlier reply's work. Still going, so it is kept in view; ended, it is not drawn
+      { record: rec({ key: "older", startedAt: ago(90) }) },
+      { record: rec({ key: "older-done", state: "completed", startedAt: ago(90), endedAt: ago(80) }) },
+    ];
+    expect(placed(work, cut)).toEqual({ a1: ["turn"], live: ["older"] });
+    // With the question on screen, work from before it belongs to an earlier turn.
+    expect(placed([{ record: rec({ key: "before", state: "completed", startedAt: ago(63), endedAt: ago(62) }) }], thread)).toEqual({});
+  });
   it("with no messages on screen everything dated is under live, and nothing is listed twice", () => {
     const work = [
       { record: rec({ key: "a", startedAt: ago(200) }) },

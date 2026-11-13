@@ -434,6 +434,8 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   return out.sort((x, y) => x.index - y.index).map(({ titles: _titles, agent: _agent, index: _index, ...work }) => work);
 }
 
+/** How long before a reply the work of that reply's own turn may have begun. */
+const TURN_LEAD_MS = 15 * 60_000;
 /**
  * Where a conversation draws each piece of work it started: under the reply that started it (the first reply that
  * finished after the work began), so the stream reads in order and nothing is listed twice. Work whose turn has
@@ -450,12 +452,16 @@ export function placeWork(
     const at = m.kind === "assistant" ? timeOf(m.at) : null;
     return at === null ? [] : [{ id: m.id, at }];
   });
-  const windowStart = messages.map((m) => timeOf(m.at)).find((at) => at !== null) ?? null;
+  // Where the messages on screen begin. When the first of them is a reply, the work of its own turn began before
+  // it (a turn can take minutes), so that reply's lead-in counts as on screen too.
+  const first = messages.find((m) => timeOf(m.at) !== null);
+  const firstAt = first ? timeOf(first.at) : null;
+  const windowStart = firstAt === null ? null : firstAt - (first!.kind === "assistant" ? TURN_LEAD_MS : WINDOW_SLACK_MS);
   for (const w of work) {
     // Interrupted counts as going: it waits to be resumed, and must not drop out of the conversation.
     const going = w.run ? ["running", "waiting", "interrupted"].includes(w.run.state) : isActiveExec(w.record);
     const started = timeOf(w.run?.startedAt ?? w.record.startedAt ?? w.record.updatedAt);
-    if (started === null || (windowStart !== null && started < windowStart - WINDOW_SLACK_MS)) {
+    if (started === null || (windowStart !== null && started < windowStart)) {
       if (going) put("live", w);
       continue;
     }

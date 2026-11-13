@@ -58,8 +58,11 @@ test("a delegation registered over MCP shows on the item and goes Stalled after 
     const panel = page.getByTestId("item-agent-panel");
     const run = panel.getByTestId("agent-run").filter({ hasText: `Cut the mortise ${nonce}` });
     await expect(run).toBeVisible();
-    await expect(run.getByTestId("agent-run-head").getByTestId("agent-live")).toHaveText("Running");
+    // One row per run in the item's Work list, in the shared state words ("Working", never "Running").
+    await expect(run.getByTestId("agent-live")).toHaveText("Working");
     await expect(run.getByTestId("agent-stalled")).toHaveCount(0);
+    // The row opens in place for its sub-agents and the ids to copy.
+    await run.getByRole("button", { expanded: false }).click();
     await expect(run.getByTestId("agent-run-children")).toContainText("3/8 inch fits");
     await expect(run.getByTestId("agent-run-copy").filter({ hasText: transcript })).toBeVisible();
     await expect(run.getByRole("button", { name: "Copy transcript" })).toBeVisible();

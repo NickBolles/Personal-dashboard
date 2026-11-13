@@ -1280,8 +1280,9 @@ for (const theme of ["light", "dark"] as const) {
     const panel = page.getByTestId("item-agent-panel");
     await expect(panel.getByTestId("agent-run")).toHaveCount(2);
     if (theme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-    await expect(panel.getByTestId("agent-run").nth(1).getByTestId("agent-stalled")).toHaveText("Stalled");
-    await expect(panel.getByTestId("agent-run").first().getByTestId("agent-stalled")).toHaveCount(0);
+    // The Work list runs Needs you (the stalled run) before Working, so the rows are found by name, not position.
+    await expect(panel.getByTestId("agent-run").filter({ hasText: "Paint colour options" }).getByTestId("agent-stalled")).toHaveText("Stalled");
+    await expect(panel.getByTestId("agent-run").filter({ hasText: "Shelf bracket research" }).getByTestId("agent-stalled")).toHaveCount(0);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.waitForTimeout(400);

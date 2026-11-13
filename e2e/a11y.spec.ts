@@ -449,7 +449,8 @@ test("inline edits: axe clean and no overflow at 200% text zoom (read, title edi
   const fits = () => header.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
   expect.soft(await fits(), "title editor at 200%").toBe(true);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Edit summary" }).click();
+  // No summary yet: its "add" chip (Plan) opens the in-place editor.
+  await page.getByRole("button", { name: "Add a summary" }).click();
   await expect(page.getByRole("textbox", { name: "Edit summary" })).toBeFocused();
   await axe("summary editor");
   expect.soft(await fits(), "summary editor at 200%").toBe(true);
@@ -624,8 +625,10 @@ test("agents + coordinator (Work from Jarvis 2): axe clean and no overflow at 20
       .toEqual([]);
   };
   await page.goto(`/areas?item=${id}`);
-  await expect(page.getByTestId("item-agent-panel")).toBeVisible();
-  await axe("item agent panel");
+  // Nothing has run on it, so no Work list is drawn; who is on it is the assignee on the header's one meta line.
+  await expect(page.getByRole("button", { name: "Assignee: @momentumchief" })).toBeVisible();
+  await expect(page.getByTestId("item-agent-panel")).toHaveCount(0);
+  await axe("item page");
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await page.waitForTimeout(200);
   await expectNoHorizontalOverflow(page, { soft: true });
