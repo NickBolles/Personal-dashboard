@@ -91,7 +91,13 @@ function SheetDemo() {
   const panel = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
   const [closed, setClosed] = useState(0);
-  const { zoneProps, handleProps } = useSheetDrag({ panel, full, onFull: setFull, onClose: () => setClosed((n) => n + 1), heights: () => ({ half: 120, full: 240 }) });
+  const { zoneProps, handleProps } = useSheetDrag({
+    panel,
+    full,
+    onFull: setFull,
+    onClose: () => setClosed((n) => n + 1),
+    heights: () => ({ half: 120, full: 240 }),
+  });
   return (
     <Block id="sheets" title="Bottom-sheet grab bar (drag up, swipe down, tap, arrow keys)">
       <div className="flex h-64 items-end rounded-lg border border-[var(--bd)] bg-[var(--s0)]">
@@ -103,7 +109,9 @@ function SheetDemo() {
         >
           <div {...zoneProps}>
             <SheetHandle {...handleProps} />
-            <p className="px-3 text-sm">{full ? "Full height" : "Half height"} · closed {closed} times</p>
+            <p className="px-3 text-sm">
+              {full ? "Full height" : "Half height"} · closed {closed} times
+            </p>
           </div>
         </div>
       </div>

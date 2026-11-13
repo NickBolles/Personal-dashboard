@@ -1667,7 +1667,9 @@ button:active > .dock-orb {
     height: 4px;
     border-radius: 999px;
     background: var(--line-strong);
-    transition: background-color var(--d1) var(--ease), width var(--d1) var(--ease);
+    transition:
+      background-color var(--d1) var(--ease),
+      width var(--d1) var(--ease);
   }
   .k-sheet-handle:hover > span,
   .k-sheet-handle:focus-visible > span {
