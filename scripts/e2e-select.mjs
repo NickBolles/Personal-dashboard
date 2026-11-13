@@ -455,7 +455,7 @@ function main() {
   else process.stdout.write(`${summaryMarkdown(result)}\n${result.grep ? `\n--grep ${JSON.stringify(result.grep)}\n` : ""}`);
   if (arg("github")) {
     if (process.env.GITHUB_OUTPUT) {
-      const shards = shardCount(result, Number(process.env.E2E_SHARDS ?? 4));
+      const shards = shardCount(result, Number(process.env.E2E_SHARDS ?? 5));
       fs.appendFileSync(
         process.env.GITHUB_OUTPUT,
         `mode=${result.mode}\nshards=${JSON.stringify(Array.from({ length: shards }, (_, i) => i + 1))}\ntotal=${shards}\n`,

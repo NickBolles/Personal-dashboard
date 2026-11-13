@@ -18,7 +18,20 @@ select ─┴─► e2e shard 1..N (Playwright container, E2E_WORKERS isolated s
 | Playwright report | merges the shards' blob reports into one HTML report + JSON, writes the job summary and a sticky PR comment, gates the run    |
 | docker            | demo image build, health/readiness, persistence + backup drill                                                                |
 
-The shard count (`E2E_SHARDS`) and workers per runner (`E2E_WORKERS`) are the `env` at the top of `ci.yml`.
+The shard count (`E2E_SHARDS`, 5) and workers per runner (`E2E_WORKERS`, 3) are the `env` at the top of `ci.yml`; a manual
+dispatch can override both (`gh workflow run ci.yml --ref <branch> -f e2e_shards=4 -f e2e_workers=3`).
+
+### Timings (full suite, PR #279, Nov 2026)
+
+| Layout                   | Workflow wall | Slowest shard (job / tests) | Billable min                              | Notes                                                          |
+| ------------------------ | ------------- | --------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| before: 1 job, 1 worker  | 47m09s        | 46m50s / 44m15s             | ~57 (×2 per PR push: push + pull_request) | main run 43260901319                                           |
+| 4 shards × 3 workers     | 10m07–10m36s  | 7m46–8m02s / 6m19–6m34s     | 36–42                                     | 3 runs green                                                   |
+| 3 shards × 4 workers     | 12m09s        | 9m12s / 7m48s               | ~40                                       | slower per test (CPU bound), 1 order-dependent failure (fixed) |
+| **5 shards × 3 workers** | 8m47s         | 6m44s / 5m16s               | ~41                                       | default                                                        |
+
+Per shard ~1.5 min is fixed cost (container 25 s, `npm ci` 48 s, artifact, 3 servers + onboarding ~10 s). Shards are split by
+test count (Playwright `--shard`), so the desktop-heavy shard runs longest.
 
 ## Isolated workers (one app + mock per Playwright worker)
 
@@ -54,7 +67,8 @@ E2E_PORT=3290 E2E_MOCK_PORT=4090 npm run e2e    # other ports (worker i uses bas
 the **E2E selection** job summary. Try it locally: `npm run e2e:select` (diffs against the merge-base with `origin/main`) or
 `node scripts/e2e-select.mjs --files components/finance/FinanceNav.tsx --json`.
 
-1. **Full suite** on push to main, the nightly run and manual dispatches; on PRs with the **`full-e2e` label**; when a
+1. **Full suite** on push to main, the nightly run and manual dispatches; on PRs with the **`full-e2e` label** (adding it
+   dispatches a full CI run on the PR branch right away, `full-e2e-label.yml`; later pushes keep running everything); when a
    shared file changes (`fullSuite` in `e2e/selection-map.json`: package files, Playwright/Next config, root and shell
    layouts, `globals.css`, `components/ui/**`, `lib/ui*`, `public/sw.js`, migrations and `server/db/**`, mock upstreams, the
    e2e harness and fixtures, the CI workflows); when one changed file is reached by more than `maxFraction` (60%) of the
