@@ -1,0 +1,24 @@
+name: Full e2e on label
+
+# Adding the `full-e2e` label to a PR runs CI with the full Playwright suite on the PR branch (a workflow_dispatch
+# run always runs everything, docs/ci.md). Other labels do nothing: this workflow skips, CI's own checks are untouched.
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Run the full e2e suite
+    if: github.event.label.name == 'full-e2e' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          gh workflow run ci.yml -R "$GITHUB_REPOSITORY" --ref "$REF"
+          echo "Full-suite CI dispatched on $REF: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/ci.yml" >> "$GITHUB_STEP_SUMMARY"

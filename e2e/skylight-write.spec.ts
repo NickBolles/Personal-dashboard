@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { MOCK_URL, mock } from "./helpers";
+import { freshSkylightBudget, MOCK_URL, mock } from "./helpers";
 import { addDays, localDate } from "../lib/time";
 
 const H = { "x-jarvis-csrf": "1" };
@@ -24,6 +24,13 @@ async function undo(page: Page) {
     .getByRole("button", { name: "Undo", exact: true })
     .click();
 }
+
+// Writes are budgeted at 12/min per user: the other Skylight write specs may have run just before on this worker's
+// server, so start with a fresh budget (no wait when they did not).
+test.beforeAll(async ({ request }) => {
+  test.setTimeout(90_000);
+  await freshSkylightBudget(request);
+});
 
 test.beforeEach(async ({ page, request }) => {
   previous = undefined;

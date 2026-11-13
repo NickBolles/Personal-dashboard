@@ -1,20 +1,38 @@
 name: CI
 
+# Pull requests run on pull_request only; main runs on push. The nightly run and manual dispatches run the full
+# e2e suite too, so anything smart selection skipped on a PR is caught within one merge (docs/ci.md).
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 09:17 UTC = 03:17 America/Chicago (CST): nightly full suite on main.
+    - cron: "17 9 * * *"
   workflow_dispatch:
+    inputs:
+      e2e_shards:
+        description: "E2E runners (shards); default 5"
+        required: false
+      e2e_workers:
+        description: "Isolated Playwright workers per runner; default 3"
+        required: false
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  # E2E layout (measured in docs/ci.md): shards = runners, workers = isolated app+mock stacks per runner.
+  E2E_SHARDS: ${{ inputs.e2e_shards || 5 }}
+  E2E_WORKERS: ${{ inputs.e2e_workers || 3 }}
+
 jobs:
   verify:
-    name: Typecheck, lint, unit, build, scans
+    name: Typecheck, lint, unit, scans
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,23 +47,89 @@ jobs:
       - run: npm run lint
       - run: npm run format:check
       - run: npm test -- --coverage
-      - run: npm run build
-      - name: Secret-pattern scan (client bundles + tracked files)
-        run: npm run secrets:scan
       - name: docker compose config validation
         run: |
           docker compose config -q
           docker compose -f docker-compose.yml -f docker-compose.local.yml config -q
           docker compose -f docker-compose.demo.yml config -q
 
-  e2e:
-    name: Playwright (mobile 320 / 412, desktop, a11y, visual)
+  # Build once: the e2e shards download this instead of each running `next build`.
+  build:
+    name: Build (Next standalone) + bundle scan
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Same install as the e2e container (no install scripts, see there): better-sqlite3's bundled prebuild is
+      # what the standalone server traces and ships, so the artifact runs unchanged in the Playwright image.
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - name: Secret-pattern scan (client bundles + tracked files)
+        run: npm run secrets:scan
+      - name: Pack the standalone server for the e2e shards
+        run: |
+          node scripts/prepare-standalone.mjs
+          cp .next/BUILD_ID .next/standalone/.prepared
+          tar -cf next-build.tar .next/BUILD_ID .next/standalone
+          ls -la next-build.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: next-build
+          path: next-build.tar
+          retention-days: 1
+          compression-level: 1
+
+  # Which e2e tests this PR needs (scripts/e2e-select.mjs); push/schedule/dispatch → full suite.
+  select:
+    name: E2E selection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
+      grep: ${{ steps.select.outputs.grep }}
+      shards: ${{ steps.select.outputs.shards }}
+      total: ${{ steps.select.outputs.total }}
+      label: ${{ steps.select.outputs.label }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Changed files
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr diff "$PR" --name-only -R "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/changed.txt" || rm -f "$RUNNER_TEMP/changed.txt"
+      - name: Select
+        id: select
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          args=(--event "$GITHUB_EVENT_NAME" --labels "$LABELS" --github)
+          if [ -f "$RUNNER_TEMP/changed.txt" ]; then args+=(--files-from "$RUNNER_TEMP/changed.txt"); fi
+          node scripts/e2e-select.mjs "${args[@]}"
+
+  e2e:
+    name: Playwright shard ${{ matrix.shard }}/${{ needs.select.outputs.total }}
+    needs: [build, select]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     container:
       # Pinned image = same fonts as the committed visual baselines.
       image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
     env:
       HOME: /root
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.select.outputs.shards) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,18 +146,101 @@ jobs:
       - name: Check the bundled SQLite binary loads
         run: |
           node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get(); console.log('better-sqlite3 bundled binary loads')"
-      - run: npm run build
-      - run: npx playwright test
+      - uses: actions/download-artifact@v4
+        with:
+          name: next-build
+      - run: tar -xf next-build.tar && rm next-build.tar
+      - name: Run Playwright (shard ${{ matrix.shard }}/${{ needs.select.outputs.total }})
+        shell: bash
         env:
           CI: "1"
+          E2E_BLOB: "1"
+          MODE: ${{ needs.select.outputs.mode }}
+          GREP: ${{ needs.select.outputs.grep }}
+          SHARD: ${{ matrix.shard }}/${{ needs.select.outputs.total }}
+        run: |
+          args=(--shard "$SHARD" --workers "$E2E_WORKERS" --pass-with-no-tests)
+          if [ "$MODE" = subset ] && [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
+          npx playwright test "${args[@]}"
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report
+          if-no-files-found: error
+          retention-days: 1
+
+  # One report for all shards (the momentumbets/mb-stack pattern): merged HTML + JSON, job summary and a sticky PR
+  # comment with counts, per-shard timing, slowest tests and failing/flaky tests.
+  e2e-report:
+    name: Playwright report
+    needs: [select, e2e]
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.e2e.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+      - name: Merge reports
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+        run: |
+          ls -la all-blob-reports
+          mkdir -p "$RUNNER_TEMP/pw" && npm install --prefix "$RUNNER_TEMP/pw" --no-save --no-package-lock --ignore-scripts @playwright/test@1.56.1 >/dev/null
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" merge-reports --reporter html,json ./all-blob-reports
+          ls -la playwright-report results.json
+      - uses: actions/upload-artifact@v4
+        id: upload-report
         with:
           name: playwright-report
-          path: |
-            playwright-report
-            test-results
-          retention-days: 7
+          path: playwright-report
+          retention-days: 14
+      - name: Summary
+        id: summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+          SELECTION: ${{ needs.select.outputs.label }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" > jobs.json || echo '{}' > jobs.json
+          node scripts/e2e-report.mjs --results results.json --jobs jobs.json \
+            --report-url "$REPORT_URL" --report-note "(zip: unzip, then \`npx playwright show-report <dir>\`)" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --selection "$SELECTION" --out summary.md
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Sticky PR comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" --paginate \
+            --jq '.[] | select(.user.type == "Bot" and (.body | contains("<!-- jarvis-e2e-report -->"))) | .id' | head -n1)
+          jq -n --rawfile body summary.md '{body: $body}' > comment.json
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" --input comment.json >/dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --input comment.json >/dev/null
+          fi
+      - name: Gate on shards and failures
+        env:
+          SHARDS: ${{ needs.e2e.result }}
+          OK: ${{ steps.summary.outputs.ok }}
+        run: |
+          echo "shards=$SHARDS ok=$OK"
+          test "$SHARDS" = success
+          test "$OK" = true
 
   docker:
     name: Docker image build + smoke

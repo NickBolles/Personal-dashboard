@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext, type Locator, type Page } from "@playwright/test";
+import { mockUrl } from "./servers";
 
 /** Picker panels are portalled: find the opener in scope, then the option on the page. */
 export async function pickOption(scope: Page | Locator, triggerName: string | RegExp, optionName: string | RegExp) {
@@ -7,7 +8,8 @@ export async function pickOption(scope: Page | Locator, triggerName: string | Re
   await page.getByRole("listbox").getByRole("option", { name: optionName, exact: true }).click();
 }
 
-export const MOCK_URL = `http://127.0.0.1:${process.env.E2E_MOCK_PORT ?? 4020}`;
+/** This worker's own mock upstream (e2e/servers.ts). */
+export const MOCK_URL = mockUrl();
 export const PASSCODE = "e2e-passcode";
 
 export async function mock(request: APIRequestContext, path: string, body?: unknown) {
@@ -22,6 +24,19 @@ export async function setHa(request: APIRequestContext, entity_id: string, state
     headers: { authorization: "Bearer mock-ha-long-lived-token" },
   });
   expect(res.ok()).toBeTruthy();
+}
+
+/**
+ * Skylight writes are budgeted at 12/min per user (integrations/skylight/write.ts). Start a write-heavy spec with a
+ * fresh budget: wait until 61 s after the last write this worker's server sent to its mock (none = no wait). Each
+ * worker has its own server, so only files that ran earlier on the same worker count.
+ */
+export async function freshSkylightBudget(request: APIRequestContext) {
+  const res = await request.get(`${MOCK_URL}/__mock/skylight/write-times`);
+  expect(res.ok()).toBeTruthy();
+  const { times, now } = (await res.json()) as { times: number[]; now: number };
+  const wait = times.length ? Math.max(...times) + 61_000 - now : 0;
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
 }
 
 /** App API call from the browser context (carries the session cookie + CSRF header). */

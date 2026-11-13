@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { MOCK_URL, expectNoHorizontalOverflow, mock } from "./helpers";
+import { MOCK_URL, expectNoHorizontalOverflow, freshSkylightBudget, mock } from "./helpers";
 
 /**
  * Capture AI triage (owner request 2026-11-12) end to end with the mock Hermes + mock Skylight:
@@ -26,10 +26,10 @@ type Entry = { id: string; title: string; capture?: { triage?: { state: string; 
 
 test.describe.configure({ mode: "serial" });
 
-test.beforeAll(async () => {
+test.beforeAll(async ({ request }) => {
   test.setTimeout(90_000);
-  // Earlier Skylight specs may have used this minute's write budget.
-  await new Promise((r) => setTimeout(r, 61_000));
+  // Earlier Skylight specs on this worker's server may have used this minute's write budget.
+  await freshSkylightBudget(request);
 });
 
 test.beforeEach(async ({ page, request }) => {
