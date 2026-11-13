@@ -213,6 +213,12 @@ describe("e2e report summary", () => {
     expect(rows[1].attachments).toEqual([{ name: "trace", path: "/t/trace.zip" }]);
   });
 
+  it("treats a failed jobs lookup as no shard timings", () => {
+    expect(shardTimings({})).toEqual([]);
+    expect(shardTimings(undefined)).toEqual([]);
+    expect(renderSummary({ report, jobs: {} }).markdown).not.toContain("Shards (");
+  });
+
   it("renders counts, failing/flaky tests, shard timing and the slowest tests", () => {
     const jobs = {
       jobs: [

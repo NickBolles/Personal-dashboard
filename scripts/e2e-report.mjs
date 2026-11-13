@@ -45,7 +45,9 @@ export function collectTests(report) {
 
 /** Shard jobs from `gh api .../runs/<id>/attempts/<n>/jobs`: name, wall time, test step time. */
 export function shardTimings(jobs) {
-  return (jobs?.jobs ?? jobs ?? [])
+  // A failed jobs lookup leaves `{}` (ci.yml fallback): no timings, never a crash.
+  const list = Array.isArray(jobs?.jobs) ? jobs.jobs : Array.isArray(jobs) ? jobs : [];
+  return list
     .filter((j) => /playwright/i.test(j.name) && /shard/i.test(j.name))
     .map((j) => {
       const wall = j.started_at && j.completed_at ? Date.parse(j.completed_at) - Date.parse(j.started_at) : undefined;
