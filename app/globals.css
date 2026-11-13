@@ -1648,6 +1648,44 @@ button:active > .dock-orb {
   .k-btn-icon.k-btn-sm {
     width: 36px;
   }
+  /* Bottom-sheet grab bar (SheetHandle + useSheetDrag): the whole strip is the target, the pill is only the mark. */
+  .k-sheet-handle {
+    display: flex;
+    width: 100%;
+    height: 28px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: grab;
+    border-radius: 16px 16px 0 0;
+  }
+  .k-sheet-handle > span {
+    width: 40px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line-strong);
+    transition: background-color var(--d1) var(--ease), width var(--d1) var(--ease);
+  }
+  .k-sheet-handle:hover > span,
+  .k-sheet-handle:focus-visible > span {
+    width: 52px;
+    background: var(--muted);
+  }
+  .k-sheet-handle:focus-visible {
+    outline-offset: -3px;
+  }
+  /* The draggable strip: the browser must not turn the drag into a scroll or pull-to-refresh. */
+  [data-sheet-drag] {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  [data-dragging] .k-sheet-handle {
+    cursor: grabbing;
+  }
   .k-btn-glyph {
     display: inline-flex;
   }
