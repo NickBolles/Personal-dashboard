@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ComponentRegistry, ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog";
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
+import { smartLabel } from "@/lib/jarvis-ui/labels";
 import { isTask, type AppliedEntry, type HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
 import { Button, Checkbox, Pill, cx } from "@/components/ui";
@@ -134,7 +135,7 @@ function TaskList({ element }: P<"TaskList">) {
   return (
     <section className="overflow-hidden rounded-lg border border-line" aria-label={list.title}>
       <header className="svh">
-        <span className="sv-tag">TaskList</span>
+        <span className="sv-tag">{smartLabel("TaskList")}</span>
         <h3 className="flex-1 text-sm font-semibold">
           {list.title} <span className="text-muted">{list.rows.length}</span>
         </h3>
@@ -227,7 +228,7 @@ function Checklist({ element }: P<"Checklist">) {
   return (
     <section className="rounded-lg border border-line" aria-label={p.title}>
       <header className="flex min-w-0 flex-wrap items-center gap-2 px-3 pt-2">
-        <span className="sv-tag">Checklist</span>
+        <span className="sv-tag">{smartLabel("Checklist")}</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title}</h3>
         <span className="text-xs text-muted">
           {done}/{p.steps.length} done
