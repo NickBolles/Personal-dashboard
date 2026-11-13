@@ -306,7 +306,11 @@ const sameAgent = (a: ExecutionRecord, b: ExecutionRecord) =>
  *   (a failed attempt and its retry share a title; the run is the retry's), else the one that has ended.
  *   A run that two could both be is neither's: each keeps its own card and controls, and the run is shown
  *   only by its own record, if it has one. A sub-agent nothing is known about yet may fold into the run's card;
- * - within a card the controls follow the best-informed record of the sub-agent it is about.
+ * - within a card the controls follow the best-informed record of the sub-agent it is about;
+ * - a sub-agent the coordinator registered as a run is that run by identity, whatever the two are titled: Jarvis
+ *   asks for each sub-agent to be registered with `delegationId = <delegation id>:<subagent id>`
+ *   (server/work/chat-context.ts), and the registration is matched the way the server matches it
+ *   (server/work/delegated-runs.ts). An identity link outranks every title match.
  */
 export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: readonly CoordinatorRunRow[]): BackgroundWork[] {
   const byId = new Map(runs.map((r) => [r.id, r]));
@@ -330,6 +334,26 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
       for (const [member, id] of agentOf) if (id === from) agentOf.set(member, to);
     }
   });
+  // Registered by identity: the run's registration names this sub-agent (specific forms first; the bare
+  // delegation id only when a single sub-agent carries it, since a batch shares one).
+  const exactRun = new Map<number, CoordinatorRunRow>();
+  const exactOwner = new Map<string, number>();
+  for (const reg of records.filter((r) => r.source === "registered_run" && !!r.delegationId && byId.has(r.id)).sort((a, b) => a.key.localeCompare(b.key))) {
+    const specific = new Set<number>();
+    const loose = new Set<number>();
+    for (const sub of subs) {
+      if (!sub.delegationId) continue;
+      const agent = agentOf.get(sub)!;
+      if (reg.delegationId === `${sub.delegationId}:${sub.id}` || (!!sub.subagentId && reg.delegationId === `${sub.delegationId}:${sub.subagentId}`))
+        specific.add(agent);
+      else if (reg.delegationId === sub.delegationId) loose.add(agent);
+    }
+    const owners = specific.size ? specific : loose;
+    const [agent] = owners;
+    if (owners.size !== 1 || exactRun.has(agent!)) continue;
+    exactRun.set(agent!, byId.get(reg.id)!);
+    exactOwner.set(reg.id, agent!);
+  }
   const known = new Set(subs.filter((r) => r.state !== "unknown").map((r) => agentOf.get(r)!));
   const going = new Map<string, Set<number>>();
   const ended = new Map<string, Set<number>>();
@@ -343,6 +367,8 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
   const ownRun = (record: ExecutionRecord, matched: CoordinatorRunRow | undefined) => {
     if (!matched) return undefined;
     const agent = agentOf.get(record)!;
+    // A run that is another sub-agent's by identity is nobody else's, however alike the titles.
+    if (exactOwner.has(matched.id)) return exactOwner.get(matched.id) === agent ? matched : undefined;
     const live = going.get(matched.id);
     const claimants = live?.size ? live : ended.get(matched.id);
     // Nothing is known about this sub-agent yet: it claims nothing, and may fold into the card of a run that
@@ -360,6 +386,7 @@ export function mergeBackgroundWork(records: readonly ExecutionRecord[], runs: r
     const newer = !!run && !!prior && (Date.parse(run.updatedAt) - Date.parse(prior.updatedAt) || run.id.localeCompare(prior.id)) > 0;
     if (run && (!prior || newer)) runOfAgent.set(agent, run);
   }
+  for (const [agent, run] of exactRun) runOfAgent.set(agent, run);
   // Cards are built from what is known first: sub-agents with a known state (every view of each), then other
   // records that report a state. Only then do records nothing is known about fold in. They add nothing to a
   // card that knows more, so the cards, what each shows and what each controls are the same in any order of

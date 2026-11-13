@@ -123,6 +123,45 @@ describe("background work", () => {
     state: "running",
     ...over,
   });
+  it("a sub-agent registered as a run under another title is still one card (linked by its delegation id)", () => {
+    const tracked = run({ id: "run-37", ref: "R-37", title: "Add dentist booking reminder to the House list" });
+    const records = [
+      rec({
+        key: "subagent:sa_7",
+        id: "sa_7",
+        subagentId: "sa_7",
+        delegationId: "del_1",
+        title: "Subagent: Add 'Schedule dentist appointment' to the existing list, deduplicated",
+      }),
+      rec({ key: "registered_run:run-37", source: "registered_run", id: "run-37", delegationId: "del_1:sa_7", title: tracked.title }),
+    ];
+    for (const order of [records, [...records].reverse()]) {
+      const work = mergeBackgroundWork(order, [tracked]);
+      expect(work).toHaveLength(1);
+      expect(work[0]!.run?.ref).toBe("R-37");
+      expect(work[0]!.control?.id).toBe("sa_7");
+    }
+  });
+  it("a bare batch id links a run only when one sub-agent carries it; a specific id beats a shared title", () => {
+    const tracked = run({ id: "run-40", ref: "R-40", title: "Price lumber" });
+    const reg = (delegationId: string) => rec({ key: "registered_run:run-40", source: "registered_run", id: "run-40", delegationId, title: "Price lumber" });
+    const a = rec({ key: "subagent:sa_a", id: "sa_a", subagentId: "sa_a", delegationId: "batch", title: "Call supplier A" });
+    const b = rec({ key: "subagent:sa_b", id: "sa_b", subagentId: "sa_b", delegationId: "batch", title: "Call supplier B" });
+    // two sub-agents share the batch id: the run is neither's, and keeps its own card
+    const shared = mergeBackgroundWork([a, b, reg("batch")], [tracked]);
+    expect(shared).toHaveLength(3);
+    expect(shared.filter((w) => w.control).every((w) => !w.run)).toBe(true);
+    // one sub-agent carries it: linked
+    const single = mergeBackgroundWork([a, reg("batch")], [tracked]);
+    expect(single).toHaveLength(1);
+    expect(single[0]!.control?.id).toBe("sa_a");
+    // registered for sub-agent B by id, while sub-agent C merely shares the run's title: the run is B's only
+    const c = rec({ key: "subagent:sa_c", id: "sa_c", subagentId: "sa_c", title: "Price lumber", startedAt: tracked.startedAt });
+    const work = mergeBackgroundWork([c, b, reg("batch:sa_b")], [tracked]);
+    expect(work.find((w) => w.control?.id === "sa_b")?.run?.ref).toBe("R-40");
+    expect(work.find((w) => w.control?.id === "sa_c")?.run).toBeUndefined();
+    expect(work).toHaveLength(2);
+  });
   it("the sub-agent, its registration and the tracked run are one card; the run is the authority", () => {
     const tracked = run({ id: "run-9", ref: "R-9", title: "Audit previews" });
     const work = mergeBackgroundWork(
