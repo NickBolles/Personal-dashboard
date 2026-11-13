@@ -33,7 +33,7 @@ test("daily compass starts a Hermes check-in and can be completed", async ({ pag
   await expect(page.getByRole("heading", { level: 1, name: /Daily Compass/ })).toBeVisible();
   await page.goto("/daily-compass");
   await page.getByRole("button", { name: "Mark complete" }).click();
-  await expect(page.getByText("Completed")).toBeVisible();
+  await expect(page.getByText("Completed", { exact: true })).toBeVisible();
 });
 
 test("skylight and brain pages render source data", async ({ page }) => {
