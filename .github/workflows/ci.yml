@@ -10,6 +10,13 @@ on:
     # 09:17 UTC = 03:17 America/Chicago (CST): nightly full suite on main.
     - cron: "17 9 * * *"
   workflow_dispatch:
+    inputs:
+      e2e_shards:
+        description: "E2E runners (shards); default 4"
+        required: false
+      e2e_workers:
+        description: "Isolated Playwright workers per runner; default 3"
+        required: false
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -20,8 +27,8 @@ permissions:
 
 env:
   # E2E layout (measured in docs/ci.md): shards = runners, workers = isolated app+mock stacks per runner.
-  E2E_SHARDS: 4
-  E2E_WORKERS: 3
+  E2E_SHARDS: ${{ inputs.e2e_shards || 4 }}
+  E2E_WORKERS: ${{ inputs.e2e_workers || 3 }}
 
 jobs:
   verify:
