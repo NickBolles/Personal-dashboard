@@ -2261,8 +2261,8 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: agent access + agent activity (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await freezeMiddayCT(page);
-    const now = Date.now();
+    // Fixture times are relative to the FROZEN page clock: built from the real clock they land in the page's future after 17:00 UTC.
+    const now = await freezeMiddayCT(page);
     const ago = (min: number) => new Date(now - min * 60_000).toISOString();
     await page.route(/\/api\/settings\/agents\/tokens$/, (route) =>
       route.request().method() === "GET"
