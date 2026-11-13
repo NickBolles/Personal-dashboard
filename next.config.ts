@@ -24,8 +24,12 @@ const securityHeaders = [
   },
 ];
 
+/** Release build id (Docker build arg); pages carry it so the PWA can tell an old cached shell from the live one. */
+const BUILD = (process.env.JARVIS_VERSION ?? "dev").trim() || "dev";
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  env: { NEXT_PUBLIC_JARVIS_BUILD: BUILD },
   serverExternalPackages: ["better-sqlite3", "web-push"],
   poweredByHeader: false,
   // The app never uses next/image. Turning the optimizer off means /_next/image
@@ -44,7 +48,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      { source: "/:path*", headers: securityHeaders },
+      { source: "/:path*", headers: [...securityHeaders, { key: "x-jarvis-build", value: BUILD }] },
       {
         source: "/sw.js",
         headers: [
