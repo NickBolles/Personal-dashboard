@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, inArray, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db";
 import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
@@ -292,9 +292,9 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
     if (chores) {
       const C = schema.sourceCompletions;
       const done = db
-        .select({ id: C.id, title: C.title, completedAt: C.completedAt })
+        .select({ id: C.id, title: C.title, completedAt: C.completedAt, outcome: C.outcome })
         .from(C)
-        .where(and(eq(C.source, "skylight"), cur ? tieBound("source_completions", "completed_at", "id", "sc:", cur) : undefined))
+        .where(and(eq(C.source, "skylight"), ne(C.outcome, "superseded"), cur ? tieBound("source_completions", "completed_at", "id", "sc:", cur) : undefined))
         .orderBy(desc(C.completedAt), desc(C.id))
         .limit(SOURCE_CAP)
         .all();
@@ -306,7 +306,7 @@ export function listActivity(user: CurrentUser, q: ActivityQuery, now = new Date
           at: r.completedAt,
           type: "chore",
           actor: { kind: "system", name: "Skylight" },
-          verb: "chore completed",
+          verb: r.outcome === "skipped" ? "chore skipped" : r.outcome === "reopened" ? "chore reopened" : "chore completed",
           object: null,
           detail: r.title,
           undoOpId: null,

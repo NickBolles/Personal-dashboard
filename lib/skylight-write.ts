@@ -41,7 +41,7 @@ const chore = { choreId: id, title, instanceDate: day.optional(), instanceTime: 
 
 export const skylightWriteOp = z.discriminatedUnion("op", [
   z.object({ op: z.literal("chore.complete"), ...chore }),
-  z.object({ op: z.literal("chore.reopen"), ...chore }),
+  z.object({ op: z.literal("chore.reopen"), ...chore, previousStatus: z.enum(["completed", "skipped"]).optional() }),
   /** Skip this occurrence (completions status "skipped"); undone by reopen. */
   z.object({ op: z.literal("chore.skip"), ...chore }),
   /** Move a one-off chore to another day (`PUT /chores/{id}` `{start}`); recurring series are left to Skylight. */
@@ -136,7 +136,7 @@ export function inverseOf(op: SkylightWriteOp, created: { itemId?: string; event
     case "chore.complete":
       return { ...op, op: "chore.reopen" };
     case "chore.reopen":
-      return { ...op, op: "chore.complete" };
+      return op.previousStatus === "skipped" ? { ...op, op: "chore.skip" } : { ...op, op: "chore.complete" };
     case "chore.skip":
       return { ...op, op: "chore.reopen" };
     case "chore.reschedule":

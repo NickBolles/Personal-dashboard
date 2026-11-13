@@ -118,19 +118,6 @@
       "count": 1
     }
   },
-  "app/(shell)/skylight/SkylightView.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "app/(shell)/todos/TodosView.tsx": {
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 2
-    }
-  },
   "app/(shell)/workouts/WorkoutView.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 2
@@ -593,19 +580,6 @@
       "count": 7
     }
   },
-  "components/skylight/SkylightActionRow.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/skylight/SkylightChoreGroups.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 1
-    }
-  },
   "components/skylight/SkylightListCard.tsx": {
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
@@ -621,22 +595,6 @@
     "jarvis-ui/no-arbitrary-values": {
       "count": 1
     },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    }
-  },
-  "components/skylight/TodayChores.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
-    "jarvis-ui/no-legacy-imports": {
-      "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
-  "components/skylight/useSkylightWrite.tsx": {
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     }

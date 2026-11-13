@@ -8,8 +8,7 @@ import { api } from "@/lib/client/api";
 import { localDate } from "@/lib/time";
 import { useAccess } from "@/components/access";
 import { useSource } from "@/components/useSource";
-import { useNow } from "@/components/ui";
-import { SectionLabel } from "@/components/ui/legacy";
+import { ChipButton, SectionHeader, useNow } from "@/components/ui";
 import { SkylightChoreGroups } from "./SkylightChoreGroups";
 import { useSkylightWrite } from "./useSkylightWrite";
 import type { SkylightExtra } from "./model";
@@ -20,6 +19,7 @@ export function todaysChores(actions: NextAction[], today: string) {
     if (a.source !== "skylight" || (a.skylight && a.skylight.kind !== "chore")) return false;
     const ref = a.skylight;
     if (a.status === "completed") return !ref?.completedOn || ref.completedOn === today;
+    if (a.status === "skipped") return ref?.skippedOn === today;
     if (a.status !== "open") return false;
     const day = ref?.instanceDate ?? ref?.startDate;
     return !day || day <= today;
@@ -66,16 +66,16 @@ export function TodayChores({
   const open = chores.filter((a) => a.status === "open").length;
   // A quiet text toggle (one primary per row stays the rows'): Mine = yours + up for grabs.
   const toggle = (
-    <button
+    <ChipButton
       type="button"
       aria-pressed={everyone}
       onClick={() => setEveryone(!everyone)}
       title={everyone ? "Showing everyone’s chores" : "Showing yours and up for grabs"}
-      className="tap relative inline-flex items-center rounded-[8px] px-1 text-xs font-semibold text-muted hover:text-text dense:min-h-6"
+      className="text-xs text-muted"
     >
       {everyone ? "Everyone" : "Mine"}
       <span className="sr-only"> (show {everyone ? "mine" : "everyone’s"})</span>
-    </button>
+    </ChipButton>
   );
   const body = chores.length ? (
     <SkylightChoreGroups actions={chores} writable={writable} request={write.request} timezone={timezone} now={now} idPrefix={id} compact />
@@ -97,21 +97,22 @@ export function TodayChores({
     );
   return (
     <section aria-labelledby={`${id}-h`} className="mb-5" data-testid="today-chores">
-      <SectionLabel
+      <SectionHeader
         id={`${id}-h`}
-        className="flex-wrap"
-        count={open ? String(open) : undefined}
+        label="Chores"
+        count={open || undefined}
         action={
           <span className="flex items-center gap-1">
             {toggle}
-            <Link href="/skylight" className="tap inline-flex items-center rounded-[8px] px-1 text-xs font-semibold text-accent hover:underline dense:min-h-6">
+            <Link
+              href="/skylight"
+              className="tap inline-flex items-center rounded-[var(--radius)] px-1 text-xs font-semibold text-accent hover:underline dense:min-h-6"
+            >
               Skylight<span className="sr-only"> chores</span>
             </Link>
           </span>
         }
-      >
-        Chores
-      </SectionLabel>
+      />
       <div>{body}</div>
       {write.node}
     </section>

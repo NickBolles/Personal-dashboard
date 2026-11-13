@@ -102,7 +102,6 @@ it("completes from the row: pending shimmer → collapses → Done today, progre
   renderWith([chore("a", "Lantern dishes", {}, "08:00"), chore("b", "Lantern bins", {}, "09:00")]);
   expect(screen.getByRole("img", { name: "Morning: 0 of 2 done" })).toBeDefined();
   fireEvent.click(screen.getByRole("checkbox", { name: "Done: Lantern dishes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
   const row = () => screen.getByRole("checkbox", { name: "Done: Lantern dishes" }).closest(".sk-row") as HTMLElement;
   expect(row().dataset.phase).toBe("pending");
   expect(row().getAttribute("aria-busy")).toBe("true");
@@ -117,11 +116,10 @@ it("completes from the row: pending shimmer → collapses → Done today, progre
   expect(screen.queryByTestId("t-done")).toBeNull();
 });
 
-it("rolls back with a shake on error and keeps Skylight's reason in the sheet", async () => {
+it("rolls back with a shake on error and keeps Skylight's reason inline", async () => {
   vi.mocked(api.post).mockRejectedValueOnce(new Error("Skylight is read-only"));
   renderWith([chore("a", "Lantern dishes", {}, "08:00")]);
   fireEvent.click(screen.getByRole("checkbox", { name: "Done: Lantern dishes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Skylight is read-only"));
   const box = screen.getByRole("checkbox", { name: "Done: Lantern dishes" });
   await waitFor(() => expect((box.closest(".sk-row") as HTMLElement).dataset.phase).toBeUndefined());
@@ -132,12 +130,12 @@ it("celebrates once when the last open chore of the day is done", async () => {
   vi.mocked(api.post).mockResolvedValueOnce({ ok: true, writeId: "w2", undoable: true, message: "ok" });
   renderWith([chore("a", "Lantern dishes", {}, "08:00")]);
   fireEvent.click(screen.getByRole("checkbox", { name: "Done: Lantern dishes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
   await waitFor(() => expect(screen.getByText("All of today’s chores are done")).toBeDefined());
   expect(screen.getByText("All of today’s chores are done").className).toContain("sk-celebrate");
 });
 
-it("swipe right on touch completes through the same confirm card", () => {
+it("swipe right on touch completes without an extra modal", async () => {
+  vi.mocked(api.post).mockResolvedValueOnce({ ok: true, writeId: "swipe", undoable: true });
   renderWith([chore("a", "Lantern dishes", {}, "08:00")]);
   const row = screen.getByRole("checkbox", { name: "Done: Lantern dishes" }).closest(".sk-row") as HTMLElement;
   const ev = (type: string, x: number) =>
@@ -146,8 +144,8 @@ it("swipe right on touch completes through the same confirm card", () => {
   ev("pointermove", 40);
   ev("pointermove", 100);
   ev("pointerup", 100);
-  expect(screen.getByRole("dialog").textContent).toContain("Lantern dishes");
-  expect(api.post).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(api.post).toHaveBeenCalledOnce());
 });
 
 it("Hermes-mode chores (no Skylight ref) stay read-only", () => {

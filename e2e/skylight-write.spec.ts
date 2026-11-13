@@ -78,7 +78,7 @@ test("skywrite completes a Nick chore and undoes its completion", async ({ page 
   const check = page.getByRole("checkbox", { name: /Done: .*Take out recycling/ });
   await expect(check).toBeVisible();
   await check.click();
-  await confirm(page, /Mark “.*Take out recycling” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(page.getByTestId("skylight-done")).toContainText("Take out recycling");
   await expect(check).toHaveCount(0);
   await expect
@@ -123,9 +123,8 @@ test("skywrite adds groceries, checks oat milk and undoes the check", async ({ p
   await expect(groceries.getByRole("checkbox", { name: "Skywrite lemons", exact: true })).toBeVisible();
   const oat = groceries.getByRole("checkbox", { name: "Oat milk", exact: true });
   await oat.click();
-  // No optimistic check: confirmation must precede any upstream mutation.
-  await expect(oat).not.toBeChecked();
-  await confirm(page, "Check off “Oat milk” on Groceries");
+  // The explicit check is confirmation; adding/removing list items still reviews separately.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(oat).toBeChecked();
   await undo(page);
   await expect(oat).not.toBeChecked();
@@ -160,11 +159,11 @@ test("skywrite creates, edits, deletes and restores a calendar event", async ({ 
 
 test("skywrite Cancel sends no mutation and returns focus", async ({ page }) => {
   await page.goto("/skylight");
-  const check = page.getByRole("checkbox", { name: /Done: .*Take out recycling/ });
+  const check = page.getByRole("button", { name: /Reopen: .*Wipe the kitchen counters/ });
   const before = await writes(page);
   await check.click();
   const dialog = page.getByRole("dialog", { name: "Confirm Skylight change" });
-  await expect(dialog).toContainText("Take out recycling");
+  await expect(dialog).toContainText("Wipe the kitchen counters");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(check).toBeFocused();

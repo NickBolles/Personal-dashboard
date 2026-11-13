@@ -3,6 +3,7 @@ import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import type { JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import type { AppliedEntry, SurfaceView } from "@/lib/jarvis-ui/types";
 import { chatVisual } from "./chat-alerts";
+import { EMPTY_AWAY } from "../../lib/client/away";
 
 const day = "2026-11-06";
 export const prismMatrix = {
@@ -75,6 +76,9 @@ export const prismWeekly: DynamicCard = {
 };
 export async function stubPrismV2(page: Page, cards: DynamicCard[] = [prismWeekly]) {
   let view: SurfaceView = { id: "uis_prismv2fixture", specHash: "a".repeat(64), state: {}, applied: [], readOnly: false };
+  // The recap keeps the tray line while it has something to say (chores other tests completed count): these tests
+  // are about the card line, so the recap is quiet here.
+  await page.route("**/api/agents/away", (r) => r.fulfill({ json: EMPTY_AWAY }));
   await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
   await page.route("**/api/smart/dynamic", (r) => r.fulfill({ json: { cards, today: day } }));
   await page.route("**/api/smart/surfaces", (r) => r.fulfill({ json: view }));

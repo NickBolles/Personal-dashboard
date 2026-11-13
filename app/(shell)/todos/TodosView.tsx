@@ -17,8 +17,21 @@ import { AgentChip } from "@/components/work/AgentChip";
 import { agentOf } from "@/lib/activity";
 import { SourceFilter } from "@/components/actions/SourceFilter";
 import { taskSourceLabel } from "@/lib/task-source";
-import { ErrorNote, Field, PageHeader, useNow, useOnline, useToast, LoadingState, EmptyState, SectionHeader, Segmented } from "@/components/ui";
-import { Button, inputCls } from "@/components/ui/legacy";
+import {
+  Button,
+  Input,
+  Toggle,
+  ErrorNote,
+  Field,
+  PageHeader,
+  useNow,
+  useOnline,
+  useToast,
+  LoadingState,
+  EmptyState,
+  SectionHeader,
+  Segmented,
+} from "@/components/ui";
 import { parseTaskSegment, taskInSegment, type TaskSegment } from "@/lib/task-segments";
 
 const SEGMENT_EVENT = "jarvis:task-segment";
@@ -63,6 +76,7 @@ export function TodosView() {
   // Same optimistic overlay as Today and the Skylight page: a confirmed chore moves to Completed at once.
   const all = useOptimisticChores(rawAll, timezone).actions;
   const [source, setSource] = useState("");
+  const [showUpcomingDaily, setShowUpcomingDaily] = useState(false);
   const segment = useSyncExternalStore(subscribeSegment, currentSegment, serverSegment);
   const setSegment = (value: TaskSegment) => {
     const url = new URL(window.location.href);
@@ -76,7 +90,7 @@ export function TodosView() {
   // Skylight chores follow Skylight's own order (time of day today, later days, past days last); everything else
   // keeps the due-state groups. Overdue — native and Skylight alike — sits at the bottom, above Completed.
   const isChore = isOpenChore;
-  const chores = groupSkylightChores(actions, { now, timezone });
+  const chores = groupSkylightChores(actions, { now, timezone, showUpcomingDaily });
   const choreBucket = (key: string) => chores.find((c) => c.key === key)?.actions ?? [];
   const native = (title: string) => actions.filter((a) => !isChore(a) && GROUPS.find((g) => g.title === title)!.match(a));
   const completed = native("Completed recently").sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -88,6 +102,7 @@ export function TodosView() {
     { title: "Waiting on others", items: actions.filter((a) => a.status === "waiting") },
     // Newest completion first, whichever list it came from.
     { title: "Completed recently", items: completed },
+    { title: "Skipped recently", items: actions.filter((a) => a.status === "skipped") },
   ];
   return (
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
@@ -134,6 +149,7 @@ export function TodosView() {
       </div>
       {provider === "jarvis" && can("todos.edit") ? <AddTodo /> : null}
       <SourceFilter options={options} value={source} onChange={setSource} />
+      <Toggle label="Show upcoming daily chores" checked={showUpcomingDaily} onChange={setShowUpcomingDaily} />
 
       {q.data?.data || sky.data?.data
         ? groups.map((g) => {
@@ -206,13 +222,13 @@ function AddTodo() {
     >
       <div className="min-w-48 flex-1">
         <Field id="new-todo" label="New todo">
-          <input id="new-todo" className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input id="new-todo" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
       </div>
       <Field id="new-todo-due" label="Due">
-        <input id="new-todo-due" type="date" className={inputCls} value={due} onChange={(e) => setDue(e.target.value)} />
+        <Input id="new-todo-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
       </Field>
-      <Button type="submit" busy={busy} disabled={!online}>
+      <Button type="submit" loading={busy} disabled={!online}>
         Add
       </Button>
     </form>

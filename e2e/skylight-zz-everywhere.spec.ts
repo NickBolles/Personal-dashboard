@@ -18,12 +18,7 @@ async function writes(page: Page): Promise<Write[]> {
   expect(response.ok()).toBe(true);
   return ((await response.json()) as { writes: Write[] }).writes;
 }
-async function confirm(page: Page, text: string | RegExp) {
-  const dialog = page.getByRole("dialog", { name: "Confirm Skylight change" });
-  await expect(dialog).toContainText(text);
-  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect(dialog).toBeHidden();
-}
+
 async function undo(page: Page) {
   await page
     .getByRole("status")
@@ -98,7 +93,7 @@ test("skyall: completes a chore from Today with motion, then Undo restores it", 
   const before = Number(/(\d+) of/.exec((await progress.getAttribute("aria-label")) ?? "")?.[1]);
   const label = (n: number) => new RegExp(`^Anytime: ${n} of \\d+ done$`);
   await row.getByRole("checkbox", { name: /Done: .*Skyall fold the towels/ }).click();
-  await confirm(page, /Mark “.*Skyall fold the towels” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(anytime.getByRole("article", { name: /Skyall fold the towels/ })).toHaveCount(0);
   await expect(section.getByTestId("today-chores-done")).toContainText("Skyall fold the towels");
   await expect(anytime.getByRole("img", { name: label(before + 1) })).toBeVisible();
@@ -127,7 +122,7 @@ test("skyall: completes a chore from the Chief of staff tray card", async ({ pag
   const row = chores.getByRole("article", { name: /Skyall water the ferns/ });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await row.getByRole("checkbox", { name: /Done: .*Skyall water the ferns/ }).click();
-  await confirm(page, /Mark “.*Skyall water the ferns” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(chores.getByTestId("tray-chores-done")).toContainText("Skyall water the ferns");
   await expect.poll(() => completions(page, "88355002")).toEqual(["complete"]);
   await undo(page);
@@ -135,7 +130,20 @@ test("skyall: completes a chore from the Chief of staff tray card", async ({ pag
   await expect.poll(() => completions(page, "88355002")).toEqual(["complete", "pending"]);
 });
 
-test("skyall: swipe right on a phone completes through the confirm card", async ({ page }) => {
+test("skyall: Todos completes in one tap and Undo restores the chore", async ({ page }) => {
+  await addChores(page, [{ id: "88355006", summary: "Skyall todos routine", category: "13600771", start: today() }]);
+  await page.goto("/todos");
+  const check = page.getByRole("checkbox", { name: "Done: Skyall todos routine", exact: true });
+  await check.click();
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^Completed recently/ })).toContainText("Skyall todos routine");
+  await expect.poll(() => completions(page, "88355006")).toEqual(["complete"]);
+  await undo(page);
+  await expect(check).toBeVisible();
+  await expect.poll(() => completions(page, "88355006")).toEqual(["complete", "pending"]);
+});
+
+test("skyall: swipe right on a phone completes without a confirmation modal", async ({ page }) => {
   await addChores(page, [{ id: "88355003", summary: "Skyall sweep the steps", category: "13600771", start: today() }]);
   await page.goto("/home");
   const row = page.getByTestId("today-chores").locator(".sk-row").filter({ hasText: "Skyall sweep the steps" });
@@ -148,7 +156,7 @@ test("skyall: swipe right on a phone completes through the confirm card", async 
   await fire("pointerdown", x0);
   for (const dx of [16, 40, 70, 96]) await fire("pointermove", x0 + dx);
   await fire("pointerup", x0 + 96);
-  await confirm(page, /Mark “.*Skyall sweep the steps” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(page.getByTestId("today-chores-done")).toContainText("Skyall sweep the steps");
   await expect.poll(() => completions(page, "88355003")).toEqual(["complete"]);
   // A short drag springs back without asking.
@@ -174,7 +182,7 @@ test("skyall: reduced motion completes instantly with no animation", async ({ pa
   const instant = (v: string) => v.split(",").every((d) => parseFloat(d) < 0.01);
   expect(instant(await row.evaluate((el) => getComputedStyle(el).transitionDuration))).toBe(true);
   await row.getByRole("checkbox", { name: /Done: .*Skyall empty the dryer/ }).click();
-  await confirm(page, /Skyall empty the dryer/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   const done = section.getByTestId("today-chores-done").locator(".sk-row").filter({ hasText: "Skyall empty the dryer" });
   await expect(done).toBeAttached();
   const anim = await done.evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration]);

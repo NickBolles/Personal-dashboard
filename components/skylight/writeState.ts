@@ -77,7 +77,7 @@ export function writeReducer(state: WriteState, ev: WriteEvent): WriteState {
 export function optimisticStatus(action: NextAction, entry: WriteEntry | undefined): NextAction["status"] | "skipped" {
   if (!entry || !MOVES.has(entry.op.op)) return action.status;
   const target = entry.op.op === "chore.reopen" || entry.op.op === "list.uncheck" ? "open" : entry.op.op === "chore.skip" ? "skipped" : "completed";
-  const original = target === "open" ? "completed" : "open";
+  const original = target === "open" ? (entry.op.op === "chore.reopen" && entry.op.previousStatus === "skipped" ? "skipped" : "completed") : "open";
   switch (entry.phase) {
     case "pending":
     case "leaving":
@@ -97,21 +97,21 @@ export function optimisticChecked(action: NextAction, entry: WriteEntry | undefi
   if (entry && MOVES.has(entry.op.op)) {
     const completes = entry.op.op === "chore.complete" || entry.op.op === "list.check";
     if (entry.phase === "pending" || entry.phase === "leaving" || entry.phase === "done" || entry.phase === "undoing") return completes;
-    if (entry.phase === "restored") return !completes;
+    if (entry.phase === "restored") return (entry.op.op === "chore.reopen" && entry.op.previousStatus !== "skipped") || entry.op.op === "list.uncheck";
   }
   return action.status === "completed";
 }
 
 /**
  * Apply the overlay to a list of actions: rows a landed write completed show as completed (today), skipped rows
- * disappear, reopened/undone rows show as open. Input is never mutated.
+ * stay distinctly skipped, reopened/undone rows show as open. Input is never mutated.
  */
 export function applyOverlay(actions: NextAction[], state: WriteState, today: string): NextAction[] {
   const out: NextAction[] = [];
   for (const a of actions) {
     const entry = state[a.id];
     const status = optimisticStatus(a, entry);
-    if (status === "skipped") continue;
+
     if (status === a.status) {
       out.push(a);
       continue;
@@ -121,7 +121,9 @@ export function applyOverlay(actions: NextAction[], state: WriteState, today: st
       ...a,
       status,
       ...(status === "completed" ? { primaryAction: undefined, updatedAt: new Date(entry!.at).toISOString() } : {}),
-      ...(ref?.kind === "chore" ? { skylight: { ...ref, completedOn: status === "completed" ? today : undefined } } : {}),
+      ...(ref?.kind === "chore"
+        ? { skylight: { ...ref, completedOn: status === "completed" ? today : undefined, skippedOn: status === "skipped" ? today : undefined } }
+        : {}),
     });
   }
   return out;
@@ -142,11 +144,11 @@ export function settledKeys(actions: NextAction[], state: WriteState, now: numbe
       if (now - e.at > maxAgeMs) return true;
       if (!MOVES.has(e.op.op)) return e.phase === "restored" || now - e.at > UNDO_WINDOW_MS;
       const a = byId.get(key);
-      const target = e.op.op === "chore.reopen" || e.op.op === "list.uncheck" ? "open" : "completed";
-      const original = target === "open" ? "completed" : "open";
+      const target = e.op.op === "chore.reopen" || e.op.op === "list.uncheck" ? "open" : e.op.op === "chore.skip" ? "skipped" : "completed";
+      const original = target === "open" ? (e.op.op === "chore.reopen" && e.op.previousStatus === "skipped" ? "skipped" : "completed") : "open";
       if (e.phase === "restored") return a?.status === original;
       if (now - e.at <= UNDO_WINDOW_MS) return false;
-      return e.op.op === "chore.skip" ? !a || a.status !== "open" : a?.status === target;
+      return a?.status === target;
     })
     .map(([key]) => key);
 }

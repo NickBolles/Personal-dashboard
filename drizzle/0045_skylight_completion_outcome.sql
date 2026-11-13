@@ -1,0 +1,1 @@
+ALTER TABLE `source_completions` ADD `outcome` text DEFAULT 'completed' NOT NULL;

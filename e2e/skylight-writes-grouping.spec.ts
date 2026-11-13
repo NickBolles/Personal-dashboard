@@ -15,12 +15,7 @@ async function writes(page: Page): Promise<Write[]> {
   expect(response.ok()).toBe(true);
   return ((await response.json()) as { writes: Write[] }).writes;
 }
-async function confirm(page: Page, text: string | RegExp) {
-  const dialog = page.getByRole("dialog", { name: "Confirm Skylight change" });
-  await expect(dialog).toContainText(text);
-  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect(dialog).toBeHidden();
-}
+
 async function undo(page: Page) {
   await page
     .getByRole("status")
@@ -103,7 +98,7 @@ test("skygroup: overdue chores sit in a red Overdue group at the bottom; Do now 
   const group = row.getByRole("group", { name: /Suggested actions/ });
   await expect(group.getByRole("button")).toHaveCount(2);
   await group.getByRole("button", { name: /^Do now: / }).click();
-  await confirm(page, /Mark “Skygroup feed the fish” done in Skylight/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
   await expect(page.getByTestId("skylight-done")).toContainText("Skygroup feed the fish");
   await expect
     .poll(async () =>
@@ -132,7 +127,8 @@ test("skygroup: Skip on an overdue one-off chore marks it skipped and Undo reope
   await expect(row.locator("[data-due-tone=danger]").filter({ hasText: "Due 3 days ago" }).first()).toBeAttached();
   await expect(row.getByRole("button", { name: /^Move to today: / })).toBeVisible();
   await row.getByRole("button", { name: /^Skip: / }).click();
-  await confirm(page, /Skip “Skygroup descale the kettle”/);
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
+  await expect(page.getByTestId("sk-skipped")).toContainText("Skygroup descale the kettle");
   await expect(row).toHaveCount(0);
   await expect
     .poll(async () =>
@@ -144,4 +140,24 @@ test("skygroup: Skip on an overdue one-off chore marks it skipped and Undo reope
   await expect
     .poll(async () => (await writes(page)).filter((w) => w.path.endsWith("/chores/88344900/completions")).map((w) => w.body.status))
     .toEqual(["skipped", "pending"]);
+});
+
+test("skygroup: Skip is available today; recurring Undo changes only the clicked time instance", async ({ page }) => {
+  const day = frameDay(0);
+  await addChores(page, [
+    { id: `88344901-${day}-0600`, summary: "Skygroup morning routine", category: "13600771", start: day, start_time: "06:00", rrule: "FREQ=DAILY" },
+    { id: `88344901-${day}-2000`, summary: "Skygroup evening routine", category: "13600771", start: day, start_time: "20:00", rrule: "FREQ=DAILY" },
+  ]);
+  await page.goto("/skylight");
+  await page.getByRole("button", { name: "Skip: Skygroup morning routine", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
+  await expect(page.getByTestId("sk-skipped")).toContainText("Skygroup morning routine");
+  await expect(page.getByTestId("skylight-done")).not.toContainText("Skygroup morning routine");
+  await expect(page.getByRole("checkbox", { name: "Done: Skygroup evening routine", exact: true })).toBeVisible();
+  await undo(page);
+  await expect(page.getByRole("checkbox", { name: "Done: Skygroup morning routine", exact: true })).toBeVisible();
+  expect((await writes(page)).filter((w) => w.path.endsWith("/chores/88344901/completions"))).toEqual([
+    { method: "PUT", path: "/api/frames/4418006/chores/88344901/completions", body: { status: "skipped", instance_date: day, instance_time: "06:00" } },
+    { method: "PUT", path: "/api/frames/4418006/chores/88344901/completions", body: { status: "pending", instance_date: day, instance_time: "06:00" } },
+  ]);
 });

@@ -28,8 +28,34 @@ import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
 import type { ResumeResponse } from "../lib/resume";
+import { skylightTaskUxFixture } from "./fixtures/skylight-task-ux";
 import type { CaptureTriageView } from "../lib/capture-triage";
 import type { InboxEntry } from "../lib/work";
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`visual: task UX skipped recap and daily filtering (${scheme})`, async ({ page }) => {
+    const fixture = skylightTaskUxFixture();
+    await page.clock.setFixedTime(fixture.now);
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (r) => r.fulfill({ json: fixture.source }));
+    await page.route(/\/api\/settings$/, (r) => r.fulfill({ json: { timezone: "America/Chicago" } }));
+    await page.route(/\/api\/agents\/away$/, (r) => r.fulfill({ json: fixture.away }));
+    await page.route("**/api/home", (r) => r.fulfill({ json: homeVisual }));
+    await page.route("**/api/home/pulse", (r) => r.fulfill({ json: homePulseVisual }));
+    await page.goto("/skylight");
+    await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), scheme);
+    await expect(page.getByRole("region", { name: "Skipped this week" })).toContainText("Skipped routine, not completed");
+    await expect(page.getByText("Daily tomorrow hidden", { exact: true })).toHaveCount(0);
+    await withoutTray(page, () => expect(page.locator("main#main")).toHaveScreenshot(`task-ux-filtered-${scheme}.png`, { animations: "disabled" }));
+    await page.goto("/home");
+    await page.evaluate((theme) => document.documentElement.setAttribute("data-theme", theme), scheme);
+    const recap = page.locator("main#main").getByTestId("while-away");
+    await expect(recap).toContainText("1 chore completed");
+    await expect(recap).toContainText("1 chore skipped");
+    await expect(recap.getByTestId("away-chore")).toHaveCount(2);
+    await withoutTray(page, () => expect(recap).toHaveScreenshot(`task-ux-recap-${scheme}.png`, { animations: "disabled" }));
+  });
+}
 
 /** Locator crops must not include fixed phone tray overlays; page shots retain them. */
 async function withoutTray(page: Page, shoot: () => Promise<void>) {
@@ -2033,9 +2059,9 @@ for (const scheme of ["light", "dark"] as const) {
     const overlays = await page.addStyleTag({ content: HIDE_OVERLAYS });
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await expect(page).toHaveScreenshot(`skylight-write-${scheme}.png`, { fullPage: true, mask: MASK.map((m) => page.locator(m)) });
-    await page.getByRole("checkbox", { name: /Done: .*Visualsky water the ferns/ }).click();
+    await page.getByRole("button", { name: /Reopen: .*Visualsky wipe the stovetop/ }).click();
     const confirm = page.getByRole("dialog", { name: "Confirm Skylight change" });
-    await expect(confirm).toContainText("Visualsky water the ferns");
+    await expect(confirm).toContainText("Visualsky wipe the stovetop");
     await withoutTray(page, () => expect(confirm).toHaveScreenshot(`skylight-write-confirm-${scheme}.png`));
     await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
     await overlays.evaluate((el) => (el as Element).remove());
@@ -2121,7 +2147,7 @@ for (const scheme of ["light", "dark"] as const) {
       expect(section).toHaveScreenshot(`skylight-today-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => section.locator(m)) }),
     );
     await section.getByRole("checkbox", { name: /Done: .*Visualsky walk the dog/ }).click();
-    await page.getByRole("dialog", { name: "Confirm Skylight change" }).getByRole("button", { name: "Confirm", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Confirm Skylight change" })).toHaveCount(0);
     await expect(section.getByRole("img", { name: "Afternoon: 1 of 1 done" })).toBeVisible();
     await page.getByRole("status").filter({ hasText: "Marked done" }).getByRole("button", { name: "Dismiss" }).click();
     await section.locator("summary").filter({ hasText: "Done today" }).click();
@@ -2235,8 +2261,8 @@ for (const scheme of ["light", "dark"] as const) {
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: agent access + agent activity (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
-    await freezeMiddayCT(page);
-    const now = Date.now();
+    // Fixture times are relative to the FROZEN page clock: built from the real clock they land in the page's future after 17:00 UTC.
+    const now = await freezeMiddayCT(page);
     const ago = (min: number) => new Date(now - min * 60_000).toISOString();
     await page.route(/\/api\/settings\/agents\/tokens$/, (route) =>
       route.request().method() === "GET"

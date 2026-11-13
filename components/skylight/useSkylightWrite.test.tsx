@@ -13,12 +13,12 @@ vi.mock("@/components/ui", async (original) => ({
   useOnline: () => state.online,
   useToast: () => ({ toast: state.toast }),
 }));
-const op = { op: "chore.complete" as const, choreId: "chore", title: "Lantern chore", categoryId: "member" };
-function Harness() {
+const op = { op: "chore.reopen" as const, choreId: "chore", title: "Lantern chore", categoryId: "member" };
+function Harness({ kind = "chore.reopen" }: { kind?: "chore.reopen" | "chore.complete" | "chore.skip" }) {
   const write = useSkylightWrite();
   return (
     <>
-      <button type="button" onClick={() => write.request(op)}>
+      <button type="button" onClick={() => write.request({ ...op, op: kind })}>
         Complete lantern
       </button>
       {write.node}
@@ -50,7 +50,7 @@ afterEach(() => {
 
 it("describes the operation and Cancel makes no request, restoring the opener", () => {
   const { opener } = setup();
-  expect(screen.getByRole("dialog").textContent).toContain("Mark “Lantern chore” done in Skylight");
+  expect(screen.getByRole("dialog").textContent).toContain("Reopen “Lantern chore” in Skylight");
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(api.post).not.toHaveBeenCalled();
@@ -86,13 +86,13 @@ it("confirms once, invalidates every dependent source, then undoes and invalidat
   fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(api.post).toHaveBeenNthCalledWith(1, "/api/skylight/write", op);
-  expect(screen.getByRole("status").textContent).toContain("Marked done");
+  expect(screen.getByRole("status").textContent).toContain("Reopened");
   for (const queryKey of [["source", "skylight"], ["home"], ["source", "todos"]]) expect(invalidate).toHaveBeenCalledWith({ queryKey });
   fireEvent.click(screen.getByRole("button", { name: "Undo" }));
   await waitFor(() => expect(api.post).toHaveBeenNthCalledWith(2, "/api/skylight/write/write%2F1/undo"));
   await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
   expect(state.toast).toHaveBeenCalledWith("Undone", "ok");
-  expect(invalidate).toHaveBeenCalledTimes(6);
+  expect(invalidate).toHaveBeenCalledTimes(10);
 });
 
 it("keeps confirmation open on error and reports the server's message", async () => {
@@ -152,6 +152,112 @@ it("undo errors are danger toasts, never an invented Undone success", async () =
   await waitFor(() => expect(state.toast).toHaveBeenCalledWith("A newer edit prevents undo", "danger"));
   expect(undone).not.toHaveBeenCalled();
   expect(done).not.toHaveBeenCalled();
+});
+
+function ListHarness() {
+  const write = useSkylightWrite();
+  return (
+    <>
+      <button onClick={() => write.request({ op: "list.check", listId: "list", itemId: "item", label: "List task", listLabel: "Tasks" })}>
+        Check list task
+      </button>
+      {write.node}
+    </>
+  );
+}
+it("list completion is one deliberate click with Undo, not a confirmation modal", async () => {
+  vi.mocked(api.post).mockResolvedValue({ ok: true, writeId: "list-check", undoable: true });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <ListHarness />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check list task" }));
+  await waitFor(() =>
+    expect(api.post).toHaveBeenCalledExactlyOnceWith("/api/skylight/write", {
+      op: "list.check",
+      listId: "list",
+      itemId: "item",
+      label: "List task",
+      listLabel: "Tasks",
+    }),
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDefined());
+});
+
+function MultiHarness() {
+  const write = useSkylightWrite();
+  return (
+    <>
+      <button onClick={() => write.request({ ...op, op: "chore.complete", choreId: "one" })}>First chore</button>
+      <button onClick={() => write.request({ ...op, op: "chore.skip", choreId: "two" })}>Second chore</button>
+      {write.node}
+    </>
+  );
+}
+it("keeps distinct-row clicks while another write is pending, with an Undo for each", async () => {
+  const finish: ((value: unknown) => void)[] = [];
+  vi.mocked(api.post).mockImplementation(() => new Promise((resolve) => finish.push(resolve)));
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MultiHarness />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "First chore" }));
+  fireEvent.click(screen.getByRole("button", { name: "Second chore" }));
+  fireEvent.click(screen.getByRole("button", { name: "First chore" }));
+  await waitFor(() => expect(api.post).toHaveBeenCalledTimes(2));
+  await act(async () => finish[0]({ ok: true, writeId: "one", undoable: true }));
+  await act(async () => finish[1]({ ok: true, writeId: "two", undoable: true }));
+  expect(screen.getByRole("status").textContent).toContain("Skipped");
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.getByRole("status").textContent).toContain("Marked done");
+});
+
+it.each(["chore.complete", "chore.skip"] as const)("%s is deliberate confirmation, double clicks are ignored, Undo remains available", async (kind) => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(api.post).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <Harness kind={kind} />
+    </QueryClientProvider>,
+  );
+  const click = screen.getByRole("button", { name: "Complete lantern" });
+  fireEvent.click(click);
+  fireEvent.click(click);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(api.post).toHaveBeenCalledExactlyOnceWith("/api/skylight/write", { ...op, op: kind }));
+  await act(async () => finish({ ok: true, writeId: kind, undoable: true }));
+  expect(screen.getByRole("button", { name: "Undo" })).toBeDefined();
+});
+
+it("offline direct clicks send nothing, failed direct clicks stay inline without a modal", async () => {
+  state.online = false;
+  const qc = new QueryClient();
+  const view = render(
+    <QueryClientProvider client={qc}>
+      <Harness kind="chore.skip" />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Complete lantern" }));
+  expect(api.post).not.toHaveBeenCalled();
+  state.online = true;
+  view.rerender(
+    <QueryClientProvider client={qc}>
+      <Harness kind="chore.skip" />
+    </QueryClientProvider>,
+  );
+  vi.mocked(api.post).mockRejectedValueOnce(new Error("Provider refused skip"));
+  fireEvent.click(screen.getByRole("button", { name: "Complete lantern" }));
+  await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Provider refused skip"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
 });
 
 it("undo bar has a draining hairline and dismisses after exactly ten seconds", () => {

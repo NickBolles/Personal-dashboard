@@ -150,9 +150,11 @@ describe("choreSuggestions", () => {
     expect(s.map((x) => x.key)).toEqual(["complete", "skip"]);
     expect(s[0].op).toMatchObject({ op: "chore.complete", instanceDate: "2026-11-03", instanceTime: "06:00" });
   });
-  it("up for grabs: Claim; done: Reopen; today's chore: nothing", () => {
-    expect(choreSuggestions(chore("Grab", "2026-11-04", undefined, { assignee: { kind: "up_for_grabs" } }), o).map((x) => x.key)).toEqual(["claim"]);
+  it("offers Skip today and in future, Claim when eligible, Reopen for terminal chores", () => {
+    expect(choreSuggestions(chore("Grab", "2026-11-04", undefined, { assignee: { kind: "up_for_grabs" } }), o).map((x) => x.key)).toEqual(["skip", "claim"]);
     expect(choreSuggestions(chore("Done", "2026-11-04", undefined, { status: "completed" }), o).map((x) => x.key)).toEqual(["reopen"]);
-    expect(choreSuggestions(chore("Morn", "2026-11-04", "06:00"), o)).toEqual([]);
+    expect(choreSuggestions(chore("Morn", "2026-11-04", "06:00"), o).map((x) => x.key)).toEqual(["skip"]);
+    expect(choreSuggestions(chore("Future", "2026-11-06"), o).map((x) => x.key)).toEqual(["skip"]);
+    expect(choreSuggestions(chore("Skipped", "2026-11-04", undefined, { status: "skipped" }), o).map((x) => x.key)).toEqual(["reopen"]);
   });
 });

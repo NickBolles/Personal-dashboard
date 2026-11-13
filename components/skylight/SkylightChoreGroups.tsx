@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { NextAction } from "@/lib/contracts";
 import { localDate } from "@/lib/time";
-import { cx } from "@/components/ui";
+import { Toggle, cx } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
 import { SkylightActionRow } from "./SkylightActionRow";
-import { CHORE_BUCKETS, choreBucket, choreDay, choreTime, type ChoreBucket } from "./grouping";
+import { CHORE_BUCKETS, choreBucket, choreDay, choreTime, visibleChore, type ChoreBucket } from "./grouping";
 import type { SkylightRequest } from "./useSkylightWrite";
 import { applyOverlay, type WriteState } from "./writeState";
 import { skylightWrites, useSkylightWriteState } from "./writeStore";
@@ -16,7 +16,7 @@ const clock = () => Date.now();
 const CELEBRATE_MS = 1_500;
 const TODAY_BUCKETS: ChoreBucket[] = ["morning", "afternoon", "evening", "anytime"];
 
-export type ChoreSection = { key: ChoreBucket; label: string; open: NextAction[]; done: NextAction[] };
+export type ChoreSection = { key: ChoreBucket; label: string; open: NextAction[]; done: NextAction[]; skipped: NextAction[] };
 
 const isChore = (a: NextAction) => a.source === "skylight" && (a.skylight === undefined || a.skylight.kind === "chore");
 
@@ -24,9 +24,12 @@ const isChore = (a: NextAction) => a.source === "skylight" && (a.skylight === un
  * Chores by Skylight's buckets with each bucket's progress: open rows (Skylight order) plus the ones done today.
  * A chore done today counts toward the bucket it was scheduled in, so "Morning 2/3" stays honest.
  */
-export function choreSections(actions: NextAction[], opts: { now: Date | number; timezone: string; buckets?: readonly ChoreBucket[] }): ChoreSection[] {
+export function choreSections(
+  actions: NextAction[],
+  opts: { now: Date | number; timezone: string; buckets?: readonly ChoreBucket[]; showUpcomingDaily?: boolean },
+): ChoreSection[] {
   const today = localDate(opts.now, opts.timezone);
-  const chores = actions.filter(isChore);
+  const chores = actions.filter((a) => isChore(a) && visibleChore(a, opts));
   const doneToday = (a: NextAction) =>
     a.status === "completed" && (a.skylight?.kind !== "chore" || !a.skylight.completedOn || a.skylight.completedOn === today);
   // #240: day first (Next 7 days: tomorrow 18:00 before next week 08:00), then time of day.
@@ -41,9 +44,10 @@ export function choreSections(actions: NextAction[], opts: { now: Date | number;
           return order(x).localeCompare(order(y)) || x.title.localeCompare(y.title);
         });
       const done = inBucket.filter(doneToday).sort((x, y) => y.updatedAt.localeCompare(x.updatedAt));
-      return { key: b.key, label: b.label, open, done };
+      const skipped = inBucket.filter((a) => a.status === "skipped" && a.skylight?.kind === "chore" && a.skylight.skippedOn === today);
+      return { key: b.key, label: b.label, open, done, skipped };
     })
-    .filter((s) => s.open.length || s.done.length);
+    .filter((s) => s.open.length || s.done.length || s.skipped.length);
 }
 
 /** Overlay-applied actions; fresh server rows reconcile (drop) overlay entries they now agree with. */
@@ -108,17 +112,27 @@ export function SkylightChoreGroups({
   level?: 2 | 3;
 }) {
   const H = level === 2 ? "h2" : "h3";
+  const [showUpcomingDaily, setShowUpcomingDaily] = useState(false);
   const optimistic = useOptimisticChores(actions, timezone);
   const writes = optimistic.writes;
-  const sections = choreSections(optimistic.actions, { now, timezone, buckets: buckets ?? (compact ? [...TODAY_BUCKETS, "overdue"] : undefined) });
+  const sections = choreSections(optimistic.actions, {
+    now,
+    timezone,
+    showUpcomingDaily,
+    buckets: buckets ?? (compact ? [...TODAY_BUCKETS, "overdue"] : undefined),
+  });
+  const skippedRows = optimistic.actions.filter(
+    (a) => a.status === "skipped" && (!compact || (a.skylight?.kind === "chore" && a.skylight.skippedOn === localDate(now, timezone))),
+  );
   const todays = sections.filter((s) => TODAY_BUCKETS.includes(s.key));
   const dayOpen = todays.reduce((n, s) => n + s.open.length, 0);
   const dayDone = todays.reduce((n, s) => n + s.done.length, 0);
   const t = clock();
-  const dayCleared = todays.length > 0 && dayOpen === 0;
+  const dayCleared = todays.length > 0 && dayOpen === 0 && skippedRows.length === 0;
   const doneRows = compact ? sections.flatMap((s) => s.done) : [];
   return (
     <div className={cx("sk-groups", compact && "sk-compact")}>
+      {!compact ? <Toggle label="Show upcoming daily chores" checked={showUpcomingDaily} onChange={setShowUpcomingDaily} /> : null}
       {dayCleared ? (
         <p
           key={`day-${dayDone}`}
@@ -141,8 +155,8 @@ export function SkylightChoreGroups({
       ) : null}
       {sections.map((s) => {
         const id = `${idPrefix}-${s.key}`;
-        const total = s.open.length + s.done.length;
-        const cleared = s.open.length === 0;
+        const total = s.open.length + s.done.length + s.skipped.length;
+        const cleared = s.open.length === 0 && s.skipped.length === 0;
         return (
           <section key={s.key} aria-labelledby={id} className={cx("sk-group", s.key === "overdue" && "sk-overdue")} data-bucket={s.key}>
             <header className="sk-ghead">
@@ -174,7 +188,7 @@ export function SkylightChoreGroups({
       })}
       {compact && doneRows.length ? (
         <details className="sk-done-today group">
-          <summary className="tap inline-flex items-center gap-1 rounded-[6px] px-1 text-xs font-medium text-muted hover:text-text">
+          <summary className="tap inline-flex items-center gap-1 rounded-[var(--radius)] px-1 text-xs font-medium text-muted hover:text-text">
             Done today <span className="tabular-nums">{doneRows.length}</span>
           </summary>
           <ul className="jv-feed mt-1" data-testid={`${idPrefix}-done`}>
@@ -185,6 +199,20 @@ export function SkylightChoreGroups({
             ))}
           </ul>
         </details>
+      ) : null}
+      {skippedRows.length ? (
+        <section aria-label={compact ? "Skipped today" : "Skipped this week"} className="mt-3">
+          <p className="text-xs font-medium text-muted">
+            {compact ? "Skipped today" : "Skipped this week"} · {skippedRows.length}
+          </p>
+          <ul className="jv-feed" data-testid={`${idPrefix}-skipped`}>
+            {skippedRows.map((a) => (
+              <li key={a.id}>
+                <SkylightActionRow action={a} writable={writable} request={request} timezone={timezone} />
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
     </div>
   );

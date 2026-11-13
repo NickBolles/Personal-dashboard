@@ -8,8 +8,7 @@ import { useAccess } from "@/components/access";
 import { useSource } from "@/components/useSource";
 import { SourceState } from "@/components/SourceState";
 import { formatWhen } from "@/components/actions/format";
-import { PageHeader, useNow, useOnline, EmptyState, SectionHeader, Segmented } from "@/components/ui";
-import { Button, ButtonLink, Spinner } from "@/components/ui/legacy";
+import { Button, ButtonLink, LoadingState, PageHeader, useNow, useOnline, EmptyState, SectionHeader, Segmented } from "@/components/ui";
 import { useSkylightWrite } from "@/components/skylight/useSkylightWrite";
 import { SkylightActionRow } from "@/components/skylight/SkylightActionRow";
 import { groupSkylightChores } from "@/components/skylight/grouping";
@@ -44,14 +43,14 @@ export function SkylightView() {
     <div className="mx-auto max-w-3xl px-4 py-5 sm:px-6">
       <PageHeader
         title="Skylight"
-        subtitle={writable ? "Changes are confirmed and can be undone." : "Read-only. Edit events and chores in Skylight."}
+        subtitle={writable ? "Tap to complete or skip. Every change can be undone." : "Read-only. Edit events and chores in Skylight."}
         actions={
           <ButtonLink href="https://app.ourskylight.com/" external>
             Open Skylight
           </ButtonLink>
         }
       />
-      {q.isLoading ? <Spinner label="Loading Skylight…" /> : null}
+      {q.isLoading ? <LoadingState label="Loading Skylight…" /> : null}
       <SourceState status={q.data?.status} hasData={Boolean(q.data?.data)} />
       {extra.needsMember ? (
         <div role="note" className="card mt-3 flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-sm">
@@ -77,7 +76,7 @@ export function SkylightView() {
               { value: "everyone", label: "Everyone" },
             ]}
           />
-          {!choreGroups.length && !done.length ? <EmptyState title="No open chores." /> : null}
+          {!choreGroups.length && !done.length && !optimistic.some((a) => a.status === "skipped") ? <EmptyState title="No open chores." /> : null}
           {/* Morning … Overdue with progress; rows complete in place (same row + motion as Today and the tray). */}
           <div className="mt-4">
             <SkylightChoreGroups actions={all} writable={writable} request={write.request} timezone={timezone} now={now} idPrefix="sk" level={2} />

@@ -7,6 +7,7 @@ import { adapterContext } from "@/server/sources";
 import { recordCompletions } from "@/server/skylight-completions";
 import { listActivity } from "@/server/work/activity";
 import { homePulse } from "@/server/home/pulse";
+import { awayDigest, dismissAway } from "@/server/agents/away";
 import { calendarCheckQuery, choreState, keepChore, mapHermesAnswer } from "@/integrations/skylight/adapter";
 import { HA_COMPLETED_DAYS, recentHaItem } from "@/integrations/todos/adapter";
 import { baseAction } from "@/integrations/actions";
@@ -35,13 +36,14 @@ const snap = (actions: SourceData["actions"]): SourceData => ({ actions, events:
 describe("adapter keeps completed chores inside the read window", () => {
   const today = "2026-11-03";
   const w = { from: "2026-10-27", to: "2026-11-10" };
-  it("keeps open and in-window completions, drops skipped and out-of-window completions", () => {
+  it("keeps open and in-window completed/skipped outcomes, drops old outcomes", () => {
     expect(keepChore({ status: "pending" }, w)).toBe(true);
     expect(keepChore({ status: "complete", completed_on: today }, w)).toBe(true);
     expect(keepChore({ status: "complete", start: today }, w)).toBe(true);
     expect(keepChore({ status: "complete", completed_on: "2026-11-02" }, w)).toBe(true);
     expect(keepChore({ status: "complete", completed_on: "2026-10-20" }, w)).toBe(false);
-    expect(keepChore({ status: "skipped", start: today }, w)).toBe(false);
+    expect(keepChore({ status: "skipped", start: today, completed_on: today }, w)).toBe(true);
+    expect(keepChore({ status: "skipped", completed_on: "2026-10-20" }, w)).toBe(false);
   });
 
   it("maps a completed chore as completed with no primary action; Hermes mode too", () => {
@@ -102,6 +104,107 @@ describe("completion history", () => {
     expect(listActivity(u, { types: ["edit"] }).items.some((i) => i.type === "chore")).toBe(false);
     const trend = homePulse(u, now).trend!;
     expect(trend.completed[trend.completed.length - 1]).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("skipped outcome history and recap", () => {
+  it("readback of Skip Undo removes only that occurrence from the closed recap, and re-skip is new", () => {
+    const now = new Date("2026-11-01T07:30:00Z");
+    const ctx = adapterContext(now);
+    const open = { ...chore("series-2026-11-01-0600", false, ctx), skylight: { kind: "chore" as const, choreId: "series-2026-11-01-0600", categoryId: null } };
+    const skipped = {
+      ...open,
+      status: "skipped" as const,
+      skylight: { kind: "chore" as const, choreId: open.sourceId, categoryId: null, skippedOn: ctx.today },
+    };
+    const sibling = { ...skipped, id: "skylight:series-2026-11-01-2000", sourceId: "series-2026-11-01-2000" };
+    recordCompletions(snap([skipped, sibling]), null, ctx.today, now);
+    const reopenedAt = new Date(now.getTime() + 1000);
+    recordCompletions(snap([open, sibling]), null, ctx.today, reopenedAt);
+    const u = userById(userId)!;
+    expect(awayDigest(u, reopenedAt).chores).toHaveLength(1);
+    expect(awayDigest(u, reopenedAt).chores![0]!.status).toBe("skipped");
+    expect(homePulse(u, reopenedAt).trend!.completed.at(-1)).toBe(0);
+    dismissAway(u, new Date(now.getTime() + 1500));
+    const again = new Date(now.getTime() + 2000);
+    recordCompletions(snap([skipped, sibling]), null, ctx.today, again);
+    expect(awayDigest(u, again).chores).toMatchObject([{ status: "skipped", at: again.toISOString() }]);
+    expect(getDb().select().from(schema.sourceCompletions).all()).toHaveLength(2);
+    dismissAway(u, new Date(now.getTime() - 86_400_000));
+  });
+  it("keeps skipped out of completion trends and renders a distinct Activity and away outcome", () => {
+    const now = new Date("2026-11-01T07:30:00Z"); // repeated 01:30, CST
+    const ctx = adapterContext(now);
+    const u = userById(userId)!;
+    const a = {
+      ...chore("skip", false, ctx),
+      status: "skipped" as const,
+      skylight: { kind: "chore" as const, choreId: "skip", categoryId: null, skippedOn: ctx.today },
+    };
+    recordCompletions(snap([a, chore("done", true, ctx)]), null, ctx.today, now);
+    expect(
+      getDb()
+        .select()
+        .from(schema.sourceCompletions)
+        .all()
+        .map((r) => r.outcome)
+        .sort(),
+    ).toEqual(["completed", "skipped"]);
+    expect(listActivity(u, {}).items.find((r) => r.detail === a.title)?.verb).toBe("chore skipped");
+    expect(homePulse(u, now).trend!.completed.at(-1)).toBe(1);
+    const recap = awayDigest(u, new Date(now.getTime() + 60_000));
+    expect(recap.chores?.map((c) => c.status).sort()).toEqual(["completed", "skipped"]);
+    expect(recap.line).toContain("1 chore completed · 1 chore skipped");
+    // A repeated sync preserves first sight, not a new away item on every refresh.
+    const later = new Date(now.getTime() + 120_000);
+    dismissAway(u, new Date(now.getTime() + 90_000));
+    recordCompletions(snap([a]), null, ctx.today, later);
+    expect(awayDigest(u, later).chores).toEqual([]);
+  });
+
+  it("reconciles completion to skipped across household days by occurrence, not outcome day", () => {
+    const first = new Date("2026-11-04T18:00:00Z");
+    const second = new Date("2026-11-05T18:00:00Z");
+    const ctx = adapterContext(first);
+    const a = {
+      ...chore("same-occurrence", true, ctx),
+      skylight: { kind: "chore" as const, choreId: "same-occurrence", categoryId: null, completedOn: ctx.today },
+    };
+    recordCompletions(snap([a]), null, ctx.today, first);
+    const next = adapterContext(second);
+    recordCompletions(snap([{ ...a, status: "skipped", skylight: { ...a.skylight, skippedOn: next.today } }]), null, next.today, second);
+    const u = userById(userId)!;
+    expect(homePulse(u, second).trend!.completed.reduce((sum, n) => sum + n, 0)).toBe(0);
+    expect(awayDigest(u, second).chores).toMatchObject([{ status: "skipped" }]);
+    expect(awayDigest(u, second).chores).toHaveLength(1);
+    expect(
+      listActivity(u, {})
+        .items.filter((r) => r.type === "chore")
+        .map((r) => r.verb),
+    ).toEqual(["chore skipped"]);
+    recordCompletions(snap([{ ...a, status: "open" }]), null, next.today, new Date(second.getTime() + 1000));
+    expect(
+      getDb()
+        .select()
+        .from(schema.sourceCompletions)
+        .all()
+        .map((r) => r.outcome)
+        .sort(),
+    ).toEqual(["reopened", "superseded"]);
+    expect(
+      listActivity(u, {})
+        .items.filter((r) => r.type === "chore")
+        .map((r) => r.verb),
+    ).toEqual(["chore reopened"]);
+  });
+  it("a completed occurrence changed to skipped no longer counts completed, despite an old completion row", () => {
+    const now = new Date("2026-11-04T18:00:00Z");
+    const ctx = adapterContext(now);
+    const a = chore("changed", true, ctx);
+    recordCompletions(snap([a]), null, ctx.today, now);
+    recordCompletions(snap([{ ...a, status: "skipped" }]), null, ctx.today, new Date(now.getTime() + 1000));
+    expect(getDb().select().from(schema.sourceCompletions).all()).toMatchObject([{ outcome: "skipped" }]);
+    expect(homePulse(userById(userId)!, now).trend!.completed.at(-1)).toBe(0);
   });
 });
 

@@ -46,7 +46,7 @@ export type NextAction = {
   sourceId: string;
   title: string;
   detail?: string;
-  status: "open" | "waiting" | "completed" | "dismissed";
+  status: "open" | "waiting" | "completed" | "skipped" | "dismissed";
   priorityReason: PriorityReason;
   dueAt?: string;
   /** true when the source only knows a due date (no time) */
@@ -181,6 +181,9 @@ export type SkylightRef =
       /** Skylight category (member) id it is assigned to; null = unassigned. */
       categoryId: string | null;
       recurring?: boolean;
+      /** Provider frequency, never inferred from occurrence count. */
+      recurrenceFrequency?: string;
+      skippedOn?: string;
       /** Frame-local day it was completed (completed chores only). */
       completedOn?: string;
     }

@@ -296,10 +296,11 @@ describe("adapters against the mock upstreams", () => {
       expect(piano.assignee).toEqual({ kind: "other", name: "Will" });
       expect(data.extra!.homeHidden).toContain(piano.id);
       expect(data.extra).toMatchObject({ counts: { upForGrabs: 2, hidden: 1, completedToday: 1 }, needsMember: false, health: { ok: true } });
-      // Done today is kept as completed (counts stay open-only); skipped chores are dropped.
+      // Terminal outcomes remain distinct (counts stay open-only), even with completed_on on Skip.
       expect(byTitle.get("Wipe the kitchen counters")).toMatchObject({ status: "completed", assignee: { kind: "mine" } });
       expect(byTitle.get("Wipe the kitchen counters")!.primaryAction).toBeUndefined();
-      expect(byTitle.has("Sort the mail pile")).toBe(false);
+      expect(byTitle.get("Sort the mail pile")).toMatchObject({ status: "skipped" });
+      expect(data.extra).toMatchObject({ counts: { skippedToday: 1 } });
       // Lists are read into list-item rows with a list source chip.
       const items = data.extra!.listItems as { title: string; sourceLabel: string }[];
       expect(items.find((i) => i.title === "Oat milk")).toMatchObject({ sourceLabel: "Skylight · Groceries" });

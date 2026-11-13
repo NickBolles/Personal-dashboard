@@ -169,11 +169,16 @@ export type AwayRun = {
   refused: { intent: string; label: string }[];
 };
 
+/** "1 chore completed", "2 chores skipped": the one wording for a chore count in the recap line and its pills. */
+export const choreCount = (n: number, outcome: "completed" | "skipped") => `${n} ${n === 1 ? "chore" : "chores"} ${outcome}`;
+
 export type AwayDigest = {
   /** runs since the owner last dismissed the digest (newest first, max 20) */
   runs: AwayRun[];
   since: string | null;
   counts: { ran: number; failed: number; changes: number; needsYou: number; running: number; waiting: number };
+  /** Provider outcomes since dismissal; separate from agent-run counts. */
+  chores?: { id: string; title: string; status: "completed" | "skipped"; at: string }[];
   /** one-line text for the tray's dynamic line, null when nothing to say */
   line: string | null;
 };

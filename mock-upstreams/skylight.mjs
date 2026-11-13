@@ -102,8 +102,19 @@ export function createSkylight({ refreshToken }) {
           category: "13600771",
         },
       ],
-      // Skipped and earlier-day completions are dropped by the adapter.
-      ["55900813", { id: "55900813", summary: "Sort the mail pile", emoji_icon: "✉️", status: "skipped", start_time: null, category: "13600771" }],
+      // Native Skip includes completed_on too; it must never count as completed.
+      [
+        "55900813",
+        {
+          id: "55900813",
+          summary: "Sort the mail pile",
+          emoji_icon: "✉️",
+          status: "skipped",
+          completed_on: choreDay(null),
+          start_time: null,
+          category: "13600771",
+        },
+      ],
     ]);
     const now = new Date();
     const day = (n) => frameNow(addDays(now, n)).date;
@@ -273,7 +284,7 @@ export function createSkylight({ refreshToken }) {
         const date = typeof body?.instance_date === "string" ? body.instance_date : null;
         if (!date) return undefined;
         const time = typeof body.instance_time === "string" ? body.instance_time.replace(":", "") : null;
-        return state.chores.get(`${match[1]}-${date}${time ? `-${time}` : ""}`) ?? state.chores.get(`${match[1]}-${date}`);
+        return state.chores.get(`${match[1]}-${date}${time ? `-${time}` : ""}`);
       };
       const c = state.chores.get(match[1]) ?? (match[2] ? occurrence() : undefined);
       if (!c) return notFound(res);
@@ -286,7 +297,10 @@ export function createSkylight({ refreshToken }) {
         if (!["complete", "pending", "skipped"].includes(body.status)) return invalid(res, "status", "is not included in the list");
         const recurring = c.id.includes("-");
         if (recurring && !body.instance_date) return invalid(res, "instance_date", "can't be blank");
+        if (recurring && c.start_time && body.instance_time !== c.start_time) return invalid(res, "instance_time", "must match the occurrence");
+        if (recurring && body.instance_date !== c.start) return invalid(res, "instance_date", "must match the occurrence");
         if (!recurring && body.instance_date != null) return invalid(res, "instance_date", "must be blank");
+        if (!recurring && body.instance_time != null) return invalid(res, "instance_time", "must be blank");
         if (body.instance_date != null && !/^\d{4}-\d{2}-\d{2}$/.test(body.instance_date)) return invalid(res, "instance_date", "is invalid");
         if (body.instance_time != null && !/^\d{2}:\d{2}$/.test(body.instance_time)) return invalid(res, "instance_time", "is invalid");
         const hasCategory = body.category_id != null && body.category_id !== "";

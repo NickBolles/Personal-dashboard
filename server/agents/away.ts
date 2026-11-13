@@ -1,11 +1,12 @@
 import "server-only";
 import { and, desc, eq, gt, ne, or } from "drizzle-orm";
 import type { CurrentUser } from "@/server/auth";
-import { getDb } from "@/server/db";
+import { getDb, schema } from "@/server/db";
+import { can } from "@/server/access";
 import { getSetting, setSetting } from "@/server/settings";
 import { listItems } from "@/server/work/store";
 import { localMinutes } from "@/lib/time";
-import { effectiveAutonomy, WAITING_SUMMARY, type AwayDigest, type AwayRun } from "@/lib/away";
+import { choreCount, effectiveAutonomy, WAITING_SUMMARY, type AwayDigest, type AwayRun } from "@/lib/away";
 import { J, R, assertAwayOwner, jobRow, scheduleTimezone, type RunRow } from "./schedules";
 import { audit } from "@/server/audit";
 const dismissKey = (id: string) => `away_digest_dismissed_at:${id}`;
@@ -67,7 +68,27 @@ export function awayDigest(user: CurrentUser, now = new Date()): AwayDigest {
   };
   const prefix = localMinutes(now, scheduleTimezone()) < 660 ? "Overnight" : "While you were away";
   const parts = [`${counts.ran} ran`, ...(counts.needsYou ? [`${counts.needsYou} needs you`] : []), ...(counts.running ? [`${counts.running} running`] : [])];
-  return { runs, since, counts, line: runs.length ? `${prefix}: ${parts.join(" · ")}` : null };
+  const C = schema.sourceCompletions;
+  const chores = can(user, "skylight.view")
+    ? getDb()
+        .select()
+        .from(C)
+        .where(and(eq(C.source, "skylight"), or(eq(C.outcome, "completed"), eq(C.outcome, "skipped")), gt(C.completedAt, since)))
+        .orderBy(desc(C.completedAt))
+        .limit(50)
+        .all()
+        .map((c) => ({ id: c.id, title: c.title, status: c.outcome === "skipped" ? ("skipped" as const) : ("completed" as const), at: c.completedAt }))
+    : [];
+  const completed = chores.filter((c) => c.status === "completed").length;
+  const skipped = chores.filter((c) => c.status === "skipped").length;
+  const choreParts = [...(completed ? [choreCount(completed, "completed")] : []), ...(skipped ? [choreCount(skipped, "skipped")] : [])];
+  return {
+    runs,
+    since,
+    counts,
+    chores,
+    line: runs.length || chores.length ? `${prefix}: ${[...(runs.length ? parts : []), ...choreParts].join(" · ")}` : null,
+  };
 }
 export function dismissAway(user: CurrentUser, now = new Date(), correlationId = "away-dismiss") {
   assertAwayOwner(user);
