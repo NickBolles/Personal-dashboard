@@ -55,6 +55,9 @@ test("approval requested inline, answered, then run completes", async ({ page })
   await expect(card).toBeHidden();
   await expect(page.getByText("Done", { exact: true })).toBeVisible({ timeout: 20_000 });
   // CH-R1: tool use folds into one summary line; Enter expands it to the step rows.
+  // The live run's own summary line is replaced by the saved message's once the transcript reloads: wait for that
+  // swap, or the focus goes away with the live line and Enter lands on nothing.
+  await expect(page.getByRole("region", { name: "Current run" })).toHaveCount(0);
   const work = page.getByRole("button", { name: /^Worked.*ran 1 command/ }).last();
   await expect(work).toBeVisible();
   await expect(work).toHaveAttribute("aria-expanded", "false");
