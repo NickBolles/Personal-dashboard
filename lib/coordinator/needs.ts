@@ -27,8 +27,9 @@ export function ageLabel(createdAt: string, now: NeedsNow): string {
   return Number.isFinite(ms) ? durationLabel(Math.max(0, ms), Math.floor) : "Unknown age";
 }
 export const isRisky = (d: Pick<Decision, "risk">): boolean => d.risk.length > 0;
+/** The agent's recommendation when it is one of the choices; null otherwise. Never the first choice as a stand-in: that reads as a recommendation nobody made. */
 export function recommendedChoice(d: Pick<Decision, "recommended" | "choices">): string | null {
-  return d.recommended && d.choices.includes(d.recommended) ? d.recommended : (d.choices[0] ?? null);
+  return d.recommended && d.choices.includes(d.recommended) ? d.recommended : null;
 }
 export function defaultLine(d: Pick<Decision, "risk" | "defaultChoice" | "expiresAt">, now: NeedsNow): string | null {
   if (isRisky(d) || !d.defaultChoice || !d.expiresAt) return null;

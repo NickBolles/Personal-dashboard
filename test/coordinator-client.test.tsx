@@ -853,7 +853,7 @@ describe("global coordinator", () => {
     // The decision row says its state in the shared words; its title opens the decision under Needs you.
     expect(decisionRow.textContent).toContain("Needs you");
     expect(decisionRow.textContent).toContain("Frames");
-    fireEvent.click(within(decisionRow).getByRole("button", { name: "Which frame should I order?" }));
+    fireEvent.click(within(decisionRow).getByRole("button", { name: "Open decision D-1: Which frame should I order?" }));
     expect(selected()).toMatch(/^Needs you/);
     expect(within(screen.getByRole("tabpanel", { name: /Needs you/ })).getAllByText("Which frame should I order?").length).toBeGreaterThan(0);
     // A reference with no row in the conversation opens its tab: an unknown run goes to Activity.

@@ -5,6 +5,7 @@ import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import type { ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf } from "@/lib/jarvis-ui/catalog";
 import { blockFits, blockMoveIntent, chipIntent, DAY_END, DAY_START, fmtMinutes, weekDays, type BriefChoice, type Intent } from "@/lib/jarvis-ui/intents";
+import { smartLabel } from "@/lib/jarvis-ui/labels";
 import { calendarRef } from "@/lib/jarvis-ui/validator";
 import type { AppliedEntry, HydratedRef } from "@/lib/jarvis-ui/types";
 import { addDays, daysBetween } from "@/lib/time";
@@ -223,7 +224,7 @@ export function ApprovalChips({ element }: P<"ApprovalChips">) {
   return (
     <section className="overflow-hidden rounded-lg border border-line" aria-label={p.title}>
       <header className="svh">
-        <span className="sv-tag">ApprovalChips</span>
+        <span className="sv-tag">{smartLabel("ApprovalChips")}</span>
         <h3 className="flex-1 text-sm font-semibold">
           {p.title} <span className="text-muted">{p.rows.length}</span>
         </h3>
@@ -406,7 +407,7 @@ export function WeekPlan({ element }: P<"WeekPlan">) {
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-line" aria-label={p.title ?? `Week of ${fmtDay(p.weekOf)}`} data-testid="week-plan">
       <header className="svh">
-        <span className="sv-tag">WeekPlan</span>
+        <span className="sv-tag">{smartLabel("WeekPlan")}</span>
         <h3 className="flex-1 text-sm font-semibold">{p.title ?? `Week of ${fmtDay(p.weekOf)}`}</h3>
         <span className="text-xs text-muted" data-dynamic>
           {scheduled.length} scheduled · {Math.round((totalMin / 60) * 10) / 10} h of {capacity / 60} h
@@ -582,7 +583,7 @@ export function PRCard({ element }: P<"PRCard">) {
   return (
     <section className="overflow-hidden rounded-lg border border-line" aria-label={`Pull request #${pr.number}: ${pr.title}`} data-testid="pr-card">
       <header className="svh">
-        <span className="sv-tag">PRCard</span>
+        <span className="sv-tag">{smartLabel("PRCard")}</span>
         <h3 className="min-w-0 flex-1 text-sm font-semibold">
           #{pr.number} {pr.title}
         </h3>

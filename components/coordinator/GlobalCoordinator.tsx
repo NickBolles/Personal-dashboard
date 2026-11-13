@@ -11,7 +11,6 @@ import { relativeTime } from "@/lib/time";
 import { sortByUrgency } from "@/lib/cw-decisions";
 import { coordinatorStatus } from "@/lib/coordinator/status";
 import { runStatus, sinceRunCounts } from "@/lib/coordinator/run-card";
-import { ageLabel } from "@/lib/coordinator/needs";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import { changeLabel } from "@/lib/coordinator/item-card";
@@ -31,11 +30,14 @@ import { pickTrayLine, type PriorityLine } from "@/lib/coordinator/things";
 import type { DynamicCard, DynamicResponse } from "@/lib/jarvis-ui/dynamic";
 import { useSmartSettings } from "@/components/smart/AssistantText";
 import { DynamicSurface } from "@/components/smart/DynamicSurface";
-import { AnchoredMenu, Button, SectionHeader, SheetHandle, StateWord, ThingRow, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
+import { AnchoredMenu, Button, SectionHeader, SheetHandle, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
 import type { ComposeScope } from "@/lib/coordinator/compose";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import { WORK_RANK, WORK_WORD, workStateOfRun } from "@/lib/work-words";
 import { NeedsPanel } from "./needs/NeedsPanel";
+import { DecisionReceiptLine, DecisionRow } from "@/components/decisions/DecisionBlock";
+import { DecisionFlowContext, useDecisionFlowController, type DecisionFlow } from "@/components/decisions/useAnswerDecision";
+import { viewOfDecision } from "@/lib/decision-view";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
 import { RunningPanel } from "./running/RunningPanel";
 import { RunCard } from "./running/RunCard";
@@ -106,6 +108,9 @@ export function GlobalCoordinator() {
   const [activeCard, setActiveCard] = useState<DynamicCard>();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const cwDecisions = useCoordinatorDecisions();
+  // One answer flow for the whole panel: a decision answered from a row in Chat, from the composer or under Needs
+  // you leaves the same receipt with the same Undo.
+  const decisionFlow = useDecisionFlowController();
   const cwRuns = useCoordinatorRuns();
   const { mutate: markLooked } = useMarkLooked();
   const now = useNow();
@@ -310,6 +315,17 @@ export function GlobalCoordinator() {
   // What a reply mentions, as rows under it in Chat: open decisions first, then runs by how much they need a look.
   const openDecision = (ref: string) => (cwDecisions.data?.decisions ?? []).find((x) => x.ref === ref && x.state === "open");
   const runByRef = (ref: string) => runRows.find((r) => r.ref === ref);
+  // "Something else…" on a decision: its chip goes into the composer, and what is typed there is recorded as the
+  // answer (a risk-flagged decision takes a second send).
+  const askDecision = (ref: string, question: string) => compose({ kind: "answer", ref, title: question, risky: !!openDecision(ref)?.risk.length });
+  const answerDecision = async (target: ComposeScope, text: string, confirmed: boolean) => {
+    const decision = target.ref ? openDecision(target.ref) : undefined;
+    if (!decision) {
+      decisionFlow.toast(`${target.ref ?? "That decision"} is no longer open.`, "warn");
+      return false;
+    }
+    return !!(await decisionFlow.answer(viewOfDecision(decision), text, { confirmed }));
+  };
   const mentions = {
     rank: (ref: string) => {
       if (ref.startsWith("D-")) return openDecision(ref) ? -1 : null;
@@ -318,7 +334,7 @@ export function GlobalCoordinator() {
     },
     render: (ref: string) => {
       const decision = ref.startsWith("D-") ? openDecision(ref) : undefined;
-      if (decision) return <MentionedDecision decision={decision} now={now} onOpen={() => onRef(ref)} />;
+      if (decision) return <MentionedDecision decision={decision} flow={decisionFlow} now={now} onOpen={onRef} onAsk={askDecision} />;
       const run = runByRef(ref);
       return run ? (
         <MentionedRun
@@ -623,6 +639,8 @@ export function GlobalCoordinator() {
                   scope={scope}
                   onScope={setScope}
                   mentions={mentions}
+                  onAnswer={answerDecision}
+                  inlineActions={() => <ChatReceipts flow={decisionFlow} />}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
                   onJump={(next, about) => {
@@ -637,7 +655,7 @@ export function GlobalCoordinator() {
                   hasOther={otherAsks.length + stalledAsks.length > 0}
                   key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
                   initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
-                  onAsk={(ref, question) => compose({ kind: "ask", ref, title: question })}
+                  onAsk={askDecision}
                   lead={
                     otherAsks.length || stalledAsks.length ? (
                       <>
@@ -706,162 +724,164 @@ export function GlobalCoordinator() {
   );
   const statusId = `${ids}-status`;
   return (
-    <div ref={host} className="gc-host">
-      {wide ? (
-        <aside
-          aria-label="Chief of staff"
-          className={`gc-rail ${expanded ? "" : "gc-strip"}`}
-          data-density="sleek"
-          style={{ width: railWidth } as CSSProperties}
-          data-testid="gc-rail"
-          data-open={expanded}
-          onKeyDown={onPanelKey}
-        >
-          {expanded ? (
-            <>
-              <div
-                className="gc-resizer"
-                role="separator"
-                aria-label="Resize Chief of staff"
-                aria-orientation="vertical"
-                aria-valuemin={300}
-                aria-valuemax={520}
-                aria-valuenow={width}
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    <DecisionFlowContext.Provider value={decisionFlow}>
+      <div ref={host} className="gc-host">
+        {wide ? (
+          <aside
+            aria-label="Chief of staff"
+            className={`gc-rail ${expanded ? "" : "gc-strip"}`}
+            data-density="sleek"
+            style={{ width: railWidth } as CSSProperties}
+            data-testid="gc-rail"
+            data-open={expanded}
+            onKeyDown={onPanelKey}
+          >
+            {expanded ? (
+              <>
+                <div
+                  className="gc-resizer"
+                  role="separator"
+                  aria-label="Resize Chief of staff"
+                  aria-orientation="vertical"
+                  aria-valuemin={300}
+                  aria-valuemax={520}
+                  aria-valuenow={width}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                      e.preventDefault();
+                      saveWidth(width + (e.key === "ArrowLeft" ? 20 : -20));
+                    }
+                  }}
+                  onPointerDown={(e) => {
                     e.preventDefault();
-                    saveWidth(width + (e.key === "ArrowLeft" ? 20 : -20));
-                  }
-                }}
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                }}
-                onPointerMove={(e) => {
-                  if (e.currentTarget.hasPointerCapture(e.pointerId)) saveWidth(window.innerWidth - e.clientX);
-                }}
-                onPointerUp={(e) => {
-                  if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-                }}
-              />
-              {content}
-            </>
-          ) : (
-            <>
-              <Button
-                variant="ghost"
-                className="gc-strip-btn gc-expand"
-                data-density-skip
-                aria-label="Expand Chief of staff"
-                title={`Chief of staff · ${tray.text}`}
-                onClick={show}
-              >
-                <span className="gc-orb" aria-hidden="true" />
-                <AttentionDot dot={tray.dot} />
-              </Button>
-              {tabs.slice(1).map((t) => (
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) saveWidth(window.innerWidth - e.clientX);
+                  }}
+                  onPointerUp={(e) => {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                  }}
+                />
+                {content}
+              </>
+            ) : (
+              <>
                 <Button
                   variant="ghost"
-                  className="gc-strip-btn"
+                  className="gc-strip-btn gc-expand"
                   data-density-skip
-                  key={t.id}
-                  aria-label={`${t.label}${t.count ? `, ${t.count}` : ""}`}
-                  title={t.count ? `${t.label} · ${t.hint}` : t.label}
-                  onClick={() => {
-                    show();
-                    selectTab(t.id);
-                  }}
+                  aria-label="Expand Chief of staff"
+                  title={`Chief of staff · ${tray.text}`}
+                  onClick={show}
                 >
-                  {t.id === "needs" ? <InboxIcon className="h-4 w-4" /> : <BoltIcon className="h-4 w-4" />}
-                  {t.count ? (
-                    <span className="gc-badge" data-tone={t.tone}>
-                      {t.count}
-                    </span>
-                  ) : null}
-                </Button>
-              ))}
-            </>
-          )}
-        </aside>
-      ) : (
-        <>
-          {!chat && d ? (
-            <div className="gc-tray-qa" data-testid="gc-tray-quick-actions">
-              <QuickActionChips
-                variant="tray"
-                context={quickContext}
-                onPrompt={(value) => {
-                  show();
-                  setTab("chat");
-                  setDraft(value.slice(0, 8000));
-                }}
-              />
-            </div>
-          ) : null}
-          {!chat ? (
-            <div className="gc-tray" data-state={tray.state} data-dynamic-tone={line.card?.line.tone}>
-              <button
-                type="button"
-                className="gc-tray-main"
-                aria-label="Chief of staff"
-                aria-describedby={statusId}
-                aria-haspopup="dialog"
-                onClick={showPriority}
-                {...trayMenu.surfaceProps}
-              >
-                <span className="gc-tray-avatar">
                   <span className="gc-orb" aria-hidden="true" />
                   <AttentionDot dot={tray.dot} />
-                </span>
-                <span className="gc-tray-copy">
-                  <strong>
-                    {line.card ? (
-                      <>
-                        <span aria-hidden="true">{line.card.line.icon} </span>
-                        {line.card.line.label}
-                      </>
-                    ) : (
-                      "Chief of staff"
-                    )}
-                  </strong>
-                  <span id={statusId} className="gc-tray-status" data-dynamic>
-                    <span data-tone={tray.tone === "neutral" ? undefined : tray.tone}>{tray.text}</span>
-                    {tray.rest ? <span className="gc-tray-rest"> · {tray.rest}</span> : null}
-                  </span>
-                </span>
-                {line.card ? <span className="gc-tray-action">{line.card.action}</span> : null}
-                <ChevronIcon className="gc-tray-chevron h-4 w-4" />
-              </button>
-            </div>
-          ) : null}
-          {!chat ? <AnchoredMenu menu={trayMenu} label="Open Chief of staff at" items={trayActions} /> : null}
-          {phoneOpen ? (
-            <dialog
-              ref={dialog}
-              className="gc-sheet"
-              data-density="sleek"
-              aria-modal="true"
-              aria-labelledby={`${ids}-title`}
-              onCancel={() => setPhoneOpen(false)}
-              onKeyDown={onPanelKey}
-              onClick={(e) => {
-                if (e.target === e.currentTarget) {
-                  const r = e.currentTarget.getBoundingClientRect();
-                  if (e.clientY < r.top) setPhoneOpen(false);
-                }
-              }}
-            >
-              <div {...sheetDrag.zoneProps} className="gc-sheet-grab">
-                <SheetHandle {...sheetDrag.handleProps} label="Close Chief of staff sheet" />
+                </Button>
+                {tabs.slice(1).map((t) => (
+                  <Button
+                    variant="ghost"
+                    className="gc-strip-btn"
+                    data-density-skip
+                    key={t.id}
+                    aria-label={`${t.label}${t.count ? `, ${t.count}` : ""}`}
+                    title={t.count ? `${t.label} · ${t.hint}` : t.label}
+                    onClick={() => {
+                      show();
+                      selectTab(t.id);
+                    }}
+                  >
+                    {t.id === "needs" ? <InboxIcon className="h-4 w-4" /> : <BoltIcon className="h-4 w-4" />}
+                    {t.count ? (
+                      <span className="gc-badge" data-tone={t.tone}>
+                        {t.count}
+                      </span>
+                    ) : null}
+                  </Button>
+                ))}
+              </>
+            )}
+          </aside>
+        ) : (
+          <>
+            {!chat && d ? (
+              <div className="gc-tray-qa" data-testid="gc-tray-quick-actions">
+                <QuickActionChips
+                  variant="tray"
+                  context={quickContext}
+                  onPrompt={(value) => {
+                    show();
+                    setTab("chat");
+                    setDraft(value.slice(0, 8000));
+                  }}
+                />
               </div>
-              {content}
-              <div data-quick-action-notices className="shrink-0" />
-            </dialog>
-          ) : null}
-        </>
-      )}
-    </div>
+            ) : null}
+            {!chat ? (
+              <div className="gc-tray" data-state={tray.state} data-dynamic-tone={line.card?.line.tone}>
+                <button
+                  type="button"
+                  className="gc-tray-main"
+                  aria-label="Chief of staff"
+                  aria-describedby={statusId}
+                  aria-haspopup="dialog"
+                  onClick={showPriority}
+                  {...trayMenu.surfaceProps}
+                >
+                  <span className="gc-tray-avatar">
+                    <span className="gc-orb" aria-hidden="true" />
+                    <AttentionDot dot={tray.dot} />
+                  </span>
+                  <span className="gc-tray-copy">
+                    <strong>
+                      {line.card ? (
+                        <>
+                          <span aria-hidden="true">{line.card.line.icon} </span>
+                          {line.card.line.label}
+                        </>
+                      ) : (
+                        "Chief of staff"
+                      )}
+                    </strong>
+                    <span id={statusId} className="gc-tray-status" data-dynamic>
+                      <span data-tone={tray.tone === "neutral" ? undefined : tray.tone}>{tray.text}</span>
+                      {tray.rest ? <span className="gc-tray-rest"> · {tray.rest}</span> : null}
+                    </span>
+                  </span>
+                  {line.card ? <span className="gc-tray-action">{line.card.action}</span> : null}
+                  <ChevronIcon className="gc-tray-chevron h-4 w-4" />
+                </button>
+              </div>
+            ) : null}
+            {!chat ? <AnchoredMenu menu={trayMenu} label="Open Chief of staff at" items={trayActions} /> : null}
+            {phoneOpen ? (
+              <dialog
+                ref={dialog}
+                className="gc-sheet"
+                data-density="sleek"
+                aria-modal="true"
+                aria-labelledby={`${ids}-title`}
+                onCancel={() => setPhoneOpen(false)}
+                onKeyDown={onPanelKey}
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    if (e.clientY < r.top) setPhoneOpen(false);
+                  }
+                }}
+              >
+                <div {...sheetDrag.zoneProps} className="gc-sheet-grab">
+                  <SheetHandle {...sheetDrag.handleProps} label="Close Chief of staff sheet" />
+                </div>
+                {content}
+                <div data-quick-action-notices className="shrink-0" />
+              </dialog>
+            ) : null}
+          </>
+        )}
+      </div>
+    </DecisionFlowContext.Provider>
   );
 }
 
@@ -878,24 +898,35 @@ function MentionedRun(props: {
   const [stopping, setStopping] = useState<string | null>(null);
   return <RunCard {...props} stopping={stopping} onStopping={setStopping} />;
 }
-/** An open decision a reply mentions, as its row in Chat: the title opens it under Needs you. */
-function MentionedDecision({ decision, now, onOpen }: { decision: Decision; now: number; onOpen: () => void }) {
+/** What was just answered from Chat (a row's chip, or the composer), with Undo while it lasts. */
+function ChatReceipts({ flow }: { flow: DecisionFlow }) {
+  const receipts = Object.values(flow.receipts);
+  return receipts.length ? (
+    <div className="gc-chat-receipts">
+      {receipts.map((receipt) => (
+        <DecisionReceiptLine key={receipt.view.ref} receipt={receipt} onUndo={receipt.undoable ? () => void flow.undo(receipt.view.ref) : undefined} />
+      ))}
+    </div>
+  ) : null;
+}
+/** An open decision a reply mentions, as its row in Chat: answer it from its chips, or open it under Needs you. */
+function MentionedDecision({
+  decision,
+  flow,
+  now,
+  onOpen,
+  onAsk,
+}: {
+  decision: Decision;
+  flow: DecisionFlow;
+  now: number;
+  onOpen: (ref: string) => void;
+  onAsk: (ref: string, question: string) => void;
+}) {
   return (
-    <ThingRow
-      className="gc-mention-decision"
-      data-ref-row={decision.ref}
-      state="needs"
-      refId={decision.ref}
-      status={
-        <>
-          <StateWord state="needs" />
-          <span data-dynamic> · {ageLabel(decision.createdAt, now)}</span>
-        </>
-      }
-      title={decision.question}
-      sub={decision.itemTitle && decision.itemTitle !== decision.question ? decision.itemTitle : undefined}
-      onOpen={onOpen}
-    />
+    <div data-ref-row={decision.ref} className="gc-mention-decision">
+      <DecisionRow view={viewOfDecision(decision)} flow={flow} now={now} onOpen={onOpen} onAsk={onAsk} />
+    </div>
   );
 }
 

@@ -88,16 +88,23 @@ test("MCP-raised decisions: tray → answer in 2 taps with Undo; risk-flagged ne
   await page.goto("/home");
   // Open Needs you (tray → tab on phones, the rail tab on desktop), then one tap on the recommended answer.
   const scope = await openNeeds(page, desktop);
-  await scope.getByRole("button", { name: `${low.ref}: Ship it`, exact: true }).click();
-  await expect(scope.getByRole("button", { name: "Undo" }).first()).toBeVisible();
+  await scope.getByRole("button", { name: `${low.ref}: Ship it (recommended)`, exact: true }).click();
+  // The row becomes its receipt: what was asked, what was answered, and Undo.
+  await expect(scope.getByTestId("decision-receipt").filter({ hasText: "Ship it" }).first()).toBeVisible();
+  await expect(scope.getByRole("button", { name: `Undo ${low.ref}`, exact: true }).first()).toBeVisible();
   await expect.poll(async () => (await decisionState(page, low.ref))?.state).toBe("answered");
 
-  // Risk-flagged: the chip opens the detail with Confirm armed; nothing is answered until Confirm.
-  await scope.getByRole("button", { name: `${risky.ref}: Rotate`, exact: true }).click();
+  // Risk-flagged: the row has no one-tap chips. It opens the card, a choice arms, and nothing is answered until Confirm.
+  await expect(scope.getByRole("button", { name: new RegExp(`^${risky.ref}: `) })).toHaveCount(0);
+  await scope.getByRole("button", { name: new RegExp(`^Open decision ${risky.ref}:`) }).click();
+  await scope
+    .getByRole("group", { name: `Answers for ${risky.ref}` })
+    .getByRole("button", { name: /^Rotate/ })
+    .click();
   const confirm = scope.getByRole("group", { name: "Confirm answer" });
-  await expect(confirm).toContainText("Confirm Rotate?");
+  await expect(confirm.getByRole("button", { name: "Confirm: Rotate", exact: true })).toBeVisible();
   expect((await decisionState(page, risky.ref))?.state).toBe("open");
-  await confirm.getByRole("button", { name: "Confirm Rotate", exact: true }).click();
+  await confirm.getByRole("button", { name: "Confirm: Rotate", exact: true }).click();
   await expect.poll(async () => (await decisionState(page, risky.ref))?.answeredChoice).toBe("Rotate");
   await expectNoHorizontalOverflow(page);
 });

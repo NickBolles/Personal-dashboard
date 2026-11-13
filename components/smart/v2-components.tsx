@@ -5,16 +5,19 @@ import type { ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf } from "@/lib/jarvis-ui/catalog";
 import { formIntents, ganttLayout, matrixIntent, matrixTotals, type FormValues } from "@/lib/jarvis-ui/v2";
 import { intentKey, intentTarget } from "@/lib/jarvis-ui/intents";
+import { smartLabel } from "@/lib/jarvis-ui/labels";
 import { isTask } from "@/lib/jarvis-ui/types";
 import { addDays } from "@/lib/time";
 import { Button, Input, Select, Textarea, cx } from "@/components/ui";
 import { useSurface } from "./context";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
-export function SmartHeader({ kind, title, meta }: { kind: string; title: string; meta?: ReactNode }) {
+/** `kind` is the component's catalog name; the owner sees its human label (lib/jarvis-ui/labels.ts), or no tag. */
+export function SmartHeader({ kind, title, meta }: { kind: ComponentName; title: string; meta?: ReactNode }) {
+  const tag = smartLabel(kind);
   return (
     <header className="svh">
-      <span className="sv-tag">{kind}</span>
+      {tag ? <span className="sv-tag">{tag}</span> : null}
       <h3 className="sv-label">{title}</h3>
       {meta ? <span className="sv-meta">{meta}</span> : null}
     </header>

@@ -77,6 +77,7 @@ export function CoordinatorThread({
   scope: scopeProp,
   onScope,
   mentions,
+  onAnswer,
 }: {
   /**
    * What the next message is about (the chip in the composer): set by Steer, Reply, Retry or "ask about this" on
@@ -89,6 +90,11 @@ export function CoordinatorThread({
    * where it sorts (lower first; null = not drawable, it stays a chip in the text); `render` draws its row.
    */
   mentions?: { rank: (ref: string) => number | null; render: (ref: string) => ReactNode };
+  /**
+   * Records what was typed as the answer to the decision in the chip (scope kind "answer"). Resolves true when it
+   * was recorded. `confirmed` is the owner's second send on a risk-flagged decision.
+   */
+  onAnswer?: (scope: ComposeScope, text: string, confirmed: boolean) => Promise<boolean>;
   info: CoordinatorResponse;
   compact?: boolean;
   /** Who the owner is talking to, as shown on replies ("Chief of staff" in the global rail). */
@@ -135,6 +141,11 @@ export function CoordinatorThread({
   const scope = onScope ? (scopeProp ?? null) : localScope;
   const setScope = onScope ?? setLocalScope;
   // One composer: a row's Steer / Reply / Retry puts its chip here and hands over the keyboard.
+  // A risky decision's typed answer is sent on the second press: the first one arms it, for exactly these words.
+  const [armed, setArmed] = useState<string | null>(null);
+  const [answering, setAnswering] = useState(false);
+  const answerKey = scope?.kind === "answer" ? `${scope.ref}:${text.trim()}` : null;
+  const confirming = armed !== null && armed === answerKey;
   const compose = (next: ComposeScope) => {
     setScope(next);
     requestAnimationFrame(() => textarea.current?.focus());
@@ -317,6 +328,23 @@ export function CoordinatorThread({
     // Files picked before the conversation exists wait in `queued` until it does: sending now would leave them behind.
     if (attachments.uploading || queued.current.length) return toast("Wait for the upload to finish, then send.", "warn");
     if (send.isPending || control.isPending || d.excluded || !online) return;
+    if (scope?.kind === "answer" && onAnswer) {
+      if (!text.trim() || answering) return;
+      if (scope.risky && !confirming) return setArmed(answerKey);
+      setAnswering(true);
+      void onAnswer(scope, text.trim(), confirming)
+        .then((recorded) => {
+          if (!recorded) return;
+          setText("");
+          setScope(null);
+          if (textarea.current && compact) textarea.current.style.height = "auto";
+        })
+        .finally(() => {
+          setArmed(null);
+          setAnswering(false);
+        });
+      return;
+    }
     if (scope) {
       // The chip decides what the words mean: a steer, a reply, a retry (which needs no words) or a question.
       if (!text.trim() && !scopeSendsEmpty(scope)) return;
@@ -662,6 +690,14 @@ export function CoordinatorThread({
               </Button>
             </div>
           ) : null}
+          {confirming && scope ? (
+            <p className="gc-scope-confirm" role="status">
+              <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
+              <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
+                Cancel
+              </Button>
+            </p>
+          ) : null}
           <div className={compact ? "gc-compose-row" : undefined}>
             {compact ? (
               <div className="gc-add-menu">
@@ -748,9 +784,9 @@ export function CoordinatorThread({
                 iconOnly
                 icon={<span>↑</span>}
                 className="gc-send"
-                aria-label="Send"
+                aria-label={confirming ? "Confirm answer" : "Send"}
                 disabled={(scope ? !text.trim() && !scopeSendsEmpty(scope) : !text.trim() && !attachments.readyIds.length) || !online}
-                loading={send.isPending || (!!scope && control.isPending)}
+                loading={send.isPending || answering || (!!scope && control.isPending)}
               >
                 Send
               </Button>

@@ -80,6 +80,11 @@ export const mapDemoDecisions = {
       itemId: "mi_dec",
       areaTitle: "Jarvis",
       sessionId: null,
+      // The decision row behind the entry (every real one has it): low-risk, with a recommendation.
+      ref: "D-12",
+      recommended: "Both",
+      risk: [],
+      pack: {},
     },
     {
       key: "approval:r1",
