@@ -130,7 +130,9 @@ function statedOutcome(payload: Record<string, unknown> | undefined, type: strin
   if (!payload) return null;
   const pipeline = Array.isArray(payload.pipeline) ? (payload.pipeline as { stage?: unknown; state?: unknown }[]) : [];
   const stage = type === "ci" ? pipeline.find((p) => p?.stage === "ci") : undefined;
-  for (const v of [stage?.state, payload.state, payload.status, payload.conclusion, payload.outcome, payload.result]) {
+  // A verdict (conclusion/outcome/result) outranks a lifecycle status: GitHub says status "completed" for a
+  // check that failed, with the failure in `conclusion`.
+  for (const v of [payload.conclusion, payload.outcome, payload.result, stage?.state, payload.state, payload.status]) {
     if (typeof v !== "string") continue;
     const t = OUTCOME[v.toLowerCase().replace(/[\s-]+/g, "_")];
     if (t === "ok" || t === "bad") return t;
@@ -146,9 +148,11 @@ function statedOutcome(payload: Record<string, unknown> | undefined, type: strin
 export function proseSaysFailed(text: string | null | undefined): boolean {
   const said = (text ?? "").replace(/\s+/g, " ").trim();
   if (!said) return false;
-  if (STILL_BROKEN.test(said) || ATTEMPT_FAILED.test(said)) return true;
+  // Negations and history go first ("the retry never failed", "the previous attempt failed"), then what
+  // overrides "fixed" (still failing, the attempt itself failed), then failures the sentence says were dealt with.
   let rest = said;
   for (const re of NOT_A_FAILURE) rest = rest.replace(re, " ");
+  if (STILL_BROKEN.test(rest) || ATTEMPT_FAILED.test(rest)) return true;
   rest = rest.replace(DEALT_WITH, " ");
   return SAYS_FAILED.test(rest);
 }

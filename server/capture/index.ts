@@ -468,5 +468,13 @@ export function captureStatus(userId: string, id: string, tokenId?: string) {
     .where(and(eq(I.id, id), eq(I.userId, userId)))
     .get();
   if (!e || e.source !== "capture" || (tokenId && e.captureTokenId !== tokenId)) throw new HttpError(404, "not_found", "Capture not found");
-  return { id: e.id, createdAt: e.createdAt, triageState: e.triageState, suggestedTitle: e.suggestedTitle ?? undefined, reportReady: !!e.latestReportId };
+  return {
+    id: e.id,
+    createdAt: e.createdAt,
+    triageState: e.triageState,
+    suggestedTitle: e.suggestedTitle ?? undefined,
+    reportReady: !!e.latestReportId,
+    // the work item it became (filed by hand or handled by capture triage); capture tokens don't see it
+    ...(tokenId ? {} : { itemId: e.acceptedItemId }),
+  };
 }

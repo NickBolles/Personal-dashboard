@@ -4,6 +4,7 @@ import { LoadingState, SectionHeader, Dialog, ErrorNote, Field, cx, useToast, Fo
 import { Badge, Button, ButtonLink, Card, Empty, OverflowMenu, Spinner, inputCls, type MenuItem } from "@/components/ui/legacy";
 import { ItemAgentPanel, useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
+import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { ItemAiChips } from "@/components/work/ItemAiChips";
 import { itemAgentChip } from "@/components/work/AgentChip";
 
@@ -1238,6 +1239,7 @@ function ItemDetail({
         {!container && item.kind !== "conversation" ? (
           <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => setDialog("continue") : undefined} />
         ) : null}
+        {!container && item.kind !== "conversation" ? <CaptureTriageCard itemId={item.id} /> : null}
         {item.createdVia || item.updatedVia ? <div className="mt-1.5 flex min-w-0 flex-wrap">{itemAgentChip(item)}</div> : null}
         {container ? null : <JobChip itemId={item.id} />}
         {container || ((settlePrompt || !primary) && !(canChat && item.kind !== "conversation")) ? null : (

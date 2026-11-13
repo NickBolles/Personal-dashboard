@@ -65,6 +65,14 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] decision defaults didn't start", (err as Error).message);
   }
+  // Capture AI triage (owner request 2026-11-12): apply planned capture actions; one-time 14-day back-fill.
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { registerCaptureTriage } = await import("./server/capture/triage");
+    registerCaptureTriage(registerDispatcherTask);
+  } catch (err) {
+    console.error("[jarvis] capture triage didn't start", (err as Error).message);
+  }
   // Workflow reminders (W4, D6): opt-in, remind-only notifications; never start a model run.
   try {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");

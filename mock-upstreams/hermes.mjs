@@ -254,6 +254,40 @@ export function createHermes({ apiKey }) {
     return null;
   }
 
+  /**
+   * Capture triage@2 actions for E2E, from the capture text inside the <data> block:
+   * "add <x> to grocery" → Skylight list add on the shopping list; "dentist" → an appointment
+   * without a time (needs input); "garage" → a device action (suggest only). Else no action.
+   */
+  function triageAction(input) {
+    const data = (input.match(/<data[^>]*>([\s\S]*?)<\/data>/) || [])[1] || "";
+    const lists = [...input.matchAll(/^(\S+) — (.+) \((\w+)\)$/gm)].map((m) => ({ id: m[1], label: m[2], kind: m[3] }));
+    const add = data.match(/\badd ([a-z ]{1,40}?) to (?:the )?grocer(?:y|ies)\b/i);
+    if (add) {
+      const shop = lists.find((l) => l.kind === "shopping") || lists[0];
+      const label = add[1].trim().replace(/^\w/, (c) => c.toUpperCase());
+      return {
+        type: "skylight_list_add",
+        confidence: 0.93,
+        summary: `Add “${label}” to ${shop ? shop.label : "the list"} on Skylight`,
+        listId: shop ? shop.id : null,
+        label,
+      };
+    }
+    if (/\bdentist\b/i.test(data))
+      return {
+        type: "skylight_event_create",
+        confidence: 0.88,
+        summary: "Add the dentist appointment to the family calendar",
+        event: { summary: "Dentist appointment", date: null, time: null },
+        missing: ["date", "time"],
+        question: null,
+        choices: [],
+      };
+    if (/\bgarage\b/i.test(data)) return { type: "ha_device", confidence: 0.95, summary: "Open the garage door" };
+    return null;
+  }
+
   function aiJobAnswer(kind, input) {
     if (/FORCE_ERROR/.test(input)) return JSON.stringify({ error: "tool missing" });
     if (/FORCE_PROSE/.test(input)) return "Here is a prose answer instead of JSON.";
@@ -316,6 +350,7 @@ export function createHermes({ apiKey }) {
           shouldInvestigate: true,
           brief: "Find the key facts",
           sensitivity: "none",
+          action: triageAction(input),
         });
       default:
         return JSON.stringify(common);

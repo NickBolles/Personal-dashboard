@@ -12,12 +12,12 @@ import { isConfigured } from "@/integrations/store";
 import { HermesTaskError, readCost, runHermesTask, takeLastCost } from "@/integrations/hermes/jobs";
 import { connForProfile } from "@/server/agents/routing";
 import type { HermesConn } from "@/integrations/hermes/client";
-import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, tierRun, type AiJobKind, type JobErrorCode, type JobState } from "@/lib/ai";
+import { AI_KIND_LABEL, KIND_VERB, OUTPUT_SCHEMAS, captureActions, tierRun, type AiJobKind, type AiSettings, type JobErrorCode, type JobState } from "@/lib/ai";
 import type { ContextSource } from "@/lib/work";
 import { getAiSettings } from "./settings";
 import { spendToday } from "./budget";
 import { subscriptionMeter } from "./meter";
-import { inboxContext, itemContext, triageDestinations } from "./context";
+import { inboxContext, itemContext, triageDestinations, triageSkylightLists } from "./context";
 import { instructionsFor, taskFor } from "./prompts";
 import { draftFromOutput, linkConversation, writeReport } from "./reports";
 import {
@@ -52,6 +52,55 @@ import {
   transition,
 } from "./jobs";
 import { scheduleSlotsFor } from "./schedule-data";
+import { newId } from "@/server/crypto";
+import { fireHook } from "@/server/hooks";
+import type { TriageAction } from "@/lib/capture-triage";
+
+/** "Thursday 2026-11-12 (America/Chicago)" for triage prompts (dates are resolved against it). */
+function todayLine(now = new Date()) {
+  const tz = getPreferences().timezone;
+  try {
+    const p = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", weekday: "long" }).formatToParts(now);
+    const g = (k: string) => p.find((x) => x.type === k)?.value ?? "";
+    return `${g("weekday")} ${g("year")}-${g("month")}-${g("day")} (${tz})`;
+  } catch {
+    return now.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Store the triage action for the capture-triage applier (one row per capture; a failed row
+ * without an external write is re-planned by a retry). Returns true when the capture looks
+ * actionable, so the automatic investigation is skipped.
+ */
+function planCaptureAction(row: typeof J.$inferSelect, action: TriageAction | null, settings: AiSettings, params: { backfill?: unknown }) {
+  if (row.subjectType !== "inbox" || !captureActions(settings).autoHandle) return false;
+  const db = getDb();
+  const C = schema.captureTriage;
+  const at = new Date().toISOString();
+  const prior = db.select().from(C).where(eq(C.inboxId, row.subjectId)).get();
+  const plan = JSON.stringify(action ?? null).slice(0, 8000);
+  if (!prior)
+    db.insert(C)
+      .values({
+        id: newId("ctr"),
+        userId: row.userId,
+        inboxId: row.subjectId,
+        state: "planned",
+        planJson: plan,
+        backfill: params.backfill === true,
+        profile: row.hermesProfile,
+        createdAt: at,
+        updatedAt: at,
+        notBefore: at,
+      })
+      .onConflictDoNothing()
+      .run();
+  else if ((prior.state === "failed" || (prior.state === "planned" && prior.errorCode === "retrying")) && !prior.skylightWriteId && !prior.itemId)
+    db.update(C).set({ state: "planned", planJson: plan, errorCode: null, notBefore: at, updatedAt: at }).where(eq(C.id, prior.id)).run();
+  fireHook("triagePlanned");
+  return !!action && !["none", "note", "other"].includes(action.type);
+}
 
 /**
  * The AI job runner (spec §3.2): a self-contained scheduler like the GitHub
@@ -308,7 +357,15 @@ async function executeJob(id: string, signal: AbortSignal, adopt: boolean) {
             (r) => effectiveAreaPolicy({ title: r.title, systemKey: r.systemKey, aiPolicy: parseAreaSettings(r.settings).aiPolicy }) === "excluded",
           )
         : [];
-    input = `${taskFor(kind, { title, brief: params.brief, areaTitle, destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n") })}\n\n${ctx.text}`;
+    const lists = kind === "triage" ? triageSkylightLists() : [];
+    input = `${taskFor(kind, {
+      title,
+      brief: params.brief,
+      areaTitle,
+      destinations: dests.map((d) => `${d.key} — ${d.path}`).join("\n"),
+      lists: lists.map((l) => `${l.id} — ${l.label} (${l.kind})`).join("\n"),
+      today: kind === "triage" ? todayLine() : undefined,
+    })}\n\n${ctx.text}`;
     outbound = ctx.text;
   }
   // Screen everything that leaves (packets, links, notes), not only the subject's own fields.
@@ -536,6 +593,7 @@ async function onSuccess(
   }
   if (kind === "triage") {
     const t = data as {
+      action?: TriageAction | null;
       title: string;
       kind: string;
       destinationKey: string | null;
@@ -569,7 +627,10 @@ async function onSuccess(
     transition(row.id, row.state as JobState, "succeeded", costPatch);
     const destArea = dest ? (await import("./jobs")).areaOf(row.userId, dest.id) : null;
     const mode = (params.investigateMode as "auto" | "triage_only" | "off" | undefined) ?? "auto";
+    // Capture AI triage: hand the validated action to the applier (server/capture/triage.ts) once per capture.
+    const actionable = planCaptureAction(row, t.action ?? null, settings, params as { backfill?: unknown });
     if (
+      !actionable &&
       shouldInvestigate(
         { shouldInvestigate: t.shouldInvestigate, confidence: t.confidence, sensitivity: t.sensitivity as never },
         settings,

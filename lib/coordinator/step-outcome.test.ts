@@ -60,6 +60,8 @@ const NOT_FAILED: string[] = [
   "Debugged the crash in the radial menu and added a regression test",
   "Zero failing checks on the merge sha",
   "Waiting for CI on the PR head",
+  "The retry never failed",
+  "The previous attempt failed; all checks passed now",
 ];
 
 const ev = (summary: string, over: Partial<RunEvent> = {}): RunEvent => ({
@@ -99,6 +101,9 @@ describe("stepOutcome: one rule for 'Step failed'", () => {
     expect(stepOutcome(ev("Checks", { type: "ci", payload: { conclusion: "failure" } }))).toBe("bad");
     expect(stepOutcome(ev("Checks", { type: "ci", payload: { pipeline: [{ stage: "ci", state: "failed" }] } }))).toBe("bad");
     expect(stepOutcome(ev("Deploy", { payload: { status: "timed_out" } }))).toBe("bad");
+    // GitHub check runs: status "completed" with the failure in conclusion.
+    expect(stepOutcome(ev("Checks", { type: "ci", payload: { status: "completed", conclusion: "failure" } }))).toBe("bad");
+    expect(stepOutcome(ev("Checks", { type: "ci", payload: { status: "completed", conclusion: "success" } }))).toBe("ok");
     // A stated in-between state is a verdict too: the prose is not read.
     expect(stepOutcome(ev("Build failed?", { payload: { status: "running" } }))).toBeNull();
   });
