@@ -184,6 +184,28 @@ export function inboxContext(userId: string, inboxId: string, opts: { imagesAnal
   };
 }
 
+/**
+ * Skylight lists for capture triage, read from the cached source snapshot (labels/kinds/ids only;
+ * no list items, no credentials). Empty when Skylight isn't connected or the snapshot is unreadable.
+ */
+export function triageSkylightLists(): { id: string; label: string; kind: string }[] {
+  const row = getDb()
+    .select({ payload: schema.sourceSnapshots.payload })
+    .from(schema.sourceSnapshots)
+    .where(eq(schema.sourceSnapshots.source, "skylight"))
+    .get();
+  try {
+    const data = JSON.parse(row?.payload ?? "null") as { extra?: { lists?: unknown } } | null;
+    const lists = Array.isArray(data?.extra?.lists) ? (data!.extra!.lists as { id?: unknown; label?: unknown; kind?: unknown }[]) : [];
+    return lists
+      .filter((l) => (typeof l.id === "string" || typeof l.id === "number") && typeof l.label === "string")
+      .slice(0, 30)
+      .map((l) => ({ id: String(l.id).slice(0, 40), label: String(l.label).slice(0, 80), kind: typeof l.kind === "string" ? l.kind.slice(0, 20) : "other" }));
+  } catch {
+    return [];
+  }
+}
+
 /** Destinations for triage: the person's non-excluded areas and projects (≤ 60). */
 export function triageDestinations(
   userId: string,
