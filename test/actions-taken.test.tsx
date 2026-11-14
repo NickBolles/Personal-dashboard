@@ -76,6 +76,7 @@ beforeEach(() => {
     throw new Error(`Unexpected API path: ${path}`);
   });
   vi.spyOn(api, "post").mockResolvedValue({ id: "focus_session" });
+  vi.spyOn(api, "put").mockResolvedValue({ areaId: "wk_area", sessionId: "s1", pinned: true, previous: null });
 });
 afterEach(() => {
   cleanup();
@@ -498,20 +499,29 @@ describe("coordinator parity controls", () => {
       ...Array.from({ length: 7 }, (_, i) => ({ id: `old${i}`, title: `Earlier ${i}`, placement: { parentId: "wk_area" } })),
     ];
     render(<CoordinatorThread info={info} />, { wrapper });
-    const disclosure = screen.getByText("Earlier", { exact: true }).closest("details")!;
+    const disclosure = screen.getByText("Earlier threads", { exact: true }).closest("details")!;
     expect(disclosure.open).toBe(false);
     expect(api.get).not.toHaveBeenCalledWith(expect.stringContaining("/api/work/conversations?"));
     disclosure.open = true;
     fireEvent(disclosure, new Event("toggle"));
-    await screen.findByRole("link", { name: "Earlier 0" });
+    await screen.findByRole("button", { name: "Earlier 0" });
     expect(api.get).toHaveBeenCalledWith("/api/work/conversations?view=all&areaId=wk_area");
-    expect(within(disclosure).getAllByRole("link")).toHaveLength(5);
-    expect(screen.queryByRole("link", { name: "Nested conversation" })).toBeNull();
-    fireEvent.click(within(disclosure).getByRole("button", { name: "New" }));
+    // PR A: earlier threads open in the panel (buttons, never /chat links); direct children only, never the current one.
+    expect(within(within(disclosure).getByRole("list", { name: "Earlier threads" })).getAllByRole("button")).toHaveLength(7);
+    expect(within(disclosure).queryAllByRole("link")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Nested conversation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Current" })).toBeNull();
+    // New thread asks first; nothing is created until the first message.
+    fireEvent.click(within(disclosure).getByRole("button", { name: "New thread" }));
+    expect(screen.getByTestId("coordinator-input")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start new thread" }));
+    expect(api.post).not.toHaveBeenCalled();
     expect(screen.getByTestId("coordinator-empty")).toBeTruthy();
     fireEvent.change(screen.getByTestId("coordinator-input"), { target: { value: "Fresh scope" } });
     fireEvent.click(screen.getByTestId("coordinator-send"));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions/focus_session/runs", expect.objectContaining({ input: "Fresh scope" })));
+    // The thread the panel starts becomes the pinned Chief of staff thread.
+    expect(api.put).toHaveBeenCalledWith("/api/work/items/wk_area/coordinator", { sessionId: "focus_session" });
     expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions", { title: "Jarvis coordinator", areaId: "wk_area" });
   });
 });
