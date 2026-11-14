@@ -15,8 +15,8 @@ import { hideCaptureBlocks } from "@/lib/workflows/runs";
 /** The Hermes session the assistant text belongs to (provided by the conversation view). */
 export const SmartSession = createContext<string | null>(null);
 
-export function useSmartSettings() {
-  return useQuery({ queryKey: ["smart-settings"], queryFn: () => api.get<SmartSettings>("/api/smart/settings"), staleTime: 5 * 60_000 });
+export function useSmartSettings(enabled = true) {
+  return useQuery({ queryKey: ["smart-settings"], queryFn: () => api.get<SmartSettings>("/api/smart/settings"), staleTime: 5 * 60_000, enabled });
 }
 
 /**

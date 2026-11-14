@@ -160,7 +160,8 @@ export function CoordinatorThread({
   };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pinThread = usePinThread(d.area.id);
-  const smartSettings = useSmartSettings();
+  // Excluded areas fetch nothing at all.
+  const smartSettings = useSmartSettings(!d.excluded);
   /** An earlier thread is open in the panel (not the Chief of staff thread). */
   const viewingEarlier = !!sessionId && !!d.sessionId && sessionId !== d.sessionId && !fresh;
   const pathname = usePathname();
