@@ -23,7 +23,8 @@ import { quickAdd, useAgentCapture, useWorkflowRun } from "@/components/workflow
 import { useAccess } from "@/components/access";
 import { useRunStream, type Activity, type RunState } from "./useRunStream";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
-import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
+import { AssistantText } from "@/components/smart/AssistantText";
+import { SmartScope } from "@/components/smart/SmartScope";
 import { ForkDialog, RenameDialog, TrackDialog } from "./dialogs";
 import { ContextSheet, type ContextChip } from "./ContextSheet";
 import { usePanelLinks } from "./LinksPanel";
@@ -647,7 +648,8 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   return (
     <AssistantName.Provider value={who}>
       <RateCtx.Provider value={rateCtx}>
-        <SmartSession.Provider value={sessionId}>
+        {/* A questionnaire smart form's Submit sends its answers as the owner's reply (PR A, F2). */}
+        <SmartScope session={sessionId} reply={(text: string) => send(text, newIdempotencyKey("form"))}>
           <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
             <ChatLinkProvider links={panel.links}>
               <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>
@@ -1026,7 +1028,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
               </div>
             </ChatLinkProvider>
           </ChatFiles.Provider>
-        </SmartSession.Provider>
+        </SmartScope>
       </RateCtx.Provider>
     </AssistantName.Provider>
   );

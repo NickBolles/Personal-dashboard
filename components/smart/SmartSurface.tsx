@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/legacy";
 import { SurfaceContext, type SurfaceCtx } from "./context";
 import { registry } from "./registry";
 import { isLatestSmartUndo, registerSmartUndo, smartUndoKey } from "@/lib/jarvis-ui/v2";
+import { isQuestionnaire } from "@/lib/jarvis-ui/live";
 import "./smart.css";
 
 function localToday() {
@@ -237,7 +238,10 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const regular = [...staged.entries()].filter(([, i]) => !isExternal(i));
   const external = [...staged.entries()].filter(([, i]) => isExternal(i));
   const n = regular.length;
-  const stageable = Object.values(spec.elements).some((e) => STAGING.has(e.type));
+  // A questionnaire Form answers the conversation (components/smart/live.tsx SmartReply), it stages nothing.
+  const stageable = Object.values(spec.elements).some(
+    (e) => STAGING.has(e.type) && !(e.type === "Form" && isQuestionnaire((e.props ?? {}) as Parameters<typeof isQuestionnaire>[0])),
+  );
   if (surface.isError)
     return <p className="text-xs text-muted">Interactive part unavailable: {surface.error instanceof ApiError ? surface.error.message : "try again later"}.</p>;
   return (

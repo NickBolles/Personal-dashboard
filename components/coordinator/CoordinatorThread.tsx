@@ -10,7 +10,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
-import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
+import { AssistantText, useSmartSettings } from "@/components/smart/AssistantText";
 import {
   AttachButton,
   AttachmentChips,
@@ -42,6 +42,11 @@ import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
+// PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
+import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
+import { THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount } from "@/lib/coordinator/thread";
+import { SmartScope } from "@/components/smart/SmartScope";
+import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
 import "@/components/agents/agents.css";
 
 export type CoordinatorResponse = {
@@ -49,6 +54,8 @@ export type CoordinatorResponse = {
   agent: AgentResolution;
   sessionId: string | null;
   sessionTitle: string | null;
+  /** PR A: the thread is the owner's pinned one (false = picked by the newest-conversation rule) */
+  pinned?: boolean;
   excluded: boolean;
   prompt: string | null;
   lastRunAt: string | null;
@@ -133,6 +140,7 @@ export function CoordinatorThread({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [fresh, setFresh] = useState(false);
   const [earlier, setEarlier] = useState(false);
+  const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
   const textarea = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!compact) textarea.current?.focus();
@@ -151,6 +159,11 @@ export function CoordinatorThread({
     requestAnimationFrame(() => textarea.current?.focus());
   };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
+  const pinThread = usePinThread(d.area.id);
+  // Excluded areas fetch nothing at all.
+  const smartSettings = useSmartSettings(!d.excluded);
+  /** An earlier thread is open in the panel (not the Chief of staff thread). */
+  const viewingEarlier = !!sessionId && !!d.sessionId && sessionId !== d.sessionId && !fresh;
   const pathname = usePathname();
   const quickActions = useQuickActions(!d.excluded);
   const hasProposals = !!quickActions.data?.actions.some((a) => a.status === "proposed");
@@ -217,6 +230,8 @@ export function CoordinatorThread({
       .then((s) => {
         setSessionId(s.id);
         setFresh(false);
+        // A thread the panel starts is the Chief of staff thread from now on.
+        pinThread.mutate(s.id);
         return s.id;
       })
       .catch((err: unknown) => {
@@ -283,6 +298,8 @@ export function CoordinatorThread({
         if (textarea.current && compact) textarea.current.style.height = "auto";
       }
       toast(notice ?? sentText, notice ? "warn" : undefined);
+      // The owner's first message in the thread the panel picked makes it the pinned Chief of staff thread.
+      if (!d.pinned && !viewingEarlier && target === d.sessionId && !pinThread.isPending) pinThread.mutate(target);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -391,8 +408,20 @@ export function CoordinatorThread({
     />
   );
   const sourceDown = !!execution.error || !!execution.data?.sources?.some((source) => source.state === "unavailable");
-  const previous = discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid).slice(0, 5) ?? [];
-  const messageGroups = groupMessages(timeline).slice(-6);
+  const previous = (discussions.data?.conversations?.filter((c) => c.placement?.parentId === d.area.id && c.id !== sid) ?? []).map((c) => ({
+    id: c.id,
+    title: c.title,
+  }));
+  // "Load earlier" pages through the thread already loaded (no extra Hermes requests); the first page always reaches
+  // back to the "Since …" divider.
+  const allGroups = groupMessages(timeline);
+  const firstNew =
+    lastLookedChat && sinceDivider(lastLookedChat, new Date(), sinceCounts)
+      ? allGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat)))
+      : -1;
+  const shownCount = visibleGroupCount(allGroups.length, shown.sid === sid ? shown.n : THREAD_FIRST_PAGE, firstNew);
+  const hiddenGroups = allGroups.length - shownCount;
+  const messageGroups = allGroups.slice(hiddenGroups);
   const msgs = messageGroups.map((group) => group[0]);
   // Each piece of work is drawn once, under the reply that started it; a hand-off is not also a chip there.
   const placed = placeWork(work, msgs);
@@ -403,7 +432,11 @@ export function CoordinatorThread({
   };
   // What a reply mentions is drawn once too: as a row under the LATEST reply that mentions it, unless it already
   // has its row as work a reply started. Everywhere else it is only the chip in the text.
+  const smartOn = !!smartSettings.data?.enabled;
   const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
+  // A smart decision card in a reply is drawn as the live decision (below), so it isn't also a mention row.
+  // With Smart replies off only a card that IS the block (its root) is drawn live; nested ones need the renderer.
+  for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text, { rootOnly: !smartOn })) drawn.add(ref);
   const mentionedBy = new Map<string, string>();
   for (const m of msgs) if (m.kind === "assistant") for (const ref of proseRefs(m.text)) mentionedBy.set(ref, m.id);
   const mentionRows = (id: string) =>
@@ -449,8 +482,34 @@ export function CoordinatorThread({
     target.querySelector<HTMLElement>(".k-thing-title, [data-thing-toggle]")?.focus({ preventScroll: true });
   };
   const refChip = onRef ? (ref: string) => <RefPill id={ref} onClick={() => jumpTo(ref)} className="gc-inline-ref" /> : null;
+  const loadEarlier = () => {
+    const body = bodyRef.current;
+    const before = body ? body.scrollHeight - body.scrollTop : 0;
+    setShown({ sid, n: shownCount + THREAD_PAGE });
+    // Keep the message the owner was reading where it was.
+    requestAnimationFrame(() => {
+      if (body) body.scrollTop = body.scrollHeight - before;
+    });
+  };
+  // F1: an open D-n decision a reply draws as a smart card is the live decision block (answer in place, Undo).
+  const liveDecision = mentions ? (ref: string) => (ref.startsWith("D-") && mentions.rank(ref) !== null ? mentions.render(ref) : null) : null;
+  // F2: a questionnaire form's Submit answers in this thread.
+  // It is its own message: it never takes the composer's draft, chips, scope or attachments with it.
+  const smartReply = async (input: string) => {
+    try {
+      const target = await ensureSession();
+      const notice = maskedNotice(await postInput(target, input));
+      toast(notice ?? sentText, notice ? "warn" : undefined);
+      void qc.invalidateQueries({ queryKey: ["session", target] });
+      void refreshSessionLists(qc).catch(() => undefined);
+      return true;
+    } catch (err) {
+      toast(`Not sent: ${(err as Error).message}`, "danger");
+      return false;
+    }
+  };
   return (
-    <SmartSession.Provider value={sid}>
+    <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
       <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
@@ -458,35 +517,36 @@ export function CoordinatorThread({
           </p>
         ) : (
           <>
-            <details className="mb-2 text-xs" onToggle={(event) => setEarlier(event.currentTarget.open)}>
-              <summary className="min-h-6 cursor-pointer text-muted">Earlier</summary>
-              <div className="flex flex-wrap items-center gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={send.isPending || control.isPending}
-                  onClick={() => {
-                    setSessionId(null);
-                    setFresh(true);
-                    requestAnimationFrame(() => textarea.current?.focus());
-                  }}
-                >
-                  New
-                </Button>
-                {discussions.isLoading ? <span className="text-muted">Loading discussions…</span> : null}
-                {discussions.error ? <span role="alert">Couldn&apos;t load earlier discussions.</span> : null}
-                {discussions.isSuccess && !previous.length ? <span className="text-muted">No earlier discussions.</span> : null}
-              </div>
-              <ul>
-                {previous.map((c) => (
-                  <li key={c.id}>
-                    <Link className="inline-flex min-h-11 max-w-full items-center text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(c.id)}`}>
-                      <span className="truncate">{c.title}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </details>
+            <ThreadBar
+              areaId={d.area.id}
+              current={d.sessionId}
+              viewing={sid}
+              viewingTitle={detail.data?.session?.title ?? null}
+              fresh={fresh}
+              busy={send.isPending || control.isPending}
+              earlier={previous}
+              earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
+              onEarlierOpen={setEarlier}
+              pinned={!!d.pinned}
+              onOpen={(id) => {
+                // Attachments and context picked for one thread never ride along to another.
+                if (attachments.drafts.length) attachments.clear();
+                setChips([]);
+                setFresh(false);
+                setSessionId(id);
+              }}
+              onNew={() => {
+                if (attachments.drafts.length) attachments.clear();
+                setChips([]);
+                setSessionId(null);
+                setFresh(true);
+                requestAnimationFrame(() => textarea.current?.focus());
+              }}
+              onUndoNew={() => {
+                setFresh(false);
+                setSessionId(null);
+              }}
+            />
             {!sid ? (
               <div>
                 <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
@@ -507,6 +567,11 @@ export function CoordinatorThread({
             ) : null}
             {sid && msgs.length ? (
               <MarkdownRefRenderer.Provider value={refChip}>
+                {hiddenGroups > 0 ? (
+                  <Button size="sm" variant="ghost" className="gc-load-earlier" data-testid="gc-load-earlier" onClick={loadEarlier}>
+                    Load earlier ({hiddenGroups})
+                  </Button>
+                ) : null}
                 <ol aria-label="Latest messages">
                   {msgs.map((m, index) => (
                     <Fragment key={m.id}>
@@ -838,7 +903,7 @@ export function CoordinatorThread({
           onToggle={(chip) => setChips((all) => (all.some((x) => x.ref === chip.ref) ? all.filter((x) => x.ref !== chip.ref) : [...all, chip].slice(0, 12)))}
         />
       ) : null}
-    </SmartSession.Provider>
+    </SmartScope>
   );
 }
 
