@@ -1,4 +1,5 @@
 import { splitBlocks } from "./parser";
+import { validateBlock } from "./validator";
 import type { PropsOf } from "./catalog";
 
 /**
@@ -29,14 +30,12 @@ export function smartDecisionRefs(text: string, opts: { rootOnly?: boolean } = {
   const out: string[] = [];
   for (const seg of splitBlocks(text)) {
     if (seg.kind !== "block" || !seg.closed || seg.tooLarge) continue;
-    let spec: { root?: string; elements?: Elements } | null = null;
-    try {
-      spec = JSON.parse(seg.raw) as { root?: string; elements?: Elements };
-    } catch {
-      continue;
-    }
-    const els = spec?.elements ?? {};
-    for (const el of opts.rootOnly ? [spec?.root ? els[spec.root] : undefined] : Object.values(els)) {
+    // Only blocks the renderer accepts count: an invalid card is not drawn, so its decision keeps its mention row.
+    const v = validateBlock(seg.raw);
+    if (!v.ok) continue;
+    const spec = v.spec as unknown as { root?: string; elements?: Elements };
+    const els = spec.elements ?? {};
+    for (const el of opts.rootOnly ? [spec.root ? els[spec.root] : undefined] : Object.values(els)) {
       if (el?.type !== "DecisionCard") continue;
       const ref = decisionRefOf((el.props as { title?: string } | undefined)?.title);
       if (ref && !out.includes(ref)) out.push(ref);

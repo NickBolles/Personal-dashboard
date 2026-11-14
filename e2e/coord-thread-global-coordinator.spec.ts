@@ -146,6 +146,9 @@ test("pinned thread: whole conversation via Load earlier, earlier threads open i
   if (!(await scope.getByRole("list", { name: "Earlier threads" }).isVisible())) await scope.getByText("Earlier threads", { exact: true }).click();
   await scope.getByRole("list", { name: "Earlier threads" }).getByRole("button", { name: "Older bramble thread" }).click();
   await scope.getByRole("group", { name: "Earlier thread" }).getByRole("button", { name: "Use this thread" }).click();
+  // The pin change asks first.
+  expect(state.pins).toEqual([]);
+  await scope.getByRole("group", { name: "Make this the Chief of staff thread?" }).getByRole("button", { name: "Use this thread" }).click();
   await expect.poll(() => state.pins).toEqual(["cw-old"]);
   await expect(scope.getByRole("group", { name: "Earlier thread" })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);

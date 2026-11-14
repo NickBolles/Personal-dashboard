@@ -61,6 +61,7 @@ export function ThreadBar({
   const { toast } = useToast();
   const pin = usePinThread(areaId);
   const [confirming, setConfirming] = useState(false);
+  const [switching, setSwitching] = useState(false);
   /** What Undo restores: the previous pin (null = no pin, back to the newest-conversation rule). */
   const [undo, setUndo] = useState<{ pin: string | null } | null>(null);
   const onEarlierThread = !!viewing && !!current && viewing !== current && !fresh;
@@ -72,22 +73,36 @@ export function ThreadBar({
           <span className="min-w-0 flex-1 truncate text-muted" data-dynamic>
             Earlier thread{viewingTitle ? `: ${viewingTitle}` : ""}
           </span>
+          <Button size="sm" variant="ghost" disabled={switching} onClick={() => setSwitching(true)}>
+            Use this thread
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => onOpen(null)}>
+            Back to current
+          </Button>
+        </div>
+      ) : null}
+      {onEarlierThread && switching ? (
+        <div className="gc-thread-confirm flex flex-wrap items-center gap-1" role="group" aria-label="Make this the Chief of staff thread?">
+          <span className="min-w-0 flex-1">Make this the Chief of staff thread? New messages from the rail and tray go here.</span>
           <Button
             size="sm"
-            variant="ghost"
+            variant="primary"
             loading={pin.isPending}
             onClick={() =>
               pin.mutate(viewing, {
                 // The panel stays on this thread; it becomes the current one when the coordinator info refreshes.
-                onSuccess: (res) => setUndo({ pin: res.previous }),
+                onSuccess: (res) => {
+                  setSwitching(false);
+                  setUndo({ pin: res.previous });
+                },
                 onError: (e) => toast(`Not changed: ${(e as Error).message}`, "danger"),
               })
             }
           >
             Use this thread
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => onOpen(null)}>
-            Back to current
+          <Button size="sm" variant="ghost" onClick={() => setSwitching(false)}>
+            Cancel
           </Button>
         </div>
       ) : null}

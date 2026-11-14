@@ -52,16 +52,53 @@ describe("coordinator thread selection (pure)", () => {
 
 describe("smart blocks that act through the conversation (pure)", () => {
   const card = (title: string) =>
-    `Let's do it.\n\n\`\`\`jarvis-ui\n${JSON.stringify({ v: 1, catalog: "jarvis-ui@1", root: "r", elements: { r: { type: "DecisionCard", props: { title, options: [] } } } })}\n\`\`\``;
+    `Let's do it.\n\n\`\`\`jarvis-ui\n${JSON.stringify({
+      v: 1,
+      catalog: "jarvis-ui@1",
+      root: "r",
+      elements: {
+        r: {
+          type: "DecisionCard",
+          props: {
+            title,
+            options: title.includes("Too few")
+              ? []
+              : [
+                  { id: "a", label: "A" },
+                  { id: "b", label: "B" },
+                ],
+          },
+        },
+      },
+    })}\n\`\`\``;
   it("finds the D-n a decision card draws", () => {
     expect(decisionRefOf("D-33 · Schedule dentist appointment")).toBe("D-33");
     expect(decisionRefOf("Pick a colour")).toBeNull();
     expect(smartDecisionRefs(card("D-33 · Dentist"))).toEqual(["D-33"]);
     expect(smartDecisionRefs(card("Pick one"))).toEqual([]);
+    // An invalid card (fewer than two options) isn't drawn, so it doesn't count.
+    expect(smartDecisionRefs(card("D-34 · Too few"))).toEqual([]);
     expect(smartDecisionRefs("D-33 in prose only")).toEqual([]);
     expect(smartDecisionRefs("```jarvis-ui\n{not json\n```")).toEqual([]);
     // Nested cards are only drawn live by the smart renderer; with Smart replies off only a root card counts.
-    const nested = `\`\`\`jarvis-ui\n${JSON.stringify({ v: 1, catalog: "jarvis-ui@1", root: "s", elements: { s: { type: "Stack", props: {}, children: ["c"] }, c: { type: "DecisionCard", props: { title: "D-9 · x", options: [] } } } })}\n\`\`\``;
+    const nested = `\`\`\`jarvis-ui\n${JSON.stringify({
+      v: 1,
+      catalog: "jarvis-ui@1",
+      root: "s",
+      elements: {
+        s: { type: "Stack", props: {}, children: ["c"] },
+        c: {
+          type: "DecisionCard",
+          props: {
+            title: "D-9 · x",
+            options: [
+              { id: "a", label: "A" },
+              { id: "b", label: "B" },
+            ],
+          },
+        },
+      },
+    })}\n\`\`\``;
     expect(smartDecisionRefs(nested)).toEqual(["D-9"]);
     expect(smartDecisionRefs(nested, { rootOnly: true })).toEqual([]);
     expect(smartDecisionRefs(card("D-33 · Dentist"), { rootOnly: true })).toEqual(["D-33"]);
