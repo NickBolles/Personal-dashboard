@@ -217,7 +217,7 @@ function DecisionCard({ element }: P<"DecisionCard">) {
       </div>
       {inert && !s.readOnly ? (
         <p className="mt-2 text-xs text-muted" data-testid="smart-decision-inert">
-          {ref ? `Answer ${ref} in Needs you, or reply here in your own words.` : "Reply here in your own words to choose."}
+          {ref ? `See ${ref} in Needs you to answer it, or reply here in your own words.` : "Reply here in your own words to choose."}
         </p>
       ) : null}
       {appliedOpt ? (

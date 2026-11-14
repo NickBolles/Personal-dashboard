@@ -10,7 +10,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
-import { AssistantText, SmartSession } from "@/components/smart/AssistantText";
+import { AssistantText } from "@/components/smart/AssistantText";
 import {
   AttachButton,
   AttachmentChips,
@@ -45,7 +45,7 @@ import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
 import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
 import { THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount } from "@/lib/coordinator/thread";
-import { LiveDecision, SmartReply } from "@/components/smart/live";
+import { SmartScope } from "@/components/smart/SmartScope";
 import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
 import "@/components/agents/agents.css";
 
@@ -496,407 +496,395 @@ export function CoordinatorThread({
       () => false,
     );
   return (
-    <SmartSession.Provider value={sid}>
-      <LiveDecision.Provider value={liveDecision}>
-        <SmartReply.Provider value={d.excluded ? null : smartReply}>
-          <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
-            {d.excluded ? (
-              <p className="text-sm" data-testid="coordinator-excluded">
-                Areas excluded from AI are never sent: this area has no coordinator chat.
-              </p>
-            ) : (
-              <>
-                <ThreadBar
-                  areaId={d.area.id}
-                  current={d.sessionId}
-                  viewing={sid}
-                  viewingTitle={detail.data?.session?.title ?? null}
-                  fresh={fresh}
-                  busy={send.isPending || control.isPending}
-                  earlier={previous}
-                  earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
-                  onEarlierOpen={setEarlier}
-                  onOpen={(id) => {
-                    setFresh(false);
-                    setSessionId(id);
-                  }}
-                  onNew={() => {
-                    setSessionId(null);
-                    setFresh(true);
-                    requestAnimationFrame(() => textarea.current?.focus());
-                  }}
-                  onUndoNew={() => {
-                    setFresh(false);
-                    setSessionId(null);
-                  }}
-                />
-                {!sid ? (
-                  <div>
-                    <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
-                      {compact
-                        ? "Nothing here yet. Ask for a catch-up, or what needs you."
-                        : "No coordinator conversation yet. Your first message starts one, filed in this area."}
-                    </p>
-                  </div>
-                ) : null}
-                {detail.isLoading ? <p className="text-sm text-muted">Loading messages…</p> : null}
-                {detail.error ? (
-                  <p role="alert" className="text-sm text-danger">
-                    Couldn&apos;t load messages: {(detail.error as Error).message}{" "}
-                    <Button size="sm" variant="ghost" loading={detail.isFetching} onClick={() => void detail.refetch()}>
-                      Try again
-                    </Button>
-                  </p>
-                ) : null}
-                {sid && msgs.length ? (
-                  <MarkdownRefRenderer.Provider value={refChip}>
-                    {hiddenGroups > 0 ? (
-                      <Button size="sm" variant="ghost" className="gc-load-earlier" data-testid="gc-load-earlier" onClick={loadEarlier}>
-                        Load earlier ({hiddenGroups})
-                      </Button>
-                    ) : null}
-                    <ol aria-label="Latest messages">
-                      {msgs.map((m, index) => (
-                        <Fragment key={m.id}>
-                          {index === dividerIndex && divider ? (
-                            <li className="gc-since" ref={sinceRef}>
-                              <div role="separator" aria-label={divider.label} className="gc-since-label">
-                                <ClockIcon className="h-3.5 w-3.5" />
-                                <span>{divider.label}</span>
-                              </div>
-                              {caughtUp.length ? (
-                                <div className="gc-since-jumps">
-                                  {caughtUp.map((chip) => (
-                                    <Button
-                                      key={chip.key}
-                                      variant="ghost"
-                                      size="sm"
-                                      className={`gc-since-chip k-t-${chip.tone}`}
-                                      icon={SINCE_ICON[chip.key]}
-                                      disabled={!onJump}
-                                      onClick={() => onJump?.(chip.tab, chip.key)}
-                                    >
-                                      {chip.label}
-                                    </Button>
-                                  ))}
-                                </div>
-                              ) : null}
-                            </li>
-                          ) : null}
-                          {isBackgroundNotice(m.text) ? (
-                            <li className="co-msg">
-                              <BackgroundNotices messages={messageGroups[index]} />
-                            </li>
-                          ) : m.kind === "assistant" ? (
-                            <li key={m.id} className="co-msg" data-who="assistant">
-                              <div className="co-msg-head flex items-center justify-between gap-1">
-                                <p className="text-xs font-semibold text-muted">{name}</p>
-                                {sid ? (
-                                  <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
-                                    <RateMessage
-                                      sessionId={sid}
-                                      messageId={m.id}
-                                      surface="coordinator"
-                                      text={m.text}
-                                      who="the coordinator's message"
-                                      model={detail.data?.session?.model ?? null}
-                                      onAskFix={async (prompt) => {
-                                        if (send.isPending || detail.data?.session?.activeRun) {
-                                          toast("Wait for the coordinator to finish, then ask again.", "warn");
-                                          return false;
-                                        }
-                                        await send.mutateAsync({ input: prompt, correction: true });
-                                        return true;
-                                      }}
-                                    />
-                                  </span>
-                                ) : null}
-                              </div>
-                              <AssistantText text={m.text} />
-                              <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                              {placed.get(m.id)?.length ? (
-                                <section aria-label="Work started by this reply" className="gc-bgwork">
-                                  {placed.get(m.id)!.map(row)}
-                                </section>
-                              ) : null}
-                              {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
-                            </li>
-                          ) : (
-                            <li key={m.id} className="co-msg" data-who="user">
-                              <UserMessage text={m.text} sessionId={sid} onRef={onRef ? jumpTo : undefined} />
-                            </li>
-                          )}
-                        </Fragment>
-                      ))}
-                    </ol>
-                  </MarkdownRefRenderer.Provider>
-                ) : sid && detail.isSuccess ? (
-                  <p className="text-sm text-muted">No messages yet.</p>
-                ) : null}
-                {detail.data?.session?.activeRun ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-                    <Dot tone="ai" live label="Coordinator running" />
-                    <span className="text-muted">{compact ? `${name} is working…` : "Working…"}</span>
-                    <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
-                      Stop
-                    </Button>
-                    <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
-                      Open
-                    </Link>
-                  </div>
-                ) : null}
-                <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
-                {sourceDown && !records.length ? (
-                  <p role="alert" className="mt-2 text-xs text-danger">
-                    {execution.error ? "Couldn't load coordinator runs." : "Couldn't check every source of background work."}{" "}
-                    <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
-                      Try again
-                    </Button>
-                  </p>
-                ) : null}
-                {/* The rows are kept current (5 s while anything runs). Freshness is said only when a refresh failed:
-                "stale" is the child inventory's permanent caveat (server/chat/execution.ts), not news. */}
-                {sourceDown && records.length ? (
-                  <LiveLine updatedAt={execution.dataUpdatedAt} failed fetching={execution.isFetching} onRetry={() => void execution.refetch()} />
-                ) : null}
-                {liveWork.length ? (
-                  <section aria-label="Work in progress" className="gc-bgwork">
-                    {liveWork.map(row)}
-                  </section>
-                ) : null}
-                {sid ? (
-                  <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
-                    Open full conversation
-                  </Link>
-                ) : null}
-                {!sid || detail.isSuccess ? inlineActions?.(lastUser?.at ?? null) : null}
-                {/* Rail/sheet: proposals scroll with the thread so the composer keeps its room on short phones. */}
-                {compact ? <ProposedQuickActions /> : null}
-              </>
-            )}
-          </div>
-          {!d.excluded && !compact ? <ProposedQuickActions /> : null}
-          {!d.excluded ? (
-            <form
-              className={compact ? "gc-composer" : "co-foot"}
-              onSubmit={(e) => {
-                e.preventDefault();
-                submit();
+    <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
+      <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
+        {d.excluded ? (
+          <p className="text-sm" data-testid="coordinator-excluded">
+            Areas excluded from AI are never sent: this area has no coordinator chat.
+          </p>
+        ) : (
+          <>
+            <ThreadBar
+              areaId={d.area.id}
+              current={d.sessionId}
+              viewing={sid}
+              viewingTitle={detail.data?.session?.title ?? null}
+              fresh={fresh}
+              busy={send.isPending || control.isPending}
+              earlier={previous}
+              earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
+              onEarlierOpen={setEarlier}
+              onOpen={(id) => {
+                setFresh(false);
+                setSessionId(id);
               }}
-            >
-              {compact && context ? (
-                <div className="gc-context">
-                  <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
-                  {onAskPage ? (
-                    <Button variant="ghost" size="sm" onClick={onAskPage}>
-                      Ask about this page
-                    </Button>
-                  ) : null}
-                  <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
-                    Remove
+              onNew={() => {
+                setSessionId(null);
+                setFresh(true);
+                requestAnimationFrame(() => textarea.current?.focus());
+              }}
+              onUndoNew={() => {
+                setFresh(false);
+                setSessionId(null);
+              }}
+            />
+            {!sid ? (
+              <div>
+                <p className="text-sm text-muted" data-testid={compact ? "gc-empty" : "coordinator-empty"}>
+                  {compact
+                    ? "Nothing here yet. Ask for a catch-up, or what needs you."
+                    : "No coordinator conversation yet. Your first message starts one, filed in this area."}
+                </p>
+              </div>
+            ) : null}
+            {detail.isLoading ? <p className="text-sm text-muted">Loading messages…</p> : null}
+            {detail.error ? (
+              <p role="alert" className="text-sm text-danger">
+                Couldn&apos;t load messages: {(detail.error as Error).message}{" "}
+                <Button size="sm" variant="ghost" loading={detail.isFetching} onClick={() => void detail.refetch()}>
+                  Try again
+                </Button>
+              </p>
+            ) : null}
+            {sid && msgs.length ? (
+              <MarkdownRefRenderer.Provider value={refChip}>
+                {hiddenGroups > 0 ? (
+                  <Button size="sm" variant="ghost" className="gc-load-earlier" data-testid="gc-load-earlier" onClick={loadEarlier}>
+                    Load earlier ({hiddenGroups})
                   </Button>
-                </div>
-              ) : compact && contextRemoved ? (
-                <div className="gc-context-off">
-                  <span>This page is not shared.</span>
-                  <Button variant="ghost" size="sm" onClick={onRestoreContext}>
-                    Share page
-                  </Button>
-                </div>
-              ) : compact ? (
-                <p className="gc-hint gc-context-none">No page context is shared.</p>
+                ) : null}
+                <ol aria-label="Latest messages">
+                  {msgs.map((m, index) => (
+                    <Fragment key={m.id}>
+                      {index === dividerIndex && divider ? (
+                        <li className="gc-since" ref={sinceRef}>
+                          <div role="separator" aria-label={divider.label} className="gc-since-label">
+                            <ClockIcon className="h-3.5 w-3.5" />
+                            <span>{divider.label}</span>
+                          </div>
+                          {caughtUp.length ? (
+                            <div className="gc-since-jumps">
+                              {caughtUp.map((chip) => (
+                                <Button
+                                  key={chip.key}
+                                  variant="ghost"
+                                  size="sm"
+                                  className={`gc-since-chip k-t-${chip.tone}`}
+                                  icon={SINCE_ICON[chip.key]}
+                                  disabled={!onJump}
+                                  onClick={() => onJump?.(chip.tab, chip.key)}
+                                >
+                                  {chip.label}
+                                </Button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </li>
+                      ) : null}
+                      {isBackgroundNotice(m.text) ? (
+                        <li className="co-msg">
+                          <BackgroundNotices messages={messageGroups[index]} />
+                        </li>
+                      ) : m.kind === "assistant" ? (
+                        <li key={m.id} className="co-msg" data-who="assistant">
+                          <div className="co-msg-head flex items-center justify-between gap-1">
+                            <p className="text-xs font-semibold text-muted">{name}</p>
+                            {sid ? (
+                              <span className="flex shrink-0 items-center" data-testid="coordinator-rate">
+                                <RateMessage
+                                  sessionId={sid}
+                                  messageId={m.id}
+                                  surface="coordinator"
+                                  text={m.text}
+                                  who="the coordinator's message"
+                                  model={detail.data?.session?.model ?? null}
+                                  onAskFix={async (prompt) => {
+                                    if (send.isPending || detail.data?.session?.activeRun) {
+                                      toast("Wait for the coordinator to finish, then ask again.", "warn");
+                                      return false;
+                                    }
+                                    await send.mutateAsync({ input: prompt, correction: true });
+                                    return true;
+                                  }}
+                                />
+                              </span>
+                            ) : null}
+                          </div>
+                          <AssistantText text={m.text} />
+                          <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+                          {placed.get(m.id)?.length ? (
+                            <section aria-label="Work started by this reply" className="gc-bgwork">
+                              {placed.get(m.id)!.map(row)}
+                            </section>
+                          ) : null}
+                          {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
+                        </li>
+                      ) : (
+                        <li key={m.id} className="co-msg" data-who="user">
+                          <UserMessage text={m.text} sessionId={sid} onRef={onRef ? jumpTo : undefined} />
+                        </li>
+                      )}
+                    </Fragment>
+                  ))}
+                </ol>
+              </MarkdownRefRenderer.Provider>
+            ) : sid && detail.isSuccess ? (
+              <p className="text-sm text-muted">No messages yet.</p>
+            ) : null}
+            {detail.data?.session?.activeRun ? (
+              <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+                <Dot tone="ai" live label="Coordinator running" />
+                <span className="text-muted">{compact ? `${name} is working…` : "Working…"}</span>
+                <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
+                  Stop
+                </Button>
+                <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
+                  Open
+                </Link>
+              </div>
+            ) : null}
+            <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
+            {sourceDown && !records.length ? (
+              <p role="alert" className="mt-2 text-xs text-danger">
+                {execution.error ? "Couldn't load coordinator runs." : "Couldn't check every source of background work."}{" "}
+                <Button size="sm" variant="ghost" loading={execution.isFetching} onClick={() => void execution.refetch()}>
+                  Try again
+                </Button>
+              </p>
+            ) : null}
+            {/* The rows are kept current (5 s while anything runs). Freshness is said only when a refresh failed:
+                "stale" is the child inventory's permanent caveat (server/chat/execution.ts), not news. */}
+            {sourceDown && records.length ? (
+              <LiveLine updatedAt={execution.dataUpdatedAt} failed fetching={execution.isFetching} onRetry={() => void execution.refetch()} />
+            ) : null}
+            {liveWork.length ? (
+              <section aria-label="Work in progress" className="gc-bgwork">
+                {liveWork.map(row)}
+              </section>
+            ) : null}
+            {sid ? (
+              <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
+                Open full conversation
+              </Link>
+            ) : null}
+            {!sid || detail.isSuccess ? inlineActions?.(lastUser?.at ?? null) : null}
+            {/* Rail/sheet: proposals scroll with the thread so the composer keeps its room on short phones. */}
+            {compact ? <ProposedQuickActions /> : null}
+          </>
+        )}
+      </div>
+      {!d.excluded && !compact ? <ProposedQuickActions /> : null}
+      {!d.excluded ? (
+        <form
+          className={compact ? "gc-composer" : "co-foot"}
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
+          {compact && context ? (
+            <div className="gc-context">
+              <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
+              {onAskPage ? (
+                <Button variant="ghost" size="sm" onClick={onAskPage}>
+                  Ask about this page
+                </Button>
               ) : null}
-              {compact && (text.trim() || scope) ? null : (
-                <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
-              )}
-              <label htmlFor={`${titleId}-m`} className="sr-only">
-                Message the coordinator
-              </label>
-              {compact ? (
-                <>
-                  {chips.length ? (
-                    <div className="gc-chips" role="group" aria-label="Context to send">
-                      {chips.map((c) => (
-                        <ChipButton key={c.ref} aria-label={`Remove context ${c.label}`} onClick={() => setChips((all) => all.filter((x) => x.ref !== c.ref))}>
-                          {c.label} ×
-                        </ChipButton>
-                      ))}
-                    </div>
-                  ) : null}
-                  <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
-                </>
+              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
+                Remove
+              </Button>
+            </div>
+          ) : compact && contextRemoved ? (
+            <div className="gc-context-off">
+              <span>This page is not shared.</span>
+              <Button variant="ghost" size="sm" onClick={onRestoreContext}>
+                Share page
+              </Button>
+            </div>
+          ) : compact ? (
+            <p className="gc-hint gc-context-none">No page context is shared.</p>
+          ) : null}
+          {compact && (text.trim() || scope) ? null : (
+            <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
+          )}
+          <label htmlFor={`${titleId}-m`} className="sr-only">
+            Message the coordinator
+          </label>
+          {compact ? (
+            <>
+              {chips.length ? (
+                <div className="gc-chips" role="group" aria-label="Context to send">
+                  {chips.map((c) => (
+                    <ChipButton key={c.ref} aria-label={`Remove context ${c.label}`} onClick={() => setChips((all) => all.filter((x) => x.ref !== c.ref))}>
+                      {c.label} ×
+                    </ChipButton>
+                  ))}
+                </div>
               ) : null}
-              {scope ? (
-                // What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message.
-                <div
-                  className="gc-scope"
-                  role="group"
-                  aria-label={scopeLabel(scope)}
-                  data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}
-                  data-testid="gc-scope"
+              <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
+            </>
+          ) : null}
+          {scope ? (
+            // What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message.
+            <div className="gc-scope" role="group" aria-label={scopeLabel(scope)} data-kind={scope.ref?.startsWith("D-") ? "d" : "r"} data-testid="gc-scope">
+              <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
+                {scopeChip(scope)}
+              </span>
+              <span className="gc-scope-title">{scope.title}</span>
+              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label={`Remove ${scopeChip(scope)} from the message`} onClick={() => setScope(null)}>
+                Remove
+              </Button>
+            </div>
+          ) : null}
+          {confirming && scope ? (
+            <p className="gc-scope-confirm" role="status">
+              <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
+              <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
+                Cancel
+              </Button>
+            </p>
+          ) : null}
+          <div className={compact ? "gc-compose-row" : undefined}>
+            {compact ? (
+              <div className="gc-add-menu">
+                <Button
+                  ref={addButton}
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  icon={<PlusIcon className="h-4 w-4" />}
+                  className="gc-add"
+                  aria-label="Add to message"
+                  aria-haspopup="menu"
+                  aria-expanded={adding}
+                  onClick={() => setAdding((v) => !v)}
                 >
-                  <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
-                    {scopeChip(scope)}
-                  </span>
-                  <span className="gc-scope-title">{scope.title}</span>
-                  <Button variant="ghost" size="sm" iconOnly icon="×" aria-label={`Remove ${scopeChip(scope)} from the message`} onClick={() => setScope(null)}>
-                    Remove
-                  </Button>
-                </div>
-              ) : null}
-              {confirming && scope ? (
-                <p className="gc-scope-confirm" role="status">
-                  <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
-                  <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
-                    Cancel
-                  </Button>
+                  Add
+                </Button>
+                {adding ? (
+                  <Menu
+                    label="Add to message"
+                    items={[
+                      { label: "Photo or file", onSelect: () => fileInput.current?.click(), disabled: !online },
+                      { label: "Camera", onSelect: () => cameraInput.current?.click(), disabled: !online },
+                      { label: "Area, item or person", onSelect: () => setSheet(true) },
+                    ]}
+                    onClose={() => {
+                      setAdding(false);
+                      addButton.current?.focus();
+                    }}
+                  />
+                ) : null}
+                <span hidden>
+                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} testId="gc-file-input" />
+                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} testId="gc-camera-input" />
+                </span>
+              </div>
+            ) : null}
+            <Textarea
+              ref={textarea}
+              id={`${titleId}-m`}
+              data-autofocus
+              data-testid={compact ? "gc-input" : "coordinator-input"}
+              className={compact ? "gc-input" : "gc-thread-input w-full min-w-0 resize-y"}
+              rows={compact ? 1 : text.length > 200 ? 8 : 3}
+              maxLength={8000}
+              value={text}
+              placeholder={
+                scope
+                  ? scopePlaceholder(scope)
+                  : compact
+                    ? `Ask ${name === "Coordinator" ? "the coordinator" : "your " + name.toLowerCase()}…`
+                    : "Ask the coordinator…"
+              }
+              onChange={(e) => {
+                setText(e.target.value);
+                if (compact) {
+                  e.target.style.height = "auto";
+                  e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+                }
+              }}
+              onKeyDown={(e) => {
+                if (isSendShortcut(composerKey(e))) {
+                  e.preventDefault();
+                  submit();
+                } else if (e.key === "Backspace" && scope && !text) {
+                  e.preventDefault();
+                  setScope(null);
+                }
+              }}
+              onPaste={(e) => {
+                if (!compact) return;
+                const files = pastedFiles(e);
+                if (files.length) {
+                  e.preventDefault();
+                  attach(files);
+                }
+              }}
+            />
+            {compact ? (
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                iconOnly
+                icon={<span>↑</span>}
+                className="gc-send"
+                aria-label={confirming ? "Confirm answer" : "Send"}
+                disabled={(scope ? !text.trim() && !scopeSendsEmpty(scope) : !text.trim() && !attachments.readyIds.length) || !online}
+                loading={send.isPending || answering || (!!scope && control.isPending)}
+              >
+                Send
+              </Button>
+            ) : null}
+          </div>
+          {!compact ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={!d.prompt}
+                onClick={() => d.prompt && setText(d.prompt)}
+                data-testid="coordinator-catch-up"
+                title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
+              >
+                Catch me up
+              </Button>
+              <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
+              <Button
+                type="submit"
+                size="sm"
+                variant={hasProposals ? "secondary" : "primary"}
+                disabled={(!text.trim() && !(scope && scopeSendsEmpty(scope))) || !online}
+                loading={send.isPending || (!!scope && control.isPending)}
+                data-testid="coordinator-send"
+              >
+                Send
+              </Button>
+            </div>
+          ) : (
+            <>
+              {!online ? (
+                <p className="gc-hint" role="status" data-tone="warn">
+                  You&apos;re offline. Your draft is kept; send it when you&apos;re back.
                 </p>
               ) : null}
-              <div className={compact ? "gc-compose-row" : undefined}>
-                {compact ? (
-                  <div className="gc-add-menu">
-                    <Button
-                      ref={addButton}
-                      variant="ghost"
-                      size="sm"
-                      iconOnly
-                      icon={<PlusIcon className="h-4 w-4" />}
-                      className="gc-add"
-                      aria-label="Add to message"
-                      aria-haspopup="menu"
-                      aria-expanded={adding}
-                      onClick={() => setAdding((v) => !v)}
-                    >
-                      Add
-                    </Button>
-                    {adding ? (
-                      <Menu
-                        label="Add to message"
-                        items={[
-                          { label: "Photo or file", onSelect: () => fileInput.current?.click(), disabled: !online },
-                          { label: "Camera", onSelect: () => cameraInput.current?.click(), disabled: !online },
-                          { label: "Area, item or person", onSelect: () => setSheet(true) },
-                        ]}
-                        onClose={() => {
-                          setAdding(false);
-                          addButton.current?.focus();
-                        }}
-                      />
-                    ) : null}
-                    <span hidden>
-                      <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} testId="gc-file-input" />
-                      <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} testId="gc-camera-input" />
-                    </span>
-                  </div>
-                ) : null}
-                <Textarea
-                  ref={textarea}
-                  id={`${titleId}-m`}
-                  data-autofocus
-                  data-testid={compact ? "gc-input" : "coordinator-input"}
-                  className={compact ? "gc-input" : "gc-thread-input w-full min-w-0 resize-y"}
-                  rows={compact ? 1 : text.length > 200 ? 8 : 3}
-                  maxLength={8000}
-                  value={text}
-                  placeholder={
-                    scope
-                      ? scopePlaceholder(scope)
-                      : compact
-                        ? `Ask ${name === "Coordinator" ? "the coordinator" : "your " + name.toLowerCase()}…`
-                        : "Ask the coordinator…"
-                  }
-                  onChange={(e) => {
-                    setText(e.target.value);
-                    if (compact) {
-                      e.target.style.height = "auto";
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (isSendShortcut(composerKey(e))) {
-                      e.preventDefault();
-                      submit();
-                    } else if (e.key === "Backspace" && scope && !text) {
-                      e.preventDefault();
-                      setScope(null);
-                    }
-                  }}
-                  onPaste={(e) => {
-                    if (!compact) return;
-                    const files = pastedFiles(e);
-                    if (files.length) {
-                      e.preventDefault();
-                      attach(files);
-                    }
-                  }}
-                />
-                {compact ? (
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="sm"
-                    iconOnly
-                    icon={<span>↑</span>}
-                    className="gc-send"
-                    aria-label={confirming ? "Confirm answer" : "Send"}
-                    disabled={(scope ? !text.trim() && !scopeSendsEmpty(scope) : !text.trim() && !attachments.readyIds.length) || !online}
-                    loading={send.isPending || answering || (!!scope && control.isPending)}
-                  >
-                    Send
-                  </Button>
-                ) : null}
-              </div>
-              {!compact ? (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!d.prompt}
-                    onClick={() => d.prompt && setText(d.prompt)}
-                    data-testid="coordinator-catch-up"
-                    title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
-                  >
-                    Catch me up
-                  </Button>
-                  <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    variant={hasProposals ? "secondary" : "primary"}
-                    disabled={(!text.trim() && !(scope && scopeSendsEmpty(scope))) || !online}
-                    loading={send.isPending || (!!scope && control.isPending)}
-                    data-testid="coordinator-send"
-                  >
-                    Send
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {!online ? (
-                    <p className="gc-hint" role="status" data-tone="warn">
-                      You&apos;re offline. Your draft is kept; send it when you&apos;re back.
-                    </p>
-                  ) : null}
-                  <p className="gc-hint gc-keys">Ctrl/⌘+Enter to send · Enter for a new line</p>
-                </>
-              )}
-            </form>
-          ) : null}
-          {sheet ? (
-            <ContextSheet
-              open
-              onClose={() => setSheet(false)}
-              sessionId={sid ?? ""}
-              areaTitle={d.area.title}
-              selected={chips}
-              onToggle={(chip) =>
-                setChips((all) => (all.some((x) => x.ref === chip.ref) ? all.filter((x) => x.ref !== chip.ref) : [...all, chip].slice(0, 12)))
-              }
-            />
-          ) : null}
-        </SmartReply.Provider>
-      </LiveDecision.Provider>
-    </SmartSession.Provider>
+              <p className="gc-hint gc-keys">Ctrl/⌘+Enter to send · Enter for a new line</p>
+            </>
+          )}
+        </form>
+      ) : null}
+      {sheet ? (
+        <ContextSheet
+          open
+          onClose={() => setSheet(false)}
+          sessionId={sid ?? ""}
+          areaTitle={d.area.title}
+          selected={chips}
+          onToggle={(chip) => setChips((all) => (all.some((x) => x.ref === chip.ref) ? all.filter((x) => x.ref !== chip.ref) : [...all, chip].slice(0, 12)))}
+        />
+      ) : null}
+    </SmartScope>
   );
 }
 
