@@ -28,6 +28,7 @@ type Earlier = { id: string; title: string };
 export function ThreadBar({
   areaId,
   current,
+  pinned,
   viewing,
   viewingTitle,
   fresh,
@@ -42,6 +43,8 @@ export function ThreadBar({
   areaId: string;
   /** the Chief of staff thread (pinned or picked) */
   current: string | null;
+  /** whether `current` is pinned (else the newest-conversation rule picked it): Undo restores exactly that */
+  pinned: boolean;
   /** the thread on screen (an earlier one, the current one, or null while a new thread waits for its first message) */
   viewing: string | null;
   viewingTitle: string | null;
@@ -58,7 +61,8 @@ export function ThreadBar({
   const { toast } = useToast();
   const pin = usePinThread(areaId);
   const [confirming, setConfirming] = useState(false);
-  const [undo, setUndo] = useState<string | null>(null);
+  /** What Undo restores: the previous pin (null = no pin, back to the newest-conversation rule). */
+  const [undo, setUndo] = useState<{ pin: string | null } | null>(null);
   const onEarlierThread = !!viewing && !!current && viewing !== current && !fresh;
   const list = earlier.filter((c) => c.id !== viewing && !isOpsConversation(c)).slice(0, 8);
   return (
@@ -75,7 +79,7 @@ export function ThreadBar({
             onClick={() =>
               pin.mutate(viewing, {
                 // The panel stays on this thread; it becomes the current one when the coordinator info refreshes.
-                onSuccess: () => setUndo(current),
+                onSuccess: (res) => setUndo({ pin: res.previous }),
                 onError: (e) => toast(`Not changed: ${(e as Error).message}`, "danger"),
               })
             }
@@ -95,7 +99,7 @@ export function ThreadBar({
             variant="primary"
             onClick={() => {
               setConfirming(false);
-              setUndo(current);
+              setUndo({ pin: pinned ? current : null });
               onNew();
             }}
           >
@@ -106,7 +110,7 @@ export function ThreadBar({
           </Button>
         </div>
       ) : null}
-      {undo !== null && !confirming ? (
+      {undo && !confirming ? (
         <p className="gc-thread-undo flex flex-wrap items-center gap-1" role="status">
           <span className="min-w-0 flex-1">{fresh ? "New thread: your next message starts it." : "Thread changed."}</span>
           <Button
@@ -114,11 +118,11 @@ export function ThreadBar({
             variant="ghost"
             loading={pin.isPending}
             onClick={() => {
-              const back = undo;
+              const back = undo.pin;
               setUndo(null);
               if (fresh) return onUndoNew();
               pin.mutate(back, {
-                onSuccess: () => onOpen(back),
+                onSuccess: (res) => onOpen(back ?? res.sessionId),
                 onError: (e) => toast(`Not undone: ${(e as Error).message}`, "danger"),
               });
             }}

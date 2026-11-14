@@ -11,7 +11,7 @@ import { addDays } from "@/lib/time";
 import { Button, Input, Select, Textarea, cx } from "@/components/ui";
 import { useSurface } from "./context";
 import { SmartReply } from "./live";
-import { isQuestionnaire, questionnaireReply } from "@/lib/jarvis-ui/live";
+import { isQuestionnaire, questionnaireReply, QUESTIONNAIRE_MAX } from "@/lib/jarvis-ui/live";
 
 type P<N extends ComponentName> = ComponentRenderProps<PropsOf<N>>;
 /** `kind` is the component's catalog name; the owner sees its human label (lib/jarvis-ui/labels.ts), or no tag. */
@@ -299,8 +299,8 @@ export function SmartForm({ element }: P<"Form">) {
   // A questionnaire (nothing to create or update) answers the conversation: Submit sends the answers as the owner's reply.
   const reply = useContext(SmartReply);
   const questionnaire = isQuestionnaire(p);
-  const sentKey = `form-sent:${p.title}`;
-  const sentAt = typeof s.uiState[sentKey] === "string" ? (s.uiState[sentKey] as string) : null;
+  // Sent state is this form's own (not the surface's saved state: an identical check-in later in the thread shares it).
+  const [sentAt, setSentAt] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const set = (id: string, v: string | boolean | number) => {
     setValues({ ...values, [id]: v });
@@ -323,11 +323,18 @@ export function SmartForm({ element }: P<"Form">) {
               return;
             }
             if (sending) return;
+            const text = questionnaireReply(p, values);
+            if (text.length > QUESTIONNAIRE_MAX) {
+              setNotice(
+                `Your answers are too long to send as one reply (${QUESTIONNAIRE_MAX.toLocaleString("en-US")} characters). Shorten them and submit again.`,
+              );
+              return;
+            }
             setSending(true);
-            void reply(questionnaireReply(p, values))
+            void reply(text)
               .then((sent) => {
                 if (!sent) return setNotice("Not sent. Try again.");
-                s.patchState({ [sentKey]: new Date().toISOString() });
+                setSentAt(new Date().toISOString());
                 setNotice("Sent to the chat as your reply.");
               })
               .finally(() => setSending(false));

@@ -60,6 +60,11 @@ describe("smart blocks that act through the conversation (pure)", () => {
     expect(smartDecisionRefs(card("Pick one"))).toEqual([]);
     expect(smartDecisionRefs("D-33 in prose only")).toEqual([]);
     expect(smartDecisionRefs("```jarvis-ui\n{not json\n```")).toEqual([]);
+    // Nested cards are only drawn live by the smart renderer; with Smart replies off only a root card counts.
+    const nested = `\`\`\`jarvis-ui\n${JSON.stringify({ v: 1, catalog: "jarvis-ui@1", root: "s", elements: { s: { type: "Stack", props: {}, children: ["c"] }, c: { type: "DecisionCard", props: { title: "D-9 · x", options: [] } } } })}\n\`\`\``;
+    expect(smartDecisionRefs(nested)).toEqual(["D-9"]);
+    expect(smartDecisionRefs(nested, { rootOnly: true })).toEqual([]);
+    expect(smartDecisionRefs(card("D-33 · Dentist"), { rootOnly: true })).toEqual(["D-33"]);
   });
 
   it("a form that writes nothing is a questionnaire, answered as one reply", () => {
@@ -75,6 +80,8 @@ describe("smart blocks that act through the conversation (pure)", () => {
     };
     expect(isQuestionnaire(form)).toBe(true);
     expect(isQuestionnaire({ submit: { label: "x", creates: [{ titleField: "today" } as never] } })).toBe(false);
+    // Never cut: the form refuses an over-long reply instead (QUESTIONNAIRE_MAX).
+    expect(questionnaireReply(form, { today: "x".repeat(9000) }).length).toBeGreaterThan(9000);
     expect(questionnaireReply(form, { today: "Good day", energy: "medium", walk: true, skip: "" })).toBe(
       "**Daily Compass check-in**\n\n**How did today go?**\nGood day\n\n**How's your energy?**\nMedium\n\n**Walked?**\nYes",
     );

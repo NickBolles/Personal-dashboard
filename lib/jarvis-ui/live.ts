@@ -24,18 +24,19 @@ export function decisionRefOf(title: string | null | undefined): string | null {
 type Elements = Record<string, { type?: unknown; props?: unknown } | undefined>;
 
 /** D-n refs of every DecisionCard in the message's (closed, parseable) smart blocks, in order, once each. */
-export function smartDecisionRefs(text: string): string[] {
+export function smartDecisionRefs(text: string, opts: { rootOnly?: boolean } = {}): string[] {
   if (!text.includes("jarvis-ui")) return [];
   const out: string[] = [];
   for (const seg of splitBlocks(text)) {
     if (seg.kind !== "block" || !seg.closed || seg.tooLarge) continue;
-    let spec: { elements?: Elements } | null = null;
+    let spec: { root?: string; elements?: Elements } | null = null;
     try {
-      spec = JSON.parse(seg.raw) as { elements?: Elements };
+      spec = JSON.parse(seg.raw) as { root?: string; elements?: Elements };
     } catch {
       continue;
     }
-    for (const el of Object.values(spec?.elements ?? {})) {
+    const els = spec?.elements ?? {};
+    for (const el of opts.rootOnly ? [spec?.root ? els[spec.root] : undefined] : Object.values(els)) {
       if (el?.type !== "DecisionCard") continue;
       const ref = decisionRefOf((el.props as { title?: string } | undefined)?.title);
       if (ref && !out.includes(ref)) out.push(ref);
@@ -68,5 +69,8 @@ export function questionnaireReply(p: Pick<FormProps, "title" | "fields">, value
     if (!shown) continue;
     lines.push("", `**${f.label}**`, shown);
   }
-  return lines.join("\n").slice(0, 8000);
+  return lines.join("\n");
 }
+
+/** Longest questionnaire reply sent as one message (the coordinator composer's own limit); longer answers are refused, never cut. */
+export const QUESTIONNAIRE_MAX = 8000;

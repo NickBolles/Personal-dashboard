@@ -10,7 +10,7 @@ import { refreshSessionLists } from "@/lib/client/session-lists";
 import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
-import { AssistantText } from "@/components/smart/AssistantText";
+import { AssistantText, useSmartSettings } from "@/components/smart/AssistantText";
 import {
   AttachButton,
   AttachmentChips,
@@ -160,6 +160,7 @@ export function CoordinatorThread({
   };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pinThread = usePinThread(d.area.id);
+  const smartSettings = useSmartSettings();
   /** An earlier thread is open in the panel (not the Chief of staff thread). */
   const viewingEarlier = !!sessionId && !!d.sessionId && sessionId !== d.sessionId && !fresh;
   const pathname = usePathname();
@@ -430,9 +431,11 @@ export function CoordinatorThread({
   };
   // What a reply mentions is drawn once too: as a row under the LATEST reply that mentions it, unless it already
   // has its row as work a reply started. Everywhere else it is only the chip in the text.
+  const smartOn = !!smartSettings.data?.enabled;
   const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
   // A smart decision card in a reply is drawn as the live decision (below), so it isn't also a mention row.
-  for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text)) drawn.add(ref);
+  // With Smart replies off only a card that IS the block (its root) is drawn live; nested ones need the renderer.
+  for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text, { rootOnly: !smartOn })) drawn.add(ref);
   const mentionedBy = new Map<string, string>();
   for (const m of msgs) if (m.kind === "assistant") for (const ref of proseRefs(m.text)) mentionedBy.set(ref, m.id);
   const mentionRows = (id: string) =>
@@ -490,11 +493,20 @@ export function CoordinatorThread({
   // F1: an open D-n decision a reply draws as a smart card is the live decision block (answer in place, Undo).
   const liveDecision = mentions ? (ref: string) => (ref.startsWith("D-") && mentions.rank(ref) !== null ? mentions.render(ref) : null) : null;
   // F2: a questionnaire form's Submit answers in this thread.
-  const smartReply = (input: string) =>
-    send.mutateAsync({ input }).then(
-      () => true,
-      () => false,
-    );
+  // It is its own message: it never takes the composer's draft, chips, scope or attachments with it.
+  const smartReply = async (input: string) => {
+    try {
+      const target = await ensureSession();
+      const notice = maskedNotice(await postInput(target, input));
+      toast(notice ?? sentText, notice ? "warn" : undefined);
+      void qc.invalidateQueries({ queryKey: ["session", target] });
+      void refreshSessionLists(qc).catch(() => undefined);
+      return true;
+    } catch (err) {
+      toast(`Not sent: ${(err as Error).message}`, "danger");
+      return false;
+    }
+  };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
       <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
@@ -514,11 +526,17 @@ export function CoordinatorThread({
               earlier={previous}
               earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
               onEarlierOpen={setEarlier}
+              pinned={!!d.pinned}
               onOpen={(id) => {
+                // Attachments and context picked for one thread never ride along to another.
+                if (attachments.drafts.length) attachments.clear();
+                setChips([]);
                 setFresh(false);
                 setSessionId(id);
               }}
               onNew={() => {
+                if (attachments.drafts.length) attachments.clear();
+                setChips([]);
                 setSessionId(null);
                 setFresh(true);
                 requestAnimationFrame(() => textarea.current?.focus());
