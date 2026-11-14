@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useContext } from "react";
 import type { ComponentRegistry, ComponentRenderProps } from "@json-render/react";
 import type { ComponentName, PropsOf, RowAction } from "@/lib/jarvis-ui/catalog";
 import { actionsForRow, intentChip, intentKey, intentTarget, rowIntent, suggestedAction } from "@/lib/jarvis-ui/intents";
@@ -10,6 +11,8 @@ import { addDays, daysBetween } from "@/lib/time";
 import { Button, Checkbox, Pill, cx } from "@/components/ui";
 import { OverflowMenu, type MenuItem } from "@/components/ui/legacy";
 import { InlineText, useSurface } from "./context";
+import { LiveDecision } from "./live";
+import { decisionRefOf } from "@/lib/jarvis-ui/live";
 import { ApprovalChips, MetricGauge, PRCard, Sparkline, WeekPlan } from "./workflow-components";
 import { ApprovalQueue, BarChart, DecisionMatrix, Gantt, SmartForm, SmartHeader } from "./v2-components";
 
@@ -165,11 +168,23 @@ function TaskList({ element }: P<"TaskList">) {
 function DecisionCard({ element }: P<"DecisionCard">) {
   const p = element.props;
   const s = useSurface();
+  const liveDecision = useContext(LiveDecision);
+  const ref = decisionRefOf(p.title);
+  const live = ref && liveDecision ? liveDecision(ref) : null;
   const key = `decision:${p.title}`;
   const staged = s.staged.get(key);
   const appliedOpt = p.options.find(
     (o) => o.intent && s.applied.get(intentTarget(o.intent)) && intentKey(s.applied.get(intentTarget(o.intent))!.intent as never) === intentKey(o.intent),
   );
+  if (live)
+    return (
+      <div data-live-decision={ref} data-testid="smart-live-decision">
+        {live}
+      </div>
+    );
+  // Options without an intent record nothing here (an agent drawing a D-n decision, or a plain question): say where
+  // the answer goes instead of showing buttons that silently do nothing.
+  const inert = !appliedOpt && p.options.every((o) => !o.intent);
   return (
     <section className="rounded-lg border border-line p-3" aria-label={p.title}>
       <SmartHeader kind="DecisionCard" title={p.title} />
@@ -200,6 +215,11 @@ function DecisionCard({ element }: P<"DecisionCard">) {
           );
         })}
       </div>
+      {inert && !s.readOnly ? (
+        <p className="mt-2 text-xs text-muted" data-testid="smart-decision-inert">
+          {ref ? `Answer ${ref} in Needs you, or reply here in your own words.` : "Reply here in your own words to choose."}
+        </p>
+      ) : null}
       {appliedOpt ? (
         <p className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-xs">
           <span className="text-ok">✓ Recorded “{appliedOpt.label}”</span>
