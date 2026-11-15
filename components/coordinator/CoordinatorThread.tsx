@@ -11,24 +11,17 @@ import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
 import { AssistantText, useSmartSettings } from "@/components/smart/AssistantText";
-import {
-  AttachButton,
-  AttachmentChips,
-  CameraButton,
-  MessageAttachments,
-  pastedFiles,
-  useChatAttachments,
-  useConversationFiles,
-} from "@/components/chat/Attachments";
+import { MessageAttachments, useChatAttachments, useConversationFiles } from "@/components/chat/Attachments";
 import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
-import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PlusIcon } from "@/components/icons";
+import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, Menu, RefPill, Textarea, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, RefPill, useOnline, useToast } from "@/components/ui";
+import { Composer, type ComposerHandle } from "@/components/chat/Composer";
+import { kvDel, kvSet } from "@/lib/client/idb";
 import { scopeChip, scopeIsCommand, scopeLabel, scopeMessage, scopePlaceholder, scopeSendsEmpty, type ComposeScope } from "@/lib/coordinator/compose";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
-import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
@@ -131,7 +124,6 @@ export function CoordinatorThread({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const titleId = useId();
   const online = useOnline();
   const sentText = compact ? `Sent to your ${name}` : "Sent to the coordinator";
   const [localText, setLocalText] = useState("");
@@ -141,9 +133,9 @@ export function CoordinatorThread({
   const [fresh, setFresh] = useState(false);
   const [earlier, setEarlier] = useState(false);
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const composer = useRef<ComposerHandle>(null);
   useEffect(() => {
-    if (!compact) textarea.current?.focus();
+    if (!compact) composer.current?.focus();
   }, [compact]);
   const [localScope, setLocalScope] = useState<ComposeScope | null>(null);
   const scope = onScope ? (scopeProp ?? null) : localScope;
@@ -156,7 +148,7 @@ export function CoordinatorThread({
   const confirming = armed !== null && armed === answerKey;
   const compose = (next: ComposeScope) => {
     setScope(next);
-    requestAnimationFrame(() => textarea.current?.focus());
+    requestAnimationFrame(() => composer.current?.focus());
   };
   /** The chip belongs to the draft it was set for: a new draft from elsewhere or another thread starts without it. */
   const dropScope = () => {
@@ -176,7 +168,7 @@ export function CoordinatorThread({
     // A quick action is a whole message of its own: it is never about the thing an earlier chip named.
     dropScope();
     setText(value.slice(0, 8000));
-    requestAnimationFrame(() => textarea.current?.focus());
+    requestAnimationFrame(() => composer.current?.focus());
   };
   const fillRef = useRef(fill);
   useEffect(() => {
@@ -214,12 +206,13 @@ export function CoordinatorThread({
     input: string,
     control = false,
     extra: { context?: string; files?: string[] } = {},
+    key?: string,
   ): Promise<{ masked?: string[] } | null> => {
     const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
-      idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
+      idempotencyKey: key ?? newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
       ...extra,
     });
@@ -269,13 +262,9 @@ export function CoordinatorThread({
     });
   };
   const [chips, setChips] = useState<ContextChip[]>([]);
-  const [adding, setAdding] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const fileInput = useRef<HTMLInputElement | null>(null);
-  const cameraInput = useRef<HTMLInputElement | null>(null);
-  const addButton = useRef<HTMLButtonElement>(null);
   const send = useMutation({
-    mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
+    mutationFn: async ({ input, correction = false, key }: { input: string; correction?: boolean; key?: string }) => {
       const target = await ensureSession();
       if (correction) return { target, notice: maskedNotice(await postInput(target, input)) };
       // Sheet picks that are @/# references ride in the message as tokens; the rest go as context lines (as in full chat).
@@ -290,7 +279,11 @@ export function CoordinatorThread({
             .slice(0, 4000) || undefined,
         files: attachments.readyIds.length ? attachments.readyIds : undefined,
       };
-      const run = await postInput(target, compact ? withPageContext(typed, context) : typed, false, extra);
+      // Kept on this device until Hermes has the message: a send that did not get through is retried with the same
+      // key (after a reload too), so it never runs twice.
+      if (key) await kvSet(`pending:${target}`, { input, key });
+      const run = await postInput(target, compact ? withPageContext(typed, context) : typed, false, extra, key);
+      if (key) await kvDel(`pending:${target}`);
       return { target, notice: maskedNotice(run) };
     },
     onSuccess: ({ target, notice }, { correction }) => {
@@ -302,7 +295,6 @@ export function CoordinatorThread({
           attachments.clear();
           void qc.invalidateQueries({ queryKey: ["chat-files", target] });
         }
-        if (textarea.current && compact) textarea.current.style.height = "auto";
       }
       toast(notice ?? sentText, notice ? "warn" : undefined);
       // The owner's first message in the thread the panel picked makes it the pinned Chief of staff thread.
@@ -348,43 +340,56 @@ export function CoordinatorThread({
     },
     onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
   });
-  const submit = () => {
+  const sendMessage = (input: string, key?: string) =>
+    send.mutateAsync({ input, key }).then(
+      () => true,
+      () => false,
+    );
+  const sendControl = (line: string) =>
+    control.mutateAsync(line).then(
+      () => true,
+      () => false,
+    );
+  // A risky decision's typed answer is recorded on the second press: the first one arms it, for exactly these words.
+  const canSend = (said: string) => {
+    if (scope?.kind !== "answer" || !onAnswer || !scope.risky || confirming) return true;
+    if (said) setArmed(answerKey);
+    return false;
+  };
+  /**
+   * What the composer's Send means here. The chip decides first (an answer to record, a one-line command, a
+   * question); with no chip the words are guidance for the run in flight, or the next message.
+   * Resolves true when the words went somewhere, and the composer then clears itself.
+   */
+  const deliver = async (said: string, key?: string): Promise<boolean> => {
     // Files picked before the conversation exists wait in `queued` until it does: sending now would leave them behind.
-    if (attachments.uploading || queued.current.length) return toast("Wait for the upload to finish, then send.", "warn");
-    if (send.isPending || control.isPending || d.excluded || !online) return;
+    if (attachments.uploading || queued.current.length) {
+      toast("Wait for the upload to finish, then send.", "warn");
+      return false;
+    }
+    if (d.excluded) return false;
     if (scope?.kind === "answer" && onAnswer) {
-      if (!text.trim() || answering) return;
-      if (scope.risky && !confirming) return setArmed(answerKey);
+      if (!said || answering) return false;
       setAnswering(true);
-      void onAnswer(scope, text.trim(), confirming)
-        .then((recorded) => {
-          if (!recorded) return;
-          setText("");
-          setScope(null);
-          if (textarea.current && compact) textarea.current.style.height = "auto";
-        })
-        .finally(() => {
-          setArmed(null);
-          setAnswering(false);
-        });
-      return;
+      try {
+        const recorded = await onAnswer(scope, said, confirming);
+        if (recorded) setScope(null);
+        return recorded;
+      } finally {
+        setArmed(null);
+        setAnswering(false);
+      }
     }
     if (scope) {
       // The chip decides what the words mean: a steer, a reply, a retry (which needs no words) or a question.
-      if (!text.trim() && !scopeSendsEmpty(scope)) return;
-      const line = scopeMessage(scope, text);
-      if (scopeIsCommand(scope) && sid)
-        control.mutate(line, {
-          onSuccess: () => {
-            setText("");
-            setScope(null);
-            if (textarea.current && compact) textarea.current.style.height = "auto";
-          },
-        });
-      else send.mutate({ input: line });
-      return;
+      if (!said && !scopeSendsEmpty(scope)) return false;
+      const line = scopeMessage(scope, said);
+      if (!scopeIsCommand(scope) || !sid) return sendMessage(line, key);
+      const sent = await sendControl(line);
+      if (sent) setScope(null);
+      return sent;
     }
-    if (text.trim() || attachments.readyIds.length) send.mutate({ input: text.trim() });
+    return running ? sendControl(said) : sendMessage(said, key);
   };
   const timeline = detail.data?.timeline ?? [];
   const replyActions = useMemo(
@@ -549,7 +554,7 @@ export function CoordinatorThread({
                 dropScope();
                 setSessionId(null);
                 setFresh(true);
-                requestAnimationFrame(() => textarea.current?.focus());
+                requestAnimationFrame(() => composer.current?.focus());
               }}
               onUndoNew={() => {
                 dropScope();
@@ -704,204 +709,148 @@ export function CoordinatorThread({
       </div>
       {!d.excluded && !compact ? <ProposedQuickActions /> : null}
       {!d.excluded ? (
-        <form
-          className={compact ? "gc-composer" : "co-foot"}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          {compact && context ? (
-            <div className="gc-context">
-              <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
-              {onAskPage ? (
-                <Button variant="ghost" size="sm" onClick={onAskPage}>
-                  Ask about this page
-                </Button>
-              ) : null}
-              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
-                Remove
-              </Button>
-            </div>
-          ) : compact && contextRemoved ? (
-            <div className="gc-context-off">
-              <span>This page is not shared.</span>
-              <Button variant="ghost" size="sm" onClick={onRestoreContext}>
-                Share page
-              </Button>
-            </div>
-          ) : compact ? (
-            <p className="gc-hint gc-context-none">No page context is shared.</p>
-          ) : null}
-          {compact && (text.trim() || scope) ? null : (
-            <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
-          )}
-          <label htmlFor={`${titleId}-m`} className="sr-only">
-            Message the coordinator
-          </label>
-          {compact ? (
-            <>
-              {chips.length ? (
-                <div className="gc-chips" role="group" aria-label="Context to send">
-                  {chips.map((c) => (
-                    <ChipButton key={c.ref} aria-label={`Remove context ${c.label}`} onClick={() => setChips((all) => all.filter((x) => x.ref !== c.ref))}>
-                      {c.label} ×
-                    </ChipButton>
-                  ))}
-                </div>
-              ) : null}
-              <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
-            </>
-          ) : null}
-          {scope ? (
-            // What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message.
-            <div className="gc-scope" role="group" aria-label={scopeLabel(scope)} data-kind={scope.ref?.startsWith("D-") ? "d" : "r"} data-testid="gc-scope">
-              <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
-                {scopeChip(scope)}
-              </span>
-              <span className="gc-scope-title">{scope.title}</span>
-              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label={`Remove ${scopeChip(scope)} from the message`} onClick={() => setScope(null)}>
-                Remove
-              </Button>
-            </div>
-          ) : null}
-          {confirming && scope ? (
-            <p className="gc-scope-confirm" role="status">
-              <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
-              <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
-                Cancel
-              </Button>
-            </p>
-          ) : null}
-          <div className={compact ? "gc-compose-row" : undefined}>
-            {compact ? (
-              <div className="gc-add-menu">
-                <Button
-                  ref={addButton}
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  icon={<PlusIcon className="h-4 w-4" />}
-                  className="gc-add"
-                  aria-label="Add to message"
-                  aria-haspopup="menu"
-                  aria-expanded={adding}
-                  onClick={() => setAdding((v) => !v)}
-                >
-                  Add
-                </Button>
-                {adding ? (
-                  <Menu
-                    label="Add to message"
-                    items={[
-                      { label: "Photo or file", onSelect: () => fileInput.current?.click(), disabled: !online },
-                      { label: "Camera", onSelect: () => cameraInput.current?.click(), disabled: !online },
-                      { label: "Area, item or person", onSelect: () => setSheet(true) },
-                    ]}
-                    onClose={() => {
-                      setAdding(false);
-                      addButton.current?.focus();
-                    }}
-                  />
-                ) : null}
-                <span hidden>
-                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} testId="gc-file-input" />
-                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} testId="gc-camera-input" />
-                </span>
-              </div>
-            ) : null}
-            <Textarea
-              ref={textarea}
-              id={`${titleId}-m`}
-              data-autofocus
-              data-testid={compact ? "gc-input" : "coordinator-input"}
-              className={compact ? "gc-input" : "gc-thread-input w-full min-w-0 resize-y"}
-              rows={compact ? 1 : text.length > 200 ? 8 : 3}
-              maxLength={8000}
-              value={text}
-              placeholder={
-                scope
-                  ? scopePlaceholder(scope)
+        <div className={compact ? "gc-composer" : "co-foot"}>
+          <Composer
+            ref={composer}
+            surface="panel"
+            sessionId={sid}
+            text={text}
+            onText={setText}
+            answerer="the coordinator"
+            // With a chip the words are about that thing, whatever is running; with none they are guidance for the run.
+            label={scope || !running ? "Message the coordinator" : undefined}
+            keyPrefix="coord"
+            canSend={canSend}
+            placeholder={
+              scope
+                ? scopePlaceholder(scope)
+                : running
+                  ? undefined
                   : compact
                     ? `Ask ${name === "Coordinator" ? "the coordinator" : "your " + name.toLowerCase()}…`
                     : "Ask the coordinator…"
-              }
-              onChange={(e) => {
-                setText(e.target.value);
-                if (compact) {
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-                }
-              }}
-              onKeyDown={(e) => {
-                if (isSendShortcut(composerKey(e))) {
-                  e.preventDefault();
-                  submit();
-                } else if (e.key === "Backspace" && scope && !text) {
-                  e.preventDefault();
-                  setScope(null);
-                }
-              }}
-              onPaste={(e) => {
-                if (!compact) return;
-                const files = pastedFiles(e);
-                if (files.length) {
-                  e.preventDefault();
-                  attach(files);
-                }
-              }}
-            />
-            {compact ? (
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                iconOnly
-                icon={<span>↑</span>}
-                className="gc-send"
-                aria-label={confirming ? "Confirm answer" : "Send"}
-                disabled={(scope ? !text.trim() && !scopeSendsEmpty(scope) : !text.trim() && !attachments.readyIds.length) || !online}
-                loading={send.isPending || answering || (!!scope && control.isPending)}
-              >
-                Send
-              </Button>
-            ) : null}
-          </div>
-          {!compact ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={!d.prompt}
-                onClick={() => d.prompt && setText(d.prompt)}
-                data-testid="coordinator-catch-up"
-                title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
-              >
-                Catch me up
-              </Button>
-              <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
-              <Button
-                type="submit"
-                size="sm"
-                variant={hasProposals ? "secondary" : "primary"}
-                disabled={(!text.trim() && !(scope && scopeSendsEmpty(scope))) || !online}
-                loading={send.isPending || (!!scope && control.isPending)}
-                data-testid="coordinator-send"
-              >
-                Send
-              </Button>
-            </div>
-          ) : (
-            <>
-              {!online ? (
-                <p className="gc-hint" role="status" data-tone="warn">
-                  You&apos;re offline. Your draft is kept; send it when you&apos;re back.
-                </p>
-              ) : null}
-              <p className="gc-hint gc-keys">Ctrl/⌘+Enter to send · Enter for a new line</p>
-            </>
-          )}
-        </form>
+            }
+            // A run in flight takes the words as guidance, as on the chat page. Stop stays on the run's own row, where
+            // it asks first.
+            phase={running ? "running" : undefined}
+            online={online}
+            accessory={
+              compact && (text.trim() || scope) ? null : (
+                <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
+              )
+            }
+            lead={
+              compact && context ? (
+                <div className="gc-context">
+                  <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
+                  {onAskPage ? (
+                    <Button variant="ghost" size="sm" onClick={onAskPage}>
+                      Ask about this page
+                    </Button>
+                  ) : null}
+                  <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
+                    Remove
+                  </Button>
+                </div>
+              ) : compact && contextRemoved ? (
+                <div className="gc-context-off">
+                  <span>This page is not shared.</span>
+                  <Button variant="ghost" size="sm" onClick={onRestoreContext}>
+                    Share page
+                  </Button>
+                </div>
+              ) : compact ? (
+                <p className="gc-hint gc-context-none">No page context is shared.</p>
+              ) : null
+            }
+            scope={
+              scope ? (
+                <>
+                  {/* What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message. */}
+                  <div
+                    className="gc-scope"
+                    role="group"
+                    aria-label={scopeLabel(scope)}
+                    data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}
+                    data-testid="gc-scope"
+                  >
+                    <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
+                      {scopeChip(scope)}
+                    </span>
+                    <span className="gc-scope-title">{scope.title}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      icon="×"
+                      aria-label={`Remove ${scopeChip(scope)} from the message`}
+                      onClick={() => setScope(null)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  {confirming ? (
+                    <p className="gc-scope-confirm" role="status">
+                      <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
+                      <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
+                        Cancel
+                      </Button>
+                    </p>
+                  ) : null}
+                </>
+              ) : null
+            }
+            footer={
+              compact ? (
+                <>
+                  {!online ? (
+                    <p className="gc-hint" role="status" data-tone="warn">
+                      You&apos;re offline. Your draft is kept; send it when you&apos;re back.
+                    </p>
+                  ) : null}
+                  <p className="gc-hint gc-keys">@ context · # PR · Ctrl/⌘+Enter to send</p>
+                </>
+              ) : (
+                <div className="co-foot-row flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!d.prompt}
+                    onClick={() => d.prompt && setText(d.prompt)}
+                    data-testid="coordinator-catch-up"
+                    title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
+                  >
+                    Catch me up
+                  </Button>
+                  <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
+                </div>
+              )
+            }
+            context={chips.map((c) => ({ label: c.label, ref: c.ref }))}
+            onRemoveContext={(ref) => setChips((all) => all.filter((x) => x.ref !== ref))}
+            onAttach={() => setSheet(true)}
+            attachments={{ ...attachments, add: attach }}
+            onSend={deliver}
+            onSteer={deliver}
+            // Commands that act on a conversation page (fork, file, share…) have nothing to act on here.
+            onCommand={(id) => (id === "context" ? setSheet(true) : undefined)}
+            commands={PANEL_COMMANDS}
+            repo={null}
+            sendsEmpty={!!scope && scopeSendsEmpty(scope)}
+            onEmptyBackspace={scope ? () => setScope(null) : undefined}
+            sendLabel={confirming ? "Confirm answer" : undefined}
+            sending={send.isPending || control.isPending || answering}
+            // One primary action per view: while proposals are waiting, theirs is it.
+            quietSend={!compact && hasProposals}
+            testIds={{
+              input: compact ? "gc-input" : "coordinator-input",
+              send: "coordinator-send",
+              add: "gc-add",
+              file: "gc-file-input",
+              camera: "gc-camera-input",
+              library: "gc-library-input",
+            }}
+          />
+        </div>
       ) : null}
       {sheet ? (
         <ContextSheet
@@ -1007,6 +956,8 @@ function withRefs(text: string, onRef: (ref: string) => void): ReactNode[] {
     .map((part, index) => (index % 2 ? <RefPill key={index} id={part} onClick={() => onRef(part)} className="gc-inline-ref" /> : part));
 }
 /** How many of a reply's mentioned things are drawn as rows before "N more". */
+/** The `/` commands that make sense in the panel: the rest act on a conversation page. */
+const PANEL_COMMANDS = ["context"] as const;
 const MENTIONS_SHOWN = 3;
 /**
  * What a reply mentions, as rich rows right under it: three at most, the rest behind one line that names them.

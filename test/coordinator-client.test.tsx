@@ -208,7 +208,7 @@ describe("shared coordinator thread", () => {
     expect(screen.getByText("Chief of staff")).toBeTruthy();
     expect(screen.queryByText("Coordinator")).toBeNull();
   });
-  it("has the full chat's add menu (photo or file, camera, context) and never uploads or sends by opening it", () => {
+  it("has the chat page's add menu (it is the same composer) and never uploads or sends by opening it", () => {
     makeClient();
     render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
     fireEvent.click(screen.getByRole("button", { name: "Add to message" }));
@@ -216,8 +216,8 @@ describe("shared coordinator thread", () => {
     expect(
       within(menu)
         .getAllByRole("menuitem")
-        .map((i) => i.textContent),
-    ).toEqual(["Photo or file", "Camera", "Area, item or person"]);
+        .map((i) => i.querySelector("span")?.textContent),
+    ).toEqual(["Context", "Attach file", "Camera", "Photo library"]);
     expect(document.querySelector('[data-testid="gc-file-input"]')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
   });
