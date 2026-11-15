@@ -83,11 +83,25 @@ export function GlobalCoordinator() {
   const gPending = useRef(false);
   const host = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  // A chip with nothing typed after it was not taken up: it does not wait for the next time the composer is opened,
+  // or follow the owner to another page. With words typed, the chip and the draft are kept together.
+  const untouched = useRef(true);
+  useEffect(() => {
+    untouched.current = !draft.trim();
+  });
+  const dropIdleScope = () => {
+    if (untouched.current) setScope(null);
+  };
+  /** Every way the phone sheet closes (grab bar, drag, Collapse, Escape, a tap outside) goes through here. */
+  const closePhone = () => {
+    dropIdleScope();
+    setPhoneOpen(false);
+  };
   // The phone sheet has one height: its grab bar (and header) drag it down to close; a tap on the bar closes too.
   const sheetDrag = useSheetDrag({
     panel: dialog,
     full: true,
-    onClose: () => setPhoneOpen(false),
+    onClose: closePhone,
     heights: () => {
       const h = dialog.current?.getBoundingClientRect().height ?? window.innerHeight;
       return { half: h, full: h };
@@ -277,10 +291,17 @@ export function GlobalCoordinator() {
       setTab("chat");
     } else openAt(status.target.tab, status.target.ref);
   };
+  // A prompt written into the composer from outside it (a quick action, the palette, "Ask about this page") is a
+  // whole message of its own. The chip an earlier Steer / Ask left behind is not about it, and from the collapsed
+  // tray that chip is not even on screen, so it never rides along.
+  const newDraft = (value: string) => {
+    setScope(null);
+    setDraft(value.slice(0, 8000));
+  };
   const prefill = (value: string) => {
     setActiveCard(undefined);
     setTab("chat");
-    setDraft(value.slice(0, 8000));
+    newDraft(value);
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const input = host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]');
@@ -370,15 +391,17 @@ export function GlobalCoordinator() {
   };
   const hide = () => {
     if (wide) {
+      dropIdleScope();
       saveOpen(false);
       setChatExpandedOn(null);
-    } else setPhoneOpen(false);
+    } else closePhone();
   };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- page-scoped opt-out and sheet/strip reset on navigation
     setRemovedOn(null);
     setChatExpandedOn(null);
     setPhoneOpen(false);
+    if (untouched.current) setScope(null);
   }, [pageKey]);
   useEffect(() => {
     try {
@@ -410,6 +433,7 @@ export function GlobalCoordinator() {
       if (document.querySelector('[data-testid="coordinator-pane"]')) return; // an open area pane takes it
       onOpen();
       setTab("chat");
+      setScope(null);
       setDraft(value.slice(0, 8000));
       requestAnimationFrame(() =>
         requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
@@ -420,6 +444,7 @@ export function GlobalCoordinator() {
     // top layer synchronously, before either destination tries to focus its input.
     const onManage = () => {
       dialog.current?.close();
+      if (untouched.current) setScope(null);
       setPhoneOpen(false);
     };
     window.addEventListener(OPEN_COORDINATOR_EVENT, onOpen);
@@ -813,7 +838,7 @@ export function GlobalCoordinator() {
                   onPrompt={(value) => {
                     show();
                     setTab("chat");
-                    setDraft(value.slice(0, 8000));
+                    newDraft(value);
                   }}
                 />
               </div>
@@ -862,12 +887,12 @@ export function GlobalCoordinator() {
                 data-density="sleek"
                 aria-modal="true"
                 aria-labelledby={`${ids}-title`}
-                onCancel={() => setPhoneOpen(false)}
+                onCancel={closePhone}
                 onKeyDown={onPanelKey}
                 onClick={(e) => {
                   if (e.target === e.currentTarget) {
                     const r = e.currentTarget.getBoundingClientRect();
-                    if (e.clientY < r.top) setPhoneOpen(false);
+                    if (e.clientY < r.top) closePhone();
                   }
                 }}
               >
