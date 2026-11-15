@@ -1,450 +1,84 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
-import { api } from "@/lib/client/api";
-import { isTerminal, type ApprovalRequest, type ClarifyRequest, type RunEvent, type RunPhase, type RunView, type SubagentIdentity } from "@/lib/hermes";
-import { aguiToRunEvents, isAguiEvent, newAguiReadState } from "@/lib/agui/reducer";
-import { toolResultState } from "@/lib/tool-presentation";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { isTerminal, type RunPhase } from "@/lib/hermes";
+import { IDLE_RUN, type RunState } from "@/lib/client/run-state";
+import { runStream, type RunSnapshot, type RunStream } from "@/lib/client/run-streams";
 
-export type Activity =
-  | {
-      id: string;
-      callId?: string;
-      kind: "tool";
-      tool: string;
-      preview?: string;
-      result?: string;
-      done: boolean;
-      error?: boolean;
-      startedAt: string;
-      durationSec?: number;
-    }
-  | ({ id: string; kind: "subagent"; goal?: string; summary?: string; status?: string; done: boolean; startedAt: string } & SubagentIdentity)
-  | { id: string; kind: "commentary"; text: string; startedAt: string };
+// The run state and its reducer live in lib/client/run-state.ts and the connection in lib/client/run-streams.ts;
+// they are re-exported here because this file is where the rest of the app has always imported them from.
+export { reduceRun, type Activity, type RunState } from "@/lib/client/run-state";
+export { HIDDEN_GRACE_MS } from "@/lib/client/run-streams";
 
-export type RunState = {
-  runId?: string;
-  phase: RunPhase;
-  text: string;
-  reasoning: string;
-  activity: Activity[];
-  approval?: ApprovalRequest;
-  /** A Hermes clarify question waiting for an answer (the run stays "running" meanwhile). */
-  clarify?: ClarifyRequest;
-  steerQueued: number;
-  pendingSteer?: string;
-  error?: string;
-  output?: string;
-  lastSeq?: number;
-  attempts: number;
-  /** Why the run shows "Queued": Hermes' own queue, or Jarvis waiting for a free Hermes connection. */
-  queueReason?: "connections";
-};
-
-type Action =
-  | { type: "reset"; runId?: string; phase?: RunPhase }
-  | { type: "event"; event: RunEvent; seq?: number }
-  /** Text/reasoning deltas coalesced per animation frame (one render per frame, not per token). */
-  | { type: "events"; items: { event: RunEvent; seq?: number }[] }
-  | { type: "phase"; phase: RunPhase; error?: string }
-  | { type: "reconciled"; view: RunView }
-  | { type: "attempt"; n: number };
-
-const initial: RunState = { phase: "completed", text: "", reasoning: "", activity: [], steerQueued: 0, attempts: 0 };
-
-let seqCounter = 0;
-const aid = () => `a${++seqCounter}`;
-
-export function reduceRun(state: RunState, a: Action): RunState {
-  switch (a.type) {
-    case "reset":
-      return { ...initial, runId: a.runId, phase: a.phase ?? (a.runId ? "running" : "completed") };
-    case "attempt":
-      return { ...state, attempts: a.n };
-    case "events":
-      return a.items.reduce((s, it) => reduceRun(s, { type: "event", event: it.event, seq: it.seq }), state);
-    case "phase":
-      // Never regress out of a terminal state, and keep "stopping" until Hermes confirms.
-      if (isTerminal(state.phase) && !isTerminal(a.phase)) return state;
-      if (state.phase === "stopping" && (a.phase === "running" || a.phase === "reconnecting")) return { ...state, error: a.error };
-      return { ...state, phase: a.phase, error: a.error ?? state.error };
-    case "reconciled": {
-      const v = a.view;
-      const phase = state.phase === "stopping" && !isTerminal(v.status) ? "stopping" : v.status;
-      return {
-        ...state,
-        phase,
-        approval: v.status === "waiting_for_approval" ? (v.pendingApproval ?? state.approval) : undefined,
-        // GET status is authoritative: no pending clarify there means it was answered or withdrawn.
-        clarify: isTerminal(v.status) ? undefined : v.pendingClarify,
-        output: v.output ?? state.output,
-        error: v.error ?? (isTerminal(v.status) ? state.error : undefined),
-        pendingSteer: v.pendingSteer ?? state.pendingSteer,
-      };
-    }
-    case "event": {
-      const e = a.event;
-      const s = { ...state, lastSeq: a.seq ?? state.lastSeq, attempts: 0 };
-      if (e.type === "run.queued") return isTerminal(s.phase) || s.phase === "stopping" ? s : { ...s, phase: "queued", queueReason: e.reason };
-      if (e.type === "unknown" && s.phase === "queued") return s;
-      if (s.phase === "reconnecting" || s.phase === "disconnected" || s.phase === "starting" || s.phase === "queued") s.phase = "running";
-      switch (e.type) {
-        case "text.delta":
-          return { ...s, text: s.text + e.delta };
-        case "commentary":
-          return e.text ? { ...s, activity: [...s.activity, { id: aid(), kind: "commentary", text: e.text, startedAt: new Date().toISOString() }] } : s;
-        case "reasoning":
-          return { ...s, reasoning: s.reasoning + e.text };
-        case "tool.started":
-          if (e.callId && s.activity.some((x) => x.kind === "tool" && x.callId === e.callId)) return s;
-          return {
-            ...s,
-            activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, preview: e.preview, done: false, startedAt: e.at }],
-          };
-        case "tool.completed": {
-          const idx = s.activity.findIndex((x) => x.kind === "tool" && (e.callId ? x.callId === e.callId : x.tool === e.tool && !x.done));
-          const done = { done: true, result: e.preview, error: toolResultState(e.preview, e.error) === "failed", durationSec: e.durationSec };
-          if (idx === -1) return { ...s, activity: [...s.activity, { id: aid(), callId: e.callId, kind: "tool", tool: e.tool, startedAt: e.at, ...done }] };
-          const next = [...s.activity];
-          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "tool" }>), ...done };
-          return { ...s, activity: next };
-        }
-        case "subagent.started": {
-          const fields = subagentFields(e);
-          // A resumed stream re-announces subagents still open; keep the original activity.
-          const idx = subagentIndex(s.activity, e);
-          if (idx !== -1) {
-            const next = [...s.activity];
-            next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields };
-            return { ...s, activity: next };
-          }
-          return { ...s, activity: [...s.activity, { id: e.id ?? aid(), kind: "subagent", goal: e.goal, done: false, startedAt: e.at, ...fields }] };
-        }
-        case "subagent.completed": {
-          const fields = subagentFields(e);
-          const idx = subagentIndex(s.activity, e);
-          if (idx === -1)
-            return {
-              ...s,
-              activity: [
-                ...s.activity,
-                { id: e.id ?? aid(), kind: "subagent", goal: e.goal, summary: e.summary, status: e.status, done: true, startedAt: e.at, ...fields },
-              ],
-            };
-          const next = [...s.activity];
-          next[idx] = { ...(next[idx] as Extract<Activity, { kind: "subagent" }>), ...fields, summary: e.summary, status: e.status, done: true };
-          return { ...s, activity: next };
-        }
-        case "approval.requested":
-          return {
-            ...s,
-            phase: "waiting_for_approval",
-            approval: { requestId: e.requestId, command: e.command, description: e.description, choices: e.choices },
-          };
-        case "approval.resolved":
-          return { ...s, phase: s.phase === "stopping" ? "stopping" : "running", approval: undefined };
-        case "clarify.requested":
-          return { ...s, clarify: { requestId: e.requestId, question: e.question, choices: e.choices, multiSelect: e.multiSelect } };
-        case "clarify.resolved":
-          return !e.requestId || s.clarify?.requestId === e.requestId ? { ...s, clarify: undefined } : s;
-        case "steer.queued":
-          return { ...s, steerQueued: s.steerQueued + 1 };
-        case "run.terminal":
-          return { ...s, phase: e.status, output: e.output ?? s.output, error: e.error, pendingSteer: e.pendingSteer, approval: undefined, clarify: undefined };
-        default:
-          return s;
-      }
-    }
-  }
-}
-
-function subagentIndex(activity: Activity[], e: SubagentIdentity & { id?: string; goal?: string }) {
-  const identified = Boolean(e.id || e.childSessionId || (e.delegationId && e.taskIndex !== undefined));
-  return activity.findIndex(
-    (x) =>
-      x.kind === "subagent" &&
-      ((e.id && x.id === e.id) ||
-        (e.childSessionId && x.childSessionId === e.childSessionId) ||
-        (e.delegationId && e.taskIndex !== undefined && x.delegationId === e.delegationId && x.taskIndex === e.taskIndex) ||
-        (!identified && e.goal !== undefined && !x.done && x.goal === e.goal)),
-  );
-}
-
-function subagentFields(e: SubagentIdentity): SubagentIdentity {
-  return Object.fromEntries(
-    Object.entries({
-      childSessionId: e.childSessionId,
-      delegationId: e.delegationId,
-      parentId: e.parentId,
-      taskIndex: e.taskIndex,
-      taskCount: e.taskCount,
-      durationSec: e.durationSec,
-    }).filter(([, v]) => v !== undefined),
-  );
-}
-
-const BACKOFF = [1000, 2000, 4000, 8000, 15000, 15000];
-/** A tab hidden this long closes its run stream (it resumes from the last event when shown). */
-export const HIDDEN_GRACE_MS = 30_000;
+const IDLE: RunSnapshot = { state: IDLE_RUN, finished: false };
+const getIdle = () => IDLE;
+const noStream = () => () => {};
 
 /**
- * Streams a Hermes run through the BFF relay. A closed or broken stream never
- * implies completion: we reconcile with GET /runs/:id and reconnect from the
- * last seen sequence number until Hermes reports a terminal state.
+ * Reads a Hermes run as it streams through the BFF relay.
+ *
+ * The stream itself is shared (lib/client/run-streams.ts): every reader of the same run, in any pane, gets the same
+ * state from one connection, so mounting a second reader never opens a second stream. `start` joins the run's stream
+ * (opening it if this is the first reader); unmounting or `clear` lets go of it.
+ *
+ * `onTerminal` is called once per run this reader followed, after Hermes confirmed the terminal state.
  */
 export function useRunStream(onTerminal: (state: RunState) => void) {
-  const [state, dispatch] = useReducer(reduceRun, initial);
-  const es = useRef<EventSource | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stateRef = useRef(state);
+  const [stream, setStream] = useState<RunStream | null>(null);
+  // The stream this reader currently counts as a reader of. It trails `stream` only across an unmount.
+  const held = useRef<RunStream | null>(null);
+  const { state, finished } = useSyncExternalStore(stream ? stream.subscribe : noStream, stream ? stream.getSnapshot : getIdle, getIdle);
+
   const terminalCb = useRef(onTerminal);
   useLayoutEffect(() => {
-    stateRef.current = state;
     terminalCb.current = onTerminal;
   });
-  const finished = useRef<string | null>(null);
-  // Connection facts updated synchronously (not via render) so connect() never sees a stale run.
-  const conn = useRef<{ runId?: string; lastSeq?: number; attempts: number }>({ attempts: 0 });
-  // AG-UI read state (tool names by synthesised id) for the current run; survives reconnects.
-  const agui = useRef(newAguiReadState());
-
-  const cleanup = useCallback(() => {
-    es.current?.close();
-    es.current = null;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
-  }, []);
-
-  // Profile-first perf (Phase 2): every token used to be its own dispatch → full Conversation render +
-  // forced layout per word. Deltas are queued and flushed once per frame; any other event flushes the
-  // queue first so ordering (and terminal/approval handling) is unchanged.
-  const queue = useRef<{ event: RunEvent; seq?: number }[]>([]);
-  const frame = useRef<(() => void) | null>(null);
-  const flush = useCallback(() => {
-    frame.current?.();
-    frame.current = null;
-    const items = queue.current;
-    if (!items.length) return;
-    queue.current = [];
-    dispatch(items.length === 1 ? { type: "event", ...items[0] } : { type: "events", items });
-  }, []);
-  const enqueue = useCallback(
-    (event: RunEvent, seq: number | undefined) => {
-      if (event.type !== "text.delta" && event.type !== "reasoning") {
-        flush();
-        dispatch({ type: "event", event, seq });
-        return;
-      }
-      queue.current.push({ event, seq });
-      if (frame.current) return;
-      // rAF pauses in background tabs: fall back to a short timer so text still lands.
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        const id = requestAnimationFrame(flush);
-        frame.current = () => cancelAnimationFrame(id);
-      } else {
-        const id = setTimeout(flush, 100);
-        frame.current = () => clearTimeout(id);
-      }
-    },
-    [flush],
-  );
-  const dropQueued = useCallback(() => {
-    frame.current?.();
-    frame.current = null;
-    queue.current = [];
-  }, []);
-  useEffect(() => dropQueued, [dropQueued]);
-
-  // finish() marks the run as done; the effect below notifies once React has committed the terminal state.
-  const pendingFinish = useRef<string | null>(null);
-  const finish = useCallback(() => {
-    const runId = conn.current.runId;
-    if (runId && finished.current !== runId) {
-      pendingFinish.current = runId;
-      cleanup();
-    }
-  }, [cleanup]);
+  const notified = useRef<RunStream | null>(null);
   useEffect(() => {
-    if (state.runId && pendingFinish.current === state.runId && isTerminal(state.phase) && finished.current !== state.runId) {
-      finished.current = state.runId;
-      pendingFinish.current = null;
+    if (stream && finished && isTerminal(state.phase) && notified.current !== stream) {
+      notified.current = stream;
       terminalCb.current(state);
     }
-  }, [state]);
+  }, [stream, finished, state]);
 
-  const reconcile = useCallback(async (): Promise<RunView | undefined> => {
-    const runId = conn.current.runId;
-    if (!runId) return;
-    try {
-      const view = await api.get<RunView>(`/api/hermes/runs/${encodeURIComponent(runId)}`);
-      dispatch({ type: "reconciled", view });
-      return view;
-    } catch {
-      return undefined;
-    }
+  const start = useCallback((runId: string, phase: RunPhase = "running") => {
+    if (held.current?.runId === runId) return;
+    held.current?.release();
+    const next = runStream(runId, phase);
+    next.retain();
+    held.current = next;
+    notified.current = null;
+    setStream(next);
   }, []);
 
-  const connectRef = useRef<() => void>(() => {});
-  /** Starts the hidden-tab grace timer; called when a stream opens in a tab that is already hidden (#253). */
-  const armHidden = useRef<() => void>(() => {});
-
-  const scheduleReconnect = useCallback(() => {
-    const n = conn.current.attempts;
-    if (n >= BACKOFF.length) {
-      dispatch({ type: "phase", phase: "disconnected", error: "Lost connection to Hermes. Retry when ready." });
-      return;
-    }
-    conn.current.attempts = n + 1;
-    dispatch({ type: "attempt", n: n + 1 });
-    timer.current = setTimeout(() => connectRef.current(), BACKOFF[n]);
-  }, []);
-
-  const onBroken = useCallback(async () => {
-    flush();
-    cleanup();
-    if (!conn.current.runId) return;
-    dispatch({ type: "phase", phase: "reconnecting" });
-    const view = await reconcile();
-    if (view && isTerminal(view.status)) return finish();
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      dispatch({ type: "phase", phase: "disconnected", error: "You're offline. Reconnecting when you're back." });
-      return;
-    }
-    scheduleReconnect();
-  }, [flush, cleanup, reconcile, finish, scheduleReconnect]);
-
-  const connect = useCallback(() => {
-    const c = conn.current;
-    if (!c.runId) return;
-    cleanup();
-    // The server answers in AG-UI only while Settings → Agents enables it; both formats are read here.
-    const q = c.lastSeq !== undefined ? `?format=agui&lastSeq=${c.lastSeq}` : "?format=agui";
-    const source = new EventSource(`/api/hermes/runs/${encodeURIComponent(c.runId)}/events${q}`);
-    es.current = source;
-    // A chat opened straight into a background tab (Ctrl/Cmd-click) never sees a
-    // visibilitychange, so start the hidden-tab release here too.
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") armHidden.current();
-    source.onmessage = (msg) => {
-      let raw: unknown;
-      try {
-        raw = JSON.parse(msg.data);
-      } catch {
-        return;
-      }
-      const events: RunEvent[] = isAguiEvent(raw) ? aguiToRunEvents(raw, agui.current) : [raw as RunEvent];
-      const seq = msg.lastEventId && /^\d+$/.test(msg.lastEventId) ? Number(msg.lastEventId) : undefined;
-      for (const ev of events) {
-        if (ev.type === "stream.closed") {
-          void onBroken();
-          return;
-        }
-        if (seq !== undefined) conn.current.lastSeq = seq;
-        conn.current.attempts = 0;
-        enqueue(ev, seq);
-        if (ev.type === "run.terminal") {
-          // Confirm with the authoritative status before finalizing.
-          void reconcile().then(() => finish());
-        }
-      }
-    };
-    source.onerror = () => {
-      if (es.current === source) void onBroken();
-    };
-  }, [cleanup, onBroken, reconcile, finish, enqueue]);
-  useLayoutEffect(() => {
-    connectRef.current = connect;
-  }, [connect]);
-
-  const start = useCallback(
-    (runId: string, phase: RunPhase = "running") => {
-      cleanup();
-      dropQueued();
-      finished.current = null;
-      pendingFinish.current = null;
-      conn.current = { runId, attempts: 0 };
-      agui.current = newAguiReadState();
-      dispatch({ type: "reset", runId, phase });
-      connectRef.current();
-    },
-    [cleanup, dropQueued],
-  );
-
-  const stop = useCallback(async () => {
-    const runId = conn.current.runId;
-    if (!runId) return;
-    dispatch({ type: "phase", phase: "stopping" });
-    try {
-      const view = await api.post<RunView>(`/api/hermes/runs/${encodeURIComponent(runId)}/stop`);
-      if (isTerminal(view.status)) {
-        dispatch({ type: "reconciled", view });
-        finish();
-      }
-    } catch (err) {
-      dispatch({ type: "phase", phase: "stopping", error: (err as Error).message });
-      void reconcile();
-    }
-  }, [finish, reconcile]);
-
-  const retry = useCallback(() => {
-    conn.current.attempts = 0;
-    dispatch({ type: "attempt", n: 0 });
-    dispatch({ type: "phase", phase: "reconnecting" });
-    connectRef.current();
+  const clear = useCallback(() => {
+    // Done with this run (not just unmounting): with no other reader its stream closes now.
+    held.current?.release(true);
+    held.current = null;
+    setStream(null);
   }, []);
 
   useEffect(() => {
-    const on = () => {
-      if (conn.current.runId && (stateRef.current.phase === "disconnected" || stateRef.current.phase === "reconnecting")) retry();
-    };
-    window.addEventListener("online", on);
-    // A hidden tab keeps no Hermes connection: after a short grace the stream closes, and it
-    // reconnects from the last seen event when the tab is visible again (Hermes allows only a few
-    // connections in total, shared by every tab, pane and device).
-    let hideTimer: ReturnType<typeof setTimeout> | null = null;
-    let paused = false;
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        if (hideTimer || !es.current) return;
-        hideTimer = setTimeout(() => {
-          hideTimer = null;
-          if (!es.current || !conn.current.runId || isTerminal(stateRef.current.phase)) return;
-          flush();
-          cleanup();
-          paused = true;
-        }, HIDDEN_GRACE_MS);
-        return;
-      }
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = null;
-      if (!paused) return;
-      paused = false;
-      if (!conn.current.runId) return;
-      void reconcile().then((view) => {
-        if (view && isTerminal(view.status)) finish();
-        else connectRef.current();
-      });
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    armHidden.current = () => {
-      if (document.visibilityState === "hidden") onVisibility();
-    };
-    // A stream may already be open (connected before this effect ran) in a hidden tab.
-    if (document.visibilityState === "hidden") onVisibility();
+    // An unmount lets go of the stream; a remount of the same reader (StrictMode, a kept-alive subtree) takes it again.
+    if (stream && held.current !== stream) {
+      stream.retain();
+      held.current = stream;
+    }
     return () => {
-      armHidden.current = () => {};
-      window.removeEventListener("online", on);
-      document.removeEventListener("visibilitychange", onVisibility);
-      if (hideTimer) clearTimeout(hideTimer);
-      cleanup();
+      if (stream && held.current === stream) {
+        stream.release();
+        held.current = null;
+      }
     };
-  }, [cleanup, retry, flush, reconcile, finish]);
+  }, [stream]);
 
-  const clear = useCallback(() => {
-    cleanup();
-    dropQueued();
-    conn.current = { attempts: 0 };
-    dispatch({ type: "reset" });
-  }, [cleanup, dropQueued]);
+  const stop = useCallback(async () => {
+    await held.current?.stop();
+  }, []);
+  const retry = useCallback(() => {
+    held.current?.retry();
+  }, []);
+
   const active = Boolean(state.runId) && !isTerminal(state.phase);
   return { state, start, stop, retry, active, clear };
 }
