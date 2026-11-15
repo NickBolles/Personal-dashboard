@@ -98,8 +98,7 @@
     height: 1rem;
   }
   /* "+", attach and camera: small ghost icons. */
-  .cmp .chat-comp .chat-add,
-  .cmp .chat-comp > button:not(.chat-send, .chat-stop, .chat-model) {
+  .cmp .chat-comp .chat-add {
     width: 1.875rem;
     min-width: 0;
     height: 1.875rem;
@@ -109,8 +108,7 @@
     border-radius: 8px;
     color: var(--muted);
   }
-  .cmp .chat-comp .chat-add svg,
-  .cmp .chat-comp > button:not(.chat-send, .chat-stop, .chat-model) svg {
+  .cmp .chat-comp .chat-add svg {
     width: 1.125rem;
     height: 1.125rem;
   }
@@ -124,6 +122,7 @@
     border-radius: 7px;
     background: transparent;
     font-size: 0.78125rem;
+    font-weight: 400;
   }
   .cmp .chat-comp .chat-model:hover {
     background: var(--surface-2);
@@ -182,7 +181,6 @@
       margin-bottom: calc((var(--comp-h) - 1.75rem) / 2);
     }
     .cmp .chat-comp .chat-add,
-    .cmp .chat-comp > button:not(.chat-send, .chat-stop, .chat-model),
     .cmp .chat-comp .chat-model {
       height: 1.75rem;
       min-height: 1.75rem;
