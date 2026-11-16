@@ -34,7 +34,10 @@ for (const theme of ["light", "dark"] as const) {
     await page.route(/\/api\/work\/items(?:\?.*)?$/, (r) => r.fulfill({ json: { items: [] } }));
     await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (r) => r.fulfill({ json: { entries: [], count: 0 } }));
     await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (r) => r.fulfill({ json: { entries: [], conversations: [] } }));
-    await page.route(/\/api\/coordinator\/(runs|decisions|looked)(?:\?.*)?$/, (r) => r.fulfill({ json: { runs: [], decisions: [], items: [] } }));
+    await page.route("**/api/coordinator/runs", (r) =>
+      r.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
+    );
+    await page.route("**/api/coordinator/decisions*", (r) => r.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
     await page.goto("/chat/sess_morning");
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
     const guide = page.getByRole("button", { name: /Guide agent/ }).first();
