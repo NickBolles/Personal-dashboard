@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -18,6 +18,9 @@ import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon } from "
 import { RateMessage } from "@/components/feedback/RateMessage";
 import { Button, ChipButton, Dot, RefPill, useOnline, useToast } from "@/components/ui";
 import { Composer, type ComposerHandle } from "@/components/chat/Composer";
+import { AssistantName, LiveRun, liveRunVisible } from "@/components/chat/Timeline";
+import { useRunStream, type RunState } from "@/components/chat/useRunStream";
+import { useRunAnswers } from "@/components/chat/useRunAnswers";
 import { kvDel, kvSet } from "@/lib/client/idb";
 import { scopeChip, scopeIsCommand, scopeLabel, scopeMessage, scopePlaceholder, scopeSendsEmpty, type ComposeScope } from "@/lib/coordinator/compose";
 import { parseNotice } from "@/lib/chat-notices";
@@ -157,6 +160,27 @@ export function CoordinatorThread({
   };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pinThread = usePinThread(d.area.id);
+  // The run in flight streams here, on the one stream every reader of that run shares (lib/client/run-streams.ts):
+  // the rail, the sheet and a chat page showing the same run cost Hermes one connection between them.
+  const clearRun = useRef<() => void>(() => {});
+  const onRunEnd = useCallback(
+    (ended: RunState) => {
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+      void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
+      void refreshSessionLists(qc).catch(() => undefined);
+      // Once the saved conversation has this turn, the live copy goes. A run that failed stays on screen.
+      void qc.refetchQueries({ queryKey: ["session", sid] }).then(() => {
+        if (ended.phase === "completed") clearRun.current();
+      });
+    },
+    [qc, sid],
+  );
+  const run = useRunStream(onRunEnd);
+  /** The stream is open and delivering: not waiting to reconnect, not given up. */
+  const streaming = run.active && run.state.phase !== "reconnecting" && run.state.phase !== "disconnected";
+  useEffect(() => {
+    clearRun.current = run.clear;
+  });
   // Excluded areas fetch nothing at all.
   const smartSettings = useSmartSettings(!d.excluded);
   /** An earlier thread is open in the panel (not the Chief of staff thread). */
@@ -188,7 +212,8 @@ export function CoordinatorThread({
     queryKey: ["session", sid],
     queryFn: () => api.get<Detail>(`/api/hermes/sessions/${encodeURIComponent(sid!)}`),
     enabled: !!sid && !d.excluded,
-    refetchInterval: (q) => (q.state.data?.session?.activeRun ? 3000 : false),
+    // The run itself arrives over its stream. Polling is only the fallback for a run that is not streaming here.
+    refetchInterval: (q) => (q.state.data?.session?.activeRun && !streaming ? 3000 : false),
   });
   const execution = useQuery({
     queryKey: ["session-exec", sid],
@@ -196,6 +221,32 @@ export function CoordinatorThread({
     enabled: !!sid && !d.excluded,
     refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 15000),
   });
+  // Follow the run this conversation has in flight; each run is taken up once (a finished one is not reopened by a
+  // session that has not caught up yet). Another thread is another conversation: its run is not this one's.
+  const activeRun = detail.data?.session?.activeRun;
+  const { start: startRun, clear: clearLive } = run;
+  const followed = useRef<{ sid: string | null; runId: string | null }>({ sid, runId: null });
+  const liveRunId = run.active ? run.state.runId : undefined;
+  const sessionFresh = detail.isSuccess && !detail.isFetching;
+  useEffect(() => {
+    if (followed.current.sid !== sid) {
+      followed.current = { sid, runId: null };
+      clearLive();
+    }
+    if (activeRun) {
+      if (followed.current.runId === activeRun.runId) return;
+      followed.current.runId = activeRun.runId;
+      startRun(activeRun.runId, activeRun.status === "queued" ? "queued" : activeRun.status === "waiting_for_approval" ? "waiting_for_approval" : "running");
+      return;
+    }
+    // The conversation, freshly read, says nothing is running. A stream still open for the run we followed has
+    // missed its ending (a dropped connection, a tab that slept): the saved conversation is the truth, so let go.
+    if (sessionFresh && liveRunId && liveRunId === followed.current.runId) {
+      clearLive();
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+    }
+  }, [sid, activeRun, startRun, clearLive, sessionFresh, liveRunId, qc]);
+  const { answerApproval, answerClarify } = useRunAnswers(run.state);
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
@@ -470,7 +521,8 @@ export function CoordinatorThread({
   const sinceRef = useRef<HTMLLIElement>(null);
   const positioned = useRef<string | null>(null);
   const lastId = msgs.at(-1)?.id;
-  const running = !!detail.data?.session?.activeRun;
+  const running = !!activeRun || run.active;
+  const showLive = liveRunVisible(run.state, run.active, timeline);
   const hasDivider = dividerIndex >= 0;
   useEffect(() => {
     const body = bodyRef.current;
@@ -484,6 +536,13 @@ export function CoordinatorThread({
     if (first && sinceRef.current) body.scrollTop = Math.max(0, sinceRef.current.offsetTop - body.offsetTop - 4);
     else body.scrollTop = body.scrollHeight;
   }, [compact, sid, lastId, running, hasDivider]);
+  // While a run writes, the thread stays on its last line, unless the owner has scrolled up to read.
+  const atBottom = useRef(true);
+  const liveSize = run.state.text.length + run.state.activity.length + (run.state.approval ? 1 : 0) + (run.state.clarify ? 1 : 0);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body && compact && showLive && atBottom.current) body.scrollTop = body.scrollHeight;
+  }, [compact, showLive, liveSize]);
   // A reference chip in the text jumps to the thing's row when it is on screen here, else to its tab.
   const jumpTo = (ref: string) => {
     const target = bodyRef.current?.querySelector<HTMLElement>(`[data-run-ref="${ref}"], [data-ref-row="${ref}"]`);
@@ -522,7 +581,16 @@ export function CoordinatorThread({
   };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
-      <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
+      <div
+        ref={bodyRef}
+        className={compact ? "gc-thread-body" : "co-body"}
+        data-testid={compact ? "gc-thread-body" : "coordinator-body"}
+        tabIndex={0}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
             Areas excluded from AI are never sent: this area has no coordinator chat.
@@ -665,6 +733,15 @@ export function CoordinatorThread({
             ) : sid && detail.isSuccess ? (
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
+            {showLive ? (
+              <MarkdownRefRenderer.Provider value={refChip}>
+                <AssistantName.Provider value={name}>
+                  <div className="gc-live" data-testid="gc-live">
+                    <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} />
+                  </div>
+                </AssistantName.Provider>
+              </MarkdownRefRenderer.Provider>
+            ) : null}
             {detail.data?.session?.activeRun ? (
               <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
                 <Dot tone="ai" live label="Coordinator running" />
@@ -732,7 +809,10 @@ export function CoordinatorThread({
             }
             // A run in flight takes the words as guidance, as on the chat page. Stop stays on the run's own row, where
             // it asks first.
-            phase={running ? "running" : undefined}
+            // What the composer needs to know about the run: it is waiting on an approval, it is stopping, or it is
+            // simply going. A stream that is queued or reconnecting does not stop guidance or a chip from being sent.
+            phase={!running ? undefined : run.state.phase === "waiting_for_approval" || run.state.phase === "stopping" ? run.state.phase : "running"}
+            clarifying={run.active && !!run.state.clarify}
             online={online}
             accessory={
               compact && (text.trim() || scope) ? null : (

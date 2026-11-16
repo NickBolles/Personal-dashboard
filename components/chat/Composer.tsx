@@ -402,10 +402,12 @@ export function Composer({
       data-surface={surface}
     >
       {jump}
-      {accessory ? <div className="cmp-accessory">{accessory}</div> : null}
+      {/* While an approval or a question waits the composer is one compact row on every surface: the card that needs
+          the answer gets the screen, so the shortcuts, the page context and the footer step aside. */}
+      {accessory && !compact ? <div className="cmp-accessory">{accessory}</div> : null}
       <div className="chat-composer-card cmp-card mx-auto rounded-xl border border-line bg-surface">
         {tray}
-        {lead ? <div className="cmp-slot">{lead}</div> : null}
+        {lead && !compact ? <div className="cmp-slot">{lead}</div> : null}
         <div className="chat-composer-context flex flex-wrap items-center gap-1 px-2" data-compact={compact || undefined}>
           {/* The header and the placeholder already name a routed agent; the chip appears only when it has news. */}
           {agentNeedsNote(agent) ? <AgentChip agent={agent} /> : null}
@@ -518,7 +520,8 @@ export function Composer({
             }}
             onKeyDown={onKeyDown}
             className="cmp-input"
-            data-wrap={(running && !compact) || undefined}
+            // With Stop in the row a narrow phone needs two lines; without it the row fits.
+            data-wrap={(running && !compact && !!onStop) || undefined}
           />
           {modelLabel && onModel && surface === "page" ? (
             <ChipButton
@@ -555,12 +558,12 @@ export function Composer({
             aria-keyshortcuts={SEND_KEYSHORTCUTS}
             data-density-skip
             data-testid={testIds?.send}
-            className={cx("chat-send shrink-0", !running && "cmp-end")}
+            className={cx("chat-send shrink-0", !(running && onStop) && "cmp-end")}
           >
             {sendName}
           </Button>
         </form>
-        {footer ? <div className="cmp-foot">{footer}</div> : null}
+        {footer && !compact ? <div className="cmp-foot">{footer}</div> : null}
         {!compact && surface === "page" ? (
           <p className="chat-composer-hint px-3 pb-2 text-xs text-muted" data-dynamic>
             @ context · # PR · / command · {mod === "⌘" ? "⌘" : "Ctrl"}+Enter send

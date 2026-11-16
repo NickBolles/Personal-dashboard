@@ -172,6 +172,19 @@ function TimeDivider({ at }: { at: string }) {
   );
 }
 
+/**
+ * Whether the run in flight is drawn after the transcript. A finished run's reply can land in the refetched
+ * transcript one render before the live copy is cleared: it is not shown twice in that window.
+ */
+export function liveRunVisible(state: RunState, active: boolean, timeline: TimelineItem[]): boolean {
+  if (!state.runId) return false;
+  const liveText = (state.text || state.output || "").trim();
+  const lastAssistant = [...timeline].reverse().find((t) => t.kind === "assistant");
+  const inTranscript =
+    state.phase === "completed" && Boolean(liveText) && Boolean(lastAssistant && "text" in lastAssistant && lastAssistant.text.trim() === liveText);
+  return !inTranscript && (active || state.phase !== "completed" || Boolean(state.text) || state.activity.length > 0);
+}
+
 /** Tapping a message shows its time and actions; links, buttons, disclosures and text selection keep working. */
 function useMetaToggle() {
   const [meta, setMeta] = useState(false);
@@ -405,7 +418,7 @@ function ActivityRow({ a }: { a: Activity }) {
   );
 }
 
-function LiveRun({
+export function LiveRun({
   state,
   onApprove,
   onClarify,
