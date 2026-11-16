@@ -939,6 +939,11 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/chat/sess_morning");
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
     await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+    // A conversation opens at its latest message. Opening the panel before that first scroll had happened left the
+    // page at the top, so this shot flipped between two positions from run to run: wait for the thread to settle.
+    await expect
+      .poll(() => page.evaluate(() => Math.round(document.documentElement.scrollHeight - window.innerHeight - window.scrollY)))
+      .toBeLessThanOrEqual(1);
     const panel = await openChatPanel(page, "Links");
     await expect(panel.locator('[data-kind="artifact"]')).toHaveCount(1);
     await page.waitForTimeout(600);
