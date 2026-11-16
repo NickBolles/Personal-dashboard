@@ -47,6 +47,8 @@ The library implements the design system in [design-system.md](design-system.md)
 
 ## Density tiers
 
+Menu rows accept an optional decorative `icon` (ReactNode). Use the shared SVG icons at `h-4 w-4`; labels remain accessible text, with one aligned icon gutter. Composer actions use ContextIcon, PaperclipIcon, CameraIcon, ImageIcon and ChipIcon. Never replace a label with an emoji or a color-only signal.
+
 Kit controls size themselves per device: phone (44px), tablet `sm:` (Button md 40 / sm 36, inputs 40) and desktop `dense:` (≥1024px + fine pointer). Don't hand-roll heights.
 
 **Sleek tier** (owner taste, 2026-11-12 — "compact, dense, premium"): put `data-density="sleek"` on a container (the Chief of staff rail and sheet do) and every kit `Button`, `IconButton`, chip picker (`.k-pick`) and menu item inside gets a small visual box (30px, `sm` 26px, icon 30/26px, 13px text) at every width. The **tap area stays at the house minimum** — 44px on phones/tablets, 40px with a fine pointer at ≥1024px — through an invisible `::after` hit-slop computed from the control's own box (`components/ui/density.css`, `--k-hit`). Controls that size themselves inside a sleek container (row bodies, answer option cards, a panel's close button) opt out with `data-density-skip`. Never copy sleek rules into a surface's CSS or override `.k-btn` sizes per panel; opt the container in. `/dev/ui` shows it ("Sleek density").

@@ -15,6 +15,7 @@ import { ErrorNote, IconButton, cx, useOnline, useToast } from "@/components/ui"
 import { Badge, Button, OverflowMenu, Spinner, type Tone } from "@/components/ui/legacy";
 import { BrainIcon, ChevronIcon, ForkIcon, PanelIcon, PlusIcon, StopIcon } from "@/components/icons";
 import { ToolStep } from "./ToolStep";
+import { ContextIcon, PaperclipIcon, CameraIcon, ImageIcon, ChipIcon } from "@/components/icons";
 import { needsTimeDivider, unwrapBrokenLines } from "@/lib/chat-text";
 import { useKeyboardInset } from "@/lib/client/keyboard";
 import { useModKey } from "@/lib/client/platform";
@@ -1857,16 +1858,16 @@ function ComposerAddMenu({
       document.removeEventListener("keydown", onEsc, true);
     };
   }, [open, byKeyboard]);
-  const items: { label: string; hint?: string; onSelect: () => void; disabled?: boolean; library?: boolean }[] = [
-    { label: "Context", hint: "areas, items, people", onSelect: onContext },
+  const items: { label: string; icon: ReactNode; hint?: string; onSelect: () => void; disabled?: boolean; library?: boolean }[] = [
+    { label: "Context", icon: <ContextIcon className="h-4 w-4 shrink-0" />, hint: "areas, items, people", onSelect: onContext },
     ...(files
       ? [
-          { label: "Attach file", onSelect: onFile, disabled: !online },
-          { label: "Camera", onSelect: onCamera, disabled: !online },
-          { label: "Photo library", onSelect: () => undefined, disabled: !online, library: true },
+          { label: "Attach file", icon: <PaperclipIcon className="h-4 w-4 shrink-0" />, onSelect: onFile, disabled: !online },
+          { label: "Camera", icon: <CameraIcon className="h-4 w-4 shrink-0" />, onSelect: onCamera, disabled: !online },
+          { label: "Photo library", icon: <ImageIcon className="h-4 w-4 shrink-0" />, onSelect: () => undefined, disabled: !online, library: true },
         ]
       : []),
-    { label: "Model", hint: modelLabel, onSelect: onModel },
+    { label: "Model", icon: <ChipIcon className="h-4 w-4 shrink-0" />, hint: modelLabel, onSelect: onModel },
   ];
   const onKey = (e: React.KeyboardEvent) => {
     const buttons = Array.from(list.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
@@ -1918,7 +1919,10 @@ function ComposerAddMenu({
                 }}
                 className="flex min-h-11 w-full items-center justify-between gap-3 rounded-[6px] px-3 text-left text-sm hover:bg-surface-2 disabled:opacity-50"
               >
-                <span>{it.label}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  {it.icon}
+                  <span className="break-words">{it.label}</span>
+                </span>
                 {it.hint ? <span className="min-w-0 truncate text-xs text-muted">{it.hint}</span> : null}
               </button>
             </li>

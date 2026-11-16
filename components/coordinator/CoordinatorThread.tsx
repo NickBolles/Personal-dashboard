@@ -35,6 +35,9 @@ import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
+import { ToolStep } from "@/components/chat/ToolStep";
+import { isDelegateTool } from "@/lib/delegate-presentation";
+import { ContextIcon, PaperclipIcon, CameraIcon } from "@/components/icons";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
 import { mergeBackgroundWork, placeWork, sinceChips, workKey, type BackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
@@ -423,6 +426,24 @@ export function CoordinatorThread({
   const hiddenGroups = allGroups.length - shownCount;
   const messageGroups = allGroups.slice(hiddenGroups);
   const msgs = messageGroups.map((group) => group[0]);
+  // Attach each delegate step to the following reply; unfinished steps remain visible below.
+  const delegateSteps = new Map<string, Extract<TimelineItem, { kind: "tool" }>[]>();
+  let pendingDelegates: Extract<TimelineItem, { kind: "tool" }>[] = [];
+  for (const item of timeline) {
+    if (item.kind === "tool" && isDelegateTool(item.tool)) pendingDelegates.push(item);
+    if (item.kind === "assistant" && pendingDelegates.length) {
+      delegateSteps.set(item.id, pendingDelegates);
+      pendingDelegates = [];
+    }
+  }
+  const renderDelegates = (steps: Extract<TimelineItem, { kind: "tool" }>[]) =>
+    steps.length ? (
+      <ul className="min-w-0 space-y-1" aria-label="Delegated work">
+        {steps.map((t) => (
+          <ToolStep key={t.id} id={t.id} tool={t.tool} input={t.input} output={t.detail} error={t.error} />
+        ))}
+      </ul>
+    ) : null;
   // Each piece of work is drawn once, under the reply that started it; a hand-off is not also a chip there.
   const placed = placeWork(work, msgs);
   const liveWork = placed.get("live") ?? [];
@@ -629,6 +650,7 @@ export function CoordinatorThread({
                               </span>
                             ) : null}
                           </div>
+                          {renderDelegates(delegateSteps.get(m.id) ?? [])}
                           <AssistantText text={m.text} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
@@ -650,6 +672,7 @@ export function CoordinatorThread({
             ) : sid && detail.isSuccess ? (
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
+            {renderDelegates(pendingDelegates)}
             {detail.data?.session?.activeRun ? (
               <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
                 <Dot tone="ai" live label="Coordinator running" />
@@ -784,9 +807,9 @@ export function CoordinatorThread({
                   <Menu
                     label="Add to message"
                     items={[
-                      { label: "Photo or file", onSelect: () => fileInput.current?.click(), disabled: !online },
-                      { label: "Camera", onSelect: () => cameraInput.current?.click(), disabled: !online },
-                      { label: "Area, item or person", onSelect: () => setSheet(true) },
+                      { label: "Photo or file", icon: <PaperclipIcon className="h-4 w-4" />, onSelect: () => fileInput.current?.click(), disabled: !online },
+                      { label: "Camera", icon: <CameraIcon className="h-4 w-4" />, onSelect: () => cameraInput.current?.click(), disabled: !online },
+                      { label: "Area, item or person", icon: <ContextIcon className="h-4 w-4" />, onSelect: () => setSheet(true) },
                     ]}
                     onClose={() => {
                       setAdding(false);

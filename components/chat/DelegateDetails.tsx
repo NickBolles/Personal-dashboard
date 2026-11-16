@@ -70,7 +70,18 @@ export function DelegateDetails({ input, output, done }: { input?: string; outpu
       </section>
       <details>
         <summary className="cursor-pointer text-muted">Raw details</summary>
-        <Button variant="ghost" size="sm" onClick={() => void navigator.clipboard?.writeText([input, output].filter(Boolean).map(redactToolText).join("\n\n"))}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            void navigator.clipboard?.writeText(
+              [input, output]
+                .filter((x): x is string => typeof x === "string")
+                .map(redactToolText)
+                .join("\n\n"),
+            )
+          }
+        >
           Copy raw details
         </Button>
         <p className="mt-1 font-semibold text-muted">Input</p>

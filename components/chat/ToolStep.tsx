@@ -6,6 +6,7 @@ import { Button, cx } from "@/components/ui";
 import { isDelegateTool, presentDelegate } from "@/lib/delegate-presentation";
 import { DelegateDetails, DelegateIcon } from "./DelegateDetails";
 import { toolOutcome } from "@/lib/tool-outcome";
+import "./tool-step.css";
 const ICONS = { agent: BrainIcon, tool: ToolIcon, search: SearchIcon, file: WorkIcon, web: CompassIcon, jarvis: WorkIcon };
 function StepIcon({ kind }: { kind: ToolKind }) {
   if (kind === "terminal")

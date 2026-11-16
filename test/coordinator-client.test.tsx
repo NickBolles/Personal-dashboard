@@ -984,6 +984,30 @@ it("keeps mixed Hermes/delegation states, flags stalled runs, and remembers PR-o
   expect(JSON.parse(localStorage.getItem("jarvis.gc.mergedSeen")!)).toEqual(["merged:o/r#1"]);
 });
 
+it.each(["compact", "area"])("uses shared delegate details in the %s coordinator history", async (surface) => {
+  sessionStorage.clear();
+  const qc = makeClient();
+  qc.setQueryData(["session", "delegate-history"], {
+    session: { id: "delegate-history", title: "Example", activeRun: null },
+    timeline: [
+      {
+        kind: "tool",
+        id: "history-tool",
+        tool: "delegate_task",
+        input: '{"action":"steer","message":"Use confirmed scope"}',
+        detail: '{"error":"No live subagent known"}',
+        error: true,
+      },
+      { kind: "assistant", id: "history-reply", text: "Guidance was not delivered." },
+    ],
+  });
+  render(<CoordinatorThread info={{ ...base, sessionId: "delegate-history" }} compact={surface === "compact"} />, { wrapper });
+  await waitFor(() => expect(screen.getByRole("button", { name: /Guide agent/ })).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: /Guide agent/ }));
+  expect(screen.getByTestId("delegate-details").textContent).toContain("Use confirmed scope");
+  expect(screen.getByTestId("delegate-details").textContent).toContain("may have finished");
+});
+
 it("bounds downward hysteresis even if the lower-priority counts keep changing; upward is immediate", () => {
   vi.useFakeTimers();
   vi.setSystemTime(10000);

@@ -379,11 +379,6 @@
       "count": 2
     }
   },
-  "components/chat/ToolStep.tsx": {
-    "jarvis-ui/no-native-controls": {
-      "count": 1
-    }
-  },
   "components/chat/WorkSummary.tsx": {
     "jarvis-ui/no-native-controls": {
       "count": 1
