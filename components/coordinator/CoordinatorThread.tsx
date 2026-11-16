@@ -158,6 +158,11 @@ export function CoordinatorThread({
     setScope(next);
     requestAnimationFrame(() => textarea.current?.focus());
   };
+  /** The chip belongs to the draft it was set for: a new draft from elsewhere or another thread starts without it. */
+  const dropScope = () => {
+    setScope(null);
+    setArmed(null);
+  };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pinThread = usePinThread(d.area.id);
   // Excluded areas fetch nothing at all.
@@ -168,6 +173,8 @@ export function CoordinatorThread({
   const quickActions = useQuickActions(!d.excluded);
   const hasProposals = !!quickActions.data?.actions.some((a) => a.status === "proposed");
   const fill = (value: string) => {
+    // A quick action is a whole message of its own: it is never about the thing an earlier chip named.
+    dropScope();
     setText(value.slice(0, 8000));
     requestAnimationFrame(() => textarea.current?.focus());
   };
@@ -532,17 +539,20 @@ export function CoordinatorThread({
                 // Attachments and context picked for one thread never ride along to another.
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);
+                dropScope();
                 setFresh(false);
                 setSessionId(id);
               }}
               onNew={() => {
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);
+                dropScope();
                 setSessionId(null);
                 setFresh(true);
                 requestAnimationFrame(() => textarea.current?.focus());
               }}
               onUndoNew={() => {
+                dropScope();
                 setFresh(false);
                 setSessionId(null);
               }}
