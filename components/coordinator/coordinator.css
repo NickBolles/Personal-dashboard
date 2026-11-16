@@ -60,6 +60,15 @@
   min-height: 44px;
   font-size: 1.125rem;
 }
+/* Expand sits beside the close control. */
+.gc-head .gc-expand {
+  position: absolute;
+  top: 6px;
+  right: 50px;
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--muted);
+}
 .gc-rail .gc-head .gc-close svg {
   /* points right: "tuck the rail away" */
   transform: none;
@@ -1473,4 +1482,64 @@ html[data-kb="open"] .gc-tray-qa {
 }
 .gc-chat-receipts {
   margin-top: 8px;
+}
+
+/* ==== Expand (/chief): the same panel as the page ====
+   Not a second copy: the rail or sheet element itself takes the page's place, so the thread keeps its scroll
+   position, its draft and its run stream. Wide screens show the conversation with Needs you / Activity as a side
+   column; below 900px the sheet covers the screen and keeps its tabs.
+   Unlayered like the rail and sheet rules it overrides (they are unlayered, so a layered rule could not). */
+.gc-sheet[data-full="true"] {
+  inset: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+.gc-sheet[data-full="true"] .gc-sheet-grab {
+  display: none;
+}
+.gc-head:has(.gc-expand) {
+  padding-right: 100px;
+}
+@media (min-width: 640px) {
+  .gc-head .gc-expand {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+@media (min-width: 900px) {
+  .gc-rail[data-full="true"] {
+    /* beside the sidebar and under the shell's top bar (h-11 + its border) */
+    inset: calc(2.75rem + 1px) 0 0 var(--sidebar-w, 0px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 34%, 420px);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    border-width: 0;
+  }
+  .gc-rail[data-full="true"] > * {
+    grid-column: 1 / -1;
+  }
+  .gc-rail[data-full="true"] > .gc-chat {
+    grid-column: 1;
+    grid-row: 3 / span 2;
+  }
+  .gc-rail[data-full="true"] > .gc-tabs {
+    grid-column: 2;
+    grid-row: 3;
+    border-left: 1px solid var(--line);
+  }
+  .gc-rail[data-full="true"] > .gc-panel-content:not(.gc-chat) {
+    grid-column: 2;
+    grid-row: 4;
+    border-left: 1px solid var(--line);
+  }
+  .gc-rail[data-full="true"] > .gc-head {
+    border-bottom: 1px solid var(--line);
+  }
+  /* A readable measure in a wide column: rows and messages share it with the composer. */
+  .gc-rail[data-full="true"] .gc-thread-body > *,
+  .gc-rail[data-full="true"] .gc-composer > * {
+    max-width: 48rem;
+    margin-inline: auto;
+  }
 }

@@ -12,7 +12,11 @@ import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
 import type { ComposeScope } from "@/lib/coordinator/compose";
 import { GlobalCoordinator } from "./GlobalCoordinator";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/more", useSearchParams: () => new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/more",
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+}));
 vi.mock("@/lib/client/api", () => ({
   api: {
     get: vi.fn(async (path: string) => {

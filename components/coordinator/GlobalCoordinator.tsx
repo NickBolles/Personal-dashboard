@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useEffectEvent, useId, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
@@ -15,7 +15,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
-import { BoltIcon, ChevronIcon, InboxIcon } from "@/components/icons";
+import { BoltIcon, ChevronIcon, ExpandIcon, InboxIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
@@ -61,6 +61,8 @@ const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
 /** Which section of its tab each catch-up chip is about (the `data-land` values the panels carry). */
 const LAND: Record<string, string> = { decisions: "new", failed: "needs", stuck: "needs", waiting: "needs", finished: "done", runs: "working" };
+/** Where the Chief of staff is the page itself (Expand). */
+export const CHIEF_PATH = "/chief";
 /** One host in AppShell, independent of page navigation. No sends without owner action. */
 export function GlobalCoordinator() {
   const pathname = usePathname();
@@ -68,9 +70,14 @@ export function GlobalCoordinator() {
   const pageKey = pathname + "?" + search.toString();
   const wide = useSyncExternalStore(subscribeWide, getWide, () => false);
   const chat = pathname === "/chat" || pathname.startsWith("/chat/");
+  // Expand: on /chief this same panel is the page. It is not a second copy, so the thread keeps its place, the draft
+  // and the run's one stream; only its size changes.
+  const full = pathname === CHIEF_PATH;
+  const router = useRouter();
   const [open, setOpen] = useState(true);
   const [width, setWidth] = useState(360);
   const [phoneOpen, setPhoneOpen] = useState(false);
+  const [side, setSide] = useState<Exclude<Tab, "chat">>("needs");
   const [chatExpandedOn, setChatExpandedOn] = useState<string | null>(null);
   const [removedOn, setRemovedOn] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
@@ -95,6 +102,7 @@ export function GlobalCoordinator() {
   /** Every way the phone sheet closes (grab bar, drag, Collapse, Escape, a tap outside) goes through here. */
   const closePhone = () => {
     dropIdleScope();
+    if (full) return leaveFull();
     setPhoneOpen(false);
   };
   // The phone sheet has one height: its grab bar (and header) drag it down to close; a tap on the bar closes too.
@@ -212,12 +220,17 @@ export function GlobalCoordinator() {
           item: chain.at(-1),
           parents: chain.slice(1, -1).map((i) => i.title),
         });
-  const attached = removedOn === pageKey ? null : context;
+  // On /chief the page is this conversation: there is no other page to tell it about.
+  const attached = full || removedOn === pageKey ? null : context;
   const quickContext: QuickActionContext = { areaId: area?.id, areaTitle: context && area ? area.title : undefined, pageLabel: context?.label, path: pathname };
   const panelOwner = usePanelOwner();
   // A chat panel owning the right side collapses the rail to its strip; an explicit open on this page still wins.
-  const expanded = open && (!(chat && panelOwner) || chatExpandedOn === pageKey);
+  const expanded = full || (open && (!(chat && panelOwner) || chatExpandedOn === pageKey));
   const railWidth = expanded ? width : 54;
+  /** Wide and full: the conversation and a side column (Needs you / Activity) are on screen together. */
+  const split = full && wide;
+  // Leaving the full view goes back to where the owner came from; opened directly, to Today.
+  const leaveFull = () => (window.history.length > 1 ? router.back() : router.push("/home"));
   const saveOpen = (value: boolean) => {
     setOpen(value);
     try {
@@ -243,6 +256,7 @@ export function GlobalCoordinator() {
   };
   const selectTab = (next: Tab) => {
     setTab(next);
+    if (next !== "chat") setSide(next);
     if (next === "running") markSeen();
   };
   // A catch-up chip lands on the part of the tab it was about ("2 finished" on Finished, "2 new decisions" on New),
@@ -390,6 +404,7 @@ export function GlobalCoordinator() {
     }
   };
   const hide = () => {
+    if (full) return leaveFull();
     if (wide) {
       dropIdleScope();
       saveOpen(false);
@@ -400,9 +415,9 @@ export function GlobalCoordinator() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- page-scoped opt-out and sheet/strip reset on navigation
     setRemovedOn(null);
     setChatExpandedOn(null);
-    setPhoneOpen(false);
+    setPhoneOpen(pathname === CHIEF_PATH);
     if (untouched.current) setScope(null);
-  }, [pageKey]);
+  }, [pageKey, pathname]);
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate browser preferences after SSR
@@ -460,14 +475,14 @@ export function GlobalCoordinator() {
   }, [pageKey]);
   useEffect(() => {
     const shell = host.current?.closest<HTMLElement>(".jv-shell");
-    shell?.style.setProperty("--gc-w", `${wide ? railWidth : 0}px`);
+    shell?.style.setProperty("--gc-w", `${wide && !full ? railWidth : 0}px`);
     if (tray.dot) shell?.setAttribute("data-gc-dot", tray.dot);
     else shell?.removeAttribute("data-gc-dot");
     return () => {
       shell?.style.removeProperty("--gc-w");
       shell?.removeAttribute("data-gc-dot");
     };
-  }, [wide, railWidth, tray.dot]);
+  }, [wide, full, railWidth, tray.dot]);
   useEffect(() => {
     if (wide || !phoneOpen) return;
     const element = dialog.current;
@@ -499,7 +514,7 @@ export function GlobalCoordinator() {
     openCoord(next, ref);
   }, [coord, coordRef]);
   // Chat "Since HH:MM" divider: snapshot the previous chat look when the chat becomes visible, then mark it.
-  const chatVisible = (wide ? open : phoneOpen) && tab === "chat" && !activeCard;
+  const chatVisible = (wide ? expanded : phoneOpen) && (tab === "chat" || split) && !activeCard;
   const lookedChat = cwRuns.data?.lastLooked?.chat ?? null;
   const cwReady = cwRuns.isSuccess;
   const onChatVisible = useEffectEvent(() => {
@@ -553,6 +568,9 @@ export function GlobalCoordinator() {
     { label: "Chief of staff", heading: true },
     ...tabs.map((t) => ({ label: t.count ? `${t.label} · ${t.count}` : t.label, onSelect: () => openAt(t.id) })),
   ];
+  const shownTabs = split ? tabs.filter((t) => t.id !== "chat") : tabs;
+  /** The tab that is selected: in the split view, the side column's. */
+  const shownTab: Tab = split ? (tab === "chat" ? side : tab) : tab;
   const content = (
     <>
       <header className="gc-head" {...(wide ? {} : sheetDrag.zoneProps)}>
@@ -567,11 +585,26 @@ export function GlobalCoordinator() {
           className="gc-close"
           data-density-skip
           data-sheet-nodrag
-          aria-label={wide ? "Collapse Chief of staff" : "Close Chief of staff"}
+          aria-label={full ? "Leave full view" : wide ? "Collapse Chief of staff" : "Close Chief of staff"}
           onClick={hide}
         >
-          {wide ? "Collapse" : "Close"}
+          {full ? "Leave full view" : wide ? "Collapse" : "Close"}
         </Button>
+        {!full && d ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            icon={<ExpandIcon className="h-4 w-4" />}
+            className="gc-expand"
+            data-density-skip
+            data-sheet-nodrag
+            data-testid="gc-expand"
+            onClick={() => router.push(CHIEF_PATH)}
+          >
+            Expand Chief of staff
+          </Button>
+        ) : null}
       </header>
       {line.card ? (
         <p className="gc-priority" data-tone={line.tone} data-dynamic={awayLine || undefined} role="status">
@@ -586,26 +619,26 @@ export function GlobalCoordinator() {
       ) : (
         <>
           <div className="gc-tabs" role="tablist" aria-label="Chief of staff tabs">
-            {tabs.map((t, index) => (
+            {shownTabs.map((t, index) => (
               <button
                 type="button"
                 role="tab"
                 id={`${ids}-${t.id}`}
                 aria-controls={`${ids}-panel-${t.id}`}
-                aria-selected={tab === t.id}
-                tabIndex={tab === t.id ? 0 : -1}
+                aria-selected={shownTab === t.id}
+                tabIndex={shownTab === t.id ? 0 : -1}
                 key={t.id}
                 onClick={() => selectTab(t.id)}
                 onKeyDown={(e) => {
                   let next = index;
-                  if (e.key === "ArrowRight") next = (index + 1) % tabs.length;
-                  else if (e.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+                  if (e.key === "ArrowRight") next = (index + 1) % shownTabs.length;
+                  else if (e.key === "ArrowLeft") next = (index + shownTabs.length - 1) % shownTabs.length;
                   else if (e.key === "Home") next = 0;
-                  else if (e.key === "End") next = tabs.length - 1;
+                  else if (e.key === "End") next = shownTabs.length - 1;
                   else return;
                   e.preventDefault();
-                  selectTab(tabs[next]!.id);
-                  document.getElementById(`${ids}-${tabs[next]!.id}`)?.focus();
+                  selectTab(shownTabs[next]!.id);
+                  document.getElementById(`${ids}-${shownTabs[next]!.id}`)?.focus();
                 }}
               >
                 {t.label}
@@ -632,10 +665,12 @@ export function GlobalCoordinator() {
             <div
               key={t.id}
               className={`gc-panel-content ${t.id === "chat" ? "gc-chat" : ""}`}
-              role="tabpanel"
+              // In the split view the conversation is not behind a tab: it is a region of its own beside the tabs.
+              role={split && t.id === "chat" ? "region" : "tabpanel"}
               id={`${ids}-panel-${t.id}`}
-              aria-labelledby={`${ids}-${t.id}`}
-              hidden={tab !== t.id}
+              aria-label={split && t.id === "chat" ? "Conversation" : undefined}
+              aria-labelledby={split && t.id === "chat" ? undefined : `${ids}-${t.id}`}
+              hidden={split ? t.id !== "chat" && t.id !== shownTab : tab !== t.id}
               tabIndex={0}
             >
               {t.id === "chat" ? (
@@ -653,7 +688,8 @@ export function GlobalCoordinator() {
                   draft={draft}
                   onDraft={setDraft}
                   context={attached}
-                  contextRemoved={!!context && !attached}
+                  contextRemoved={!full && !!context && !attached}
+                  standalone={full}
                   onRemoveContext={() => setRemovedOn(pageKey)}
                   onRestoreContext={() => setRemovedOn(null)}
                   onAskPage={() => {
@@ -675,7 +711,7 @@ export function GlobalCoordinator() {
                   onRef={onRef}
                 />
               ) : null}
-              {t.id === "needs" && tab === "needs" ? (
+              {t.id === "needs" && shownTab === "needs" ? (
                 <NeedsPanel
                   hasOther={otherAsks.length + stalledAsks.length > 0}
                   key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
@@ -715,7 +751,7 @@ export function GlobalCoordinator() {
                   </Button>
                 </p>
               ) : null}
-              {t.id === "running" && tab === "running" ? (
+              {t.id === "running" && shownTab === "running" ? (
                 <RunningPanel
                   key={focusRef?.tab === "running" ? `r${focusRef.n}` : "running"}
                   initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
@@ -726,7 +762,7 @@ export function GlobalCoordinator() {
                   quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
                 />
               ) : null}
-              {t.id === "running" && tab === "running" && otherRuns.length ? (
+              {t.id === "running" && shownTab === "running" && otherRuns.length ? (
                 <section className="gc-list" aria-label="Jobs and checks">
                   <SectionHeader label={cwRuns.isError ? "Saved item status · live details unavailable" : "Jobs and checks"} count={otherRuns.length} />
                   {otherRuns.map((run) => (
@@ -756,7 +792,8 @@ export function GlobalCoordinator() {
             aria-label="Chief of staff"
             className={`gc-rail ${expanded ? "" : "gc-strip"}`}
             data-density="sleek"
-            style={{ width: railWidth } as CSSProperties}
+            style={full ? undefined : ({ width: railWidth } as CSSProperties)}
+            data-full={full || undefined}
             data-testid="gc-rail"
             data-open={expanded}
             onKeyDown={onPanelKey}
@@ -764,6 +801,7 @@ export function GlobalCoordinator() {
             {expanded ? (
               <>
                 <div
+                  hidden={full}
                   className="gc-resizer"
                   role="separator"
                   aria-label="Resize Chief of staff"
@@ -884,6 +922,7 @@ export function GlobalCoordinator() {
               <dialog
                 ref={dialog}
                 className="gc-sheet"
+                data-full={full || undefined}
                 data-density="sleek"
                 aria-modal="true"
                 aria-labelledby={`${ids}-title`}

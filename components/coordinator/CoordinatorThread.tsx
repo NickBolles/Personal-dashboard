@@ -65,6 +65,7 @@ export function CoordinatorThread({
   name = "Coordinator",
   context = null,
   contextRemoved = false,
+  standalone,
   onRemoveContext,
   onRestoreContext,
   onAskPage,
@@ -105,6 +106,8 @@ export function CoordinatorThread({
   context?: PageContext | null;
   /** The owner turned this page's context off (it can be shared again). */
   contextRemoved?: boolean;
+  /** The panel is the page itself (Expand): there is no other page whose context could be shared, so say nothing. */
+  standalone?: boolean;
   onRemoveContext?: () => void;
   onRestoreContext?: () => void;
   /** Fills the composer with a question about the page being viewed. Never sends. */
@@ -749,9 +752,11 @@ export function CoordinatorThread({
                 <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
                   Stop
                 </Button>
-                <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
-                  Open
-                </Link>
+                {compact ? null : (
+                  <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
+                    Open
+                  </Link>
+                )}
               </div>
             ) : null}
             <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
@@ -773,7 +778,7 @@ export function CoordinatorThread({
                 {liveWork.map(row)}
               </section>
             ) : null}
-            {sid ? (
+            {sid && !compact ? (
               <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
                 Open full conversation
               </Link>
@@ -839,7 +844,7 @@ export function CoordinatorThread({
                     Share page
                   </Button>
                 </div>
-              ) : compact ? (
+              ) : compact && !standalone ? (
                 <p className="gc-hint gc-context-none">No page context is shared.</p>
               ) : null
             }
