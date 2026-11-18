@@ -214,12 +214,13 @@ export function CoordinatorThread({
     input: string,
     control = false,
     extra: { context?: string; files?: string[] } = {},
+    key?: string,
   ): Promise<{ masked?: string[] } | null> => {
     const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
-      idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
+      idempotencyKey: key ?? newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
       ...extra,
     });
@@ -502,10 +503,10 @@ export function CoordinatorThread({
   const liveDecision = mentions ? (ref: string) => (ref.startsWith("D-") && mentions.rank(ref) !== null ? mentions.render(ref) : null) : null;
   // F2: a questionnaire form's Submit answers in this thread.
   // It is its own message: it never takes the composer's draft, chips, scope or attachments with it.
-  const smartReply = async (input: string) => {
+  const smartReply = async (input: string, key?: string) => {
     try {
       const target = await ensureSession();
-      const notice = maskedNotice(await postInput(target, input));
+      const notice = maskedNotice(await postInput(target, input, false, {}, key));
       toast(notice ?? sentText, notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void refreshSessionLists(qc).catch(() => undefined);
