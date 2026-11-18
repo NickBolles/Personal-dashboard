@@ -19,7 +19,7 @@ test("batch choices: editable locally, review once, retry same exact reply and r
       ? route.fulfill({ status: 503, json: { error: { code: "unavailable", message: "Temporary test failure" } } })
       : route.fulfill({ json: { runId: "batch-run", sessionId: "cw-pin", status: "completed" } });
   });
-  await page.goto("/more");
+  await page.goto("/settings/agents");
   const scope = await openChat(page, info.project.name === "desktop");
   const batch = scope.getByTestId("answer-batch");
   await expect(batch.getByRole("button", { name: "Submit choices" })).toBeDisabled();

@@ -1404,7 +1404,8 @@ function LiveRun({
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
           <span className="sr-only">{who} is saying: </span>
-          {text ? <AssistantText text={text} live={!isTerminal(state.phase)} /> : null}
+          {/* Keep controls inactive until the persisted message has its stable ID; terminal stream IDs differ from history IDs. */}
+          {text ? <AssistantText text={text} live /> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued" ? (
             <span className="chat-caret" aria-hidden="true" />
           ) : null}

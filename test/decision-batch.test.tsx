@@ -149,7 +149,10 @@ it("preserves multiline fields and enclosing section instructions in the reviewe
       root: "section",
       elements: {
         section: { type: "Section", props: { title: "Discussion only", subtitle: "No commitments" }, children: ["form"] },
-        form: { type: "Form", props: { title: "Notes", fields: [{ id: "details", label: "Details", kind: "textarea" }], submit: { label: "Reply" } } },
+        form: {
+          type: "Form",
+          props: { title: "Notes", fields: [{ id: "details", label: "Details", kind: "textarea", proposed: "Draft note" }], submit: { label: "Reply" } },
+        },
       },
     }),
   );
@@ -158,6 +161,22 @@ it("preserves multiline fields and enclosing section instructions in the reviewe
   const qs = answerQuestions(v.spec, 1);
   expect(qs[0].kind).toBe("textarea");
   expect(qs[0].context).toBe("Discussion only: No commitments");
+  expect(qs[0].proposed).toEqual({ choice: "text", other: "Draft note" });
+  const reply = vi.fn();
+  const draw = () => (
+    <SmartReply.Provider value={reply}>
+      <AnswerBatch questions={qs} session="isolated" source="proposed" />
+    </SmartReply.Provider>
+  );
+  const ui = render(draw());
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Draft note");
+  expect(screen.getByText("Proposed by Jarvis · editable")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Owner's edited note" } });
+  ui.unmount();
+  render(draw());
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Owner's edited note");
+  expect(screen.queryByText("Proposed by Jarvis · editable")).toBeNull();
+  expect(reply).not.toHaveBeenCalled();
   expect(answerPayload(qs, { [qs[0].id]: { choice: "text", other: "First line\nSecond line" } })).toContain("First line\nSecond line");
   expect(answerComplete(qs[0], { choice: "text", other: "" })).toBe(true);
 });
@@ -203,6 +222,29 @@ it("streamed and persisted assistant text use the same batch contract, never inc
   ui.unmount();
   render(draw(false));
   expect(screen.getByRole("button", { name: "One" }).getAttribute("aria-pressed")).toBe("true");
+});
+it("rejects duplicate option IDs and mismatched explicit/title D refs before rendering controls", () => {
+  const card = (options: unknown[], extra = {}) =>
+    JSON.stringify({ root: "q", elements: { q: { type: "DecisionCard", props: { title: "D-9001 · Test question", ...extra, options } } } });
+  expect(
+    validateBlock(
+      card([
+        { id: "one", label: "One" },
+        { id: "one", label: "Duplicate" },
+      ]),
+    ).ok,
+  ).toBe(false);
+  expect(
+    validateBlock(
+      card(
+        [
+          { id: "one", label: "One" },
+          { id: "two", label: "Two" },
+        ],
+        { decisionRef: "D-9002" },
+      ),
+    ).ok,
+  ).toBe(false);
 });
 it("extracts nested cards, retains stable IDs and separates explicit writes", () => {
   const v = validateBlock(

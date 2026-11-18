@@ -258,7 +258,11 @@ export const COMPONENTS = {
         .max(6)
         .refine((options) => new Set(options.map((o) => o.id)).size === options.length, "Duplicate choice IDs"),
     })
-    .strict(),
+    .strict()
+    .refine((card) => {
+      const titleRef = /\bD-\d{1,9}\b/.exec(card.title)?.[0];
+      return !card.decisionRef || !titleRef || card.decisionRef === titleRef;
+    }, "Decision reference disagrees with title"),
   Checklist: z
     .object({
       title: label,

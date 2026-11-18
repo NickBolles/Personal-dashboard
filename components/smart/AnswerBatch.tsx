@@ -8,7 +8,7 @@ import "./answers.css";
 import { SmartReply } from "./live";
 
 export const BatchedAnswers = createContext(false);
-type Draft = { source: string; values: AnswerValues; payload?: string; key?: string; sent?: boolean };
+type Draft = { source: string; values: AnswerValues; edited?: string[]; payload?: string; key?: string; sent?: boolean };
 // One tab can show this exact response in both the chat page and coordinator rail.
 const pendingBatches = new Set<string>();
 const DRAFT_EVENT = "jarvis:answer-draft";
@@ -34,7 +34,7 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
     } catch {
       /* private browsing/storage unavailable */
     }
-    return { source, values: {} };
+    return { source, values: Object.fromEntries(questions.filter((q) => q.proposed).map((q) => [q.id, q.proposed!])) };
   });
   const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(() => pendingBatches.has(storageKey));
@@ -86,7 +86,7 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
   const locked = busy || !!draft.payload || !!draft.sent;
   const text = draft.payload ?? `Reply to conversation ${session}, response ${source.split("\n")[0]}\n\n${answerPayload(questions, draft.values)}`;
   const update = (id: string, choice: string, other?: string) => {
-    save({ source, values: { ...draft.values, [id]: { choice, other } } });
+    save({ source, values: { ...draft.values, [id]: { choice, other } }, edited: [...new Set([...(draft.edited ?? []), id])] });
     setReview(false);
     setError("");
   };
@@ -144,6 +144,7 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
             {q.title} <span className="text-xs text-muted">{q.required ? "Required" : "Optional"}</span>
           </legend>
           {q.context ? <p className="text-xs text-muted break-words">{q.context}</p> : null}
+          {q.proposed && !draft.edited?.includes(q.id) && draft.values[q.id] ? <p className="text-xs text-ai">Proposed by Jarvis · editable</p> : null}
           {q.kind === "choice" ? (
             <div className="flex min-w-0 flex-wrap gap-1" role="group" aria-label={q.title}>
               {q.options.map((o) => (

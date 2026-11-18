@@ -10,6 +10,7 @@ export type AnswerQuestion = {
   kind: "choice" | "text" | "textarea";
   options: { id: string; label: string; consequence?: string; recommended?: boolean }[];
   allowOther?: boolean;
+  proposed?: AnswerValue;
 };
 export type AnswerValue = { choice: string; other?: string };
 export type AnswerValues = Record<string, AnswerValue>;
@@ -51,6 +52,12 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
           title: `${p.title} · ${f.label}`,
           context: sections.get(key)?.join(" · ") || undefined,
           required: !!f.required,
+          proposed:
+            f.proposed === undefined
+              ? undefined
+              : ["choice", "scale", "toggle"].includes(f.kind)
+                ? { choice: String(f.proposed) }
+                : { choice: "text", other: String(f.proposed) },
           kind: ["choice", "scale", "toggle"].includes(f.kind) ? "choice" : f.kind === "textarea" ? "textarea" : "text",
           options:
             f.kind === "scale"
