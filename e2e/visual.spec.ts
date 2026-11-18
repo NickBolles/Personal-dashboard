@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { batchReply, openChat as openBatchChat, stubCoordinator as stubBatchCoordinator } from "./fixtures/decision-batch";
 import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, openChatPanel, setHa, startConversation } from "./helpers";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
@@ -128,16 +129,15 @@ const globalCoordinatorVisual = {
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
 
 test("visual: reviewed decision batch in the shared coordinator", async ({ page }, info) => {
-  const { batchReply, openChat, stubCoordinator } = await import("./fixtures/decision-batch");
   const frozen = await freezeMiddayCT(page);
-  await stubCoordinator(
+  await stubBatchCoordinator(
     page,
     { "cw-pin": [{ kind: "assistant", id: "visual-answer-batch", text: batchReply(), at: new Date(frozen - 60_000).toISOString() }] },
     { current: "cw-pin", now: frozen },
   );
   await page.route("**/api/smart/settings", (route) => route.fulfill({ json: { enabled: true, calendarWrites: false } }));
   await page.goto("/more");
-  const scope = await openChat(page, info.project.name === "desktop");
+  const scope = await openBatchChat(page, info.project.name === "desktop");
   const batch = scope.getByTestId("answer-batch");
   await batch.getByRole("button", { name: "Birch", exact: true }).click();
   await batch.getByRole("button", { name: "Later", exact: true }).click();

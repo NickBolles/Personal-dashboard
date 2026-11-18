@@ -7,7 +7,7 @@ export type AnswerQuestion = {
   context?: string;
   ref?: string;
   required: boolean;
-  kind: "choice" | "text";
+  kind: "choice" | "text" | "textarea";
   options: { id: string; label: string; consequence?: string; recommended?: boolean }[];
   allowOther?: boolean;
 };
@@ -17,6 +17,16 @@ export type AnswerValues = Record<string, AnswerValue>;
 /** Only conversational controls. Mixed intent/non-intent cards are unsupported, never half-functional. */
 export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion[] {
   const result: AnswerQuestion[] = [];
+  const sections = new Map<string, string[]>();
+  const walk = (key: string, context: string[]) => {
+    const el = spec.elements[key];
+    if (!el) return;
+    sections.set(key, context);
+    const p = el.props as { title?: string; subtitle?: string };
+    const next = el.type === "Section" ? [...context, [p.title, p.subtitle].filter(Boolean).join(": ")] : context;
+    for (const child of el.children ?? []) walk(child, next);
+  };
+  walk(spec.root, []);
   for (const [key, el] of Object.entries(spec.elements)) {
     if (el.type === "DecisionCard") {
       const p = el.props as PropsOf<"DecisionCard">;
@@ -24,7 +34,7 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
       result.push({
         id: `${block}:${key}:${p.id ?? key}`,
         title: p.title,
-        context: p.context,
+        context: [...(sections.get(key) ?? []), p.context].filter(Boolean).join(" · ") || undefined,
         ref: p.decisionRef ?? decisionRefOf(p.title) ?? undefined,
         required: p.required !== false,
         kind: "choice",
@@ -39,8 +49,9 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
         result.push({
           id: `${block}:${key}:${f.id}`,
           title: `${p.title} · ${f.label}`,
+          context: sections.get(key)?.join(" · ") || undefined,
           required: !!f.required,
-          kind: ["choice", "scale", "toggle"].includes(f.kind) ? "choice" : "text",
+          kind: ["choice", "scale", "toggle"].includes(f.kind) ? "choice" : f.kind === "textarea" ? "textarea" : "text",
           options:
             f.kind === "scale"
               ? [1, 2, 3, 4, 5].map((n) => ({ id: String(n), label: String(n) }))
@@ -58,7 +69,7 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
 export function answerComplete(q: AnswerQuestion, v?: AnswerValue): boolean {
   if (!v) return !q.required;
   if (v.choice === "$skip") return !q.required;
-  if (q.kind === "text") return !!v.other?.trim();
+  if (q.kind !== "choice") return !q.required || !!v.other?.trim();
   if (v.choice === "$other") return !!q.allowOther && !!v.other?.trim();
   return q.options.some((o) => o.id === v.choice);
 }
@@ -71,11 +82,11 @@ export function answerPayload(questions: AnswerQuestion[], values: AnswerValues)
       return [
         `\n${q.ref ? `[${q.ref}] ` : ""}${q.title} [question:${q.id}]`,
         q.context ? `Context: ${q.context}` : "",
-        !v || v.choice === "$skip"
+        !v || v.choice === "$skip" || (q.kind !== "choice" && !v.other?.trim() && !q.required)
           ? "Answer: skipped (optional)"
           : option
             ? `Answer: ${option.label} [choice:${option.id}]`
-            : `Answer: ${q.kind === "text" ? "Written response" : "Other"} [choice:${v.choice}] — ${v.other?.trim()}`,
+            : `Answer: ${q.kind !== "choice" ? "Written response" : "Other"} [choice:${v.choice}] — ${v.other?.trim()}`,
         option?.consequence ? `Discussed consequence (not executed): ${option.consequence}` : "",
       ]
         .filter(Boolean)

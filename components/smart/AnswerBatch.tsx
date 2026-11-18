@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { Button, Input } from "@/components/ui";
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Button, Input, Textarea } from "@/components/ui";
 import { api, newIdempotencyKey } from "@/lib/client/api";
 import { answerComplete, answerDraftKey, answerPayload, type AnswerQuestion, type AnswerValues } from "@/lib/jarvis-ui/answers";
 import "./answers.css";
@@ -9,8 +9,22 @@ import { SmartReply } from "./live";
 
 export const BatchedAnswers = createContext(false);
 type Draft = { source: string; values: AnswerValues; payload?: string; key?: string; sent?: boolean };
+// One tab can show this exact response in both the chat page and coordinator rail.
+const pendingBatches = new Set<string>();
+const DRAFT_EVENT = "jarvis:answer-draft";
 
-export function AnswerBatch({ questions, session, source }: { questions: AnswerQuestion[]; session: string; source: string }) {
+const subscribeHydration = () => () => undefined;
+type BatchProps = { questions: AnswerQuestion[]; session: string; source: string };
+/** Read tab storage only after hydration, so SSR cannot disagree with a restored selected/sent state. */
+export function AnswerBatch(props: BatchProps) {
+  const mounted = useSyncExternalStore(
+    subscribeHydration,
+    () => true,
+    () => false,
+  );
+  return mounted ? <AnswerBatchState {...props} /> : <p className="text-xs text-muted">Loading saved choices…</p>;
+}
+function AnswerBatchState({ questions, session, source }: BatchProps) {
   const reply = useContext(SmartReply);
   const storageKey = answerDraftKey(session, source);
   const [draft, setDraft] = useState<Draft>(() => {
@@ -23,7 +37,18 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
     return { source, values: {} };
   });
   const [review, setReview] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(() => pendingBatches.has(storageKey));
+  const notify = (next?: Draft) => window.dispatchEvent(new CustomEvent(DRAFT_EVENT, { detail: { storageKey, next, busy: pendingBatches.has(storageKey) } }));
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<{ storageKey: string; next?: Draft; busy: boolean }>).detail;
+      if (detail.storageKey !== storageKey) return;
+      if (detail.next) setDraft(detail.next);
+      setBusy(detail.busy);
+    };
+    window.addEventListener(DRAFT_EVENT, receive);
+    return () => window.removeEventListener(DRAFT_EVENT, receive);
+  }, [storageKey]);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const refsKey = JSON.stringify(questions.flatMap((q) => (q.ref ? [q.ref] : [])));
@@ -55,6 +80,7 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
     } catch {
       /* explained below */
     }
+    notify(next);
   };
   const missing = questions.filter((q) => !answerComplete(q, draft.values[q.id]));
   const locked = busy || !!draft.payload || !!draft.sent;
@@ -65,8 +91,10 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
     setError("");
   };
   const submit = async () => {
-    if (inFlight.current || draft.sent || missing.length || checking || stale.length || !reply) return;
+    if (inFlight.current || pendingBatches.has(storageKey) || draft.sent || missing.length || checking || stale.length || !reply) return;
     inFlight.current = true;
+    pendingBatches.add(storageKey);
+    notify();
     setBusy(true);
     setError("");
     try {
@@ -89,6 +117,8 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
       setError((err as Error).message);
     } finally {
       inFlight.current = false;
+      pendingBatches.delete(storageKey);
+      notify();
       setBusy(false);
     }
   };
@@ -136,7 +166,16 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
               ) : null}
             </div>
           ) : null}
-          {q.kind === "text" || draft.values[q.id]?.choice === "$other" ? (
+          {q.kind === "textarea" ? (
+            <Textarea
+              aria-label={`${q.title} response`}
+              className="w-full min-w-0"
+              rows={3}
+              maxLength={2000}
+              value={draft.values[q.id]?.other ?? ""}
+              onChange={(e) => update(q.id, "text", e.target.value)}
+            />
+          ) : q.kind === "text" || draft.values[q.id]?.choice === "$other" ? (
             <Input
               aria-label={`${q.title} response`}
               className="w-full min-w-0"

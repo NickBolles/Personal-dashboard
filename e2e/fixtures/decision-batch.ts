@@ -1,9 +1,11 @@
 import type { Page } from "@playwright/test";
+import { EMPTY_AWAY } from "../../lib/client/away";
 export type Msg = { kind: "user" | "assistant"; id: string; text: string; at: string };
 /** Fully stubbed coordinator: `threads` by session id; the pin is stateful (PUT changes what the global info says). */
 export async function stubCoordinator(page: Page, threads: Record<string, Msg[]>, opts: { current: string; stubDecisions?: boolean; now?: number }) {
   const iso = (minAgo: number) => new Date((opts.now ?? Date.now()) - minAgo * 60_000).toISOString();
   const state = { current: opts.current, pins: [] as (string | null)[], runs: [] as { sid: string; body: Record<string, unknown> }[] };
+  await page.route("**/api/agents/away", (route) => route.fulfill({ json: EMPTY_AWAY }));
   await page.route("**/api/work/coordinator/global", (route) =>
     route.fulfill({
       json: {

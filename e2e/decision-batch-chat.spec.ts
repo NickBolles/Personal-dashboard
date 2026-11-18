@@ -55,6 +55,34 @@ test("batch choices: editable locally, review once, retry same exact reply and r
   await expect(done.getByTestId("answer-batch").getByRole("status")).toHaveText("Sent as one reply to this conversation.");
 });
 
+test("batch phone reflow: long generated labels at 320 and 412, 200 percent text and accessible choices", async ({ page }) => {
+  const now = new Date("2026-11-17T18:00:00Z").getTime();
+  await page.clock.setFixedTime(now);
+  const long = batchReply().replace('"label":"Birch"', `"label":"${"Bramble".repeat(25)}"`);
+  await stubCoordinator(
+    page,
+    { "cw-pin": [{ kind: "assistant", id: "long-batch", text: long, at: new Date(now - 60_000).toISOString() }] },
+    { current: "cw-pin", now },
+  );
+  await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
+  for (const width of [320, 412]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/more");
+    const scope = await openChat(page, false);
+    const batch = scope.getByTestId("answer-batch");
+    await expect(batch).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+    await page.addStyleTag({ content: "html { font-size:200% !important; }" });
+    await expectNoHorizontalOverflow(page);
+    const { default: AxeBuilder } = await import("@axe-core/playwright");
+    const result = await new AxeBuilder({ page: page as never })
+      .include('[data-testid="answer-batch"]')
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+      .analyze();
+    expect(result.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) }))).toEqual([]);
+  }
+});
+
 test("batch explicit chat: keyboard choice, typed Other, optional skipped, invalid controls unavailable", async ({ page }) => {
   const now = new Date("2026-11-17T18:00:00Z").getTime();
   await page.clock.setFixedTime(now);
@@ -84,12 +112,12 @@ test("batch explicit chat: keyboard choice, typed Other, optional skipped, inval
   );
   await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
   await page.goto("/chat/cw-pin");
-  const batch = page.getByTestId("answer-batch");
+  const batch = page.getByTestId("msg-bubble").getByTestId("answer-batch");
   await batch.getByRole("button", { name: "Other", exact: true }).focus();
   await page.keyboard.press("Enter");
   await batch.getByRole("textbox", { name: "Bramble name response" }).fill("Willow");
   await expect(page.getByRole("button", { name: "Launch" })).toHaveCount(0);
-  await expect(page.getByTestId("smart-fallback")).toBeVisible();
+  await expect(page.getByTestId("msg-bubble").getByTestId("smart-fallback")).toBeVisible();
   expect(state.runs).toHaveLength(0);
   await batch.getByRole("button", { name: "Submit choices" }).click();
   await batch.getByRole("button", { name: "Confirm send reply" }).click();
