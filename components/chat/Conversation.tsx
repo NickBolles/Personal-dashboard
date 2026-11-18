@@ -1167,7 +1167,7 @@ function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; o
       <li className="chat-msg flex flex-col" data-meta={meta || undefined} id={`msg-${item.id}`}>
         <div className="min-w-0 max-w-full" data-testid="msg-bubble" data-who="assistant" onClick={onClick} onContextMenu={() => setMeta(true)}>
           <span className="sr-only">{who} said: </span>
-          <AssistantText text={item.text} />
+          <AssistantText text={item.text} messageId={item.id} />
         </div>
         {actions}
         <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} rateId={item.id} />

@@ -183,7 +183,11 @@ export const COMPONENTS = {
   Form: z
     .object({
       title: safeText(),
-      fields: z.array(smartFormField).min(1).max(12),
+      fields: z
+        .array(smartFormField)
+        .min(1)
+        .max(12)
+        .refine((fields) => new Set(fields.map((f) => f.id)).size === fields.length, "Duplicate field IDs"),
       submit: z
         .object({ label: safeText(80), creates: z.array(formCreate).max(3).optional(), updates: z.array(inlineIntentSchema).max(12).optional() })
         .strict(),
@@ -326,7 +330,7 @@ export const COMPONENT_DOCS: Record<ComponentName, string> = {
   Gantt: "{title,rows:[{ref:item,start?:YYYY-MM-DD,milestone?}],from?,to?} ≤30; live dates only; reschedule stages targetDate",
   BarChart: "{metric,label?} bars from a Jarvis series only",
   ApprovalQueue: "{title?} read-only owner approvals, decisions and staged surfaces",
-  Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1–3}],updates?:[item.update intent]}} ≤12 fields; submit stages only",
+  Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1–3}],updates?:[item.update intent]}} ≤12 fields; without creates/updates: one reviewed conversation reply with all cards/forms; otherwise submit stages writes",
   Stack: "{direction?: column|row, gap?: sm|md} + children",
   Section: "{title, subtitle?, tone?: neutral|warn|ok|accent} + children",
   Text: "{text, variant?: body|meta|lead} plain text, **bold** and `code` only",

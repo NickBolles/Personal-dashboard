@@ -240,7 +240,10 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const n = regular.length;
   // A questionnaire Form answers the conversation (components/smart/live.tsx SmartReply), it stages nothing.
   const stageable = Object.values(spec.elements).some(
-    (e) => STAGING.has(e.type) && !(e.type === "Form" && isQuestionnaire((e.props ?? {}) as Parameters<typeof isQuestionnaire>[0])),
+    (e) =>
+      STAGING.has(e.type) &&
+      !(e.type === "Form" && isQuestionnaire((e.props ?? {}) as Parameters<typeof isQuestionnaire>[0])) &&
+      !(e.type === "DecisionCard" && !(e.props as { options: { intent?: unknown }[] }).options.some((o) => o.intent)),
   );
   if (surface.isError)
     return <p className="text-xs text-muted">Interactive part unavailable: {surface.error instanceof ApiError ? surface.error.message : "try again later"}.</p>;

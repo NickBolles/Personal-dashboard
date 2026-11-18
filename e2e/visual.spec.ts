@@ -127,6 +127,30 @@ const globalCoordinatorVisual = {
 
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
 
+test("visual: reviewed decision batch in the shared coordinator", async ({ page }, info) => {
+  const { batchReply, openChat, stubCoordinator } = await import("./fixtures/decision-batch");
+  const frozen = await freezeMiddayCT(page);
+  await stubCoordinator(
+    page,
+    { "cw-pin": [{ kind: "assistant", id: "visual-answer-batch", text: batchReply(), at: new Date(frozen - 60_000).toISOString() }] },
+    { current: "cw-pin", now: frozen },
+  );
+  await page.route("**/api/smart/settings", (route) => route.fulfill({ json: { enabled: true, calendarWrites: false } }));
+  await page.goto("/more");
+  const scope = await openChat(page, info.project.name === "desktop");
+  const batch = scope.getByTestId("answer-batch");
+  await batch.getByRole("button", { name: "Birch", exact: true }).click();
+  await batch.getByRole("button", { name: "Later", exact: true }).click();
+  await expect(batch).toHaveScreenshot("decision-batch-selected.png");
+  await batch.getByRole("button", { name: "Submit choices" }).click();
+  await expect(batch).toHaveScreenshot("decision-batch-review.png");
+  if (process.env.JARVIS_BATCH_SHOTS) {
+    await batch.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-${info.project.name}.png` });
+  }
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+});
+
 /**
  * Freeze the browser clock at 12:00 America/Chicago on today's frame date. The server and the mock
  * upstreams date their seeds in the same timezone (mock-upstreams/util.mjs isoDate), so "Due today",

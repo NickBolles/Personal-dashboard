@@ -640,7 +640,7 @@ export function CoordinatorThread({
                               </span>
                             ) : null}
                           </div>
-                          <AssistantText text={m.text} />
+                          <AssistantText text={m.text} messageId={m.id} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
                             <section aria-label="Work started by this reply" className="gc-bgwork">

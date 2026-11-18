@@ -58,7 +58,7 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
   };
   const missing = questions.filter((q) => !answerComplete(q, draft.values[q.id]));
   const locked = busy || !!draft.payload || !!draft.sent;
-  const text = draft.payload ?? answerPayload(questions, draft.values);
+  const text = draft.payload ?? `Reply to conversation ${session}, response ${source.split("\n")[0]}\n\n${answerPayload(questions, draft.values)}`;
   const update = (id: string, choice: string, other?: string) => {
     save({ source, values: { ...draft.values, [id]: { choice, other } } });
     setReview(false);
@@ -104,7 +104,11 @@ export function AnswerBatch({ questions, session, source }: { questions: AnswerQ
         <p className="text-xs text-muted">Select locally, then review one reply. No decisions or actions are committed.</p>
       </div>
       {questions.map((q) => (
-        <fieldset key={q.id} disabled={locked || (!!q.ref && (checking || stale.includes(q.ref)))} className="min-w-0 space-y-1 border-b border-line pb-2">
+        <fieldset
+          key={q.id}
+          disabled={!reply || locked || (!!q.ref && (checking || stale.includes(q.ref)))}
+          className="min-w-0 space-y-1 border-b border-line pb-2"
+        >
           <legend className="max-w-full text-sm font-medium break-words">
             {q.ref && !q.title.includes(q.ref) ? `${q.ref} · ` : ""}
             {q.title} <span className="text-xs text-muted">{q.required ? "Required" : "Optional"}</span>

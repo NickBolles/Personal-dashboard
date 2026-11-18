@@ -18,7 +18,7 @@ export function useSmartSettings(enabled = true) {
 }
 
 /** One response is one answer batch, across nested cards and fences. Streaming never exposes incomplete controls. */
-export function AssistantText({ text: raw, live = false }: { text: string; live?: boolean }) {
+export function AssistantText({ text: raw, live = false, messageId }: { text: string; live?: boolean; messageId?: string }) {
   const text = useMemo(() => hideCaptureBlocks(raw), [raw]);
   const sessionId = useContext(SmartSession);
   const block = hasBlock(text);
@@ -60,7 +60,9 @@ export function AssistantText({ text: raw, live = false }: { text: string; live?
             new Set(qs.map((q) => q.id.split(":").slice(0, 2).join(":"))).size;
         return answerOnly ? null : <SmartSurface key={i} spec={v.spec} sessionId={sessionId} blockIndex={s.index} dropped={v.dropped} />;
       })}
-      {!live && questions.length ? <AnswerBatch key={`${sessionId}:${text}`} questions={questions} session={sessionId} source={text} /> : null}
+      {!live && questions.length ? (
+        <AnswerBatch key={`${sessionId}:${text}`} questions={questions} session={sessionId} source={`${messageId ?? "reply"}\n${text}`} />
+      ) : null}
     </BatchedAnswers.Provider>
   );
 }

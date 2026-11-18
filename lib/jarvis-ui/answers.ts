@@ -22,7 +22,7 @@ export function answerQuestions(spec: JarvisSpec, block: number): AnswerQuestion
       const p = el.props as PropsOf<"DecisionCard">;
       if (p.options.some((o) => o.intent)) continue;
       result.push({
-        id: `${block}:${p.id ?? key}`,
+        id: `${block}:${key}:${p.id ?? key}`,
         title: p.title,
         context: p.context,
         ref: p.decisionRef ?? decisionRefOf(p.title) ?? undefined,

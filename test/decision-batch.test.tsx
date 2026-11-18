@@ -129,7 +129,7 @@ it("extracts nested cards, retains stable IDs and separates explicit writes", ()
   );
   expect(v.ok).toBe(true);
   if (!v.ok) return;
-  expect(answerQuestions(v.spec, 2).map((q) => q.id)).toEqual(["2:name"]);
+  expect(answerQuestions(v.spec, 2).map((q) => q.id)).toEqual(["2:question:name"]);
   expect(answerComplete(questions[0], { choice: "forged" })).toBe(false);
   expect(answerComplete(questions[0], { choice: "$other", other: " " })).toBe(false);
   expect(answerPayload(questions, {})).toContain("not authorization");
