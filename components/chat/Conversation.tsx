@@ -649,7 +649,24 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     <AssistantName.Provider value={who}>
       <RateCtx.Provider value={rateCtx}>
         {/* A questionnaire smart form's Submit sends its answers as the owner's reply (PR A, F2). */}
-        <SmartScope session={sessionId} reply={(text: string) => send(text, newIdempotencyKey("form"))}>
+        <SmartScope
+          session={sessionId}
+          reply={async (input: string, key?: string) => {
+            try {
+              const r = await api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/runs`, {
+                input,
+                idempotencyKey: key ?? newIdempotencyKey("form"),
+                capabilities: [SMART_CAPABILITY],
+                ...model,
+              });
+              run.start(r.runId, r.status);
+              void qc.invalidateQueries({ queryKey: ["session", sessionId] });
+              return true;
+            } catch {
+              return false;
+            }
+          }}
+        >
           <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
             <ChatLinkProvider links={panel.links}>
               <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>
@@ -1150,7 +1167,7 @@ function TimelineRow({ item, onFork, stepSec, actions }: { item: TimelineItem; o
       <li className="chat-msg flex flex-col" data-meta={meta || undefined} id={`msg-${item.id}`}>
         <div className="min-w-0 max-w-full" data-testid="msg-bubble" data-who="assistant" onClick={onClick} onContextMenu={() => setMeta(true)}>
           <span className="sr-only">{who} said: </span>
-          <AssistantText text={item.text} />
+          <AssistantText text={item.text} messageId={item.id} />
         </div>
         {actions}
         <MessageMeta time={time} onFork={onFork} who={`${who}' message`} text={item.text} rateId={item.id} />
@@ -1387,7 +1404,8 @@ function LiveRun({
       {text || (!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued") ? (
         <div className="min-w-0 max-w-full" data-streaming={!isTerminal(state.phase) || undefined}>
           <span className="sr-only">{who} is saying: </span>
-          {text ? <AssistantText text={text} live={!isTerminal(state.phase)} /> : null}
+          {/* Keep controls inactive until the persisted message has its stable ID; terminal stream IDs differ from history IDs. */}
+          {text ? <AssistantText text={text} live /> : null}
           {!isTerminal(state.phase) && state.phase !== "waiting_for_approval" && state.phase !== "queued" ? (
             <span className="chat-caret" aria-hidden="true" />
           ) : null}

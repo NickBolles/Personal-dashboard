@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Request } from "@playwright/test";
 import { appPost, expectNoHorizontalOverflow } from "./helpers";
 
 /**
@@ -10,94 +10,15 @@ import { appPost, expectNoHorizontalOverflow } from "./helpers";
  * are unique to this spec.
  */
 
-type Msg = { kind: "user" | "assistant"; id: string; text: string; at: string };
+import { stubCoordinator, openChat } from "./fixtures/decision-batch";
 const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
-
-function longThread(n: number): Msg[] {
+function longThread(n: number) {
   return Array.from({ length: n }, (_, i) => ({
-    kind: i % 2 ? "assistant" : "user",
+    kind: i % 2 ? ("assistant" as const) : ("user" as const),
     id: `m${i + 1}`,
     text: `Bramble message ${i + 1}`,
     at: iso(300 - i),
   }));
-}
-
-/** Fully stubbed coordinator: `threads` by session id; the pin is stateful (PUT changes what the global info says). */
-async function stubCoordinator(page: Page, threads: Record<string, Msg[]>, opts: { current: string; stubDecisions?: boolean }) {
-  const state = { current: opts.current, pins: [] as (string | null)[], runs: [] as { sid: string; body: Record<string, unknown> }[] };
-  await page.route("**/api/work/coordinator/global", (route) =>
-    route.fulfill({
-      json: {
-        area: { id: "portfolio", title: "Portfolio" },
-        scope: "global",
-        agent: { requested: "chiefofstaff", profile: "chiefofstaff", routed: true, reason: "routed" },
-        sessionId: state.current,
-        sessionTitle: state.current === "cw-pin" ? "Chief of staff" : "Older bramble thread",
-        pinned: true,
-        excluded: false,
-        prompt: "Catch me up",
-        lastRunAt: null,
-      },
-    }),
-  );
-  await page.route("**/api/work/items/portfolio/coordinator", (route) => {
-    const body = route.request().postDataJSON() as { sessionId: string | null };
-    const previous = state.current;
-    state.pins.push(body.sessionId);
-    if (body.sessionId) state.current = body.sessionId;
-    return route.fulfill({ json: { areaId: "portfolio", sessionId: state.current, pinned: true, previous } });
-  });
-  await page.route("**/api/work/conversations*", (route) =>
-    route.fulfill({
-      json: {
-        conversations: [
-          { id: "cw-old", title: "Older bramble thread", placement: { parentId: "portfolio" }, suggestions: [] },
-          { id: "zz-bramble", title: "zz-smoke 15:42 api_bramble", placement: { parentId: "portfolio" }, suggestions: [] },
-        ],
-        unfiledCount: 0,
-        unreadCount: 0,
-        unavailable: [],
-      },
-    }),
-  );
-  await page.route("**/api/work/decisions*", (route) => route.fulfill({ json: { entries: [], count: 0 } }));
-  await page.route("**/api/work/agent-runs*", (route) => route.fulfill({ json: { items: {}, active: [] } }));
-  await page.route("**/api/work/activity**", (route) => route.fulfill({ json: { items: [], nextCursor: null, latestAt: null } }));
-  await page.route("**/api/work/items*", (route) => route.fulfill({ json: { items: [], linkedConversations: [] } }));
-  if (opts.stubDecisions !== false)
-    await page.route("**/api/coordinator/decisions*", (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
-  await page.route("**/api/coordinator/runs", (route) =>
-    route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: new Date().toISOString(), needs: null, running: null, changes: null, context: null } } }),
-  );
-  await page.route("**/api/coordinator/looked", (route) =>
-    route.fulfill({ json: { lastLooked: { chat: new Date().toISOString(), needs: null, running: null, changes: null, context: null } } }),
-  );
-  await page.route("**/api/hermes/sessions**", (route) => {
-    const req = route.request();
-    const path = new URL(req.url()).pathname;
-    const sid = decodeURIComponent(path.split("/")[4] ?? "");
-    if (req.method() === "POST" && path.endsWith("/runs")) {
-      state.runs.push({ sid, body: req.postDataJSON() as Record<string, unknown> });
-      return route.fulfill({ json: { runId: `run-${state.runs.length}`, sessionId: sid, status: "completed" } });
-    }
-    if (req.method() !== "GET") return route.fulfill({ status: 409, json: { error: "Not part of this test" } });
-    if (path.endsWith("/area")) return route.fulfill({ json: { enabled: false } });
-    if (path.endsWith("/execution"))
-      return route.fulfill({ json: { sessionId: sid, parent: null, records: [], sources: [{ source: "transcript", state: "ok" }], fetchedAt: iso(0) } });
-    if (path.endsWith("/files") || path.endsWith("/links-panel")) return route.fulfill({ json: { files: [], links: [] } });
-    if (path === "/api/hermes/sessions") return route.fulfill({ json: { sessions: [], nextOffset: null } });
-    const title = sid === "cw-pin" ? "Chief of staff" : "Older bramble thread";
-    return route.fulfill({ json: { session: { id: sid, title, pinned: false, archived: false }, children: [], links: [], timeline: threads[sid] ?? [] } });
-  });
-  return state;
-}
-
-/** Opens the Chief of staff Chat tab: the tray sheet on phones, the rail on desktop. */
-async function openChat(page: Page, desktop: boolean) {
-  const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
-  if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
-  await scope.getByRole("tab", { name: "Chat", exact: true }).click();
-  return scope;
 }
 
 test("pinned thread: whole conversation via Load earlier, earlier threads open in the panel, New thread asks and undoes", async ({ page }, info) => {
@@ -195,19 +116,19 @@ test("questionnaire form in a coordinator reply: Submit sends the answers as the
   });
   await page.goto("/more");
   const scope = await openChat(page, desktop);
-  const card = scope.getByRole("region", { name: "Bramble check-in" });
-  await card.getByLabel(/How did the bramble day go/).fill("Pruned the bramble hedge");
-  await card.getByLabel("Bramble energy").selectOption("high");
+  const card = scope.getByTestId("answer-batch");
+  await card.getByRole("textbox", { name: /How did the bramble day go/ }).fill("Pruned the bramble hedge");
+  await card.getByRole("button", { name: "High", exact: true }).click();
+  expect(state.runs).toHaveLength(0);
   const sent = page.waitForRequest((r: Request) => r.method() === "POST" && /\/api\/hermes\/sessions\/cw-pin\/runs$/.test(new URL(r.url()).pathname));
-  await card.getByRole("button", { name: "Submit check-in" }).click();
+  await card.getByRole("button", { name: "Submit choices" }).click();
+  await card.getByRole("button", { name: "Confirm send reply" }).click();
   const body = (await sent).postDataJSON() as { input: string };
-  expect(body.input).toContain("**Bramble check-in**");
+  expect(body.input).toContain("Bramble check-in");
   expect(body.input).toContain("Pruned the bramble hedge");
-  expect(body.input).toContain("High");
-  await expect(card.getByRole("status")).toHaveText("Sent to the chat as your reply.");
-  await expect(card.getByRole("button", { name: "Submit check-in" })).toBeDisabled();
+  expect(body.input).toContain("High [choice:high]");
+  await expect(card.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   expect(state.runs).toHaveLength(1);
-  // A questionnaire stages nothing: no change tray.
   await expect(scope.getByTestId("smart-tray-count")).toHaveCount(0);
 });
 
@@ -221,7 +142,7 @@ test.afterEach(async ({ page }) => {
   areaId = null;
 });
 
-test("a D-n decision a coordinator reply draws is the live decision block: answered in place (F1)", async ({ page }, info) => {
+test("a D-n decision card replies conversationally without answering the owner decision", async ({ page }, info) => {
   const desktop = info.project.name === "desktop";
   const nonce = `${Date.now().toString(36)}${info.retry}${info.project.name.replace(/\W/g, "")}`;
   await page.goto("/home");
@@ -273,21 +194,17 @@ test("a D-n decision a coordinator reply draws is the live decision block: answe
     { "cw-pin": [{ kind: "assistant", id: "d1", text: `${ref} is about the ledger.\n\n\`\`\`jarvis-ui\n${JSON.stringify(card)}\n\`\`\``, at: iso(5) }] },
     { current: "cw-pin", stubDecisions: false },
   );
+  await page.route("**/api/smart/settings", (route) => route.fulfill({ json: { enabled: true, calendarWrites: false } }));
   await page.goto("/more");
   const scope = await openChat(page, desktop);
-  const live = scope.getByTestId("smart-live-decision");
-  await expect(live).toBeVisible();
-  // Drawn once: the live block replaces the card, and the prose mention adds no second row.
-  await expect(scope.locator(`[data-ref-row="${ref}"]`)).toHaveCount(1);
-  await expect(scope.getByRole("radio", { name: /Ship it/ })).toHaveCount(0);
-  await live.getByRole("button", { name: `${ref}: Ship it (recommended)`, exact: true }).click();
-  await expect
-    .poll(async () => {
-      const res = await page.request.get("/api/coordinator/decisions?state=all");
-      return ((await res.json()) as { decisions: { ref: string; state: string }[] }).decisions.find((d) => d.ref === ref)?.state;
-    })
-    .toBe("answered");
-  await expect(scope.getByRole("button", { name: `Undo ${ref}`, exact: true }).first()).toBeVisible();
+  const batch = scope.getByTestId("answer-batch");
+  await expect(batch).toBeVisible();
+  await batch.getByRole("button", { name: /Ship it/ }).click();
+  await batch.getByRole("button", { name: "Submit choices" }).click();
+  await batch.getByRole("button", { name: "Confirm send reply" }).click();
+  await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
+  const res = await page.request.get("/api/coordinator/decisions?state=all");
+  expect(((await res.json()) as { decisions: { ref: string; state: string }[] }).decisions.find((d) => d.ref === ref)?.state).toBe("open");
   await expectNoHorizontalOverflow(page);
 });
 
