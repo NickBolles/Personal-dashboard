@@ -91,7 +91,8 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
     setError("");
   };
   const submit = async () => {
-    if (inFlight.current || pendingBatches.has(storageKey) || draft.sent || missing.length || checking || stale.length || !reply) return;
+    if (inFlight.current || pendingBatches.has(storageKey) || draft.sent || missing.length || text.length > 50_000 || checking || stale.length || !reply)
+      return;
     inFlight.current = true;
     pendingBatches.add(storageKey);
     notify();
@@ -222,7 +223,7 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
             size="sm"
             variant="primary"
             className="max-w-full whitespace-normal"
-            disabled={!reply || !!missing.length || text.length > 8000 || checking || !!stale.length}
+            disabled={!reply || !!missing.length || text.length > 50_000 || checking || !!stale.length}
             loading={busy}
             onClick={() => (review ? void submit() : setReview(true))}
           >
@@ -249,7 +250,9 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
         </div>
       ) : null}
       {!reply ? <p className="text-xs text-muted">This view cannot send replies. Open the originating conversation.</p> : null}
-      {text.length > 8000 ? <p className="text-xs text-muted">Reply exceeds 8,000 characters. Shorten your written answers.</p> : null}
+      {text.length > 50_000 ? (
+        <p className="text-xs text-muted">Reply exceeds the chat limit of 50,000 characters. Shorten written answers or ask for a smaller set of questions.</p>
+      ) : null}
       <p className="text-xs text-muted">
         Draft kept in this browser tab through reload when storage is available; closing the tab clears it. After a send attempt, retry the same reply before
         editing.

@@ -267,6 +267,68 @@ it("rejects duplicate option IDs and mismatched explicit/title D refs before ren
     ).ok,
   ).toBe(false);
 });
+it("supports long choice-only questionnaires within the real chat transport limit", () => {
+  const qs: AnswerQuestion[] = Array.from({ length: 12 }, (_, i) => ({
+    id: `field-${i}`,
+    title: "T".repeat(200) + " · " + "Q".repeat(200),
+    context: "C".repeat(400),
+    required: true,
+    kind: "choice",
+    options: [
+      { id: "yes", label: "Yes" },
+      { id: "no", label: "No" },
+    ],
+    proposed: { choice: "yes" },
+  }));
+  const text = answerPayload(qs, Object.fromEntries(qs.map((q) => [q.id, { choice: "yes" }])));
+  expect(text.length).toBeGreaterThan(8000);
+  expect(text.length).toBeLessThan(50000);
+  render(
+    <SmartReply.Provider value={vi.fn()}>
+      <AnswerBatch questions={qs} session="isolated" source="long" />
+    </SmartReply.Provider>,
+  );
+  expect((screen.getByRole("button", { name: "Submit choices" }) as HTMLButtonElement).disabled).toBe(false);
+});
+it("warns when malformed siblings are dropped from an otherwise answer-only block", () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  qc.setQueryData(["smart-settings"], { enabled: true });
+  const text = `\`\`\`jarvis-ui\n${JSON.stringify({
+    root: "r",
+    elements: {
+      r: { type: "Stack", props: {}, children: ["good", "bad"] },
+      good: {
+        type: "DecisionCard",
+        props: {
+          title: "Valid",
+          options: [
+            { id: "one", label: "One" },
+            { id: "two", label: "Two" },
+          ],
+        },
+      },
+      bad: {
+        type: "DecisionCard",
+        props: {
+          title: "Invalid",
+          options: [
+            { id: "same", label: "One" },
+            { id: "same", label: "Two" },
+          ],
+        },
+      },
+    },
+  })}\n\`\`\``;
+  render(
+    <QueryClientProvider client={qc}>
+      <SmartScope session="isolated" reply={vi.fn()}>
+        <AssistantText text={text} messageId="partial" />
+      </SmartScope>
+    </QueryClientProvider>,
+  );
+  expect(screen.getByTestId("smart-fallback").textContent).toContain("Only the listed answers will be sent");
+  expect(screen.getAllByTestId("answer-batch")).toHaveLength(1);
+});
 it("extracts nested cards, retains stable IDs and separates explicit writes", () => {
   const v = validateBlock(
     JSON.stringify({

@@ -35,7 +35,7 @@ export function AssistantText({ text: raw, live = false, messageId }: { text: st
     );
   const questions = parsed.flatMap((v, i) => (v?.ok ? answerQuestions(v.spec, i) : []));
   return (
-    <BatchedAnswers.Provider value={true}>
+    <BatchedAnswers.Provider value={questions.length > 0}>
       {segments.map((s, i) => {
         if (s.kind === "text") return <Markdown key={i} text={s.text} className="select-text" />;
         if (!s.closed || live)
@@ -58,7 +58,15 @@ export function AssistantText({ text: raw, live = false, messageId }: { text: st
           Object.values(v.spec.elements).every((e) => ["Stack", "Section", "DecisionCard", "Form"].includes(e.type)) &&
           Object.values(v.spec.elements).filter((e) => e.type === "DecisionCard" || e.type === "Form").length ===
             new Set(qs.map((q) => q.id.split(":").slice(0, 2).join(":"))).size;
-        return answerOnly ? null : <SmartSurface key={i} spec={v.spec} sessionId={sessionId} blockIndex={s.index} dropped={v.dropped} />;
+        return answerOnly ? (
+          v.dropped ? (
+            <p key={i} className="my-2 text-xs text-muted" data-testid="smart-fallback">
+              Some questions are unsupported and unavailable. Only the listed answers will be sent.
+            </p>
+          ) : null
+        ) : (
+          <SmartSurface key={i} spec={v.spec} sessionId={sessionId} blockIndex={s.index} dropped={v.dropped} />
+        );
       })}
       {!live && questions.length ? (
         <AnswerBatch key={`${sessionId}:${text}`} questions={questions} session={sessionId} source={`${messageId ?? "reply"}\n${text}`} />
