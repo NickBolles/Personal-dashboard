@@ -141,12 +141,23 @@ test("visual: reviewed decision batch in the shared coordinator", async ({ page 
   const batch = scope.getByTestId("answer-batch");
   await batch.getByRole("button", { name: "Birch", exact: true }).click();
   await batch.getByRole("button", { name: "Later", exact: true }).click();
+  const viewport = page.viewportSize()!;
+  if (process.env.JARVIS_BATCH_SHOTS)
+    await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-selected-screen-${info.project.name}.png` });
+  // The batch can exceed the scroll pane's free height: a normal element shot paints fixed composers over it.
+  // Grow only the capture viewport (same width), then restore the real phone/desktop height for reflow checks.
+  await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
   await expect(batch).toHaveScreenshot("decision-batch-selected.png");
   await batch.getByRole("button", { name: "Submit choices" }).click();
+  await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
   await expect(batch).toHaveScreenshot("decision-batch-review.png");
   if (process.env.JARVIS_BATCH_SHOTS) {
     await batch.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-${info.project.name}.png` });
   }
+  await page.setViewportSize(viewport);
+  await batch.getByRole("button", { name: "Confirm send reply" }).scrollIntoViewIfNeeded();
+  if (process.env.JARVIS_BATCH_SHOTS)
+    await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-review-screen-${info.project.name}.png` });
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
   await expectNoHorizontalOverflow(page);
 });
