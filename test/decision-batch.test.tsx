@@ -7,6 +7,7 @@ import { SmartScope } from "@/components/smart/SmartScope";
 import { AnswerBatch } from "@/components/smart/AnswerBatch";
 import { SmartReply } from "@/components/smart/live";
 import { answerComplete, answerPayload, answerQuestions, type AnswerQuestion } from "@/lib/jarvis-ui/answers";
+import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
 import { validateBlock } from "@/lib/jarvis-ui/validator";
 vi.mock("@/lib/client/api", () => ({ api: { get: vi.fn(async () => ({ decisions: [] })) }, newIdempotencyKey: () => "answers-fixture-key" }));
 const questions: AnswerQuestion[] = [
@@ -224,6 +225,26 @@ it("streamed and persisted assistant text use the same batch contract, never inc
   expect(screen.getByRole("button", { name: "One" }).getAttribute("aria-pressed")).toBe("true");
 });
 it("rejects duplicate option IDs and mismatched explicit/title D refs before rendering controls", () => {
+  expect(
+    smartDecisionRefs(
+      `\`\`\`jarvis-ui\n${JSON.stringify({
+        root: "q",
+        elements: {
+          q: {
+            type: "DecisionCard",
+            props: {
+              title: "Test question",
+              decisionRef: "D-9001",
+              options: [
+                { id: "one", label: "One" },
+                { id: "two", label: "Two" },
+              ],
+            },
+          },
+        },
+      })}\n\`\`\``,
+    ),
+  ).toEqual(["D-9001"]);
   const card = (options: unknown[], extra = {}) =>
     JSON.stringify({ root: "q", elements: { q: { type: "DecisionCard", props: { title: "D-9001 · Test question", ...extra, options } } } });
   expect(
