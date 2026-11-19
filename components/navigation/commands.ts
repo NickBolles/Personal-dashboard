@@ -29,6 +29,13 @@ export const NEW_CHAT_EVENT = "jarvis:new-chat";
 export const NEW_WORK_EVENT = "jarvis:new-work";
 /** Open the global Chief of staff rail/sheet without sending anything. */
 export const OPEN_COORDINATOR_EVENT = "jarvis:chief-of-staff";
+/**
+ * A shell overlay the Chief of staff sheet stepped aside for (search, Manage quick actions) has closed. On /chief
+ * the sheet is the page, so it comes back.
+ */
+export const OVERLAY_CLOSED_EVENT = "jarvis:overlay-closed";
+/** Show the pinned Chief of staff thread in the panel (its /chat address was asked for), whatever thread it is on. */
+export const COORDINATOR_PINNED_THREAD = "jarvis:chief-of-staff-pinned";
 
 /** The Work item open in /work right now, if any. */
 function currentWorkItem() {

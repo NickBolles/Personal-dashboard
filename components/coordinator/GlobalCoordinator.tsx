@@ -21,7 +21,7 @@ import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
-import { OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT } from "@/components/navigation/commands";
+import { COORDINATOR_PINNED_THREAD, OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT, OVERLAY_CLOSED_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
@@ -83,6 +83,21 @@ export function GlobalCoordinator() {
   const [chatExpandedOn, setChatExpandedOn] = useState<string | null>(null);
   const [removedOn, setRemovedOn] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
+  /** On /chief (phone) search or Manage quick actions is over the sheet: it is closed, not gone, until that closes. */
+  const [covered, setCovered] = useState(false);
+  // /chief?thread=pinned: the pinned thread's own address was asked for (the /chat/<id> redirect). The panel shows
+  // that thread, whatever earlier thread it was on, and the address goes back to plain /chief.
+  const wantsPinned = full && search.get("thread") === "pinned";
+  const [seenWantsPinned, setSeenWantsPinned] = useState(false);
+  if (wantsPinned !== seenWantsPinned) {
+    setSeenWantsPinned(wantsPinned);
+    if (wantsPinned) setTab("chat");
+  }
+  useEffect(() => {
+    if (!wantsPinned) return;
+    window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD));
+    router.replace(CHIEF_PATH);
+  }, [wantsPinned, router]);
   const [draft, setDraft] = useState("");
   /** The chip in the one composer: what the next message is about (a run to steer, retry or ask about, a decision). */
   const [scope, setScope] = useState<ComposeScope | null>(null);
@@ -420,6 +435,7 @@ export function GlobalCoordinator() {
     setRemovedOn(null);
     setChatExpandedOn(null);
     setPhoneOpen(pathname === CHIEF_PATH);
+    setCovered(false);
     if (pathname !== CHIEF_PATH) cameFrom.current = pageKey;
     if (untouched.current) setScope(null);
   }, [pageKey, pathname]);
@@ -465,19 +481,25 @@ export function GlobalCoordinator() {
     const onManage = () => {
       dialog.current?.close();
       if (untouched.current) setScope(null);
-      setPhoneOpen(false);
+      // On /chief the sheet is the page: it steps aside with its thread still mounted (the thread it is on, its
+      // attachments and its place are kept) and comes back when the overlay closes.
+      if (pathname === CHIEF_PATH) setCovered(true);
+      else setPhoneOpen(false);
     };
+    const onOverlayClosed = () => setCovered(false);
     window.addEventListener(OPEN_COORDINATOR_EVENT, onOpen);
     window.addEventListener(COORDINATOR_PROMPT, onPrompt);
     window.addEventListener(QUICK_ACTION_MANAGE, onManage);
     window.addEventListener(OPEN_PALETTE_EVENT, onManage);
+    window.addEventListener(OVERLAY_CLOSED_EVENT, onOverlayClosed);
     return () => {
+      window.removeEventListener(OVERLAY_CLOSED_EVENT, onOverlayClosed);
       window.removeEventListener(OPEN_COORDINATOR_EVENT, onOpen);
       window.removeEventListener(COORDINATOR_PROMPT, onPrompt);
       window.removeEventListener(QUICK_ACTION_MANAGE, onManage);
       window.removeEventListener(OPEN_PALETTE_EVENT, onManage);
     };
-  }, [pageKey]);
+  }, [pageKey, pathname]);
   useEffect(() => {
     const shell = host.current?.closest<HTMLElement>(".jv-shell");
     shell?.style.setProperty("--gc-w", `${wide && !full ? railWidth : 0}px`);
@@ -489,7 +511,7 @@ export function GlobalCoordinator() {
     };
   }, [wide, full, railWidth, tray.dot]);
   useEffect(() => {
-    if (wide || !phoneOpen) return;
+    if (wide || !phoneOpen || covered) return;
     const element = dialog.current;
     const restore = document.activeElement as HTMLElement | null;
     element?.showModal(); // native modal: focus trap + inert background
@@ -501,7 +523,7 @@ export function GlobalCoordinator() {
       document.body.style.overflow = overflow;
       restore?.focus();
     };
-  }, [wide, phoneOpen]);
+  }, [wide, phoneOpen, covered]);
   const coord = search.get("coord");
   const coordRef = search.get("d") ?? search.get("r") ?? undefined;
   const openedCoord = useRef<string | null>(null);
