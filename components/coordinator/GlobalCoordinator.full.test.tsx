@@ -264,3 +264,16 @@ it("plain /chief (Expand) asks for no thread: the panel stays on the one it is s
     window.removeEventListener(COORDINATOR_PINNED_THREAD, asked);
   }
 });
+
+it("a message link through the redirect keeps its target: the address becomes /chief#msg-<id>", async () => {
+  window.history.replaceState(null, "", "/chief?thread=pinned#msg-a%201");
+  try {
+    nav.path = CHIEF_PATH;
+    nav.search = "thread=pinned";
+    mount();
+    await screen.findByTestId("thread");
+    expect(nav.replace).toHaveBeenCalledWith(CHIEF_PATH + "#msg-a%201");
+  } finally {
+    window.history.replaceState(null, "", "/");
+  }
+});

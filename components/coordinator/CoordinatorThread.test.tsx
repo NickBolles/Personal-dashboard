@@ -705,3 +705,30 @@ it.each([true, false])("asked for the pinned thread, the Chief of staff page lea
     expect(screen.getByText("From last week")).toBeTruthy();
   }
 });
+
+// A feedback "Open message" link is /chat/<id>#msg-<message>. For the pinned thread that address leads to /chief,
+// so the thread there resolves the link: the reply is revealed, however far back, and brought into view.
+it.each([true, false])("a message link opens that reply on the Chief of staff page, even one paged away (as the page=%s)", async (standalone) => {
+  const long = Array.from({ length: 30 }, (_, i) => ({ kind: i % 2 ? "assistant" : "user", id: `m${i}`, text: `Message number ${i}` }));
+  client.setQueryData(["session", "same-session"], { session: { id: "same-session", pinned: false, archived: false }, timeline: long });
+  window.history.replaceState(null, "", "/chief#msg-m3");
+  try {
+    mount({ compact: true, standalone });
+    if (standalone) {
+      const reply = await screen.findByText("Message number 3");
+      await waitFor(() => expect(reply.closest("[data-msg]")?.hasAttribute("data-landed")).toBe(true));
+      // The link is used up: the address is the conversation again, and what it revealed stays.
+      expect(window.location.hash).toBe("");
+      expect(screen.getByText("Message number 3")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Load earlier/ })).toBeTruthy();
+      expect(screen.queryByText("Message number 0")).toBeNull();
+    } else {
+      // The rail beside some other page: a fragment in that page's address is not about this thread.
+      expect(await screen.findByText("Message number 29")).toBeTruthy();
+      expect(screen.queryByText("Message number 3")).toBeNull();
+      expect(window.location.hash).toBe("#msg-m3");
+    }
+  } finally {
+    window.history.replaceState(null, "", "/");
+  }
+});

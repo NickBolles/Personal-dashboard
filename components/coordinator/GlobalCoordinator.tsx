@@ -96,7 +96,8 @@ export function GlobalCoordinator() {
   useEffect(() => {
     if (!wantsPinned) return;
     window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD));
-    router.replace(CHIEF_PATH);
+    // A message link ("/chat/<id>#msg-<id>") keeps its target: the thread opens that message.
+    router.replace(CHIEF_PATH + (window.location.hash.startsWith("#msg-") ? window.location.hash : ""));
   }, [wantsPinned, router]);
   const [draft, setDraft] = useState("");
   /** The chip in the one composer: what the next message is about (a run to steer, retry or ask about, a decision). */

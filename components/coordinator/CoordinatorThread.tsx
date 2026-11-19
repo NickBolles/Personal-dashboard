@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -511,7 +511,14 @@ export function CoordinatorThread({
     lastLookedChat && sinceDivider(lastLookedChat, new Date(), sinceCounts)
       ? allGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat)))
       : -1;
-  const shownCount = visibleGroupCount(allGroups.length, shown.sid === sid ? shown.n : THREAD_FIRST_PAGE, firstNew);
+  // A message link ("#msg-<id>", as the feedback inbox writes them) that led here: on /chief this thread is the
+  // conversation the link is about, so the message is revealed (however far back) and brought into view.
+  const hash = useSyncExternalStore(subscribeHash, readHash, noHash);
+  const linked = standalone ? linkedMessage(hash) : null;
+  const linkedGroup = linked ? allGroups.findIndex((group) => group.some((m) => m.id === linked)) : -1;
+  const linkedRow = linkedGroup >= 0 ? allGroups[linkedGroup][0].id : null;
+  const reach = [firstNew, linkedGroup].filter((i) => i >= 0);
+  const shownCount = visibleGroupCount(allGroups.length, shown.sid === sid ? shown.n : THREAD_FIRST_PAGE, reach.length ? Math.min(...reach) : -1);
   const hiddenGroups = allGroups.length - shownCount;
   const messageGroups = allGroups.slice(hiddenGroups);
   const msgs = messageGroups.map((group) => group[0]);
@@ -567,6 +574,23 @@ export function CoordinatorThread({
   }, [compact, sid, lastId, running, hasDivider]);
   // While a run writes, the thread stays on its last line, unless the owner has scrolled up to read.
   const atBottom = useRef(true);
+  useEffect(() => {
+    if (!linkedRow) return;
+    // After the thread's own first placement (above), which would otherwise win.
+    const frame = requestAnimationFrame(() => {
+      const rows = bodyRef.current?.querySelectorAll<HTMLElement>("[data-msg]") ?? [];
+      const target = [...rows].find((row) => row.dataset.msg === linkedRow);
+      if (!target) return;
+      target.scrollIntoView?.({ block: "center" });
+      target.setAttribute("data-landed", "");
+      window.setTimeout(() => target.removeAttribute("data-landed"), 1900);
+      atBottom.current = false;
+      // What was revealed for the link stays revealed; the link itself is used up, and the address is /chief again.
+      setShown({ sid, n: shownCount });
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [linkedRow, sid, shownCount]);
   const liveSize = run.state.text.length + run.state.activity.length + (run.state.approval ? 1 : 0) + (run.state.clarify ? 1 : 0);
   useEffect(() => {
     const body = bodyRef.current;
@@ -706,11 +730,11 @@ export function CoordinatorThread({
                         </li>
                       ) : null}
                       {isBackgroundNotice(m.text) ? (
-                        <li className="co-msg">
+                        <li className="co-msg" data-msg={m.id}>
                           <BackgroundNotices messages={messageGroups[index]} />
                         </li>
                       ) : m.kind === "assistant" ? (
-                        <li key={m.id} className="co-msg" data-who="assistant">
+                        <li key={m.id} className="co-msg" data-who="assistant" data-msg={m.id}>
                           <div className="co-msg-head flex items-center justify-between gap-1">
                             <p className="text-xs font-semibold text-muted">{name}</p>
                             {sid ? (
@@ -744,7 +768,7 @@ export function CoordinatorThread({
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
                         </li>
                       ) : (
-                        <li key={m.id} className="co-msg" data-who="user">
+                        <li key={m.id} className="co-msg" data-who="user" data-msg={m.id}>
                           <UserMessage text={m.text} sessionId={sid} onRef={onRef ? jumpTo : undefined} />
                         </li>
                       )}
@@ -971,6 +995,28 @@ export function CoordinatorThread({
 }
 
 /** What the owner sent: their words in a bubble; machine wrappers become a quiet caption or a compact receipt. */
+// The address's fragment, read as the thread renders. Next's own navigations change it without a hashchange event,
+// but they re-render the thread (it becomes the page), which is when it is read.
+const subscribeHash = (changed: () => void) => {
+  window.addEventListener("hashchange", changed);
+  window.addEventListener("popstate", changed);
+  return () => {
+    window.removeEventListener("hashchange", changed);
+    window.removeEventListener("popstate", changed);
+  };
+};
+const readHash = () => window.location.hash;
+const noHash = () => "";
+/** The message a "#msg-<id>" fragment names (lib/feedback.ts messageLink), or null. */
+function linkedMessage(hash: string): string | null {
+  if (!hash.startsWith("#msg-")) return null;
+  try {
+    return decodeURIComponent(hash.slice(5)) || null;
+  } catch {
+    return null; // a malformed fragment is not a message link
+  }
+}
+
 function UserMessage({ text, sessionId, onRef }: { text: string; sessionId?: string | null; onRef?: (ref: string) => void }) {
   const { body, attached } = splitAttachedContext(text);
   const parts = parseUserMessage(body);

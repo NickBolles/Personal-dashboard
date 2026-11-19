@@ -159,6 +159,20 @@ test("the pinned Chief of staff thread's chat address leads to /chief; another c
     await page.goto(`/chat/${pinned}`);
     await expect(page).toHaveURL(/\/chief$/);
     await expect(page.getByRole("heading", { level: 1, name: "Chief of staff" })).toBeAttached();
+    // A message link (feedback inbox: /chat/<id>#msg-<message>) keeps its target through the redirect. This thread
+    // has no such message, so the target stays in the address for the thread to resolve.
+    await page.goto(`/chat/${pinned}#msg-whitebeam-none`);
+    await expect(page).toHaveURL(/\/chief#msg-whitebeam-none$/);
+    // The same from inside the app: a client-side navigation, as the feedback inbox's link makes (not a page load).
+    await page.goto("/more");
+    type Shell = { whitebeamLoaded?: boolean; next: { router: { push: (to: string) => void } } };
+    await page.evaluate((href) => {
+      const shell = window as unknown as Shell;
+      shell.whitebeamLoaded = true;
+      shell.next.router.push(href);
+    }, `/chat/${pinned}#msg-whitebeam-none`);
+    await expect(page).toHaveURL(/\/chief#msg-whitebeam-none$/);
+    expect(await page.evaluate(() => (window as unknown as Shell).whitebeamLoaded), "the page was not reloaded on the way").toBe(true);
     // Any other conversation, filed under the same area or not, is still its own chat page.
     await page.goto(`/chat/${other}`);
     await expect(page).toHaveURL(new RegExp(`/chat/${other}$`));
@@ -166,4 +180,15 @@ test("the pinned Chief of staff thread's chat address leads to /chief; another c
     await pin(before);
     if (created) await page.request.patch(`/api/work/items/${created}`, { data: { archived: true }, headers });
   }
+});
+
+test("a message link opens that reply on /chief, even one that was paged away, and is then used up", async ({ page }) => {
+  await stubCoordinator(page);
+  // The thread opens on its latest 12 of 24; message 2 is behind "Load earlier".
+  await page.goto("/chief#msg-w2");
+  const reply = page.getByText(/^Whitebeam message 2:/);
+  await expect(reply).toBeInViewport();
+  await expect(page).toHaveURL(/\/chief$/);
+  await expect(page.getByText(/^Whitebeam message 24/)).toBeAttached();
+  await expectNoHorizontalOverflow(page);
 });
