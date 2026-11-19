@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requirePage } from "@/server/auth/page";
-import { coordinatorPin, globalCoordinatorArea } from "@/server/work/coordinator";
+import { globalCoordinatorArea, pinnedCoordinatorSession } from "@/server/work/coordinator";
 import { Conversation } from "@/components/chat/Conversation";
 
 export const metadata = { title: "Conversation" };
@@ -11,7 +11,9 @@ export default async function ConversationPage({ params, searchParams }: { param
   const { run } = await searchParams;
   const id = decodeURIComponent(sessionId);
   // The pinned Chief of staff thread is shown in one place, the Chief of staff itself: never a second, different copy.
+  // Only while it is the thread shown there: a pinned conversation that was archived or moved out of the area is an
+  // ordinary conversation again and keeps its own page.
   const chief = user.capabilities.has("work.use") ? globalCoordinatorArea(user) : null;
-  if (chief && coordinatorPin(chief.id) === id) redirect("/chief");
+  if (chief && pinnedCoordinatorSession(user, chief.id) === id) redirect("/chief");
   return <Conversation sessionId={id} initialRunId={run} />;
 }

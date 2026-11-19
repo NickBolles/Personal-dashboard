@@ -153,8 +153,20 @@ it("wide: expanding keeps the one mounted thread, shows it beside Needs you and 
   expect(within(rail()).queryByRole("separator", { name: "Resize Chief of staff" })).toBeNull();
   expect(rail().querySelector<HTMLElement>(".gc-resizer")!.hidden).toBe(true);
   // Closing leaves the full view instead of collapsing a rail.
+  // Expanded from a page of this app: Leave goes back to it.
+  nav.push.mockClear();
   fireEvent.click(within(rail()).getByRole("button", { name: "Leave full view" }));
-  expect(nav.back.mock.calls.length + nav.push.mock.calls.length).toBe(1);
+  expect(nav.back).toHaveBeenCalledOnce();
+  expect(nav.push).not.toHaveBeenCalled();
+});
+
+it("opened directly, Leave full view goes to Today: what is behind /chief in the browser's history is not the app's to return to", async () => {
+  nav.path = CHIEF_PATH;
+  mount();
+  await screen.findByTestId("thread");
+  fireEvent.click(within(rail()).getByRole("button", { name: "Leave full view" }));
+  expect(nav.push).toHaveBeenCalledExactlyOnceWith("/home");
+  expect(nav.back).not.toHaveBeenCalled();
 });
 
 it("phone: on /chief the sheet is the page (open, full height, no grab bar to drag), and closing it leaves", async () => {
@@ -171,7 +183,8 @@ it("phone: on /chief the sheet is the page (open, full height, no grab bar to dr
       .map((t) => t.textContent),
   ).toEqual(["Chat", "Needs you", "Activity"]);
   fireEvent.click(within(sheet).getByRole("button", { name: "Leave full view" }));
-  expect(nav.back.mock.calls.length + nav.push.mock.calls.length).toBe(1);
+  expect(nav.push).toHaveBeenCalledExactlyOnceWith("/home");
+  expect(nav.back).not.toHaveBeenCalled();
 });
 
 it("phone: leaving /chief for another page closes the sheet again", async () => {

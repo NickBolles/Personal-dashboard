@@ -73,6 +73,8 @@ export function GlobalCoordinator() {
   // Expand: on /chief this same panel is the page. It is not a second copy, so the thread keeps its place, the draft
   // and the run's one stream; only its size changes.
   const full = pathname === CHIEF_PATH;
+  /** The last page this shell showed that was not /chief (null: /chief is where this visit began). */
+  const cameFrom = useRef<string | null>(pathname === CHIEF_PATH ? null : pageKey);
   const router = useRouter();
   const [open, setOpen] = useState(true);
   const [width, setWidth] = useState(360);
@@ -229,8 +231,10 @@ export function GlobalCoordinator() {
   const railWidth = expanded ? width : 54;
   /** Wide and full: the conversation and a side column (Needs you / Activity) are on screen together. */
   const split = full && wide;
-  // Leaving the full view goes back to where the owner came from; opened directly, to Today.
-  const leaveFull = () => (window.history.length > 1 ? router.back() : router.push("/home"));
+  // Leaving the full view goes back to where the owner came from. That is only known when this shell showed a page
+  // before /chief; opened directly (a link, a new tab, a reload) whatever is behind it in the browser's history is
+  // not ours to go back to, so Leave goes to Today.
+  const leaveFull = () => (cameFrom.current ? router.back() : router.push("/home"));
   const saveOpen = (value: boolean) => {
     setOpen(value);
     try {
@@ -416,6 +420,7 @@ export function GlobalCoordinator() {
     setRemovedOn(null);
     setChatExpandedOn(null);
     setPhoneOpen(pathname === CHIEF_PATH);
+    if (pathname !== CHIEF_PATH) cameFrom.current = pageKey;
     if (untouched.current) setScope(null);
   }, [pageKey, pathname]);
   useEffect(() => {
