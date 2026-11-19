@@ -15,7 +15,7 @@ export function SmartScope({
   children,
 }: {
   session: string | null;
-  reply?: ((text: string) => Promise<boolean>) | null;
+  reply?: ((text: string, key?: string) => Promise<boolean>) | null;
   liveDecision?: ((ref: string) => ReactNode | null) | null;
   children: ReactNode;
 }) {

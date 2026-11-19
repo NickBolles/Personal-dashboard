@@ -332,13 +332,13 @@
   },
   "components/chat/Conversation.tsx": {
     "jarvis-ui/no-arbitrary-values": {
-      "count": 15
+      "count": 4
     },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
     },
     "jarvis-ui/no-native-controls": {
-      "count": 14
+      "count": 6
     }
   },
   "components/chat/LinksPanel.tsx": {

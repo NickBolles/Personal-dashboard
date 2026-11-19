@@ -1,9 +1,10 @@
 /** PR A: the pinned Chief of staff thread (selection, smoke exclusion, pin persistence), paging, live decisions, questionnaires. */
 import { beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { __setTestDatabase, getDb, schema } from "@/server/db";
 import { claimInstance, createSession, resolveUser } from "@/server/auth";
 import * as store from "@/server/work/store";
-import { coordinatorFor, coordinatorPin, pinCoordinatorThread } from "@/server/work/coordinator";
+import { coordinatorFor, coordinatorPin, pinCoordinatorThread, pinnedCoordinatorSession } from "@/server/work/coordinator";
 import { isOpsConversation, pickCoordinatorThread, visibleGroupCount, type ThreadCandidate } from "@/lib/coordinator/thread";
 import { decisionRefOf, isQuestionnaire, questionnaireReply, smartDecisionRefs } from "@/lib/jarvis-ui/live";
 
@@ -169,6 +170,37 @@ describe("coordinator pin (server)", () => {
       .all()
       .filter((a) => a.action === "coordinator.pin");
     expect(audits.length).toBe(4);
+  });
+
+  const setConv = (sessionId: string, patch: { archived?: boolean; parentId?: string }) =>
+    getDb()
+      .update(schema.workItems)
+      .set(patch)
+      .where(eq(schema.workItems.id, `wk_${sessionId}`))
+      .run();
+
+  // /chat/<id> leads to /chief only for the thread /chief shows. A pin left on a conversation that was archived or
+  // moved away must not send that conversation's own address to a different thread.
+  it("the pinned session is only reported while it is the thread the coordinator shows", () => {
+    const u = userOf(owner);
+    const area = store.createItem(u, { kind: "area", title: "Portfolio" }, cid);
+    const other = store.createItem(u, { kind: "area", title: "Finance" }, cid);
+    addConv(owner, area.id, "api_owner", "Chief of staff", "2026-11-13T10:00:00.000Z");
+    addConv(owner, area.id, "api_later", "What needs me?", "2026-11-14T09:00:00.000Z");
+    expect(pinnedCoordinatorSession(u, area.id)).toBeNull();
+    pinCoordinatorThread(u, area.id, "api_owner", cid);
+    expect(pinnedCoordinatorSession(u, area.id)).toBe("api_owner");
+
+    setConv("api_owner", { archived: true });
+    expect(coordinatorPin(area.id)).toBe("api_owner");
+    expect(coordinatorFor(u, area.id)).toMatchObject({ sessionId: "api_later", pinned: false });
+    expect(pinnedCoordinatorSession(u, area.id)).toBeNull();
+    // Restored, it is the pinned thread again: the stored pin was never dropped.
+    setConv("api_owner", { archived: false });
+    expect(pinnedCoordinatorSession(u, area.id)).toBe("api_owner");
+
+    setConv("api_owner", { parentId: other.id });
+    expect(pinnedCoordinatorSession(u, area.id)).toBeNull();
   });
 
   it("refuses conversations outside the area and AI-excluded areas", () => {

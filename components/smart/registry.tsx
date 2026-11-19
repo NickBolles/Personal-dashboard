@@ -1,4 +1,5 @@
 "use client";
+import { BatchedAnswers } from "./AnswerBatch";
 
 import Link from "next/link";
 import { useContext } from "react";
@@ -166,16 +167,20 @@ function TaskList({ element }: P<"TaskList">) {
 }
 
 function DecisionCard({ element }: P<"DecisionCard">) {
+  const batched = useContext(BatchedAnswers);
   const p = element.props;
   const s = useSurface();
   const liveDecision = useContext(LiveDecision);
   const ref = decisionRefOf(p.title);
-  const live = ref && liveDecision ? liveDecision(ref) : null;
+  const live = !p.options.some((o) => o.intent) && ref && liveDecision ? liveDecision(ref) : null;
   const key = `decision:${p.title}`;
   const staged = s.staged.get(key);
   const appliedOpt = p.options.find(
     (o) => o.intent && s.applied.get(intentTarget(o.intent)) && intentKey(s.applied.get(intentTarget(o.intent))!.intent as never) === intentKey(o.intent),
   );
+  if (batched && p.options.every((o) => !o.intent)) return null;
+  if (p.options.some((o) => o.intent) && p.options.some((o) => !o.intent))
+    return <p className="text-xs text-muted">This choice mixes replies and writes and is unavailable. Ask for separate controls.</p>;
   if (live)
     return (
       <div data-live-decision={ref} data-testid="smart-live-decision">

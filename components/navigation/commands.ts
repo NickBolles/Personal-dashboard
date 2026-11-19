@@ -76,6 +76,13 @@ export function useCommands(): Command[] {
       { id: "go.alerts", label: "Go to Alerts", group: "Go to", keywords: "notifications alerts", run: go("/alerts") },
       work && { id: "work.today", label: "Go to Areas", group: "Go to", keywords: "areas work overview map portfolio continue", run: go("/areas") },
       work && {
+        id: "go.chief",
+        label: "Go to Chief of staff",
+        group: "Go to",
+        keywords: "chief of staff coordinator conversation chat expand full",
+        run: go("/chief"),
+      },
+      work && {
         id: "work.resume",
         label: "Go to In flight",
         group: "Go to",

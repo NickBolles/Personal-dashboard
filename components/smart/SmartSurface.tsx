@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
+import { BatchedAnswers } from "./AnswerBatch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { JSONUIProvider, Renderer } from "@json-render/react";
 import type { Spec } from "@json-render/core";
@@ -27,6 +28,7 @@ const STAGING = new Set(["TaskList", "DecisionCard", "ApprovalChips", "WeekPlan"
 /** One canonical surface: ref hydration, durable drafts, confirmed Apply and recorded Undo. */
 export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: JarvisSpec; sessionId: string; blockIndex: number; dropped: number }) {
   const qc = useQueryClient();
+  const hasAnswerBatch = useContext(BatchedAnswers);
   const { toast } = useToast();
   const canon = useMemo(() => canonicalJson(spec), [spec]);
   const refs = useMemo(() => specRefs(spec), [spec]);
@@ -240,7 +242,10 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
   const n = regular.length;
   // A questionnaire Form answers the conversation (components/smart/live.tsx SmartReply), it stages nothing.
   const stageable = Object.values(spec.elements).some(
-    (e) => STAGING.has(e.type) && !(e.type === "Form" && isQuestionnaire((e.props ?? {}) as Parameters<typeof isQuestionnaire>[0])),
+    (e) =>
+      STAGING.has(e.type) &&
+      !(e.type === "Form" && isQuestionnaire((e.props ?? {}) as Parameters<typeof isQuestionnaire>[0])) &&
+      !(e.type === "DecisionCard" && !(e.props as { options: { intent?: unknown }[] }).options.some((o) => o.intent)),
   );
   if (surface.isError)
     return <p className="text-xs text-muted">Interactive part unavailable: {surface.error instanceof ApiError ? surface.error.message : "try again later"}.</p>;
@@ -310,7 +315,7 @@ export function SmartSurface({ spec, sessionId, blockIndex, dropped }: { spec: J
                   </Button>
                   <Button
                     size="sm"
-                    variant="primary"
+                    variant={hasAnswerBatch ? "ghost" : "primary"}
                     busy={apply.isPending && !approveCal}
                     onClick={() => (needsConfirm ? setConfirmApply(true) : apply.mutate(false))}
                   >

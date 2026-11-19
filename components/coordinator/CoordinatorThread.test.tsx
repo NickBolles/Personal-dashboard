@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { useState, type ComponentProps } from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { api } from "@/lib/client/api";
 import { Button } from "@/components/ui";
 import type { ComposeScope } from "@/lib/coordinator/compose";
+import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { COORDINATOR_RUNS_KEY } from "./running/useCoordinatorRuns";
@@ -286,6 +287,30 @@ it("Backspace in the empty field removes the chip; with text in the field it onl
   expect(field().placeholder).toBe("Ask the coordinator…");
   // With no chip, Backspace is just Backspace.
   expect(fireEvent.keyDown(field(), { key: "Backspace" })).toBe(true);
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+// The chip belongs to the draft it was set for. The owner hit an "About R-40" chip riding along with an unrelated
+// quick action: anything that replaces the draft, or leaves the thread, starts without it.
+it("a quick action written into the composer starts its own message: the chip does not ride along", () => {
+  mountScoped(steerR3);
+  fireEvent.change(field(), { target: { value: "Skip the arch" } });
+  act(() => {
+    window.dispatchEvent(new CustomEvent(COORDINATOR_PROMPT, { detail: { text: "Plan my week" } }));
+  });
+  expect(field().value).toBe("Plan my week");
+  expect(chip()).toBeNull();
+  expect(field().placeholder).toBe("Ask the coordinator…");
+  expect(api.post).not.toHaveBeenCalled();
+});
+
+it("starting a new thread drops the chip, and an armed risky answer with it", () => {
+  const seen = mountScoped(steerR3);
+  fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+  expect(chip()).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Start new thread" }));
+  expect(chip()).toBeNull();
+  expect(seen).toHaveBeenCalledWith(null);
   expect(api.post).not.toHaveBeenCalled();
 });
 

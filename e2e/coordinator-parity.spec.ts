@@ -137,6 +137,14 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await expect(page.getByText("Sent to the coordinator", { exact: true })).toBeVisible();
   await expect(pane.getByTestId("gc-scope")).toHaveCount(0);
   await expect(input).toHaveValue("");
+  // The chip belongs to the draft it was set for: a quick action written into the composer starts its own message.
+  await run.getByRole("button", { name: "Steer Audit retries", exact: true }).click();
+  await expect(pane.getByTestId("gc-scope")).toContainText("Audit retries");
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("jarvis:coordinator-prompt", { detail: { text: "Plan my week" } })));
+  await expect(input).toHaveValue("Plan my week");
+  await expect(pane.getByTestId("gc-scope")).toHaveCount(0);
+  await input.fill("");
+  expect(sent).toHaveLength(1);
   // Stop asks once on the row, then sends.
   await run.getByRole("button", { name: "Stop Audit retries", exact: true }).click();
   expect(sent).toHaveLength(1);

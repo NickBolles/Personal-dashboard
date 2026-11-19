@@ -1,4 +1,5 @@
 "use client";
+import { BatchedAnswers } from "./AnswerBatch";
 import Link from "next/link";
 import { useContext, useId, useState, type ReactNode } from "react";
 import type { ComponentRenderProps } from "@json-render/react";
@@ -299,6 +300,7 @@ export function SmartForm({ element }: P<"Form">) {
   // A questionnaire (nothing to create or update) answers the conversation: Submit sends the answers as the owner's reply.
   const reply = useContext(SmartReply);
   const questionnaire = isQuestionnaire(p);
+  const batched = useContext(BatchedAnswers);
   // Sent state is this form's own (not the surface's saved state: an identical check-in later in the thread shares it).
   const [sentAt, setSentAt] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -306,6 +308,7 @@ export function SmartForm({ element }: P<"Form">) {
     setValues({ ...values, [id]: v });
     setEdited(new Set([...edited, id]));
   };
+  if (batched && questionnaire) return null;
   return (
     <section className="sv" aria-label={p.title}>
       <SmartHeader kind="Form" title={p.title} meta="Questionnaire" />

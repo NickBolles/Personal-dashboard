@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -11,24 +11,20 @@ import type { AgentResolution } from "@/lib/agents";
 import { maskedNotice, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { Markdown, MarkdownRefRenderer } from "@/components/markdown/Markdown";
 import { AssistantText, useSmartSettings } from "@/components/smart/AssistantText";
-import {
-  AttachButton,
-  AttachmentChips,
-  CameraButton,
-  MessageAttachments,
-  pastedFiles,
-  useChatAttachments,
-  useConversationFiles,
-} from "@/components/chat/Attachments";
+import { MessageAttachments, useChatAttachments, useConversationFiles } from "@/components/chat/Attachments";
 import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
-import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon, PlusIcon } from "@/components/icons";
+import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, Menu, RefPill, Textarea, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, RefPill, useOnline, useToast } from "@/components/ui";
+import { Composer, type ComposerHandle } from "@/components/chat/Composer";
+import { AssistantName, LiveRun, liveRunVisible } from "@/components/chat/Timeline";
+import { useRunStream, type RunState } from "@/components/chat/useRunStream";
+import { useRunAnswers } from "@/components/chat/useRunAnswers";
+import { kvDel, kvSet } from "@/lib/client/idb";
 import { scopeChip, scopeIsCommand, scopeLabel, scopeMessage, scopePlaceholder, scopeSendsEmpty, type ComposeScope } from "@/lib/coordinator/compose";
 import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
-import { composerKey, isSendShortcut } from "@/lib/client/composer-keys";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
@@ -37,7 +33,6 @@ import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { ToolStep } from "@/components/chat/ToolStep";
 import { isDelegateTool } from "@/lib/delegate-presentation";
-import { ContextIcon, PaperclipIcon, CameraIcon } from "@/components/icons";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
 import { mergeBackgroundWork, placeWork, sinceChips, workKey, type BackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
@@ -72,6 +67,7 @@ export function CoordinatorThread({
   name = "Coordinator",
   context = null,
   contextRemoved = false,
+  standalone,
   onRemoveContext,
   onRestoreContext,
   onAskPage,
@@ -112,6 +108,8 @@ export function CoordinatorThread({
   context?: PageContext | null;
   /** The owner turned this page's context off (it can be shared again). */
   contextRemoved?: boolean;
+  /** The panel is the page itself (Expand): there is no other page whose context could be shared, so say nothing. */
+  standalone?: boolean;
   onRemoveContext?: () => void;
   onRestoreContext?: () => void;
   /** Fills the composer with a question about the page being viewed. Never sends. */
@@ -134,7 +132,6 @@ export function CoordinatorThread({
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const titleId = useId();
   const online = useOnline();
   const sentText = compact ? `Sent to your ${name}` : "Sent to the coordinator";
   const [localText, setLocalText] = useState("");
@@ -144,9 +141,9 @@ export function CoordinatorThread({
   const [fresh, setFresh] = useState(false);
   const [earlier, setEarlier] = useState(false);
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
-  const textarea = useRef<HTMLTextAreaElement>(null);
+  const composer = useRef<ComposerHandle>(null);
   useEffect(() => {
-    if (!compact) textarea.current?.focus();
+    if (!compact) composer.current?.focus();
   }, [compact]);
   const [localScope, setLocalScope] = useState<ComposeScope | null>(null);
   const scope = onScope ? (scopeProp ?? null) : localScope;
@@ -159,10 +156,40 @@ export function CoordinatorThread({
   const confirming = armed !== null && armed === answerKey;
   const compose = (next: ComposeScope) => {
     setScope(next);
-    requestAnimationFrame(() => textarea.current?.focus());
+    requestAnimationFrame(() => composer.current?.focus());
+  };
+  /** The chip belongs to the draft it was set for: a new draft from elsewhere or another thread starts without it. */
+  const dropScope = () => {
+    setScope(null);
+    setArmed(null);
   };
   const sid = fresh ? null : (sessionId ?? d.sessionId);
   const pinThread = usePinThread(d.area.id);
+  // The run in flight streams here, on the one stream every reader of that run shares (lib/client/run-streams.ts):
+  // the rail, the sheet and a chat page showing the same run cost Hermes one connection between them.
+  const clearRun = useRef<() => void>(() => {});
+  /** The conversation on screen and the run of it that was taken up (see the follow effect below). */
+  const followed = useRef<{ sid: string | null; runId: string | null }>({ sid, runId: null });
+  const onRunEnd = useCallback(
+    (ended: RunState) => {
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+      void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
+      void refreshSessionLists(qc).catch(() => undefined);
+      // Once the saved conversation has this turn, the live copy goes. A run that failed stays on screen.
+      // By then the owner may have opened another thread, or this one may have started its next run: the stream
+      // held now is that one's, and it is not this run's to clear.
+      void qc.refetchQueries({ queryKey: ["session", sid] }).then(() => {
+        if (ended.phase === "completed" && followed.current.sid === sid && followed.current.runId === ended.runId) clearRun.current();
+      });
+    },
+    [qc, sid],
+  );
+  const run = useRunStream(onRunEnd);
+  /** The stream is open and delivering: not waiting to reconnect, not given up. */
+  const streaming = run.active && run.state.phase !== "reconnecting" && run.state.phase !== "disconnected";
+  useEffect(() => {
+    clearRun.current = run.clear;
+  });
   // Excluded areas fetch nothing at all.
   const smartSettings = useSmartSettings(!d.excluded);
   /** An earlier thread is open in the panel (not the Chief of staff thread). */
@@ -171,8 +198,10 @@ export function CoordinatorThread({
   const quickActions = useQuickActions(!d.excluded);
   const hasProposals = !!quickActions.data?.actions.some((a) => a.status === "proposed");
   const fill = (value: string) => {
+    // A quick action is a whole message of its own: it is never about the thing an earlier chip named.
+    dropScope();
     setText(value.slice(0, 8000));
-    requestAnimationFrame(() => textarea.current?.focus());
+    requestAnimationFrame(() => composer.current?.focus());
   };
   const fillRef = useRef(fill);
   useEffect(() => {
@@ -192,7 +221,8 @@ export function CoordinatorThread({
     queryKey: ["session", sid],
     queryFn: () => api.get<Detail>(`/api/hermes/sessions/${encodeURIComponent(sid!)}`),
     enabled: !!sid && !d.excluded,
-    refetchInterval: (q) => (q.state.data?.session?.activeRun ? 3000 : false),
+    // The run itself arrives over its stream. Polling is only the fallback for a run that is not streaming here.
+    refetchInterval: (q) => (q.state.data?.session?.activeRun && !streaming ? 3000 : false),
   });
   const execution = useQuery({
     queryKey: ["session-exec", sid],
@@ -200,6 +230,31 @@ export function CoordinatorThread({
     enabled: !!sid && !d.excluded,
     refetchInterval: (q) => (detail.data?.session?.activeRun || q.state.data?.records?.some(isActiveExec) ? 5000 : 15000),
   });
+  // Follow the run this conversation has in flight; each run is taken up once (a finished one is not reopened by a
+  // session that has not caught up yet). Another thread is another conversation: its run is not this one's.
+  const activeRun = detail.data?.session?.activeRun;
+  const { start: startRun, clear: clearLive } = run;
+  const liveRunId = run.active ? run.state.runId : undefined;
+  const sessionFresh = detail.isSuccess && !detail.isFetching;
+  useEffect(() => {
+    if (followed.current.sid !== sid) {
+      followed.current = { sid, runId: null };
+      clearLive();
+    }
+    if (activeRun) {
+      if (followed.current.runId === activeRun.runId) return;
+      followed.current.runId = activeRun.runId;
+      startRun(activeRun.runId, activeRun.status === "queued" ? "queued" : activeRun.status === "waiting_for_approval" ? "waiting_for_approval" : "running");
+      return;
+    }
+    // The conversation, freshly read, says nothing is running. A stream still open for the run we followed has
+    // missed its ending (a dropped connection, a tab that slept): the saved conversation is the truth, so let go.
+    if (sessionFresh && liveRunId && liveRunId === followed.current.runId) {
+      clearLive();
+      void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
+    }
+  }, [sid, activeRun, startRun, clearLive, sessionFresh, liveRunId, qc]);
+  const { answerApproval, answerClarify } = useRunAnswers(run.state);
   const discussions = useQuery({
     queryKey: ["work", "conversations", "coordinator-earlier", d.area.id],
     queryFn: () => api.get<ConversationListResponse>(`/api/work/conversations?view=all&areaId=${encodeURIComponent(d.area.id)}`),
@@ -210,12 +265,13 @@ export function CoordinatorThread({
     input: string,
     control = false,
     extra: { context?: string; files?: string[] } = {},
+    key?: string,
   ): Promise<{ masked?: string[] } | null> => {
     const active = detail.data?.session?.activeRun;
     if (control && active) return api.post<{ masked?: string[] } | null>(`/api/hermes/runs/${encodeURIComponent(active.runId)}/steer`, { input });
     return api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(target)}/runs`, {
       input,
-      idempotencyKey: newIdempotencyKey(control ? "ctl" : "coord"),
+      idempotencyKey: key ?? newIdempotencyKey(control ? "ctl" : "coord"),
       capabilities: [SMART_CAPABILITY],
       ...extra,
     });
@@ -265,13 +321,9 @@ export function CoordinatorThread({
     });
   };
   const [chips, setChips] = useState<ContextChip[]>([]);
-  const [adding, setAdding] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const fileInput = useRef<HTMLInputElement | null>(null);
-  const cameraInput = useRef<HTMLInputElement | null>(null);
-  const addButton = useRef<HTMLButtonElement>(null);
   const send = useMutation({
-    mutationFn: async ({ input, correction = false }: { input: string; correction?: boolean }) => {
+    mutationFn: async ({ input, correction = false, key }: { input: string; correction?: boolean; key?: string }) => {
       const target = await ensureSession();
       if (correction) return { target, notice: maskedNotice(await postInput(target, input)) };
       // Sheet picks that are @/# references ride in the message as tokens; the rest go as context lines (as in full chat).
@@ -286,7 +338,11 @@ export function CoordinatorThread({
             .slice(0, 4000) || undefined,
         files: attachments.readyIds.length ? attachments.readyIds : undefined,
       };
-      const run = await postInput(target, compact ? withPageContext(typed, context) : typed, false, extra);
+      // Kept on this device until Hermes has the message: a send that did not get through is retried with the same
+      // key (after a reload too), so it never runs twice.
+      if (key) await kvSet(`pending:${target}`, { input, key });
+      const run = await postInput(target, compact ? withPageContext(typed, context) : typed, false, extra, key);
+      if (key) await kvDel(`pending:${target}`);
       return { target, notice: maskedNotice(run) };
     },
     onSuccess: ({ target, notice }, { correction }) => {
@@ -298,7 +354,6 @@ export function CoordinatorThread({
           attachments.clear();
           void qc.invalidateQueries({ queryKey: ["chat-files", target] });
         }
-        if (textarea.current && compact) textarea.current.style.height = "auto";
       }
       toast(notice ?? sentText, notice ? "warn" : undefined);
       // The owner's first message in the thread the panel picked makes it the pinned Chief of staff thread.
@@ -344,43 +399,56 @@ export function CoordinatorThread({
     },
     onError: (err) => toast(`Not stopped: ${(err as Error).message}`, "danger"),
   });
-  const submit = () => {
+  const sendMessage = (input: string, key?: string) =>
+    send.mutateAsync({ input, key }).then(
+      () => true,
+      () => false,
+    );
+  const sendControl = (line: string) =>
+    control.mutateAsync(line).then(
+      () => true,
+      () => false,
+    );
+  // A risky decision's typed answer is recorded on the second press: the first one arms it, for exactly these words.
+  const canSend = (said: string) => {
+    if (scope?.kind !== "answer" || !onAnswer || !scope.risky || confirming) return true;
+    if (said) setArmed(answerKey);
+    return false;
+  };
+  /**
+   * What the composer's Send means here. The chip decides first (an answer to record, a one-line command, a
+   * question); with no chip the words are guidance for the run in flight, or the next message.
+   * Resolves true when the words went somewhere, and the composer then clears itself.
+   */
+  const deliver = async (said: string, key?: string): Promise<boolean> => {
     // Files picked before the conversation exists wait in `queued` until it does: sending now would leave them behind.
-    if (attachments.uploading || queued.current.length) return toast("Wait for the upload to finish, then send.", "warn");
-    if (send.isPending || control.isPending || d.excluded || !online) return;
+    if (attachments.uploading || queued.current.length) {
+      toast("Wait for the upload to finish, then send.", "warn");
+      return false;
+    }
+    if (d.excluded) return false;
     if (scope?.kind === "answer" && onAnswer) {
-      if (!text.trim() || answering) return;
-      if (scope.risky && !confirming) return setArmed(answerKey);
+      if (!said || answering) return false;
       setAnswering(true);
-      void onAnswer(scope, text.trim(), confirming)
-        .then((recorded) => {
-          if (!recorded) return;
-          setText("");
-          setScope(null);
-          if (textarea.current && compact) textarea.current.style.height = "auto";
-        })
-        .finally(() => {
-          setArmed(null);
-          setAnswering(false);
-        });
-      return;
+      try {
+        const recorded = await onAnswer(scope, said, confirming);
+        if (recorded) setScope(null);
+        return recorded;
+      } finally {
+        setArmed(null);
+        setAnswering(false);
+      }
     }
     if (scope) {
       // The chip decides what the words mean: a steer, a reply, a retry (which needs no words) or a question.
-      if (!text.trim() && !scopeSendsEmpty(scope)) return;
-      const line = scopeMessage(scope, text);
-      if (scopeIsCommand(scope) && sid)
-        control.mutate(line, {
-          onSuccess: () => {
-            setText("");
-            setScope(null);
-            if (textarea.current && compact) textarea.current.style.height = "auto";
-          },
-        });
-      else send.mutate({ input: line });
-      return;
+      if (!said && !scopeSendsEmpty(scope)) return false;
+      const line = scopeMessage(scope, said);
+      if (!scopeIsCommand(scope) || !sid) return sendMessage(line, key);
+      const sent = await sendControl(line);
+      if (sent) setScope(null);
+      return sent;
     }
-    if (text.trim() || attachments.readyIds.length) send.mutate({ input: text.trim() });
+    return running ? sendControl(said) : sendMessage(said, key);
   };
   const timeline = detail.data?.timeline ?? [];
   const replyActions = useMemo(
@@ -455,11 +523,11 @@ export function CoordinatorThread({
   // has its row as work a reply started. Everywhere else it is only the chip in the text.
   const smartOn = !!smartSettings.data?.enabled;
   const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
-  // A smart decision card in a reply is drawn as the live decision (below), so it isn't also a mention row.
-  // With Smart replies off only a card that IS the block (its root) is drawn live; nested ones need the renderer.
-  for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text, { rootOnly: !smartOn })) drawn.add(ref);
+  // Only suppress rows actually replaced by the enabled rich renderer. Smart-off keeps native owner-session controls.
+  if (smartOn) for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text)) drawn.add(ref);
   const mentionedBy = new Map<string, string>();
-  for (const m of msgs) if (m.kind === "assistant") for (const ref of proseRefs(m.text)) mentionedBy.set(ref, m.id);
+  for (const m of msgs)
+    if (m.kind === "assistant") for (const ref of new Set([...proseRefs(m.text), ...(!smartOn ? smartDecisionRefs(m.text) : [])])) mentionedBy.set(ref, m.id);
   const mentionRows = (id: string) =>
     mentions
       ? [...mentionedBy]
@@ -479,7 +547,8 @@ export function CoordinatorThread({
   const sinceRef = useRef<HTMLLIElement>(null);
   const positioned = useRef<string | null>(null);
   const lastId = msgs.at(-1)?.id;
-  const running = !!detail.data?.session?.activeRun;
+  const running = !!activeRun || run.active;
+  const showLive = liveRunVisible(run.state, run.active, timeline);
   const hasDivider = dividerIndex >= 0;
   useEffect(() => {
     const body = bodyRef.current;
@@ -493,6 +562,13 @@ export function CoordinatorThread({
     if (first && sinceRef.current) body.scrollTop = Math.max(0, sinceRef.current.offsetTop - body.offsetTop - 4);
     else body.scrollTop = body.scrollHeight;
   }, [compact, sid, lastId, running, hasDivider]);
+  // While a run writes, the thread stays on its last line, unless the owner has scrolled up to read.
+  const atBottom = useRef(true);
+  const liveSize = run.state.text.length + run.state.activity.length + (run.state.approval ? 1 : 0) + (run.state.clarify ? 1 : 0);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (body && compact && showLive && atBottom.current) body.scrollTop = body.scrollHeight;
+  }, [compact, showLive, liveSize]);
   // A reference chip in the text jumps to the thing's row when it is on screen here, else to its tab.
   const jumpTo = (ref: string) => {
     const target = bodyRef.current?.querySelector<HTMLElement>(`[data-run-ref="${ref}"], [data-ref-row="${ref}"]`);
@@ -516,10 +592,10 @@ export function CoordinatorThread({
   const liveDecision = mentions ? (ref: string) => (ref.startsWith("D-") && mentions.rank(ref) !== null ? mentions.render(ref) : null) : null;
   // F2: a questionnaire form's Submit answers in this thread.
   // It is its own message: it never takes the composer's draft, chips, scope or attachments with it.
-  const smartReply = async (input: string) => {
+  const smartReply = async (input: string, key?: string) => {
     try {
       const target = await ensureSession();
-      const notice = maskedNotice(await postInput(target, input));
+      const notice = maskedNotice(await postInput(target, input, false, {}, key));
       toast(notice ?? sentText, notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -531,7 +607,16 @@ export function CoordinatorThread({
   };
   return (
     <SmartScope session={sid} reply={d.excluded ? null : smartReply} liveDecision={liveDecision}>
-      <div ref={bodyRef} className={compact ? "gc-thread-body" : "co-body"} data-testid={compact ? "gc-thread-body" : "coordinator-body"} tabIndex={0}>
+      <div
+        ref={bodyRef}
+        className={compact ? "gc-thread-body" : "co-body"}
+        data-testid={compact ? "gc-thread-body" : "coordinator-body"}
+        tabIndex={0}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+      >
         {d.excluded ? (
           <p className="text-sm" data-testid="coordinator-excluded">
             Areas excluded from AI are never sent: this area has no coordinator chat.
@@ -553,17 +638,20 @@ export function CoordinatorThread({
                 // Attachments and context picked for one thread never ride along to another.
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);
+                dropScope();
                 setFresh(false);
                 setSessionId(id);
               }}
               onNew={() => {
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);
+                dropScope();
                 setSessionId(null);
                 setFresh(true);
-                requestAnimationFrame(() => textarea.current?.focus());
+                requestAnimationFrame(() => composer.current?.focus());
               }}
               onUndoNew={() => {
+                dropScope();
                 setFresh(false);
                 setSessionId(null);
               }}
@@ -651,7 +739,7 @@ export function CoordinatorThread({
                             ) : null}
                           </div>
                           {renderDelegates(delegateSteps.get(m.id) ?? [])}
-                          <AssistantText text={m.text} />
+                          <AssistantText text={m.text} messageId={m.id} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
                             <section aria-label="Work started by this reply" className="gc-bgwork">
@@ -673,6 +761,15 @@ export function CoordinatorThread({
               <p className="text-sm text-muted">No messages yet.</p>
             ) : null}
             {renderDelegates(pendingDelegates)}
+            {showLive ? (
+              <MarkdownRefRenderer.Provider value={refChip}>
+                <AssistantName.Provider value={name}>
+                  <div className="gc-live" data-testid="gc-live">
+                    <LiveRun state={run.state} onApprove={answerApproval} onClarify={answerClarify} onRetry={run.retry} />
+                  </div>
+                </AssistantName.Provider>
+              </MarkdownRefRenderer.Provider>
+            ) : null}
             {detail.data?.session?.activeRun ? (
               <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
                 <Dot tone="ai" live label="Coordinator running" />
@@ -680,9 +777,11 @@ export function CoordinatorThread({
                 <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
                   Stop
                 </Button>
-                <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
-                  Open
-                </Link>
+                {compact ? null : (
+                  <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
+                    Open
+                  </Link>
+                )}
               </div>
             ) : null}
             <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
@@ -704,7 +803,7 @@ export function CoordinatorThread({
                 {liveWork.map(row)}
               </section>
             ) : null}
-            {sid ? (
+            {sid && !compact ? (
               <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
                 Open full conversation
               </Link>
@@ -717,204 +816,151 @@ export function CoordinatorThread({
       </div>
       {!d.excluded && !compact ? <ProposedQuickActions /> : null}
       {!d.excluded ? (
-        <form
-          className={compact ? "gc-composer" : "co-foot"}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          {compact && context ? (
-            <div className="gc-context">
-              <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
-              {onAskPage ? (
-                <Button variant="ghost" size="sm" onClick={onAskPage}>
-                  Ask about this page
-                </Button>
-              ) : null}
-              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
-                Remove
-              </Button>
-            </div>
-          ) : compact && contextRemoved ? (
-            <div className="gc-context-off">
-              <span>This page is not shared.</span>
-              <Button variant="ghost" size="sm" onClick={onRestoreContext}>
-                Share page
-              </Button>
-            </div>
-          ) : compact ? (
-            <p className="gc-hint gc-context-none">No page context is shared.</p>
-          ) : null}
-          {compact && (text.trim() || scope) ? null : (
-            <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
-          )}
-          <label htmlFor={`${titleId}-m`} className="sr-only">
-            Message the coordinator
-          </label>
-          {compact ? (
-            <>
-              {chips.length ? (
-                <div className="gc-chips" role="group" aria-label="Context to send">
-                  {chips.map((c) => (
-                    <ChipButton key={c.ref} aria-label={`Remove context ${c.label}`} onClick={() => setChips((all) => all.filter((x) => x.ref !== c.ref))}>
-                      {c.label} ×
-                    </ChipButton>
-                  ))}
-                </div>
-              ) : null}
-              <AttachmentChips drafts={attachments.drafts} onRemove={attachments.remove} onRetry={attachments.retry} />
-            </>
-          ) : null}
-          {scope ? (
-            // What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message.
-            <div className="gc-scope" role="group" aria-label={scopeLabel(scope)} data-kind={scope.ref?.startsWith("D-") ? "d" : "r"} data-testid="gc-scope">
-              <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
-                {scopeChip(scope)}
-              </span>
-              <span className="gc-scope-title">{scope.title}</span>
-              <Button variant="ghost" size="sm" iconOnly icon="×" aria-label={`Remove ${scopeChip(scope)} from the message`} onClick={() => setScope(null)}>
-                Remove
-              </Button>
-            </div>
-          ) : null}
-          {confirming && scope ? (
-            <p className="gc-scope-confirm" role="status">
-              <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
-              <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
-                Cancel
-              </Button>
-            </p>
-          ) : null}
-          <div className={compact ? "gc-compose-row" : undefined}>
-            {compact ? (
-              <div className="gc-add-menu">
-                <Button
-                  ref={addButton}
-                  variant="ghost"
-                  size="sm"
-                  iconOnly
-                  icon={<PlusIcon className="h-4 w-4" />}
-                  className="gc-add"
-                  aria-label="Add to message"
-                  aria-haspopup="menu"
-                  aria-expanded={adding}
-                  onClick={() => setAdding((v) => !v)}
-                >
-                  Add
-                </Button>
-                {adding ? (
-                  <Menu
-                    label="Add to message"
-                    items={[
-                      { label: "Photo or file", icon: <PaperclipIcon className="h-4 w-4" />, onSelect: () => fileInput.current?.click(), disabled: !online },
-                      { label: "Camera", icon: <CameraIcon className="h-4 w-4" />, onSelect: () => cameraInput.current?.click(), disabled: !online },
-                      { label: "Area, item or person", icon: <ContextIcon className="h-4 w-4" />, onSelect: () => setSheet(true) },
-                    ]}
-                    onClose={() => {
-                      setAdding(false);
-                      addButton.current?.focus();
-                    }}
-                  />
-                ) : null}
-                <span hidden>
-                  <AttachButton onFiles={attach} disabled={!online} inputRef={fileInput} testId="gc-file-input" />
-                  <CameraButton onFiles={attach} disabled={!online} inputRef={cameraInput} testId="gc-camera-input" />
-                </span>
-              </div>
-            ) : null}
-            <Textarea
-              ref={textarea}
-              id={`${titleId}-m`}
-              data-autofocus
-              data-testid={compact ? "gc-input" : "coordinator-input"}
-              className={compact ? "gc-input" : "gc-thread-input w-full min-w-0 resize-y"}
-              rows={compact ? 1 : text.length > 200 ? 8 : 3}
-              maxLength={8000}
-              value={text}
-              placeholder={
-                scope
-                  ? scopePlaceholder(scope)
+        <div className={compact ? "gc-composer" : "co-foot"}>
+          <Composer
+            ref={composer}
+            surface="panel"
+            sessionId={sid}
+            text={text}
+            onText={setText}
+            answerer="the coordinator"
+            // With a chip the words are about that thing, whatever is running; with none they are guidance for the run.
+            label={scope || !running ? "Message the coordinator" : undefined}
+            keyPrefix="coord"
+            canSend={canSend}
+            placeholder={
+              scope
+                ? scopePlaceholder(scope)
+                : running
+                  ? undefined
                   : compact
                     ? `Ask ${name === "Coordinator" ? "the coordinator" : "your " + name.toLowerCase()}…`
                     : "Ask the coordinator…"
-              }
-              onChange={(e) => {
-                setText(e.target.value);
-                if (compact) {
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
-                }
-              }}
-              onKeyDown={(e) => {
-                if (isSendShortcut(composerKey(e))) {
-                  e.preventDefault();
-                  submit();
-                } else if (e.key === "Backspace" && scope && !text) {
-                  e.preventDefault();
-                  setScope(null);
-                }
-              }}
-              onPaste={(e) => {
-                if (!compact) return;
-                const files = pastedFiles(e);
-                if (files.length) {
-                  e.preventDefault();
-                  attach(files);
-                }
-              }}
-            />
-            {compact ? (
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                iconOnly
-                icon={<span>↑</span>}
-                className="gc-send"
-                aria-label={confirming ? "Confirm answer" : "Send"}
-                disabled={(scope ? !text.trim() && !scopeSendsEmpty(scope) : !text.trim() && !attachments.readyIds.length) || !online}
-                loading={send.isPending || answering || (!!scope && control.isPending)}
-              >
-                Send
-              </Button>
-            ) : null}
-          </div>
-          {!compact ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={!d.prompt}
-                onClick={() => d.prompt && setText(d.prompt)}
-                data-testid="coordinator-catch-up"
-                title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
-              >
-                Catch me up
-              </Button>
-              <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
-              <Button
-                type="submit"
-                size="sm"
-                variant={hasProposals ? "secondary" : "primary"}
-                disabled={(!text.trim() && !(scope && scopeSendsEmpty(scope))) || !online}
-                loading={send.isPending || (!!scope && control.isPending)}
-                data-testid="coordinator-send"
-              >
-                Send
-              </Button>
-            </div>
-          ) : (
-            <>
-              {!online ? (
-                <p className="gc-hint" role="status" data-tone="warn">
-                  You&apos;re offline. Your draft is kept; send it when you&apos;re back.
-                </p>
-              ) : null}
-              <p className="gc-hint gc-keys">Ctrl/⌘+Enter to send · Enter for a new line</p>
-            </>
-          )}
-        </form>
+            }
+            // A run in flight takes the words as guidance, as on the chat page. Stop stays on the run's own row, where
+            // it asks first.
+            // What the composer needs to know about the run: it is waiting on an approval, it is stopping, or it is
+            // simply going. A stream that is queued or reconnecting does not stop guidance or a chip from being sent.
+            phase={!running ? undefined : run.state.phase === "waiting_for_approval" || run.state.phase === "stopping" ? run.state.phase : "running"}
+            clarifying={run.active && !!run.state.clarify}
+            online={online}
+            accessory={
+              compact && (text.trim() || scope) ? null : (
+                <QuickActionChips variant="row" context={quickContext ?? { areaId: d.area.id, areaTitle: d.area.title, path: pathname }} onPrompt={fill} />
+              )
+            }
+            lead={
+              compact && context ? (
+                <div className="gc-context">
+                  <span title="Sent with your message so the answer fits what you are looking at">Viewing: {context.label}</span>
+                  {onAskPage ? (
+                    <Button variant="ghost" size="sm" onClick={onAskPage}>
+                      Ask about this page
+                    </Button>
+                  ) : null}
+                  <Button variant="ghost" size="sm" iconOnly icon="×" aria-label="Remove page context" onClick={onRemoveContext}>
+                    Remove
+                  </Button>
+                </div>
+              ) : compact && contextRemoved ? (
+                <div className="gc-context-off">
+                  <span>This page is not shared.</span>
+                  <Button variant="ghost" size="sm" onClick={onRestoreContext}>
+                    Share page
+                  </Button>
+                </div>
+              ) : compact && !standalone ? (
+                <p className="gc-hint gc-context-none">No page context is shared.</p>
+              ) : null
+            }
+            scope={
+              scope ? (
+                <>
+                  {/* What the next message is about. Remove it (or Backspace in the empty field) to write an ordinary message. */}
+                  <div
+                    className="gc-scope"
+                    role="group"
+                    aria-label={scopeLabel(scope)}
+                    data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}
+                    data-testid="gc-scope"
+                  >
+                    <span className="k-ref" data-kind={scope.ref?.startsWith("D-") ? "d" : "r"}>
+                      {scopeChip(scope)}
+                    </span>
+                    <span className="gc-scope-title">{scope.title}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      iconOnly
+                      icon="×"
+                      aria-label={`Remove ${scopeChip(scope)} from the message`}
+                      onClick={() => setScope(null)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  {confirming ? (
+                    <p className="gc-scope-confirm" role="status">
+                      <span>{scope.ref} is flagged risky. Send again to record this as your answer.</span>
+                      <Button variant="ghost" size="sm" onClick={() => setArmed(null)}>
+                        Cancel
+                      </Button>
+                    </p>
+                  ) : null}
+                </>
+              ) : null
+            }
+            footer={
+              compact ? (
+                <>
+                  {!online ? (
+                    <p className="gc-hint" role="status" data-tone="warn">
+                      You&apos;re offline. Your draft is kept; send it when you&apos;re back.
+                    </p>
+                  ) : null}
+                  <p className="gc-hint gc-keys">@ context · # PR · Ctrl/⌘+Enter to send</p>
+                </>
+              ) : (
+                <div className="co-foot-row flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    disabled={!d.prompt}
+                    onClick={() => d.prompt && setText(d.prompt)}
+                    data-testid="coordinator-catch-up"
+                    title="Fills the message with a summary of this area's open items, decisions and recent activity. Nothing is sent until you tap Send."
+                  >
+                    Catch me up
+                  </Button>
+                  <span className="min-w-0 flex-1 text-xs text-muted">{text ? "Review, then tap Send." : null}</span>
+                </div>
+              )
+            }
+            context={chips.map((c) => ({ label: c.label, ref: c.ref }))}
+            onRemoveContext={(ref) => setChips((all) => all.filter((x) => x.ref !== ref))}
+            onAttach={() => setSheet(true)}
+            attachments={{ ...attachments, add: attach }}
+            onSend={deliver}
+            onSteer={deliver}
+            // Commands that act on a conversation page (fork, file, share…) have nothing to act on here.
+            onCommand={(id) => (id === "context" ? setSheet(true) : undefined)}
+            commands={PANEL_COMMANDS}
+            repo={null}
+            sendsEmpty={!!scope && scopeSendsEmpty(scope)}
+            onEmptyBackspace={scope ? () => setScope(null) : undefined}
+            sendLabel={confirming ? "Confirm answer" : undefined}
+            sending={send.isPending || control.isPending || answering}
+            // One primary action per view: while proposals are waiting, theirs is it.
+            quietSend={!compact && hasProposals}
+            testIds={{
+              input: compact ? "gc-input" : "coordinator-input",
+              send: "coordinator-send",
+              add: "gc-add",
+              file: "gc-file-input",
+              camera: "gc-camera-input",
+              library: "gc-library-input",
+            }}
+          />
+        </div>
       ) : null}
       {sheet ? (
         <ContextSheet
@@ -1020,6 +1066,8 @@ function withRefs(text: string, onRef: (ref: string) => void): ReactNode[] {
     .map((part, index) => (index % 2 ? <RefPill key={index} id={part} onClick={() => onRef(part)} className="gc-inline-ref" /> : part));
 }
 /** How many of a reply's mentioned things are drawn as rows before "N more". */
+/** The `/` commands that make sense in the panel: the rest act on a conversation page. */
+const PANEL_COMMANDS = ["context"] as const;
 const MENTIONS_SHOWN = 3;
 /**
  * What a reply mentions, as rich rows right under it: three at most, the rest behind one line that names them.

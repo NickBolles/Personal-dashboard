@@ -6,7 +6,11 @@ import { OPEN_PALETTE_EVENT } from "@/components/navigation/commands";
 import { QUICK_ACTION_MANAGE } from "@/lib/quick-actions";
 import { GlobalCoordinator } from "./GlobalCoordinator";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/more", useSearchParams: () => new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/more",
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+}));
 // No Chief of staff area, no decisions, no runs: these tests are about the sheet and the tray themselves.
 vi.mock("@/lib/client/api", () => ({
   api: {
