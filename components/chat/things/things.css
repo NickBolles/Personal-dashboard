@@ -203,22 +203,11 @@
   .chat-inline-state-dot[data-state="open"] {
     background: var(--ok);
   }
-  .chat-composer-context:empty {
-    display: none;
-  }
-  .chat-composer-card .chat-comp {
-    border: 0;
-    border-radius: 0 0 11px 11px;
-  }
-  .chat-composer-card:focus-within {
-    border-color: var(--accent);
-  }
   html[data-kb="open"] .chat-tray-counts,
   html[data-kb="open"] .chat-capture-chips,
   html[data-kb="open"] .chat-composer-context,
   .chat-tray[data-compact="true"] .chat-tray-counts,
-  .chat-tray[data-compact="true"] .chat-capture-chips,
-  .chat-composer-context[data-compact="true"] {
+  .chat-tray[data-compact="true"] .chat-capture-chips {
     display: none;
   }
   html[data-kb="open"] .chat-tray-line {
@@ -631,81 +620,6 @@
   background: linear-gradient(to top, var(--bg), transparent);
   pointer-events: none;
 }
-.chat-dock .chat-composer-card .chat-comp {
-  gap: 2px;
-  padding: 3px 5px 3px 3px;
-  /* transparent: the card paints the surface, so the form's square corners never show past the card's round ones */
-  background: transparent;
-}
-.chat-dock .chat-comp textarea {
-  min-height: var(--comp-h);
-  padding: 0.5625rem 0.375rem;
-  font-size: 0.9375rem;
-  line-height: 1.25rem;
-}
-.chat-dock .chat-send,
-.chat-dock .chat-stop {
-  width: 2rem;
-  min-width: 2rem;
-  height: 2rem;
-  min-height: 2rem;
-  margin-bottom: calc((var(--comp-h) - 2rem) / 2);
-  padding: 0;
-}
-/* Send: the same control as the Chief of staff sheet (.gc-send), an accent circle with an up arrow. */
-.chat-dock .chat-send {
-  border-radius: 999px;
-  font-size: 1rem;
-  line-height: 1;
-}
-.chat-dock .chat-send:disabled {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  opacity: 0.45;
-}
-.chat-dock .chat-stop {
-  border-radius: 8px;
-  color: var(--muted);
-}
-.chat-dock .chat-stop svg {
-  width: 1rem;
-  height: 1rem;
-}
-/* "+", attach and camera: small ghost icons. */
-.chat-dock .chat-add,
-.chat-dock .chat-comp > button:not(.chat-send, .chat-stop, .chat-model) {
-  width: 1.875rem;
-  min-width: 0;
-  height: 1.875rem;
-  min-height: 0;
-  margin-bottom: calc((var(--comp-h) - 1.875rem) / 2);
-  padding: 0;
-  border-radius: 8px;
-  color: var(--muted);
-}
-.chat-dock .chat-add svg,
-.chat-dock .chat-comp > button:not(.chat-send, .chat-stop, .chat-model) svg {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-/* "Model Default ▾": a quiet text chip. */
-.chat-dock .chat-model {
-  max-width: 14rem;
-  min-height: 1.875rem;
-  margin-bottom: calc((var(--comp-h) - 1.875rem) / 2);
-  padding: 0 0.5rem;
-  border-color: transparent;
-  border-radius: 7px;
-  background: transparent;
-  font-size: 0.78125rem;
-}
-.chat-dock .chat-model:hover {
-  background: var(--surface-2);
-}
-.chat-dock [role="menu"] [role="menuitem"] {
-  min-height: 2.5rem;
-}
 /* The strip over the composer (status line, counts, capture targets) is slim too. */
 .chat-dock .chat-tray-line,
 .chat-dock .chat-tray-counts .chat-summary-chip,
@@ -727,25 +641,6 @@
   /* Desktop pointer keeps the library's dense field: 32px, 14px text. */
   .chat-page .chat-dock {
     --comp-h: 2rem;
-  }
-  .chat-dock .chat-comp textarea {
-    padding-block: 0.375rem;
-    font-size: 0.875rem;
-  }
-  .chat-dock .chat-send,
-  .chat-dock .chat-stop {
-    width: 1.75rem;
-    min-width: 1.75rem;
-    height: 1.75rem;
-    min-height: 1.75rem;
-    margin-bottom: calc((var(--comp-h) - 1.75rem) / 2);
-  }
-  .chat-dock .chat-add,
-  .chat-dock .chat-comp > button:not(.chat-send, .chat-stop, .chat-model),
-  .chat-dock .chat-model {
-    height: 1.75rem;
-    min-height: 1.75rem;
-    margin-bottom: calc((var(--comp-h) - 1.75rem) / 2);
   }
 }
 /* ==== end sleek controls ==== */

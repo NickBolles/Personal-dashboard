@@ -1,0 +1,201 @@
+/*
+ * The one message composer (components/chat/Composer.tsx): the chat page's dock and the Chief of staff panel.
+ * One calm row: the field sets the row height, the controls centre on its last line; small ghost controls and an
+ * accent send circle. Everything is scoped under .cmp, so it loads and looks the same wherever the composer is.
+ * Sizes are in rem, so they grow with text zoom.
+ */
+@layer components {
+  /* --comp-h is the row's height unit: the field's minimum height, which the controls centre on. */
+  .cmp {
+    --comp-h: 2.375rem;
+  }
+  .cmp-card,
+  .cmp-files {
+    max-width: 760px;
+  }
+  /* In a panel (the Chief of staff rail or sheet, an area pane) the composer fills the panel's own measure. */
+  .cmp-panel .cmp-card,
+  .cmp-panel .cmp-files {
+    max-width: none;
+  }
+  .cmp-accessory {
+    margin-bottom: 0.375rem;
+  }
+
+  /* The card around the row is the box: the row and the field inside it have none of their own. */
+  .cmp .chat-composer-card:focus-within {
+    border-color: var(--accent);
+  }
+  .cmp .chat-composer-card .chat-comp {
+    gap: 2px;
+    padding: 3px 5px 3px 3px;
+    border: 0;
+    border-radius: 0 0 11px 11px;
+    /* transparent: the card paints the surface, so the form's square corners never show past the card's round ones */
+    background: transparent;
+  }
+  .cmp .chat-composer-context:empty,
+  .cmp .chat-composer-context[data-compact="true"] {
+    display: none;
+  }
+
+  /* The field is the kit textarea without its own box. */
+  .cmp .chat-comp .cmp-input {
+    display: block;
+    flex: 1 1 0%;
+    width: 100%;
+    min-width: 0;
+    min-height: var(--comp-h);
+    max-height: 200px;
+    padding: 0.5625rem 0.375rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    line-height: 1.25rem;
+    resize: none;
+  }
+  .cmp .chat-comp .cmp-input:focus {
+    border: 0;
+    outline: 0;
+    box-shadow: none;
+  }
+  .cmp .chat-comp .cmp-input::placeholder {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Send: an accent circle with an up arrow. Stop: a quiet square. */
+  .cmp .chat-comp .chat-send,
+  .cmp .chat-comp .chat-stop {
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    margin-bottom: calc((var(--comp-h) - 2rem) / 2);
+    padding: 0;
+  }
+  .cmp .chat-comp .chat-send {
+    border-radius: 999px;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .cmp .chat-comp .chat-send:disabled {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-contrast);
+    opacity: 0.45;
+  }
+  .cmp .chat-comp .chat-stop {
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .cmp .chat-comp .chat-stop svg {
+    width: 1rem;
+    height: 1rem;
+  }
+  /* "+", attach and camera: small ghost icons. */
+  .cmp .chat-comp .chat-add {
+    width: 1.875rem;
+    min-width: 0;
+    height: 1.875rem;
+    min-height: 0;
+    margin-bottom: calc((var(--comp-h) - 1.875rem) / 2);
+    padding: 0;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+  .cmp .chat-comp .chat-add svg {
+    width: 1.125rem;
+    height: 1.125rem;
+  }
+  /* "Model Default ▾": a quiet text chip. */
+  .cmp .chat-comp .chat-model {
+    max-width: 14rem;
+    min-height: 1.875rem;
+    margin-bottom: calc((var(--comp-h) - 1.875rem) / 2);
+    padding: 0 0.5rem;
+    border-color: transparent;
+    border-radius: 7px;
+    background: transparent;
+    font-size: 0.78125rem;
+    font-weight: 400;
+  }
+  .cmp .chat-comp .chat-model:hover {
+    background: var(--surface-2);
+  }
+
+  /* The controls are small boxes; an invisible hit-slop keeps the tap area at the house minimum (44px, 40px with a
+     fine pointer on wide screens). The composer sizes its own controls, so they opt out of a surrounding density
+     tier (data-density-skip) and carry their slop themselves. */
+  .cmp .chat-comp :is(.chat-send, .chat-stop, .chat-add) {
+    position: relative;
+  }
+  .cmp .chat-comp :is(.chat-send, .chat-stop, .chat-add)::after {
+    content: "";
+    position: absolute;
+    inset: min(-6px, calc((100% - var(--cmp-hit, 44px)) / 2));
+  }
+
+  /* What a surface puts inside the card above the row (page context, the chip the message is about). */
+  .cmp .cmp-slot {
+    padding: 0.375rem 0.5rem 0;
+  }
+
+  .cmp .cmp-foot {
+    padding: 0 0.5rem 0.375rem;
+  }
+
+  /* The "+" menu opens upward from its button. */
+  .cmp .cmp-add > .k-menu {
+    position: absolute;
+    bottom: calc(100% + 0.5rem);
+    left: 0;
+    z-index: 40;
+    width: 15rem;
+    max-width: calc(100vw - 2rem);
+  }
+  .cmp .chat-comp [role="menu"] [role="menuitem"] {
+    min-height: 2.5rem;
+  }
+
+  @media (min-width: 1024px) and (pointer: fine) {
+    /* Desktop pointer keeps the library's dense field: 32px, 14px text. */
+    .cmp {
+      --comp-h: 2rem;
+      --cmp-hit: 40px;
+    }
+    .cmp .chat-comp .cmp-input {
+      padding-block: 0.375rem;
+      font-size: 0.875rem;
+    }
+    .cmp .chat-comp .chat-send,
+    .cmp .chat-comp .chat-stop {
+      width: 1.75rem;
+      min-width: 1.75rem;
+      height: 1.75rem;
+      min-height: 1.75rem;
+      margin-bottom: calc((var(--comp-h) - 1.75rem) / 2);
+    }
+    .cmp .chat-comp .chat-add,
+    .cmp .chat-comp .chat-model {
+      height: 1.75rem;
+      min-height: 1.75rem;
+      margin-bottom: calc((var(--comp-h) - 1.75rem) / 2);
+    }
+  }
+
+  @media (max-width: 400px) {
+    /* A narrow phone with a run going: the field takes the first line, the controls the second, pushed to the end. */
+    .cmp .chat-comp .cmp-input[data-wrap="true"] {
+      order: -9999;
+      flex-basis: 100%;
+    }
+    .cmp .chat-comp .cmp-end {
+      margin-left: auto;
+    }
+  }
+}
