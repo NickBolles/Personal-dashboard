@@ -212,3 +212,45 @@ it("a stream that cannot reach the run does not block the composer, and the conv
   await settle(3_200);
   expect(sessionReads()).toBeGreaterThan(reads);
 });
+
+it("a run that finished clears only its own live copy: another thread opened meanwhile keeps the run it is following", async () => {
+  const stream = await mount();
+  const OTHER = "earlier-thread";
+  const first = runId;
+  const second = "run_in_other_thread";
+  const other = { session: { id: OTHER, activeRun: { runId: second, status: "running" } }, timeline: [said] };
+  // The finished run's refresh of its conversation is still on its way when the owner opens another thread.
+  let arrive = () => {};
+  const late = new Promise<typeof session>((resolve) => {
+    arrive = () => resolve({ session: { id: SID }, timeline: [said, { kind: "assistant", id: "a1", text: "Done.", at }] });
+  });
+  let ended = false;
+  vi.mocked(api.get).mockImplementation(async (path: string) => {
+    if (path === `/api/hermes/sessions/${SID}`) return ended ? late : session;
+    if (path === `/api/hermes/sessions/${OTHER}`) return other;
+    if (path === `/api/hermes/runs/${first}`) return { status: "completed", output: "Done." };
+    if (path === `/api/hermes/runs/${second}`) return { status: "running" };
+    if (path.startsWith("/api/work/conversations")) return { conversations: [{ id: OTHER, title: "Last week", placement: { parentId: "portfolio" } }] };
+    if (path.endsWith("/execution")) return { records: [], sources: [] };
+    return {};
+  });
+  const list = screen.getByText("Earlier threads").closest("details")!;
+  list.open = true;
+  fireEvent(list, new Event("toggle"));
+  await settle(10);
+  ended = true;
+  act(() => stream.emit({ type: "run.terminal", status: "completed", output: "Done." }, 1));
+  await settle(50);
+  fireEvent.click(screen.getByRole("button", { name: "Last week" }));
+  await settle(50);
+  const following = () => open().map((s) => s.url);
+  expect(following()).toEqual([`/api/hermes/runs/${second}/events?format=agui`]);
+  // Now the first thread's refresh lands.
+  arrive();
+  await settle(50);
+  await settle(50);
+  expect(following()).toEqual([`/api/hermes/runs/${second}/events?format=agui`]);
+  act(() => open()[0]!.emit({ type: "text.delta", delta: "Still writing in the other thread" }, 1));
+  await settle(120);
+  expect(within(live()).getByText("Still writing in the other thread")).toBeTruthy();
+});

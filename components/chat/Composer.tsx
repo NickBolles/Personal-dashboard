@@ -215,18 +215,26 @@ export function Composer({
   useEffect(() => {
     latest.current = { text, setText };
   });
+  const shown = useRef(sessionId);
   useEffect(() => {
+    const from = shown.current;
+    shown.current = sessionId;
     pendingKey.current = undefined;
     if (!sessionId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- no conversation yet: nothing stored to wait for
       setLoaded(true);
       return;
     }
+    // Another conversation was open in this composer (a thread switch in the Chief of staff panel). The words in
+    // the field were written there: they stay there as its draft, and this conversation gets its own back. A
+    // conversation that has only just been created (no id → id) keeps what was typed for it.
+    const left = from && from !== sessionId ? latest.current.text : null;
+    if (left) void kvSet(`draft:${from}`, left);
     let stale = false;
     setLoaded(false);
     void Promise.all([kvGet<string>(`draft:${sessionId}`), kvGet<{ input: string; key: string }>(`pending:${sessionId}`)]).then(([draft, pending]) => {
       if (stale) return;
-      const typed = latest.current.text;
+      const typed = left !== null && latest.current.text === left ? "" : latest.current.text;
       if (pending) {
         if (!typed || typed === pending.input) {
           latest.current.setText(pending.input);
@@ -303,7 +311,9 @@ export function Composer({
 
   const submit = async () => {
     const typed = text.trim();
-    const hasFiles = attachments.drafts.length > 0;
+    // A scope chip means the surface decides where the words go (an answer to record, a one-line command): that is
+    // never a message made of the attachments alone, and the attachments wait in the draft for the next message.
+    const hasFiles = attachments.drafts.length > 0 && !scope;
     if ((!typed && !hasFiles && !sendsEmpty) || busy || sending || !online) return;
     if (attachments.uploading) {
       toast("Wait for the attachments to finish uploading", "danger");
@@ -352,7 +362,7 @@ export function Composer({
       ? "Approve or deny first"
       : (placeholderProp ?? (running ? "Add guidance…" : `Message ${answerer}…`));
   const open = !!trigger && (rows.length > 0 || loading || trigger.sigil !== "@" || trigger.query.length > 0);
-  const nothingToSend = !text.trim() && !attachments.readyIds.length && !sendsEmpty;
+  const nothingToSend = !text.trim() && !(attachments.readyIds.length && !scope) && !sendsEmpty;
   const sendName = sendLabel ?? (running ? "Send guidance" : "Send");
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
