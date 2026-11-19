@@ -732,3 +732,41 @@ it.each([true, false])("a message link opens that reply on the Chief of staff pa
     window.history.replaceState(null, "", "/");
   }
 });
+
+// The host can keep which thread the panel is on (the phone sheet unmounts the panel when it closes).
+it("the thread the panel is on can be kept by the host: it is reported when it changes and honoured on mount", async () => {
+  const earlier = { session: { id: "earlier-thread", pinned: false, archived: false }, timeline: [{ kind: "assistant", id: "old", text: "From last week" }] };
+  const pinned = client.getQueryData(["session", "same-session"]);
+  vi.mocked(api.get).mockImplementation(async (path: string) => {
+    if (path === "/api/hermes/sessions/earlier-thread") return earlier;
+    if (path.startsWith("/api/work/conversations")) return { conversations: [{ id: "earlier-thread", title: "Last week", placement: { parentId: "dev" } }] };
+    if (path.endsWith("/execution")) return { records: [], sources: [] };
+    return pinned;
+  });
+  let kept = { sessionId: null as string | null, fresh: false };
+  function Host() {
+    const [selection, setSelection] = useState(kept);
+    kept = selection;
+    return <CoordinatorThread info={info} compact selection={selection} onSelection={setSelection} />;
+  }
+  const ui = () => (
+    <QueryClientProvider client={client}>
+      <Host />
+    </QueryClientProvider>
+  );
+  const first = render(ui());
+  const list = screen.getByText("Earlier threads").closest("details")!;
+  list.open = true;
+  fireEvent(list, new Event("toggle"));
+  fireEvent.click(await screen.findByRole("button", { name: "Last week" }));
+  expect(await screen.findByText("From last week")).toBeTruthy();
+  expect(kept).toEqual({ sessionId: "earlier-thread", fresh: false });
+  // The sheet closes and opens again: a new panel, on the same thread.
+  first.unmount();
+  render(ui());
+  expect(await screen.findByText("From last week")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
+  // Going back is reported too.
+  fireEvent.click(screen.getByRole("button", { name: "Back to current" }));
+  await waitFor(() => expect(kept).toEqual({ sessionId: null, fresh: false }));
+});

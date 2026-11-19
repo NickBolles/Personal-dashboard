@@ -62,6 +62,10 @@ export function pickCoordinatorThread<T extends ThreadCandidate>(
   return { item: threads.find((c) => !isOpsConversation(c)) ?? null, pinned: false };
 }
 
+/** The thread the panel is on: an earlier one by id, a new one not yet created (fresh), or neither: the coordinator's own thread. */
+export type ThreadSelection = { sessionId: string | null; fresh: boolean };
+export const CHIEF_THREAD: ThreadSelection = { sessionId: null, fresh: false };
+
 /** How many message groups the panel shows first, and how many more each "Load earlier" adds. */
 export const THREAD_FIRST_PAGE = 12;
 export const THREAD_PAGE = 20;

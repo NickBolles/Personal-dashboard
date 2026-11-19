@@ -1,7 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -41,7 +53,7 @@ import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
 import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
-import { THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount } from "@/lib/coordinator/thread";
+import { CHIEF_THREAD, THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount, type ThreadSelection } from "@/lib/coordinator/thread";
 import { SmartScope } from "@/components/smart/SmartScope";
 import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
 import "@/components/agents/agents.css";
@@ -72,6 +84,8 @@ export function CoordinatorThread({
   onAskPage,
   draft,
   onDraft,
+  selection,
+  onSelection,
   inlineActions,
   quickContext,
   lastLookedChat,
@@ -115,6 +129,13 @@ export function CoordinatorThread({
   onAskPage?: () => void;
   draft?: string;
   onDraft?: (text: string) => void;
+  /**
+   * Which thread the panel is on, when the host keeps it (as it keeps the draft). The phone sheet unmounts this
+   * component when it closes: without the host's copy it would reopen on the Chief of staff thread with a draft
+   * that was written for another one.
+   */
+  selection?: ThreadSelection;
+  onSelection?: Dispatch<SetStateAction<ThreadSelection>>;
   inlineActions?: (lastUserAt: string | null) => ReactNode;
   /** Context for quick-action chips ({area}/{page} fill + scope). Chips fill the composer only. */
   quickContext?: QuickActionContext;
@@ -136,8 +157,11 @@ export function CoordinatorThread({
   const [localText, setLocalText] = useState("");
   const text = draft ?? localText;
   const setText = onDraft ?? setLocalText;
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [fresh, setFresh] = useState(false);
+  const [ownSelection, setOwnSelection] = useState<ThreadSelection>(CHIEF_THREAD);
+  const { sessionId, fresh } = selection ?? ownSelection;
+  const select = onSelection ?? setOwnSelection;
+  const setSessionId = (id: string | null) => select((now) => ({ ...now, sessionId: id }));
+  const setFresh = (value: boolean) => select((now) => ({ ...now, fresh: value }));
   const [earlier, setEarlier] = useState(false);
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
   const composer = useRef<ComposerHandle>(null);
