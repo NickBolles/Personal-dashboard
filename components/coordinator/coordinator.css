@@ -1495,6 +1495,10 @@ html[data-kb="open"] .gc-tray-qa {
   max-height: 100dvh;
   border-radius: 0;
 }
+/* Stepped aside for search or Manage quick actions: closed but still mounted, so nothing of it shows. */
+.gc-sheet[data-full="true"]:not([open]) {
+  display: none;
+}
 .gc-sheet[data-full="true"] .gc-sheet-grab {
   display: none;
 }

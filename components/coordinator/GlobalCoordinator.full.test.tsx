@@ -3,16 +3,19 @@
  * Expand: on /chief the shell's one Chief of staff panel is the page. It is the same panel (so the thread, its draft
  * and its run stream carry over), at full size; wide screens show the conversation with Needs you / Activity beside it.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { COORDINATOR_PINNED_THREAD, OPEN_PALETTE_EVENT, OVERLAY_CLOSED_EVENT } from "@/components/navigation/commands";
+import { QUICK_ACTION_MANAGE } from "@/lib/quick-actions";
 import { CHIEF_PATH, GlobalCoordinator } from "./GlobalCoordinator";
 
-const nav = { path: "/more", push: vi.fn(), back: vi.fn() };
+const nav = { path: "/more", search: "", push: vi.fn(), back: vi.fn(), replace: vi.fn() };
+const router = { push: nav.push, back: nav.back, replace: nav.replace };
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.path,
-  useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ push: nav.push, back: nav.back }),
+  useSearchParams: () => new URLSearchParams(nav.search),
+  useRouter: () => router,
 }));
 vi.mock("@/lib/client/api", () => ({
   api: {
@@ -69,8 +72,10 @@ const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototyp
 let wide = true;
 beforeEach(() => {
   nav.path = "/more";
+  nav.search = "";
   nav.push.mockClear();
   nav.back.mockClear();
+  nav.replace.mockClear();
   threadMounts = 0;
   wide = true;
   vi.stubGlobal("matchMedia", () => ({ matches: wide, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
@@ -195,4 +200,67 @@ it("phone: leaving /chief for another page closes the sheet again", async () => 
   nav.path = "/todos";
   view.rerender();
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+// Search and Manage quick actions need the native modal sheet out of the way. On /chief the sheet is the page, so it
+// only steps aside: the same mounted thread is back when the overlay closes.
+it.each([OPEN_PALETTE_EVENT, QUICK_ACTION_MANAGE])(
+  "phone: on /chief the sheet steps aside for %s and comes back, still the one mounted thread",
+  async (event) => {
+    wide = false;
+    nav.path = CHIEF_PATH;
+    mount();
+    const sheet = await screen.findByRole("dialog", { name: "Chief of staff" });
+    await screen.findByTestId("thread");
+    expect(threadMounts).toBe(1);
+    act(() => void window.dispatchEvent(new Event(event)));
+    expect(sheet.hasAttribute("open")).toBe(false);
+    expect(sheet.isConnected).toBe(true);
+    expect(screen.getByTestId("thread")).toBeTruthy();
+    act(() => void window.dispatchEvent(new Event(OVERLAY_CLOSED_EVENT)));
+    expect(sheet.hasAttribute("open")).toBe(true);
+    expect(threadMounts).toBe(1);
+  },
+);
+
+it("phone: on any other page the sheet still closes for an overlay and does not come back by itself", async () => {
+  wide = false;
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: /Chief of staff/ }));
+  expect(screen.getByRole("dialog", { name: "Chief of staff" }).hasAttribute("open")).toBe(true);
+  act(() => void window.dispatchEvent(new Event(QUICK_ACTION_MANAGE)));
+  expect(screen.queryByRole("dialog", { name: "Chief of staff" })).toBeNull();
+  act(() => void window.dispatchEvent(new Event(OVERLAY_CLOSED_EVENT)));
+  expect(screen.queryByRole("dialog", { name: "Chief of staff" })).toBeNull();
+});
+
+it("/chief?thread=pinned asks the panel for the pinned thread, shows the conversation and cleans the address", async () => {
+  const asked = vi.fn();
+  window.addEventListener(COORDINATOR_PINNED_THREAD, asked);
+  try {
+    wide = false;
+    nav.path = CHIEF_PATH;
+    nav.search = "thread=pinned";
+    mount();
+    const sheet = await screen.findByRole("dialog", { name: "Chief of staff" });
+    expect(asked).toHaveBeenCalled();
+    expect(nav.replace).toHaveBeenCalledWith(CHIEF_PATH);
+    expect(within(sheet).getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+  } finally {
+    window.removeEventListener(COORDINATOR_PINNED_THREAD, asked);
+  }
+});
+
+it("plain /chief (Expand) asks for no thread: the panel stays on the one it is showing", async () => {
+  const asked = vi.fn();
+  window.addEventListener(COORDINATOR_PINNED_THREAD, asked);
+  try {
+    nav.path = CHIEF_PATH;
+    mount();
+    await screen.findByTestId("thread");
+    expect(asked).not.toHaveBeenCalled();
+    expect(nav.replace).not.toHaveBeenCalled();
+  } finally {
+    window.removeEventListener(COORDINATOR_PINNED_THREAD, asked);
+  }
 });

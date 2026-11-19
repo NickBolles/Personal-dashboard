@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
+import { OVERLAY_CLOSED_EVENT } from "@/components/navigation/commands";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { Button, Dialog, useToast } from "@/components/ui";
@@ -262,7 +263,14 @@ export function QuickActionsHost() {
   }, [path]);
   return (
     <>
-      <ManageQuickActions open={context !== null} context={context ?? { path }} onClose={() => setContext(null)} />
+      <ManageQuickActions
+        open={context !== null}
+        context={context ?? { path }}
+        onClose={() => {
+          setContext(null);
+          window.dispatchEvent(new Event(OVERLAY_CLOSED_EVENT));
+        }}
+      />
       {addedOp ? (
         <QuickActionNotice>
           Added ·{" "}

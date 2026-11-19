@@ -14,7 +14,7 @@ import { QuickActionsHost } from "@/components/quick-actions/ManageQuickActions"
 import { allowed, DESTINATIONS, PRIMARY, type Dest } from "./destinations";
 import { CommandDock } from "./CommandDock";
 import { HeaderCrumbs, Sidebar, useSidebarCollapsed } from "./Sidebar";
-import { NEW_CHAT_EVENT, NEW_WORK_EVENT, OPEN_CAPTURE_EVENT } from "./commands";
+import { NEW_CHAT_EVENT, NEW_WORK_EVENT, OPEN_CAPTURE_EVENT, OVERLAY_CLOSED_EVENT } from "./commands";
 import { useAskHermes } from "@/components/chat/useAskHermes";
 import { CaptureDialog } from "@/components/work/inbox";
 import { ComposerRouteWatcher, useComposerTarget } from "@/components/agents/useComposerTarget";
@@ -396,7 +396,13 @@ export function AppShell({ children, userName }: { children: ReactNode; userName
       <Suspense fallback={null}>
         <ComposerRouteWatcher />
       </Suspense>
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <SearchDialog
+        open={searchOpen}
+        onClose={() => {
+          setSearchOpen(false);
+          window.dispatchEvent(new Event(OVERLAY_CLOSED_EVENT));
+        }}
+      />
       <WorkflowStartHost />
       {canWork ? <QuickActionsHost /> : null}
       {capturing && canWork ? <CaptureDialog onClose={() => setCapturing(false)} /> : null}

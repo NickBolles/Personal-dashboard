@@ -14,6 +14,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   // Only while it is the thread shown there: a pinned conversation that was archived or moved out of the area is an
   // ordinary conversation again and keeps its own page.
   const chief = user.capabilities.has("work.use") ? globalCoordinatorArea(user) : null;
-  if (chief && pinnedCoordinatorSession(user, chief.id) === id) redirect("/chief");
+  // The panel may be on an earlier thread: the address says which conversation was asked for.
+  if (chief && pinnedCoordinatorSession(user, chief.id) === id) redirect("/chief?thread=pinned");
   return <Conversation sessionId={id} initialRunId={run} />;
 }

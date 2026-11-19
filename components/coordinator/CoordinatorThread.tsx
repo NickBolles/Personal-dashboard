@@ -27,6 +27,7 @@ import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
+import { COORDINATOR_PINNED_THREAD } from "@/components/navigation/commands";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
@@ -320,6 +321,28 @@ export function CoordinatorThread({
   };
   const [chips, setChips] = useState<ContextChip[]>([]);
   const [sheet, setSheet] = useState(false);
+  /** Opens a thread in the panel: an earlier one by id, or (null) the Chief of staff thread itself. */
+  const openThread = (id: string | null) => {
+    // Attachments and context picked for one thread never ride along to another.
+    if (attachments.drafts.length) attachments.clear();
+    setChips([]);
+    dropScope();
+    setFresh(false);
+    setSessionId(id);
+  };
+  const onThread = sessionId !== null || fresh;
+  const openThreadRef = useRef(openThread);
+  useEffect(() => {
+    openThreadRef.current = openThread;
+  });
+  useEffect(() => {
+    // The pinned thread's own address was asked for (/chat/<id> leads to /chief): show that thread, not the earlier
+    // or new one the panel happens to be on. Already there, nothing is touched.
+    if (!standalone || !onThread) return;
+    const onPinned = () => openThreadRef.current(null);
+    window.addEventListener(COORDINATOR_PINNED_THREAD, onPinned);
+    return () => window.removeEventListener(COORDINATOR_PINNED_THREAD, onPinned);
+  }, [standalone, onThread]);
   const send = useMutation({
     mutationFn: async ({ input, correction = false, key }: { input: string; correction?: boolean; key?: string }) => {
       const target = await ensureSession();
@@ -614,14 +637,7 @@ export function CoordinatorThread({
               earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
               onEarlierOpen={setEarlier}
               pinned={!!d.pinned}
-              onOpen={(id) => {
-                // Attachments and context picked for one thread never ride along to another.
-                if (attachments.drafts.length) attachments.clear();
-                setChips([]);
-                dropScope();
-                setFresh(false);
-                setSessionId(id);
-              }}
+              onOpen={openThread}
               onNew={() => {
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);

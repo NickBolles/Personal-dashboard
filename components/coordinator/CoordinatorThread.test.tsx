@@ -7,6 +7,7 @@ import { api } from "@/lib/client/api";
 import { Button } from "@/components/ui";
 import type { ComposeScope } from "@/lib/coordinator/compose";
 import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
+import { COORDINATOR_PINNED_THREAD } from "@/components/navigation/commands";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
 import { COORDINATOR_RUNS_KEY } from "./running/useCoordinatorRuns";
@@ -675,4 +676,32 @@ it("a risky decision's typed answer takes a second send, for exactly those words
   expect(onAnswer).toHaveBeenCalledExactlyOnceWith(risky, "Pay the deposit tomorrow", true);
   await waitFor(() => expect(chip()).toBeNull());
   expect(api.post).not.toHaveBeenCalled();
+});
+
+// /chat/<pinned id> leads to /chief. The panel there may be on an earlier thread: the address asked for the pinned one.
+it.each([true, false])("asked for the pinned thread, the Chief of staff page leaves an earlier thread (as the page=%s)", async (standalone) => {
+  const earlier = { session: { id: "earlier-thread", pinned: false, archived: false }, timeline: [{ kind: "assistant", id: "old", text: "From last week" }] };
+  const pinned = client.getQueryData(["session", "same-session"]);
+  vi.mocked(api.get).mockImplementation(async (path: string) => {
+    if (path === "/api/hermes/sessions/earlier-thread") return earlier;
+    if (path.startsWith("/api/work/conversations")) return { conversations: [{ id: "earlier-thread", title: "Last week", placement: { parentId: "dev" } }] };
+    if (path.endsWith("/execution")) return { records: [], sources: [] };
+    return pinned;
+  });
+  mount({ compact: true, standalone });
+  const list = screen.getByText("Earlier threads").closest("details")!;
+  list.open = true;
+  fireEvent(list, new Event("toggle"));
+  fireEvent.click(await screen.findByRole("button", { name: "Last week" }));
+  expect(await screen.findByText("From last week")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
+  act(() => void window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD)));
+  if (standalone) {
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Earlier thread" })).toBeNull());
+    expect(screen.getByText("Reply to correct")).toBeTruthy();
+  } else {
+    // A panel that is not the page (the rail beside another page) is not what the address was about.
+    expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
+    expect(screen.getByText("From last week")).toBeTruthy();
+  }
 });
