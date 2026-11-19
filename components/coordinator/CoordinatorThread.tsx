@@ -163,14 +163,18 @@ export function CoordinatorThread({
   // The run in flight streams here, on the one stream every reader of that run shares (lib/client/run-streams.ts):
   // the rail, the sheet and a chat page showing the same run cost Hermes one connection between them.
   const clearRun = useRef<() => void>(() => {});
+  /** The conversation on screen and the run of it that was taken up (see the follow effect below). */
+  const followed = useRef<{ sid: string | null; runId: string | null }>({ sid, runId: null });
   const onRunEnd = useCallback(
     (ended: RunState) => {
       void qc.invalidateQueries({ queryKey: ["session-exec", sid] });
       void qc.invalidateQueries({ queryKey: ["work", "coordinator"] });
       void refreshSessionLists(qc).catch(() => undefined);
       // Once the saved conversation has this turn, the live copy goes. A run that failed stays on screen.
+      // By then the owner may have opened another thread, or this one may have started its next run: the stream
+      // held now is that one's, and it is not this run's to clear.
       void qc.refetchQueries({ queryKey: ["session", sid] }).then(() => {
-        if (ended.phase === "completed") clearRun.current();
+        if (ended.phase === "completed" && followed.current.sid === sid && followed.current.runId === ended.runId) clearRun.current();
       });
     },
     [qc, sid],
@@ -225,7 +229,6 @@ export function CoordinatorThread({
   // session that has not caught up yet). Another thread is another conversation: its run is not this one's.
   const activeRun = detail.data?.session?.activeRun;
   const { start: startRun, clear: clearLive } = run;
-  const followed = useRef<{ sid: string | null; runId: string | null }>({ sid, runId: null });
   const liveRunId = run.active ? run.state.runId : undefined;
   const sessionFresh = detail.isSuccess && !detail.isFetching;
   useEffect(() => {
