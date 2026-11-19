@@ -497,11 +497,11 @@ export function CoordinatorThread({
   // has its row as work a reply started. Everywhere else it is only the chip in the text.
   const smartOn = !!smartSettings.data?.enabled;
   const drawn = new Set([...placed.values()].flat().flatMap((w) => (w.run ? [w.run.ref] : [])));
-  // A smart decision card in a reply is drawn as the live decision (below), so it isn't also a mention row.
-  // With Smart replies off only a card that IS the block (its root) is drawn live; nested ones need the renderer.
-  for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text, { rootOnly: !smartOn })) drawn.add(ref);
+  // Only suppress rows actually replaced by the enabled rich renderer. Smart-off keeps native owner-session controls.
+  if (smartOn) for (const m of msgs) if (m.kind === "assistant") for (const ref of smartDecisionRefs(m.text)) drawn.add(ref);
   const mentionedBy = new Map<string, string>();
-  for (const m of msgs) if (m.kind === "assistant") for (const ref of proseRefs(m.text)) mentionedBy.set(ref, m.id);
+  for (const m of msgs)
+    if (m.kind === "assistant") for (const ref of new Set([...proseRefs(m.text), ...(!smartOn ? smartDecisionRefs(m.text) : [])])) mentionedBy.set(ref, m.id);
   const mentionRows = (id: string) =>
     mentions
       ? [...mentionedBy]
@@ -566,10 +566,10 @@ export function CoordinatorThread({
   const liveDecision = mentions ? (ref: string) => (ref.startsWith("D-") && mentions.rank(ref) !== null ? mentions.render(ref) : null) : null;
   // F2: a questionnaire form's Submit answers in this thread.
   // It is its own message: it never takes the composer's draft, chips, scope or attachments with it.
-  const smartReply = async (input: string) => {
+  const smartReply = async (input: string, key?: string) => {
     try {
       const target = await ensureSession();
-      const notice = maskedNotice(await postInput(target, input));
+      const notice = maskedNotice(await postInput(target, input, false, {}, key));
       toast(notice ?? sentText, notice ? "warn" : undefined);
       void qc.invalidateQueries({ queryKey: ["session", target] });
       void refreshSessionLists(qc).catch(() => undefined);
@@ -712,7 +712,7 @@ export function CoordinatorThread({
                               </span>
                             ) : null}
                           </div>
-                          <AssistantText text={m.text} />
+                          <AssistantText text={m.text} messageId={m.id} />
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
                             <section aria-label="Work started by this reply" className="gc-bgwork">

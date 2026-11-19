@@ -586,7 +586,24 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     <AssistantName.Provider value={who}>
       <RateCtx.Provider value={rateCtx}>
         {/* A questionnaire smart form's Submit sends its answers as the owner's reply (PR A, F2). */}
-        <SmartScope session={sessionId} reply={(text: string) => send(text, newIdempotencyKey("form"))}>
+        <SmartScope
+          session={sessionId}
+          reply={async (input: string, key?: string) => {
+            try {
+              const r = await api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/runs`, {
+                input,
+                idempotencyKey: key ?? newIdempotencyKey("form"),
+                capabilities: [SMART_CAPABILITY],
+                ...model,
+              });
+              run.start(r.runId, r.status);
+              void qc.invalidateQueries({ queryKey: ["session", sessionId] });
+              return true;
+            } catch {
+              return false;
+            }
+          }}
+        >
           <ChatFiles.Provider value={{ sessionId, files: filesQ.data ?? NO_FILES }}>
             <ChatLinkProvider links={panel.links}>
               <div ref={chatWrapperRef} className="chat-things-container @container" data-panel-open={(surface.wide && surface.open) || undefined}>

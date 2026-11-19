@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { batchReply, openChat as openBatchChat, stubCoordinator as stubBatchCoordinator } from "./fixtures/decision-batch";
 import { ensureWorkflowActive, expectNoHorizontalOverflow, mock, openChatContext, openChatPanel, setHa, startConversation } from "./helpers";
 import teaching from "../lib/workflows/fixtures/teaching-notes.json";
 import { homePulseVisual, homeVisual } from "./fixtures/home";
@@ -126,6 +127,40 @@ const globalCoordinatorVisual = {
 };
 
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
+
+test("visual: reviewed decision batch in the shared coordinator", async ({ page }, info) => {
+  const frozen = await freezeMiddayCT(page);
+  await stubBatchCoordinator(
+    page,
+    { "cw-pin": [{ kind: "assistant", id: "visual-answer-batch", text: batchReply(), at: new Date(frozen - 60_000).toISOString() }] },
+    { current: "cw-pin", now: frozen },
+  );
+  await page.route("**/api/smart/settings", (route) => route.fulfill({ json: { enabled: true, calendarWrites: false } }));
+  await page.goto("/more");
+  const scope = await openBatchChat(page, info.project.name === "desktop");
+  const batch = scope.getByTestId("answer-batch");
+  await batch.getByRole("button", { name: "Birch", exact: true }).click();
+  await batch.getByRole("button", { name: "Later", exact: true }).click();
+  const viewport = page.viewportSize()!;
+  if (process.env.JARVIS_BATCH_SHOTS)
+    await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-selected-screen-${info.project.name}.png` });
+  // The batch can exceed the scroll pane's free height: a normal element shot paints fixed composers over it.
+  // Grow only the capture viewport (same width), then restore the real phone/desktop height for reflow checks.
+  await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
+  await expect(batch).toHaveScreenshot("decision-batch-selected.png");
+  await batch.getByRole("button", { name: "Submit choices" }).click();
+  await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
+  await expect(batch).toHaveScreenshot("decision-batch-review.png");
+  if (process.env.JARVIS_BATCH_SHOTS) {
+    await batch.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-${info.project.name}.png` });
+  }
+  await page.setViewportSize(viewport);
+  await batch.getByRole("button", { name: "Confirm send reply" }).scrollIntoViewIfNeeded();
+  if (process.env.JARVIS_BATCH_SHOTS)
+    await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-review-screen-${info.project.name}.png` });
+  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+  await expectNoHorizontalOverflow(page);
+});
 
 /**
  * Freeze the browser clock at 12:00 America/Chicago on today's frame date. The server and the mock
@@ -939,6 +974,11 @@ for (const theme of ["light", "dark"] as const) {
     await page.goto("/chat/sess_morning");
     await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
     await expect(page.getByText(chatVisual.timeline[2].text!, { exact: true })).toBeVisible();
+    // A conversation opens at its latest message. Opening the panel before that first scroll had happened left the
+    // page at the top, so this shot flipped between two positions from run to run: wait for the thread to settle.
+    await expect
+      .poll(() => page.evaluate(() => Math.round(document.documentElement.scrollHeight - window.innerHeight - window.scrollY)))
+      .toBeLessThanOrEqual(1);
     const panel = await openChatPanel(page, "Links");
     await expect(panel.locator('[data-kind="artifact"]')).toHaveCount(1);
     await page.waitForTimeout(600);
