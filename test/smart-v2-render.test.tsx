@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
+import { BatchedAnswers } from "@/components/smart/AnswerBatch";
 import { SmartSurface } from "@/components/smart/SmartSurface";
 import type { JarvisSpec } from "@/lib/jarvis-ui/catalog";
 import type { AppliedEntry, SurfaceView } from "@/lib/jarvis-ui/types";
@@ -49,11 +50,13 @@ const form: JarvisSpec = {
 };
 let view: SurfaceView;
 let post: MockInstance<typeof api.post>;
-function mount(spec: JarvisSpec, session = "iris-live") {
+function mount(spec: JarvisSpec, session = "iris-live", batch = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <SmartSurface spec={spec} sessionId={session} blockIndex={0} dropped={0} />
+      <BatchedAnswers.Provider value={batch}>
+        <SmartSurface spec={spec} sessionId={session} blockIndex={0} dropped={0} />
+      </BatchedAnswers.Provider>
     </QueryClientProvider>,
   );
 }
@@ -96,6 +99,18 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("v2 live surface", () => {
+  it("keeps Apply quiet beside the response batch primary, with a separate write confirmation", async () => {
+    mount(matrix, "iris-mixed", true);
+    const pick = await screen.findByRole("button", { name: "Iris patch" });
+    await waitFor(() => expect((pick as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(pick);
+    const apply = screen.getByRole("button", { name: "Apply 1 change" });
+    expect(apply.classList.contains("bg-transparent")).toBe(true);
+    expect(apply.classList.contains("bg-accent")).toBe(false);
+    fireEvent.click(apply);
+    expect(screen.getByRole("button", { name: "Confirm apply" })).toBeTruthy();
+    expect(post.mock.calls.some(([p]) => p === "/api/smart/apply")).toBe(false);
+  });
   it("changes weights locally, stages one exact option, confirms apply and undoes", async () => {
     mount(matrix);
     const pick = await screen.findByRole("button", { name: "Iris patch" });

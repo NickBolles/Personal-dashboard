@@ -6,7 +6,7 @@ import { createContext, type ReactNode } from "react";
  * Sends text into the conversation the smart block belongs to, as the owner's reply (a questionnaire Form's Submit).
  * Resolves true once sent. Null where the block isn't inside a conversation that can take a reply.
  */
-export const SmartReply = createContext<((text: string) => Promise<boolean>) | null>(null);
+export const SmartReply = createContext<((text: string, key?: string) => Promise<boolean>) | null>(null);
 
 /**
  * Draws an open D-n decision as the live decision block (one answer flow, Undo). Returns null when it can't be drawn

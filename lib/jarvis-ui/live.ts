@@ -37,7 +37,8 @@ export function smartDecisionRefs(text: string, opts: { rootOnly?: boolean } = {
     const els = spec.elements ?? {};
     for (const el of opts.rootOnly ? [spec.root ? els[spec.root] : undefined] : Object.values(els)) {
       if (el?.type !== "DecisionCard") continue;
-      const ref = decisionRefOf((el.props as { title?: string } | undefined)?.title);
+      const props = el.props as { title?: string; decisionRef?: string } | undefined;
+      const ref = props?.decisionRef ?? decisionRefOf(props?.title);
       if (ref && !out.includes(ref)) out.push(ref);
     }
   }

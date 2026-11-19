@@ -49,8 +49,12 @@ values count as unset.
 - **Queued, not failed.** When the stream budget is full the relay waits for a slot and sends
   `run.queued` with `reason: "connections"`; the chat shows "Queued — your message was sent.
   Jarvis is waiting for a free Hermes connection …" until events flow.
+- **One browser stream per run, per page.** Every reader of a run on a page (`useRunStream`) shares
+  one `EventSource` and one run state (`lib/client/run-streams.ts`): a second pane showing the same
+  run joins the stream that is already open and gets what has arrived so far. The stream closes 1 s
+  after its last reader leaves, so a remount picks it up instead of opening another.
 - **Hidden tabs let go.** A tab hidden for 30 s closes its run stream and resumes from the last
-  event when it is visible again (`components/chat/useRunStream.ts`).
+  event when it is visible again (`lib/client/run-streams.ts`).
 
 The budget is per Jarvis process. Other clients of the same Traefik host (anything on the LAN using
 `hermes-api.ai.nickbolles.com`) share the proxy's 10 slots and are outside it.

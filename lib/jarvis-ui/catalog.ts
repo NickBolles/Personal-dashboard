@@ -183,7 +183,11 @@ export const COMPONENTS = {
   Form: z
     .object({
       title: safeText(),
-      fields: z.array(smartFormField).min(1).max(12),
+      fields: z
+        .array(smartFormField)
+        .min(1)
+        .max(12)
+        .refine((fields) => new Set(fields.map((f) => f.id)).size === fields.length, "Duplicate field IDs"),
       submit: z
         .object({ label: safeText(80), creates: z.array(formCreate).max(3).optional(), updates: z.array(inlineIntentSchema).max(12).optional() })
         .strict(),
@@ -229,6 +233,13 @@ export const COMPONENTS = {
     .strict(),
   DecisionCard: z
     .object({
+      id: fieldId.optional(),
+      decisionRef: z
+        .string()
+        .regex(/^D-[1-9]\d*$/)
+        .optional(),
+      required: z.boolean().optional(),
+      allowOther: z.boolean().optional(),
       title: label,
       context: str(1000).optional(),
       options: z
@@ -244,9 +255,14 @@ export const COMPONENTS = {
             .strict(),
         )
         .min(2)
-        .max(6),
+        .max(6)
+        .refine((options) => new Set(options.map((o) => o.id)).size === options.length, "Duplicate choice IDs"),
     })
-    .strict(),
+    .strict()
+    .refine((card) => {
+      const titleRef = /\bD-\d{1,9}\b/.exec(card.title)?.[0];
+      return !card.decisionRef || !titleRef || card.decisionRef === titleRef;
+    }, "Decision reference disagrees with title"),
   Checklist: z
     .object({
       title: label,
@@ -318,7 +334,7 @@ export const COMPONENT_DOCS: Record<ComponentName, string> = {
   Gantt: "{title,rows:[{ref:item,start?:YYYY-MM-DD,milestone?}],from?,to?} ≤30; live dates only; reschedule stages targetDate",
   BarChart: "{metric,label?} bars from a Jarvis series only",
   ApprovalQueue: "{title?} read-only owner approvals, decisions and staged surfaces",
-  Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1–3}],updates?:[item.update intent]}} ≤12 fields; submit stages only",
+  Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1–3}],updates?:[item.update intent]}} ≤12 fields; without creates/updates: one reviewed conversation reply with all cards/forms; otherwise submit stages writes",
   Stack: "{direction?: column|row, gap?: sm|md} + children",
   Section: "{title, subtitle?, tone?: neutral|warn|ok|accent} + children",
   Text: "{text, variant?: body|meta|lead} plain text, **bold** and `code` only",
@@ -326,7 +342,8 @@ export const COMPONENT_DOCS: Record<ComponentName, string> = {
   Divider: "{}",
   TaskList:
     "{title, bucket?, actions?: [done|week|snooze|drop|promote], promoteParentRef?: item ref, rows:[{ref, reason?, suggestion?: do_week|reschedule|drop|snooze|keep|done, suggestedDate?: YYYY-MM-DD}]} rows show live title/due from the ref",
-  DecisionCard: "{title, context?, options:[{id, label, consequence?, recommended?, intent?}]} one choice; the chosen option's intent is staged",
+  DecisionCard:
+    "{id?, title, decisionRef?:D-n, context?, required?:true, allowOther?:false, options:[{id, label, consequence?, recommended?, intent?}]} without intents: local selection, one reviewed chat reply for the whole response; with intents on EVERY option: staged writes, Apply + Undo; never mix",
   Checklist: "{title, steps:[{id, label, detail?, runBy?: you|agent}]} ticks are recorded, never run",
   Gauge: "{metric} live Jarvis number, or {label, value, max, unit?, note?} as your estimate",
   Sparkline: "{metric, label?} trend from a Jarvis series",
