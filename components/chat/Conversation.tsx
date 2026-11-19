@@ -9,7 +9,7 @@ import { api, ApiError, newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet, rememberSession } from "@/lib/client/idb";
 import { takeFirstRun } from "@/lib/client/first-run";
 import type { EntityLink } from "@/lib/contracts";
-import { maskedNotice, type ApprovalRequest, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
+import { maskedNotice, type RunPhase, type RunView, type SessionSummary, type TimelineItem } from "@/lib/hermes";
 import { ErrorNote, IconButton, useOnline, useToast } from "@/components/ui";
 import { Badge, Button, OverflowMenu, Spinner, type Tone } from "@/components/ui/legacy";
 import { ChevronIcon, ForkIcon, PanelIcon } from "@/components/icons";
@@ -32,7 +32,8 @@ import type { ChatThings, ThingsTab } from "@/lib/chat/things";
 import "./things/things.css";
 import { DropOverlay, useChatAttachments, useConversationFiles, useFileDrop } from "./Attachments";
 import { Composer } from "./Composer";
-import { AssistantName, ChatFiles, NO_FILES, RateCtx, Timeline, type RateContext } from "./Timeline";
+import { AssistantName, ChatFiles, NO_FILES, RateCtx, Timeline, liveRunVisible, type RateContext } from "./Timeline";
+import { useRunAnswers } from "./useRunAnswers";
 
 // The timeline moved to ./Timeline; this name is still imported from here.
 export { groupTimeline } from "./Timeline";
@@ -380,31 +381,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
     }
   };
 
-  const answerApproval = async (choice: ApprovalRequest["choices"][number]) => {
-    if (!run.state.runId) return;
-    try {
-      await api.post(`/api/hermes/runs/${encodeURIComponent(run.state.runId)}/approval`, { choice, requestId: run.state.approval?.requestId });
-      announce(choice === "deny" ? "Denied" : "Approved");
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-    } catch (err) {
-      // The approval card shows "Couldn't send your approval" + Retry, with this message folded under Details.
-      announce(choice === "deny" ? "Couldn't send your denial" : "Couldn't send your approval");
-      throw err;
-    }
-  };
-
-  const answerClarify = async (answer: string) => {
-    const runId = run.state.runId;
-    const requestId = run.state.clarify?.requestId;
-    if (!runId || !requestId) return;
-    try {
-      await api.post(`/api/hermes/runs/${encodeURIComponent(runId)}/clarify`, { answer, requestId });
-      announce("Answer sent");
-    } catch (err) {
-      announce("Couldn't send your answer");
-      throw err;
-    }
-  };
+  const { answerApproval, answerClarify } = useRunAnswers(run.state, announce);
 
   const patch = async (body: Record<string, unknown>, msg: string) => {
     try {
@@ -496,14 +473,7 @@ export function Conversation({ sessionId, initialRunId }: { sessionId: string; i
   const liveActive = run.active;
   // A completed run's reply can land in the refetched transcript one render before the live copy is
   // cleared (onTerminal's refetch → clear); don't show the same reply twice in that window.
-  const liveText = (run.state.text || run.state.output || "").trim();
-  const lastAssistant = [...detail.timeline].reverse().find((t) => t.kind === "assistant");
-  const liveInTranscript =
-    run.state.phase === "completed" && Boolean(liveText) && Boolean(lastAssistant && "text" in lastAssistant && lastAssistant.text.trim() === liveText);
-  const showLive =
-    Boolean(run.state.runId) &&
-    !liveInTranscript &&
-    (liveActive || run.state.phase !== "completed" || Boolean(run.state.text) || run.state.activity.length > 0);
+  const showLive = liveRunVisible(run.state, liveActive, detail.timeline);
   const lastUser = [...detail.timeline].reverse().find((t) => t.kind === "user");
   const showPendingUser = pendingInput && !(lastUser && "text" in lastUser && lastUser.text.startsWith(pendingInput.slice(0, 40)));
 
