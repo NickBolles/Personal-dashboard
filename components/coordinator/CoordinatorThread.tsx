@@ -1,7 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SMART_CAPABILITY } from "@/lib/jarvis-ui/types";
@@ -27,6 +39,7 @@ import { parseNotice } from "@/lib/chat-notices";
 import { refChips, sinceDivider } from "@/lib/coordinator/runs-view";
 import { withPageContext, type PageContext } from "@/lib/coordinator/page-context";
 import { COORDINATOR_PROMPT, type QuickActionContext } from "@/lib/quick-actions";
+import { COORDINATOR_PINNED_THREAD } from "@/components/navigation/commands";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { ProposedQuickActions } from "@/components/quick-actions/ProposedQuickActions";
 import { useQuickActions } from "@/components/quick-actions/useQuickActions";
@@ -40,7 +53,7 @@ import type { ConversationListResponse } from "@/lib/work";
 import { parseUserMessage, splitAttachedContext } from "@/lib/chat/display";
 // PR A (pinned Chief of staff thread): thread switcher, paging, live decisions and questionnaire replies.
 import { ThreadBar, usePinThread } from "@/components/coordinator/thread/ThreadBar";
-import { THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount } from "@/lib/coordinator/thread";
+import { CHIEF_THREAD, THREAD_FIRST_PAGE, THREAD_PAGE, visibleGroupCount, type ThreadSelection } from "@/lib/coordinator/thread";
 import { SmartScope } from "@/components/smart/SmartScope";
 import { smartDecisionRefs } from "@/lib/jarvis-ui/live";
 import "@/components/agents/agents.css";
@@ -65,11 +78,14 @@ export function CoordinatorThread({
   name = "Coordinator",
   context = null,
   contextRemoved = false,
+  standalone,
   onRemoveContext,
   onRestoreContext,
   onAskPage,
   draft,
   onDraft,
+  selection,
+  onSelection,
   inlineActions,
   quickContext,
   lastLookedChat,
@@ -105,12 +121,21 @@ export function CoordinatorThread({
   context?: PageContext | null;
   /** The owner turned this page's context off (it can be shared again). */
   contextRemoved?: boolean;
+  /** The panel is the page itself (Expand): there is no other page whose context could be shared, so say nothing. */
+  standalone?: boolean;
   onRemoveContext?: () => void;
   onRestoreContext?: () => void;
   /** Fills the composer with a question about the page being viewed. Never sends. */
   onAskPage?: () => void;
   draft?: string;
   onDraft?: (text: string) => void;
+  /**
+   * Which thread the panel is on, when the host keeps it (as it keeps the draft). The phone sheet unmounts this
+   * component when it closes: without the host's copy it would reopen on the Chief of staff thread with a draft
+   * that was written for another one.
+   */
+  selection?: ThreadSelection;
+  onSelection?: Dispatch<SetStateAction<ThreadSelection>>;
   inlineActions?: (lastUserAt: string | null) => ReactNode;
   /** Context for quick-action chips ({area}/{page} fill + scope). Chips fill the composer only. */
   quickContext?: QuickActionContext;
@@ -132,8 +157,11 @@ export function CoordinatorThread({
   const [localText, setLocalText] = useState("");
   const text = draft ?? localText;
   const setText = onDraft ?? setLocalText;
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [fresh, setFresh] = useState(false);
+  const [ownSelection, setOwnSelection] = useState<ThreadSelection>(CHIEF_THREAD);
+  const { sessionId, fresh } = selection ?? ownSelection;
+  const select = onSelection ?? setOwnSelection;
+  const setSessionId = (id: string | null) => select((now) => ({ ...now, sessionId: id }));
+  const setFresh = (value: boolean) => select((now) => ({ ...now, fresh: value }));
   const [earlier, setEarlier] = useState(false);
   const [shown, setShown] = useState<{ sid: string | null; n: number }>({ sid: null, n: THREAD_FIRST_PAGE });
   const composer = useRef<ComposerHandle>(null);
@@ -317,6 +345,28 @@ export function CoordinatorThread({
   };
   const [chips, setChips] = useState<ContextChip[]>([]);
   const [sheet, setSheet] = useState(false);
+  /** Opens a thread in the panel: an earlier one by id, or (null) the Chief of staff thread itself. */
+  const openThread = (id: string | null) => {
+    // Attachments and context picked for one thread never ride along to another.
+    if (attachments.drafts.length) attachments.clear();
+    setChips([]);
+    dropScope();
+    setFresh(false);
+    setSessionId(id);
+  };
+  const onThread = sessionId !== null || fresh;
+  const openThreadRef = useRef(openThread);
+  useEffect(() => {
+    openThreadRef.current = openThread;
+  });
+  useEffect(() => {
+    // The pinned thread's own address was asked for (/chat/<id> leads to /chief): show that thread, not the earlier
+    // or new one the panel happens to be on. Already there, nothing is touched.
+    if (!standalone || !onThread) return;
+    const onPinned = () => openThreadRef.current(null);
+    window.addEventListener(COORDINATOR_PINNED_THREAD, onPinned);
+    return () => window.removeEventListener(COORDINATOR_PINNED_THREAD, onPinned);
+  }, [standalone, onThread]);
   const send = useMutation({
     mutationFn: async ({ input, correction = false, key }: { input: string; correction?: boolean; key?: string }) => {
       const target = await ensureSession();
@@ -485,7 +535,14 @@ export function CoordinatorThread({
     lastLookedChat && sinceDivider(lastLookedChat, new Date(), sinceCounts)
       ? allGroups.findIndex((group) => group.some((m) => m.at && Date.parse(m.at) > Date.parse(lastLookedChat)))
       : -1;
-  const shownCount = visibleGroupCount(allGroups.length, shown.sid === sid ? shown.n : THREAD_FIRST_PAGE, firstNew);
+  // A message link ("#msg-<id>", as the feedback inbox writes them) that led here: on /chief this thread is the
+  // conversation the link is about, so the message is revealed (however far back) and brought into view.
+  const hash = useSyncExternalStore(subscribeHash, readHash, noHash);
+  const linked = standalone ? linkedMessage(hash) : null;
+  const linkedGroup = linked ? allGroups.findIndex((group) => group.some((m) => m.id === linked)) : -1;
+  const linkedRow = linkedGroup >= 0 ? allGroups[linkedGroup][0].id : null;
+  const reach = [firstNew, linkedGroup].filter((i) => i >= 0);
+  const shownCount = visibleGroupCount(allGroups.length, shown.sid === sid ? shown.n : THREAD_FIRST_PAGE, reach.length ? Math.min(...reach) : -1);
   const hiddenGroups = allGroups.length - shownCount;
   const messageGroups = allGroups.slice(hiddenGroups);
   const msgs = messageGroups.map((group) => group[0]);
@@ -541,6 +598,23 @@ export function CoordinatorThread({
   }, [compact, sid, lastId, running, hasDivider]);
   // While a run writes, the thread stays on its last line, unless the owner has scrolled up to read.
   const atBottom = useRef(true);
+  useEffect(() => {
+    if (!linkedRow) return;
+    // After the thread's own first placement (above), which would otherwise win.
+    const frame = requestAnimationFrame(() => {
+      const rows = bodyRef.current?.querySelectorAll<HTMLElement>("[data-msg]") ?? [];
+      const target = [...rows].find((row) => row.dataset.msg === linkedRow);
+      if (!target) return;
+      target.scrollIntoView?.({ block: "center" });
+      target.setAttribute("data-landed", "");
+      window.setTimeout(() => target.removeAttribute("data-landed"), 1900);
+      atBottom.current = false;
+      // What was revealed for the link stays revealed; the link itself is used up, and the address is /chief again.
+      setShown({ sid, n: shownCount });
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [linkedRow, sid, shownCount]);
   const liveSize = run.state.text.length + run.state.activity.length + (run.state.approval ? 1 : 0) + (run.state.clarify ? 1 : 0);
   useEffect(() => {
     const body = bodyRef.current;
@@ -611,14 +685,7 @@ export function CoordinatorThread({
               earlierState={discussions.isLoading ? "loading" : discussions.error ? "error" : discussions.isSuccess ? "ready" : "idle"}
               onEarlierOpen={setEarlier}
               pinned={!!d.pinned}
-              onOpen={(id) => {
-                // Attachments and context picked for one thread never ride along to another.
-                if (attachments.drafts.length) attachments.clear();
-                setChips([]);
-                dropScope();
-                setFresh(false);
-                setSessionId(id);
-              }}
+              onOpen={openThread}
               onNew={() => {
                 if (attachments.drafts.length) attachments.clear();
                 setChips([]);
@@ -687,11 +754,11 @@ export function CoordinatorThread({
                         </li>
                       ) : null}
                       {isBackgroundNotice(m.text) ? (
-                        <li className="co-msg">
+                        <li className="co-msg" data-msg={m.id}>
                           <BackgroundNotices messages={messageGroups[index]} />
                         </li>
                       ) : m.kind === "assistant" ? (
-                        <li key={m.id} className="co-msg" data-who="assistant">
+                        <li key={m.id} className="co-msg" data-who="assistant" data-msg={m.id}>
                           <div className="co-msg-head flex items-center justify-between gap-1">
                             <p className="text-xs font-semibold text-muted">{name}</p>
                             {sid ? (
@@ -725,7 +792,7 @@ export function CoordinatorThread({
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
                         </li>
                       ) : (
-                        <li key={m.id} className="co-msg" data-who="user">
+                        <li key={m.id} className="co-msg" data-who="user" data-msg={m.id}>
                           <UserMessage text={m.text} sessionId={sid} onRef={onRef ? jumpTo : undefined} />
                         </li>
                       )}
@@ -752,9 +819,11 @@ export function CoordinatorThread({
                 <Button size="sm" variant="ghost" loading={stop.isPending} onClick={() => stop.mutate()}>
                   Stop
                 </Button>
-                <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
-                  Open
-                </Link>
+                {compact ? null : (
+                  <Link className="inline-flex min-h-11 items-center px-2 text-accent sm:min-h-10" href={`/chat/${encodeURIComponent(sid!)}`}>
+                    Open
+                  </Link>
+                )}
               </div>
             ) : null}
             <ActionsTaken actions={actionsFor("live")} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
@@ -776,7 +845,7 @@ export function CoordinatorThread({
                 {liveWork.map(row)}
               </section>
             ) : null}
-            {sid ? (
+            {sid && !compact ? (
               <Link href={`/chat/${encodeURIComponent(sid)}`} className="mt-2 inline-block text-xs text-accent hover:underline">
                 Open full conversation
               </Link>
@@ -842,7 +911,7 @@ export function CoordinatorThread({
                     Share page
                   </Button>
                 </div>
-              ) : compact ? (
+              ) : compact && !standalone ? (
                 <p className="gc-hint gc-context-none">No page context is shared.</p>
               ) : null
             }
@@ -950,6 +1019,28 @@ export function CoordinatorThread({
 }
 
 /** What the owner sent: their words in a bubble; machine wrappers become a quiet caption or a compact receipt. */
+// The address's fragment, read as the thread renders. Next's own navigations change it without a hashchange event,
+// but they re-render the thread (it becomes the page), which is when it is read.
+const subscribeHash = (changed: () => void) => {
+  window.addEventListener("hashchange", changed);
+  window.addEventListener("popstate", changed);
+  return () => {
+    window.removeEventListener("hashchange", changed);
+    window.removeEventListener("popstate", changed);
+  };
+};
+const readHash = () => window.location.hash;
+const noHash = () => "";
+/** The message a "#msg-<id>" fragment names (lib/feedback.ts messageLink), or null. */
+function linkedMessage(hash: string): string | null {
+  if (!hash.startsWith("#msg-")) return null;
+  try {
+    return decodeURIComponent(hash.slice(5)) || null;
+  } catch {
+    return null; // a malformed fragment is not a message link
+  }
+}
+
 function UserMessage({ text, sessionId, onRef }: { text: string; sessionId?: string | null; onRef?: (ref: string) => void }) {
   const { body, attached } = splitAttachedContext(text);
   const parts = parseUserMessage(body);
