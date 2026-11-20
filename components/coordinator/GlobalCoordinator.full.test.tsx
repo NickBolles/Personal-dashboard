@@ -42,13 +42,21 @@ let threadMounts = 0;
 vi.mock("./CoordinatorThread", async () => {
   const { useEffect } = await import("react");
   return {
-    CoordinatorThread: (p: { standalone?: boolean; context?: unknown }) => {
+    CoordinatorThread: (p: {
+      standalone?: boolean;
+      context?: unknown;
+      selection?: { sessionId: string | null; fresh: boolean };
+      onSelection?: (next: { sessionId: string | null; fresh: boolean }) => void;
+    }) => {
       useEffect(() => {
         threadMounts += 1;
       }, []);
       return (
-        <div data-testid="thread" data-standalone={String(!!p.standalone)} data-context={String(!!p.context)}>
+        <div data-testid="thread" data-standalone={String(!!p.standalone)} data-context={String(!!p.context)} data-on={p.selection?.sessionId ?? "chief"}>
           The conversation
+          <button type="button" onClick={() => p.onSelection?.({ sessionId: "earlier-thread", fresh: false })}>
+            Open an earlier thread
+          </button>
         </div>
       );
     },
@@ -263,4 +271,34 @@ it("plain /chief (Expand) asks for no thread: the panel stays on the one it is s
   } finally {
     window.removeEventListener(COORDINATOR_PINNED_THREAD, asked);
   }
+});
+
+it("a message link through the redirect keeps its target: the address becomes /chief#msg-<id>", async () => {
+  window.history.replaceState(null, "", "/chief?thread=pinned#msg-a%201");
+  try {
+    nav.path = CHIEF_PATH;
+    nav.search = "thread=pinned";
+    mount();
+    await screen.findByTestId("thread");
+    expect(nav.replace).toHaveBeenCalledWith(CHIEF_PATH + "#msg-a%201");
+  } finally {
+    window.history.replaceState(null, "", "/");
+  }
+});
+
+// The draft is kept by the shell, and the phone sheet unmounts the thread when it closes. The thread the draft was
+// written in is kept with it, or the draft would come back in a different conversation.
+it("phone: closing the sheet (or leaving the full view) and opening it again is still on the thread that was open", async () => {
+  wide = false;
+  mount();
+  const openSheet = async () => fireEvent.click(await screen.findByRole("button", { name: /Chief of staff/ }));
+  await openSheet();
+  expect((await screen.findByTestId("thread")).getAttribute("data-on")).toBe("chief");
+  fireEvent.click(screen.getByRole("button", { name: "Open an earlier thread" }));
+  expect(screen.getByTestId("thread").getAttribute("data-on")).toBe("earlier-thread");
+  fireEvent.click(screen.getByRole("button", { name: "Close Chief of staff" }));
+  expect(screen.queryByTestId("thread")).toBeNull();
+  await openSheet();
+  expect(threadMounts).toBe(2);
+  expect(screen.getByTestId("thread").getAttribute("data-on")).toBe("earlier-thread");
 });

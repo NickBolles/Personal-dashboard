@@ -23,6 +23,7 @@ import { AgentChip } from "@/components/agents/AgentChip";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
 import { COORDINATOR_PINNED_THREAD, OPEN_COORDINATOR_EVENT, OPEN_PALETTE_EVENT, OVERLAY_CLOSED_EVENT } from "@/components/navigation/commands";
 import { CoordinatorThread, type CoordinatorResponse } from "./CoordinatorThread";
+import { CHIEF_THREAD, type ThreadSelection } from "@/lib/coordinator/thread";
 import { QuickActionChips } from "@/components/quick-actions/QuickActionChips";
 import { COORDINATOR_PROMPT, QUICK_ACTION_MANAGE, type QuickActionContext } from "@/lib/quick-actions";
 import { useCoordinatorThings } from "./useCoordinatorThings";
@@ -96,9 +97,13 @@ export function GlobalCoordinator() {
   useEffect(() => {
     if (!wantsPinned) return;
     window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD));
-    router.replace(CHIEF_PATH);
+    // A message link ("/chat/<id>#msg-<id>") keeps its target: the thread opens that message.
+    router.replace(CHIEF_PATH + (window.location.hash.startsWith("#msg-") ? window.location.hash : ""));
   }, [wantsPinned, router]);
   const [draft, setDraft] = useState("");
+  // Kept here with the draft: the phone sheet unmounts the thread when it closes, and the draft must come back in
+  // the thread it was written for.
+  const [thread, setThread] = useState<ThreadSelection>(CHIEF_THREAD);
   /** The chip in the one composer: what the next message is about (a run to steer, retry or ask about, a decision). */
   const [scope, setScope] = useState<ComposeScope | null>(null);
   /** D-n / R-n a tray tap, deep link or chip opened (the panel starts on it). */
@@ -714,6 +719,8 @@ export function GlobalCoordinator() {
                   commandRef={commandRef}
                   draft={draft}
                   onDraft={setDraft}
+                  selection={thread}
+                  onSelection={setThread}
                   context={attached}
                   contextRemoved={!full && !!context && !attached}
                   standalone={full}

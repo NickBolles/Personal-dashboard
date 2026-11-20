@@ -705,3 +705,68 @@ it.each([true, false])("asked for the pinned thread, the Chief of staff page lea
     expect(screen.getByText("From last week")).toBeTruthy();
   }
 });
+
+// A feedback "Open message" link is /chat/<id>#msg-<message>. For the pinned thread that address leads to /chief,
+// so the thread there resolves the link: the reply is revealed, however far back, and brought into view.
+it.each([true, false])("a message link opens that reply on the Chief of staff page, even one paged away (as the page=%s)", async (standalone) => {
+  const long = Array.from({ length: 30 }, (_, i) => ({ kind: i % 2 ? "assistant" : "user", id: `m${i}`, text: `Message number ${i}` }));
+  client.setQueryData(["session", "same-session"], { session: { id: "same-session", pinned: false, archived: false }, timeline: long });
+  window.history.replaceState(null, "", "/chief#msg-m3");
+  try {
+    mount({ compact: true, standalone });
+    if (standalone) {
+      const reply = await screen.findByText("Message number 3");
+      await waitFor(() => expect(reply.closest("[data-msg]")?.hasAttribute("data-landed")).toBe(true));
+      // The link is used up: the address is the conversation again, and what it revealed stays.
+      expect(window.location.hash).toBe("");
+      expect(screen.getByText("Message number 3")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Load earlier/ })).toBeTruthy();
+      expect(screen.queryByText("Message number 0")).toBeNull();
+    } else {
+      // The rail beside some other page: a fragment in that page's address is not about this thread.
+      expect(await screen.findByText("Message number 29")).toBeTruthy();
+      expect(screen.queryByText("Message number 3")).toBeNull();
+      expect(window.location.hash).toBe("#msg-m3");
+    }
+  } finally {
+    window.history.replaceState(null, "", "/");
+  }
+});
+
+// The host can keep which thread the panel is on (the phone sheet unmounts the panel when it closes).
+it("the thread the panel is on can be kept by the host: it is reported when it changes and honoured on mount", async () => {
+  const earlier = { session: { id: "earlier-thread", pinned: false, archived: false }, timeline: [{ kind: "assistant", id: "old", text: "From last week" }] };
+  const pinned = client.getQueryData(["session", "same-session"]);
+  vi.mocked(api.get).mockImplementation(async (path: string) => {
+    if (path === "/api/hermes/sessions/earlier-thread") return earlier;
+    if (path.startsWith("/api/work/conversations")) return { conversations: [{ id: "earlier-thread", title: "Last week", placement: { parentId: "dev" } }] };
+    if (path.endsWith("/execution")) return { records: [], sources: [] };
+    return pinned;
+  });
+  let kept = { sessionId: null as string | null, fresh: false };
+  function Host() {
+    const [selection, setSelection] = useState(kept);
+    kept = selection;
+    return <CoordinatorThread info={info} compact selection={selection} onSelection={setSelection} />;
+  }
+  const ui = () => (
+    <QueryClientProvider client={client}>
+      <Host />
+    </QueryClientProvider>
+  );
+  const first = render(ui());
+  const list = screen.getByText("Earlier threads").closest("details")!;
+  list.open = true;
+  fireEvent(list, new Event("toggle"));
+  fireEvent.click(await screen.findByRole("button", { name: "Last week" }));
+  expect(await screen.findByText("From last week")).toBeTruthy();
+  expect(kept).toEqual({ sessionId: "earlier-thread", fresh: false });
+  // The sheet closes and opens again: a new panel, on the same thread.
+  first.unmount();
+  render(ui());
+  expect(await screen.findByText("From last week")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
+  // Going back is reported too.
+  fireEvent.click(screen.getByRole("button", { name: "Back to current" }));
+  await waitFor(() => expect(kept).toEqual({ sessionId: null, fresh: false }));
+});

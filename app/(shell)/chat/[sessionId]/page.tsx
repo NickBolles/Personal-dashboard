@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { requirePage } from "@/server/auth/page";
 import { globalCoordinatorArea, pinnedCoordinatorSession } from "@/server/work/coordinator";
 import { Conversation } from "@/components/chat/Conversation";
+import { ChiefRedirect } from "@/components/coordinator/ChiefRedirect";
 
 export const metadata = { title: "Conversation" };
 
@@ -14,7 +14,8 @@ export default async function ConversationPage({ params, searchParams }: { param
   // Only while it is the thread shown there: a pinned conversation that was archived or moved out of the area is an
   // ordinary conversation again and keeps its own page.
   const chief = user.capabilities.has("work.use") ? globalCoordinatorArea(user) : null;
-  // The panel may be on an earlier thread: the address says which conversation was asked for.
-  if (chief && pinnedCoordinatorSession(user, chief.id) === id) redirect("/chief?thread=pinned");
+  // The panel may be on an earlier thread: the address says which conversation was asked for (and, for a message
+  // link, which message: see ChiefRedirect for why this is not a server redirect).
+  if (chief && pinnedCoordinatorSession(user, chief.id) === id) return <ChiefRedirect />;
   return <Conversation sessionId={id} initialRunId={run} />;
 }
