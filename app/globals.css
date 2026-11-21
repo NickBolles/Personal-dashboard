@@ -3083,15 +3083,17 @@ button:active > .dock-orb {
       min-height: 32px;
     }
   }
-  /* iOS Safari zooms the page when a focused field's text is under 16px, so there the fields keep 16px text in the
-     same compact box. Only iOS matches this query (the Fold and desktop browsers do not). */
-  @supports (-webkit-touch-callout: none) {
-    .k-input input,
-    .k-textarea,
-    .k-select,
-    .jv-field {
-      font-size: 16px;
-    }
+}
+
+/* iOS Safari zooms the page when a focused field's text is under 16px, so there the fields keep 16px text in the same
+   compact box. Only iOS matches this query (the Fold and desktop browsers do not). Unlayered on purpose: a field's
+   size utility (inputCls's own text size, a text-sm on an Input) sits in the utilities layer and would win otherwise. */
+@supports (-webkit-touch-callout: none) {
+  .k-input input,
+  .k-textarea,
+  .k-select,
+  .jv-field {
+    font-size: 16px;
   }
 }
 
