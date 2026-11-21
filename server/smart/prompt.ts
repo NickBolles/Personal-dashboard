@@ -2,7 +2,7 @@ import "server-only";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { CATALOG_ID, COMPONENT_NAMES, type ComponentName } from "@/lib/jarvis-ui/catalog";
 
-export const SMART_PROMPT_VERSION = "jarvis-ui-prompt@2";
+export const SMART_PROMPT_VERSION = "jarvis-ui-prompt@3";
 
 /**
  * Run instructions for clients that render `jarvis-ui@1` (spec §4.5). Kept
@@ -18,7 +18,7 @@ export function smartInstructions(): string {
     Divider: "{}",
     TaskList: "{title,rows:[{ref,reason?,suggestion?:do_week|reschedule|drop|done,suggestedDate?}],actions?:[done|week|snooze|drop|promote],promoteParentRef?}",
     DecisionCard:
-      "{id,title,decisionRef?:D-n,context?,required?:true,allowOther?:false,options:[{id,label,consequence?,recommended?,intent?}]} stable IDs. No intents: local choices, ONE reviewed chat reply across cards/forms; NOT Needs-you answers/action authorization. Every option with intent: Apply+Undo writes. Never mix. Closed D-n: text only.",
+      "{id,title,decisionRef?:D-n,context?,required?:true,allowOther?:false,options:[{id,label,consequence?,recommended?,intent?}]} stable IDs. No intents: ONE Submit sends a chat reply; NOT Needs-you answers/authorization. All intents: Apply+Undo writes. Never mix. Closed D-n: text only.",
     Checklist: "{title,steps:[{id,label,detail?,runBy?:you|agent}]}",
     Gauge: "{metric} or {label,value,max,unit?} labelled estimate",
     Sparkline: "{metric,label?}",
@@ -32,11 +32,11 @@ export function smartInstructions(): string {
     Gantt: "{title,rows:[{ref:item,start?:date,milestone?}],from?,to?} <=30; live item dates",
     BarChart: "{metric,label?} Jarvis series only",
     ApprovalQueue: "{title?} read-only; no approval writes",
-    Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1-3}],updates?:[item.update]}} <=12 fields; no creates/updates = questionnaire batched into one reviewed chat reply; otherwise stages writes",
+    Form: "{title,fields:[{id,label,kind:text|textarea|scale|choice|toggle,options?:[{value,label}],required?,proposed?}],submit:{label,creates?:[{parentRef,titleField,splitLines?,maxItems?:1-3}],updates?:[item.update]}} <=12 fields; no writes = ONE Submit chat reply; otherwise stages writes",
   };
   return maskAccountNumbers(
     [
-      `Interactive workflow: summary outside ONE jarvis-ui fence containing {v:1,catalog:"${CATALOG_ID}",root:"r",elements:{r:{type,props,children?:[ids]}}}. JSON only. Only Stack/Section have children.`,
+      `Compact UI: ONE jarvis-ui fence {v:1,catalog:"${CATALOG_ID}",root:"r",elements:{r:{type,props,children?:[ids]}}}. JSON only. Only Stack/Section have children. Brief labels/options; context once, no stacked callouts or prose repeating choices. Prefer DecisionCards for choices, Form for mixed inputs.`,
       "Copy refs from context; never invent item titles/dates. AI-excluded areas stay out. Never include credentials, tokens or full account numbers. No URLs/HTML/styles. Proposals only: Apply confirms, Undo reverts. Dates=YYYY-MM-DD, today..+365d for writes. Never settle/delete/merge.",
       ...COMPONENT_NAMES.map((n) => `${n} ${hints[n]}`),
       "metric:ai_spend_today|ai_spend_7d|items_done_14d|overdue_count: Jarvis numbers, never yours.",

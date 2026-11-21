@@ -3,6 +3,7 @@
  * pages use for PR / checks / deploy pills), and the "since you last looked" breakdown. Pure and client-safe.
  */
 import { isActiveExec, type ExecutionRecord } from "@/lib/chat-execution";
+import { STALL_AFTER_MIN } from "@/lib/agent-runs";
 import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent, RunEventType } from "@/lib/cw-runs";
 import { relativeTime } from "@/lib/time";
@@ -476,6 +477,15 @@ export function placeWork(
  * and a card whose controls would reach anything else is a new card. (Each kind has its own prefix: a handle
  * can never be mistaken for a run or a record key.)
  */
+/** Silence alone is quiet in Chat; failures and owner approvals remain prominent. Activity is unchanged. */
+export function quietChatWork(work: BackgroundWork, now: number): boolean {
+  const { record, run } = work;
+  if (record.error || record.state === "failed" || record.state === "waiting") return false;
+  if (run?.lastEvent && eventChip(run.lastEvent).tone === "bad") return false;
+  if (run) return runStatus(run, now).key === "stuck";
+  return record.state === "running" && !!record.updatedAt && now - Date.parse(record.updatedAt) > STALL_AFTER_MIN * 60_000;
+}
+
 export function workKey(work: BackgroundWork): string {
   if (work.control) return `agent:${controlHandle(work.control)}`;
   return work.run ? `run:${work.run.id}` : `record:${work.record.key}`;
