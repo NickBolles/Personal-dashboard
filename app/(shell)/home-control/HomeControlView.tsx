@@ -55,7 +55,7 @@ export function HomeControlView({ focusEntity, propose }: { focusEntity?: string
   const controlsFresh = controls.data && now - new Date(controls.data.fetchedAt).getTime() < 60_000;
 
   return (
-    <div className="@container mx-auto max-w-3xl px-4 pt-4 pb-6 sm:px-6 dense:pt-5 dense:max-w-6xl">
+    <div className="@container mx-auto max-w-3xl px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5 dense:max-w-6xl">
       <PageHeader
         title="House"
         subtitle={

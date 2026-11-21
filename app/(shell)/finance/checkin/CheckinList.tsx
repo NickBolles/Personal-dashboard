@@ -32,7 +32,7 @@ export function CheckinList() {
   const q = useQuery({ queryKey: ["finance", "checkins"], queryFn: () => api.get<{ checkins: Row[]; month: string }>("/api/finance/checkins") });
   const month = q.data?.month ?? "";
   return (
-    <div className="mx-auto max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-3xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title="Check-ins"
         actions={q.data && !q.data.checkins.some((c) => c.month === month) ? <StartCheckinButton month={month} label={`Start ${monthLabel(month)}`} /> : null}

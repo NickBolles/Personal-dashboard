@@ -1561,13 +1561,14 @@ button:active > .dock-orb {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    min-height: 44px;
-    padding: 0 16px;
+    /* Phones get the same compact box as tablets (owner: "no chonky inputs"); icon-only buttons keep 44px below. */
+    min-height: 36px;
+    padding: 0 12px;
     border-radius: var(--r2);
     border: 1px solid var(--bd2);
     background: var(--s3);
     color: var(--t1);
-    font: 500 15px/1.2 var(--sans);
+    font: 500 14px/1.2 var(--sans);
     white-space: nowrap;
     text-decoration: none;
     cursor: pointer;
@@ -1637,16 +1638,19 @@ button:active > .dock-orb {
     filter: brightness(1.15);
   }
   .k-btn-sm {
-    min-height: 36px;
-    padding: 0 12px;
-    font-size: 14px;
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 13px;
   }
+  /* Icon actions are the one control that keeps the 44px box on phones: the glyph is the whole target. */
   .k-btn-icon {
     width: 44px;
+    min-height: 44px;
     padding: 0;
   }
   .k-btn-icon.k-btn-sm {
     width: 36px;
+    min-height: 36px;
   }
   /* Bottom-sheet grab bar (SheetHandle + useSheetDrag): the whole strip is the target, the pill is only the mark. */
   .k-sheet-handle {
@@ -1865,7 +1869,7 @@ button:active > .dock-orb {
     align-items: center;
     max-width: 100%;
     min-width: 0;
-    min-height: 44px;
+    min-height: 32px;
     border-radius: 999px;
     border: 1px solid transparent;
     background: var(--s2);
@@ -1950,11 +1954,6 @@ button:active > .dock-orb {
   .k-pick-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
-  }
-  @media (min-width: 640px) {
-    .k-pick {
-      min-height: 36px;
-    }
   }
   @media (min-width: 1024px) and (pointer: fine) {
     .k-pick {
@@ -2074,9 +2073,9 @@ button:active > .dock-orb {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: 44px;
+    min-height: 36px;
     color: var(--t1);
-    font: 15px var(--sans);
+    font: 14px var(--sans);
     cursor: pointer;
   }
   .k-check-in {
@@ -2155,11 +2154,11 @@ button:active > .dock-orb {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    min-height: 44px;
+    min-height: 36px;
     background: none;
     border: 0;
     color: var(--t1);
-    font: 15px var(--sans);
+    font: 14px var(--sans);
     cursor: pointer;
   }
   .k-toggle-t {
@@ -2211,7 +2210,7 @@ button:active > .dock-orb {
     border: 1px solid var(--bd);
   }
   .k-seg-i {
-    min-height: 40px;
+    min-height: 32px;
     padding: 0 12px;
     border-radius: var(--r1);
     border: 0;
@@ -2251,8 +2250,8 @@ button:active > .dock-orb {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 44px;
-    padding: 0 12px;
+    min-height: 36px;
+    padding: 0 10px;
     border-radius: var(--r2);
     border: 1px solid var(--bdc);
     background: var(--s2);
@@ -2271,7 +2270,7 @@ button:active > .dock-orb {
     border: 0;
     outline: 0;
     color: inherit;
-    font: 16px var(--sans);
+    font: 14px var(--sans);
   }
   .k-input input::placeholder {
     color: var(--t3);
@@ -2286,13 +2285,13 @@ button:active > .dock-orb {
   .k-textarea {
     display: block;
     width: 100%;
-    min-height: 44px;
-    padding: 8px 12px;
+    min-height: 36px;
+    padding: 6px 10px;
     border-radius: var(--r2);
     border: 1px solid var(--bdc);
     background: var(--s2);
     color: var(--t1);
-    font: 16px/1.45 var(--sans);
+    font: 14px/1.45 var(--sans);
     resize: vertical;
   }
   .k-textarea::placeholder {
@@ -2308,8 +2307,8 @@ button:active > .dock-orb {
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    min-height: 44px;
-    padding: 0 32px 0 12px;
+    min-height: 36px;
+    padding: 0 30px 0 10px;
     border-radius: var(--r2);
     border: 1px solid var(--bdc);
     background-color: var(--s2);
@@ -2320,7 +2319,7 @@ button:active > .dock-orb {
     background-size: 5px 5px;
     background-repeat: no-repeat;
     color: var(--t1);
-    font: 16px var(--sans);
+    font: 14px var(--sans);
     appearance: none;
   }
   .k-select:focus {
@@ -3017,33 +3016,15 @@ button:active > .dock-orb {
 
   @media (min-width: 600px) {
     .k-btn {
-      min-height: 36px;
       padding: 0 14px;
-      font-size: 14px;
-    }
-    .k-btn-sm {
-      min-height: 32px;
-      padding: 0 10px;
-      font-size: 13px;
     }
     .k-btn-icon {
       width: 36px;
+      min-height: 36px;
     }
     .k-btn-icon.k-btn-sm {
       width: 32px;
-    }
-    .k-input {
-      min-height: 36px;
-    }
-    .k-input input {
-      font-size: 14px;
-    }
-    .k-textarea {
-      font-size: 14px;
-    }
-    .k-select {
-      min-height: 36px;
-      font-size: 14px;
+      min-height: 32px;
     }
     .k-row {
       min-height: 40px;
@@ -3051,13 +3032,8 @@ button:active > .dock-orb {
     .k-row2 {
       min-height: 52px;
     }
-    .k-row-t,
-    .k-check,
-    .k-toggle {
+    .k-row-t {
       font-size: 14px;
-    }
-    .k-seg-i {
-      min-height: 32px;
     }
     .k-menu-i {
       min-height: 36px;
@@ -3076,9 +3052,11 @@ button:active > .dock-orb {
     }
     .k-btn-icon {
       width: 28px;
+      min-height: 28px;
     }
     .k-btn-icon.k-btn-sm {
       width: 24px;
+      min-height: 24px;
     }
     .k-input {
       min-height: 30px;
@@ -3103,6 +3081,16 @@ button:active > .dock-orb {
     .k-check,
     .k-toggle {
       min-height: 32px;
+    }
+  }
+  /* iOS Safari zooms the page when a focused field's text is under 16px, so there the fields keep 16px text in the
+     same compact box. Only iOS matches this query (the Fold and desktop browsers do not). */
+  @supports (-webkit-touch-callout: none) {
+    .k-input input,
+    .k-textarea,
+    .k-select,
+    .jv-field {
+      font-size: 16px;
     }
   }
 }

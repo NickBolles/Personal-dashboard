@@ -841,7 +841,7 @@ export function CheckinView({ id }: { id: string }) {
     </Pill>
   );
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title={`${month} check-in`}
         subtitle={

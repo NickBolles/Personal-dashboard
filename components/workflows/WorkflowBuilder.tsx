@@ -207,13 +207,14 @@ function BuilderView({ detail, intro }: { detail: Detail | null; intro?: React.R
       />
       {intro}
       <div className="grid grid-cols-1 gap-4 @min-[872px]:grid-cols-[180px_minmax(0,1fr)_minmax(0,360px)]">
-        <nav aria-label="Builder sections" className="flex min-w-0 flex-wrap gap-1 @min-[872px]:flex-col">
+        <nav aria-label="Builder sections" data-scroll-x className="flex min-w-0 gap-1 overflow-x-auto @min-[872px]:flex-col @min-[872px]:overflow-visible">
           {BUILDER_SECTIONS.map((s) => (
             <Button
               key={s}
               type="button"
               variant="ghost"
-              className={`min-w-0 justify-start whitespace-normal text-left ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
+              size="sm"
+              className={`shrink-0 justify-start text-left @min-[872px]:min-w-0 @min-[872px]:shrink @min-[872px]:whitespace-normal ${state.section === s ? "bg-surface-2 font-semibold" : ""}`}
               aria-current={state.section === s ? "step" : undefined}
               onClick={() => dispatch({ type: "section", section: s })}
             >

@@ -18,7 +18,7 @@ export function FinanceShell({ children }: { children: ReactNode }) {
   const path = usePathname();
   return (
     <HideAmountsProvider>
-      <div className="mx-auto max-w-[1240px] px-4 pt-4 sm:px-6 dense:px-7 dense:pt-5">
+      <div className="mx-auto max-w-[1240px] px-3 pt-3 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           {/* The shared segmented control; phones scroll it sideways rather than wrapping. */}
           <nav aria-label="Finance" className="scroll-x-clean max-w-full min-w-0">
