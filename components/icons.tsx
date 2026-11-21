@@ -1,5 +1,32 @@
 /** Inline icons (no icon font / bundle). All decorative: aria-hidden. */
 type P = { className?: string };
+export const ContextIcon = ({ className }: P) =>
+  base(
+    <>
+      <rect x="4" y="4" width="11" height="13" rx="2" />
+      <path d="M9 7h11v13H9M7 8h5M7 12h5" />
+    </>,
+    className,
+  );
+export const PaperclipIcon = ({ className }: P) => base(<path d="m8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L13 2M5 15 15 5" />, className);
+export const ImageIcon = ({ className }: P) =>
+  base(
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8" cy="8" r="1" />
+      <path d="m3 17 6-6 4 4 3-3 5 5" />
+    </>,
+    className,
+  );
+export const ChipIcon = ({ className }: P) =>
+  base(
+    <>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
+    </>,
+    className,
+  );
 const base = (d: React.ReactNode, className = "h-6 w-6") => (
   <svg
     viewBox="0 0 24 24"

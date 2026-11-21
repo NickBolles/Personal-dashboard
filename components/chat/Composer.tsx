@@ -21,7 +21,7 @@ import { newIdempotencyKey } from "@/lib/client/api";
 import { kvDel, kvGet, kvSet } from "@/lib/client/idb";
 import { isTerminal, type RunPhase } from "@/lib/hermes";
 import { Button, ChipButton, Menu, Textarea, cx, useToast, type KMenuItem } from "@/components/ui";
-import { PlusIcon, StopIcon } from "@/components/icons";
+import { CameraIcon, ChipIcon, ContextIcon, ImageIcon, PaperclipIcon, PlusIcon, StopIcon } from "@/components/icons";
 import { useModKey } from "@/lib/client/platform";
 import { composerKey, isSendShortcut, SEND_KEYSHORTCUTS, sendHint } from "@/lib/client/composer-keys";
 import { displayRef, encodeMessage, triggerAt, type CommandId, type Reference, type Trigger } from "@/lib/references";
@@ -641,15 +641,15 @@ function ComposerAddMenu({
     };
   }, [open]);
   const items: KMenuItem[] = [
-    { label: "Context", hint: "areas, items, people", onSelect: onContext },
+    { label: "Context", icon: <ContextIcon className="h-4 w-4" />, hint: "areas, items, people", onSelect: onContext },
     ...(files
       ? [
-          { label: "Attach file", onSelect: onFile, disabled: !online },
-          { label: "Camera", onSelect: onCamera, disabled: !online },
-          { label: "Photo library", onSelect: () => library.current?.click(), disabled: !online },
+          { label: "Attach file", icon: <PaperclipIcon className="h-4 w-4" />, onSelect: onFile, disabled: !online },
+          { label: "Camera", icon: <CameraIcon className="h-4 w-4" />, onSelect: onCamera, disabled: !online },
+          { label: "Photo library", icon: <ImageIcon className="h-4 w-4" />, onSelect: () => library.current?.click(), disabled: !online },
         ]
       : []),
-    ...(modelLabel && onModel ? [{ label: "Model", hint: modelLabel, onSelect: onModel }] : []),
+    ...(modelLabel && onModel ? [{ label: "Model", icon: <ChipIcon className="h-4 w-4" />, hint: modelLabel, onSelect: onModel }] : []),
   ];
   return (
     <div ref={root} className={cx("cmp-add relative shrink-0", !always && "sm:hidden")}>

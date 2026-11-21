@@ -1,0 +1,20 @@
+@layer components {
+  .chat-tool.k-btn {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    white-space: normal;
+    padding: 0.25rem 0.625rem;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 400;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    text-align: left;
+  }
+  .chat-tool.k-btn > span:first-of-type {
+    overflow-wrap: anywhere;
+  }
+}
