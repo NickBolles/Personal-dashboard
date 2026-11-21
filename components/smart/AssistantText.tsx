@@ -93,6 +93,25 @@ function AnswerNotes({ spec, elementId }: { spec: JarvisSpec; elementId: string 
       </div>
     );
   }
+  if (element.type === "Section") {
+    const answerKeys = new Set(answerQuestions(spec, 0).map((q) => q.id.split(":")[1]));
+    const containsAnswer = (id: string): boolean => answerKeys.has(id) || !!spec.elements[id]?.children?.some(containsAnswer);
+    const p = element.props as PropsOf<"Section">;
+    // Sections around questions already travel with the question context. Informational-only sections do not.
+    return (
+      <>
+        {!containsAnswer(elementId) ? (
+          <div className="answer-context">
+            <h4 className="font-medium">{p.title}</h4>
+            {p.subtitle ? <Markdown text={p.subtitle} /> : null}
+          </div>
+        ) : null}
+        {element.children?.map((child) => (
+          <AnswerNotes key={child} spec={spec} elementId={child} />
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {element.children?.map((child) => (

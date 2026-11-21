@@ -184,6 +184,41 @@ it("preserves multiline fields and enclosing section instructions in the reviewe
   expect(answerPayload(qs, { [qs[0].id]: { choice: "text", other: "First line\nSecond line" } })).toContain("First line\nSecond line");
   expect(answerComplete(qs[0], { choice: "text", other: "" })).toBe(true);
 });
+it("preserves informational Section titles/subtitles beside compact questions without a second surface", () => {
+  const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  qc.setQueryData(["smart-settings"], { enabled: true });
+  const spec = {
+    root: "root",
+    elements: {
+      root: { type: "Stack", props: {}, children: ["info", "question"] },
+      info: { type: "Section", props: { title: "Important limits", subtitle: "Discussion does not grant access" }, children: ["text"] },
+      text: { type: "Text", props: { text: "Existing permissions remain unchanged." } },
+      question: {
+        type: "DecisionCard",
+        props: {
+          id: "plan",
+          title: "Direction",
+          options: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+        },
+      },
+    },
+  };
+  render(
+    <QueryClientProvider client={qc}>
+      <SmartScope session="isolated" reply={vi.fn()}>
+        <AssistantText text={`\`\`\`jarvis-ui\n${JSON.stringify(spec)}\n\`\`\``} messageId="info-section" />
+      </SmartScope>
+    </QueryClientProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "Important limits" })).toBeTruthy();
+  expect(screen.getByText("Discussion does not grant access")).toBeTruthy();
+  expect(screen.getByText("Existing permissions remain unchanged.")).toBeTruthy();
+  expect(screen.getAllByTestId("answer-batch")).toHaveLength(1);
+  expect(screen.getAllByRole("button", { name: "Submit choices" })).toHaveLength(1);
+});
 it("unbound controls cannot offer a fake submit path", () => {
   render(<AnswerBatch questions={questions} session="isolated" source="unbound" />);
   expect((screen.getByRole("button", { name: "Submit choices" }) as HTMLButtonElement).disabled).toBe(true);
