@@ -139,14 +139,8 @@
     }
   },
   "components/NotificationSetup.tsx": {
-    "jarvis-ui/no-arbitrary-values": {
-      "count": 2
-    },
     "jarvis-ui/no-legacy-imports": {
       "count": 1
-    },
-    "jarvis-ui/no-native-controls": {
-      "count": 3
     }
   },
   "components/SourceState.tsx": {

@@ -36,13 +36,12 @@ const VARIANTS: Record<Variant, string> = {
 };
 
 /**
- * Three density tiers: phones keep 44px touch targets; tablets (≥640px, touch)
- * get 40/36px controls so a page doesn't read as oversized; a desktop pointer
- * (`dense:`) gets the compact command-center sizes.
+ * Two density tiers: touch screens (phone and tablet) share one compact 36/32px box, the same as the kit
+ * `Button`; a desktop pointer (`dense:`) gets the command-center sizes.
  */
 const SIZES = {
-  md: "min-h-11 px-4 text-[0.9375rem] sm:min-h-10 sm:px-3.5 sm:text-[0.875rem] dense:min-h-9 dense:px-3.5 dense:text-[0.875rem]",
-  sm: "min-h-11 px-3 text-sm sm:min-h-9 sm:px-3 dense:min-h-[30px] dense:px-2.5",
+  md: "min-h-9 px-3 text-[0.875rem] sm:px-3.5",
+  sm: "min-h-8 px-2.5 text-sm dense:min-h-[30px]",
 } as const;
 
 const BUTTON_BASE =
@@ -118,16 +117,21 @@ export function Card({
  * Page frame. App pages use the available width on desktop (`wide`, ~1240px);
  * `medium` suits single lists, `narrow` reading/forms, `full` multi-pane layouts.
  */
+const InPage = createContext(false);
 export function Page({ children, className, width = "wide" }: { children: ReactNode; className?: string; width?: "narrow" | "medium" | "wide" | "full" }) {
+  // A page frame inside a page frame (a settings section inside the settings shell) keeps its width but not a
+  // second set of gutters.
+  const nested = useContext(InPage);
   return (
     <div
       className={cx(
-        "mx-auto w-full px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5",
+        "mx-auto w-full",
+        !nested && "px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5",
         width === "narrow" ? "max-w-3xl" : width === "medium" ? "max-w-[1040px]" : width === "wide" ? "max-w-[1240px]" : "",
         className,
       )}
     >
-      {children}
+      <InPage.Provider value={true}>{children}</InPage.Provider>
     </div>
   );
 }
@@ -145,7 +149,7 @@ export function PageHeader({
   eyebrow?: ReactNode;
 }) {
   return (
-    <header className="mb-4 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+    <header className="mb-3 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
       <div className="min-w-0">
         {eyebrow ? <div className="eyebrow mb-1">{eyebrow}</div> : null}
         <h1 className="text-[1.25rem] leading-7 font-semibold tracking-[-0.01em]">{title}</h1>
@@ -572,7 +576,7 @@ export function useNow(intervalMs = 30_000) {
 export function Field({ label, hint, children, id, error }: { label: string; hint?: ReactNode; children: ReactNode; id: string; error?: string }) {
   return (
     <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium">
+      <label htmlFor={id} className="block text-xs font-medium text-muted">
         {label}
       </label>
       {children}
@@ -591,4 +595,4 @@ export function Field({ label, hint, children, id, error }: { label: string; hin
 }
 
 export const inputCls =
-  "block w-full min-h-11 rounded-[8px] border border-line-strong bg-surface px-3 py-2 text-base text-text placeholder:text-muted disabled:opacity-60 sm:min-h-10 sm:py-1.5 dense:min-h-9 dense:px-2.5 dense:py-1.5 dense:text-[0.875rem]";
+  "jv-field block w-full min-h-9 rounded-[8px] border border-line-strong bg-surface px-2.5 py-1.5 text-[0.875rem] text-text placeholder:text-muted disabled:opacity-60";

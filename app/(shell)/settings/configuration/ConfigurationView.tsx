@@ -59,7 +59,7 @@ export function ConfigurationView() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4">
       <PageHeader title="Configuration transfer" />
       <Link href="/settings" className="text-sm text-accent underline">
         Back to Settings

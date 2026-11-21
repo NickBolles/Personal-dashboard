@@ -74,7 +74,7 @@ export function HomeTuningView() {
   const weightOf = (c: string) => t?.categories.find((x) => x.category === c)?.weight ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-220 space-y-4 px-4 pt-4 pb-6 sm:px-6 dense:px-7 dense:pt-5">
+    <div className="mx-auto w-full max-w-220 space-y-4">
       <PageHeader title="Home priorities" subtitle="What Home shows first, and what you’ve told it. Only you see this page." />
       {!t ? (
         <span role="status">

@@ -315,7 +315,7 @@ export function AccountsView() {
   const ignore = useFinanceMutation((x: External) => api.patch("/api/finance/external", { source: x.source, externalId: x.externalId, ignored: !x.ignored }));
   const list = accounts.data?.accounts ?? [];
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-5 sm:px-6">
+    <div className="mx-auto max-w-6xl space-y-4 px-3 pt-3 pb-6 sm:px-5 sm:pt-4 dense:px-7 dense:pt-5">
       <PageHeader
         title="Accounts"
         subtitle="Balances keep their source, as-of and fetch time. Unknown as-of stays unknown."
