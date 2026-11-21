@@ -28,7 +28,7 @@ import { ContextSheet, type ContextChip } from "@/components/chat/ContextSheet";
 import { parseFileMarkers } from "@/lib/chat-files";
 import { AlertIcon, BellIcon, BoltIcon, CheckIcon, ClockIcon, InboxIcon } from "@/components/icons";
 import { RateMessage } from "@/components/feedback/RateMessage";
-import { Button, ChipButton, Dot, RefPill, useOnline, useToast } from "@/components/ui";
+import { Button, ChipButton, Dot, RefPill, useNow, useOnline, useToast } from "@/components/ui";
 import { Composer, type ComposerHandle } from "@/components/chat/Composer";
 import { AssistantName, LiveRun, liveRunVisible } from "@/components/chat/Timeline";
 import { useRunStream, type RunState } from "@/components/chat/useRunStream";
@@ -46,7 +46,16 @@ import { useQuickActions } from "@/components/quick-actions/useQuickActions";
 import { ActionsTaken } from "@/components/chat/ActionsTaken";
 import { actionsByReply } from "@/lib/chat/actions";
 import { isActiveExec, type ChatExecutionResponse, type ExecutionRecord } from "@/lib/chat-execution";
-import { mergeBackgroundWork, placeWork, sinceChips, workKey, type BackgroundWork, type SinceChip, type SinceCounts } from "@/lib/coordinator/run-card";
+import {
+  mergeBackgroundWork,
+  placeWork,
+  quietChatWork,
+  sinceChips,
+  workKey,
+  type BackgroundWork,
+  type SinceChip,
+  type SinceCounts,
+} from "@/lib/coordinator/run-card";
 import { ExecCard, LiveLine } from "@/components/coordinator/running/RunCard";
 import { useCoordinatorRuns } from "@/components/coordinator/running/useCoordinatorRuns";
 import type { ConversationListResponse } from "@/lib/work";
@@ -786,7 +795,7 @@ export function CoordinatorThread({
                           <ActionsTaken actions={actionsFor(m.id)} sessionId={sid ?? undefined} areaHint={d.area.title} compact />
                           {placed.get(m.id)?.length ? (
                             <section aria-label="Work started by this reply" className="gc-bgwork">
-                              {placed.get(m.id)!.map(row)}
+                              <ChatWork work={placed.get(m.id)!} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
                             </section>
                           ) : null}
                           {mentions ? <MentionRows refs={mentionRows(m.id)} render={mentions.render} /> : null}
@@ -842,7 +851,7 @@ export function CoordinatorThread({
             ) : null}
             {liveWork.length ? (
               <section aria-label="Work in progress" className="gc-bgwork">
-                {liveWork.map(row)}
+                <ChatWork work={liveWork} render={row} onActivity={onJump ? () => onJump("running") : undefined} />
               </section>
             ) : null}
             {sid && !compact ? (
@@ -1079,6 +1088,32 @@ function UserMessage({ text, sessionId, onRef }: { text: string; sessionId?: str
 function SentFiles({ sessionId, ids }: { sessionId: string; ids: string[] }) {
   const files = useConversationFiles(sessionId);
   return <MessageAttachments sessionId={sessionId} ids={ids} files={files.data ?? []} />;
+}
+
+/** Do not repeat the full stalled inventory beneath the conversation. No records are changed or removed. */
+export function ChatWork({ work, render, onActivity }: { work: BackgroundWork[]; render: (w: BackgroundWork) => ReactNode; onActivity?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const now = useNow();
+  const quiet = [...new Map(work.filter((w) => quietChatWork(w, now)).map((w) => [workKey(w), w])).values()];
+  const visible = work.filter((w) => !quietChatWork(w, now));
+  return (
+    <>
+      {visible.map(render)}
+      {quiet.length ? (
+        <div className="gc-quiet-work" data-testid="quiet-chat-work">
+          <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {quiet.length} stalled {quiet.length === 1 ? "run" : "runs"}
+          </Button>
+          {onActivity ? (
+            <Button size="sm" variant="ghost" onClick={onActivity}>
+              Activity
+            </Button>
+          ) : null}
+          {open ? <div aria-label="Stalled run history">{quiet.map(render)}</div> : null}
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 type ThreadMessage = Extract<TimelineItem, { kind: "user" | "assistant" | "system" }>;
