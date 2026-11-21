@@ -128,7 +128,7 @@ const globalCoordinatorVisual = {
 
 const MASK = ["time", "[data-dynamic]", "p.text-xs", "p.text-sm.text-muted", "header p.text-sm"];
 
-test("visual: reviewed decision batch in the shared coordinator", async ({ page }, info) => {
+test("visual: compact decision batch in the shared coordinator", async ({ page }, info) => {
   const frozen = await freezeMiddayCT(page);
   await stubBatchCoordinator(
     page,
@@ -149,13 +149,14 @@ test("visual: reviewed decision batch in the shared coordinator", async ({ page 
   await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
   await expect(batch).toHaveScreenshot("decision-batch-selected.png");
   await batch.getByRole("button", { name: "Submit choices" }).click();
+  await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
   await expect(batch).toHaveScreenshot("decision-batch-review.png");
   if (process.env.JARVIS_BATCH_SHOTS) {
     await batch.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-${info.project.name}.png` });
   }
   await page.setViewportSize(viewport);
-  await batch.getByRole("button", { name: "Confirm send reply" }).scrollIntoViewIfNeeded();
+  await batch.getByRole("status").scrollIntoViewIfNeeded();
   if (process.env.JARVIS_BATCH_SHOTS)
     await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-review-screen-${info.project.name}.png` });
   await page.addStyleTag({ content: "html { font-size: 200% !important; }" });

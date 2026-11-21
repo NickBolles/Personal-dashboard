@@ -38,7 +38,7 @@ afterEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
 });
-it("selects locally, edits, previews exact readable payload then sends once with retry identity", async () => {
+it("selects locally and ONE Submit sends once without review; retry preserves identity", async () => {
   const reply = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
   render(
     <SmartReply.Provider value={reply}>
@@ -51,12 +51,14 @@ it("selects locally, edits, previews exact readable payload then sends once with
   fireEvent.click(screen.getByRole("button", { name: "Elm" }));
   expect(reply).toHaveBeenCalledTimes(0);
   fireEvent.click(screen.getByRole("button", { name: "Submit choices" }));
-  const payload = screen.getByRole("region", { name: "Review exact reply" }).querySelector("pre")!.textContent;
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("region", { name: "Review exact reply" })).toBeNull();
+  await waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
+  const payload = reply.mock.calls[0][0];
   expect(payload).toContain("Elm [choice:elm]");
   expect(payload).toContain("question:0:naming");
   expect(payload).toContain("skipped (optional)");
-  fireEvent.click(screen.getByRole("button", { name: "Confirm send reply" }));
-  await waitFor(() => expect(reply).toHaveBeenCalledTimes(1));
+
   await screen.findByText(/Send not confirmed/);
   fireEvent.click(screen.getByRole("button", { name: "Retry same reply" }));
   await screen.findByText("Sent as one reply to this conversation.");
@@ -83,7 +85,6 @@ it("keeps editable draft and sent receipt on reload, supports Other and reset", 
   expect((screen.getByRole("button", { name: "Submit choices" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Birch" }));
   fireEvent.click(screen.getByRole("button", { name: "Submit choices" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm send reply" }));
   await screen.findByText("Sent as one reply to this conversation.");
   ui.unmount();
   draw();
@@ -119,9 +120,8 @@ it("chat and rail share selections, in-flight lock and sent receipt for the same
   fireEvent.click(chat.getByRole("button", { name: "Birch" }));
   expect(rail.getByRole("button", { name: "Birch" }).getAttribute("aria-pressed")).toBe("true");
   fireEvent.click(chat.getByRole("button", { name: "Submit choices" }));
-  fireEvent.click(rail.getByRole("button", { name: "Submit choices" }));
-  fireEvent.click(chat.getByRole("button", { name: "Confirm send reply" }));
-  fireEvent.click(rail.getByRole("button", { name: /Confirm send reply|Retry same reply/ }));
+  fireEvent.click(rail.getByRole("button", { name: "Retry same reply" }));
+
   expect(reply).toHaveBeenCalledTimes(1);
   accept(true);
   await waitFor(() => expect(screen.getAllByText("Sent as one reply to this conversation.")).toHaveLength(2));
@@ -140,7 +140,6 @@ it("rechecks stale D refs after selection and before any send", async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "Birch" }).closest("fieldset")?.disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "Birch" }));
   fireEvent.click(screen.getByRole("button", { name: "Submit choices" }));
-  fireEvent.click(screen.getByRole("button", { name: "Confirm send reply" }));
   await screen.findByText(/D-9001 is closed/);
   expect(reply).not.toHaveBeenCalled();
 });

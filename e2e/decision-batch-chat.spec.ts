@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { batchReply, openChat, stubCoordinator } from "./fixtures/decision-batch";
 import { expectNoHorizontalOverflow } from "./helpers";
 
-test("batch choices: editable locally, review once, retry same exact reply and reload receipt in originating coordinator", async ({ page }, info) => {
+test("batch choices: ONE Submit sends without review, retry same exact reply and reload receipt in originating coordinator", async ({ page }, info) => {
   const now = new Date("2026-11-17T18:00:00Z").getTime();
   await page.clock.setFixedTime(now);
   const state = await stubCoordinator(
@@ -29,17 +29,16 @@ test("batch choices: editable locally, review once, retry same exact reply and r
   await batch.getByRole("button", { name: "Later", exact: true }).click();
   expect(calls).toHaveLength(0);
   expect(state.runs).toHaveLength(0);
-  await batch.getByRole("button", { name: "Submit choices" }).click();
-  await batch.getByRole("button", { name: "Cancel review" }).click();
   await page.reload();
   const restored = await openChat(page, info.project.name === "desktop");
   const b = restored.getByTestId("answer-batch");
   await expect(b.getByRole("button", { name: "Elm", exact: true })).toHaveAttribute("aria-pressed", "true");
   await b.getByRole("button", { name: "Submit choices" }).click();
-  const exact = await b.getByRole("region", { name: "Review exact reply" }).locator("pre").innerText();
-  await b.getByRole("button", { name: "Confirm send reply" }).dblclick();
+  await expect(b.getByRole("region", { name: "Review exact reply" })).toHaveCount(0);
+  await expect(b.getByRole("button", { name: "Confirm send reply" })).toHaveCount(0);
   await expect(b.getByRole("status")).toContainText("Send not confirmed");
   expect(calls).toHaveLength(1);
+  const exact = calls[0].input;
   fail = false;
   await b.getByRole("button", { name: "Retry same reply" }).click();
   await expect(b.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
@@ -120,7 +119,6 @@ test("batch explicit chat: keyboard choice, typed Other, optional skipped, inval
   await expect(page.getByTestId("msg-bubble").getByTestId("smart-fallback")).toBeVisible();
   expect(state.runs).toHaveLength(0);
   await batch.getByRole("button", { name: "Submit choices" }).click();
-  await batch.getByRole("button", { name: "Confirm send reply" }).click();
   await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   expect(state.runs).toHaveLength(1);
   expect(state.runs[0].sid).toBe("cw-pin");

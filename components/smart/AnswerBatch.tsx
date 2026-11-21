@@ -36,7 +36,6 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
     }
     return { source, values: Object.fromEntries(questions.filter((q) => q.proposed).map((q) => [q.id, q.proposed!])) };
   });
-  const [review, setReview] = useState(false);
   const [busy, setBusy] = useState(() => pendingBatches.has(storageKey));
   const notify = (next?: Draft) => window.dispatchEvent(new CustomEvent(DRAFT_EVENT, { detail: { storageKey, next, busy: pendingBatches.has(storageKey) } }));
   useEffect(() => {
@@ -87,7 +86,6 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
   const text = draft.payload ?? `Reply to conversation ${session}, response ${source.split("\n")[0]}\n\n${answerPayload(questions, draft.values)}`;
   const update = (id: string, choice: string, other?: string) => {
     save({ source, values: { ...draft.values, [id]: { choice, other } }, edited: [...new Set([...(draft.edited ?? []), id])] });
-    setReview(false);
     setError("");
   };
   const submit = async () => {
@@ -113,7 +111,6 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
       if (!(await reply(text, attempt.key)))
         throw new Error("Send not confirmed. Your selections are kept. Retry uses the same message key; do not send it manually.");
       save({ ...attempt, sent: true });
-      setReview(false);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -124,41 +121,29 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
     }
   };
   return (
-    <section
-      className="answer-batch min-w-0 space-y-3 rounded-lg border border-line p-3"
-      data-testid="answer-batch"
-      aria-label="Your choices"
-      data-density="sleek"
-    >
-      <div>
-        <h3 className="text-sm font-semibold">Your choices</h3>
-        <p className="text-xs text-muted">Select locally, then review one reply. No decisions or actions are committed.</p>
-      </div>
-      {questions.map((q) => (
-        <fieldset
-          key={q.id}
-          disabled={!reply || locked || (!!q.ref && (checking || stale.includes(q.ref)))}
-          className="min-w-0 space-y-1 border-b border-line pb-2"
-        >
+    <section className="answer-batch min-w-0" data-testid="answer-batch" aria-label="Your choices" data-density="sleek">
+      {questions.map((q, index) => (
+        <fieldset key={q.id} disabled={!reply || locked || (!!q.ref && (checking || stale.includes(q.ref)))} className="answer-question min-w-0">
           <legend className="max-w-full text-sm font-medium break-words">
+            {q.group && q.group !== questions[index - 1]?.group ? <span className="answer-group">{q.group}</span> : null}
             {q.ref && !q.title.includes(q.ref) ? `${q.ref} · ` : ""}
-            {q.title} <span className="text-xs text-muted">{q.required ? "Required" : "Optional"}</span>
+            {q.label ?? q.title} {q.required ? <span className="sr-only">Required</span> : <span className="answer-optional">Optional</span>}
           </legend>
-          {q.context ? <p className="text-xs text-muted break-words">{q.context}</p> : null}
+          {q.context ? <p className="answer-context">{q.context}</p> : null}
           {q.proposed && !draft.edited?.includes(q.id) && draft.values[q.id] ? <p className="text-xs text-ai">Proposed by Jarvis · editable</p> : null}
           {q.kind === "choice" ? (
-            <div className="flex min-w-0 flex-wrap gap-1" role="group" aria-label={q.title}>
+            <div className="answer-options" role="group" aria-label={q.title}>
               {q.options.map((o) => (
                 <Button
                   key={o.id}
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
                   className="max-w-full whitespace-normal text-left break-words"
                   aria-pressed={draft.values[q.id]?.choice === o.id}
                   onClick={() => update(q.id, o.id)}
                 >
                   {o.label}
-                  {o.recommended ? " · Recommended" : ""}
+                  {o.recommended ? <span className="answer-recommended">Suggested</span> : null}
                 </Button>
               ))}
               {q.allowOther ? (
@@ -196,15 +181,6 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
           ) : null}
         </fieldset>
       ))}
-      {review ? (
-        <div className="min-w-0 space-y-2" role="region" aria-label="Review exact reply">
-          <p className="text-xs text-muted">
-            This exact text goes to this conversation. It does not answer Needs you, settle work or authorize any action. Actions still need their own
-            confirmation.
-          </p>
-          <pre className="max-h-60 overflow-y-auto whitespace-pre-wrap text-xs break-words">{text}</pre>
-        </div>
-      ) : null}
       <p role="status" className="text-xs text-muted break-words">
         {draft.sent
           ? "Sent as one reply to this conversation."
@@ -214,8 +190,8 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
               : stale.length
                 ? `${stale.join(", ")} is closed or unavailable. Ask for updated questions; nothing was sent.`
                 : missing.length
-                  ? `Choose required answers: ${missing.map((q) => q.title).join("; ")}`
-                  : "Ready to review.")}
+                  ? `${questions.length - missing.length} of ${questions.length} ready`
+                  : "One reply · no actions executed")}
       </p>
       {!draft.sent ? (
         <div className="flex min-w-0 flex-wrap gap-2">
@@ -225,9 +201,9 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
             className="max-w-full whitespace-normal"
             disabled={!reply || !!missing.length || text.length > 50_000 || checking || !!stale.length}
             loading={busy}
-            onClick={() => (review ? void submit() : setReview(true))}
+            onClick={() => void submit()}
           >
-            {review ? (draft.payload ? "Retry same reply" : "Confirm send reply") : "Submit choices"}
+            {draft.payload ? "Retry same reply" : "Submit choices"}
           </Button>
           {!locked ? (
             <Button
@@ -235,16 +211,10 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
               variant="ghost"
               onClick={() => {
                 save({ source, values: {} });
-                setReview(false);
                 setError("");
               }}
             >
               Reset choices
-            </Button>
-          ) : null}
-          {review && !locked ? (
-            <Button size="sm" variant="ghost" onClick={() => setReview(false)}>
-              Cancel review
             </Button>
           ) : null}
         </div>
@@ -253,10 +223,6 @@ function AnswerBatchState({ questions, session, source }: BatchProps) {
       {text.length > 50_000 ? (
         <p className="text-xs text-muted">Reply exceeds the chat limit of 50,000 characters. Shorten written answers or ask for a smaller set of questions.</p>
       ) : null}
-      <p className="text-xs text-muted">
-        Draft kept in this browser tab through reload when storage is available; closing the tab clears it. After a send attempt, retry the same reply before
-        editing.
-      </p>
     </section>
   );
 }
