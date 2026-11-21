@@ -629,3 +629,62 @@
   }
 }
 /* ==== end sleek controls ==== */
+
+/* ==== the thread embedded in another page (ChatThread frame="embedded": a task's Chat tab) ====
+   Unlayered like the page rules it adjusts (.chat-page / .chat-dock in app/globals.css). */
+.chat-things-container[data-frame="embedded"] .chat-page {
+  max-width: none;
+}
+/* The page scrolls (a phone pane): the column fills what is left of the screen under what sits above it
+   (--chat-top, measured by ChatThread), so the composer rests at the bottom of a short thread. */
+.chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-page {
+  min-height: calc(100dvh - 76px - var(--chat-top, 0px));
+}
+@media (min-width: 640px) {
+  .chat-things-container[data-frame="embedded"][data-scroll="window"] .chat-page {
+    min-height: calc(100dvh - var(--chat-top, 0px));
+  }
+}
+/* The thread scrolls inside its column (a dock): the column has the dock's height and the composer sits under it. */
+.chat-things-container[data-frame="embedded"][data-scroll="element"],
+.chat-things-container[data-frame="embedded"][data-scroll="element"] .chat-things-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.chat-things-container[data-frame="embedded"][data-scroll="element"] .chat-page {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.chat-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.chat-scroll:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+/* The slim bar that stands in for the chat page's header: status, who answers, the panel and the menu. */
+.chat-embed-bar {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid var(--bd);
+}
+@media (min-width: 640px) {
+  .chat-embed-bar {
+    min-height: 40px;
+  }
+}
+/* A docked column on a touch tablet: the keyboard takes its share of the dock, not of the composer. */
+.k-split-dock {
+  height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
+}
+/* ==== end embedded thread ==== */

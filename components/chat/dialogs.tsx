@@ -60,11 +60,14 @@ export function ForkDialog({
   onClose,
   session,
   fromMessage,
+  onForked,
 }: {
   open: boolean;
   onClose: () => void;
   session: SessionSummary;
   fromMessage?: TimelineItem;
+  /** The fork exists. Left out, the dialog opens it as a chat page. */
+  onForked?: (session: SessionSummary) => void;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -100,7 +103,8 @@ export function ForkDialog({
         "ok",
       );
       onClose();
-      router.push(`/chat/${encodeURIComponent(res.session.id)}${res.run ? `?run=${encodeURIComponent(res.run.runId)}` : ""}`);
+      if (onForked) onForked(res.session);
+      else router.push(`/chat/${encodeURIComponent(res.session.id)}${res.run ? `?run=${encodeURIComponent(res.run.runId)}` : ""}`);
     },
     onError: (e) => toast((e as Error).message, "danger"),
   });
