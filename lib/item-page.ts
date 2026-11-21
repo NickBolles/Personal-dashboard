@@ -160,7 +160,7 @@ export function itemWorkRows(input: {
       title: input.info.sessionId ? "Conversation" : "Agent work",
       note: [input.info.approval ? "approval" : "", who].filter(Boolean).join(" · "),
       at: input.info.liveAt,
-      sessionId: input.info.sessionId,
+      sessionId: input.info.runSessionId ?? input.info.sessionId,
       approval: !!input.info.approval,
     });
   }

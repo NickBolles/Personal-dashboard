@@ -57,7 +57,7 @@ export function useWorkSignals(enabled = true) {
 }
 
 /** Every run, AI job and report on one item as rows, and its timeline (lib/item-page.ts), kept current. */
-export function useItemWork(itemId: string, enabled = true) {
+export function useItemWork(itemId: string, enabled = true, primarySessionId: string | null = null) {
   const canAi = useAccess().can("work.ai");
   const { agents, runs, events, decisions } = useWorkSignals(enabled);
   const ai = useItemAi(itemId, enabled);
@@ -67,8 +67,8 @@ export function useItemWork(itemId: string, enabled = true) {
   const reports = ai.data?.reports;
   const rows = useMemo(() => itemWorkRows({ info, runs, decisions, jobs, reports, now }), [info, runs, decisions, jobs, reports, now]);
   const timeline = useMemo(() => itemTimeline({ itemId, runs, events, reports }), [itemId, runs, events, reports]);
-  // The conversation behind the newest run (else the item's own linked conversation): where the reasoning is.
-  const sessionId = info?.agentRuns?.find((run) => run.hermesSessionId)?.hermesSessionId ?? info?.sessionId ?? null;
+  // The task's chat (its primary chat: lib/task-chat.ts). Without one, the conversation behind the newest run.
+  const sessionId = primarySessionId ?? info?.agentRuns?.find((run) => run.hermesSessionId)?.hermesSessionId ?? info?.sessionId ?? null;
   return { rows, timeline, sessionId, info, agents, runs, decisions };
 }
 

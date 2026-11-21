@@ -9,7 +9,7 @@ import type { ForkInput } from "@/integrations/hermes/service";
 import type { AssistantBackend } from "@/lib/assistant";
 import type { SessionSummary } from "@/lib/hermes";
 import { parseAreaSettings as parseSettings } from "@/lib/work";
-import { conversationNodes, placeConversation } from "@/server/work/store";
+import { conversationNodes, placeConversation, primaryChatTask } from "@/server/work/store";
 import { conversationPlacement } from "@/server/work/conversations";
 import { areaDefaultsFor, assertAreaOwned } from "@/server/references";
 import { requestedAgentFor, resolveAgent, resolveAgentForNode } from "@/server/agents/routing";
@@ -77,12 +77,9 @@ export async function forkConversation(user: Viewer, id: string, input: ForkInpu
   const child: SessionSummary = result.session;
   if (can(user, "work.use") && child?.id) {
     try {
-      const parentNode = conversationNodes(user.id).get(id);
-      placeConversation(
-        user,
-        { sessionId: child.id, parentId: parentNode?.parentId ?? null, title: child.title || input.title || "Fork", forkedFromSessionId: id },
-        correlationId,
-      );
+      // A fork of a task's primary chat is another chat of that task; the original stays primary (lib/task-chat.ts).
+      const parentId = primaryChatTask(user.id, id)?.id ?? conversationNodes(user.id).get(id)?.parentId ?? null;
+      placeConversation(user, { sessionId: child.id, parentId, title: child.title || input.title || "Fork", forkedFromSessionId: id }, correlationId);
     } catch {
       /* placement is best effort; the fork exists either way */
     }

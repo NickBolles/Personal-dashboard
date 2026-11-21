@@ -323,6 +323,13 @@
       "when": 1794587536616,
       "tag": "0045_skylight_completion_outcome",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1795302735552,
+      "tag": "0046_primary_chat",
+      "breakpoints": true
     }
   ]
 }

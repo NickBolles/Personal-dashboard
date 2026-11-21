@@ -41,8 +41,9 @@ function approvalText(raw: string | null): string {
   }
 }
 
-/** The item's linked Hermes conversation: a conversation child, else a chat_session link. */
+/** The item's chat: its primary chat (lib/task-chat.ts); without one, a conversation child, else a chat_session link. */
 function sessionFor(item: WorkItem, items: WorkItem[], links: Map<string, { kind: string; targetId: string | null }[]>): string | null {
+  if (item.primarySessionId) return item.primarySessionId;
   const child = items.find((c) => c.parentId === item.id && c.kind === "conversation" && c.sessionId && !c.archived);
   if (child?.sessionId) return child.sessionId;
   return links.get(item.id)?.find((l) => l.kind === "chat_session" && l.targetId)?.targetId ?? null;
