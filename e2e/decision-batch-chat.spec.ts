@@ -2,6 +2,130 @@ import { expect, test } from "@playwright/test";
 import { batchReply, openChat, stubCoordinator } from "./fixtures/decision-batch";
 import { expectNoHorizontalOverflow } from "./helpers";
 
+test("Chief full chat: generated three-choice Form and prose use compact shared rendering, one Submit", async ({ page }, info) => {
+  const now = Date.parse("2026-11-17T18:00:00Z");
+  await page.clock.setFixedTime(now);
+  const text =
+    "Choose the plan.\n```jarvis-ui\n" +
+    JSON.stringify({
+      root: "root",
+      elements: {
+        root: { type: "Stack", props: {}, children: ["note", "form"] },
+        note: { type: "Callout", props: { title: "Discussion only", text: "Pick a direction; nothing is changed.", tone: "info" } },
+        form: {
+          type: "Form",
+          props: {
+            title: "Release plan",
+            fields: ["Timing", "Scope", "Tone"].map((label) => ({
+              id: label.toLowerCase(),
+              label,
+              kind: "choice",
+              required: true,
+              options: [
+                { value: "one", label: `${label} A` },
+                { value: "two", label: `${label} B` },
+              ],
+            })),
+            submit: { label: "Submit" },
+          },
+        },
+      },
+    }) +
+    "\n```";
+  const state = await stubCoordinator(
+    page,
+    { "cw-pin": [{ kind: "assistant", id: "three-form", text, at: new Date(now - 60_000).toISOString() }] },
+    { current: "cw-pin", now },
+  );
+  await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
+  await page.goto("/chief");
+  const batch = page.getByTestId("answer-batch");
+  await expect(batch.getByText("Release plan", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Discussion only", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-testid="smart-surface"]')).toHaveCount(0);
+  for (const label of ["Timing", "Scope", "Tone"]) await batch.getByRole("button", { name: `${label} B`, exact: true }).click();
+  expect(state.runs).toHaveLength(0);
+  if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/three-form-${info.project.name}.png` });
+  if (info.project.name === "mobile")
+    for (const width of [368, 706]) {
+      await page.setViewportSize({ width, height: 850 });
+      await expectNoHorizontalOverflow(page);
+      if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/three-form-${width}.png` });
+    }
+  await batch.getByRole("button", { name: "Submit choices" }).click();
+  await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
+  expect(state.runs).toHaveLength(1);
+  for (const id of ["timing", "scope", "tone"]) expect(state.runs[0].body.input).toContain(`[question:1:form:${id}]`);
+  await expect(page.getByRole("dialog", { name: /confirm|review/i })).toHaveCount(0);
+  await expectNoHorizontalOverflow(page);
+});
+
+test("Chief stalled inventory is one quiet disclosure; Activity and original run rows survive reload", async ({ page }, info) => {
+  const now = Date.parse("2026-11-17T18:00:00Z");
+  const iso = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  await page.clock.setFixedTime(now);
+  await stubCoordinator(page, { "cw-pin": [{ kind: "assistant", id: "quiet-history", text: "The report is ready.", at: iso(5) }] }, { current: "cw-pin", now });
+  const runs = [1, 2, 3].map((n) => ({
+    id: `quiet-${n}`,
+    ref: `R-${n}`,
+    seq: n,
+    itemId: `item-${n}`,
+    itemTitle: "Release",
+    profile: "devchief",
+    title: `Quiet run ${n}`,
+    state: "running",
+    stalled: true,
+    summary: null,
+    prUrl: null,
+    parentRunId: null,
+    parentRef: null,
+    pipeline: [],
+    lock: null,
+    interruptedAt: null,
+    startedAt: iso(100),
+    updatedAt: iso(90),
+    finishedAt: null,
+    noticeCount: 0,
+  }));
+  await page.route("**/api/coordinator/runs", (r) =>
+    r.fulfill({ json: { runs, events: [], lastLooked: { chat: iso(1), needs: null, running: null, changes: null, context: null } } }),
+  );
+  await page.route("**/api/hermes/sessions/cw-pin/execution", (r) =>
+    r.fulfill({
+      json: {
+        sessionId: "cw-pin",
+        parent: null,
+        sources: [{ source: "registered_runs", state: "ok" }],
+        fetchedAt: iso(0),
+        records: runs.map((run) => ({
+          key: `registered_run:${run.id}`,
+          source: "registered_run",
+          id: run.id,
+          title: run.title,
+          state: run.state,
+          startedAt: run.startedAt,
+          updatedAt: run.updatedAt,
+        })),
+      },
+    }),
+  );
+  for (const width of [320, 412, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/chief");
+    const quiet = page.getByTestId("quiet-chat-work");
+    await expect(quiet).toHaveCount(1);
+    await expect(quiet.getByRole("button", { name: "3 stalled runs" })).toHaveAttribute("aria-expanded", "false");
+    await expect(quiet.getByText("Quiet run 1", { exact: true })).toHaveCount(0);
+    if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/quiet-${width}-${info.project.name}.png` });
+    await quiet.getByRole("button", { name: "3 stalled runs" }).click();
+    await expect(quiet.getByText("Quiet run 1", { exact: true })).toBeVisible();
+    await quiet.getByRole("button", { name: "Activity", exact: true }).click();
+    await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("tabpanel", { name: /^Activity/ }).locator('[data-run-ref="R-1"]')).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  }
+});
+
 test("batch choices: ONE Submit sends without review, retry same exact reply and reload receipt in originating coordinator", async ({ page }, info) => {
   const now = new Date("2026-11-17T18:00:00Z").getTime();
   await page.clock.setFixedTime(now);
@@ -64,15 +188,19 @@ test("batch phone reflow: long generated labels at 320 and 412, 200 percent text
     { current: "cw-pin", now },
   );
   await page.route("**/api/smart/settings", (r) => r.fulfill({ json: { enabled: true, calendarWrites: false } }));
-  for (const width of [320, 412]) {
+  for (const width of [320, 368, 412, 706]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/more");
     const scope = await openChat(page, false);
     const batch = scope.getByTestId("answer-batch");
     await expect(batch).toBeVisible();
     await expectNoHorizontalOverflow(page);
+    if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/reflow-${width}.png` });
     await page.addStyleTag({ content: "html { font-size:200% !important; }" });
     await expectNoHorizontalOverflow(page);
+    await batch.getByRole("button", { name: "Submit choices" }).scrollIntoViewIfNeeded();
+    await expect(batch.getByRole("button", { name: "Submit choices" })).toBeVisible();
+    if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/reflow-${width}-zoom.png` });
     const { default: AxeBuilder } = await import("@axe-core/playwright");
     const result = await new AxeBuilder({ page: page as never })
       .include('[data-testid="answer-batch"]')

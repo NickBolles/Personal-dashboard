@@ -51,4 +51,15 @@
     font-family: inherit;
     overflow-wrap: anywhere;
   }
+  .gc-quiet-work {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+  }
+  .gc-quiet-work > div {
+    flex-basis: 100%;
+    min-width: 0;
+  }
 }

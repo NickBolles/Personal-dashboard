@@ -148,6 +148,14 @@ test("visual: compact decision batch in the shared coordinator", async ({ page }
   // Grow only the capture viewport (same width), then restore the real phone/desktop height for reflow checks.
   await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });
   await expect(batch).toHaveScreenshot("decision-batch-selected.png");
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  await expect(batch).toHaveScreenshot("decision-batch-selected-dark.png");
+  if (process.env.JARVIS_BATCH_SHOTS) await batch.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/decision-batch-dark-${info.project.name}.png` });
+  const { default: AxeBuilder } = await import("@axe-core/playwright");
+  expect(
+    (await new AxeBuilder({ page: page as never }).include('[data-testid="answer-batch"]').withTags(["wcag2aa", "wcag21aa"]).analyze()).violations,
+  ).toEqual([]);
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
   await batch.getByRole("button", { name: "Submit choices" }).click();
   await expect(batch.getByRole("status")).toHaveText("Sent as one reply to this conversation.");
   await page.setViewportSize({ ...viewport, height: Math.max(viewport.height, Math.ceil((await batch.boundingBox())!.height + 600)) });

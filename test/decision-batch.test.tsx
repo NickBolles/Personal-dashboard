@@ -89,6 +89,10 @@ it("keeps editable draft and sent receipt on reload, supports Other and reset", 
   ui.unmount();
   draw();
   expect(screen.queryByRole("button", { name: "Submit choices" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Birch" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "View choices" }));
+  expect(screen.getByRole("button", { name: "Birch" }).getAttribute("aria-pressed")).toBe("true");
+  expect(screen.getByRole("button", { name: "Birch" }).closest("fieldset")?.disabled).toBe(true);
   expect(reply).toHaveBeenCalledTimes(1);
 });
 it("closed or missing D ref never sends or writes", async () => {
