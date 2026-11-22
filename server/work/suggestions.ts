@@ -25,6 +25,7 @@ import {
 } from "@/lib/suggestions";
 import { withVia } from "./actor";
 import { globalCoordinatorArea } from "./coordinator";
+import * as assistant from "@/server/assistant";
 import { createItem, listItems, undoOp, updateItem, type OpOut } from "./store";
 import { activeRun, startTask, steerTask, type TaskRunDeps } from "./task-runs";
 
@@ -43,16 +44,26 @@ type Viewer = CurrentUser & Capable;
 type Result = { itemId: string; title: string; href: string; ops: string[]; created?: boolean; at: string };
 
 /** Undo what Start did, newest first. A task it created that has a chat by now can't be removed: it is archived. */
-function undoStart(user: CurrentUser, ops: string[], createdId: string | null, correlationId: string) {
+/** Returns the assistant turns to stop: undoing a start marks the run stopped here, the caller stops the turn. */
+function undoStart(user: CurrentUser, ops: string[], createdId: string | null, correlationId: string): string[] {
+  const stop: string[] = [];
   for (const op of ops) {
     try {
-      undoOp(user, op, correlationId);
+      const out = undoOp(user, op, correlationId);
+      if ("stopRunId" in out && typeof out.stopRunId === "string") stop.push(out.stopRunId);
     } catch (e) {
       if (!createdId || op !== ops.at(-1)) throw e;
       updateItem(user, createdId, { archived: true } as never, correlationId);
     }
   }
+  return stop;
 }
+/** Asks the assistant to stop those turns. Best effort, as the Undo route does: a turn that already ended is fine. */
+async function stopTurns(user: CurrentUser, runIds: string[], correlationId: string, stop: StopRun) {
+  for (const runId of runIds) await stop(user, runId, correlationId).catch(() => undefined);
+}
+type StopRun = (user: CurrentUser, runId: string, correlationId: string) => Promise<unknown>;
+const defaultStop: StopRun = (...args) => assistant.stopRun(...args);
 
 const taskHref = (id: string) => `/areas?item=${encodeURIComponent(id)}&tab=chat`;
 const parseJson = <T>(s: string | null, fallback: T): T => {
@@ -291,7 +302,15 @@ function ownRow(userId: string, id: string) {
  * the brief goes to the working task's chat (nothing to undo once sent). Not now hides it a week and lowers its
  * kind; "Don't suggest this" stops the kind in this channel. Each has its own way back.
  */
-export async function actOnSuggestion(user: Viewer, id: string, action: SuggestionAction, correlationId: string, deps?: TaskRunDeps, now = new Date()) {
+export async function actOnSuggestion(
+  user: Viewer,
+  id: string,
+  action: SuggestionAction,
+  correlationId: string,
+  deps?: TaskRunDeps,
+  now = new Date(),
+  stop: StopRun = defaultStop,
+) {
   const r = ownRow(user.id, id);
   const db = getDb();
   const at = now.toISOString();
@@ -324,45 +343,59 @@ export async function actOnSuggestion(user: Viewer, id: string, action: Suggesti
         set({ state: "stale" });
         throw new HttpError(409, "stale", "This no longer applies");
       }
+      // Claim it first, so a second tap (another tab, another device) can't start it twice.
+      const claimed = db
+        .update(S)
+        .set({ state: "starting", updatedAt: at })
+        .where(and(eq(S.id, id), eq(S.state, "open")))
+        .run();
+      if (claimed.changes !== 1) throw new HttpError(409, "not_open", "This suggestion was already acted on");
       const caller = { user, profile: r.profile, tokenId: null };
-      if (r.act === "steer") {
-        const item = view.byId.get(r.itemId!)!;
-        await steerTask(caller, item, { message: r.brief }, correlationId, deps);
-        const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops: [], at };
-        set({ state: "started", resultItemId: item.id, resultJson: JSON.stringify(result) });
-        break;
-      }
-      const ops: string[] = [];
-      let item = r.itemId ? view.byId.get(r.itemId)! : null;
-      if (!item) {
-        // Made by the coordinator that suggested it (the owner's tap is the go-ahead), so it can be undone.
-        const out: OpOut = {};
-        item = withVia(`agent:${r.profile}`, () => createItem(user, { kind: "thread", title: r.title, parentId: r.channelId }, correlationId, out));
-        if (out.op) ops.push(out.op.id);
-      }
       try {
-        const started = await startTask(
-          caller,
-          listItems(user.id).find((i) => i.id === item.id)!,
-          { brief: r.brief, title: r.title },
-          correlationId,
-          deps,
-          now,
-        );
-        if (started.undoOpId) ops.unshift(started.undoOpId);
+        if (r.act === "steer") {
+          const item = view.byId.get(r.itemId!)!;
+          await steerTask(caller, item, { message: r.brief }, correlationId, deps);
+          const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops: [], at };
+          set({ state: "started", resultItemId: item.id, resultJson: JSON.stringify(result) });
+          break;
+        }
+        const ops: string[] = [];
+        let item = r.itemId ? view.byId.get(r.itemId)! : null;
+        if (!item) {
+          // Made by the coordinator that suggested it (the owner's tap is the go-ahead), so it can be undone.
+          const out: OpOut = {};
+          item = withVia(`agent:${r.profile}`, () => createItem(user, { kind: "thread", title: r.title, parentId: r.channelId }, correlationId, out));
+          if (out.op) ops.push(out.op.id);
+        }
+        try {
+          const started = await startTask(
+            caller,
+            listItems(user.id).find((i) => i.id === item.id)!,
+            { brief: r.brief, title: r.title },
+            correlationId,
+            deps,
+            now,
+          );
+          if (started.undoOpId) ops.unshift(started.undoOpId);
+        } catch (e) {
+          await stopTurns(user, undoStart(user, ops, r.itemId ? null : item.id, correlationId), correlationId, stop);
+          throw e;
+        }
+        const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops, created: !r.itemId, at };
+        set({ state: "started", resultItemId: item.id, resultJson: JSON.stringify(result) });
       } catch (e) {
-        undoStart(user, ops, r.itemId ? null : item.id, correlationId);
+        set({ state: "open" }); // the claim is released: it can be tried again
         throw e;
       }
-      const result: Result = { itemId: item.id, title: item.title, href: taskHref(item.id), ops, created: !r.itemId, at };
-      set({ state: "started", resultItemId: item.id, resultJson: JSON.stringify(result) });
       break;
     }
     case "undo": {
       const result = parseJson<Result | null>(r.resultJson, null);
       if (r.state !== "started" || !result?.ops.length) throw new HttpError(409, "not_undoable", "Nothing to undo");
-      undoStart(user, result.ops, result.created ? result.itemId : null, correlationId);
+      const turns = undoStart(user, result.ops, result.created ? result.itemId : null, correlationId);
       set({ state: "open", resultItemId: null, resultJson: null });
+      // The run is marked stopped; the agent's turn is asked to stop too, so nothing keeps working after Undo.
+      await stopTurns(user, turns, correlationId, stop);
       break;
     }
   }
@@ -411,5 +444,10 @@ export function getSuggestion(user: CurrentUser, id: string, now = new Date()): 
     return null;
   }
   if (r.state !== "open" && r.state !== "started") return null;
+  // Not now and "Don't suggest this" hide it here too, as in the list.
+  if (r.state === "open") {
+    const topic = topics(user.id).get(`${r.channelId}:${r.topic}`);
+    if (topic?.blocked || (r.hiddenUntil && Date.parse(r.hiddenUntil) > now.getTime())) return null;
+  }
   return toSuggestion(user, r, view, 0);
 }

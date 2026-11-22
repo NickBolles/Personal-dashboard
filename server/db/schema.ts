@@ -1957,7 +1957,7 @@ export const suggestions = sqliteTable(
     evidenceJson: text("evidence_json").notNull().default("[]"),
     /** the scheduled run that wrote it (null: written in a chat with jarvis_suggest) */
     runId: text("run_id"),
-    /** open | started | dismissed | stale | replaced */
+    /** open | starting (Start in flight) | started | dismissed | stale | replaced */
     state: text("state").notNull().default("open"),
     hiddenUntil: text("hidden_until"),
     /** after Start/Send: the task it worked on and the op that undoes it */

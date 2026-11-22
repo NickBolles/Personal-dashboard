@@ -147,7 +147,8 @@ describe("the owner's answer", () => {
 
   it("Start creates the task in the channel and starts it in its chat; Undo stops it and removes the task", async () => {
     const s = id(suggest());
-    const { suggestion } = await actOnSuggestion(viewer(), s, "start", cid, deps);
+    const stop = vi.fn(async () => undefined);
+    const { suggestion } = await actOnSuggestion(viewer(), s, "start", cid, deps, new Date(), stop);
     const made = items().find((i) => i.title === "Schedule the furnace service visit")!;
     expect(made).toMatchObject({ parentId: home.id });
     expect(sent).toHaveLength(1);
@@ -155,9 +156,36 @@ describe("the owner's answer", () => {
     expect(suggestion).toMatchObject({ state: "started", result: { itemId: made.id, undoable: true } });
     // The done card stays for a while, then leaves.
     expect(listSuggestions(owner, "all")).toEqual([expect.objectContaining({ id: s, state: "started" })]);
-    await actOnSuggestion(viewer(), s, "undo", cid, deps);
+    await actOnSuggestion(viewer(), s, "undo", cid, deps, new Date(), stop);
     expect(rowOf(s).state).toBe("open");
     expect(items().find((i) => i.id === made.id && !i.archived)).toBeUndefined();
+    // The agent's turn is asked to stop, not only marked stopped.
+    expect(stop).toHaveBeenCalledWith(expect.anything(), "hr-1", cid);
+  });
+
+  it("two taps on Start start it once", async () => {
+    const s = id(suggest());
+    const results = await Promise.allSettled([actOnSuggestion(viewer(), s, "start", cid, deps), actOnSuggestion(viewer(), s, "start", cid, deps)]);
+    expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(sent).toHaveLength(1);
+    expect(items().filter((i) => i.title === "Schedule the furnace service visit")).toHaveLength(1);
+  });
+
+  it("a failed Start releases the card so it can be tried again", async () => {
+    const s = id(suggest());
+    const failing = { ...deps, startRun: (async () => Promise.reject(new Error("Hermes is not answering"))) as never };
+    await expect(actOnSuggestion(viewer(), s, "start", cid, failing)).rejects.toThrow("Hermes is not answering");
+    expect(rowOf(s).state).toBe("open");
+  });
+
+  it("a card read back in a chat is hidden by Not now and by Don't suggest this", async () => {
+    const s = id(suggest({ topic: "review" }));
+    expect(getSuggestion(owner, s)).not.toBeNull();
+    await actOnSuggestion(viewer(), s, "not_now", cid, deps);
+    expect(getSuggestion(owner, s)).toBeNull();
+    await actOnSuggestion(viewer(), s, "show_again", cid, deps);
+    await actOnSuggestion(viewer(), s, "stop_topic", cid, deps);
+    expect(getSuggestion(owner, s)).toBeNull();
   });
 
   it("Send posts the steer into the working task's chat; a steer is only for a task that is working", async () => {
