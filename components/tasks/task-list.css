@@ -214,3 +214,46 @@
     min-height: 40px;
   }
 }
+
+/* ---- a project's Tasks section ---- */
+.tl-views {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.tl-plain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-plain li {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: baseline;
+  gap: 6px;
+  font: 400 13px/19px var(--sans);
+}
+.tl-plain-link {
+  min-width: 0;
+  flex: 1;
+  color: var(--t1);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.tl-plain-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tl-plain-age {
+  flex: none;
+  color: var(--t3);
+  font: 400 12px/18px var(--mono);
+}

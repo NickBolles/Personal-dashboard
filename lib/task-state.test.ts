@@ -47,6 +47,11 @@ describe("one state per task", () => {
     expect(taskDetail(s, "@dev", NOW)).toEqual(["6m", "@dev"]);
   });
 
+  it("a turn in flight in the task's chat is working too, but a silent registered run is still the worse news", () => {
+    expect(taskState({ ...base, chatRunningAt: ago(2) })).toMatchObject({ state: "working", since: ago(2) });
+    expect(taskState({ ...base, chatRunningAt: ago(2), runs: [run({ stalled: true })] }).state).toBe("stalled");
+  });
+
   it("a finished run is ready for review, never done; so is work whose status waits for a look", () => {
     const finished = taskState({ ...base, runs: [run({ state: "done", updatedAt: ago(120), summary: "Lakeside is cheapest" })] });
     expect(finished).toMatchObject({ state: "review", line: "Lakeside is cheapest", since: ago(120) });

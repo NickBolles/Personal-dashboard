@@ -179,17 +179,7 @@ function eventText(e: WorkEvent): string {
  * A task with no chat yet: what it is, and a composer. The first message creates the chat (filed under the task,
  * on the agent that answers for its area), makes it primary and is sent into it.
  */
-function FirstMessage({
-  d,
-  scroll,
-  lead,
-  prefill,
-}: {
-  d: WorkDetail;
-  scroll: "window" | "element";
-  lead: React.ReactNode;
-  prefill?: TaskDraft;
-}) {
+function FirstMessage({ d, scroll, lead, prefill }: { d: WorkDetail; scroll: "window" | "element"; lead: React.ReactNode; prefill?: TaskDraft }) {
   const { item } = d;
   const qc = useQueryClient();
   const { toast } = useToast();

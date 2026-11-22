@@ -74,6 +74,8 @@ export type TaskFacts = {
   questions?: readonly { question: string; askedAt: string }[];
   /** A chat run on the task is paused on an approval. */
   approvalAt?: string | null;
+  /** A turn is in flight in the task's chat right now (a message you or a bot sent there), since when. */
+  chatRunningAt?: string | null;
   /** Registered runs on the task, top level only. Any order. */
   runs?: readonly TaskRunFact[];
 };
@@ -133,6 +135,8 @@ export function taskState(f: TaskFacts): TaskStatus {
   }
   const running = runs.find((r) => r.state === "running");
   if (running) return { state: "working", since: running.startedAt, cause: null, line: flat(running.summary) || null };
+  // No registered run, but the agent is answering in the task's chat right now.
+  if (f.chatRunningAt) return { state: "working", since: f.chatRunningAt, cause: null, line: null };
 
   if (latest?.state === "done") return { state: "review", since: latest.updatedAt, cause: null, line: flat(latest.summary) || REVIEW_LINE[f.status] || null };
   if (REVIEW_STATUSES.includes(f.status)) return { state: "review", since: f.updatedAt, cause: null, line: REVIEW_LINE[f.status] ?? null };

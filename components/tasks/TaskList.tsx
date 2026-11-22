@@ -318,15 +318,20 @@ export type TaskListProps = {
   select?: RowHooks["select"];
   /** Rows shown per group before "Show more". */
   limit?: number;
+  /** Top-level rows this surface already draws elsewhere (a thing is drawn once per screen). */
+  exclude?: readonly string[];
 };
 
-export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, selectedId, select, limit }: TaskListProps) {
+export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, selectedId, select, limit, exclude }: TaskListProps) {
   const q = useTaskList(scope, view);
   const qc = useQueryClient();
   const flow = useDecisionFlowController();
   const now = useNow();
   const [all, setAll] = useState<string[]>([]);
   const onChanged = () => void qc.invalidateQueries({ queryKey: ["work"] });
+  const groups = (q.data?.groups ?? [])
+    .map((g) => (exclude?.length ? { ...g, rows: g.rows.filter((r) => !exclude.includes(r.id)) } : g))
+    .filter((g) => g.rows.length);
   const data = q.data;
   const hooks: RowHooks = { flow, onPick, selectedId, select, onChanged };
   return (
@@ -334,7 +339,7 @@ export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, s
       {q.error && !data ? <ErrorNote error={q.error} retry={() => void q.refetch()} /> : null}
       {!data && !q.error ? <KSpinner label="Loading tasks…" /> : null}
       {lead}
-      {data?.groups.map((group) => {
+      {groups.map((group) => {
         const shown = limit && !all.includes(group.id) ? group.rows.slice(0, limit) : group.rows;
         return (
           <section key={group.id} aria-label={group.title} className="tl-group" data-testid="task-group">
@@ -378,7 +383,7 @@ export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, s
           ) : null}
         </section>
       ) : null}
-      {data && !data.groups.length && !(view === "flight" && (data.review || data.done)) ? (empty ?? <EmptyState title="Nothing here" />) : null}
+      {data && !groups.length && !(view === "flight" && (data.review || data.done)) ? (empty ?? <EmptyState title="Nothing here" />) : null}
     </div>
   );
 }

@@ -15,7 +15,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import { rowChoices, viewOfDecision, type DecisionView } from "@/lib/decision-view";
 import { primarySessionOf } from "@/lib/task-chat";
-import { isInFlight, taskState, TASK_RANK, type TaskRunFact, type TaskState, type TaskStatus } from "@/lib/task-state";
+import { isInFlight, taskState, TASK_RANK, type TaskRunFact, type TaskStatus } from "@/lib/task-state";
 import { isClosed, type WorkItem } from "@/lib/work";
 
 export const TASK_VIEWS = ["flight", "all", "review"] as const;
@@ -237,6 +237,7 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
       nextAction: item.nextAction,
       questions: [...asks.map((d) => ({ question: d.question, askedAt: d.createdAt })), ...own],
       approvalAt: info?.live === "waiting" && info.approval ? info.liveAt : null,
+      chatRunningAt: info?.live === "running" ? info.liveAt : null,
       runs: facts,
     });
     const open = runs.filter((r) => r.state === "running" || r.state === "waiting");
@@ -267,7 +268,7 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
       chat,
       can: {
         steer: status.state === "working" || status.state === "stalled" || (status.state === "needs" && !asks.length),
-        stop: open.length > 0,
+        stop: open.length > 0 || (status.state === "working" && !!chat),
         retry: status.state === "failed" || status.state === "stalled",
       },
     };

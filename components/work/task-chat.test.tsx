@@ -148,7 +148,7 @@ describe("a task with no chat yet", () => {
       .mockImplementation(async (path) =>
         path === "/api/work/items/t1/chat" ? { sessionId: "sess-h", created: true } : { runId: "run-2", status: "running" },
       );
-    render(<TaskChat d={d} scroll="element" prefill={{ text: "# Handoff: Standing desk", at: 1 }} onOp={() => undefined} />, { wrapper });
+    render(<TaskChat d={d} scroll="element" prefill={{ text: "# Handoff: Standing desk", at: 1, handoff: true }} onOp={() => undefined} />, { wrapper });
     const input = screen.getByTestId("task-first-input") as HTMLTextAreaElement;
     expect(input.value).toBe("# Handoff: Standing desk");
     expect(post).not.toHaveBeenCalled();
@@ -160,6 +160,21 @@ describe("a task with no chat yet", () => {
     });
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/work/items/t1/chat", { handoff: true }));
     takeFirstRun("sess-h");
+  });
+
+  it("a draft a list row opened the task with (Retry, Resume) is a plain first message, not a handoff", async () => {
+    const post = vi
+      .spyOn(api, "post")
+      .mockImplementation(async (path) =>
+        path === "/api/work/items/t1/chat" ? { sessionId: "sess-r", created: true } : { runId: "run-3", status: "running" },
+      );
+    render(<TaskChat d={detail()} scroll="element" prefill={{ text: "Try again from where it failed.", at: 2 }} onOp={() => undefined} />, { wrapper });
+    expect((screen.getByTestId("task-first-input") as HTMLTextAreaElement).value).toBe("Try again from where it failed.");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("task-first-send"));
+    });
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/api/work/items/t1/chat", {}));
+    takeFirstRun("sess-r");
   });
 
   it("keeps the words when the chat could not be started", async () => {

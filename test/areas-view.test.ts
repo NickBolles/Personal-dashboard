@@ -19,6 +19,10 @@ describe("areas view state (tabs keep the selection)", () => {
     // Board and Graph are views a task can be opened in: the bar names the one that is open, so there is a way back.
     expect(tabsFor({ item: "t", task: true, chat: true }, "graph")).toEqual(["overview", "chat", "graph"]);
     expect(tabsFor({ item: "t", task: true, chat: true }, "activity")).toEqual(["overview", "chat"]);
+    // A project uses the task page; Board, Graph and Activity are views of what is inside it, named while open.
+    expect(tabsFor({ item: "p", task: true, chat: true, project: true }, "overview")).toEqual(["overview", "chat"]);
+    expect(tabsFor({ item: "p", task: true, chat: true, project: true }, "activity")).toEqual(["overview", "chat", "activity"]);
+    expect(tabsFor({ item: "p", task: true, chat: true, project: true }, "board")).toEqual(["overview", "chat", "board"]);
     expect(tabsFor({ item: "p", task: false, chat: false }, "overview")).toEqual(["overview", "board", "activity", "graph"]);
     expect(tabsFor({ item: null, task: false, chat: false }, "overview")).toEqual(["overview", "portfolio", "board", "activity", "graph"]);
     expect(areasHref("/areas?item=t", { tab: "chat" })).toBe("/areas?item=t&tab=chat");
