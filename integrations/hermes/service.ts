@@ -690,7 +690,7 @@ export async function reconcileRun(runId: string): Promise<RunView> {
       // saw a terminal state, report it as interrupted rather than completed.
       const status = isTerminal(row.status) ? row.status : "interrupted";
       updateRunRow(runId, { status, completedAt: row.completedAt ?? new Date().toISOString() });
-      return { runId, sessionId: row.sessionId, status: status as RunView["status"] };
+      return { runId, sessionId: row.sessionId, status: status as RunView["status"], forgotten: true };
     }
     throw err;
   }

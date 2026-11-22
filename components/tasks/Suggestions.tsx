@@ -147,6 +147,9 @@ export function ChatSuggestion({ id }: { id: string }) {
     queryKey: ["work", "suggestions", "one", id],
     queryFn: ({ signal }) => api.get<{ suggestion: Suggestion | null }>(`/api/work/suggestions/${encodeURIComponent(id)}`, signal),
   });
+  // Hidden or turned off here: the line with its Undo stays where the card was, as in a list.
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  if (receipt) return <ReceiptLine r={receipt} onDone={() => setReceipt(null)} />;
   const s = q.data?.suggestion;
-  return s ? <SuggestionCard s={s} quiet /> : null;
+  return s ? <SuggestionCard s={s} quiet onReceipt={setReceipt} /> : null;
 }

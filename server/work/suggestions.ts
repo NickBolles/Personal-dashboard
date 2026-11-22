@@ -100,7 +100,7 @@ function staleReason(userId: string, r: Row, view: ReturnType<typeof readable>, 
   if (!channel || view.channelOf(r.channelId)?.id !== r.channelId) return "channel";
   for (const id of parseJson<string[]>(r.evidenceJson, [])) {
     const e = view.byId.get(id);
-    if (!e || e.archived || view.channelOf(id)?.id !== r.channelId) return "evidence";
+    if (!e || e.archived || isClosed(e.status) || view.channelOf(id)?.id !== r.channelId) return "evidence";
   }
   if (r.itemId) {
     const item = view.byId.get(r.itemId);
@@ -368,13 +368,17 @@ export async function actOnSuggestion(
           if (out.op) ops.push(out.op.id);
         }
         try {
-          const started = await startTask(
-            caller,
-            listItems(user.id).find((i) => i.id === item.id)!,
-            { brief: r.brief, title: r.title },
-            correlationId,
-            deps,
-            now,
+          // Attributed to the coordinator, as its create is: an agent's start keeps the agent Undo window (a week),
+          // longer than the done card stays.
+          const started = await withVia(`agent:${r.profile}`, () =>
+            startTask(
+              caller,
+              listItems(user.id).find((i) => i.id === item.id)!,
+              { brief: r.brief, title: r.title },
+              correlationId,
+              deps,
+              now,
+            ),
           );
           if (started.undoOpId) ops.unshift(started.undoOpId);
         } catch (e) {

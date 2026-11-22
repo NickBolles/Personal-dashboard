@@ -161,6 +161,9 @@ describe("the owner's answer", () => {
     expect(items().find((i) => i.id === made.id && !i.archived)).toBeUndefined();
     // The agent's turn is asked to stop, not only marked stopped.
     expect(stop).toHaveBeenCalledWith(expect.anything(), "hr-1", cid);
+    // The start is the coordinator's, like its create: it keeps the agent Undo window, longer than the done card.
+    const startOp = getDb().select().from(schema.workOps).where(eq(schema.workOps.kind, "task_start")).get()!;
+    expect(startOp.via).toBe("agent:homechief");
   });
 
   it("two taps on Start start it once", async () => {
@@ -202,6 +205,13 @@ describe("the owner's answer", () => {
 });
 
 describe("staleness (H6)", () => {
+  it("goes when an evidence task is closed", () => {
+    const a = id(suggest());
+    store.updateItem(owner, filter.id, { status: "abandoned", reason: "Bought another way" } as never, cid);
+    expect(listSuggestions(owner, "all")).toHaveLength(0);
+    expect(rowOf(a).state).toBe("stale");
+  });
+
   it("goes when its evidence stops being true, or when it gets old", async () => {
     const a = id(suggest());
     store.updateItem(owner, filter.id, { archived: true } as never, cid);
