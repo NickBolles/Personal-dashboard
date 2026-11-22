@@ -203,7 +203,7 @@ describe("the rules, one at a time", () => {
     await expect(start(item(area.id), { brief: "x" })).rejects.toMatchObject({ code: "bad_item" });
     await expect(start(item(note.id), { brief: "x" })).rejects.toMatchObject({ code: "bad_item" });
     await expect(start(item(task.id), { brief: "   " })).rejects.toMatchObject({ code: "brief" });
-    await expect(start(item(task.id), { brief: "use the key sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" })).rejects.toMatchObject({
+    await expect(start(item(task.id), { brief: `use the key ${["sk", "ant", "api03", "A".repeat(52)].join("-")}` })).rejects.toMatchObject({
       code: "credentials",
     });
     store.updateItem(owner, task.id, { status: "abandoned", reason: "No longer needed" }, cid);
