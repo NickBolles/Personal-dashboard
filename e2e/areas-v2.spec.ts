@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, openTaskPane } from "./helpers";
 
 /**
  * Areas v2 (N6): the view tabs (Overview · Board · Activity · Graph) swap the
- * pane in place and keep the selected node; the Graph tab is a radial mind map
+ * pane in place and keep the selected node; a task's bar is Overview · Chat (its own conversation, side by side
+ * with room); the Graph tab is a radial mind map
  * whose nodes re-centre it; /areas/map redirects there. Runs on phone (mobile)
  * and desktop. Titles use Quokka/Wombat/Bilby words no other spec uses.
  */
@@ -65,11 +66,62 @@ test("view tabs keep the selected node and stay in the same spot", async ({ page
   await expect(tab(page, "Board")).toBeFocused();
   await expect(page).toHaveURL(/tab=board/);
 
-  // A work item folds its Chats section into the same bar.
+  // A task has ONE tab bar, Overview · Chat. Its old Activity address opens Overview with the log open in place.
   await page.goto(`/areas?item=${s.item}&tab=activity`);
-  await expect(tab(page, "Chats")).toBeVisible();
-  await expect(tab(page, "Activity")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { level: 2, name: `Bilby lantern ${s.nonce}` })).toBeVisible();
+  await expect(page.getByTestId("item-log-body")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Item sections" })).toHaveCount(0);
+  const panes = page.getByTestId("task-panes");
+  if ((await panes.getAttribute("data-split")) !== null) {
+    // With room the two panes sit side by side and there is nothing to switch.
+    await expect(views(page)).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Chat" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Overview" })).toBeVisible();
+  } else {
+    await expect(views(page).getByRole("tab")).toHaveText(["Overview", "Chat"]);
+    await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
+    await tab(page, "Chat").click();
+    await expect(page).toHaveURL(new RegExp(`item=${s.item}&tab=chat$`));
+    await expect(page.getByTestId("task-no-chat")).toBeVisible();
+    // The old Chats address still opens the task's chat.
+    await page.goto(`/areas?item=${s.item}&tab=chats`);
+    await expect(tab(page, "Chat")).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("task-no-chat")).toBeVisible();
+    // Arrow keys move between the two tabs.
+    await tab(page, "Chat").focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(tab(page, "Overview")).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`item=${s.item}$`));
+  }
+});
+
+test("task page: the first message from the Chat pane creates the task's chat and makes it primary", async ({ page }) => {
+  await page.goto("/home");
+  const s = await seed(page);
+  await page.goto(`/areas?item=${s.item}`);
+  await expect(page.getByRole("heading", { level: 2, name: `Bilby lantern ${s.nonce}` })).toBeVisible();
+  const item = async () => ((await (await page.request.get(`/api/work/items/${s.item}`)).json()) as { item: { primarySessionId: string | null } }).item;
+  expect((await item()).primarySessionId).toBeNull();
+  const chat = await openTaskPane(page, "Chat");
+  // Nothing exists before there is a message to put in it.
+  await expect(chat.getByTestId("task-no-chat")).toBeVisible();
+  expect((await item()).primarySessionId).toBeNull();
+  await chat.getByTestId("task-first-input").fill(`quokka first message ${s.nonce}`);
+  await chat.getByTestId("task-first-send").click();
+  // The same thread as any chat: the message, then the reply, with the composer under it.
+  await expect(chat.locator('[data-testid="msg-bubble"][data-who="user"], [data-testid="msg-pending"]').first()).toContainText(
+    `quokka first message ${s.nonce}`,
+  );
+  await expect(chat.getByText(/Got it: "quokka first message/)).toBeVisible({ timeout: 20_000 });
+  const primary = (await item()).primarySessionId;
+  expect(primary).toBeTruthy();
+  // The chat is filed under the task, and it is still the task's chat after a reload.
+  const detail = (await (await page.request.get(`/api/work/items/${s.item}`)).json()) as { children: { kind: string; sessionId: string | null }[] };
+  expect(detail.children.filter((c) => c.kind === "conversation").map((c) => c.sessionId)).toEqual([primary]);
+  await page.reload();
+  const again = await openTaskPane(page, "Chat");
+  await expect(again.getByText(/Got it: "quokka first message/)).toBeVisible({ timeout: 20_000 });
+  await expect(again.getByTestId("task-no-chat")).toHaveCount(0);
 });
 
 test("graph: tap a node to re-centre, breadcrumb back out, list fallback", async ({ page }) => {

@@ -41,7 +41,7 @@ test("chat panel: tray opens chip tabs, truthful running and parent links", asyn
   // "In this chat" has a fixed section for each kind of thing, all on the page at once (no tabs).
   await expect(panel.getByRole("tab")).toHaveCount(0);
   for (const title of ["Running", "Waiting on you", "Pull requests", "Artifacts", "Files", "Links", "Context"])
-    await expect(panel.getByRole("heading", { name: new RegExp(`^${title}`) })).toBeVisible();
+    await expect(panel.getByRole("heading", { level: 3, name: new RegExp(`^${title}`) })).toBeVisible();
   // The sheet's height is set by dragging its grab bar, not by buttons: up for full height, down to close.
   const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });
   await expect(sheet.getByRole("button", { name: /^(Done|Full height|Half height)$/ })).toHaveCount(1);

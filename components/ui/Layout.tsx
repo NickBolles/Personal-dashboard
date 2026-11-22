@@ -2,7 +2,7 @@
 
 /**
  * Layout pieces of the library (docs/ui-library.md): a disclosure, a bottom sheet, a side dock and a two-pane split.
- * Styles are the `.k-disc`, `.k-sheet`, `.k-dock` and `.k-split` classes in app/globals.css; colours come from tokens.
+ * Styles are the `.k-disc`, `.k-sheet`, `.k-dock` and `.k-panes` classes in app/globals.css; colours come from tokens.
  */
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
@@ -272,11 +272,11 @@ export function SplitPane({
   }
   if (split)
     return (
-      <div ref={root} className={cx("k-split", className)} data-split="">
-        <section className="k-split-main" aria-label={panes[0].label}>
+      <div ref={root} className={cx("k-panes", className)} data-split="">
+        <section className="k-panes-main" aria-label={panes[0].label}>
           {panes[0].content}
         </section>
-        <SideDock label={panes[1].label} className="k-split-dock">
+        <SideDock label={panes[1].label} className="k-panes-dock">
           {panes[1].content}
         </SideDock>
       </div>
@@ -303,14 +303,14 @@ export function SplitPane({
   return (
     <div
       ref={root}
-      className={cx("k-split", className)}
+      className={cx("k-panes", className)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       onTouchCancel={() => {
         start.current = null;
       }}
     >
-      <div key={panes[index].id} className="k-split-one" data-pane={panes[index].id} data-enter={direction}>
+      <div key={panes[index].id} className="k-panes-one" data-pane={panes[index].id} data-enter={direction}>
         {panes[index].content}
       </div>
     </div>

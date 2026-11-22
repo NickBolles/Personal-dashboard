@@ -684,7 +684,7 @@
   }
 }
 /* A docked column on a touch tablet: the keyboard takes its share of the dock, not of the composer. */
-.k-split-dock {
+.k-panes-dock {
   height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
 }
 /* ==== end embedded thread ==== */

@@ -4058,22 +4058,22 @@ button:active > .dock-orb {
   }
 
   /* SplitPane: two panes side by side with room, one at a time (swipe) without. */
-  .k-split {
+  .k-panes {
     min-width: 0;
   }
-  .k-split[data-split] {
+  .k-panes[data-split] {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(300px, 54%, 620px);
     align-items: start;
   }
-  .k-split-main,
-  .k-split-one {
+  .k-panes-main,
+  .k-panes-one {
     min-width: 0;
   }
-  .k-split-one {
+  .k-panes-one {
     animation: k-pane-in var(--d2) var(--ease) both;
   }
-  .k-split-one[data-enter="back"] {
+  .k-panes-one[data-enter="back"] {
     animation-name: k-pane-back;
   }
   @keyframes k-pane-in {

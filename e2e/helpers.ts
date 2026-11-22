@@ -124,10 +124,37 @@ export async function openChatPanel(page: Page, tab = "Links") {
   const inChat = panel.getByRole("tab", { name: "In this chat", exact: true });
   if (await inChat.count()) await inChat.click();
   await panel
-    .getByRole("heading", { name: new RegExp(`^${CHAT_SECTIONS[tab] ?? tab}`) })
+    .getByRole("heading", { level: 3, name: new RegExp(`^${CHAT_SECTIONS[tab] ?? tab}`) })
     .first()
     .scrollIntoViewIfNeeded();
   return panel;
+}
+/**
+ * The log of the node that is open. A task's log opens in place on its Overview (one "Log" line); an area or
+ * project has an Activity tab. Returns the element that holds it.
+ */
+export async function openItemLog(page: Page) {
+  const line = page.getByTestId("item-log").getByRole("button", { name: /^Log/ });
+  await expect(line.or(page.getByRole("tab", { name: "Activity", exact: true })).first()).toBeVisible();
+  if (!(await line.isVisible())) {
+    await page.getByRole("tab", { name: "Activity", exact: true }).click();
+    return page.getByRole("tabpanel");
+  }
+  if ((await line.getAttribute("aria-expanded")) !== "true") await line.click();
+  const body = page.getByTestId("item-log-body");
+  await expect(body).toBeVisible();
+  return body;
+}
+/**
+ * A task page shows Overview and Chat side by side with room, and one at a time (a tab bar) without.
+ * Brings the named pane on screen and returns it.
+ */
+export async function openTaskPane(page: Page, pane: "Overview" | "Chat") {
+  const tab = page.getByRole("tablist", { name: "Views" }).getByRole("tab", { name: pane, exact: true });
+  const panes = page.getByTestId("task-panes");
+  await expect(panes).toBeVisible();
+  if ((await panes.getAttribute("data-split")) === null) await tab.click();
+  return pane === "Chat" ? panes.locator('[data-pane="chat"], .k-panes-dock').first() : panes.locator('[data-pane="overview"], .k-panes-main').first();
 }
 export async function closeChatPanel(page: Page) {
   const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });

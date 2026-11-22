@@ -193,7 +193,11 @@ function FirstMessage({
   const later = () => toast("Send a first message, then attach to this chat.", "neutral");
   const send = async (input: string, key: string) => {
     try {
-      const chat = await api.post<{ sessionId: string; created: boolean }>(`/api/work/items/${encodeURIComponent(item.id)}/chat`, {});
+      // A handoff put in this composer is recorded on the task with the chat it starts.
+      const chat = await api.post<{ sessionId: string; created: boolean }>(
+        `/api/work/items/${encodeURIComponent(item.id)}/chat`,
+        prefill ? { handoff: true } : {},
+      );
       // The thread takes this send over as soon as it mounts: it shows the message at once and streams the reply.
       const run = api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(chat.sessionId)}/runs`, {
         input,

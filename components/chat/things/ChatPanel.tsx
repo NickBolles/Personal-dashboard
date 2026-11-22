@@ -292,7 +292,8 @@ function ChatSections(p: Props) {
   }, [wanted]);
   const records = p.execution?.records ?? [];
   const waiting = records.filter((r) => r.state === "waiting");
-  const running = p.execution ? { ...p.execution, records: records.filter((r) => r.state !== "waiting") } : undefined;
+  // The link back to a parent chat is drawn once, at the top of the panel.
+  const running = p.execution ? { ...p.execution, parent: null, records: records.filter((r) => r.state !== "waiting") } : undefined;
   const prs = p.links.filter((l) => l.kind === "github" && l.ghType === "pull");
   const artifacts = p.links.filter((l) => l.kind === "artifact");
   const others = p.links.filter((l) => l.kind !== "artifact" && !(l.kind === "github" && l.ghType === "pull"));
@@ -331,24 +332,8 @@ function ChatSections(p: Props) {
         )}
       </PanelSection>
       <PanelSection id="Artifacts" uid={uid} count={artifacts.length}>
-        {artifacts.length ? (
-          <div className="grid grid-cols-2 gap-2">
-            {artifacts.map((l) => (
-              <a
-                href={safeHref(l.url) ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
-                key={l.url}
-                className="min-h-11 rounded-lg border border-line bg-surface-2 p-3 text-sm break-words"
-              >
-                <strong>{l.title}</strong>
-                <span className="mt-1 block text-xs text-muted">Artifact · {l.slug} ↗</span>
-              </a>
-            ))}
-          </div>
-        ) : (
-          <Quiet>None yet</Quiet>
-        )}
+        {/* The same row as a link (open, pin, remove): an artifact is listed once, here. */}
+        {artifacts.length ? <LinksPanel {...linksProps} links={artifacts} linksOnly bare /> : <Quiet>None yet</Quiet>}
       </PanelSection>
       <PanelSection id="Files" uid={uid} count={c.files}>
         <FilesSection sessionId={p.sessionId} bare />

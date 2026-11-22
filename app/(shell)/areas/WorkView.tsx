@@ -876,6 +876,9 @@ function ItemDetail({
     setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now() });
     setDialog(null);
     setTab("chat");
+    // A task that has its chat already: the handoff is recorded on the task now (nothing is created or sent).
+    // Without one, it is recorded when the first message creates the chat (TaskChat).
+    if (q.data.item.primarySessionId) void api.post(`/api/work/items/${encodeURIComponent(id)}/continue`, {}).catch(() => undefined);
   });
   const continueInChat = chatTab && dialog === "continue" && !!q.data;
   useEffect(() => {
