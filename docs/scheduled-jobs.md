@@ -6,18 +6,23 @@ Scheduled jobs live in Jarvis, not Hermes cron. The standalone notification disp
 
 Open Settings → Agents → Scheduled jobs. Review its area, prompt, local time and overnight option, then enable it. All new jobs, suggested templates and imports arrive disabled. Templates seed once per owner. Missing/deleted areas need a new selection. AI-excluded areas cannot run, including Run now. Finance defaults to propose like any area; triage-only stays propose-only. Credentials/tokens/passwords stay blocked, and account numbers are masked to last 4 before prompts leave.
 
-Schedules use the household timezone when created. Daily, weekdays and weekly schedules are supported; DST follows the shared schedule contract. A slot has a 30-minute grace window. Missed windows are not replayed. A unique `(job_id, slot)` database claim prevents duplicate execution. Run now requires `{ "confirm": true }`, uses a separate minute-scoped slot and ignores quiet hours, but still enforces policy, daily cap and one active run per job. An area cannot be changed and a job cannot be deleted while a run is active.
+Schedules use the household timezone when created. Daily, weekdays and weekly schedules are supported; DST follows the shared schedule contract. A slot has a 30-minute grace window. Missed windows are not replayed. A unique `(job_id, slot)` database claim prevents duplicate execution. Run now requires `{ "confirm": true }`, uses a separate minute-scoped slot and ignores quiet hours, but still enforces policy, daily cap, the AI budget and one active run per job. An area cannot be changed and a job cannot be deleted while a run is active.
 
 ## Limits
 
 - At most 12 jobs, including disabled jobs.
 - Default daily cap: 6 non-skipped runs, by household local date. Internal setting: `away_max_runs_per_day`, positive integer.
 - At most 2 starts per dispatcher pass.
+- **Money gate:** under pay-per-token billing, a slot is skipped (`skipped_budget`, "Skipped · AI budget used up") and Run now is refused (`budget`) while today's spend plus what is running plus one standard estimate is over the daily AI budget (Settings → AI), the same rule background AI jobs follow. Under a subscription nothing is spent per run, so the dollar budget does not hold runs back.
 - At most 10 proposals from a report; invalid/excess proposals are reported as refused.
 - A run blocked on a Hermes approval/clarify prompt shows as Needs you (digest `waiting`, agent panel "waiting") and notifies once; it still fails after 2 hours ("Timed out waiting for your approval").
 - Deleting a job is a soft delete (`deleted_at`): its run ledger stays, so the daily cap and the digest still count its runs; Undo creates a new job.
 - Runs time out after 2 hours. Five consecutive failures switch a job off; the owner can re-enable it.
 - Quiet-hour slots are recorded as skipped unless Overnight is enabled. Decision/failure notifications are deferred until quiet hours end. Silent reports never notify.
+
+## Suggest next steps
+
+Kind `suggest` (task threads H1–H8, docs/home-priorities.md). Seeded disabled once per channel that has a coordinator (`suggest-next-steps:<areaId>`), never for Finance or a channel closed to AI; a suggest job on Finance is skipped as policy. Besides its slot it runs once after a task in its channel finishes (slot `done:<hour>`), at least an hour after its last run and at most six times in 24 hours; a finished task that finds the job capped, quiet or over budget is not queued. Its prompt gets the channel's open suggestions (not to repeat) and the kinds the owner turned off. The run proposes `{"intent": "suggest", title, why, text, evidence: [itemIds], act: "start" | "steer", itemId?, topic?}`; each becomes a card, never a change or a decision, and is refused (listed with the run's refused proposals) without evidence from the channel's tasks.
 
 ## Autonomy
 
@@ -26,6 +31,7 @@ Schedules use the household timezone when created. Daily, weekdays and weekly sc
 | Create note/thread, update next action, file to Inbox | Needs-you decision         | Applied locally, attributed to the agent, undoable from Activity for 7 days |
 | Status/assignee, project/link, decision               | Needs-you decision         | Needs-you decision                                                          |
 | Settle, abandon, supersede, archive, move             | Owner-only change proposal | Owner-only change proposal                                                  |
+| Suggest                                               | A card the owner may Start | A card the owner may Start                                                  |
 | Merge, deploy, spend, send externally                 | Refused                    | Refused                                                                     |
 | Any intent in an AI-excluded area                     | AI off                     | AI off                                                                      |
 

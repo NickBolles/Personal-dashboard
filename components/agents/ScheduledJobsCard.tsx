@@ -12,6 +12,7 @@ import {
   JOB_KINDS,
   JOB_KIND_LABELS,
   JOB_STATUS_LABELS,
+  SUGGEST_TEMPLATE,
   jobInputSchema,
   jobsExportSchema,
   SUGGESTED_TEMPLATES,
@@ -40,6 +41,7 @@ const starters: Record<JobKind, string> = {
   triage: "Review new Inbox captures and suggest where each belongs. If nothing changed, say exactly NOTHING_NEW.",
   stalled: "Check stalled or failed agent runs in this area. Suggest the next action. If nothing changed, say exactly NOTHING_NEW.",
   feedback: FEEDBACK_TRIAGE_TEMPLATE.prompt,
+  suggest: SUGGEST_TEMPLATE.prompt,
   custom: "",
 };
 

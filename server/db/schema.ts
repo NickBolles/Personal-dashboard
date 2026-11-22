@@ -1928,6 +1928,63 @@ export const agentTokens = sqliteTable(
   (t) => [uniqueIndex("agent_tokens_hash_idx").on(t.tokenHash), index("agent_tokens_user_idx").on(t.userId)],
 );
 
+/**
+ * Suggestions a coordinator wrote for its channel (task threads H1-H7): a card the owner may Start or Send.
+ * Never applied by Jarvis; Start and Send are the owner's tap. Evidence is the owner's own tasks the reason comes
+ * from, and a suggestion goes stale once any of it stops being true.
+ */
+export const suggestions = sqliteTable(
+  "suggestions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** the channel (area) it is for */
+    channelId: text("channel_id").notNull(),
+    /** the coordinator profile that wrote it */
+    profile: text("profile").notNull(),
+    /** "review", "next_step"…: the owner can lower or stop a kind */
+    topic: text("topic").notNull(),
+    /** start | steer */
+    act: text("act").notNull(),
+    /** the task to start or steer; null: Start creates a task titled `title` in the channel */
+    itemId: text("item_id"),
+    title: text("title").notNull(),
+    why: text("why").notNull(),
+    /** what the agent is told */
+    brief: text("brief").notNull(),
+    evidenceJson: text("evidence_json").notNull().default("[]"),
+    /** the scheduled run that wrote it (null: written in a chat with jarvis_suggest) */
+    runId: text("run_id"),
+    /** open | starting (Start in flight) | started | dismissed | stale | replaced */
+    state: text("state").notNull().default("open"),
+    hiddenUntil: text("hidden_until"),
+    /** after Start/Send: the task it worked on and the op that undoes it */
+    resultItemId: text("result_item_id"),
+    resultJson: text("result_json"),
+    createdAt: text("created_at").notNull().default(now),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [index("suggestions_user_state_idx").on(t.userId, t.state), index("suggestions_channel_idx").on(t.channelId, t.state)],
+);
+
+/** The owner's say on a kind of suggestion in a channel (H5): Not now lowers it, "Don't suggest this" stops it. */
+export const suggestionTopics = sqliteTable(
+  "suggestion_topics",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: text("channel_id").notNull(),
+    topic: text("topic").notNull(),
+    weight: integer("weight").notNull().default(0),
+    blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+    updatedAt: text("updated_at").notNull().default(now),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.channelId, t.topic] })],
+);
+
 /** Owner-managed coordinator schedules. New rows always start disabled. */
 export const scheduledJobs = sqliteTable(
   "scheduled_jobs",

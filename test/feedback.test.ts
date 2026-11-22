@@ -215,6 +215,7 @@ describe("daily feedback triage job", () => {
   it("is seeded once, disabled, on installs that already had templates", () => {
     setSetting("global_coordinator_area_id", areaId);
     setSetting("away_templates_seeded:owner", true);
+    setSetting(`suggest_template_seeded:owner:${areaId}`, true);
     const a = listSchedules(owner, now);
     const b = listSchedules(owner, now);
     expect(a.jobs.map((j) => j.templateKey)).toEqual(["daily-feedback-triage"]);

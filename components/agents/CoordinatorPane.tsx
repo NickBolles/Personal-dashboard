@@ -7,6 +7,7 @@ import { relativeTime } from "@/lib/time";
 import { AgentChip } from "@/components/agents/AgentChip";
 import { Button, CoordinatorGlyph, IconAction, Tabs } from "@/components/ui";
 import { TaskList, useTaskList } from "@/components/tasks/TaskList";
+import { Suggestions } from "@/components/tasks/Suggestions";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { coordinatorDot, coordinatorEntries } from "@/lib/agent-runs";
 import { CoordinatorThread, type CoordinatorResponse } from "@/components/coordinator/CoordinatorThread";
@@ -122,6 +123,7 @@ export function CoordinatorPane({ areaId, onClose }: { areaId: string; onClose: 
                   empty={<p className="text-sm text-muted">Nothing in flight</p>}
                   reviewHref={`/resume/review?scope=${encodeURIComponent(areaId)}`}
                 />
+                <Suggestions scope={areaId} />
               </div>
             ) : null}
           </>

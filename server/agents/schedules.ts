@@ -13,6 +13,7 @@ import {
   MAX_JOBS,
   RUN_TIMEOUT_MS,
   SUGGESTED_TEMPLATES,
+  SUGGEST_TEMPLATE,
   effectiveAutonomy,
   nextRunAt,
   jobInputSchema,
@@ -25,6 +26,7 @@ import {
 } from "@/lib/away";
 import { audit } from "@/server/audit";
 import { FEEDBACK_TRIAGE_TEMPLATE } from "@/lib/feedback";
+import { isFinanceAreaLike } from "@/lib/finance-area";
 
 export const J = schema.scheduledJobs;
 export const R = schema.scheduledJobRuns;
@@ -178,10 +180,31 @@ export function seedFeedbackTemplate(user: CurrentUser, now = new Date()) {
     setSetting(key, true);
   });
 }
+/**
+ * "Suggest next steps" (task threads H1): one per channel that has a coordinator, seeded disabled once per channel.
+ * Never for Finance or a channel closed to AI. Nothing runs until the owner switches it on.
+ */
+export function seedSuggestTemplates(user: CurrentUser, now = new Date()) {
+  assertAwayOwner(user);
+  getDb().transaction(() => {
+    const { key, ...t } = SUGGEST_TEMPLATE;
+    for (const area of listItems(user.id)) {
+      if (area.kind !== "area" || area.parentId || area.archived || !area.settings?.agentMode) continue;
+      if (effectiveAutonomy(area) === "off" || isFinanceAreaLike(area)) continue;
+      const seeded = `suggest_template_seeded:${user.id}:${area.id}`;
+      if (getSetting(seeded)) continue;
+      const templateKey = `${key}:${area.id}`;
+      if (!jobRows(user).some((r) => r.templateKey === templateKey) && jobRows(user).length < MAX_JOBS)
+        createJob(user, { ...t, areaId: area.id, enabled: false }, "suggest-template", now, templateKey);
+      setSetting(seeded, true);
+    }
+  });
+}
 export function listSchedules(user: CurrentUser, now = new Date()) {
   assertAwayOwner(user);
   seedJobs(user, now);
   seedFeedbackTemplate(user, now);
+  seedSuggestTemplates(user, now);
   return {
     jobs: jobRows(user).map((r) => jobView(user, r, now)),
     tz: scheduleTimezone(),

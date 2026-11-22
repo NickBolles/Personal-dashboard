@@ -280,3 +280,21 @@
   flex-basis: 100%;
   order: 10;
 }
+
+/* Suggested for you (task threads H3): one card per channel, then the receipt left by Not now. */
+.sg {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sg-receipt {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--t2);
+  font-size: 13px;
+}

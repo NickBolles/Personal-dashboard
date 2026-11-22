@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { ChevronIcon, LogIcon, RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import {
+  AgentSurface,
   AnchoredMenu,
   MenuButton,
   useAnchoredMenu,
@@ -191,6 +192,82 @@ function ThingRowDemo() {
 }
 
 /** Bottom-sheet grab bar: drag up for full height, down for half, further down to close (here it reopens). */
+/** The agent surface (G1-G5): what a bot proposes (dashed) and what it did by itself (solid, with Undo). Still. */
+function AgentSurfaceDemo() {
+  const [started, setStarted] = useState(false);
+  return (
+    <Block id="agent-surface" title="AgentSurface (proposed, done; wash and glow tokens, never moves)">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {started ? (
+          <AgentSurface
+            variant="done"
+            who="Home coordinator · just now"
+            title="Started “Schedule the furnace service visit”"
+            actions={
+              <>
+                <Button size="sm" variant="secondary">
+                  Open task
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setStarted(false)}>
+                  Undo
+                </Button>
+              </>
+            }
+          />
+        ) : (
+          <AgentSurface
+            variant="proposed"
+            who="Home coordinator suggests"
+            title="Schedule the furnace service visit"
+            why="Two of three steps are done and the filter arrived Tuesday. The visit is the one left before the cold week."
+            primary={{ label: "Start", onClick: () => setStarted(true) }}
+            actions={
+              <Button size="sm" variant="ghost">
+                Not now
+              </Button>
+            }
+            more={
+              <>
+                <span>From: Furnace filter · Book a service slot</span>
+                <span>Creates “Schedule the furnace service visit” in Home and starts it.</span>
+              </>
+            }
+          />
+        )}
+        <AgentSurface
+          variant="done"
+          who="Chief of staff · just now"
+          title="Created “Trace the three old links”"
+          why="Filed under Portfolio › Preview audit and handed to the Ops bot."
+          actions={
+            <>
+              <Button size="sm" variant="secondary">
+                Open task
+              </Button>
+              <Button size="sm" variant="ghost">
+                Undo
+              </Button>
+            </>
+          }
+        />
+        <AgentSurface
+          variant="proposed"
+          quiet
+          who="Suggests steering"
+          title="Tell “Price lumber” to use last month's list"
+          why="It has waited 5 days on the store. Last month's prices are in the project files."
+          primary={{ label: "Send", onClick: () => undefined }}
+          actions={
+            <Button size="sm" variant="ghost">
+              Not now
+            </Button>
+          }
+        />
+      </div>
+    </Block>
+  );
+}
+
 function SheetDemo() {
   const panel = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
@@ -398,6 +475,7 @@ export function LibraryGallery() {
         <SheetDemo />
         <LayoutDemo />
         <ThingRowDemo />
+        <AgentSurfaceDemo />
         <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
           <div data-density="sleek" className="flex flex-wrap items-center gap-2">
             <Button size="sm">Answer</Button>

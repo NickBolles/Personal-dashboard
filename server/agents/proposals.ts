@@ -11,10 +11,11 @@ import { listItems, updateItem } from "@/server/work/store";
 import { DECISION_DETAIL_MAX } from "@/lib/decisions";
 import { capture } from "@/server/work/inbox";
 import type { AgentPrincipal } from "@/server/agent-access/tokens";
+import { writeSuggestion } from "@/server/work/suggestions";
 
 const LIFECYCLE: readonly string[] = ["settle", "abandon", "supersede", "archive", "move"];
 
-export function applyProposals(user: CurrentUser, areaId: string, jobTitle: string, profile: string, proposals: Proposal[]) {
+export function applyProposals(user: CurrentUser, areaId: string, jobTitle: string, profile: string, proposals: Proposal[], runId: string | null = null) {
   const result: Pick<AwayRun, "changes" | "decisions" | "refused"> = { changes: [], decisions: [], refused: [] };
   const agent: AgentPrincipal = { user, profile, via: `agent:${profile}`, tokenId: "scheduled", scopes: [] };
   const call = (name: string, args: Record<string, unknown>) => {
@@ -26,6 +27,13 @@ export function applyProposals(user: CurrentUser, areaId: string, jobTitle: stri
   for (const p of proposals) {
     const label = p.intent.replaceAll("_", " ");
     const refuse = (reason: string) => result.refused.push({ intent: p.intent, label: `${label}: ${reason}` });
+    if (p.intent === "suggest") {
+      // A card the owner may Start or Send (H1): stored, never applied and never a decision.
+      const written = writeSuggestion(user, areaId, profile, p, runId);
+      if (written.ok) result.changes.push({ intent: p.intent, label: "suggested", itemId: p.itemId ?? null, itemTitle: p.title ?? null });
+      else refuse(written.reason);
+      continue;
+    }
     const items = listItems(user.id);
     const area = items.find((i) => i.id === areaId);
     const target = agentItems(user.id).byId.get(p.itemId ?? areaId);
