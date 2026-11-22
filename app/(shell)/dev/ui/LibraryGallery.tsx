@@ -38,6 +38,11 @@ import {
   Textarea,
   Toast,
   CoordinatorGlyph,
+  Disclosure,
+  Sheet,
+  SideDock,
+  SplitPane,
+  useSplitWidth,
 } from "@/components/ui";
 
 const STATUS = [
@@ -194,6 +199,65 @@ function SheetDemo() {
   );
 }
 
+/** Layout pieces: a section that opens in place, a bottom sheet, and two panes (side by side with room, swipe without). */
+function LayoutDemo() {
+  const [sheet, setSheet] = useState(false);
+  const [pane, setPane] = useState("overview");
+  const frame = useRef<HTMLDivElement>(null);
+  const split = useSplitWidth(frame, 600);
+  return (
+    <Block id="layout" title="Layout (Disclosure, Sheet, SplitPane with a SideDock)">
+      <Disclosure summary="Log" meta="Status set to In progress · 2h ago">
+        <p className="text-sm text-muted">Captured by you on 18 Nov, filed under Office by the Home coordinator.</p>
+      </Disclosure>
+      <div>
+        <Button size="sm" onClick={() => setSheet(true)}>
+          Open sheet
+        </Button>
+        {sheet ? (
+          <Sheet title="In this chat" onClose={() => setSheet(false)} closeLabel="Collapse">
+            <p className="p-3 text-sm text-muted">Drag the bar up for full height, down to close.</p>
+          </Sheet>
+        ) : null}
+      </div>
+      <div ref={frame} className="overflow-hidden rounded-lg border border-[var(--bd)]" data-testid="ui-split">
+        {split ? null : (
+          <div className="px-3">
+            <Tabs
+              label="Panes"
+              value={pane}
+              onChange={setPane}
+              tabs={[
+                { id: "overview", label: "Overview" },
+                { id: "chat", label: "Chat" },
+              ]}
+            />
+          </div>
+        )}
+        <SplitPane
+          split={split}
+          value={pane}
+          onChange={setPane}
+          panes={[
+            { id: "overview", label: "Overview", content: <p className="p-3 text-sm">Overview: the details of the task. Swipe left for Chat.</p> },
+            { id: "chat", label: "Chat", content: <p className="p-3 text-sm">Chat: the task&apos;s conversation. Swipe right for Overview.</p> },
+          ]}
+        />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-[var(--bd)]">
+        <SideDock
+          label="Example dock"
+          className="h-32"
+          header={<p className="p-2 text-xs text-muted">Header</p>}
+          footer={<p className="p-2 text-xs text-muted">Footer</p>}
+        >
+          <p className="p-2 text-sm">A docked column: header, a body that scrolls, footer.</p>
+        </SideDock>
+      </div>
+    </Block>
+  );
+}
+
 export function LibraryGallery() {
   const [status, setStatus] = useState("in_progress");
   const [tags, setTags] = useState<string[]>(["design", "house"]);
@@ -308,6 +372,7 @@ export function LibraryGallery() {
         </Block>
         <MenuDemo />
         <SheetDemo />
+        <LayoutDemo />
         <ThingRowDemo />
         <Block id="sleek" title="Sleek density (small boxes, 44px / 40px tap areas)">
           <div data-density="sleek" className="flex flex-wrap items-center gap-2">

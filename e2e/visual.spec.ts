@@ -1294,6 +1294,9 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.locator("#work-item-title")).toHaveText(d.item.title);
     await page.waitForTimeout(500);
     await withoutTray(page, () => expect(header).toHaveScreenshot(`inline-read-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) }));
+    // A task's fields (status, due, owner, tags, Next) sit at the top of its Overview, under the title header.
+    const fields = page.getByTestId("item-fields");
+    await withoutTray(page, () => expect(fields).toHaveScreenshot(`inline-fields-${theme}.png`, { mask: MASK.map((m) => page.locator(m)) }));
     await page.locator("#work-item-title").getByRole("button").click();
     await expect(page.getByRole("textbox", { name: "Edit title" })).toBeFocused();
     await page.waitForTimeout(150);
@@ -1413,7 +1416,8 @@ for (const scheme of ["light", "dark"] as const) {
     if (scheme === "dark") await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     await expect(page.locator('.jv-meta [data-tag="shelving"]')).toBeVisible();
     await expect(page.getByTestId("assignee-picker").getByRole("button")).toHaveAttribute("data-value", "agent:devchief");
-    const header = page.locator('article[aria-labelledby="work-item-title"] > section').first();
+    // The tags and chips of a task are in its fields block, at the top of Overview.
+    const header = page.getByTestId("item-fields");
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     const t2 = await page.addStyleTag({ content: 'nav[aria-label="Primary"], .chat-dock { visibility: hidden !important; }' });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

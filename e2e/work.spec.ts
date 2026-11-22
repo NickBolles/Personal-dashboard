@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost, expectNoHorizontalOverflow, pickOption } from "./helpers";
+import { appPost, expectNoHorizontalOverflow, openItemLog, openTaskPane, pickOption } from "./helpers";
 
 /**
  * Flagship Work journey (docs/work.md): Momentum Bets → Criteria evaluator →
@@ -76,8 +76,7 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await page.getByLabel("Summary excerpt").fill("p95 hydration regressed after the V5 contract change");
   await page.getByRole("button", { name: "Split", exact: true }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Hydration perf bug" })).toBeVisible();
-  await page.getByRole("tab", { name: "Activity" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("Split from V5 evaluator contract");
+  await expect(await openItemLog(page)).toContainText("Split from V5 evaluator contract");
 
   // Fork it too: a sibling with forked_from lineage.
   await page.getByRole("button", { name: "More item actions" }).click();
@@ -102,7 +101,8 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await page.getByRole("dialog").getByLabel("Next action", { exact: true }).fill("Open the evaluator contract PR");
   await page.getByRole("button", { name: "Save packet" }).click();
   await expect(page.getByRole("heading", { name: "Work packet v1" })).toBeVisible();
-  const header = page.getByRole("article").locator("section").first();
+  // A task's fields and its Next section are the top of its Overview pane.
+  const header = page.getByRole("article").locator('[data-pane="overview"], .k-panes-main').first();
   const badge = (s: string) => header.locator(`[data-status="${s}"]`);
   await expect(badge("in_progress")).toBeVisible();
   await expect(header).toContainText("Open the evaluator contract PR");
@@ -160,14 +160,14 @@ test("work: organize, hand off, merge, validate, settle and reopen", async ({ pa
   await page.getByLabel("Why is it reopening?").fill("Regressed on low-end Android");
   await page.getByRole("dialog").getByRole("button", { name: "Reopen", exact: true }).click();
   await expect(badge("reopened")).toBeVisible();
-  await page.getByRole("tab", { name: "Activity" }).click();
+  const settledLog = await openItemLog(page);
   for (const t of [
     "Captured → In progress",
     "In progress → Awaiting validation: PR #128 merged; awaiting validation",
     "Awaiting validation → Settled",
     "Settled → Reopened",
   ])
-    await expect(page.getByRole("tabpanel")).toContainText(t);
+    await expect(settledLog).toContainText(t);
 
   // Persisted: reload lands on the same item.
   await page.reload();
@@ -353,9 +353,11 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await dialog.getByLabel("Search conversations").fill(`Picker check ${nonce}`);
   await dialog.getByRole("button", { name: `Link Picker check ${nonce}` }).click();
   await expect(dialog).toHaveCount(0);
-  const links = page.getByRole("article").locator("li", { hasText: `Picker check ${nonce}` });
-  await expect(links.first()).toContainText("Last activity");
-  await expect(links.first().getByRole("link", { name: /Open conversation/ })).toHaveAttribute("href", `/chat/${picked.id}`);
+  // A linked conversation is one of the task's other chats, on its Chat pane; it can be made the primary one.
+  const others = (await openTaskPane(page, "Chat")).getByTestId("task-other-chats");
+  await others.getByRole("button", { name: /^Other chats/ }).click();
+  await expect(others.getByRole("link", { name: `Picker check ${nonce}` })).toHaveAttribute("href", `/chat/${picked.id}`);
+  await expect(others.getByRole("button", { name: "Make primary" })).toBeVisible();
 
   // New chats land in Miscellaneous with zero filing; the conversations view's Unfiled filter files them in one tap.
   await page.goto("/chat?view=unfiled");
@@ -379,25 +381,25 @@ test("work: conversation picker, unfiled filing, continue in a new conversation 
   await expect(page.getByRole("treeitem", { name: `Picker check ${nonce}, linked conversation` })).toBeVisible();
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
 
-  // Continue in a new conversation: the handoff is a draft in the composer; nothing is sent. With no packet yet
-  // the packet block is not drawn, so the action is in the ⋯ menu.
-  await itemAction(page, "Continue in new conversation");
-  const cont = page.getByRole("dialog", { name: "Continue in a new conversation" });
-  await expect(cont.getByTestId("continue-preview")).toContainText("Handoff: V5 evaluator contract");
-  await cont.getByRole("button", { name: "Create conversation" }).click();
-  await expect(page).toHaveURL(/\/chat\/[^/?]+$/);
-  const sessionId = decodeURIComponent(new URL(page.url()).pathname.split("/").pop()!);
-  const composer = page.locator("#composer");
-  await expect(composer).toHaveValue(/# Handoff: V5 evaluator contract/);
-  await expect(composer).toHaveValue(/\*\*Where:\*\* Momentum Bets › Criteria evaluator › V5 evaluator contract/);
+  // Continue in chat: the handoff is a draft in the task's own Chat pane; nothing is created or sent until Send.
+  // With no packet yet the packet block is not drawn, so the action is in the ⋯ menu.
+  const v5 = async () =>
+    ((await (await page.request.get(`/api/work/items/${ids["V5 evaluator contract"]}`)).json()) as { item: { primarySessionId: string | null } }).item;
+  await itemAction(page, "Continue in chat");
+  const first = page.getByTestId("task-first-input");
+  await expect(first).toHaveValue(/# Handoff: V5 evaluator contract/);
+  await expect(first).toHaveValue(/\*\*Where:\*\* Momentum Bets › Criteria evaluator › V5 evaluator contract/);
   await page.waitForTimeout(500);
-  const detail = (await (await page.request.get(`/api/hermes/sessions/${encodeURIComponent(sessionId)}`)).json()) as { timeline: unknown[] };
-  expect(detail.timeline).toEqual([]);
+  expect((await v5()).primarySessionId).toBeNull();
+  // The chats it already had are its other chats; neither was made its primary chat for it.
+  await expect(page.getByTestId("task-other-chats")).toContainText("Other chats");
+  // Send: the task gets its own chat, the handoff goes into it, and the handoff is recorded on the task.
+  await page.getByTestId("task-first-send").click();
+  await expect.poll(async () => (await v5()).primarySessionId, { timeout: 20_000 }).toBeTruthy();
   await page.goto(`/areas?item=${ids["V5 evaluator contract"]}`);
-  await expect(page.getByTestId("work-links").getByText("started from the handoff", { exact: false })).toBeVisible();
-  await page.getByRole("tab", { name: "Activity" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText("Continued in a new conversation (handoff, no packet yet)");
-  await expect(page.getByRole("tabpanel")).toContainText("Handed off to");
+  const log = await openItemLog(page);
+  await expect(log).toContainText("Continued in a new conversation (handoff, no packet yet)");
+  await expect(log).toContainText("Handed off to");
 
   // Drag-and-drop: drop V2 onto the middle of V4 → it becomes V4's child (moved_from recorded).
   await showTree(page);
@@ -504,8 +506,7 @@ test("work: timeline date editing and dependencies, validation templates, the ma
   await page.reload();
   await expect(page.getByTestId("validation-overdue")).toContainText("1 overdue");
   await expect(page.locator("[data-overdue]")).toContainText("error rate");
-  await page.getByRole("tab", { name: "Activity" }).click();
-  await expect(page.getByRole("tabpanel")).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
+  await expect(await openItemLog(page)).toContainText(`Dates: start ${day(4)} → ${day(6)}`);
 
   // Graph (Areas v2): the old /areas/map bookmark lands on the radial Graph tab with the root selected.
   await page.goto(`/areas/map?root=${ids.area}`);

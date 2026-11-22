@@ -19,13 +19,15 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
     queryKey: key,
     queryFn: () => api.get<{ links: PanelLink[] }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/links-panel`),
     staleTime: 15_000,
+    // A thread that has not started yet (the Chief of staff panel before its first message) has nothing to read.
+    enabled: !!sessionId,
   });
   const seen = useMemo(() => extractLinks(timeline), [timeline]);
   const sent = useRef(new Set<string>());
   // #75: the server resolves 6 GitHub titles per call; keep syncing (bounded) while that makes progress.
   const resolveMore = useRef<{ last: number; tries: number }>({ last: Infinity, tries: 0 });
   useEffect(() => {
-    if (readOnly) return;
+    if (readOnly || !sessionId) return;
     // The route caps URLs at 2048 chars; one oversized URL would reject the whole batch.
     const fresh = seen.filter((l) => l.url.length <= 2048 && !sent.current.has(l.url));
     if (!fresh.length) return;
@@ -74,6 +76,7 @@ export function LinksPanel({
   onRemoveContext,
   linksOnly = false,
   contextOnly = false,
+  bare = false,
 }: {
   sessionId: string;
   links: PanelLink[];
@@ -83,14 +86,22 @@ export function LinksPanel({
   onRemoveContext: (ref: string) => void;
   linksOnly?: boolean;
   contextOnly?: boolean;
+  /** The surrounding section already names what this is: draw the content without a heading of its own. */
+  bare?: boolean;
 }) {
   return (
     <div className="space-y-4 text-sm" data-testid="links-panel">
       {!linksOnly ? (
         <section aria-labelledby="lp-ctx">
-          <h3 id="lp-ctx" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
-            Attached context
-          </h3>
+          {bare ? (
+            <span id="lp-ctx" className="sr-only">
+              Attached context
+            </span>
+          ) : (
+            <h3 id="lp-ctx" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
+              Attached context
+            </h3>
+          )}
           {context.length ? (
             <ul className="flex flex-wrap gap-1">
               {context.map((c) => (
@@ -102,16 +113,24 @@ export function LinksPanel({
               ))}
             </ul>
           ) : (
-            <p className="text-xs text-muted">Nothing attached to the next message. Use + to add context.</p>
+            <p className="text-xs text-muted">
+              {bare ? "Nothing attached to the next message" : "Nothing attached to the next message. Use + to add context."}
+            </p>
           )}
         </section>
       ) : null}
       {!linksOnly && !contextOnly ? <FilesSection sessionId={sessionId} /> : null}
       {!contextOnly ? (
         <section aria-labelledby="lp-links">
-          <h3 id="lp-links" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
-            Links{links.length ? ` (${links.length})` : ""}
-          </h3>
+          {bare ? (
+            <span id="lp-links" className="sr-only">
+              Links
+            </span>
+          ) : (
+            <h3 id="lp-links" className="mb-1 text-[11px] font-semibold tracking-wide text-muted uppercase">
+              Links{links.length ? ` (${links.length})` : ""}
+            </h3>
+          )}
           {links.length ? (
             <ul className="space-y-1.5">
               {links.map((l) => (

@@ -20,6 +20,7 @@ export const UNDO_KINDS = [
   "create",
   "quick_action",
   "import",
+  "primary_chat",
 ] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
@@ -43,6 +44,8 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   create: "Created",
   /** a portfolio map import (Phase 4): undo removes the untouched new items and the added links/tags */
   import: "Imported portfolio map",
+  /** a task's primary chat was swapped ("Make primary"); undo puts the previous one back */
+  primary_chat: "Primary chat changed",
 };
 
 /**

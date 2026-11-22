@@ -198,8 +198,10 @@ export type ItemAgentInfo = {
   approval?: boolean;
   /** when the deciding run started/finished */
   liveAt: string | null;
-  /** the Hermes conversation of the deciding run (opens it) */
+  /** the task's chat: its primary chat, else the conversation of the deciding run, else its first filed or linked one */
   sessionId: string | null;
+  /** the conversation the deciding run is in, when that is not the task's chat (an approval waits there) */
+  runSessionId?: string | null;
   runs: number;
   prs: PrState[];
   report: { title: string; summary: string; at: string; href: string | null } | null;

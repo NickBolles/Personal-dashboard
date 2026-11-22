@@ -1029,6 +1029,11 @@ export const workItems = sqliteTable(
     validationDefault: text("validation_default"),
     /** conversation nodes: the Hermes/Claude session id (one node per session per owner) */
     sessionId: text("session_id"),
+    /**
+     * Tasks (items that are not areas or conversations): the session id of the task's ONE primary chat, or null
+     * while it has none (server/work/primary-chat.ts). A session is primary for at most one task.
+     */
+    primarySessionId: text("primary_session_id"),
     /** areas only: JSON AreaSettings (lib/work.ts parseAreaSettings); null = defaults */
     settings: text("settings"),
     /** JSON array of normalised tag names (lib/item-tags.ts); colours live in work_tags */
@@ -1048,6 +1053,7 @@ export const workItems = sqliteTable(
     index("work_items_owner_idx").on(t.userId, t.parentId),
     uniqueIndex("work_items_system_idx").on(t.userId, t.systemKey),
     uniqueIndex("work_items_session_idx").on(t.userId, t.sessionId),
+    uniqueIndex("work_items_primary_session_idx").on(t.userId, t.primarySessionId),
   ],
 );
 

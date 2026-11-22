@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { areasHref, legacyMapHref, parseTab, readAreasUrl } from "@/lib/areas-view";
+import { areasHref, legacyMapHref, parseTab, readAreasUrl, tabsFor } from "@/lib/areas-view";
 
 describe("areas view state (tabs keep the selection)", () => {
   it("parses tabs, falling back to Overview", () => {
@@ -7,8 +7,22 @@ describe("areas view state (tabs keep the selection)", () => {
     expect(parseTab("board")).toBe("board");
     expect(parseTab(null)).toBe("overview");
     expect(parseTab("dependencies")).toBe("overview");
+    // A task's conversation is the Chat tab; the old Chats address still opens it.
+    expect(parseTab("chat")).toBe("chat");
+    expect(parseTab("chats")).toBe("chat");
   });
 
+  it("a task has one bar, Overview and Chat; an area or project keeps its views", () => {
+    expect(tabsFor({ item: "t", task: true, chat: true }, "overview")).toEqual(["overview", "chat"]);
+    // A note (or a person who cannot chat) has no Chat tab.
+    expect(tabsFor({ item: "t", task: true, chat: false }, "overview")).toEqual(["overview"]);
+    // Board and Graph are views a task can be opened in: the bar names the one that is open, so there is a way back.
+    expect(tabsFor({ item: "t", task: true, chat: true }, "graph")).toEqual(["overview", "chat", "graph"]);
+    expect(tabsFor({ item: "t", task: true, chat: true }, "activity")).toEqual(["overview", "chat"]);
+    expect(tabsFor({ item: "p", task: false, chat: false }, "overview")).toEqual(["overview", "board", "activity", "graph"]);
+    expect(tabsFor({ item: null, task: false, chat: false }, "overview")).toEqual(["overview", "portfolio", "board", "activity", "graph"]);
+    expect(areasHref("/areas?item=t", { tab: "chat" })).toBe("/areas?item=t&tab=chat");
+  });
   it("switching tabs keeps the selected node and other params", () => {
     const at = "https://j.test/areas?item=abc&foo=1";
     expect(areasHref(at, { tab: "graph" })).toBe("/areas?item=abc&tab=graph&foo=1");

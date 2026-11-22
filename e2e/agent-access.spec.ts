@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost } from "./helpers";
+import { appPost, openItemLog } from "./helpers";
 
 /**
  * Agent access (docs/agent-tools.md): mint a scoped token in Settings → Agents (shown once),
@@ -56,8 +56,7 @@ test("mint a token, MCP creates an item attributed to the agent, undo, revoke", 
       .filter({ hasText: `created by @${profile}` })
       .first(),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Activity" }).click();
-  const feed = page.getByRole("region", { name: "Activity" });
+  const feed = (await openItemLog(page)).getByRole("region", { name: "Activity" });
   const created = feed.locator(".jv-activity-row", { hasText: "created" });
   await expect(created.getByTestId("agent-chip")).toHaveText(`by @${profile}`);
   await created.getByRole("button", { name: /Undo/ }).click();

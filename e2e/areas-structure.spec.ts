@@ -79,15 +79,18 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await expect(page.getByTestId("children-work")).toContainText("Load bench");
   await page.getByLabel("New item in Scoring engine").press("Escape");
 
-  // Item page: one primary action + Chat here + ⋯ (no wall of buttons).
+  // Item page: a title with one ⋯, one primary action in its Next section, the chat as a pane (no wall of buttons).
   await page
     .getByTestId("children-work")
     .getByRole("button", { name: /Cache warmup/ })
     .click();
   await expect(article).toHaveAttribute("data-node-kind", "work");
   const header = article.locator("section").first();
-  await expect(header.getByRole("button", { name: "Start focused work" })).toBeVisible();
-  for (const gone of ["Link PR", "Link URL", "New child", "Link conversation"]) await expect(header.getByRole("button", { name: gone })).toHaveCount(0);
+  await expect(page.getByTestId("item-next").getByRole("button", { name: "Start focused work" })).toBeVisible();
+  await expect(header.getByRole("button", { name: "More item actions" })).toBeVisible();
+  for (const gone of ["Start focused work", "Link PR", "Link URL", "New child", "Link conversation", "Chat here"])
+    await expect(header.getByRole("button", { name: gone })).toHaveCount(0);
+  await expect(page.getByRole("tablist", { name: "Item sections" })).toHaveCount(0);
   await expect(page.getByRole("tab", { name: /Children/ })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
