@@ -1707,7 +1707,10 @@ async function stubGlobalCoordinator(page: Page) {
   await page.route(/\/api\/work\/inbox(?:\?.*)?$/, (route) => route.fulfill({ json: inboxVisual }));
   await page.route(/\/api\/work\/conversations\/unfiled(?:\?.*)?$/, (route) => route.fulfill({ json: { conversations: [], total: 0, unavailable: [] } }));
   await page.route(/\/api\/notifications\/count$/, (route) => route.fulfill({ json: { unread: 0 } }));
-  // CW v3 lists (tray line, Needs you, Running): empty so other specs' decisions/runs never leak in.
+  // The Tasks tab's list, and the lists behind the tray line: empty so other specs' tasks, decisions and runs never leak in.
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: { view: "flight", scope: "all", groups: [], needs: 0, review: null, done: null, open: 0, fetchedAt: new Date(0).toISOString() } }),
+  );
   await page.route(/\/api\/coordinator\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { decisions: [], counts: { open: 0, deferred: 0 } } }));
   await page.route(/\/api\/coordinator\/runs$/, (route) =>
     route.fulfill({ json: { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
@@ -1737,7 +1740,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(rail.getByTestId("quick-action-proposal")).toContainText("Weekly review");
     await expect(rail.getByTestId("quick-actions-row").getByRole("button", { name: "Daily brief", exact: true })).toBeVisible();
     // v3: no priority line inside the rail (the tray/strip carry it); counts sit on the tabs.
-    await expect(rail.getByRole("tab", { name: /^Needs you/ })).toBeVisible();
+    await expect(rail.getByRole("tab", { name: /^Tasks/ })).toBeVisible();
     // A chip only fills the composer.
     await rail.getByTestId("quick-actions-row").getByRole("button", { name: "Plan my week", exact: true }).click();
     await expect(rail.getByTestId("gc-input")).toHaveValue("Help me plan this week");
@@ -1816,11 +1819,11 @@ for (const scheme of ["light", "dark"] as const) {
     await page.waitForTimeout(400);
     await expectNoHorizontalOverflow(page);
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
-    // Activity = runs + what the Chief of staff changed (the old Changes tab).
-    await sheet.getByRole("tab", { name: /^Activity/ }).click();
+    // Tasks = the task list, then what the Chief of staff changed (with Undo).
+    await sheet.getByRole("tab", { name: /^Tasks/ }).click();
     await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
     await page.waitForTimeout(200);
-    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-activity-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
+    await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-tasks-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
 }
 
@@ -1924,7 +1927,7 @@ test("chief of staff phone tray: a long failing line truncates inside the viewpo
     // The sheet's composer is on screen and takes a tap (nothing is sent).
     await tray.click();
     const sheet = page.getByRole("dialog", { name: "Chief of staff" });
-    // The tray opens where its sentence points (Activity, for stuck runs); the composer is on the Chat tab.
+    // The tray opens where its sentence points (Tasks, for stuck work); the composer is on the Chat tab.
     await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
     const input = sheet.getByTestId("gc-input");
     await expect(input).toBeVisible();

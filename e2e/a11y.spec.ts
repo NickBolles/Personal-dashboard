@@ -853,20 +853,20 @@ test("a11y + 200% text: Chief of staff rail, phone tray and sheet with quick act
   await zoom();
   await tray.click();
   const sheet = page.getByRole("dialog", { name: "Chief of staff" });
-  // The tray opens where its sentence points (here: the approvals under Needs you); the chat is one tab away.
+  // The tray opens where its sentence points (here: the approvals under Tasks); the chat is one tab away.
   await sheet.getByRole("tab", { name: "Chat", exact: true }).click();
   await expect(sheet.getByTestId("quick-action-proposal")).toBeVisible();
   await axe("sheet chat");
   await zoom();
-  // Changes live under Activity (with runs); there is no separate tab.
-  await sheet.getByRole("tab", { name: /^Activity/ }).click();
+  // Changes live under Tasks (after the task list); there is no separate tab.
+  await sheet.getByRole("tab", { name: /^Tasks/ }).click();
   await expect(sheet.getByRole("region", { name: "Changes" })).toBeVisible();
-  await axe("sheet activity");
+  await axe("sheet tasks");
   await zoom();
   await page.keyboard.press("Escape");
 });
 
-test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and Running groups", async ({ page }, info) => {
+test("a11y + 200% text: the bot panel's Tasks tab, a question answered from its row and a risk-flagged decision's card", async ({ page }, info) => {
   test.setTimeout(120_000);
   const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
   const decision = (seq: number, question: string, extra: Record<string, unknown> = {}) => ({
@@ -941,6 +941,74 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   await page.route(/\/api\/coordinator\/looked$/, (route) =>
     route.fulfill({ json: { lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } } }),
   );
+  // The Tasks tab: one row per task. Two wait on a question (one risk-flagged), one failed, one is working.
+  const view = (d: (typeof decisions)[number]) => ({
+    ref: d.ref,
+    itemId: d.itemId,
+    itemTitle: d.itemTitle,
+    areaTitle: d.areaTitle,
+    question: d.question,
+    choices: d.choices,
+    recommended: d.recommended,
+    risk: d.risk,
+    pack: d.pack,
+    defaultChoice: null,
+    expiresAt: null,
+    createdAt: d.createdAt,
+    blocks: null,
+  });
+  const taskRow = (id: string, title: string, state: string, over: Record<string, unknown> = {}) => ({
+    id,
+    title,
+    path: "Portfolio › Quillwort release train",
+    areaId: "portfolio",
+    parentId: "portfolio",
+    project: false,
+    state,
+    since: iso(45),
+    cause: null,
+    line: null,
+    who: "@devchief",
+    assignee: null,
+    tags: [],
+    activity: [],
+    question: null,
+    pr: null,
+    chat: null,
+    can: { steer: state === "working", stop: state === "working", retry: state === "failed" },
+    ...over,
+  });
+  const rows = [
+    taskRow("wk_cw48", "Rotate the tunnel key before the release window, with a fairly long task title", "needs", {
+      question: view(decisions[0]!),
+      line: decisions[0]!.question,
+    }),
+    taskRow("wk_cw49", "Renumber migration 0042", "needs", { question: view(decisions[1]!), line: decisions[1]!.question }),
+    taskRow("wk_cw65", "Lane 65: hotfix chat send while four lanes run with a long title", "failed", {
+      line: "The e2e suite failed on the send test",
+      activity: [{ id: "m1", label: "Failed", tone: "bad", text: "The e2e suite failed on the send test", at: iso(10) }],
+    }),
+    taskRow("wk_cw66", "Lane 66: hotfix chat send while four lanes run with a long title", "working", {
+      activity: [
+        { id: "m2", label: "Progress", tone: "ai", text: "Running the e2e suite", at: iso(3) },
+        { id: "m3", label: "Step done", tone: "ok", text: "Build passed", at: iso(9) },
+      ],
+    }),
+  ];
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: {
+        view: "flight",
+        scope: "all",
+        groups: [{ id: "portfolio", title: "Portfolio", needs: 2, rows }],
+        needs: 2,
+        review: null,
+        done: null,
+        open: 4,
+        fetchedAt: iso(0),
+      },
+    }),
+  );
   await page.route(/\/api\/coordinator\/decisions\/.+\/(answer|defer)$/, (route) => route.fulfill({ status: 409, json: { error: "Not part of this test" } }));
   await page.route(/\/api\/hermes\/sessions(\/.*)?$/, (route) => (route.request().method() === "GET" ? route.fallback() : route.abort()));
   const axe = async (label: string, include: string) => {
@@ -973,25 +1041,29 @@ test("a11y + 200% text: CW v3 Needs you list, risk-flagged decision detail and R
   const desktop = info.project.name === "desktop";
   const scope = desktop ? page.getByRole("complementary", { name: "Chief of staff" }) : page.getByRole("dialog", { name: "Chief of staff" });
   const sel = desktop ? ".gc-rail" : ".gc-sheet";
-  // The tray is one button; its status sentence says what waits. Needs you is a tab inside.
+  // The tray is one button; its status sentence says what waits. Tasks is a tab inside.
   if (!desktop) await page.locator(".gc-tray").getByRole("button", { name: "Chief of staff", exact: true }).click();
-  await scope.getByRole("tab", { name: /^Needs you/ }).click();
-  await expect(scope.getByRole("button", { name: "D-49: Ship it now (recommended)", exact: true })).toBeVisible();
-  // A risky decision offers no one-tap chips: its row opens the card.
-  await expect(scope.getByRole("button", { name: /^D-48: / })).toHaveCount(0);
-  await axe("needs list", sel);
+  await scope.getByRole("tab", { name: /^Tasks/ }).click();
+  const list = scope.getByTestId("task-list");
+  await expect(list.getByTestId("task-row")).toHaveCount(4);
+  // A question with two short choices is answered from its row; a risk-flagged one offers "Answer" only.
+  const safe = list.getByTestId("task-row").filter({ hasText: "Renumber migration 0042" });
+  await expect(safe.getByRole("button", { name: "Ship it now", exact: true })).toBeVisible();
+  const risky = list.getByTestId("task-row").filter({ hasText: "Rotate the tunnel key" });
+  await expect(risky.getByRole("button", { name: /^Rotate/ })).toHaveCount(0);
+  await expect(list.getByText(/Lane 65/)).toBeVisible();
+  // A tray tap can open the top decision's card above the list: close it so the list is checked alone.
+  const back = scope.getByRole("button", { name: /^Back/ });
+  if (await back.count()) await back.first().click();
+  await axe("tasks list", sel);
   await zoom();
-  await scope.getByRole("button", { name: /^Open decision D-48:/ }).click();
+  await risky.getByRole("button", { name: "Answer", exact: true }).click();
   const answers = scope.getByRole("group", { name: "Answers for D-48" });
   await expect(answers).toBeVisible();
   // A risky choice arms first; the in-place Confirm is what would send it.
   await answers.getByRole("button", { name: /^Rotate/ }).click();
   await expect(scope.getByRole("group", { name: "Confirm answer" })).toBeVisible();
   await axe("risk-flagged detail", sel);
-  await zoom();
-  await scope.getByRole("tab", { name: /^Activity/ }).click();
-  await expect(scope.getByText(/Lane 65/)).toBeVisible();
-  await axe("activity", sel);
   await zoom();
 });
 

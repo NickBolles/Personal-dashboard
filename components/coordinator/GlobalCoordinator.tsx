@@ -15,7 +15,7 @@ import type { Decision } from "@/lib/cw-decisions";
 import type { RunEvent } from "@/lib/cw-runs";
 import { changeLabel } from "@/lib/coordinator/item-card";
 import { ItemCard, useItemCardData, type ItemCardData } from "./cards/ItemCard";
-import { BoltIcon, ChevronIcon, ExpandIcon, InboxIcon } from "@/components/icons";
+import { BoltIcon, ChevronIcon, ExpandIcon } from "@/components/icons";
 import { pageContext } from "@/lib/coordinator/page-context";
 import { sessionIdFromRoute } from "@/lib/composer-target";
 import { usePanelOwner } from "@/lib/client/panel-owner";
@@ -34,15 +34,15 @@ import { DynamicSurface } from "@/components/smart/DynamicSurface";
 import { AnchoredMenu, Button, SectionHeader, SheetHandle, useAnchoredMenu, useNow, useSheetDrag, useToast } from "@/components/ui";
 import type { ComposeScope } from "@/lib/coordinator/compose";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
-import { WORK_RANK, WORK_WORD, workStateOfRun } from "@/lib/work-words";
+import { WORK_RANK, workStateOfRun } from "@/lib/work-words";
 import { NeedsPanel } from "./needs/NeedsPanel";
 import { DecisionReceiptLine, DecisionRow } from "@/components/decisions/DecisionBlock";
 import { DecisionFlowContext, useDecisionFlowController, type DecisionFlow } from "@/components/decisions/useAnswerDecision";
 import { viewOfDecision } from "@/lib/decision-view";
 import { useCoordinatorDecisions } from "./needs/useCoordinatorDecisions";
-import { RunningPanel } from "./running/RunningPanel";
+import { TaskList } from "@/components/tasks/TaskList";
 import { RunCard } from "./running/RunCard";
-import { useCoordinatorRuns, useMarkLooked } from "./running/useCoordinatorRuns";
+import { useCoordinatorRuns, useMarkLooked, useResumeAll } from "./running/useCoordinatorRuns";
 // The design library's sleek density tier, right before this panel's own styles (see the file's header).
 import "@/components/ui/density.css";
 import "./coordinator.css";
@@ -54,9 +54,16 @@ const subscribeWide = (cb: () => void) => {
   return () => m.removeEventListener("change", cb);
 };
 const getWide = () => window.matchMedia("(min-width: 900px)").matches;
-/** "running" is the Activity tab: runs (working, stuck, finished) plus what the Chief of staff changed. */
-type Tab = "chat" | "needs" | "running";
-const TAB_KEYS: Record<string, Tab> = { n: "needs", r: "running", a: "running", c: "chat" };
+/**
+ * Two tabs: Chat, and Tasks (In flight, scoped to this bot: for the Chief of staff, every channel). Tasks also holds
+ * what Needs you and Activity used to: the decision that was opened (its answer card), approvals that are not on a
+ * task, and what the Chief of staff changed, with Undo.
+ */
+type Tab = "chat" | "tasks";
+const TAB_KEYS: Record<string, Tab> = { t: "tasks", n: "tasks", r: "tasks", a: "tasks", c: "chat" };
+/** Where the older surfaces pointed (a tray line, a catch-up chip, a deep link): everything but Chat is under Tasks now. */
+const tabOf = (target: string | null | undefined): Tab | null =>
+  target === "chat" ? "chat" : target === "needs" || target === "running" || target === "changes" || target === "tasks" ? "tasks" : null;
 const typingIn = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const ASK_PAGE = "Help me understand this page and suggest the next action.";
 
@@ -80,7 +87,7 @@ export function GlobalCoordinator() {
   const [open, setOpen] = useState(true);
   const [width, setWidth] = useState(360);
   const [phoneOpen, setPhoneOpen] = useState(false);
-  const [side, setSide] = useState<Exclude<Tab, "chat">>("needs");
+  const [side, setSide] = useState<Exclude<Tab, "chat">>("tasks");
   const [chatExpandedOn, setChatExpandedOn] = useState<string | null>(null);
   const [removedOn, setRemovedOn] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("chat");
@@ -281,7 +288,7 @@ export function GlobalCoordinator() {
   const selectTab = (next: Tab) => {
     setTab(next);
     if (next !== "chat") setSide(next);
-    if (next === "running") markSeen();
+    if (next === "tasks") markSeen();
   };
   // A catch-up chip lands on the part of the tab it was about ("2 finished" on Finished, "2 new decisions" on New),
   // marked for a moment. The tab may still be drawing, so look for it over a few frames — inside THIS panel only
@@ -327,7 +334,7 @@ export function GlobalCoordinator() {
     } else if (awayLine) {
       show();
       setTab("chat");
-    } else openAt(status.target.tab, status.target.ref);
+    } else openAt(tabOf(status.target.tab) ?? "chat", status.target.ref);
   };
   // A prompt written into the composer from outside it (a quick action, the palette, "Ask about this page") is a
   // whole message of its own. The chip an earlier Steer / Ask left behind is not about it, and from the collapsed
@@ -348,7 +355,7 @@ export function GlobalCoordinator() {
       }),
     );
   };
-  const onRef = (ref: string) => openAt(ref.startsWith("D-") ? "needs" : "running", ref);
+  const onRef = (ref: string) => openAt("tasks", ref);
   const focusComposer = () =>
     requestAnimationFrame(() =>
       requestAnimationFrame(() => host.current?.ownerDocument.querySelector<HTMLTextAreaElement>('[data-testid="gc-input"]')?.focus()),
@@ -536,8 +543,8 @@ export function GlobalCoordinator() {
   useEffect(() => {
     const key = `${coord}:${coordRef ?? ""}`;
     if (!coord || openedCoord.current === key) return;
-    // "changes" predates the merged Activity tab; old links still land where the changes are.
-    const next: Tab | null = coord === "needs" ? "needs" : coord === "running" || coord === "changes" ? "running" : coord === "chat" ? "chat" : null;
+    // Older links name Needs you, Activity or Changes: all three are under Tasks.
+    const next = tabOf(coord);
     if (!next) return;
     openedCoord.current = key;
     const ref = coordRef && /^[DR]-\d{1,9}$/.test(coordRef) ? coordRef : undefined;
@@ -582,18 +589,21 @@ export function GlobalCoordinator() {
     }
   }, [requestedCard, dynamic.data]);
   const d = info.data?.area ? (info.data as CoordinatorResponse) : null;
-  const inFlight = status.counts.working + status.counts.stuck + status.counts.waiting;
+  const asking = Math.max(0, needsCount - stalledAsks.length);
   const tabs: { id: Tab; label: string; count?: number; tone?: "bad" | "warn"; hint?: string }[] = [
     { id: "chat", label: "Chat" },
-    { id: "needs", label: "Needs you", count: needsCount, tone: needsCount ? "warn" : undefined, hint: `${needsCount} waiting on you` },
     {
-      id: "running",
-      label: "Activity",
-      count: inFlight,
-      tone: status.counts.newStuck ? "bad" : undefined,
-      hint: `${status.counts.working} working, ${status.counts.stuck} stalled or failed, ${status.counts.waiting} need you`,
+      id: "tasks",
+      label: "Tasks",
+      // The badge counts what needs the owner, nothing else: work that went silent is Stalled, listed but not counted.
+      count: asking,
+      tone: status.counts.newStuck ? "bad" : asking ? "warn" : undefined,
+      hint: `${asking} need you, ${status.counts.working} working, ${status.counts.stuck} stalled or failed`,
     },
   ];
+  /** The decision a tray tap, a D-n chip, a deep link or a row's "Answer" opened: its card shows above the list. */
+  const openRef = focusRef?.tab === "tasks" && focusRef.ref?.startsWith("D-") ? focusRef.ref : undefined;
+  const interrupted = runRows.filter((r) => r.state === "interrupted" && !r.parentRunId);
   // The tray is one button with one sentence; a long press (or right-click) goes straight to a tab.
   const trayMenu = useAnchoredMenu();
   const trayActions = [
@@ -738,79 +748,42 @@ export function GlobalCoordinator() {
                   inlineActions={() => <ChatReceipts flow={decisionFlow} />}
                   lastLookedChat={chatSince}
                   sinceCounts={sinceCounts}
-                  onJump={(next, about) => {
-                    selectTab(next === "needs" ? "needs" : "running");
+                  onJump={(_next, about) => {
+                    selectTab("tasks");
                     land(about);
                   }}
                   onRef={onRef}
                 />
               ) : null}
-              {t.id === "needs" && shownTab === "needs" ? (
-                <NeedsPanel
-                  hasOther={otherAsks.length + stalledAsks.length > 0}
-                  key={focusRef?.tab === "needs" ? `n${focusRef.n}` : "needs"}
-                  initialRef={focusRef?.tab === "needs" ? focusRef.ref : undefined}
-                  onAsk={askDecision}
-                  lead={
-                    otherAsks.length || stalledAsks.length ? (
-                      <>
-                        {otherAsks.length ? (
-                          <section className="gc-list" aria-label="Approvals and proposals">
-                            <SectionHeader label="Waiting for your approval" count={otherAsks.length} />
-                            {otherAsks.map((ask) => (
-                              <Link key={ask.key} href={ask.href}>
-                                <strong>{ask.title}</strong>
-                                <span>{ask.question} · opens the conversation</span>
-                              </Link>
-                            ))}
-                          </section>
-                        ) : null}
-                        {stalledAsks.length ? (
-                          <section className="gc-list" aria-label="Runs to check">
-                            <Button variant="ghost" className="gc-stalled-row" onClick={() => selectTab("running")}>
-                              <strong>{stalledAsks.length === 1 ? "1 run stalled" : `${stalledAsks.length} runs stalled`}</strong>
-                              <span>No report for over 30 minutes · check in Activity</span>
-                            </Button>
-                          </section>
-                        ) : null}
-                      </>
-                    ) : null
-                  }
-                />
+              {t.id === "tasks" && shownTab === "tasks" ? (
+                <div className="gc-tasks" data-testid="gc-tasks">
+                  {/* The decision that was opened: its answer card, with the pager that walks the queue. */}
+                  {openRef ? (
+                    <NeedsPanel detailOnly key={`d${focusRef!.n}`} initialRef={openRef} onAsk={askDecision} onClosed={() => setFocusRef(null)} />
+                  ) : null}
+                  {otherAsks.length ? (
+                    <section className="gc-list" aria-label="Approvals and proposals">
+                      <SectionHeader label="Waiting for your approval" count={otherAsks.length} />
+                      {otherAsks.map((ask) => (
+                        <Link key={ask.key} href={ask.href}>
+                          <strong>{ask.title}</strong>
+                          <span>{ask.question} · opens the conversation</span>
+                        </Link>
+                      ))}
+                    </section>
+                  ) : null}
+                  {interrupted.length ? <ResumeAll count={interrupted.length} refs={interrupted.map((r) => r.ref)} /> : null}
+                  <TaskList scope="all" view="flight" onAnswer={(ref) => openAt("tasks", ref)} empty={<p className="gc-hint">Nothing in flight</p>} />
+                  {things.changes.length ? (
+                    <p className="gc-jump">
+                      <Button variant="ghost" size="sm" onClick={() => document.getElementById(`${ids}-changes`)?.scrollIntoView({ block: "start" })}>
+                        {things.changes.length === 1 ? "1 change" : `${things.changes.length} changes`} by the Chief of staff in the last 24 hours
+                      </Button>
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
-              {t.id === "running" && things.changes.length ? (
-                <p className="gc-jump">
-                  <Button variant="ghost" size="sm" onClick={() => document.getElementById(`${ids}-changes`)?.scrollIntoView({ block: "start" })}>
-                    {things.changes.length === 1 ? "1 change" : `${things.changes.length} changes`} by the Chief of staff in the last 24 hours
-                  </Button>
-                </p>
-              ) : null}
-              {t.id === "running" && shownTab === "running" ? (
-                <RunningPanel
-                  key={focusRef?.tab === "running" ? `r${focusRef.n}` : "running"}
-                  initialRef={focusRef?.tab === "running" ? focusRef.ref : undefined}
-                  onCompose={compose}
-                  onStop={stopRun}
-                  decisions={cwDecisions.data?.decisions}
-                  onRef={onRef}
-                  quietEmpty={otherRuns.length > 0 || things.changes.length > 0}
-                />
-              ) : null}
-              {t.id === "running" && shownTab === "running" && otherRuns.length ? (
-                <section className="gc-list" aria-label="Jobs and checks">
-                  <SectionHeader label={cwRuns.isError ? "Saved item status · live details unavailable" : "Jobs and checks"} count={otherRuns.length} />
-                  {otherRuns.map((run) => (
-                    <Link key={run.id} href={`/areas?item=${encodeURIComponent(run.itemId)}`}>
-                      <strong>{run.title}</strong>
-                      <span data-tone={run.state === "failed" || run.state === "stalled" ? "bad" : "ai"}>
-                        {OTHER_STATE[run.state]}
-                        {run.at ? ` · ${relativeTime(run.at)}` : ""}
-                      </span>
-                    </Link>
-                  ))}
-                </section>
-              ) : null}
-              {t.id === "running" ? <ChangesSection id={`${ids}-changes`} rows={things.changes} {...cardHooks} /> : null}
+              {t.id === "tasks" ? <ChangesSection id={`${ids}-changes`} rows={things.changes} {...cardHooks} /> : null}
             </div>
           ))}
         </>
@@ -889,7 +862,7 @@ export function GlobalCoordinator() {
                       selectTab(t.id);
                     }}
                   >
-                    {t.id === "needs" ? <InboxIcon className="h-4 w-4" /> : <BoltIcon className="h-4 w-4" />}
+                    <BoltIcon className="h-4 w-4" />
                     {t.count ? (
                       <span className="gc-badge" data-tone={t.tone}>
                         {t.count}
@@ -1028,13 +1001,6 @@ function MentionedDecision({
   );
 }
 
-const OTHER_STATE: Record<"running" | "stalled" | "failed" | "waiting", string> = {
-  running: WORK_WORD.working,
-  stalled: WORK_WORD.stalled,
-  failed: WORK_WORD.failed,
-  waiting: WORK_WORD.needs,
-};
-
 function AttentionDot({ dot }: { dot: "red" | "yellow" | null }) {
   return dot ? <span className="gc-dot" data-dot={dot} role="img" aria-label={dot === "red" ? "Attention required" : "Updates to review"} /> : null;
 }
@@ -1131,6 +1097,55 @@ function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: str
           ),
         )}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * Work a restart interrupted: one confirmed tap sends each a resume prompt in its own chat. Each task also has its
+ * own Resume on its row.
+ */
+function ResumeAll({ count, refs }: { count: number; refs: string[] }) {
+  const resumeAll = useResumeAll();
+  const [confirm, setConfirm] = useState(false);
+  const [note, setNote] = useState("");
+  return (
+    <section className="gc-list" aria-label="Interrupted work" data-testid="gc-resume-all">
+      <p className="gc-resume">
+        <span>{count === 1 ? "1 piece of work was interrupted" : `${count} pieces of work were interrupted`}</span>
+        <Button size="sm" variant="ghost" disabled={resumeAll.isPending} onClick={() => setConfirm(true)}>
+          Resume all {count}
+        </Button>
+      </p>
+      {confirm ? (
+        <div role="group" aria-label={`Resume ${count} interrupted?`} className="gc-run-confirm">
+          <p>Send a resume prompt to each one&apos;s chat?</p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setConfirm(false);
+              resumeAll.mutate(refs, {
+                onSuccess: ({ results }) => {
+                  const sent = results.filter((r) => r.ok).length;
+                  const failed = results.length - sent;
+                  setNote([sent ? `Resume sent to ${sent}` : "", failed ? `Couldn't resume ${failed}` : ""].filter(Boolean).join(". "));
+                },
+                onError: (error) => setNote(error instanceof Error ? error.message : "Couldn't resume. Try again."),
+              });
+            }}
+          >
+            Confirm
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {note ? (
+        <p className="text-sm text-muted" role="status" data-dynamic>
+          {note}
+        </p>
+      ) : null}
     </section>
   );
 }

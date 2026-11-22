@@ -161,10 +161,11 @@ describe("a row", () => {
     });
     await waitFor(() => expect(posts.some((p) => p.path === "/api/coordinator/decisions/D-52/answer")).toBe(true));
     expect(posts.find((p) => p.path.endsWith("/answer"))!.body).toMatchObject({ answer: "$350" });
-    const receipt = await within(row("Compare standing desk frames")).findByRole("status");
-    expect(receipt.textContent).toContain("Answered: $350");
+    // The receipt sits at the top of the list, so its Undo is still there when the row moves on or leaves.
+    const receipt = await screen.findByTestId("decision-receipt");
+    expect(receipt.textContent).toContain("$350");
     await act(async () => {
-      fireEvent.click(within(receipt).getByRole("button", { name: "Undo" }));
+      fireEvent.click(within(receipt).getByRole("button", { name: "Undo D-52" }));
     });
     await waitFor(() => expect(posts.some((p) => p.path === "/api/work/ops/op_answer/undo")).toBe(true));
   });

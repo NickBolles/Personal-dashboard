@@ -15,12 +15,13 @@ import type { DynamicCard } from "@/lib/jarvis-ui/dynamic";
 import { COORDINATOR_PROMPT } from "@/lib/quick-actions";
 import { OPEN_COORDINATOR_EVENT } from "@/components/navigation/commands";
 import { ToastProvider } from "@/components/ui";
+import type { TaskListResponse, TaskRow } from "@/lib/task-list";
 
-const nav = vi.hoisted(() => ({ path: "/areas", search: "", wide: true }));
+const nav = vi.hoisted(() => ({ path: "/areas", search: "", wide: true, push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.path,
   useSearchParams: () => new URLSearchParams(nav.search),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: nav.push }),
 }));
 const clients: QueryClient[] = [];
 let info: CoordinatorResponse | { area: null };
@@ -28,6 +29,45 @@ let activity: ActivityItem[];
 let runs: Record<string, ItemAgentInfo>;
 let workItems: Record<string, unknown>[];
 let quick: Record<string, unknown>[];
+/** What the Tasks tab reads (GET /api/work/tasks): empty unless a test fills it. */
+let tasks: TaskListResponse;
+const noTasks = (): TaskListResponse => ({
+  view: "flight",
+  scope: "all",
+  groups: [],
+  needs: 0,
+  review: null,
+  done: null,
+  open: 0,
+  fetchedAt: new Date().toISOString(),
+});
+const taskRow = (id: string, title: string, state: TaskRow["state"], over: Partial<TaskRow> = {}): TaskRow => ({
+  id,
+  title,
+  path: "Portfolio",
+  areaId: "portfolio",
+  parentId: "portfolio",
+  project: false,
+  state,
+  since: new Date(Date.now() - 6 * 60_000).toISOString(),
+  cause: null,
+  line: null,
+  who: "@devchief",
+  assignee: null,
+  tags: [],
+  activity: [],
+  question: null,
+  pr: null,
+  chat: null,
+  can: { steer: state === "working" || state === "stalled", stop: state === "working", retry: state === "failed" || state === "stalled" },
+  ...over,
+});
+const listOf = (...rows: TaskRow[]): TaskListResponse => ({
+  ...noTasks(),
+  groups: rows.length ? [{ id: "portfolio", title: "Portfolio", needs: rows.filter((r) => r.state === "needs").length, rows }] : [],
+  needs: rows.filter((r) => r.state === "needs").length,
+  open: rows.length,
+});
 const qa = (id: string, label: string, prompt: string, pinned = false) => ({
   id,
   userId: "u",
@@ -85,6 +125,8 @@ beforeEach(() => {
   runs = {};
   workItems = [];
   quick = [];
+  tasks = noTasks();
+  nav.push.mockClear();
   vi.stubGlobal("matchMedia", () => ({ matches: nav.wide, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
   // jsdom has no dialog top layer. Model only open/close; the browser spec covers real focus trapping.
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
@@ -106,6 +148,8 @@ beforeEach(() => {
     if (path.startsWith("/api/work/activity")) return { items: activity, nextCursor: null, latestAt: activity[0]?.at ?? null };
     if (path === "/api/work/items") return { items: workItems };
     if (path === "/api/quick-actions") return { actions: quick };
+    if (path.startsWith("/api/work/tasks")) return tasks;
+    if (path.endsWith("/timeline")) return { moments: [] };
     if (path.startsWith("/api/hermes/sessions/"))
       return {
         session: { id: "s1", pinned: false, archived: false },
@@ -436,7 +480,7 @@ describe("global coordinator", () => {
     view.rerender(globalView());
     await chatPanel().findByText("Viewing: Needs you");
     // There is no Context tab any more: the composer carries the page chip and its one action.
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Needs you", "Activity"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Tasks"]);
     fireEvent.click(screen.getByRole("button", { name: "Ask about this page" }));
     expect((screen.getByTestId("gc-input") as HTMLTextAreaElement).value).toContain("Help me understand this page");
     expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
@@ -576,6 +620,7 @@ describe("global coordinator", () => {
     });
     let looked: string | null = iso(60);
     let runRows = [runRow(1, {}), runRow(2, { state: "failed", title: "Ledger import", updatedAt: iso(5) })];
+    tasks = listOf(taskRow("t2", "Ledger import", "failed", { line: "Import stopped on row 40" }), taskRow("t1", "Work 1", "working"));
     const fallback = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
       if (path.startsWith("/api/coordinator/decisions")) return { decisions: [decision(1), decision(2)], counts: { open: 2, deferred: 0 } };
@@ -595,16 +640,15 @@ describe("global coordinator", () => {
     expect(within(document.querySelector<HTMLElement>(".gc-tray")!).getAllByRole("button")).toHaveLength(1);
     fireEvent.click(tray);
     const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
-    expect(
-      within(sheet)
-        .getByRole("tab", { name: /Activity/ })
-        .getAttribute("aria-selected"),
-    ).toBe("true");
-    // The failed run is under Needs you in Activity (a section of the list, not the Needs you tab).
-    const needs = await within(sheet).findByRole("region", { name: "Needs you" });
-    expect(needs.getAttribute("data-land")).toBe("needs");
-    expect(needs.textContent).toContain("Ledger import");
-    expect(within(sheet).getByRole("region", { name: "Working" }).textContent).toContain("Work 1");
+    expect(within(sheet).getByRole("tab", { name: /Tasks/ }).getAttribute("aria-selected")).toBe("true");
+    // Tasks is the task list: the failed task leads, then what is working. No run is a row of its own.
+    const list = await within(sheet).findByTestId("task-list");
+    await waitFor(() =>
+      expect(Array.from(list.querySelectorAll("[data-task]")).map((el) => el.getAttribute("data-task-state"))).toEqual(["failed", "working"]),
+    );
+    expect(list.querySelector('[data-task="t2"]')!.textContent).toContain("Ledger import");
+    expect(list.querySelector('[data-task="t1"]')!.textContent).toContain("Work 1");
+    expect(sheet.querySelector("[data-run-ref]")).toBeNull();
     // Once seen it is still counted, but what waits on the owner leads and nothing is red.
     looked = new Date().toISOString();
     runRows = runRows.map((r) => ({ ...r }));
@@ -616,11 +660,75 @@ describe("global coordinator", () => {
     fireEvent.click(tray);
     expect(
       within(screen.getByRole("dialog", { name: "Chief of staff" }))
-        .getByRole("tab", { name: /Needs you/ })
+        .getByRole("tab", { name: /Tasks/ })
         .getAttribute("aria-selected"),
     ).toBe("true");
   });
-  describe("rows in Activity and the one composer", () => {
+  describe("task rows under Tasks", () => {
+    /** The phone sheet on Home, on its Tasks tab, with these tasks. */
+    async function openTasks(rows: TaskRow[]) {
+      nav.wide = false;
+      nav.path = "/home";
+      info = { ...base, sessionId: "s1" };
+      tasks = listOf(...rows);
+      makeClient();
+      render(globalView(), { wrapper });
+      fireEvent.click(await screen.findByRole("button", { name: "Chief of staff" }));
+      const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
+      await within(sheet).findByTestId("gc-input");
+      fireEvent.click(within(sheet).getByRole("tab", { name: /Tasks/ }));
+      await waitFor(() => expect(sheet.querySelector(`[data-task="${rows[0]!.id}"]`)).toBeTruthy());
+      return sheet;
+    }
+    const rowOf = (sheet: HTMLElement, id: string) => within(sheet.querySelector<HTMLElement>(`[data-task="${id}"]`)!);
+    const hermes = () => vi.mocked(api.post).mock.calls.filter(([path]) => String(path).startsWith("/api/hermes/"));
+
+    it("is In flight for this bot: one row per task, with the same states and icon actions, and no run or decision rows", async () => {
+      const sheet = await openTasks([
+        taskRow("t3", "Compare desk frames", "needs", { line: "What is your budget ceiling?" }),
+        taskRow("t2", "Nightly eval", "failed", { line: "Timed out" }),
+        taskRow("t1", "Ledger import", "working"),
+      ]);
+      expect(
+        within(sheet)
+          .getAllByTestId("task-row")
+          .map((el) => el.getAttribute("data-task-state")),
+      ).toEqual(["needs", "failed", "working"]);
+      expect(rowOf(sheet, "t1").getByRole("link", { name: "Ledger import" }).getAttribute("href")).toBe("/areas?item=t1");
+      expect(sheet.querySelector("[data-run-ref]")).toBeNull();
+      expect(within(sheet).queryByRole("tab", { name: /Needs you|Activity/ })).toBeNull();
+      // The row has no text field: a task is steered in its own chat.
+      expect(rowOf(sheet, "t1").queryByRole("textbox")).toBeNull();
+    });
+
+    it("Steer and Retry open the task's own chat; nothing goes into this panel's composer and nothing is sent", async () => {
+      const sheet = await openTasks([taskRow("t2", "Nightly eval", "failed"), taskRow("t1", "Ledger import", "working")]);
+      fireEvent.click(rowOf(sheet, "t1").getByRole("button", { name: "Steer Ledger import" }));
+      expect(nav.push).toHaveBeenLastCalledWith("/areas?item=t1&tab=chat&compose=1");
+      fireEvent.click(rowOf(sheet, "t2").getByRole("button", { name: "Retry Nightly eval" }));
+      expect(nav.push).toHaveBeenLastCalledWith("/areas?item=t2&tab=chat&draft=retry");
+      expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
+      expect(hermes()).toEqual([]);
+    });
+
+    it("Stop is confirmed on the row, then stops the task; it never goes through the composer or the Chief of staff's chat", async () => {
+      const sheet = await openTasks([taskRow("t1", "Ledger import", "working")]);
+      fireEvent.click(rowOf(sheet, "t1").getByRole("button", { name: "Stop Ledger import" }));
+      const confirm = () => within(sheet).getByRole("group", { name: "Stop work on Ledger import?" });
+      fireEvent.click(within(confirm()).getByRole("button", { name: "Cancel" }));
+      expect(within(sheet).queryByRole("group", { name: "Stop work on Ledger import?" })).toBeNull();
+      expect(vi.mocked(api.post).mock.calls.some(([path]) => String(path).endsWith("/stop"))).toBe(false);
+      fireEvent.click(rowOf(sheet, "t1").getByRole("button", { name: "Stop Ledger import" }));
+      fireEvent.click(within(confirm()).getByRole("button", { name: "Stop" }));
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/work/items/t1/stop"));
+      // The owner stays where they were: no tab switch, no chip, nothing written for them.
+      expect(within(sheet).getByRole("tab", { selected: true }).textContent).toMatch(/^Tasks/);
+      expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
+      expect((within(sheet).getByTestId("gc-input") as HTMLTextAreaElement).value).toBe("");
+      expect(hermes()).toEqual([]);
+    });
+  });
+  describe("run rows under a reply, and the one composer", () => {
     const iso = (minAgo: number) => new Date(Date.now() - minAgo * 60_000).toISOString();
     const runRow = (seq: number, over: Record<string, unknown> = {}) => ({
       id: `run-${seq}`,
@@ -645,17 +753,26 @@ describe("global coordinator", () => {
       noticeCount: 0,
       ...over,
     });
-    /** The phone sheet on Home, with these runs under Activity. */
-    async function openActivity(rows: Record<string, unknown>[], sessionId: string | null) {
+    /** The phone sheet on Home, in Chat, with a reply that names these runs: each is drawn as a row under it. */
+    async function openMentions(rows: Record<string, unknown>[]) {
       nav.wide = false;
       nav.path = "/home";
-      info = { ...base, sessionId };
+      info = { ...base, sessionId: "s1" };
       const fallback = vi.mocked(api.get).getMockImplementation()!;
       vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
         if (path.startsWith("/api/coordinator/decisions")) return { decisions: [], counts: { open: 0, deferred: 0 } };
         if (path === "/api/coordinator/runs")
-          return { runs: rows, events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } };
+          return { runs: rows, events: [], lastLooked: { chat: null, needs: null, running: iso(1), changes: null, context: null } };
         if (path.startsWith("/api/coordinator/runs/")) return { events: [] };
+        if (path.startsWith("/api/hermes/sessions/s1/execution")) return { sessionId: "s1", parent: null, records: [], sources: [] };
+        if (path.startsWith("/api/hermes/sessions/"))
+          return {
+            session: { id: "s1", pinned: false, archived: false },
+            timeline: [
+              { kind: "user", id: "u1", text: "Where do things stand?", at: iso(11) },
+              { kind: "assistant", id: "a1", text: `Status: ${rows.map((r) => r.ref).join(", ")}.`, at: iso(10) },
+            ],
+          };
         return fallback(path, ...rest);
       });
       makeClient();
@@ -663,11 +780,10 @@ describe("global coordinator", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Chief of staff" }));
       const sheet = screen.getByRole("dialog", { name: "Chief of staff" });
       await within(sheet).findByTestId("gc-input");
-      fireEvent.click(within(sheet).getByRole("tab", { name: /Activity/ }));
-      await waitFor(() => expect(sheet.querySelector(`[data-run-ref="${rows[0]!.ref}"]`)).toBeTruthy());
+      await waitFor(() => expect(sheet.querySelector(`article[data-run-ref="${rows[0]!.ref}"]`)).toBeTruthy());
       return sheet;
     }
-    const rowOf = (sheet: HTMLElement, ref: string) => within(sheet.querySelector<HTMLElement>(`[data-run-ref="${ref}"]`)!);
+    const rowOf = (sheet: HTMLElement, ref: string) => within(sheet.querySelector<HTMLElement>(`article[data-run-ref="${ref}"]`)!);
     const selectedTab = (sheet: HTMLElement) => within(sheet).getByRole("tab", { selected: true }).textContent;
     const composer = (sheet: HTMLElement) => within(sheet).getByTestId("gc-input") as HTMLTextAreaElement;
     /** Everything posted to the assistant: [path, the line sent]. Marking a tab as looked at is not one of them. */
@@ -677,8 +793,8 @@ describe("global coordinator", () => {
         .mock.calls.filter(([path]) => String(path).startsWith("/api/hermes/"))
         .map(([path, payload]) => [path, (payload as { input?: string } | undefined)?.input]);
 
-    it("Steer on an Activity row switches to Chat with the run's chip in the composer; nothing is sent until Send, then one line goes through the control channel", async () => {
-      const sheet = await openActivity([runRow(1)], "s1");
+    it("Steer on a run row puts the run's chip in the composer; nothing is sent until Send, then one line goes through the control channel", async () => {
+      const sheet = await openMentions([runRow(1)]);
       // The row has no text field: the composer in Chat is the only one.
       expect(rowOf(sheet, "R-1").queryByRole("textbox")).toBeNull();
       fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Steer R-1" }));
@@ -701,22 +817,8 @@ describe("global coordinator", () => {
       await waitFor(() => expect(within(sheet).queryByTestId("gc-scope")).toBeNull());
       expect(composer(sheet).value).toBe("");
     });
-    it("with no conversation yet Steer still only sets the chip; Send starts the conversation with that line", async () => {
-      const sheet = await openActivity([runRow(1)], null);
-      fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Steer R-1" }));
-      expect(selectedTab(sheet)).toBe("Chat");
-      expect(within(sheet).getByTestId("gc-scope").getAttribute("aria-label")).toBe("Steering R-1: Ledger import");
-      expect(composer(sheet).value).toBe("");
-      // nothing is sent or created by the chip
-      expect(sent()).toEqual([]);
-      fireEvent.change(composer(sheet), { target: { value: "Skip the archive tab" } });
-      fireEvent.click(within(sheet).getByRole("button", { name: "Send" }));
-      await waitFor(() => expect(sent().map(([path]) => path)).toEqual(["/api/hermes/sessions", "/api/hermes/sessions/s1/runs"]));
-      expect(sent()[1]![1]).toMatch(/(^|\n)Steer R-1 \(Ledger import\): Skip the archive tab$/);
-      await waitFor(() => expect(within(sheet).queryByTestId("gc-scope")).toBeNull());
-    });
-    it("Retry on a failed row goes to the composer too, and can be sent as it is", async () => {
-      const sheet = await openActivity([runRow(2, { state: "failed", title: "Nightly eval", updatedAt: iso(5) }), runRow(1)], "s1");
+    it("Retry on a failed run row goes to the composer too, and can be sent as it is", async () => {
+      const sheet = await openMentions([runRow(2, { state: "failed", title: "Nightly eval", updatedAt: iso(5) }), runRow(1)]);
       fireEvent.click(rowOf(sheet, "R-2").getByRole("button", { name: "Retry R-2" }));
       expect(selectedTab(sheet)).toBe("Chat");
       const chip = within(sheet).getByTestId("gc-scope");
@@ -732,21 +834,20 @@ describe("global coordinator", () => {
       await waitFor(() => expect(sent()).toEqual([["/api/hermes/sessions/s1/runs", "Retry R-2 (Nightly eval)."]]));
       await waitFor(() => expect(within(sheet).queryByTestId("gc-scope")).toBeNull());
     });
-    it("a chip set from Activity is removed by its button or by Backspace in the empty field, and then nothing about the run is sent", async () => {
-      const sheet = await openActivity([runRow(1)], "s1");
+    it("a chip is removed by its button or by Backspace in the empty field, and then nothing about the run is sent", async () => {
+      const sheet = await openMentions([runRow(1)]);
       fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Steer R-1" }));
       fireEvent.click(within(sheet).getByRole("button", { name: "Remove R-1 from the message" }));
       expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
       expect(composer(sheet).placeholder).toBe("Ask your chief of staff…");
-      fireEvent.click(within(sheet).getByRole("tab", { name: /Activity/ }));
       fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Steer R-1" }));
       expect(within(sheet).getByTestId("gc-scope")).toBeTruthy();
       fireEvent.keyDown(composer(sheet), { key: "Backspace" });
       expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
       expect(sent()).toEqual([]);
     });
-    it("Stop on an Activity row is confirmed on the row, then sent to the conversation as one line; it never goes through the composer", async () => {
-      const sheet = await openActivity([runRow(1)], "s1");
+    it("Stop on a run row is confirmed on the row, then sent to the conversation as one line; it never goes through the composer", async () => {
+      const sheet = await openMentions([runRow(1)]);
       fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Stop R-1" }));
       const confirm = () => within(sheet).getByRole("group", { name: "Stop R-1 and its sub-agents?" });
       expect(sent()).toEqual([]);
@@ -757,24 +858,14 @@ describe("global coordinator", () => {
       fireEvent.click(within(confirm()).getByRole("button", { name: "Stop R-1" }));
       await waitFor(() => expect(sent()).toEqual([["/api/hermes/sessions/s1/runs", "Stop R-1 (Ledger import) and its sub-agents."]]));
       expect(api.post).toHaveBeenCalledWith("/api/hermes/sessions/s1/runs", expect.objectContaining({ idempotencyKey: expect.stringMatching(/^ctl-/) }));
-      // The owner stays where they were: no tab switch, no chip, nothing written for them.
+      // The owner stays where they were: no chip, nothing written for them.
       await waitFor(() => expect(within(sheet).queryByRole("group", { name: "Stop R-1 and its sub-agents?" })).toBeNull());
-      expect(selectedTab(sheet)).toMatch(/^Activity/);
+      expect(selectedTab(sheet)).toBe("Chat");
       expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
       expect(composer(sheet).value).toBe("");
     });
-    it("with no conversation to send a stop through, confirming writes the request into the composer for the owner to send", async () => {
-      const sheet = await openActivity([runRow(1)], null);
-      fireEvent.click(rowOf(sheet, "R-1").getByRole("button", { name: "Stop R-1" }));
-      fireEvent.click(within(within(sheet).getByRole("group", { name: "Stop R-1 and its sub-agents?" })).getByRole("button", { name: "Stop R-1" }));
-      await waitFor(() => expect(composer(sheet).value).toBe("Stop R-1 (Ledger import) and its sub-agents."));
-      expect(selectedTab(sheet)).toBe("Chat");
-      expect(within(sheet).queryByTestId("gc-scope")).toBeNull();
-      // nothing is sent or created until the owner sends it
-      expect(sent()).toEqual([]);
-    });
   });
-  it("Needs you counts what Today counts: approvals and stalled runs are listed with the decisions, stalled ones link to Activity", async () => {
+  it("Tasks holds what is not a task too: an approval is listed above the list; stalled work is its task's row, and the badge counts only what needs you", async () => {
     info = { ...base, sessionId: "s1" };
     const fallback = vi.mocked(api.get).getMockImplementation()!;
     vi.mocked(api.get).mockImplementation(async (path, ...rest) => {
@@ -808,21 +899,21 @@ describe("global coordinator", () => {
         return { runs: [], events: [], lastLooked: { chat: null, needs: null, running: null, changes: null, context: null } };
       return fallback(path, ...rest);
     });
+    tasks = listOf(taskRow("i7", "Ledger", "stalled"));
     makeClient();
     render(globalView(), { wrapper });
-    const tab = await screen.findByRole("tab", { name: /Needs you\s*2/ });
+    // One thing needs the owner (the approval). Work that went silent is Stalled: it is listed, not counted.
+    const tab = await screen.findByRole("tab", { name: /Tasks\s*1$/ });
     fireEvent.click(tab);
-    const panel = within(screen.getByRole("tabpanel", { name: /Needs you/ }));
+    const panel = within(screen.getByRole("tabpanel", { name: /Tasks/ }));
     expect((await panel.findByRole("region", { name: "Approvals and proposals" })).textContent).toContain("Recursive delete");
-    const stalled = panel.getByRole("region", { name: "Runs to check" });
-    // The shared word for silence, then what is known and where to look.
-    expect(within(stalled).getByText("1 run stalled")).toBeTruthy();
-    expect(stalled.textContent).toContain("No report for over 30 minutes · check in Activity");
-    // With other things waiting, an empty decision queue does not claim that nothing needs the owner.
-    expect(panel.getByText("No open decisions")).toBeTruthy();
+    expect(panel.queryByRole("region", { name: "Runs to check" })).toBeNull();
+    const row = await panel.findByTestId("task-row");
+    expect(row.getAttribute("data-task-state")).toBe("stalled");
+    expect(row.textContent).toContain("Ledger");
+    // No decision is open, so no answer card is drawn and nothing claims the list is the whole story.
     expect(panel.queryByText("Nothing needs you")).toBeNull();
-    fireEvent.click(within(stalled).getByRole("button"));
-    expect(screen.getByRole("tab", { name: /Activity/ }).getAttribute("aria-selected")).toBe("true");
+    expect(panel.queryByText("Choose a decision")).toBeNull();
   });
   it("what a reply mentions is drawn under it in Chat: the open decision first, then runs by need; each row and chip opens the right place", async () => {
     nav.path = "/home";
@@ -924,7 +1015,7 @@ describe("global coordinator", () => {
     fireEvent.click(within(reply).getByRole("button", { name: "Decision D 1" }));
     expect(decisionRow.hasAttribute("data-landed")).toBe(true);
     expect(selected()).toBe("Chat");
-    // The run rows are the same rows as in Activity, with the same actions: Retry puts the run in the composer here.
+    // A run a reply names is a row under that reply, with its actions: Retry puts the run in the composer here.
     expect(failed.textContent).toContain("Failed");
     fireEvent.click(within(failed).getByRole("button", { name: "Retry R-2" }));
     expect(selected()).toBe("Chat");
@@ -935,19 +1026,22 @@ describe("global coordinator", () => {
     fireEvent.click(within(within(moving).getByRole("group", { name: "Stop R-3 and its sub-agents?" })).getByRole("button", { name: "Cancel" }));
     expect(within(chat).queryByRole("group", { name: /^Stop R-/ })).toBeNull();
     expect(vi.mocked(api.post).mock.calls.some(([path]) => String(path).startsWith("/api/hermes/"))).toBe(false);
-    // The decision row says its state in the shared words; its title opens the decision under Needs you.
+    // The decision row says its state in the shared words; its title opens the decision's answer card under Tasks.
     expect(decisionRow.textContent).toContain("Needs you");
     expect(decisionRow.textContent).toContain("Frames");
     fireEvent.click(within(decisionRow).getByRole("button", { name: "Open decision D-1: Which frame should I order?" }));
-    expect(selected()).toMatch(/^Needs you/);
-    expect(within(screen.getByRole("tabpanel", { name: /Needs you/ })).getAllByText("Which frame should I order?").length).toBeGreaterThan(0);
-    // A reference with no row in the conversation opens its tab: an unknown run goes to Activity.
+    expect(selected()).toMatch(/^Tasks/);
+    const tasksPanel = within(screen.getByRole("tabpanel", { name: /Tasks/ }));
+    expect((await tasksPanel.findAllByText("Which frame should I order?")).length).toBeGreaterThan(0);
+    // The card is the decision alone: the queue is not listed beside it (each question is on its task's row).
+    expect(tasksPanel.queryByText("Choose a decision")).toBeNull();
+    // A reference with no row in the conversation opens Tasks.
     fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
     fireEvent.click(within(reply).getByRole("button", { name: "Run R 99" }));
-    expect(selected()).toMatch(/^Activity/);
+    expect(selected()).toMatch(/^Tasks/);
     fireEvent.click(screen.getByRole("tab", { name: "Chat" }));
     fireEvent.click(within(reply).getByRole("button", { name: "Decision D 9" }));
-    expect(selected()).toMatch(/^Needs you/);
+    expect(selected()).toMatch(/^Tasks/);
   });
   it("renders the no-area setup link without a send control", async () => {
     info = { area: null };
@@ -957,15 +1051,15 @@ describe("global coordinator", () => {
     expect(screen.getByRole("link", { name: "Settings → Agents" }).getAttribute("href")).toBe("/settings/agents");
     expect(screen.queryByRole("textbox")).toBeNull();
   });
-  it("shows recent attributed action cards under Activity → Changes only (none under a reply in Chat), and calls the existing undo endpoint", async () => {
+  it("shows recent attributed action cards under Tasks → Changes only (none under a reply in Chat), and calls the existing undo endpoint", async () => {
     info = { ...base, sessionId: "s1" };
     activity = [action("new", "chiefofstaff"), action("old", "chiefofstaff", new Date(Date.now() - 10000).toISOString()), action("other", "devchief")];
     makeClient();
     render(globalView(), { wrapper });
     await screen.findByTestId("gc-input");
     const chatPanel = screen.getByRole("tabpanel", { name: "Chat" });
-    fireEvent.click(screen.getByRole("tab", { name: /Activity/ }));
-    const changes = within(screen.getByRole("tabpanel", { name: /Activity/ })).getByRole("region", { name: "Changes" });
+    fireEvent.click(screen.getByRole("tab", { name: /Tasks/ }));
+    const changes = within(screen.getByRole("tabpanel", { name: /Tasks/ })).getByRole("region", { name: "Changes" });
     // Each touched item is a card (its title opens the card; "Open item" is inside).
     expect(await within(changes).findByText("Item new")).toBeTruthy();
     expect(within(changes).getByText("Item old")).toBeTruthy();
@@ -985,8 +1079,8 @@ describe("global coordinator", () => {
     makeClient();
     render(globalView(), { wrapper });
     await screen.findByTestId("gc-input");
-    fireEvent.click(screen.getByRole("tab", { name: /Activity/ }));
-    const changes = within(screen.getByRole("tabpanel", { name: /Activity/ })).getByRole("region", { name: "Changes" });
+    fireEvent.click(screen.getByRole("tab", { name: /Tasks/ }));
+    const changes = within(screen.getByRole("tabpanel", { name: /Tasks/ })).getByRole("region", { name: "Changes" });
     fireEvent.contextMenu((await within(changes).findByText("Item new")).closest("article")!, { clientX: 20, clientY: 20 });
     fireEvent.click(screen.getByRole("menuitem", { name: "Ask in chat" }));
     expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");

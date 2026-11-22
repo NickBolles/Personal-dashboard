@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Expand: on /chief the shell's one Chief of staff panel is the page. It is the same panel (so the thread, its draft
- * and its run stream carry over), at full size; wide screens show the conversation with Needs you / Activity beside it.
+ * and its run stream carry over), at full size; wide screens show the conversation with Tasks beside it.
  */
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -63,7 +63,7 @@ vi.mock("./CoordinatorThread", async () => {
   };
 });
 vi.mock("./needs/NeedsPanel", () => ({ NeedsPanel: () => <div data-testid="needs-panel">Needs you list</div> }));
-vi.mock("./running/RunningPanel", () => ({ RunningPanel: () => <div data-testid="running-panel">Activity list</div> }));
+vi.mock("@/components/tasks/TaskList", () => ({ TaskList: () => <div data-testid="task-list">Task list</div> }));
 vi.mock("@/components/quick-actions/QuickActionChips", () => ({ QuickActionChips: () => null }));
 vi.mock("@/components/agents/WhileAwayCard", () => ({ WhileAwayCard: () => null }));
 vi.mock("./useCoordinatorThings", () => ({
@@ -132,14 +132,14 @@ it("the rail offers Expand, which goes to the Chief of staff's own address", asy
   expect(nav.push).toHaveBeenCalledExactlyOnceWith(CHIEF_PATH);
 });
 
-it("wide: expanding keeps the one mounted thread, shows it beside Needs you and Activity, and leaves on close", async () => {
+it("wide: expanding keeps the one mounted thread, shows it beside Tasks, and leaves on close", async () => {
   const view = mount();
   await screen.findByTestId("thread");
   expect(
     within(rail())
       .getAllByRole("tab")
       .map((t) => t.textContent),
-  ).toEqual(["Chat", "Needs you", "Activity"]);
+  ).toEqual(["Chat", "Tasks"]);
   nav.path = CHIEF_PATH;
   view.rerender();
   // The same panel, not a second one: the thread was mounted once and is still the one on screen.
@@ -151,12 +151,11 @@ it("wide: expanding keeps the one mounted thread, shows it beside Needs you and 
     within(rail())
       .getAllByRole("tab")
       .map((t) => t.textContent),
-  ).toEqual(["Needs you", "Activity"]);
+  ).toEqual(["Tasks"]);
   const conversation = within(rail()).getByRole("region", { name: "Conversation" });
   expect(within(conversation).getByTestId("thread")).toBeTruthy();
-  expect(within(rail()).getByTestId("needs-panel")).toBeTruthy();
-  fireEvent.click(within(rail()).getByRole("tab", { name: "Activity" }));
-  expect(within(rail()).getByTestId("running-panel")).toBeTruthy();
+  // The side column is the task list. No decision was opened, so no answer card is drawn above it.
+  expect(within(rail()).getByTestId("task-list")).toBeTruthy();
   expect(within(rail()).queryByTestId("needs-panel")).toBeNull();
   expect(conversation.hidden).toBe(false);
   // It is the page: no "Viewing: …" context about another page, no Expand, no resizer to drag.
@@ -194,7 +193,7 @@ it("phone: on /chief the sheet is the page (open, full height, no grab bar to dr
     within(sheet)
       .getAllByRole("tab")
       .map((t) => t.textContent),
-  ).toEqual(["Chat", "Needs you", "Activity"]);
+  ).toEqual(["Chat", "Tasks"]);
   fireEvent.click(within(sheet).getByRole("button", { name: "Leave full view" }));
   expect(nav.push).toHaveBeenCalledExactlyOnceWith("/home");
   expect(nav.back).not.toHaveBeenCalled();

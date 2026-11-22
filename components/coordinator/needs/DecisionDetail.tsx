@@ -8,7 +8,16 @@ import { decisionKeyAction, deferUntil, nextAfterAnswer, pagerState } from "@/li
 import { viewOfDecision, type DecisionView } from "@/lib/decision-view";
 import { useDecisionFlow } from "./useCoordinatorDecisions";
 
-type Props = { decisions: Decision[]; refId: string; onBack: () => void; onNavigate: (ref: string) => void; onAsk: (ref: string) => void; arm?: string };
+type Props = {
+  decisions: Decision[];
+  refId: string;
+  onBack: () => void;
+  onNavigate: (ref: string) => void;
+  onAsk: (ref: string) => void;
+  arm?: string;
+  /** What Back returns to (its accessible name): the list this card was opened from. */
+  backLabel?: string;
+};
 /**
  * One decision in the Chief of staff panel: the shared card (components/decisions) paging through the queue
  * ("1 of N", j / k), and moving to the next decision 600 ms after an answer. The receipt keeps its Undo in the panel.
@@ -17,7 +26,7 @@ export function DecisionDetail(props: Props) {
   // Navigation resets the armed choice; a previous decision's confirmation can never leak.
   return <Detail key={props.refId} {...props} />;
 }
-function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
+function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm, backLabel = "Back to Needs you" }: Props) {
   const { flow, shared } = useDecisionFlow();
   const current = decisions.find((d) => d.ref === refId && d.state === "open");
   const receipt = flow.receipts[refId];
@@ -115,7 +124,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
   if (!view)
     return (
       <div className="gc-needs-detail min-w-0" ref={root} tabIndex={-1} onKeyDown={keyDown}>
-        <Button size="sm" onClick={back} aria-label="Back to Needs you">
+        <Button size="sm" onClick={back} aria-label={backLabel}>
           Back
         </Button>
         <p>{refId} was already answered</p>
@@ -139,7 +148,7 @@ function Detail({ decisions, refId, onBack, onNavigate, onAsk, arm }: Props) {
           now={now}
           onAsk={ask}
           onClose={back}
-          closeLabel="Back to Needs you"
+          closeLabel={backLabel}
           pager={{
             index: Math.max(0, pager.index),
             total: pager.total,

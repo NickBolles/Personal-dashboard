@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RetryIcon, SteerIcon, StopIcon } from "@/components/icons";
 import { useAccess } from "@/components/access";
+import { DecisionReceiptLine } from "@/components/decisions/DecisionBlock";
 import { useDecisionFlowController, type DecisionFlow } from "@/components/decisions/useAnswerDecision";
 import {
   Button,
@@ -58,6 +59,23 @@ export const taskHref = (id: string, to: "overview" | "chat" | "question" | "ste
 
 const ic = "h-4 w-4";
 
+/**
+ * Opening a task from a row. The areas page keeps its own view state and follows the address only on Back/Forward,
+ * so on that page a row moves the address and tells the page (the same signal Back sends); anywhere else it is a
+ * plain navigation. Pass the click event for a real link: it is only taken over on the areas page.
+ */
+function useTaskNav() {
+  const router = useRouter();
+  const pathname = usePathname();
+  return (href: string, event?: { preventDefault: () => void }) => {
+    if (pathname === "/areas") {
+      event?.preventDefault();
+      window.history.pushState({ jarvisAreas: true }, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    } else if (!event) router.push(href);
+  };
+}
+
 /** The state in its word and colour. "Working" shimmers the way it does in a chat; nothing else in a list moves. */
 export function TaskStateWord({ state }: { state: TaskState }) {
   if (state === "review" || state === "idle")
@@ -90,6 +108,7 @@ function MomentLine({ moment, now }: { moment: TaskMoment; now: number }) {
 /** A task's whole timeline, newest first, each line with its type and time. Read when a row is opened. */
 export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; title: string; seed: TaskMoment[]; onOpen?: () => void }) {
   const now = useNow();
+  const nav = useTaskNav();
   const q = useQuery({
     queryKey: ["work", "tasks", "timeline", taskId],
     queryFn: ({ signal }) => api.get<{ moments: TaskMoment[] }>(`/api/work/items/${encodeURIComponent(taskId)}/timeline`, signal),
@@ -115,7 +134,13 @@ export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; 
           Open task
         </Button>
       ) : (
-        <ButtonLink href={taskHref(taskId)} size="sm" variant="ghost" className="tl-open">
+        <ButtonLink
+          href={taskHref(taskId)}
+          size="sm"
+          variant="ghost"
+          className="tl-open"
+          onClick={(e: { preventDefault: () => void }) => nav(taskHref(taskId), e)}
+        >
           Open task
         </ButtonLink>
       )}
@@ -129,6 +154,8 @@ type RowHooks = {
   onPick?: (row: TaskRow, to: "overview" | "chat") => void;
   /** The list sits on a page that opens tasks itself (the areas page): every way into a task goes through this. */
   open?: (id: string, to: "overview" | "chat") => void;
+  /** The host answers questions in its own place (the bot panel opens the decision's card): "Answer" and the D-n chip go here. */
+  onAnswer?: (ref: string) => void;
   selectedId?: string | null;
   /** The review queue: rows can be ticked. */
   select?: { ids: readonly string[]; toggle: (id: string) => void };
@@ -137,7 +164,7 @@ type RowHooks = {
 
 export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?: number } & RowHooks) {
   const now = useNow();
-  const router = useRouter();
+  const nav = useTaskNav();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
@@ -154,10 +181,9 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
     const chat = to !== "overview" && to !== "question";
     if (hooks.open) hooks.open(row.id, chat ? "chat" : "overview");
     else if (hooks.onPick && (to === "steer" || to === "chat")) hooks.onPick(row, "chat");
-    else router.push(taskHref(row.id, to));
+    else nav(taskHref(row.id, to));
   };
   const answers = rowAnswers(row.question);
-  const receipt = row.question ? hooks.flow.receipts[row.question.ref] : undefined;
   const sending = !!row.question && hooks.flow.pending.includes(row.question.ref);
   const detail = row.project && row.rollup ? [rollupLine(row.rollup)] : taskDetail(row, null, now);
   // Who has it: always while an agent is on it; on work nothing has touched, only its own assignee.
@@ -218,18 +244,22 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
           ? { onOpen: () => hooks.open!(row.id, "overview") }
           : hooks.onPick
             ? { onOpen: () => hooks.onPick!(row, "overview") }
-            : { href: taskHref(row.id) })}
+            : { href: taskHref(row.id), hitProps: { onClick: (e: { preventDefault: () => void }) => nav(taskHref(row.id), e) } })}
         peek={peek ?? undefined}
         sub={
-          row.state === "needs" && !receipt ? (
+          row.state === "needs" ? (
             <span className="tl-ask">
-              {row.question ? <RefPill id={row.question.ref} /> : null}
+              {row.question ? <RefPill id={row.question.ref} onClick={hooks.onAnswer ? () => hooks.onAnswer!(row.question!.ref) : undefined} /> : null}
               {answers.length ? (
                 answers.map((choice) => (
                   <Button key={choice} size="sm" disabled={sending} onClick={() => void hooks.flow.answer(row.question!, choice).then(() => hooks.onChanged())}>
                     {choice}
                   </Button>
                 ))
+              ) : hooks.onAnswer && row.question ? (
+                <Button size="sm" onClick={() => hooks.onAnswer!(row.question!.ref)}>
+                  Answer
+                </Button>
               ) : hooks.open ? (
                 <Button size="sm" onClick={() => go(row.question ? "question" : "chat")}>
                   Answer
@@ -239,15 +269,6 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
                   Answer
                 </ButtonLink>
               )}
-            </span>
-          ) : receipt ? (
-            <span className="tl-ask" role="status">
-              <span className="tl-receipt">Answered: {receipt.choice}</span>
-              {receipt.undoable ? (
-                <Button size="sm" variant="ghost" onClick={() => void hooks.flow.undo(receipt.view.ref).then(() => hooks.onChanged())}>
-                  Undo
-                </Button>
-              ) : null}
             </span>
           ) : row.pr ? (
             <span className="tl-pr">
@@ -355,6 +376,7 @@ export type TaskListProps = {
   empty?: ReactNode;
   onPick?: RowHooks["onPick"];
   open?: RowHooks["open"];
+  onAnswer?: RowHooks["onAnswer"];
   selectedId?: string | null;
   select?: RowHooks["select"];
   /** Rows shown per group before "Show more". */
@@ -363,7 +385,7 @@ export type TaskListProps = {
   exclude?: readonly string[];
 };
 
-export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, open, selectedId, select, limit, exclude }: TaskListProps) {
+export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, open, onAnswer, selectedId, select, limit, exclude }: TaskListProps) {
   const q = useTaskList(scope, view);
   const qc = useQueryClient();
   const flow = useDecisionFlowController();
@@ -374,12 +396,20 @@ export function TaskList({ scope, view, reviewHref, bare, lead, empty, onPick, o
     .map((g) => (exclude?.length ? { ...g, rows: g.rows.filter((r) => !exclude.includes(r.id)) } : g))
     .filter((g) => g.rows.length);
   const data = q.data;
-  const hooks: RowHooks = { flow, onPick, open, selectedId, select, onChanged };
+  const hooks: RowHooks = { flow, onPick, open, onAnswer, selectedId, select, onChanged };
   return (
     <div className="tl" data-testid="task-list" data-view={view} data-stale={q.error && data ? "" : undefined}>
       {q.error && !data ? <ErrorNote error={q.error} retry={() => void q.refetch()} /> : null}
       {!data && !q.error ? <KSpinner label="Loading tasks…" /> : null}
       {lead}
+      {/* What was just answered: the receipt and its Undo stay here even when the task's row moves on or leaves the list. */}
+      {Object.values(flow.receipts).map((receipt) => (
+        <DecisionReceiptLine
+          key={receipt.view.ref}
+          receipt={receipt}
+          onUndo={receipt.undoable ? () => void flow.undo(receipt.view.ref).then(onChanged) : undefined}
+        />
+      ))}
       {groups.map((group) => {
         const shown = limit && !all.includes(group.id) ? group.rows.slice(0, limit) : group.rows;
         return (

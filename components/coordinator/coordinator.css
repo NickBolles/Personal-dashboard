@@ -1559,3 +1559,22 @@ html[data-kb="open"] .gc-tray-qa {
   min-width: 0;
   flex: 1 1 auto;
 }
+
+/* ---- Tasks tab: the task list, with what is not a task above it (an opened decision, approvals) ---- */
+.gc-tasks {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+.gc-resume {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+  color: var(--t2);
+  font: 400 13px/19px var(--sans);
+}

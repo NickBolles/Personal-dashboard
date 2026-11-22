@@ -145,3 +145,18 @@
   padding-left: 10px;
   border-left: 2px solid var(--line);
 }
+/* The pane's two tabs (Chat, Tasks): the thread fills the pane and stays mounted behind Tasks. */
+.co-tabs {
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  padding: 0 12px;
+}
+.co-tabpane {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+.co-tabpane[hidden] {
+  display: none;
+}

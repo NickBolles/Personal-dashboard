@@ -1229,7 +1229,7 @@ export function ChatWork({ work, render, onActivity }: { work: BackgroundWork[];
           </Button>
           {onActivity ? (
             <Button size="sm" variant="ghost" onClick={onActivity}>
-              Activity
+              Tasks
             </Button>
           ) : null}
           {open ? <div aria-label="Stalled run history">{quiet.map(render)}</div> : null}

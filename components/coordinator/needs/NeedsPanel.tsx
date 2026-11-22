@@ -15,8 +15,15 @@ type Props = {
   lead?: ReactNode;
   /** Approvals or runs to check are listed in `lead`: an empty decision queue must not say "Nothing needs you". */
   hasOther?: boolean;
+  /**
+   * Under the Tasks tab: only the decision that was opened is drawn (its answer card, with the pager that walks the
+   * queue and the keyboard answers). The queue is not listed: each question is on its task's row.
+   */
+  detailOnly?: boolean;
+  /** `detailOnly`: the owner went back from the open decision. */
+  onClosed?: () => void;
 };
-export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props) {
+export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther, detailOnly, onClosed }: Props) {
   const query = useCoordinatorDecisions();
   // One flow for the list and the detail: a receipt and its Undo survive moving between them. The panel host
   // shares its own when it has one, so an answer typed in the Chat composer leaves its receipt here too.
@@ -68,7 +75,7 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {announcement}
         </div>
-        {query.isPending ? (
+        {query.isPending && !detailOnly ? (
           <div role="status" aria-label="Loading decisions" className="gc-needs-loading">
             {[0, 1, 2].map((i) => (
               <div key={i}>
@@ -87,7 +94,27 @@ export function NeedsPanel({ onAsk, initialRef, onCount, lead, hasOther }: Props
           </p>
         ) : null}
         {!query.data && !query.isPending ? lead : null}
-        {query.data ? (
+        {query.data && detailOnly ? (
+          selected ? (
+            <div className="gc-needs-layout" data-detail="true" data-only="">
+              <div className="gc-needs-detail-pane min-w-0">
+                <DecisionDetail
+                  key={selected.visit}
+                  decisions={decisions}
+                  refId={selected.ref}
+                  arm={selected.arm}
+                  backLabel="Back to Tasks"
+                  onBack={() => {
+                    setSelected(null);
+                    onClosed?.();
+                  }}
+                  onNavigate={(ref) => open(ref)}
+                  onAsk={ask}
+                />
+              </div>
+            </div>
+          ) : null
+        ) : query.data ? (
           <div className="gc-needs-layout" data-detail={!!selected}>
             <div className="gc-needs-list-pane min-w-0">
               {lead}

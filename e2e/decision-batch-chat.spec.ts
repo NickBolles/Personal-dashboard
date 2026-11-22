@@ -60,7 +60,7 @@ test("Chief full chat: generated three-choice Form and prose use compact shared 
   await expectNoHorizontalOverflow(page);
 });
 
-test("Chief stalled inventory is one quiet disclosure; Activity and original run rows survive reload", async ({ page }, info) => {
+test("Chief stalled inventory is one quiet disclosure, with a way to Tasks", async ({ page }, info) => {
   const now = Date.parse("2026-11-17T18:00:00Z");
   const iso = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
   await page.clock.setFixedTime(now);
@@ -119,9 +119,11 @@ test("Chief stalled inventory is one quiet disclosure; Activity and original run
     if (process.env.JARVIS_BATCH_SHOTS) await page.screenshot({ path: `${process.env.JARVIS_BATCH_SHOTS}/quiet-${width}-${info.project.name}.png` });
     await quiet.getByRole("button", { name: "3 stalled runs" }).click();
     await expect(quiet.getByText("Quiet run 1", { exact: true })).toBeVisible();
-    await quiet.getByRole("button", { name: "Activity", exact: true }).click();
-    await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("tabpanel", { name: /^Activity/ }).locator('[data-run-ref="R-1"]')).toBeVisible();
+    await quiet.getByRole("button", { name: "Tasks", exact: true }).click();
+    await expect(page.getByRole("tab", { name: /^Tasks/ })).toHaveAttribute("aria-selected", "true");
+    // Tasks lists tasks: the stalled runs are not rows of their own there.
+    await expect(page.getByRole("tabpanel", { name: /^Tasks/ }).getByTestId("task-list")).toBeVisible();
+    await expect(page.getByRole("tabpanel", { name: /^Tasks/ }).locator("[data-run-ref]")).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
   }
 });
