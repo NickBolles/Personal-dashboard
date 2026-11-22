@@ -154,6 +154,22 @@ export const MODULES: ModuleDef[] = [
     capabilities: [{ id: "daily_compass.use", label: "Daily Compass", description: "The admin's personal check-in.", roles: [] }],
   },
   {
+    id: "brief",
+    label: "Brief",
+    description: "One page that says what matters most today and what to start with. Written by AI when that is on; private to each person.",
+    sources: [],
+    viewCapability: "brief.use",
+    routes: [{ href: "/brief", label: "Brief" }],
+    capabilities: [
+      {
+        id: "brief.use",
+        label: "Daily brief",
+        description: "Their own brief, feedback and the notes that teach it. AI builds use the household AI budget.",
+        roles: [],
+      },
+    ],
+  },
+  {
     id: "home_assistant",
     label: "Home",
     description: "Doors, locks, lights, cameras and the household calendar from Home Assistant.",

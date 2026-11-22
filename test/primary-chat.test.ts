@@ -232,9 +232,9 @@ describe("every reader of the task's chat uses the stored primary", () => {
   });
 });
 
-describe("backfill (drizzle/0046_primary_chat.sql)", () => {
+describe("backfill (drizzle/0047_primary_chat.sql)", () => {
   const backfill = () => {
-    const file = fs.readFileSync(path.join(process.cwd(), "drizzle", "0046_primary_chat.sql"), "utf8");
+    const file = fs.readFileSync(path.join(process.cwd(), "drizzle", "0047_primary_chat.sql"), "utf8");
     const statement = file.split("--> statement-breakpoint").at(-1)!;
     expect(statement).toContain("UPDATE work_items");
     getSqlite().exec(statement);

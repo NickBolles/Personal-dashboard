@@ -330,6 +330,92 @@ export function createHermes({ apiKey }) {
         });
       case "schedule":
         return JSON.stringify({ durationMinutes: 90, splitOk: false, preferredWindows: ["morning"], reason: "Needs focus; best done in the morning." });
+      case "brief": {
+        // Daily brief: pick only from the refs Jarvis listed; cite the notes/check-ins/feedback it sent.
+        const refs = [...input.matchAll(/^(a[0-9a-f]{6}) \| /gm)].map((m) => m[1]);
+        const ids = (re) => [...input.matchAll(re)].map((m) => m[1]);
+        const notes = ids(/^(n:[0-9a-f]{6}) \| /gm);
+        const checkins = ids(/^(c:\d{4}-\d{2}-\d{2}) \| /gm);
+        const feedback = ids(/^(f:[0-9a-f]{6}) \| /gm);
+        const has = (label) => input.includes(`<data source="${label}`);
+        return JSON.stringify({
+          headline: refs.length ? "Protect the morning for the one thing that moves this week" : "A clear day: use it on purpose",
+          lead: refs.length
+            ? "Two things are due, but only one of them is important. Do that first while your head is clear; the rest fits after lunch."
+            : "Nothing is due and nothing is waiting on you. Pull one thing forward that you would be glad to have done.",
+          first: refs[0]
+            ? { ref: refs[0], why: "It has slipped twice and everything after it waits on it.", step: "Open it and write the first rough line." }
+            : null,
+          then: refs.slice(1, 3).map((ref, i) => ({ ref, why: i ? "Small, and it clears your head for the evening." : "Short once the first one is moving." })),
+          blocks: [
+            {
+              kind: "focus",
+              title: "One deep block before noon",
+              text: "You do your best thinking early. Keep the first two hours for the top item and leave messages for after.",
+              basis: [...notes.slice(0, 1), ...checkins.slice(0, 1)],
+            },
+            // About the person: grounded in what Jarvis sent (or in memory, when the request allows it).
+            ...(has("completed workouts")
+              ? [
+                  {
+                    kind: "insight",
+                    title: "You have been lifting more",
+                    text: "More sessions in the last two weeks than the two before. Whatever changed is working.",
+                    ask: "What changed?",
+                    basis: ["src:workouts"],
+                  },
+                  { kind: "training" },
+                ]
+              : []),
+            ...(notes.length
+              ? [
+                  {
+                    kind: "callout",
+                    title: "You said this matters. The week does not show it.",
+                    text: "One of the things you told me you care about has nothing protecting it in the next few days.",
+                    steps: ["Block one evening for it now", "Tell the person it involves", "ignored fourth step", "ignored fifth step"],
+                    ask: "What got in the way?",
+                    basis: notes.slice(0, 1),
+                  },
+                ]
+              : []),
+            {
+              kind: "idea",
+              title: "Ten minutes on the week ahead",
+              text: "Small, and it makes the rest of the week lighter.",
+              steps: ["Pick the one day that is overfull", "Move one thing off it"],
+            },
+            { kind: "insight", title: "An ungrounded guess", text: "no basis, dropped by Jarvis" },
+            ...(has("calendar today and tomorrow") ? [{ kind: "schedule", text: "The afternoon is where the meetings are. The morning is yours." }] : []),
+            ...(refs.length > 3
+              ? [{ kind: "defer", title: "These can wait", text: "None of them gets worse by tomorrow. Let them go for today.", refs: refs.slice(3, 6) }]
+              : []),
+            ...(feedback.length
+              ? [{ kind: "nudge", title: "You corrected me yesterday", text: "I moved that kind of item out of the top spot.", basis: feedback.slice(0, 1) }]
+              : []),
+            ...(has("finished in the last seven days")
+              ? [
+                  {
+                    kind: "insight",
+                    title: "You close things early in the week",
+                    text: "Most of what you finished lately was done by Tuesday.",
+                    basis: ["src:done"],
+                  },
+                ]
+              : []),
+            // Cited whether or not memory was allowed: Jarvis drops it when it was not.
+            { kind: "insight", title: "You sound lighter than last month", text: "Looks like the mornings are doing it.", basis: ["src:memory"] },
+            { kind: "momentum" },
+            { kind: "compass" },
+            { kind: "reflect", title: "For tonight", text: "Did the morning block hold? If not, what took it?" },
+            { kind: "bogus", text: "dropped by Jarvis" },
+          ],
+          learned:
+            /FORCE_LEARN/.test(input) || feedback.length >= 2
+              ? [{ kind: "driver", text: "Prefers one deep block before noon", evidence: "Marked morning picks right on two briefs." }]
+              : [],
+        });
+      }
       case "draft":
         return JSON.stringify({
           ...common,

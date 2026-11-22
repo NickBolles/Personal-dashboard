@@ -2526,7 +2526,9 @@ for (const scheme of ["light", "dark"] as const) {
         await stubPhase3Settings(page);
         await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(date) }));
       } else {
-        await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture(date) }));
+        // A fixed Saturday, not today: each run shows its weekday ("Sat 8:00 AM"), and on the 412px phone the
+        // first row is within a few pixels of wrapping, so the card's height changed with the day of the week.
+        await page.route("**/api/agents/away", (route) => route.fulfill({ json: awayFixture("2026-11-21") }));
         await page.route(/\/api\/home(?:\?.*)?$/, (route) => route.fulfill({ json: homeVisual }));
         await page.route("**/api/home/pulse", (route) => route.fulfill({ json: homePulseVisual }));
       }

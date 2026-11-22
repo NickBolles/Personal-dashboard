@@ -10,7 +10,7 @@
 1. **One primary per view.** Exactly one `Button variant="primary"` (solid `--acb`) visible per page/pane/dialog; everything else secondary/ghost.
 2. **Blue = you act. Teal = an agent did/proposes this.** `--ac/--acb` for actions, focus, selection, checks. `--ai` (Lagoon) only for agent text, agent pills, live dot, AI spend ring, "From agents" count, agent progress, staged/proposed surfaces.
 3. **Proposed = dashed teal.** Anything an agent proposes but hasn't been applied: 1px dashed `--aib` outline + `--ais` fill (`Pill tone="prop"`, `StatusCircle status="prop"`, `ProposedBox`, `AttentionRow proposed`). Applied = solid.
-4. **Orb gradient only on the orb** (plus the 20px agent glyph and agent progress fill). Never on buttons, text or cards. Greeting gradient text (`t1 → ac → ai`) is the one text exception, Today header only.
+4. **Orb gradient only on the orb** (plus the 20px agent glyph and agent progress fill). Never on buttons, text or cards. Greeting gradient text (`t1 → ac → ai`) is the one text exception, Today header only. The daily brief's sky (`/brief` hero and its door on Home) is the one surface exception (owner, 2026-11-21): a drifting wash mixed from tokens by time of day, behind the headline only.
 5. **One attention pattern everywhere** (`AttentionRow`: icon · title · why · actions). Don't invent cards for alerts/approvals/inbox items.
 6. **Finance is locked by default**: `LockBar` above any finance data (masked amounts until unlocked, "Locked · unlock with passcode").
 7. Agent identity = `AgentMark` with per-profile hue (`--ag-cos/mom/dev/lab/jar`); hue is a ring + initial, never a fill behind body text.
