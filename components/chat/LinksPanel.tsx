@@ -19,13 +19,15 @@ export function usePanelLinks(sessionId: string, timeline: TimelineItem[], readO
     queryKey: key,
     queryFn: () => api.get<{ links: PanelLink[] }>(`/api/hermes/sessions/${encodeURIComponent(sessionId)}/links-panel`),
     staleTime: 15_000,
+    // A thread that has not started yet (the Chief of staff panel before its first message) has nothing to read.
+    enabled: !!sessionId,
   });
   const seen = useMemo(() => extractLinks(timeline), [timeline]);
   const sent = useRef(new Set<string>());
   // #75: the server resolves 6 GitHub titles per call; keep syncing (bounded) while that makes progress.
   const resolveMore = useRef<{ last: number; tries: number }>({ last: Infinity, tries: 0 });
   useEffect(() => {
-    if (readOnly) return;
+    if (readOnly || !sessionId) return;
     // The route caps URLs at 2048 chars; one oversized URL would reject the whole batch.
     const fresh = seen.filter((l) => l.url.length <= 2048 && !sent.current.has(l.url));
     if (!fresh.length) return;

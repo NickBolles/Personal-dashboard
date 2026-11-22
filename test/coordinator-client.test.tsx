@@ -208,6 +208,57 @@ describe("shared coordinator thread", () => {
     expect(screen.getByText("Chief of staff")).toBeTruthy();
     expect(screen.queryByText("Coordinator")).toBeNull();
   });
+  it("has a regular chat's status bar and In this chat sheet, fed by the thread's own background-work read", async () => {
+    makeClient();
+    vi.mocked(api.get).mockImplementation(async (path) => {
+      if (path.endsWith("/execution"))
+        return {
+          sessionId: "s1",
+          parent: null,
+          fetchedAt: new Date().toISOString(),
+          sources: [{ source: "transcript", state: "ok" }],
+          records: [{ id: "sub", key: "sub", source: "subagent", title: "Check delivery times", state: "running" }],
+        };
+      if (path.endsWith("/links-panel"))
+        return {
+          links: [
+            {
+              url: "https://github.com/o/r/pull/7",
+              kind: "github",
+              domain: "github.com",
+              title: "Fix coupon test",
+              repo: "o/r",
+              number: 7,
+              ghType: "pull",
+              state: "open",
+              pinned: false,
+            },
+          ],
+        };
+      if (path.endsWith("/files")) return { files: [] };
+      if (path.startsWith("/api/hermes/sessions/")) return { session: { id: "s1", pinned: false, archived: false }, timeline: [] };
+      if (path === "/api/quick-actions") return { actions: [] };
+      throw new Error(`Unexpected API path: ${path}`);
+    });
+    render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
+    // One line for what is happening, as above any chat's composer.
+    const status = await screen.findByTestId("chat-tray-status");
+    expect(status.textContent).toContain("Running");
+    expect(status.textContent).toContain("Check delivery times");
+    // The thread already keeps background work current: the status bar does not ask for it a second time.
+    expect(vi.mocked(api.get).mock.calls.filter(([path]) => String(path).endsWith("/execution"))).toHaveLength(1);
+    fireEvent.click(status);
+    const sheet = screen.getByRole("dialog", { name: "In this chat" });
+    expect(within(sheet).getByRole("heading", { name: "Pull requests · 1" })).toBeTruthy();
+    expect(within(sheet).getByText("Fix coupon test")).toBeTruthy();
+    expect(within(sheet).getByRole("heading", { name: "Waiting on you · 0" })).toBeTruthy();
+    // The header button opens the same sheet when nothing is happening.
+    fireEvent.click(within(sheet).getByRole("button", { name: "Collapse" }));
+    expect(screen.queryByRole("dialog", { name: "In this chat" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "In this chat" }));
+    expect(screen.getByRole("dialog", { name: "In this chat" })).toBeTruthy();
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/runs"), expect.anything());
+  });
   it("has the chat page's add menu (it is the same composer) and never uploads or sends by opening it", () => {
     makeClient();
     render(<CoordinatorThread info={{ ...base, sessionId: "s1" }} compact name="Chief of staff" />, { wrapper });
@@ -217,7 +268,7 @@ describe("shared coordinator thread", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((i) => i.querySelector("span")?.textContent),
-    ).toEqual(["Context", "Attach file", "Camera", "Photo library"]);
+    ).toEqual(["Context", "Attach file", "Camera", "Photo library", "Model"]);
     expect(document.querySelector('[data-testid="gc-file-input"]')).toBeTruthy();
     expect(api.post).not.toHaveBeenCalled();
   });

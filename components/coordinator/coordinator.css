@@ -1547,3 +1547,15 @@ html[data-kb="open"] .gc-tray-qa {
     margin-inline: auto;
   }
 }
+
+/* The thread switcher and the "In this chat" button share one row at the top of the thread. */
+.gc-threadrow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.gc-threadrow > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
