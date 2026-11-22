@@ -20,6 +20,7 @@ import type { IntegrationKind } from "@/integrations/registry";
 import { updatePreferences } from "@/server/settings";
 import { refreshSource } from "@/server/sources";
 import { saveAiSettings } from "@/server/ai/settings";
+import { addMilestone, deleteMilestone } from "@/server/home-tuning";
 import { drainRunner, runnerTick } from "@/server/ai/runner";
 import * as work from "@/server/work/store";
 import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, type BriefNoteView, type BriefView } from "@/lib/brief";
@@ -762,6 +763,17 @@ describe("the rows under the picks", () => {
     expect(card.more).toBe("/areas");
     getDb().update(schema.workItems).set({ completedAt: new Date().toISOString() }).where(eq(schema.workItems.id, p.id)).run();
     expect((await view()).deck.find((d) => d.kind === "initiatives")?.rows.map((r) => r.title) ?? []).not.toContain("DECK_INITIATIVE");
+  });
+
+  it("a saved date that falls today leads Coming up, where the dates card used to say it", async () => {
+    const today = (await view()).date;
+    const id = addMilestone(owner, { title: "DECK_DATE_TODAY", date: today, yearly: false, leadDays: 0 });
+    const v = await view();
+    const ahead = v.deck.find((d) => d.kind === "ahead")!;
+    expect(ahead.rows[0]).toMatchObject({ id: `date-${id}`, title: "DECK_DATE_TODAY", meta: "Today" });
+    // The card replaces the dates widget, so the date must be on it.
+    expect(v.brief.blocks.some((b) => b.kind === "dates")).toBe(false);
+    deleteMilestone(owner, id);
   });
 
   it("cycling is off until the person turns it on", async () => {

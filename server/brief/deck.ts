@@ -133,7 +133,8 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
     );
   }
 
-  // Coming up: tomorrow and the rest of the week on the calendar, and saved dates within 30 days.
+  // Coming up: tomorrow and the rest of the week on the calendar, and saved dates within 30 days. A saved date that
+  // falls today leads the card: it is not a calendar event, so nothing else on the page would say it.
   const ahead: (BriefDeckRow & { sort: string })[] = [];
   for (const e of [...c.events, ...c.weekAhead]) {
     const day = localDate(new Date(e.startsAt), c.timezone);
@@ -141,8 +142,9 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
     ahead.push({ id: `ev-${e.id}`, title: e.title, at: e.startsAt, ...(e.allDay ? { allDay: true } : {}), sort: e.startsAt });
   }
   for (const d of c.dates) {
-    if (d.inDays <= 0) continue;
-    ahead.push({ id: `date-${d.id}`, title: d.title, meta: d.inDays === 1 ? "Tomorrow" : `In ${d.inDays} days`, sort: `${addDays(c.today, d.inDays)}T00:00` });
+    if (d.inDays < 0) continue;
+    const meta = d.inDays === 0 ? "Today" : d.inDays === 1 ? "Tomorrow" : `In ${d.inDays} days`;
+    ahead.push({ id: `date-${d.id}`, title: d.title, meta, sort: `${addDays(c.today, d.inDays)}T00:00` });
   }
   ahead.sort((a, b) => a.sort.localeCompare(b.sort));
   out.push(
