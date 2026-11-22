@@ -91,7 +91,7 @@ test("MCP-raised decisions: tray → answer in 2 taps with Undo; risk-flagged ne
   const scope = await openTasks(page, desktop);
   const row = scope.getByTestId("task-row").filter({ hasText: `Sedge ledger ${nonce}` });
   await expect(row).toHaveAttribute("data-task-state", "needs");
-  await expect(row.getByRole("img", { name: `Decision ${low.ref.replace("-", " ")}` })).toBeVisible();
+  await expect(row.getByRole("button", { name: `Decision ${low.ref.replace("-", " ")}` })).toBeVisible();
   await row.getByRole("button", { name: "Ship it", exact: true }).click();
   // The answer leaves its receipt: what was asked, what was answered, and Undo.
   await expect(scope.getByTestId("decision-receipt").filter({ hasText: "Ship it" }).first()).toBeVisible();

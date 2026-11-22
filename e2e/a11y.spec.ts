@@ -1051,7 +1051,7 @@ test("a11y + 200% text: the bot panel's Tasks tab, a question answered from its 
   await expect(safe.getByRole("button", { name: "Ship it now", exact: true })).toBeVisible();
   const risky = list.getByTestId("task-row").filter({ hasText: "Rotate the tunnel key" });
   await expect(risky.getByRole("button", { name: /^Rotate/ })).toHaveCount(0);
-  await expect(list.getByText(/Lane 65/)).toBeVisible();
+  await expect(list.getByRole("link", { name: /^Lane 65/ })).toBeVisible();
   // A tray tap can open the top decision's card above the list: close it so the list is checked alone.
   const back = scope.getByRole("button", { name: /^Back/ });
   if (await back.count()) await back.first().click();

@@ -89,6 +89,13 @@ test.beforeEach(async ({ request, page }) => {
       },
     }),
   );
+  // The task list (In flight, the sidebar badge, a bot's Tasks tab) would show other specs' tasks: empty unless a
+  // test stubs it (a route added later in a test wins).
+  await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      json: { view: "flight", scope: "all", groups: [], needs: 0, review: null, done: null, open: 0, fetchedAt: "2026-11-07T14:05:00Z" },
+    }),
+  );
   await page.route("**/api/agents/away", (route) => route.fulfill({ json: EMPTY_AWAY }));
   await page.route("**/api/agents/schedules", (route) => route.fulfill({ json: schedulesFixture(localDate(new Date(), "America/Chicago")) }));
   await page.route(/\/api\/settings\/agents\/coordinators$/, (route) => route.fulfill({ json: phase3Coordinators }));
@@ -2141,6 +2148,8 @@ for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     const now = await freezeSkylightClock(page);
     await page.route(/\/api\/sources\/skylight(?:\?.*)?$/, (route) => route.fulfill({ json: skylightVisual(now) }));
+    // The sidebar's area tree would list other specs' areas: a fixed tree.
+    await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
     await page.goto("/skylight");
     await page.locator("h1").first().waitFor();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
