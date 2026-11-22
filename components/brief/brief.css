@@ -13,6 +13,8 @@
   .brief {
     --brief-gap: 14px;
     --brief-r: calc(var(--r4) + 4px);
+    /* The page gutter on a phone (Page: px-3 pt-3). The sky and the carousels run out to the screen edge by exactly this much. */
+    --brief-bleed: 12px;
     display: flex;
     flex-direction: column;
     gap: calc(var(--brief-gap) + 4px);
@@ -95,7 +97,7 @@
   .brief-sky-bg {
     position: absolute;
     z-index: -1;
-    inset: -16px -16px -36px;
+    inset: calc(-1 * var(--brief-bleed, 12px)) calc(-1 * var(--brief-bleed, 12px)) -36px;
     overflow: hidden;
     pointer-events: none;
     mask-image: linear-gradient(to bottom, black 58%, transparent);
@@ -972,12 +974,12 @@
     position: relative;
     display: flex;
     gap: 10px;
-    margin-inline: -16px;
-    padding: 2px 16px 4px;
+    margin-inline: calc(-1 * var(--brief-bleed, 12px));
+    padding: 2px var(--brief-bleed, 12px) 4px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-snap-type: x mandatory;
-    scroll-padding-inline: 16px;
+    scroll-padding-inline: var(--brief-bleed, 12px);
     scrollbar-width: none;
   }
   .brief-deck::-webkit-scrollbar {
