@@ -103,6 +103,13 @@ describe("readSubagentLog", () => {
     expect(tail.text).toBe("last line\n");
     expect(tail.size).toBe(full.size);
   });
+  it("never returns a context-free fragment of an unterminated line", () => {
+    writeLog("devchief", "deleg_0a1b2c3e", 0, "start\npassword=synthetic123456");
+    const cut = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c3e", task: 0 }, 15);
+    expect(cut).toMatchObject({ truncated: true, text: "" });
+    const whole = readSubagentLog({ profile: "devchief", delegationId: "deleg_0a1b2c3e", task: 0 });
+    expect(whole.text).not.toContain("synthetic123456");
+  });
   it("answers not_found for a missing log and a symlink out of the profile folder", () => {
     expect(() => readSubagentLog({ profile: "devchief", delegationId: "deleg_ffffffff", task: 0 })).toThrow(/No log/);
     fs.writeFileSync(path.join(outside, "secret.log"), "outside");

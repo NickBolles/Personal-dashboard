@@ -122,9 +122,10 @@ export function readSubagentLog(input: { profile: unknown; delegationId: unknown
     }
     let text = buf.subarray(0, read).toString("utf8");
     if (start > 0) {
-      // Drop the partial first line (and any split UTF-8 sequence with it).
+      // Drop the partial first line (and any split UTF-8 sequence with it). With no newline at all the whole tail is a
+      // fragment without its context (e.g. the end of `password=…`), so the masking can't be trusted: return nothing.
       const nl = text.indexOf("\n");
-      text = nl >= 0 ? text.slice(nl + 1) : text.replace(/^\uFFFD+/, "");
+      text = nl >= 0 ? text.slice(nl + 1) : "";
     }
     const red = redactLog(text);
     return {
