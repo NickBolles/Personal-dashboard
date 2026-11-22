@@ -4,34 +4,60 @@
 manual dispatch. Branch pushes without a PR don't run CI; a newer push to the same PR cancels the older run.
 
 ```
-verify ─────────────── typecheck · lint · prettier · unit (coverage) · audit · compose config ──► docker (image + smoke)
-build ──┐              next build once · bundle secret scan · standalone server packed as an artifact
+verify ─────────────── typecheck · lint · prettier · audit · compose config
+unit ───────────────── vitest with coverage
+docker ─────────────── demo image build · health/readiness · persistence + backup drill
+build ──┐              next build once (warm from main's cache) · bundle secret scan · standalone server packed as an artifact
 select ─┴─► e2e shard 1..N (Playwright container, E2E_WORKERS isolated stacks each) ──► Playwright report
 ```
 
+Nothing waits on anything except the e2e shards (on `build` and `select`) and the report (on the shards), so the run is as
+long as its longest path: build, then the slowest shard, then the report.
+
 | Job               | What it does                                                                                                                  |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| verify            | `npm ci`, audit, typecheck, lint, format check, vitest with coverage, docker compose config                                   |
+| verify            | `npm ci`, audit, typecheck, lint, format check, docker compose config                                                         |
+| unit              | `npm ci`, vitest with coverage                                                                                                |
 | build             | the only `next build`; runs `secrets:scan` on the bundles, packs `.next/standalone` (assets copied in) as `next-build`        |
 | select            | decides what the e2e shards run (see _Smart selection_)                                                                       |
 | e2e (matrix)      | `npx playwright test --shard i/N --workers $E2E_WORKERS [--grep <selection>]` in `mcr.microsoft.com/playwright:v1.56.1-noble` |
 | Playwright report | merges the shards' blob reports into one HTML report + JSON, writes the job summary and a sticky PR comment, gates the run    |
-| docker            | demo image build, health/readiness, persistence + backup drill                                                                |
+| docker            | demo image build, health/readiness, persistence + backup drill (alongside the checks, not after them)                         |
 
-The shard count (`E2E_SHARDS`, 5) and workers per runner (`E2E_WORKERS`, 3) are the `env` at the top of `ci.yml`; a manual
+The shard count (`E2E_SHARDS`, 7) and workers per runner (`E2E_WORKERS`, 3) are the `env` at the top of `ci.yml`; a manual
 dispatch can override both (`gh workflow run ci.yml --ref <branch> -f e2e_shards=4 -f e2e_workers=3`).
+
+**Build cache.** Turbopack keeps its build cache in `.next/cache` (on by default since Next 16.3). The build job restores
+the newest cache main saved this week for the current lockfile, so a pull request builds warm (30 s against 94 s cold on a
+laptop). Only runs on main save one (keyed by commit, at the end of the job): the shards wait for the build job, so a pull
+request never spends time saving. The cache grows with every build it is carried through, so the ISO week is part of the
+key: the first main build of a week, and the first after a lockfile change, starts cold. The cache is not part of the
+packed artifact.
 
 ### Timings (full suite, PR #279, Nov 2026)
 
-| Layout                   | Workflow wall | Slowest shard (job / tests) | Billable min                              | Notes                                                          |
-| ------------------------ | ------------- | --------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| before: 1 job, 1 worker  | 47m09s        | 46m50s / 44m15s             | ~57 (×2 per PR push: push + pull_request) | main run 43260901319                                           |
-| 4 shards × 3 workers     | 10m07–10m36s  | 7m46–8m02s / 6m19–6m34s     | 36–42                                     | 3 runs green                                                   |
-| 3 shards × 4 workers     | 12m09s        | 9m12s / 7m48s               | ~40                                       | slower per test (CPU bound), 1 order-dependent failure (fixed) |
-| **5 shards × 3 workers** | 8m47s         | 6m44s / 5m16s               | ~41                                       | default                                                        |
+| Layout                  | Workflow wall | Slowest shard (job / tests) | Billable min                              | Notes                                                          |
+| ----------------------- | ------------- | --------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| before: 1 job, 1 worker | 47m09s        | 46m50s / 44m15s             | ~57 (×2 per PR push: push + pull_request) | main run 43260901319                                           |
+| 4 shards × 3 workers    | 10m07–10m36s  | 7m46–8m02s / 6m19–6m34s     | 36–42                                     | 3 runs green                                                   |
+| 3 shards × 4 workers    | 12m09s        | 9m12s / 7m48s               | ~40                                       | slower per test (CPU bound), 1 order-dependent failure (fixed) |
+| 5 shards × 3 workers    | 8m47s         | 6m44s / 5m16s               | ~41                                       | default until Nov 2026                                         |
 
-Per shard ~1.5 min is fixed cost (container 25 s, `npm ci` 48 s, artifact, 3 servers + onboarding ~10 s). Shards are split by
+Per shard ~1 min is fixed cost (container 27 s, `npm ci` 9–18 s, artifact, 3 servers + onboarding ~10 s). Shards are split by
 test count (Playwright `--shard`), so the desktop-heavy shard runs longest.
+
+### Where the time went (5 shards, run 45035831824, Nov 2026)
+
+| Path                           | Time                                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| build → slowest shard → report | 1m36s + (57 s setup + 3m12s–4m42s tests, green) + 20 s     |
+| verify (all checks in one job) | 4m55s (typecheck 34 s, lint 52 s, format 22 s, unit 158 s) |
+| verify → docker                | 4m55s + 2m12s = 7m07s                                      |
+
+The e2e path and the docker path were about as long as each other, so shortening one alone would not have shortened the
+run. Since then: the unit tests are their own job, docker no longer waits for the checks, the build starts warm, and the
+default is **7 shards × 3 workers** (the same tests on two more runners: about two more billable minutes per full run for
+about a quarter less test time on the slowest shard). Measure a full run after a change here and add it to the table.
 
 ## Isolated workers (one app + mock per Playwright worker)
 
