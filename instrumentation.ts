@@ -73,6 +73,16 @@ export async function register() {
   } catch (err) {
     console.error("[jarvis] capture triage didn't start", (err as Error).message);
   }
+  // Daily brief: one background build per person who asked for it, once their build time has passed (docs/brief.md).
+  try {
+    const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
+    const { briefAutoTick } = await import("./server/brief");
+    registerDispatcherTask("brief_auto", 5 * 60_000, (now) =>
+      briefAutoTick(now).catch((e) => console.error("[jarvis] brief auto-build failed", (e as Error).message.slice(0, 200))),
+    );
+  } catch (err) {
+    console.error("[jarvis] brief auto-build didn't start", (err as Error).message);
+  }
   // Workflow reminders (W4, D6): opt-in, remind-only notifications; never start a model run.
   try {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");

@@ -49,8 +49,12 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
  * "no scoped area reference or item-access tools". Never for AI-excluded areas (Exclude from AI);
  * Finance areas get it like any other area (owner decision 2026-11-07, #243), with account numbers
  * masked and anything credential-like left out.
+ *
+ * `snapshot: false` leaves the open items out and says only where the conversation is filed: for a
+ * first message that must carry nothing but itself (the brief's sparkle and Improve, server/brief).
  */
-export function filedChatContext(user: CurrentUser, sessionId: string, profile: string | null): string | null {
+export function filedChatContext(user: CurrentUser, sessionId: string, profile: string | null, opts: { snapshot?: boolean } = {}): string | null {
+  const snapshot = opts.snapshot !== false;
   const where = areaDefaultsFor(user, sessionId);
   if (!where) return null;
   const items = listItems(user.id);
@@ -72,7 +76,7 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
   const queue = [scope.id];
   const kids = new Map<string, WorkItem[]>();
   for (const i of items) if (i.parentId && !i.archived) kids.set(i.parentId, [...(kids.get(i.parentId) ?? []), i]);
-  while (queue.length && open.length < FILED_CONTEXT_LIMITS.items * 4) {
+  while (snapshot && queue.length && open.length < FILED_CONTEXT_LIMITS.items * 4) {
     for (const c of (kids.get(queue.shift()!) ?? []).sort((a, b) => a.sortOrder - b.sortOrder)) {
       if (c.kind === "conversation") continue;
       queue.push(c.id);
@@ -87,16 +91,20 @@ export function filedChatContext(user: CurrentUser, sessionId: string, profile: 
     `This conversation is filed in Jarvis under: ${path.join(" › ")} (${scope.kind} id ${scope.id}). Jarvis conversation id: ${sessionId}.`,
     tools
       ? "You can read more and act with the Jarvis tools (jarvis_get_item, jarvis_tree, jarvis_update_item …). Settling, archiving and moving are owner-only: use jarvis_request_change."
-      : "You have no Jarvis item tools in this conversation: use the snapshot below to answer. To change items, list the exact changes (item id + change) for the owner to apply; never claim you changed anything. Settling is always the owner's call.",
+      : `You have no Jarvis item tools in this conversation${snapshot ? ": use the snapshot below to answer" : ""}. To change items, list the exact changes (item id + change) for the owner to apply; never claim you changed anything. Settling is always the owner's call.`,
     ...(coordinator ? coordinatorBrief(area.title, scope.id, sessionId, tools) : tools ? [delegationRule(scope.id, sessionId)] : []),
-    `Open items there (${open.length}${open.length > FILED_CONTEXT_LIMITS.items ? `, first ${FILED_CONTEXT_LIMITS.items}` : ""}):`,
-    ...(open.length ? [] : ["- none"]),
-    ...open
-      .slice(0, FILED_CONTEXT_LIMITS.items)
-      .map(
-        (i) =>
-          `- [${STATUS_LABELS[i.status]}] ${clip(maskAccountNumbers(i.title), 100)} (${i.kind}, id ${i.id})${i.nextAction ? ` — next: ${clip(maskAccountNumbers(i.nextAction), 100)}` : ""}`,
-      ),
+    ...(snapshot
+      ? [
+          `Open items there (${open.length}${open.length > FILED_CONTEXT_LIMITS.items ? `, first ${FILED_CONTEXT_LIMITS.items}` : ""}):`,
+          ...(open.length ? [] : ["- none"]),
+          ...open
+            .slice(0, FILED_CONTEXT_LIMITS.items)
+            .map(
+              (i) =>
+                `- [${STATUS_LABELS[i.status]}] ${clip(maskAccountNumbers(i.title), 100)} (${i.kind}, id ${i.id})${i.nextAction ? ` — next: ${clip(maskAccountNumbers(i.nextAction), 100)}` : ""}`,
+            ),
+        ]
+      : []),
   ];
   let text = lines.join("\n");
   if (text.length > FILED_CONTEXT_LIMITS.chars) text = `${text.slice(0, FILED_CONTEXT_LIMITS.chars - 1)}…`;

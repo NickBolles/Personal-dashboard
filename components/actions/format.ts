@@ -24,6 +24,19 @@ export function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+/**
+ * When a task is due, as a compact "Today · all day" / "Tomorrow · 6:00 PM". A date-only deadline is stored as the
+ * END of its local day, which west of Greenwich is already the next day in UTC: it is read as its calendar day in
+ * the task's timezone, never by the instant's first ten characters.
+ */
+export function formatDueWhen(
+  a: Pick<NextAction, "dueAt" | "dueIsDate" | "dueTimezone">,
+  timezone = a.dueTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+) {
+  if (!a.dueAt) return undefined;
+  return a.dueIsDate ? formatWhen(calendarDay(a.dueAt, timezone), true) : formatWhen(a.dueAt);
+}
+
 export function formatWhen(iso: string, allDay?: boolean) {
   const d = allDay ? new Date(`${iso.slice(0, 10)}T12:00:00`) : new Date(iso);
   const today = new Date();

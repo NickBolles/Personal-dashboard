@@ -1,5 +1,6 @@
 import "server-only";
 import type { AiJobKind } from "@/lib/ai";
+import { BRIEF_PROMPT_VERSION, briefInstructions } from "@/server/brief/prompt";
 
 /**
  * Versioned instructions per AI job kind (`kind@N`). The instructions carry
@@ -17,6 +18,7 @@ export const PROMPT_VERSIONS: Record<AiJobKind, string> = {
   triage: "triage@2",
   investigate: "investigate@1",
   file: "file@1",
+  brief: BRIEF_PROMPT_VERSION,
 };
 
 const COMMON_EXAMPLE = {
@@ -69,10 +71,13 @@ const EXAMPLES: Record<AiJobKind, unknown> = {
       { sessionId: "an id from the conversations list", destinationKey: "an id from the destinations list, or null", confidence: 0.8, reason: "≤200" },
     ],
   },
+  // The brief carries its own rules and shape (server/brief/prompt.ts): no tools, no web.
+  brief: null,
 };
 
 export function instructionsFor(kind: AiJobKind) {
   const v = PROMPT_VERSIONS[kind].split("@")[1];
+  if (kind === "brief") return `${AI_JOB_MARKER} kind=${kind} v=${v}\n${briefInstructions()}`;
   return [
     `${AI_JOB_MARKER} kind=${kind} v=${v}`,
     "You are working for Nick inside Jarvis, in the background. Nobody is watching live.",
@@ -129,6 +134,8 @@ export function taskFor(kind: AiJobKind, v: TaskVars) {
       return `Summarize "${t}" using only the supplied item context: description, notes, recent activity, child items and linked conversation titles (not transcripts). Cover the objective, current state, key decisions, blockers and next actions; distinguish facts from unknowns. Return a concise DRAFT for review only. Do not use tools, change the item, create notes, or send anything. Nick must explicitly choose Save as note.`;
     case "file":
       return `Suggest where each of Nick's conversations belongs in his Areas tree, judging from the title. Destinations (key — path):\n${v.destinations || "(none)"}\nFor every conversation return its sessionId, the best destination key (or null when nothing fits; Miscellaneous is fine for one-off questions) and a short reason. Don't invent keys.`;
+    case "brief":
+      return "Write today's brief from the data below.";
     case "investigate":
       return `Prepare what Nick needs when he opens this capture: what it is, why it matters${v.areaTitle ? ` for ${v.areaTitle}` : ""}, key facts with sources, and the obvious next action.${v.brief ? ` Brief from triage: ${v.brief}` : ""}`;
   }

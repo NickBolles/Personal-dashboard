@@ -95,6 +95,12 @@ source you can see.
 Jarvis doesn't claim it has "learned" anything. The only effects are the ones in
 this table, and every one shows up in `why`.
 
+The daily brief (`/brief`, docs/brief.md) is separate: an AI-written read on top
+of this ranking, with its own feedback and visible notes. It never changes
+Home's order, and Home feedback never goes to it. Home shows one line linking
+to the brief once a person turns the AI brief on; that read is local, so "Home
+never waits on a model" still holds.
+
 ## Suggestions
 
 At most two, after Now. They're built only from:

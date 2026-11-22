@@ -84,6 +84,8 @@ export function ButtonLink({
   variant,
   size,
   icon,
+  iconOnly,
+  loading: _loading,
   className,
   children,
   external,
@@ -94,25 +96,25 @@ export function ButtonLink({
   >) {
   if (external) {
     return (
-      <a {...rest} href={href} target="_blank" rel="noreferrer noopener" className={buttonClass({ variant, size }, className)}>
+      <a {...rest} href={href} target="_blank" rel="noreferrer noopener" className={buttonClass({ variant, size, iconOnly }, className)}>
         {icon ? (
           <span className="k-btn-glyph" aria-hidden>
             {icon}
           </span>
         ) : null}
-        {children}
+        {iconOnly ? <span className="sr-only">{children}</span> : children}
         <span className="sr-only"> (opens in a new tab)</span>
       </a>
     );
   }
   return (
-    <Link {...rest} href={href} className={buttonClass({ variant, size }, className)}>
+    <Link {...rest} href={href} className={buttonClass({ variant, size, iconOnly }, className)}>
       {icon ? (
         <span className="k-btn-glyph" aria-hidden>
           {icon}
         </span>
       ) : null}
-      {children}
+      {iconOnly ? <span className="sr-only">{children}</span> : children}
     </Link>
   );
 }
