@@ -8,6 +8,7 @@ import type { CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
 import { processSingleton } from "@/server/singleton";
 import { startConversation } from "@/server/areas";
+import { createSession } from "@/server/assistant";
 import type { AssistantBackend } from "@/lib/assistant";
 import { canHaveChat } from "@/lib/task-chat";
 import type { WorkItem, WorkKind, WorkLink } from "@/lib/work";
@@ -94,7 +95,14 @@ const creating = () => processSingleton<Map<string, Promise<Ensured>>>("task_cha
  * The task's primary chat, created now if it has none: a conversation filed under the task, on the profile that
  * answers for its area, recorded as primary. Called when there is a first message to send (never on page load).
  */
-export async function ensureTaskChat(user: Viewer, itemId: string, backend: AssistantBackend | undefined, correlationId: string): Promise<Ensured> {
+export async function ensureTaskChat(
+  user: Viewer,
+  itemId: string,
+  backend: AssistantBackend | undefined,
+  correlationId: string,
+  /** `profile`: the agent that works on the task (a bot started it); left out, the one that answers for its area. */
+  opts: { profile?: string | null } = {},
+): Promise<Ensured> {
   requireCap(user, "hermes.chat");
   const row = ownedItem(user.id, itemId);
   if (!asTask(row)) throw new HttpError(409, "no_chat", "Only a task has a chat of its own");
@@ -104,7 +112,10 @@ export async function ensureTaskChat(user: Viewer, itemId: string, backend: Assi
   const inFlight = creating().get(key);
   if (inFlight) return inFlight;
   const made = (async (): Promise<Ensured> => {
-    const session = await startConversation(user, { title: row.title.slice(0, 200), backend, areaId: itemId }, correlationId);
+    const session =
+      opts.profile === undefined
+        ? await startConversation(user, { title: row.title.slice(0, 200), backend, areaId: itemId }, correlationId)
+        : { ...(await createSession(user, row.title.slice(0, 200), "hermes", opts.profile)), placedIn: null };
     // startConversation files best-effort; the primary chat must be filed under its task.
     if (session.placedIn !== itemId) placeConversation(user, { sessionId: session.id, parentId: itemId, title: session.title || row.title }, correlationId);
     const sessionId = getDb().transaction((tx) => {
@@ -119,6 +130,39 @@ export async function ensureTaskChat(user: Viewer, itemId: string, backend: Assi
   })().finally(() => creating().delete(key));
   creating().set(key, made);
   return made;
+}
+
+/**
+ * A hand-off to another agent: a new conversation on that agent's profile, filed under the task, becomes its
+ * primary chat. The one it had stays under Other chats (a conversation stays on the profile it was created on).
+ */
+export async function replaceTaskChat(
+  user: Viewer,
+  itemId: string,
+  profile: string | null,
+  correlationId: string,
+): Promise<{ sessionId: string; prev: string | null }> {
+  requireCap(user, "hermes.chat");
+  const row = ownedItem(user.id, itemId);
+  if (!asTask(row)) throw new HttpError(409, "no_chat", "Only a task has a chat of its own");
+  const session = await createSession(user, row.title.slice(0, 200), "hermes", profile);
+  placeConversation(user, { sessionId: session.id, parentId: itemId, title: session.title || row.title }, correlationId);
+  const prev = getDb().transaction((tx) => {
+    const now = ownedItem(user.id, itemId, tx);
+    tx.update(T).set({ primarySessionId: session.id, updatedAt: nowIso() }).where(eq(T.id, itemId)).run();
+    event(tx, itemId, user.id, { kind: "chat", reason: profile ? `Chat with @${profile} started` : "Chat started" });
+    return now.primarySessionId ?? null;
+  });
+  audit({
+    actor: user.id,
+    action: "work.chat_start",
+    source: "work",
+    sourceRecord: itemId,
+    result: "ok",
+    correlationId,
+    detail: { session: session.id, replaced: prev },
+  });
+  return { sessionId: session.id, prev };
 }
 
 /**

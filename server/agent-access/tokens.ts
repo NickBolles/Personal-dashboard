@@ -77,7 +77,8 @@ export function revokeAgentToken(user: CurrentUser, id: string, correlationId: s
 export function capabilitiesForScopes(scopes: AgentScope[], ownerCaps: Set<string>): Set<string> {
   const want = new Set<string>();
   if (scopes.length) want.add("work.use");
-  if (scopes.includes("conversations.file")) want.add("hermes.chat");
+  // Filing a conversation and starting or steering a task both open or write to a chat.
+  if (scopes.includes("conversations.file") || scopes.includes("tasks.run")) want.add("hermes.chat");
   return new Set([...want].filter((c) => ownerCaps.has(c) && !c.startsWith("finance") && c !== "admin"));
 }
 

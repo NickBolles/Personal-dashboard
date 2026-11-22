@@ -21,6 +21,8 @@ export const UNDO_KINDS = [
   "quick_action",
   "import",
   "primary_chat",
+  "task_start",
+  "task_handoff",
 ] as const;
 export type UndoKind = (typeof UNDO_KINDS)[number];
 
@@ -46,6 +48,10 @@ export const UNDO_LABELS: Record<UndoKind, string> = {
   import: "Imported portfolio map",
   /** a task's primary chat was swapped ("Make primary"); undo puts the previous one back */
   primary_chat: "Primary chat changed",
+  /** a bot started a task in its chat (server/work/task-runs.ts): undo stops the run */
+  task_start: "Task started",
+  /** a bot handed a task to another agent: undo stops the run and puts the assignee and the chat back */
+  task_handoff: "Handed off",
 };
 
 /**
