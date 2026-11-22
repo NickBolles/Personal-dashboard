@@ -30,7 +30,7 @@ import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
 import { ItemTimeline, ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
-import { TaskChat } from "@/components/work/TaskChat";
+import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
 import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
 import { canHaveChat, taskChats } from "@/lib/task-chat";
 import { ItemRows, RollupGroups } from "@/components/work/Rollup";
@@ -828,8 +828,11 @@ function ItemDetail({
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
   const tab: ItemSection = section ?? "overview";
   const setTab = useCallback((next: AreaTab) => onSection?.(next), [onSection]);
-  /** A draft handed to the task's chat (a work packet's handoff): the Chat pane puts it in its composer. */
-  const [prefill, setPrefill] = useState<{ text: string; at: number }>();
+  /**
+   * A draft handed to the task's chat: a work packet's handoff, or what a list row's Steer / Retry / Resume opened
+   * the task with (`?compose=1`, `?draft=retry|resume`). The Chat pane puts it in its composer; nothing is sent.
+   */
+  const [prefill, setPrefill] = useState<TaskDraft | undefined>(draftFromUrl);
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -873,7 +876,7 @@ function ItemDetail({
   // "Continue" on a task hands the packet to the task's own chat: the handoff becomes a draft there (never sent here).
   const handoffToChat = useEffectEvent(() => {
     if (!q.data) return;
-    setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now() });
+    setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now(), handoff: true });
     setDialog(null);
     setTab("chat");
     // A task that has its chat already: the handoff is recorded on the task now (nothing is created or sent).

@@ -78,6 +78,14 @@ export type TaskListResponse = {
   done: { count: number; titles: string[] } | null;
   /** Open tasks in scope (the All view's size). */
   open: number;
+  /** One project's page (`scope` is a project): what is inside it by state, who is working in it, what happened last. */
+  project?: {
+    rollup: TaskRollup;
+    /** Every task being worked on anywhere inside the project. */
+    atWork: { id: string; title: string; who: string | null; since: string | null }[];
+    /** The newest things that happened on any task inside it. */
+    timeline: (TaskMoment & { taskId: string; task: string })[];
+  };
   fetchedAt: string;
 };
 
@@ -100,6 +108,8 @@ export const isTask = (i: Pick<WorkItem, "kind" | "parentId">) => i.parentId !==
 
 /** How many activity lines a row carries. */
 export const ROW_MOMENTS = 3;
+/** Lines of a project's own timeline (across its tasks). */
+export const PROJECT_MOMENTS = 6;
 /** Levels a project opens in place. */
 export const PROJECT_LEVELS = 2;
 
@@ -356,9 +366,24 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
   const since = src.lastLooked ? Date.parse(src.lastLooked) : now - 86_400_000;
   const closed = rows.filter((r) => r.state === "done" && !r.project && r.since && Date.parse(r.since) > since).sort(recent);
   const projects = new Set(reviewRows.map((r) => projectOf(r)?.id ?? ""));
+  const inProject = scopeItem && scopeItem.parentId !== null;
+  const project: TaskListResponse["project"] = inProject
+    ? {
+        rollup: rollupOf(scopeItem.id),
+        atWork: open
+          .filter((r) => r.state === "working" && !r.project)
+          .sort(recent)
+          .map((r) => ({ id: r.id, title: r.title, who: r.who, since: r.since })),
+        timeline: rows
+          .flatMap((r) => r.activity.map((m) => ({ ...m, taskId: r.id, task: r.title })))
+          .sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+          .slice(0, PROJECT_MOMENTS),
+      }
+    : undefined;
   return {
     view: opts.view,
     scope: opts.scope,
+    ...(project ? { project } : {}),
     groups,
     needs: open.filter((r) => r.state === "needs").length,
     review: reviewRows.length

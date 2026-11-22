@@ -473,6 +473,11 @@ export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "
   const threadRef = useRef<HTMLDivElement>(null);
   // A question about one delegated step: quoted into the composer for the owner to finish and send.
   const composerRef = useRef<ComposerHandle>(null);
+  // A draft handed in (a handoff, or Steer / Retry / Resume from a list) takes the cursor: the next thing is to send it.
+  const draftAt = prefill?.at;
+  useEffect(() => {
+    if (draftAt) requestAnimationFrame(() => composerRef.current?.focus(true));
+  }, [draftAt]);
   const askAbout = useCallback((text: string) => {
     setRestore({ text, key: newIdempotencyKey("ask"), at: Date.now() });
     requestAnimationFrame(() => composerRef.current?.focus(true));

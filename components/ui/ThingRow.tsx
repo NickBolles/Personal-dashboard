@@ -24,10 +24,11 @@ export function StateDot({ state, label }: { state: ThingState; label?: string }
 }
 
 /** The state in words, in its colour. One word per state everywhere: pass children only to add to it, never to rename it. */
-export function StateWord({ state, children }: { state: WorkState; children?: ReactNode }) {
+export function StateWord({ state, children, live }: { state: WorkState; children?: ReactNode; live?: boolean }) {
   return (
     <span className="k-sw" data-state={state}>
-      {children ?? WORK_WORD[state]}
+      {/* `live`: the work is going on right now, so the word shimmers the way "Working" does in a chat. */}
+      {live ? <span className="chat-work-shimmer">{children ?? WORK_WORD[state]}</span> : (children ?? WORK_WORD[state])}
     </span>
   );
 }
@@ -87,6 +88,8 @@ export function RowAction({
  * - `status`: the stacked form. Line one is the reference, the state mark and `status` (the state word and its
  *   time); line two is the title, which is then the link or button (`href` / `onOpen`) that opens the thing itself;
  *   line three is `sub`, a one-line peek. Opening in place is a separate control: pass `onToggle`.
+ * - `peek` (stacked form, with `onToggle`): line three is the latest activity fading into the one before it, and
+ *   IS the control that opens the row in place (named `toggleLabel`); the chevron is then left out.
  * - A screen draws each thing as a row once. Any other mention of it is a `RefPill`.
  */
 export function ThingRow({
@@ -95,6 +98,7 @@ export function ThingRow({
   title,
   status,
   sub,
+  peek,
   actions,
   onOpen,
   onToggle,
@@ -113,6 +117,8 @@ export function ThingRow({
   /** Stacked form: what follows the state mark on line one (state word, time). */
   status?: ReactNode;
   sub?: ReactNode;
+  /** Stacked form: the lines that fade out under the title; with `onToggle` they open the row in place. */
+  peek?: ReactNode;
   actions?: ReactNode;
   onOpen?: () => void;
   /** Stacked form: toggles `expanded` from its own chevron button, named `toggleLabel`. */
@@ -153,11 +159,21 @@ export function ThingRow({
               <span {...titleProps}>{title}</span>
             )}
             {sub ? <span className="k-thing-s">{sub}</span> : null}
+            {peek && !open ? (
+              onToggle ? (
+                <button type="button" className="k-thing-peek" aria-expanded={false} data-thing-toggle="" onClick={onToggle}>
+                  <span className="sr-only">{toggleLabel}: </span>
+                  {peek}
+                </button>
+              ) : (
+                <span className="k-thing-peek">{peek}</span>
+              )
+            ) : null}
           </div>
-          {actions || onToggle ? (
+          {actions || (onToggle && (!peek || open)) ? (
             <span className="k-thing-acts">
               {actions}
-              {onToggle ? (
+              {onToggle && (!peek || open) ? (
                 <RowAction
                   label={toggleLabel}
                   data-thing-toggle=""

@@ -112,6 +112,23 @@ export function startedElsewhere(d: Parameters<typeof taskChats>[0], runSessions
   return [...new Set(runSessions.filter((s): s is string => !!s && !own.has(s)))];
 }
 
+/** A draft for the task's composer. `handoff`: it is a work packet's handoff, recorded on the task when it is sent. */
+export type TaskDraft = { text: string; at: number; handoff?: boolean };
+
+const DRAFTS: Record<string, string> = {
+  retry: "Try again from where it failed.",
+  resume: "Carry on from where you stopped.",
+};
+
+/** What a list row opened the task with: Steer (`?compose=1`, an empty draft that takes the cursor), Retry or Resume. */
+export function draftFromUrl(): TaskDraft | undefined {
+  if (typeof window === "undefined") return undefined;
+  const q = new URLSearchParams(window.location.search);
+  const text = DRAFTS[q.get("draft") ?? ""];
+  if (text) return { text, at: Date.now() };
+  return q.get("compose") === "1" ? { text: "", at: Date.now() } : undefined;
+}
+
 export function TaskChat({
   d,
   scroll,
@@ -124,8 +141,8 @@ export function TaskChat({
   scroll: "window" | "element";
   /** The sessions agent runs on this task name (lib/agent-runs ExternalRun.hermesSessionId). */
   runSessions?: readonly (string | null | undefined)[];
-  /** A draft to put in the composer (a work packet's handoff). */
-  prefill?: { text: string; at: number };
+  /** A draft to put in the composer (a work packet's handoff, or a row's Steer / Retry / Resume). */
+  prefill?: TaskDraft;
   onOp: (op: UndoOp | null | undefined) => void;
 }) {
   const qc = useQueryClient();
@@ -171,7 +188,7 @@ function FirstMessage({
   d: WorkDetail;
   scroll: "window" | "element";
   lead: React.ReactNode;
-  prefill?: { text: string; at: number };
+  prefill?: TaskDraft;
 }) {
   const { item } = d;
   const qc = useQueryClient();
@@ -193,7 +210,7 @@ function FirstMessage({
       // A handoff put in this composer is recorded on the task with the chat it starts.
       const chat = await api.post<{ sessionId: string; created: boolean }>(
         `/api/work/items/${encodeURIComponent(item.id)}/chat`,
-        prefill ? { handoff: true } : {},
+        prefill?.handoff ? { handoff: true } : {},
       );
       // The thread takes this send over as soon as it mounts: it shows the message at once and streams the reply.
       const run = api.post<RunView>(`/api/hermes/sessions/${encodeURIComponent(chat.sessionId)}/runs`, {

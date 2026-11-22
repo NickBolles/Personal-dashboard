@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { requirePage } from "@/server/auth/page";
 import { WorkShell } from "@/components/work/common";
-import { ResumeView } from "@/components/resume/ResumeView";
+import { InFlightView } from "@/components/tasks/InFlightView";
 import "@/components/work/work.css";
 
 export const metadata = { title: "In flight" };
@@ -11,7 +11,7 @@ export default async function ResumePage() {
   return (
     <WorkShell>
       <Suspense>
-        <ResumeView />
+        <InFlightView />
       </Suspense>
     </WorkShell>
   );

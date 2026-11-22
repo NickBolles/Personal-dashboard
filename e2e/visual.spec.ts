@@ -28,7 +28,7 @@ import { awayFixture, schedulesFixture } from "./fixtures/away";
 import { feedbackVisual } from "./fixtures/feedback";
 import { EMPTY_AWAY } from "../lib/client/away";
 import { localDate } from "../lib/time";
-import type { ResumeResponse } from "../lib/resume";
+import { stubTasks } from "./fixtures/tasks";
 import { skylightTaskUxFixture } from "./fixtures/skylight-task-ux";
 import type { CaptureTriageView } from "../lib/capture-triage";
 import type { InboxEntry } from "../lib/work";
@@ -2586,81 +2586,21 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
-test("visual: resume hub", async ({ page }) => {
-  // Row times sit 5 minutes before the frozen browser clock, so the relative label ("5 min ago")
-  // and its width are the same at any hour (a fixed wall time read "in 8 hours" before 08:05 CT).
+test("visual: in flight", async ({ page }) => {
+  // Times sit minutes before the frozen browser clock, so every age and time on a row is the same at any hour.
   const frozen = await freezeMiddayCT(page);
-  const at = new Date(frozen - 5 * 60_000).toISOString();
-  const run = { kind: "run" as const, path: "General Dev › Jarvis › Resume hub", approval: false, stalled: false, who: "@devchief", at };
-  const conversation = {
-    kind: "conversation" as const,
-    preview: null,
-    path: "General Dev › Jarvis",
-    parentId: "resume_project",
-    unfiled: false,
-    unread: false,
-    unreadCount: null,
-    agentProfile: "devchief",
-    at,
-    itemHref: "/areas?item=resume_project",
-  };
-  const fixture: ResumeResponse = {
-    runs: [
-      {
-        ...run,
-        key: "waiting",
-        itemId: "resume_waiting",
-        title: "Review the resume hub",
-        live: "waiting",
-        approval: true,
-        href: "/chat/resume_waiting",
-        itemHref: "/areas?item=resume_waiting",
-        sessionId: "resume_waiting",
-      },
-      {
-        ...run,
-        key: "running",
-        itemId: "resume_running",
-        title: "Verify navigation",
-        live: "running",
-        href: "/chat/resume_running",
-        itemHref: "/areas?item=resume_running",
-        sessionId: "resume_running",
-      },
-    ],
-    conversations: [
-      { ...conversation, key: "unread", sessionId: "resume_unread", title: "Navigation review", unread: true, unreadCount: 2, href: "/chat/resume_unread" },
-      { ...conversation, key: "recent", sessionId: "resume_recent", title: "Plan the next iteration", href: "/chat/resume_recent" },
-      {
-        ...conversation,
-        key: "unfiled",
-        sessionId: "resume_unfiled",
-        title: "A thought to file",
-        unfiled: true,
-        path: null,
-        parentId: null,
-        itemHref: null,
-        href: "/chat/resume_unfiled",
-      },
-    ],
-    counts: { running: 1, waiting: 1, unread: 1, unfiled: 1 },
-    conversationsUnavailable: false,
-    fetchedAt: at,
-  };
-  await page.route("**/api/work/resume", (route) => route.fulfill({ json: fixture }));
+  await stubTasks(page, frozen);
   const viewport = page.viewportSize()!;
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto("/resume");
-    await expect(page.getByTestId("resume-row")).toHaveCount(5);
+    await expect(page.getByTestId("task-row")).toHaveCount(4);
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
     await expectNoHorizontalOverflow(page);
     const main = page.locator("main").first();
     const height = await main.evaluate((el) => Math.ceil(el.getBoundingClientRect().height));
     if (height + 160 > viewport.height) await page.setViewportSize({ width: viewport.width, height: height + 160 });
-    await withoutTray(page, () =>
-      expect(main).toHaveScreenshot(`resume-hub-${scheme}.png`, { animations: "disabled", mask: MASK.map((m) => main.locator(m)) }),
-    );
+    await withoutTray(page, () => expect(main).toHaveScreenshot(`in-flight-${scheme}.png`, { animations: "disabled" }));
     await page.setViewportSize(viewport);
   }
 });

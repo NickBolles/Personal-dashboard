@@ -9,7 +9,7 @@ import { cx, ErrorNote, useToast } from "@/components/ui";
 import { Spinner } from "@/components/ui/legacy";
 import { BellIcon, BoltIcon, ChatIcon, GearIcon, InboxIcon, MoreIcon, PanelIcon, SearchIcon, SunIcon } from "@/components/icons";
 import { useDecisions } from "@/components/map/Decisions";
-import { useResume } from "@/components/resume/ResumeView";
+import { useTaskList } from "@/components/tasks/TaskList";
 import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { areasHref } from "@/lib/areas-view";
 import { useShowArchived } from "@/lib/client/show-archived";
@@ -120,7 +120,8 @@ export function Sidebar({
   });
   const inbox = useInbox();
   const decisions = useDecisions(canWork || canChat);
-  const resume = useResume(canWork && wide);
+  // The In flight badge counts tasks that need you, nothing else: the same number as its Needs you rows.
+  const flight = useTaskList("all", "flight", canWork && wide);
   const place = useWorkMutation(
     (v: { id: string; parentId: string | null; index: number }) =>
       api.post<{ op: UndoOp | null }>(`/api/work/items/${encodeURIComponent(v.id)}/place`, { parentId: v.parentId, index: v.index }),
@@ -166,8 +167,8 @@ export function Sidebar({
             href: "/resume",
             label: "In flight",
             icon: ChatIcon,
-            active: path === "/resume",
-            badge: resume.error ? 0 : (resume.data?.counts.waiting ?? 0) + (resume.data?.counts.unread ?? 0),
+            active: path.startsWith("/resume"),
+            badge: flight.error ? 0 : (flight.data?.needs ?? 0),
           },
         ]
       : []),
@@ -251,7 +252,7 @@ export function Sidebar({
                   href={d.href}
                   aria-current={d.active ? "page" : undefined}
                   aria-label={
-                    d.badge ? `${d.label}, ${d.badge} ${d.key === "alerts" ? "unread" : d.key === "resume" ? "waiting or unread" : "waiting"}` : d.label
+                    d.badge ? `${d.label}, ${d.badge} ${d.key === "alerts" ? "unread" : d.key === "resume" ? (d.badge === 1 ? "needs you" : "need you") : "waiting"}` : d.label
                   }
                   title={collapsed ? d.label : undefined}
                   className={rowCls(d.active)}
