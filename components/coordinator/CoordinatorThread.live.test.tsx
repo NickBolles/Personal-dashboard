@@ -234,14 +234,15 @@ it("a run that finished clears only its own live copy: another thread opened mea
     if (path.endsWith("/execution")) return { records: [], sources: [] };
     return {};
   });
-  const list = screen.getByText("Earlier threads").closest("details")!;
-  list.open = true;
-  fireEvent(list, new Event("toggle"));
+  // The thread list was read at mount, before this earlier thread existed: read it again.
+  await act(() => client.invalidateQueries({ queryKey: ["work", "conversations"] }));
+  await settle(10);
+  fireEvent.click(screen.getByRole("button", { name: /^Earlier · Last week/ }));
   await settle(10);
   ended = true;
   act(() => stream.emit({ type: "run.terminal", status: "completed", output: "Done." }, 1));
   await settle(50);
-  fireEvent.click(screen.getByRole("button", { name: "Last week" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Continue Last week/ }));
   await settle(50);
   const following = () => open().map((s) => s.url);
   expect(following()).toEqual([`/api/hermes/runs/${second}/events?format=agui`]);

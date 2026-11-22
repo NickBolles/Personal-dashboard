@@ -689,10 +689,9 @@ it.each([true, false])("asked for the pinned thread, the Chief of staff page lea
     return pinned;
   });
   mount({ compact: true, standalone });
-  const list = screen.getByText("Earlier threads").closest("details")!;
-  list.open = true;
-  fireEvent(list, new Event("toggle"));
-  fireEvent.click(await screen.findByRole("button", { name: "Last week" }));
+  // The earlier thread is the top of the chat: its divider loads it, greyed; tapping its own divider continues it.
+  fireEvent.click(await screen.findByRole("button", { name: /^Earlier · Last week/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Continue Last week/ }));
   expect(await screen.findByText("From last week")).toBeTruthy();
   expect(screen.getByRole("group", { name: "Earlier thread" })).toBeTruthy();
   act(() => void window.dispatchEvent(new Event(COORDINATOR_PINNED_THREAD)));
@@ -755,10 +754,9 @@ it("the thread the panel is on can be kept by the host: it is reported when it c
     </QueryClientProvider>
   );
   const first = render(ui());
-  const list = screen.getByText("Earlier threads").closest("details")!;
-  list.open = true;
-  fireEvent(list, new Event("toggle"));
-  fireEvent.click(await screen.findByRole("button", { name: "Last week" }));
+  // The earlier thread is the top of the chat: its divider loads it, greyed; tapping its own divider continues it.
+  fireEvent.click(await screen.findByRole("button", { name: /^Earlier · Last week/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Continue Last week/ }));
   expect(await screen.findByText("From last week")).toBeTruthy();
   expect(kept).toEqual({ sessionId: "earlier-thread", fresh: false });
   // The sheet closes and opens again: a new panel, on the same thread.
@@ -769,4 +767,55 @@ it("the thread the panel is on can be kept by the host: it is reported when it c
   // Going back is reported too.
   fireEvent.click(screen.getByRole("button", { name: "Back to current" }));
   await waitFor(() => expect(kept).toEqual({ sessionId: null, fresh: false }));
+});
+
+// Earlier threads are the top of one continuous chat: grey dividers and greyed, read-only messages. Nothing folds.
+it("shows earlier threads above the current one as grey dividers with their messages greyed, one more at a time", async () => {
+  const thread = (id: string, text: string) => ({
+    session: { id, pinned: false, archived: false },
+    timeline: [
+      { kind: "user", id: `${id}-u`, text: `Asked in ${id}` },
+      { kind: "assistant", id: `${id}-a`, text },
+    ],
+  });
+  const pinned = client.getQueryData(["session", "same-session"]);
+  vi.mocked(api.get).mockImplementation(async (path: string) => {
+    if (path === "/api/hermes/sessions/week") return thread("week", "From last week");
+    if (path === "/api/hermes/sessions/month") return thread("month", "From last month");
+    if (path.startsWith("/api/work/conversations"))
+      return {
+        conversations: [
+          { id: "month", title: "Last month", lastActiveAt: "2026-10-20T15:00:00.000Z", placement: { parentId: "dev" } },
+          { id: "week", title: "Last week", lastActiveAt: "2026-11-14T15:00:00.000Z", placement: { parentId: "dev" } },
+          { id: "ops", title: "zz-smoke 09:00 abc", lastActiveAt: "2026-11-15T15:00:00.000Z", placement: { parentId: "dev" } },
+          { id: "elsewhere", title: "Another area's thread", lastActiveAt: "2026-11-16T15:00:00.000Z", placement: { parentId: "home" } },
+        ],
+      };
+    if (path.endsWith("/execution")) return { records: [], sources: [] };
+    return pinned;
+  });
+  mount({ compact: true });
+  // No collapse: the newest earlier thread is one grey divider at the top, and nothing of it is loaded yet.
+  expect(screen.queryByText("Earlier threads")).toBeNull();
+  const more = await screen.findByRole("button", { name: /^Earlier · Last week/ });
+  expect(more.closest("details")).toBeNull();
+  expect(screen.queryByText("From last week")).toBeNull();
+  // Smoke-test chats and other areas' threads are not this bot's history.
+  expect(screen.queryByText(/zz-smoke|Another area/)).toBeNull();
+  fireEvent.click(more);
+  const week = await screen.findByRole("region", { name: /^Earlier thread: Last week/ });
+  expect(await within(week).findByText("From last week")).toBeTruthy();
+  expect(within(week).getByText("Asked in week")).toBeTruthy();
+  // History is read-only: no rating, no actions; a divider closes it above the thread you are in.
+  expect(within(week).queryByTestId("coordinator-rate")).toBeNull();
+  expect(screen.getByRole("separator", { name: "This thread" })).toBeTruthy();
+  // The next one up is its own divider, loaded on its own; the older thread sits above the newer.
+  fireEvent.click(screen.getByRole("button", { name: /^Earlier · Last month/ }));
+  const month = await screen.findByRole("region", { name: /^Earlier thread: Last month/ });
+  expect(await within(month).findByText("From last month")).toBeTruthy();
+  expect(month.compareDocumentPosition(week) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /^Earlier · / })).toBeNull();
+  // The current thread is where it was, below the history, and nothing was sent.
+  expect(screen.getByText("Reply to correct")).toBeTruthy();
+  expect(api.post).not.toHaveBeenCalled();
 });
