@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-11-21 — Daily brief
+
+A new page, `/brief` (More → Brief), that says what matters most today and what to start with. Home stays the
+structured list of what needs you; the brief is the opinionated read on top of it. Details in docs/brief.md.
+
+- **Works without AI.** Until you turn the AI brief on, the page is built by rules from Home priorities and
+  nothing is sent anywhere.
+- **Written by Jarvis when you turn it on.** One AI job per build on your Hermes, inside the household AI budget,
+  at most four a day; optionally ready each morning at a time you pick. It names the one thing to start with,
+  what comes next, and a few cards (focus, watch, nudge, not today, momentum, tonight) next to widgets Jarvis
+  fills from its own data (your day, trend, household, coming up, Daily Compass).
+- **It notices things about you.** Besides the day, the brief carries what it noticed (a streak, a drop-off in
+  workouts, something that keeps slipping), an honest take when what you do has drifted from what you said
+  matters, and small ideas with one to three things to do. A card can ask you one question, answered in a chat.
+  It reads your finished work, workouts and the week ahead, and may draw on what Hermes remembers of you.
+  What it comes to believe about you (values, principles, drivers, patterns) arrives as proposals you keep.
+- **Facts stay Jarvis'.** The model copies refs; titles, times and numbers always come from Jarvis. Open safety
+  alerts are shown whatever the model picked.
+- **It learns in the open.** Thumbs on each pick and card (a wrong call can say why), notes, a journal
+  of your Daily Compass check-ins and whether you did what it picked. What it notices arrives as a proposal and is
+  not used until you keep it. Settings → Brief lists everything it knows, with import, export and reset.
+- **Private by construction.** Finance and AI-excluded areas are never sent; credentials and account numbers are
+  masked; each source can be switched off for the model.
+- Daily Compass answers may now carry `tomorrow` (the one thing named for the next day). Optional; older answers
+  still validate.
+- **It follows the day.** The brief opens under a sky that changes with the time of day, with an arc showing
+  where the day stands and today's calendar on it. A line under the headline says what is true right now (the
+  next meeting, how long you are clear, picks done). The picks are one path: the first open one is the one to be
+  on, and the next opens when it is done. Small things on a card can be ticked off, and the next brief is told
+  how many you did. None of this calls a model.
+- **The brief in rows.** Under the picks ("Today") the page now runs Next up (Urgent, Decisions), Insights (a
+  carousel of what Jarvis noticed, its idea and honest take, and what it proposes to remember), Initiatives
+  (Habits, In progress) and Coming up (On the calendar, Low priority). Steps on an insight fold away.
+- **A sparkle on some tasks.** Where a task looks like an errand ("Schedule vet appointment", "Call plumber",
+  "Renew car registration") there is a small teal action under it ("Find how to book"). One tap starts an
+  agent researching that one task; the row then shows how it stands and the next steps it left. Undo takes
+  it back.
+- **Improve the brief by asking.** A wand in the brief's header takes one sentence ("Add friend notes"), files
+  it as an item under the area you choose and starts that area's agent on it in its own conversation. The
+  brief lists what is in the works and how it stands; Undo stops it and takes it back out.
+- **The brief is Home.** With the AI brief on, the Today tab opens the brief. The ranked list is one tap away
+  ("List view") and leads back; with the AI brief off, Home is the list as before.
+- **Everything else is one swipe deck.** Under the picks, a card per theme (big rocks, decisions, the rest of
+  today, habits, initiatives, coming up, low priority) shows the first three and how many there are. Swipe
+  between them, or let them cycle (Settings → Brief → Home, off by default).
+- `ButtonLink` takes `iconOnly`, like `Button`.
+
 ## 2026-11-13 — One shape per thing: chat and Activity
 
 The same thing was drawn several ways and mentioned several times on one screen. This change applies the

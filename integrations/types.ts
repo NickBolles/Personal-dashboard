@@ -24,6 +24,8 @@ export type CompassState = {
   summary?: string;
   /** today's priorities as the check-in recorded them (Hermes/HTTP modes; optional, ≤ 5) */
   priorities?: string[];
+  /** the one thing the check-in named for the next day, when it recorded one (Hermes/HTTP modes; optional) */
+  tomorrow?: string;
 };
 
 export type SourceData = {

@@ -10,7 +10,7 @@ afterEach(cleanup);
 it("marks the current section, uses the shared list and adds no h1", () => {
   nav.path = "/settings/agents";
   render(
-    <AccessProvider value={{ role: "admin", modules: [], capabilities: ["admin", "work.use"] }}>
+    <AccessProvider value={{ role: "admin", modules: [], capabilities: ["admin", "work.use", "brief.use"] }}>
       <SettingsShell>
         <h1>Agents</h1>
       </SettingsShell>

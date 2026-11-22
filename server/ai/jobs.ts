@@ -86,6 +86,8 @@ export function subjectText(userId: string, subjectType: string, subjectId: stri
   const db = getDb();
   // Filing suggestions: the subject is the person's own unfiled list; titles are screened one by one at enqueue.
   if (subjectType === "conversations") return subjectId === userId ? { title: "Unfiled conversations", text: "" } : null;
+  // The daily brief: the subject is the person's local day; its context is built and screened when the job runs.
+  if (subjectType === "brief") return /^\d{4}-\d{2}-\d{2}$/.test(subjectId) ? { title: "Daily brief", text: "" } : null;
   if (subjectType === "work_item") {
     const r = db
       .select()
@@ -127,7 +129,7 @@ export function guardSubject(userId: string, kind: AiJobKind, subjectType: strin
 export type EnqueueInput = {
   userId: string;
   kind: AiJobKind;
-  subjectType: "work_item" | "inbox" | "conversations";
+  subjectType: "work_item" | "inbox" | "conversations" | "brief";
   subjectId: string;
   clientKey: string;
   params?: Record<string, unknown>;
