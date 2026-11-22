@@ -843,6 +843,19 @@
       bottom: 16px;
     }
   }
+  /*
+   * The Chief of staff tray floats over the bottom of the page on phones and tablets, and the shell keeps that
+   * much room under the content for it (coordinator.css: 146px, 198px with its quick actions). The toast sits
+   * above it: under the tray, a tap on Undo lands on the tray.
+   */
+  @media (max-width: 899.98px) {
+    .jv-shell:has(.gc-tray) .brief-undo {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 146px);
+    }
+    .jv-shell:has(.gc-tray-qa .qa-chip) .brief-undo {
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 198px);
+    }
+  }
 
   /* ---- Home's door to the brief: the same sky, small ---- */
   .brief-entry {

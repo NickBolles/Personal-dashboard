@@ -228,6 +228,11 @@ test("turn it on, read it, correct it, and keep what Jarvis noticed", async ({ p
   await expect(works.getByRole("link", { name: /Add friend notes/ })).toHaveAttribute("href", /^\/chat\//);
   await expectNoHorizontalOverflow(page);
   expect(await serious(page)).toEqual([]);
+  // The Undo toast clears the Chief of staff tray that floats over the bottom of the page: under it, the tap lands on the tray.
+  const toast = await page.locator(".brief-undo > *").boundingBox();
+  const tray = await page.locator(".gc-tray").first().boundingBox();
+  expect(toast).not.toBeNull();
+  if (tray) expect(toast!.y + toast!.height).toBeLessThanOrEqual(tray.y);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(works).toHaveCount(0);
 
