@@ -92,8 +92,10 @@ else of the Hermes home is visible to Jarvis.
   (default 64 KB, max 256 KB). Owner only (`hermes.chat` + owner), `cache-control: no-store`.
 - Agents: `jarvis_read_subagent_log` (scope `runs.write`), their own profile's logs only.
 - Every part is checked against a strict pattern (profile id, `deleg_<hex>`, task 0–63), the resolved file must stay inside
-  the profile's folder (symlinks out answer `not_found`), only the tail is read (the cut first line is dropped) and
-  credentials are masked (`server/ai/rules.ts maskSecrets` + key=value/Bearer redaction). No mount → `503 logs_unavailable`.
+  the profile's folder (symlinks out answer `not_found`), and credentials are masked (`server/ai/rules.ts maskSecrets` +
+  key=value/Bearer redaction) over the tail plus 64 KB of context above it (so a multiline value or PEM body that starts
+  above the tail is still caught); the tail is then cut from the masked text and its partial first line dropped (a tail
+  with no newline returns nothing). No mount → `503 logs_unavailable`.
 
 ## Tasks: bots work in the task's chat
 
