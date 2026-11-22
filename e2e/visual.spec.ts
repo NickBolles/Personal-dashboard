@@ -2598,8 +2598,10 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 test("visual: in flight", async ({ page }) => {
-  // Times sit minutes before the frozen browser clock, so every age and time on a row is the same at any hour.
-  const frozen = await freezeMiddayCT(page);
+  // Everything in the list is stubbed, so the browser clock is pinned to ONE fixed instant (12:00 CDT) and the rows
+  // are built from it: every age ("6m") and clock time ("no word since 09:37") is the same on any day, at any hour.
+  const frozen = Date.parse("2026-10-11T17:00:00.000Z");
+  await page.clock.setFixedTime(new Date(frozen));
   await stubTasks(page, frozen);
   // "Add a task" offers the channels: stub the tree so another spec's areas never show in the picker.
   await page.route(/\/api\/work\/items(?:\?.*)?$/, (route) => route.fulfill({ json: areasVisual }));
