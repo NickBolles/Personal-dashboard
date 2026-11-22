@@ -196,3 +196,55 @@ it("an empty or short thread that fits the screen never detaches or offers a jum
   expect(screen.getByText("following")).toBeTruthy();
   expect(screen.getByText("nothing below")).toBeTruthy();
 });
+
+/** A thread docked in a column: the element scrolls, the page does not. */
+function DockedHarness() {
+  const scroller = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const bottom = useRef<HTMLDivElement>(null);
+  const { detached, jumpToLatest } = useFollowScroll(content, bottom, true, scroller);
+  return (
+    <>
+      <div ref={scroller} data-testid="scroller">
+        <div ref={content}>
+          <p>Reply</p>
+          <div ref={bottom} />
+        </div>
+      </div>
+      <output>{detached ? "detached" : "following"}</output>
+      <button onClick={() => jumpToLatest(true)}>Jump to latest</button>
+    </>
+  );
+}
+
+it("follows inside its own scroller when the thread is docked: the page is never scrolled", () => {
+  render(<DockedHarness />);
+  const scroller = screen.getByTestId("scroller");
+  let top = 0;
+  Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 2000 });
+  Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 500 });
+  Object.defineProperty(scroller, "scrollTop", { configurable: true, get: () => top, set: (v: number) => void (top = v) });
+  const scrollTo = vi.fn((opts: ScrollToOptions) => void (top = Math.min(opts.top ?? 0, 1500)));
+  scroller.scrollTo = scrollTo as unknown as typeof scroller.scrollTo;
+  // Opening lands on the latest message, in the element.
+  frame();
+  expect(scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "auto" });
+  expect(window.scrollTo).not.toHaveBeenCalled();
+  expect(screen.getByText("following")).toBeTruthy();
+  // The person scrolls up inside the thread: following stops, and growth no longer moves it.
+  top = 600;
+  fireEvent.wheel(scroller, { deltaY: -200 });
+  fireEvent.scroll(scroller);
+  expect(screen.getByText("detached")).toBeTruthy();
+  scrollTo.mockClear();
+  resize();
+  frame();
+  expect(scrollTo).not.toHaveBeenCalled();
+  // A wheel on the page itself is not this thread's scroll.
+  fireEvent.click(screen.getByRole("button", { name: "Jump to latest" }));
+  expect(screen.getByText("following")).toBeTruthy();
+  fireEvent.wheel(window, { deltaY: -200 });
+  expect(screen.getByText("following")).toBeTruthy();
+  expect(scrollTo).toHaveBeenLastCalledWith({ top: 2000, behavior: "smooth" });
+  expect(window.scrollTo).not.toHaveBeenCalled();
+});
