@@ -22,6 +22,9 @@ export { IconAction, IconAction as IconButton, CoordinatorGlyph, FocusGlyph, typ
 // The one row for a decision (D-n), a piece of work (R-n) or an item: what it is, then its state; icon actions; opens in place.
 export { ThingRow, StateDot, StateWord, RefPill, RowAction, type ThingState } from "./ThingRow";
 
+// The agent surface: what a bot proposes (dashed) or did by itself (solid), with the wash and glow tokens.
+export { AgentSurface } from "./AgentSurface";
+
 // Bottom-sheet grab bar: drag up for full height, down to close; the bar is also a button and takes arrow keys.
 export { SheetHandle, useSheetDrag } from "./SheetDrag";
 

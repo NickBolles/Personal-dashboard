@@ -1,6 +1,6 @@
 import "server-only";
 import { maskAccountNumbers } from "@/lib/ai-redact";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 import { getDb } from "@/server/db";
 import { getOwner, userById, type CurrentUser } from "@/server/auth";
 import { HttpError } from "@/server/http/errors";
@@ -38,6 +38,14 @@ import { J, R, assertAwayOwner, jobRows, jobRow, jobView, runCaps, type JobRow, 
 import { applyProposals } from "./proposals";
 import { awayRun } from "./away";
 import { claimTriage, completeTriage, hasTriageWork, releaseTriage } from "@/server/feedback/store";
+import { getAiSettings } from "@/server/ai/settings";
+import { spendToday } from "@/server/ai/budget";
+import { budgetGate } from "@/server/ai/rules";
+import { isFinanceAreaLike } from "@/lib/finance-area";
+import { isClosed } from "@/lib/work";
+import { areaIndex } from "@/lib/map-rollup";
+import { suggestContext } from "@/server/work/suggestions";
+import { SUGGEST_MIN_GAP_MS, SUGGEST_RUNS_PER_DAY } from "@/lib/away";
 
 export const defaultDeps = { createSession, startRun, getRun, getSessionDetail, resolveAgentForNode, sessionProfile, coordinatorFor, notify };
 export type SchedulerDeps = typeof defaultDeps;
@@ -123,7 +131,21 @@ function fail(user: CurrentUser, row: RunRow, now: Date, error: string, deps: Sc
   });
 }
 
-/** Run-now ignores quiet hours, but never area policy, cap or concurrent-run protection. */
+/**
+ * The money gate (task threads H4): a scheduled run also waits while the day's AI budget is used up, as background
+ * AI jobs do. The dollar budget applies to pay-per-token billing; under a subscription nothing is spent per run.
+ */
+export function scheduledBudgetOk(now: Date) {
+  const settings = getAiSettings();
+  if (settings.billing.mode !== "api") return true;
+  const t = spendToday(now);
+  return budgetGate({ spentToday: t.spentUsd, reserved: t.reservedUsd, estimate: settings.estimatesUsd.standard, daily: settings.dailyBudgetUsd, override: false }).ok;
+}
+
+/** Suggestions never read Finance (H7): a suggest job on it does not run. */
+const suggestBlocked = (job: JobRow, area: { title: string; systemKey?: string | null }) => job.kind === "suggest" && isFinanceAreaLike(area);
+
+/** Run-now ignores quiet hours, but never area policy, cap, the AI budget or concurrent-run protection. */
 export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, deps: SchedulerDeps = defaultDeps, now = new Date()): Promise<AwayRun> {
   assertAwayOwner(user);
   const row = getDb().transaction(() => {
@@ -134,12 +156,14 @@ export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, 
     if (effectiveAutonomy(area) === "off") throw new HttpError(409, "ai_off", "AI is off in this area");
     if (detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) === "credentials")
       throw new HttpError(409, "ai_off", "Scheduled prompts cannot include credentials");
+    if (suggestBlocked(job, area)) throw new HttpError(409, "ai_off", "Suggestions never read Finance");
     if (!area.settings?.agentMode) throw new HttpError(409, "not_ready", "Set an area coordinator first");
     const resolution = deps.resolveAgentForNode(user.id, area.id);
     if (!["default", "routing_off", "routed"].includes(resolution.reason)) throw new HttpError(409, "not_ready", "The coordinator route isn't ready");
     if (runningJob(job.id)) throw new HttpError(409, "already_running", "This job is already running");
     const caps = runCaps(user, now);
     if (caps.runsToday >= caps.maxRunsPerDay) throw new HttpError(409, "daily_cap", "The daily run cap is reached");
+    if (!scheduledBudgetOk(now)) throw new HttpError(409, "budget", "Today's AI budget is used up");
     const claimed = claimJobSlot(user, job, slot, now);
     if (!claimed) throw new HttpError(409, "already_running", "This slot has already run");
     return claimed;
@@ -172,11 +196,13 @@ export async function startJobRun(user: CurrentUser, job: JobRow, slot: string, 
         : "";
     // Feedback triage: new 👎 (excluded areas and sensitive text already dropped), held by this run.
     const feedback = job.kind === "feedback" ? claimTriage(user, row.id, null) : "";
+    // Suggest: what is already open and the kinds the owner turned off, so nothing is suggested twice.
+    const suggest = job.kind === "suggest" ? suggestContext(user, area.id, now) : "";
     const prefs = getPreferences().hermes;
     const settings = area.settings;
     const modeHint = settings?.agentMode && settings.agentMode !== profile ? `Agent mode: ${settings.agentMode}.` : "";
     const instructions = maskAccountNumbers([modeHint, settings?.instructions, policyInstructions(effectiveAutonomy(area))].filter(Boolean).join("\n\n"));
-    const rawInput = [job.prompt, feedback, context, stalled].filter(Boolean).join("\n\n");
+    const rawInput = [job.prompt, feedback, suggest, context, stalled].filter(Boolean).join("\n\n");
     if (detectSensitivity(rawInput) === "credentials") throw new HttpError(409, "ai_off", "Scheduled context contains credentials");
     const input = maskAccountNumbers(rawInput);
     const registered = registerAgentRun(
@@ -273,7 +299,7 @@ export async function reconcileScheduledRuns(user: CurrentUser, now = new Date()
         getDb().transaction(() => {
           // Local writes and the terminal marker commit together. Cross-process readers cannot apply twice.
           if (getDb().select().from(R).where(eq(R.id, row.id)).get()?.status !== "running") return;
-          const applied = applyProposals(user, area.id, job.title, row.profile ?? "default", parsed.proposals);
+          const applied = applyProposals(user, area.id, job.title, row.profile ?? "default", parsed.proposals, row.id);
           if (parsed.dropped) applied.refused.push({ intent: "invalid", label: `${parsed.dropped} invalid or excess proposals dropped` });
           getDb()
             .update(R)
@@ -315,15 +341,19 @@ export async function runSchedulePass(now: Date, deps: SchedulerDeps = defaultDe
   await reconcileScheduledRuns(user, now, deps);
   let started = 0;
   for (const job of jobRows(user).filter((j) => j.enabled)) {
-    const at = dueSlot(jobView(user, job, now).schedule, now, job.tz);
+    const due = dueSlot(jobView(user, job, now).schedule, now, job.tz);
+    // A suggest job also runs once after a task in its channel finishes (H4), at most six times a day.
+    const finished = !due && job.kind === "suggest" && suggestAfterFinish(user, job, now);
+    const at = due ?? (finished ? now : null);
     if (!at || runningJob(job.id)) continue;
-    const slot = slotKey(at);
+    const slot = due ? slotKey(at) : `done:${now.toISOString().slice(0, 13)}`;
     const area = areaFor(user, job);
     const caps = runCaps(user, now);
     const skip =
       !area ||
       effectiveAutonomy(area) === "off" ||
       !area.settings?.agentMode ||
+      suggestBlocked(job, area) ||
       detectSensitivity([job.prompt, area.settings?.instructions].filter(Boolean).join("\n")) === "credentials"
         ? "skipped_policy"
         : job.kind === "feedback" && !hasTriageWork(user)
@@ -332,7 +362,11 @@ export async function runSchedulePass(now: Date, deps: SchedulerDeps = defaultDe
             ? "skipped_quiet"
             : caps.runsToday >= caps.maxRunsPerDay
               ? "skipped_cap"
-              : null;
+              : !scheduledBudgetOk(now)
+                ? "skipped_budget"
+                : null;
+    // A finished task that can't be acted on now is not queued: the next one (or the slot) tries again.
+    if (skip && finished) continue;
     if (skip) {
       claimJobSlot(user, job, slot, now, skip);
       continue;
@@ -346,6 +380,23 @@ export async function runSchedulePass(now: Date, deps: SchedulerDeps = defaultDe
     }
   }
 }
+/** A task in the suggest job's channel finished since its last run, and the job has room today (H4). */
+function suggestAfterFinish(user: CurrentUser, job: JobRow, now: Date) {
+  if (!job.areaId) return false;
+  const last = job.lastRunAt ? Date.parse(job.lastRunAt) : 0;
+  if (now.getTime() - last < SUGGEST_MIN_GAP_MS) return false;
+  const dayStart = new Date(now.getTime() - 24 * 3600_000).toISOString();
+  const today = getDb()
+    .select({ id: R.id })
+    .from(R)
+    .where(and(eq(R.jobId, job.id), gte(R.startedAt, dayStart)))
+    .all().length;
+  if (today >= SUGGEST_RUNS_PER_DAY) return false;
+  const items = listItems(user.id);
+  const areaOf = areaIndex(items);
+  return items.some((i) => i.parentId !== null && areaOf.get(i.id) === job.areaId && isClosed(i.status) && Date.parse(i.updatedAt) > last);
+}
+
 export function tickSchedules(now = new Date(), deps: SchedulerDeps = defaultDeps) {
   const s = state();
   if (s.running) return;
