@@ -179,15 +179,21 @@ describe("a row", () => {
     expect(within(asking).getByRole("link", { name: "Answer" }).getAttribute("href")).toBe("/areas?item=task_desk#ip-next-h");
   });
 
-  it("a silent task's opened timeline offers Check in: a status question the owner sends, once", async () => {
+  it("a silent task's opened timeline offers Check in: a status question the owner sends, asked first, once", async () => {
     render(<TaskList scope="all" view="flight" />, { wrapper });
     await screen.findByText("Compare standing desk frames");
     const quiet = row("Price lumber for the garage shelving");
     fireEvent.click(within(quiet).getByRole("button", { name: /^Timeline for Price lumber/ }));
     const ask = await within(quiet).findByRole("button", { name: "Check in" });
+    fireEvent.click(ask);
+    // Asked first: nothing is sent until the owner says Ask; Cancel sends nothing.
+    const confirm = within(quiet).getByRole("group", { name: /^Ask Price lumber/ });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+    expect(within(quiet).queryByRole("group", { name: /^Ask Price lumber/ })).toBeNull();
     expect(posts).toEqual([]);
+    fireEvent.click(ask);
     await act(async () => {
-      fireEvent.click(ask);
+      fireEvent.click(within(within(quiet).getByRole("group", { name: /^Ask Price lumber/ })).getByRole("button", { name: "Ask" }));
     });
     await waitFor(() => expect(posts.map((p) => p.path)).toEqual(["/api/work/items/task_lumber/check-in"]));
     expect(within(quiet).getByRole("button", { name: "Asked for a status" }).hasAttribute("disabled")).toBe(true);

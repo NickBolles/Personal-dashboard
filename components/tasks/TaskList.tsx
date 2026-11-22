@@ -124,9 +124,12 @@ export function TaskTimeline({
   const nav = useTaskNav();
   const qc = useQueryClient();
   const { toast } = useToast();
+  // A message to its agent can't be taken back once sent, so it is asked first.
+  const [confirmAsk, setConfirmAsk] = useState(false);
   const ask = useMutation({
     mutationFn: () => api.post(`/api/work/items/${encodeURIComponent(taskId)}/check-in`),
     onSuccess: () => {
+      setConfirmAsk(false);
       toast("Asked for a status");
       void qc.invalidateQueries({ queryKey: ["work"] });
     },
@@ -153,9 +156,27 @@ export function TaskTimeline({
       )}
       {q.error && !q.data ? <p className="tl-quiet">Couldn&apos;t load the rest</p> : null}
       {checkIn ? (
-        <Button size="sm" variant="ghost" className="tl-open" loading={ask.isPending} disabled={ask.isSuccess} onClick={() => ask.mutate()}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="tl-open"
+          disabled={ask.isSuccess}
+          aria-expanded={ask.isSuccess ? undefined : confirmAsk}
+          onClick={() => setConfirmAsk((v) => !v)}
+        >
           {ask.isSuccess ? "Asked for a status" : "Check in"}
         </Button>
+      ) : null}
+      {checkIn && confirmAsk && !ask.isSuccess ? (
+        <div role="group" aria-label={`Ask ${title} for a status?`} className="tl-confirm">
+          <p>Ask its agent for a status? It answers in the task&apos;s chat, then carries on.</p>
+          <Button size="sm" variant="secondary" loading={ask.isPending} onClick={() => ask.mutate()}>
+            Ask
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmAsk(false)}>
+            Cancel
+          </Button>
+        </div>
       ) : null}
       {onOpen ? (
         <Button size="sm" variant="ghost" className="tl-open" onClick={onOpen}>

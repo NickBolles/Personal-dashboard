@@ -105,6 +105,8 @@ export type ExternalRun = {
   hermesSessionId?: string | null;
   delegationId?: string | null;
   transcriptPath?: string | null;
+  /** last activity seen in the run's chat (server/work/session-end.ts): a quiet run with a busy chat is not stalled */
+  chatActiveAt?: string | null;
   children?: RunChild[];
 };
 
@@ -113,7 +115,7 @@ export type ExternalRun = {
  * changed). Chat activity comes from the ended-chat check (server/work/session-end.ts), so it can be a few minutes old.
  */
 export const STALL_AFTER_MIN = 30;
-export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt"> & { chatActiveAt?: string | null }, now: number = Date.now()): boolean {
+export function isStalled(r: Pick<ExternalRun, "state" | "updatedAt" | "chatActiveAt">, now: number = Date.now()): boolean {
   if (r.state !== "running") return false;
   const t = Date.parse(r.updatedAt);
   // Its chat was active inside the threshold: the agent is working, it just has not reported.
@@ -204,7 +206,7 @@ export type ItemAgentInfo = {
   approval?: boolean;
   /** when the deciding run started/finished */
   liveAt: string | null;
-  /** A turn is in flight in one of the task's chats right now (a run Jarvis started there): since when. */
+  /** A turn is in flight in one of the task's chats right now (a run Jarvis started there), or an AI action on it: since when. */
   chatRunningAt?: string | null;
   /** the task's chat: its primary chat, else the conversation of the deciding run, else its first filed or linked one */
   sessionId: string | null;

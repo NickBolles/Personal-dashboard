@@ -78,7 +78,7 @@ export type TaskFacts = {
   questions?: readonly { question: string; askedAt: string }[];
   /** A chat run on the task is paused on an approval. */
   approvalAt?: string | null;
-  /** A turn is in flight in the task's chat right now (a message you or a bot sent there), since when. */
+  /** A turn is in flight in the task's chat right now (a message you or a bot sent there), or an AI action on it: since when. */
   chatRunningAt?: string | null;
   /** Registered runs on the task, top level only. Any order. */
   runs?: readonly TaskRunFact[];

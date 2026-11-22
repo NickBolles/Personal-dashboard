@@ -12,6 +12,7 @@ import { registerAgentRun } from "@/server/work/registered-runs";
 import { deliverAnswers, type DeliveryDeps } from "@/server/work/answer-delivery";
 import { taskTimeline } from "@/server/work/tasks";
 import { DELIVERY_DELAY_MS, deliveryText } from "@/lib/cw-decisions";
+import { maskAccountNumbers } from "@/lib/ai-redact";
 import type { OpOut } from "@/server/work/store";
 import type { TimelineItem } from "@/lib/hermes";
 import type { WorkItem } from "@/lib/work";
@@ -20,6 +21,7 @@ const cid = "test";
 let owner: CurrentUser;
 let task: WorkItem;
 let chat: TimelineItem[];
+let hermes: Map<string, { status: string; pendingSteer?: string }>;
 
 beforeEach(() => {
   __setTestDatabase();
@@ -28,6 +30,7 @@ beforeEach(() => {
   const area = store.createItem(owner, { kind: "area", title: "Home", parentId: null }, cid);
   task = store.createItem(owner, { kind: "thread", title: "Compare desk frames", parentId: area.id }, cid);
   chat = [];
+  hermes = new Map();
 });
 
 const setPrimary = (sessionId: string | null) =>
@@ -44,14 +47,20 @@ function deps(over: Partial<DeliveryDeps> = {}) {
     return { runId: "run_x" } as never;
   });
   const steerRun = vi.fn(async () => ({}) as never);
+  // Hermes's view of a run: by default what Jarvis recorded; a test can say otherwise.
+  const reconcile = vi.fn(async (runId: string) => ({
+    status: hermes.get(runId)?.status ?? getDb().select().from(schema.runs).where(eq(schema.runs.runId, runId)).get()?.status ?? "completed",
+    pendingSteer: hermes.get(runId)?.pendingSteer,
+  }));
   const d: DeliveryDeps = {
     startRun: startRun as never,
     steerRun: steerRun as never,
+    reconcile,
     sessionDetail: async () => ({ timeline: chat }),
     user: () => owner,
     ...over,
   };
-  return { d, startRun, steerRun };
+  return { d, startRun, steerRun, reconcile };
 }
 const ask = () =>
   raiseDecision(
@@ -106,7 +115,7 @@ describe("an answer reaches the agent's chat", () => {
     expect(startRun).not.toHaveBeenCalled();
   });
 
-  it("a turn in flight takes it as guidance, and its acceptance is the confirmation; a turn paused on an approval is waited for", async () => {
+  it("a turn in flight takes it as guidance, delivered once that turn ends having used it; a turn paused on an approval is waited for", async () => {
     setPrimary("sess-task");
     const q = ask();
     answerDecisionRef(owner.id, q.ref, "$300", "queue", cid);
@@ -125,6 +134,63 @@ describe("an answer reaches the agent's chat", () => {
     turn("running");
     await deliverAnswers(after(DELIVERY_DELAY_MS + 61_000 + 1), d);
     expect(steerRun).toHaveBeenCalledExactlyOnceWith(expect.anything(), "hr1", deliveryText(q.ref, "What is your budget ceiling?", "$300"), expect.any(String));
+    // Accepted is only queued: still sent while the turn runs, delivered once it ends without handing it back.
+    expect(row(q.ref)).toMatchObject({ deliveryState: "sent", deliveryRun: "hr1" });
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 62_000), d);
+    expect(row(q.ref).deliveryState).toBe("sent");
+    hermes.set("hr1", { status: "completed" });
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 63_000), d);
+    expect(row(q.ref).deliveryState).toBe("delivered");
+  });
+
+  it("guidance the turn handed back unread is posted as the next message", async () => {
+    setPrimary("sess-task");
+    const q = ask();
+    answerDecisionRef(owner.id, q.ref, "$300", "queue", cid);
+    getDb().insert(schema.runs).values({ runId: "hr2", userId: owner.id, sessionId: "sess-task", status: "running", idempotencyKey: "k-hr2" }).run();
+    const { d, steerRun, startRun } = deps();
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 1), d);
+    expect(steerRun).toHaveBeenCalledTimes(1);
+    const text = deliveryText(q.ref, "What is your budget ceiling?", "$300");
+    hermes.set("hr2", { status: "completed", pendingSteer: text });
+    getDb().update(schema.runs).set({ status: "completed" }).where(eq(schema.runs.runId, "hr2")).run();
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 2_000), d);
+    expect(row(q.ref)).toMatchObject({ deliveryState: "pending", deliveryRun: null });
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 3_000), d);
+    expect(startRun).toHaveBeenCalledExactlyOnceWith(expect.anything(), expect.objectContaining({ input: text }), expect.any(String));
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 4_000), d);
+    expect(row(q.ref).deliveryState).toBe("delivered");
+  });
+
+  it("asks Hermes before steering: a turn Jarvis still thinks is running but has ended gets a new message", async () => {
+    setPrimary("sess-task");
+    const q = ask();
+    answerDecisionRef(owner.id, q.ref, "$350", "queue", cid);
+    getDb().insert(schema.runs).values({ runId: "hr3", userId: owner.id, sessionId: "sess-task", status: "running", idempotencyKey: "k-hr3" }).run();
+    hermes.set("hr3", { status: "completed" });
+    const { d, steerRun, startRun } = deps();
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 1), d);
+    expect(steerRun).not.toHaveBeenCalled();
+    expect(startRun).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads back the message as the chat shows it, with account numbers masked", async () => {
+    setPrimary("sess-task");
+    const q = raiseDecision(
+      owner.id,
+      task.id,
+      { question: "Which account pays it?", choices: ["Checking"] },
+      { raisedBy: "agent:homechief", correlationId: cid },
+    );
+    answerDecisionRef(owner.id, q.ref, "Account 12345678", "queue", cid);
+    const { d } = deps({
+      startRun: vi.fn(async (_u: unknown, r: { input: string }) => {
+        chat.push({ kind: "user", id: "u0", text: maskAccountNumbers(r.input) });
+        return { runId: "run_y" } as never;
+      }) as never,
+    });
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 1), d);
+    await deliverAnswers(after(DELIVERY_DELAY_MS + 2_000), d);
     expect(row(q.ref).deliveryState).toBe("delivered");
   });
 

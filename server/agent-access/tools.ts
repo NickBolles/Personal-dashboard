@@ -251,7 +251,7 @@ export const TOOLS: ToolDef[] = [
           title: r.title,
           profile: r.profile,
           state: r.state,
-          stalled: isStalled({ state: r.state as AgentRunState, updatedAt: r.updatedAt }),
+          stalled: isStalled({ state: r.state as AgentRunState, updatedAt: r.updatedAt, chatActiveAt: r.chatActiveAt }),
           summary: r.summary,
           prUrl: r.prUrl,
           hermesSessionId: r.hermesSessionId,

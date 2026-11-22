@@ -2144,6 +2144,8 @@ export const decisions = sqliteTable(
     deliverAfter: text("deliver_after"),
     deliveredAt: text("delivered_at"),
     deliveryError: text("delivery_error"),
+    /** a steer: the turn it was queued on. Delivered once that turn ends without handing it back as pending_steer. */
+    deliveryRun: text("delivery_run"),
     createdAt: text("created_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
   },
