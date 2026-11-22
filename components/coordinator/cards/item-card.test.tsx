@@ -92,9 +92,9 @@ it("a quiet item shows its status, where it sits and what is next; actions are o
   expect(card().getByText("Confirm the sale dates")).toBeTruthy();
   // The arrow goes straight to the item; the rest of the actions are one tap in.
   expect(card().getByRole("link", { name: "Open Holiday sale checklist" }).getAttribute("href")).toBe("/areas?item=b");
-  expect(card().queryByRole("link", { name: "Open item" })).toBeNull();
+  expect(card().queryByRole("link", { name: "Open task" })).toBeNull();
   fireEvent.click(head());
-  expect(card().getByRole("link", { name: "Open item" }).getAttribute("href")).toBe("/areas?item=b");
+  expect(card().getByRole("link", { name: "Open task" }).getAttribute("href")).toBe("/areas?item=b");
   expect(card().getByText("Last year's list, updated.")).toBeTruthy();
   fireEvent.click(card().getByRole("button", { name: "Ask in chat about Holiday sale checklist" }));
   expect(onAsk).toHaveBeenCalledExactlyOnceWith("Holiday sale checklist");
@@ -158,7 +158,7 @@ it("lists what was changed as a chip timeline: three when closed, all when open,
   fireEvent.click(card().getByRole("button", { name: "1 earlier change" }));
   expect(chips()).toEqual(["Dates", "Tagged", "Moved", "Created"]);
   expect(list()[3]!.querySelector(".rc-event-text")).toBeNull();
-  expect(card().getByRole("link", { name: "Open item" })).toBeTruthy();
+  expect(card().getByRole("link", { name: "Open task" })).toBeTruthy();
 });
 
 it("an item that is gone still shows what was done to it", () => {
@@ -182,7 +182,7 @@ it("right-click or long-press opens a menu with everything the card can do", () 
   fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
   const menu = within(screen.getByRole("menu", { name: "Actions for Holiday sale checklist" }));
   expect(menu.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
-    "Open item",
+    "Open task",
     "Ask in chat",
     "Review D-14 · Use last year's dates?",
     "Go to R-3 · Smoke tests",
@@ -195,7 +195,7 @@ it("right-click or long-press opens a menu with everything the card can do", () 
   // choosing closes it; Escape and a tap elsewhere do too
   expect(screen.queryByRole("menu")).toBeNull();
   fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
-  fireEvent.click(screen.getByRole("menuitem", { name: "Open item" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Open task" }));
   expect(push).toHaveBeenLastCalledWith("/areas?item=b");
   fireEvent.contextMenu(document.querySelector("article")!, { clientX: 40, clientY: 60 });
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });

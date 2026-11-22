@@ -1060,7 +1060,7 @@ describe("global coordinator", () => {
     const chatPanel = screen.getByRole("tabpanel", { name: "Chat" });
     fireEvent.click(screen.getByRole("tab", { name: /Tasks/ }));
     const changes = within(screen.getByRole("tabpanel", { name: /Tasks/ })).getByRole("region", { name: "Changes" });
-    // Each touched item is a card (its title opens the card; "Open item" is inside).
+    // Each touched item is a card (its title opens the card; "Open task" is inside).
     expect(await within(changes).findByText("Item new")).toBeTruthy();
     expect(within(changes).getByText("Item old")).toBeTruthy();
     expect(within(changes).queryByText("Item other")).toBeNull();
@@ -1070,7 +1070,7 @@ describe("global coordinator", () => {
     expect(await within(chatPanel).findByText("Hello")).toBeTruthy();
     expect(within(chatPanel).queryByText("Item new")).toBeNull();
     expect(chatPanel.querySelector("article")).toBeNull();
-    fireEvent.click(within(changes).getByRole("button", { name: "Undo Created item: Item new" }));
+    fireEvent.click(within(changes).getByRole("button", { name: "Undo Created task: Item new" }));
     await waitFor(() => expect(api.post).toHaveBeenCalledWith("/api/work/ops/op-new/undo"));
   });
   it("Ask in chat on a changed item switches to Chat with the item in the composer; nothing is typed for the owner and nothing is sent", async () => {

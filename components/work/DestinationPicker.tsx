@@ -142,7 +142,7 @@ export function DestinationPicker({
                   </span>
                 ) : null}
               </span>
-              {o.kind ? <span className="text-xs text-muted">{o.kind === "thread" ? "Item" : KIND_LABELS[o.kind]}</span> : null}
+              {o.kind ? <span className="text-xs text-muted">{o.kind === "thread" ? "Task" : KIND_LABELS[o.kind]}</span> : null}
             </li>
           ))}
         </ul>

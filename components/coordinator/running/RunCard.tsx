@@ -323,7 +323,7 @@ export function RunCard({
     { label: "Ask in chat", onSelect: ask },
     { label: open ? "Close log" : "Open log", onSelect: () => setOpen((value) => !value) },
     asks && onRef ? { label: `Review ${asks.ref}`, onSelect: () => onRef(asks.ref) } : null,
-    run.itemId ? { label: "Open item", onSelect: () => router.push(`/areas?item=${encodeURIComponent(run.itemId)}`) } : null,
+    run.itemId ? { label: "Open task", onSelect: () => router.push(`/areas?item=${encodeURIComponent(run.itemId)}`) } : null,
     prUrl ? { label: "Open pull request", onSelect: () => void window.open(prUrl, "_blank", "noopener,noreferrer") } : null,
     { label: `Copy ${run.ref}`, onSelect: () => void navigator.clipboard?.writeText(run.ref).catch(() => undefined) },
     canStop ? { label: "Stop…", danger: true, onSelect: () => onStopping(run.ref) } : null,
@@ -512,7 +512,7 @@ export function RunCard({
               href={`/areas?item=${encodeURIComponent(run.itemId)}`}
               icon={<AreasIcon className={small} />}
             >
-              Open item
+              Open task
             </ButtonLink>
           ) : null}
           {canStop && asks ? (

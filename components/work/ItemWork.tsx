@@ -120,7 +120,7 @@ export function ItemTimeline({
           {open}
         </h4>
       )}
-      <RunTimeline events={all ? events : events.slice(0, TIMELINE_SHOWN)} runTitle="" label="What the agents on this item did, newest first" live={live} />
+      <RunTimeline events={all ? events : events.slice(0, TIMELINE_SHOWN)} runTitle="" label="What the agents on this task did, newest first" live={live} />
       {earlier > 0 ? (
         <Button variant="ghost" size="sm" className="ip-more" aria-expanded={all} onClick={() => setAll((value) => !value)}>
           {all ? "Show fewer" : `Show earlier (${earlier})`}
@@ -159,7 +159,6 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
       data-testid="agent-run"
       data-stalled={row.state === "stalled" || undefined}
       state={row.state}
-      refId={row.refId ?? undefined}
       title={row.title}
       sub={<Line row={row} now={now} stalledId />}
       expanded={open}
@@ -171,13 +170,6 @@ function RunRow({ row, itemId, now, open, onToggle }: { row: RunWorkRow; itemId:
               label="Open conversation"
               icon={<ChatIcon className="h-4 w-4" />}
               onClick={() => router.push(`/chat/${encodeURIComponent(run.hermesSessionId!)}`)}
-            />
-          ) : null}
-          {row.refId ? (
-            <RowAction
-              label={`Log of ${row.refId}`}
-              icon={<LogIcon className="h-4 w-4" />}
-              onClick={() => router.push(coordHref(itemId, "running", row.refId!))}
             />
           ) : null}
         </>

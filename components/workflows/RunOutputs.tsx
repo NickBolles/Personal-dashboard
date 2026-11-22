@@ -599,7 +599,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
       toast(
         !r.created.length
           ? "Already created"
-          : `${r.created.length === 1 ? "Created 1 item" : `Created ${r.created.length} items`}${already ? ` · ${already} already created` : ""}`,
+          : `${r.created.length === 1 ? "Created 1 task" : `Created ${r.created.length} tasks`}${already ? ` · ${already} already created` : ""}`,
         "ok",
       );
     } catch (e) {
@@ -635,7 +635,7 @@ export function ActionChecklist({ sessionId, run }: { sessionId: string; run: Ru
         })}
       </ul>
       <Button size="sm" className="mt-2" disabled={!plan.length} onClick={() => setConfirming(true)} data-testid="workflow-actions-create">
-        {plan.length === 1 ? "Create 1 item" : `Create ${plan.length} items`}
+        {plan.length === 1 ? "Create 1 task" : `Create ${plan.length} tasks`}
       </Button>
       {confirming ? (
         <Dialog

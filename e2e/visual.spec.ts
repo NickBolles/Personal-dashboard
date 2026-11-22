@@ -1821,7 +1821,7 @@ for (const scheme of ["light", "dark"] as const) {
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-chat-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
     // Tasks = the task list, then what the Chief of staff changed (with Undo).
     await sheet.getByRole("tab", { name: /^Tasks/ }).click();
-    await expect(sheet.getByRole("button", { name: /^Undo Created item/ })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: /^Undo Created task/ })).toBeVisible();
     await page.waitForTimeout(200);
     await withoutTray(page, () => expect(sheet).toHaveScreenshot(`gc-sheet-tasks-${scheme}.png`, { animations: "disabled", mask: gcMask(sheet) }));
   });
@@ -2075,7 +2075,7 @@ for (const scheme of ["light", "dark"] as const) {
     await expect(page.getByRole("heading", { level: 2, name: "Momentum Bets" })).toBeVisible();
     await expect(page.getByTestId("area-color")).toBeVisible();
     await page.evaluate((s) => document.documentElement.setAttribute("data-theme", s), scheme);
-    await page.getByRole("button", { name: "More item actions" }).click();
+    await page.getByRole("button", { name: "More actions" }).click();
     await page.getByRole("menuitem", { name: "Area settings…" }).click();
     const dialog = page.getByRole("dialog", { name: "Momentum Bets settings" });
     await expect(dialog).toBeVisible();

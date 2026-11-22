@@ -37,7 +37,7 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await tree(page)
     .getByRole("treeitem", { name: `Add a project to ${area}` })
     .click();
-  const input = page.getByLabel(`New item in ${area}`);
+  const input = page.getByLabel(`New task in ${area}`);
   await input.fill("Scoring engine / Cache warmup");
   await input.press("Enter");
   await expect(row(page, "Scoring engine")).toHaveAttribute("aria-label", /project/);
@@ -57,8 +57,8 @@ test("build structure: area page, inline path add, project page, decluttered ite
   // One list per level: project cards (no duplicate "Projects" / "Filed in this area" lists); adding = "+ Project" or ⋯.
   await expect(page.getByTestId("area-project-cards")).toContainText("Scoring engine");
   await expect(page.getByTestId("children-projects")).toHaveCount(0);
-  await page.getByRole("button", { name: "More item actions" }).click();
-  await expect(page.getByRole("menuitem", { name: "Add item to area" })).toBeVisible();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Add task to area" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(article.getByRole("button", { name: "+ Project" })).toBeVisible();
   await expect(article.getByRole("button", { name: "Add validation" })).toHaveCount(0);
@@ -67,24 +67,24 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 
-  // Project page: its Tasks section (the shared task list) + "+ Item"; inline add under the heading.
+  // Project page: its Tasks section (the shared task list) + "+ Task"; inline add under the heading.
   await page
     .getByTestId("area-project-cards")
     .getByRole("link", { name: /Scoring engine/ })
     .click();
   await expect(article).toHaveAttribute("data-node-kind", "project");
   await page.getByTestId("children-work").getByRole("button", { name: "Add task, sub-project or path" }).click();
-  await page.getByLabel("New item in Scoring engine").fill("Load bench");
-  await page.getByLabel("New item in Scoring engine").press("Enter");
+  await page.getByLabel("New task in Scoring engine").fill("Load bench");
+  await page.getByLabel("New task in Scoring engine").press("Enter");
   await expect(page.getByTestId("children-work")).toContainText("Load bench");
-  await page.getByLabel("New item in Scoring engine").press("Escape");
+  await page.getByLabel("New task in Scoring engine").press("Escape");
 
   // Item page: a title with one ⋯, one primary action in its Next section, the chat as a pane (no wall of buttons).
   await page.getByTestId("children-work").getByRole("button", { name: "Cache warmup", exact: true }).click();
   await expect(article).toHaveAttribute("data-node-kind", "work");
   const header = article.locator("section").first();
   await expect(page.getByTestId("item-next").getByRole("button", { name: "Start focused work" })).toBeVisible();
-  await expect(header.getByRole("button", { name: "More item actions" })).toBeVisible();
+  await expect(header.getByRole("button", { name: "More actions" })).toBeVisible();
   for (const gone of ["Start focused work", "Link PR", "Link URL", "New child", "Link conversation", "Chat here"])
     await expect(header.getByRole("button", { name: gone })).toHaveCount(0);
   await expect(page.getByRole("tablist", { name: "Item sections" })).toHaveCount(0);
@@ -92,7 +92,7 @@ test("build structure: area page, inline path add, project page, decluttered ite
   await expectNoHorizontalOverflow(page);
 
   // Convert item → project (and the page becomes a container).
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Convert to project" }).click();
   await expect(article).toHaveAttribute("data-node-kind", "project");
   await expect.poll(async () => (await items(page)).find((i) => i.title === "Cache warmup")?.kind).toBe("project");

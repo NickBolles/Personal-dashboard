@@ -52,7 +52,7 @@ export function NewMenu({
       }
       items={[
         ...(canChat ? [{ label: "Chat", hint: where, onSelect: onChat }] : []),
-        { label: "Item", hint: where, onSelect: () => onNew("thread") },
+        { label: "Task", hint: where, onSelect: () => onNew("thread") },
         { label: "Project", hint: where, onSelect: () => onNew("project") },
         { label: "Area", onSelect: () => onNew("area") },
         { label: "Capture to Inbox", onSelect: onCapture },
@@ -92,7 +92,7 @@ export function MoveToDialog({ ids, items, onClose, onDone }: { ids: string[]; i
       },
     },
   );
-  const title = moving.length === 1 ? `Move ${moving[0]!.title}` : `Move ${moving.length} items`;
+  const title = moving.length === 1 ? `Move ${moving[0]!.title}` : `Move ${moving.length} tasks`;
   return (
     <DestinationPicker
       title={title}

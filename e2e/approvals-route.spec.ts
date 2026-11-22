@@ -17,7 +17,7 @@ test("alder approvals tab opens a decision deep link and reviews an option witho
   await expect(approval).toHaveAttribute("href", "/decisions/item%3Awk_alder_review");
   await approval.click();
   await expect(page.getByRole("heading", { name: phase3Decision.question })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open item", exact: true })).toHaveAttribute("href", phase3Decision.href);
+  await expect(page.getByRole("link", { name: "Open task", exact: true })).toHaveAttribute("href", phase3Decision.href);
   // The decision is risk-flagged: a choice arms in place (no dialog) and nothing is written until Confirm.
   const card = page.getByTestId("decision-card");
   await card.getByRole("button", { name: /^Alder pilot/ }).click();

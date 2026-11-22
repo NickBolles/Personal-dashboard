@@ -379,7 +379,7 @@ export function LibraryGallery() {
           </div>
         </Block>
         <Block id="states" title="States (loading, empty, error, banner, toast)">
-          <SectionHeader label="Open items" count={0} />
+          <SectionHeader label="Open tasks" count={0} />
           <EmptyState title="Nothing open" action={<Button size="sm">Add item</Button>}>
             New items land here.
           </EmptyState>

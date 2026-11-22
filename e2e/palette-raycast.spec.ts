@@ -23,7 +23,7 @@ async function openWithKeys(page: Page) {
   }).toPass();
 }
 
-test("typed action: New item in ‹area› → confirm → created", async ({ page }) => {
+test("typed action: New task in ‹area› → confirm → created", async ({ page }) => {
   const nonce = Date.now().toString(36);
   const area = `Raycast hearth ${nonce}`;
   await page.goto("/home");

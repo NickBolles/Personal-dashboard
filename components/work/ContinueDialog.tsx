@@ -53,7 +53,7 @@ export function ContinueDialog({ d, markdown, onClose }: { d: WorkDetail; markdo
       title="Continue in a new conversation"
       description={
         <>
-          Starts a new conversation linked to this item as its source{p ? ` (handoff from packet v${p.version})` : ""}. The handoff below is put in the message
+          Starts a new conversation linked to this task as its source{p ? ` (handoff from packet v${p.version})` : ""}. The handoff below is put in the message
           box as a draft: nothing is sent until you press Send.
         </>
       }

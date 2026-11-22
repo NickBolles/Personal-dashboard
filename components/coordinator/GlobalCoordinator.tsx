@@ -1070,7 +1070,7 @@ function ChangesSection({ rows, id, ...hooks }: { rows: ActivityItem[]; id?: str
       {!rows.length ? <p className="gc-hint">Nothing changed by the Chief of staff in the last day.</p> : null}
       {rows.length ? (
         <p className="gc-hint gc-changes-count">
-          {rows.length === 1 ? "1 change" : `${rows.length} changes`} across {groups.length === 1 ? "1 item" : `${groups.length} items`}
+          {rows.length === 1 ? "1 change" : `${rows.length} changes`} across {groups.length === 1 ? "1 task" : `${groups.length} tasks`}
           {groups.length > shown.length ? `; showing the ${shown.length} most recent.` : "."}
         </p>
       ) : null}

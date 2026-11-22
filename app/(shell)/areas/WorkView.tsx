@@ -971,7 +971,7 @@ function ItemDetail({
     prLinks.find((l) => l.externalState !== "merged" && l.externalState !== "closed") ??
     prLinks[0];
   const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
-  const childLabel = isArea ? "Project" : "Item";
+  const childLabel = isArea ? "Project" : "Task";
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
   const hasBlockers = d.blockedBy.length + d.blocking.length > 0;
   const rollup = containerRollup({ item, items, agents: work.agents, runs: work.runs, decisions: work.decisions, now: nowMs });
@@ -1022,9 +1022,9 @@ function ItemDetail({
       leaf || (container && chatTab) ? { label: "Graph", onSelect: () => setTab("graph") } : null,
     ]),
     ...group("Add", [
-      container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      container || item.kind === "note" ? null : { label: "Add sub-task", onSelect: () => onAdd("thread", item) },
       // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
-      isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
+      isArea ? { label: "Add task to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1114,7 +1114,7 @@ function ItemDetail({
       : shown === "record"
         ? `${pending} check${pending === 1 ? " still needs" : "s still need"} a result.`
         : shown === "resolve_blocker"
-          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} items`}.`
+          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} tasks`}.`
           : shown === "reopen"
             ? item.settledReason
             : null;
@@ -1150,7 +1150,7 @@ function ItemDetail({
         !item.summary && !item.builtIn && editing !== "summary" ? (
           <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
         ) : null,
-        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-item" name="Add sub-item" onClick={() => onAdd("thread", item)} /> : null,
+        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-task" name="Add sub-task" onClick={() => onAdd("thread", item)} /> : null,
         !d.links.length ? (
           <AddMenuChip
             key="link"
@@ -1311,7 +1311,7 @@ function ItemDetail({
           // "Continue in chat" is the page's primary while a packet is ready: not offered twice.
           onContinue={canChat && shown !== "continue" ? () => setDialog("continue") : undefined}
         />
-        <div className="ip-adds" role="group" aria-label="Add to this item">
+        <div className="ip-adds" role="group" aria-label="Add to this task">
           {adds}
         </div>
       </section>
@@ -1400,7 +1400,7 @@ function ItemDetail({
               {isArea && item.settings?.color ? (
                 <span className={`jv-pick-dot jv-tag-${item.settings.color}`} aria-hidden="true" data-testid="area-color" />
               ) : null}
-              {isArea ? "Area" : item.kind === "thread" ? "Item" : KIND_LABEL[item.kind]}
+              {isArea ? "Area" : item.kind === "thread" ? "Task" : KIND_LABEL[item.kind]}
             </li>
           </ol>
         </nav>
@@ -1423,8 +1423,8 @@ function ItemDetail({
                 + {childLabel}
               </KButton>
             ) : null}
-            <MenuButton menu={menu} label="More item actions" />
-            <AnchoredMenu menu={menu} label="More item actions" items={menuItems} />
+            <MenuButton menu={menu} label="More actions" />
+            <AnchoredMenu menu={menu} label="More actions" items={menuItems} />
           </div>
         </div>
         {leaf ? null : headFields}
@@ -1610,7 +1610,7 @@ function ContainerBody({
         {/* An area keeps its Needs you / Working roll-up; a project's tasks say the same in its Tasks section. */}
         {isArea ? <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} /> : null}
         {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
-        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
+        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add task to area". */}
         {isArea ? (
           <AreaProjects areaId={item.id} onOpen={onSelect} />
         ) : (
@@ -1684,7 +1684,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
             </li>
           ))}
           <li aria-current="page" className="px-1">
-            {node.parentId === null ? "Area" : node.kind === "thread" ? "Item" : KIND_LABEL[node.kind]}
+            {node.parentId === null ? "Area" : node.kind === "thread" ? "Task" : KIND_LABEL[node.kind]}
           </li>
         </ol>
       </nav>
@@ -1699,7 +1699,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
 /**
  * The items under a project (or the sub-items under an item): one row per open item with its one headline, then
  * "Done · N" as one tight row that expands. A tag / assignee filter appears once rows carry either. A project's
- * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Item" adds).
+ * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Task" adds).
  */
 function ItemsSection({
   label,
@@ -1742,17 +1742,17 @@ function ItemsSection({
           ) : (
             <h3 id={`kids-${testId}`} className="ip-label">
               {label} <span className="ip-count">{count}</span>
-              {/* The header's "+ Item" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
+              {/* The header's "+ Task" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
               <span className="ip-label-acts">
                 <KButton
                   variant="ghost"
                   size="sm"
                   iconOnly
                   icon={<PlusIcon className="h-4 w-4" />}
-                  title="Add item, sub-project or path"
+                  title="Add task, sub-project or path"
                   onClick={() => setAdding(true)}
                 >
-                  Add item, sub-project or path
+                  Add task, sub-project or path
                 </KButton>
               </span>
             </h3>

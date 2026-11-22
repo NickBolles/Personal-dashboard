@@ -49,7 +49,7 @@ function mount(children: ReactNode) {
 function ItemMenu({ onPick }: { onPick: (kind: string) => void }) {
   const items = useAiMenuItems("wk_item", onPick);
   const summary = useSummaryMenuItem("wk_item", onPick);
-  return <OverflowMenu label="More item actions" items={summary ? [...items, summary] : items} />;
+  return <OverflowMenu label="More actions" items={summary ? [...items, summary] : items} />;
 }
 beforeEach(() => {
   access.ai = true;
@@ -92,15 +92,15 @@ it("offers Summarize in the item overflow menu, with a reason when policy refuse
   const pick = vi.fn();
   const view = mount(<ItemMenu onPick={pick} />);
   await waitFor(() => expect(api.get).toHaveBeenCalled());
-  fireEvent.click(screen.getByRole("button", { name: "More item actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
   fireEvent.click(await screen.findByRole("menuitem", { name: "Summarize" }));
   expect(pick).toHaveBeenCalledWith("summarize");
   view.unmount();
   client.clear();
   vi.mocked(api.get).mockResolvedValue({ ...allowed, policy: { allowed: false, reason: "ai_excluded_area" } });
   mount(<ItemMenu onPick={pick} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "More item actions" })).toBeTruthy());
-  fireEvent.click(screen.getByRole("button", { name: "More item actions" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "More actions" })).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
   const disabled = await screen.findByRole("menuitem", { name: /Summarize/ });
   expect((disabled as HTMLButtonElement).disabled).toBe(true);
   expect(disabled.textContent).toContain("AI is excluded here");
@@ -116,6 +116,6 @@ it("does not promote Summarize to the Get started primary button or expose it wi
   client.clear();
   access.ai = false;
   mount(<ItemMenu onPick={() => {}} />);
-  fireEvent.click(screen.getByRole("button", { name: "More item actions" }));
+  fireEvent.click(screen.getByRole("button", { name: "More actions" }));
   expect(screen.queryByRole("menuitem", { name: /Summarize/ })).toBeNull();
 });

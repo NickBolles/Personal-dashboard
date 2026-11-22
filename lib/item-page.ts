@@ -215,7 +215,7 @@ export function logLine(events: readonly { at: string }[], now: number = Date.no
  * The item's timeline: what its agents have been doing, newest first, so the owner can see where it is at without
  * opening the conversation. Every event of every tracked run on the item (started, progress, step done, CI,
  * staged, live, failed, finished) plus each report that came back. With more than one run on the item an event is
- * prefixed with its R-n, so it is clear whose step it was.
+ * prefixed with that run's title, so it is clear whose step it was.
  */
 export function itemTimeline(input: {
   itemId: string;
@@ -232,7 +232,8 @@ export function itemTimeline(input: {
     if (!run || seen.has(event.id)) continue;
     seen.add(event.id);
     const summary = flat(event.summary) || run.title;
-    out.push({ ...event, summary: several ? `${run.ref} · ${summary}` : summary });
+    // With several runs on the task a line says whose step it was, by the run's own title (never its number).
+    out.push({ ...event, summary: several && summary !== run.title ? `${run.title} · ${summary}` : summary });
   }
   for (const report of input.reports ?? []) {
     if (report.archivedAt || report.supersededBy) continue;
