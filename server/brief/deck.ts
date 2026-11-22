@@ -7,7 +7,7 @@ import { listDecisions } from "@/server/work/decisions";
 import { sortDecisions } from "@/lib/decisions";
 import { decisionHref } from "@/lib/decision-route";
 import { STATUS_LABELS, type WorkStatus } from "@/lib/work";
-import { addDays } from "@/lib/time";
+import { addDays, calendarDay } from "@/lib/time";
 import { BRIEF_LIMITS, type BriefDeckCard, type BriefDeckRow } from "@/lib/brief";
 import { eventDay, type BriefContext } from "./context";
 import { assistForAction, assistForItem, assistIndex } from "./assist";
@@ -25,11 +25,15 @@ import { assistForAction, assistForItem, assistIndex } from "./assist";
 const ROWS = BRIEF_LIMITS.deckRows;
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
 
-const actionRow = (a: NextAction): BriefDeckRow => ({
+/**
+ * A date-only deadline goes out as its calendar day, like an all-day event. Its instant is the END of that local
+ * day, which west of Greenwich is already the next day in UTC, so the instant would show a day late.
+ */
+const actionRow = (a: NextAction, tz: string): BriefDeckRow => ({
   id: a.id,
   title: a.title,
   ...(a.sourceLabel ? { meta: a.sourceLabel } : {}),
-  ...(a.dueAt ? { at: a.dueAt, ...(a.dueIsDate ? { allDay: true } : {}) } : {}),
+  ...(a.dueAt ? (a.dueIsDate ? { at: calendarDay(a.dueAt, a.dueTimezone ?? tz), allDay: true } : { at: a.dueAt }) : {}),
   href: a.href,
   ...(a.external ? { external: true } : {}),
 });
@@ -62,7 +66,7 @@ export function briefDeck(user: CurrentUser, c: BriefContext, picked: Set<string
   const ax = assistIndex(user, items);
   const withAssist = (a: NextAction): BriefDeckRow => {
     const assist = assistForAction(ax, c, a);
-    return { ...actionRow(a), ...(assist ? { assist } : {}) };
+    return { ...actionRow(a, c.timezone), ...(assist ? { assist } : {}) };
   };
 
   // Urgent: what the person named for today in their check-in (their big rocks), then everything

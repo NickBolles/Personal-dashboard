@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Banner, Button, ButtonLink, ErrorNote, Page, ProposedBox, Skeleton, Toast, useOnline } from "@/components/ui";
 import { CheckIcon } from "@/components/icons";
-import { formatWhen } from "@/components/actions/format";
+import { formatDueWhen } from "@/components/actions/format";
 import type { BriefBlockView, BriefFeedbackView, BriefPickView, BriefView as View } from "@/lib/brief";
 import { WhileAwayCard } from "@/components/agents/WhileAwayCard";
 import { PickUpStrip } from "@/components/resume/PickUpStrip";
@@ -23,7 +23,7 @@ function pickMeta(p: BriefPickView) {
   const a = p.action;
   if (p.state === "done") return ["Done"];
   if (p.state === "gone") return ["No longer open"];
-  return [a?.sourceLabel, a?.dueAt ? formatWhen(a.dueAt, a.dueIsDate) : undefined].filter((x): x is string => Boolean(x));
+  return [a?.sourceLabel, a ? formatDueWhen(a) : undefined].filter((x): x is string => Boolean(x));
 }
 
 /** Shown until the person turns the AI brief on: says plainly what it does and what leaves. */

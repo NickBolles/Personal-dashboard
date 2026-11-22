@@ -203,10 +203,10 @@ function blockViews(
   return out;
 }
 
-/** Every task a stored brief points at, in its picks and on its cards, may still be shown to this person. */
+/** Every task a stored brief points at, in its picks and on its cards, and every input a card rested on, may still be shown to this person. */
 function docShowable(doc: BriefDoc, c: BriefContext) {
   const refs = [...(doc.first ? [doc.first] : []), ...doc.then, ...doc.blocks.flatMap((b) => b.actions ?? [])];
-  return refs.every(c.mayShow);
+  return refs.every(c.mayShow) && doc.blocks.every((b) => (b.basis ?? []).every(c.mayCite));
 }
 
 /** Safety alerts are never budgeted away (docs/home-priorities.md): any the picks left out are shown regardless. */

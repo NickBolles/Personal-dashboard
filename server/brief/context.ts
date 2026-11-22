@@ -9,7 +9,7 @@ import { lookup } from "@/server/smart/store";
 import { maskSecrets } from "@/server/ai/rules";
 import { maskAccountNumbers } from "@/lib/ai-redact";
 import { addDays, localDate, localMinutes } from "@/lib/time";
-import { briefRef, shortHash, type BriefBlockDoc, type BriefNoteView, type BriefOrigin, type BriefSettings } from "@/lib/brief";
+import { briefRef, shortHash, type BriefBasis, type BriefBlockDoc, type BriefNoteView, type BriefOrigin, type BriefSettings } from "@/lib/brief";
 import { listWorkouts } from "@/server/workouts";
 import {
   briefDocs,
@@ -92,6 +92,8 @@ export type BriefContext = {
    * (scoped) selection, or it is gone and they may still see the source it came from
    */
   mayShow: (p: { actionId: string } & BriefOrigin) => boolean;
+  /** whether this person may still see an input a stored card rested on (their check-ins, workouts, the calendar) */
+  mayCite: (x: BriefBasis) => boolean;
   totals: { now: number; today: number; overdue: number; upcoming: number; backlog: number; open: number };
   focus: string[];
   compass?: { completed: boolean; inWindow: boolean; windowLabel: string };
@@ -255,10 +257,22 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
     if (a) return allowed(a);
     return mayShow(p) && allowed({ source: p.source!, sourceId: p.sourceId! });
   };
-  // A written card: every task it pointed at, and every input it rested on, must still be shared.
+  // An input a card rested on, by the same access that decides whether its data is read today. Notes and feedback
+  // are the person's own words to the brief, and finished work is made of actions already scoped to them.
+  const mayCite = (x: BriefBasis) =>
+    x.kind === "checkin"
+      ? compassAllowed
+      : x.kind === "source" && x.id === "workouts"
+        ? can(user, "workouts.use")
+        : x.kind === "source" && x.id === "calendar"
+          ? calendarAllowed
+          : true;
+  // A written card: every task it pointed at, and every input it rested on, must still be theirs to see and shared.
   const cardOk = (b: BriefBlockDoc) =>
     (b.actions ?? []).every(mayQuote) &&
-    (b.basis ?? []).every((x) => (x.kind === "checkin" ? share.checkins : x.kind === "source" ? share[x.id as keyof typeof share] === true : true));
+    (b.basis ?? []).every(
+      (x) => mayCite(x) && (x.kind === "checkin" ? share.checkins : x.kind === "source" ? share[x.id as keyof typeof share] === true : true),
+    );
 
   const earlier = recentBriefs(user.id, today, 7).slice(0, 5);
   const stepOutcomes: StepOutcome[] = earlier.flatMap((row) => {
@@ -326,6 +340,7 @@ export async function briefContext(user: CurrentUser, now = new Date()): Promise
     byRef,
     sendable: allowed,
     mayShow,
+    mayCite,
     totals: {
       now: attention.totals.now,
       today: attention.totals.today,

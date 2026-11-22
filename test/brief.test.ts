@@ -26,6 +26,8 @@ import * as work from "@/server/work/store";
 import { BRIEF_DECK_GROUP_OF, BRIEF_LIMITS, assistIntent, briefImportSchema, type BriefNoteView, type BriefView } from "@/lib/brief";
 import { briefAutoTick, briefJobStale, getBriefView, saveBuiltBrief, startBuild } from "@/server/brief";
 import { runAnyway } from "@/server/ai/jobs";
+import { formatDueWhen } from "@/components/actions/format";
+import { calendarDay } from "@/lib/time";
 import { sourceCapability } from "@/lib/modules";
 import * as restoreRoute from "@/app/api/brief/profile/restore/route";
 import { briefContext, eventDay, renderContext } from "@/server/brief/context";
@@ -675,6 +677,59 @@ describe("the day and the small steps", () => {
     expect(v.day!.events.length).toBeGreaterThan(0);
     for (const e of v.day!.events)
       expect(e).toEqual(expect.objectContaining({ id: expect.any(String), title: expect.any(String), startsAt: expect.any(String) }));
+  });
+
+  it("a date-only deadline is shown on its own day, not the day its instant falls on in UTC", async () => {
+    // Stored as the end of the local day: 23:59 on 10 March in Chicago is already 11 March in UTC.
+    const due = { dueAt: "2027-03-11T05:59:00.000Z", dueIsDate: true, dueTimezone: "America/Chicago" };
+    expect(formatDueWhen(due)).toMatch(/Mar 10 · all day$/);
+    expect(formatDueWhen({ dueAt: "2027-03-11T05:59:00.000Z", dueIsDate: false })).not.toContain("all day");
+    expect(formatDueWhen({})).toBeUndefined();
+
+    const c = await briefContext(me());
+    const dated = [...c.nowList, ...c.todayList, ...c.lists.overdue, ...c.lists.backlog].filter((a) => a.dueAt && a.dueIsDate);
+    expect(dated.length, "the mock sources hold a date-only task").toBeGreaterThan(0);
+    const rows = new Map((await view()).deck.flatMap((d) => [...d.rows, ...(d.extra ?? [])]).map((r) => [r.id, r]));
+    let checked = 0;
+    for (const a of dated) {
+      const row = rows.get(a.id);
+      if (!row) continue;
+      checked++;
+      expect(row).toMatchObject({ allDay: true, at: calendarDay(a.dueAt!, a.dueTimezone ?? c.timezone) });
+      expect(row.at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  it("a past card is quoted, and shown, only while the person may still see what it rested on", async () => {
+    addNote(owner, "Family dinner is not movable", "you", "value");
+    const v = await build();
+    const row = latestBrief(owner, v.date)!;
+    const doc = JSON.parse(row.docJson) as { blocks: { kind: string; title?: string; basis?: unknown[] }[] };
+    const card = doc.blocks.find((b) => b.kind === "callout")!;
+    const put = (basis: unknown[]) => {
+      card.basis = basis;
+      getDb()
+        .update(schema.briefs)
+        .set({ docJson: JSON.stringify(doc) })
+        .where(eq(schema.briefs.id, row.id))
+        .run();
+    };
+    const without = (cap: string) => ({ ...me(), capabilities: new Set([...me().capabilities].filter((x) => x !== cap)) });
+    const tomorrow = new Date(Date.now() + 26 * 3_600_000);
+    const quoted = async (who: ReturnType<typeof me>) => renderContext(await briefContext(who, tomorrow)).includes(card.title!);
+
+    for (const [basis, cap] of [
+      [{ kind: "source", id: "workouts", label: "your workouts" }, "workouts.use"],
+      [{ kind: "checkin", id: v.date, label: `Check-in ${v.date}` }, "daily_compass.use"],
+    ] as const) {
+      put([basis]);
+      expect(await quoted(me())).toBe(true);
+      expect((await getBriefView(me())).brief.source).toBe("ai");
+      // Without access to that input the card is not quoted to the next build, and the stored brief is not shown.
+      expect(await quoted(without(cap))).toBe(false);
+      expect((await getBriefView(without(cap))).brief.source).toBe("rules");
+    }
   });
 
   it("an all-day event is on its own date, not the evening before", async () => {
