@@ -36,12 +36,13 @@ packed artifact.
 
 ### Timings (full suite, PR #279, Nov 2026)
 
-| Layout                  | Workflow wall | Slowest shard (job / tests) | Billable min                              | Notes                                                          |
-| ----------------------- | ------------- | --------------------------- | ----------------------------------------- | -------------------------------------------------------------- |
-| before: 1 job, 1 worker | 47m09s        | 46m50s / 44m15s             | ~57 (×2 per PR push: push + pull_request) | main run 43260901319                                           |
-| 4 shards × 3 workers    | 10m07–10m36s  | 7m46–8m02s / 6m19–6m34s     | 36–42                                     | 3 runs green                                                   |
-| 3 shards × 4 workers    | 12m09s        | 9m12s / 7m48s               | ~40                                       | slower per test (CPU bound), 1 order-dependent failure (fixed) |
-| 5 shards × 3 workers    | 8m47s         | 6m44s / 5m16s               | ~41                                       | default until Nov 2026                                         |
+| Layout                   | Workflow wall | Slowest shard (job / tests) | Billable min                              | Notes                                                            |
+| ------------------------ | ------------- | --------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| before: 1 job, 1 worker  | 47m09s        | 46m50s / 44m15s             | ~57 (×2 per PR push: push + pull_request) | main run 43260901319                                             |
+| 4 shards × 3 workers     | 10m07–10m36s  | 7m46–8m02s / 6m19–6m34s     | 36–42                                     | 3 runs green                                                     |
+| 3 shards × 4 workers     | 12m09s        | 9m12s / 7m48s               | ~40                                       | slower per test (CPU bound), 1 order-dependent failure (fixed)   |
+| 5 shards × 3 workers     | 8m47s         | 6m44s / 5m16s               | ~41                                       | default until Nov 2026                                           |
+| **7 shards × 3 workers** | 7m56s         | 5m42s / 4m48s               | ~46                                       | run 45040797431, build cold; checks, unit and docker in parallel |
 
 Per shard ~1 min is fixed cost (container 27 s, `npm ci` 9–18 s, artifact, 3 servers + onboarding ~10 s). Shards are split by
 test count (Playwright `--shard`), so the desktop-heavy shard runs longest.
@@ -56,8 +57,26 @@ test count (Playwright `--shard`), so the desktop-heavy shard runs longest.
 
 The e2e path and the docker path were about as long as each other, so shortening one alone would not have shortened the
 run. Since then: the unit tests are their own job, docker no longer waits for the checks, the build starts warm, and the
-default is **7 shards × 3 workers** (the same tests on two more runners: about two more billable minutes per full run for
-about a quarter less test time on the slowest shard). Measure a full run after a change here and add it to the table.
+default is **7 shards × 3 workers**. Measure a full run after a change here and add it to the table.
+
+### After (7 shards, run 45040797431)
+
+| Path                           | Time                                          |
+| ------------------------------ | --------------------------------------------- |
+| build → slowest shard → report | 1m47s (cold) + 5m42s + 18 s = the run's 7m56s |
+| verify                         | 2m20s                                         |
+| unit                           | 2m42s                                         |
+| docker                         | 2m14s                                         |
+
+The run is now the e2e path alone. It cost about five more billable minutes (two more runners, one more job) for 51 s less
+wall time; a warm build should take another half minute off, and that first shows on the pull request after this one
+merges.
+
+**The shards are uneven, and that is what is left.** Their Playwright steps took 4m11s, 2m31s, 2m57s, 3m23s, 2m46s, 4m48s
+and 2m29s: 3m18s on average, 4m48s on the slowest. Playwright splits by test count, and the slow tests (desktop a11y at
+200% text zoom, 17–26 s each) sit together. Two more runners moved the slowest shard by a minute; a split by measured
+duration (`--test-list` per shard, built from recorded timings) would bring it near the average, about a minute and a
+half less, with no more runners. Not built.
 
 ## Isolated workers (one app + mock per Playwright worker)
 
