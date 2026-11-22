@@ -46,6 +46,7 @@ token** the owner mints in **Settings → Agents → Agent access**. The proposa
 | `decisions.write`    | `jarvis_raise_decision`, `jarvis_supersede_decision`, `jarvis_request_change`, `jarvis_propose_device_change` |
 | `runs.write`         | `jarvis_run_start`, `jarvis_run_update`, `jarvis_run_event`                                                   |
 | `conversations.file` | `jarvis_file_conversation` (also needs a route for the profile in Settings → Agents)                          |
+| `tasks.run`          | `jarvis_start_task`, `jarvis_steer_task`, `jarvis_hand_off` (not a default scope: the owner opts a token in)  |
 
 `tools/list` returns only the tools the token's scopes allow.
 
@@ -79,13 +80,28 @@ tapping a saved chip only fills the composer. The owner still taps Send.
 | `jarvis_run_update`         | `runId` (id or R-n), `state running\|waiting\|done\|failed\|interrupted`, `summary?`, `prUrl?`, `hermesSessionId?`, `transcriptPath?`, `children?`, `pipeline?`, `lock?` | Own profile only; heartbeat; returns `{runId, ref, state}`. Children ≤20 replace the list; `lock: null` clears. Interrupted is nonterminal, sets interruptedAt; other states clear it. State transitions record lifecycle events once; done/failed also posts to Activity |
 | `jarvis_run_event`          | `runId` (id or R-n), `type`, `summary` (≤300), `payload?` (record, serialized UTF-8 ≤4 KB)                                                                               | Own profile only; heartbeat; returns `{eventId, runRef}`. Types: `progress`, `notice`, `lock.acquired`, `lock.released`, `ci`, `release.staged`, `release.live`. Lifecycle types are forbidden                                                                            |
 
+## Tasks: bots work in the task's chat
+
+A coordinator does three things with work: it **creates** a task (`jarvis_create_item`), **starts or steers** it, and **hands it off**. The work itself never happens in the coordinator's own channel chat: these tools open or continue the **task's own chat** (docs/work.md "Task chats"), so the owner has one place to look. The channel chat keeps one line that links to the task.
+
+| Tool                | Params                                    | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jarvis_start_task` | `itemId`, `brief` (≤8000), `title?`       | Opens the task's chat with the brief on the agent that works on it (its assignee, else the agent of its area, else the Chief of staff's, else the default assistant), registers the run there under that agent's profile and returns `{itemId, title, runId, ref, sessionId, worker, href, undoOpId}`. Refused: an area, note or conversation (`bad_item`), closed work (`closed`), AI off in the area (`ai_off`), a run already in flight in the chat (`already_working`), credentials in the brief, the daily cap (`daily_cap`, 40 starts per owner per day). |
+| `jarvis_steer_task` | `itemId`, `message` (≤4000), `ownerAsked` | Posts into the task's chat: guidance for the run in flight, or the next message when nothing runs. **Only with `ownerAsked: true`**, and only when the owner asked for it in the conversation the agent is in. A steer the agent thought of itself is refused (`owner_only`): it raises a decision and the owner decides. Refused while the run waits on the owner (`waiting`) or the task has no chat (`no_chat`).                                                                                                                                             |
+| `jarvis_hand_off`   | `itemId`, `toProfile`, `brief`, `title?`  | Assigns the task to `toProfile` (a routed profile) and starts it there. If the task's chat is with another agent, a new chat with `toProfile` becomes the task's chat; the old one stays under Other chats.                                                                                                                                                                                                                                                                                                                                                     |
+
+- **Every brief ends with how to report**: the run's `R-n`, `jarvis_run_event` for key moments, `jarvis_run_update` at the end, `jarvis_raise_decision` to ask the owner. The run is registered under the **working** agent's profile, so that agent's own token can report on it.
+- **Undo** (Activity, 7 days for agent ops): a start or hand-off stops being "working" at once (the run is marked stopped and the assistant is asked to stop the turn); a hand-off also puts the assignee and the chat back. A task the same agent created is removed or archived by undoing its `create` op, as before.
+- **Nothing else changes**: these tools cannot settle, spend, send outside Jarvis or touch a device, and AI-excluded areas stay invisible.
+- The coordinator profiles' instructions (on the Hermes side) must tell them to use these tools; Jarvis cannot make an agent work in a particular chat.
+
 Tool errors come back as MCP tool results with `isError: true` and `{error, message}` (for example
 `not_found`, `forbidden`, `owner_only`, `validation`, `decision_open` or `rate_limited`). They are
 not JSON-RPC errors.
 
-Suggested coordinator flow: `jarvis_run_start` → `delegate_task`. When the delegation completes:
-`jarvis_run_update(done, summary, prUrl)`, then `jarvis_link(pr)`, then
-`jarvis_update_item(status, nextAction)`.
+Suggested coordinator flow: `jarvis_create_item` (when the task does not exist) → `jarvis_start_task(itemId, brief)`, then one line to the owner linking the task. The agent in the task's chat reports with `jarvis_run_event`, ends with `jarvis_run_update(done, summary, prUrl)`, then `jarvis_link(pr)` and `jarvis_update_item(status, nextAction)`.
+
+A short tool-like delegation that needs no chat of its own can still be `jarvis_run_start` → `delegate_task`; it shows as a step in the parent thread.
 
 Call `jarvis_run_event` instead of replying in chat when a background notice changes nothing for the owner.
 `type: "notice"` folds it into the run card without a chat/Activity post. `lock.acquired` takes

@@ -32,7 +32,14 @@ describe("actions taken parser", () => {
         { parentId: "wk_p", title: "Retry policy" },
       ),
     )!;
-    expect(a).toMatchObject({ kind: "created", label: "Created", title: "Retry policy", itemId: "wk_abc-1", undoOpId: "op_9", href: "/areas?item=wk_abc-1" });
+    expect(a).toMatchObject({
+      kind: "created",
+      label: "Created",
+      title: "Retry policy",
+      itemId: "wk_abc-1",
+      undoOpId: "op_9",
+      href: "/areas?item=wk_abc-1&tab=chat",
+    });
   });
   it("a note chip focuses the item the note was added to, never the note (#251)", () => {
     const a = actionFromTool(
@@ -43,7 +50,7 @@ describe("actions taken parser", () => {
         { itemId: "wk_parent", title: "Findings" },
       ),
     )!;
-    expect(a).toMatchObject({ kind: "note", itemId: "wk_note-1", focusId: "wk_parent", href: "/areas?item=wk_note-1" });
+    expect(a).toMatchObject({ kind: "note", itemId: "wk_note-1", focusId: "wk_parent", href: "/areas?item=wk_note-1&tab=chat" });
     expect(focusTarget(a)).toBe("wk_parent");
     const orphan = actionFromTool(tool("t3", "mcp__jarvis__jarvis_add_note", { item: { id: "wk_note-2", kind: "note" } }, { title: "x" }))!;
     expect(focusTarget(orphan)).toBeNull();

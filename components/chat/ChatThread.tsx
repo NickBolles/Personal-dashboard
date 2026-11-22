@@ -31,7 +31,8 @@ import { useChatPanelLayout } from "./things/useChatPanelLayout";
 import type { ChatThings, ThingsTab } from "@/lib/chat/things";
 import "./things/things.css";
 import { DropOverlay, useChatAttachments, useConversationFiles, useFileDrop } from "./Attachments";
-import { Composer } from "./Composer";
+import { Composer, type ComposerHandle } from "./Composer";
+import { AskAboutStep } from "./Notice";
 import { AssistantName, ChatFiles, NO_FILES, RateCtx, Timeline, liveRunVisible, type RateContext } from "./Timeline";
 import { useRunAnswers } from "./useRunAnswers";
 
@@ -470,6 +471,12 @@ export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "
   // --- scrolling: follow the latest output until the person scrolls up (useFollowScroll) ---
   const bottomRef = useRef<HTMLDivElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  // A question about one delegated step: quoted into the composer for the owner to finish and send.
+  const composerRef = useRef<ComposerHandle>(null);
+  const askAbout = useCallback((text: string) => {
+    setRestore({ text, key: newIdempotencyKey("ask"), at: Date.now() });
+    requestAnimationFrame(() => composerRef.current?.focus(true));
+  }, []);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const { below, jumpToLatest } = useFollowScroll(threadRef, bottomRef, Boolean(detail), elementScroll ? scrollerRef : undefined);
   // Embedded in a page that scrolls: the column fills what is left of the screen under whatever sits above it,
@@ -887,17 +894,19 @@ export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "
                             </ul>
                           </div>
                         ) : null}
-                        <Timeline
-                          sessionId={sessionId}
-                          items={detail.timeline}
-                          replyActions={replyActions}
-                          pending={showPendingUser ? pendingInput : undefined}
-                          live={showLive ? { state: run.state, onApprove: answerApproval, onClarify: answerClarify, onRetry: run.retry } : null}
-                          onFork={(item) => {
-                            setForkFrom(item);
-                            setDialog("fork");
-                          }}
-                        />
+                        <AskAboutStep.Provider value={readOnly ? null : askAbout}>
+                          <Timeline
+                            sessionId={sessionId}
+                            items={detail.timeline}
+                            replyActions={replyActions}
+                            pending={showPendingUser ? pendingInput : undefined}
+                            live={showLive ? { state: run.state, onApprove: answerApproval, onClarify: answerClarify, onRetry: run.retry } : null}
+                            onFork={(item) => {
+                              setForkFrom(item);
+                              setDialog("fork");
+                            }}
+                          />
+                        </AskAboutStep.Provider>
                         <div ref={bottomRef} />
                       </div>
                     </ThreadScroll>
@@ -914,6 +923,7 @@ export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "
                       </div>
                     ) : (
                       <Composer
+                        ref={composerRef}
                         surface={elementScroll ? "panel" : "page"}
                         inputId={embedded ? undefined : "composer"}
                         jump={jump}

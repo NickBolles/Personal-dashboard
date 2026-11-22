@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-export const AGENT_SCOPES = ["work.read", "work.write", "decisions.write", "runs.write", "conversations.file"] as const;
+export const AGENT_SCOPES = ["work.read", "work.write", "decisions.write", "runs.write", "conversations.file", "tasks.run"] as const;
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 export const AGENT_SCOPE_LABELS: Record<AgentScope, { label: string; hint: string }> = {
@@ -14,9 +14,13 @@ export const AGENT_SCOPE_LABELS: Record<AgentScope, { label: string; hint: strin
   "decisions.write": { label: "Ask you", hint: "Raise a Needs-you decision; destructive changes become a proposal for you" },
   "runs.write": { label: "Record runs", hint: "Register agent runs and their progress on items" },
   "conversations.file": { label: "File conversations", hint: "File the agent's own conversations into an area or item" },
+  "tasks.run": {
+    label: "Start and steer tasks",
+    hint: "Open a task's chat with a brief, steer it when you asked for that, hand it to another agent (undoable, daily cap)",
+  },
 };
 
-/** Defaults offered when minting (everything but filing conversations). */
+/** Defaults offered when minting (everything but filing conversations and starting tasks: those are opted into). */
 export const DEFAULT_AGENT_SCOPES: AgentScope[] = ["work.read", "work.write", "decisions.write", "runs.write"];
 
 export const AGENT_TOKEN_PREFIX = "jva_";

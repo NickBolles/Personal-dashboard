@@ -26,6 +26,7 @@ import { buildDeviceProposal } from "./ha-proposals";
 import { DECISION_STATES, raiseSchema } from "@/lib/cw-decisions";
 import { findDecision, listDecisionRows, raiseDecision, withdrawDecision } from "@/server/work/decision-store";
 import { RUN_TOOLS } from "./run-tools";
+import { TASK_TOOLS } from "./task-tools";
 import { lockSchema, pipelineSchema, runRef } from "@/lib/cw-runs";
 import { ensureRunSeqs, recordRunTransition, resolveRun, runIdentifier } from "@/server/work/run-events";
 
@@ -629,6 +630,7 @@ export const TOOLS: ToolDef[] = [
     },
   }),
   ...RUN_TOOLS,
+  ...TASK_TOOLS,
 ];
 
 export const TOOL_BY_NAME = new Map(TOOLS.map((t) => [t.name, t]));

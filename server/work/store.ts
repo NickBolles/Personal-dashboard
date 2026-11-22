@@ -950,6 +950,8 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
     const kind = op.kind as UndoKind;
     let outcome: "restored" | "deleted" | "archived" = "restored";
+    /** A bot's start that was undone: the assistant's own run, for the route to stop. */
+    let stopRunId: string | null = null;
     if (kind === "move" || kind === "reorder") {
       const from = payload.fromParentId ?? null;
       if (row.parentId !== (payload.toParentId ?? null)) throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
@@ -970,6 +972,37 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       }
       restoreOrder(tx, allRows(user.id, tx), from, payload.prevOrder ?? [], row.id);
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "move" ? "Undid move" : "Undid reorder" });
+    } else if (kind === "task_start" || kind === "task_handoff") {
+      const p = payload as {
+        runId?: string;
+        hermesRunId?: string | null;
+        sessionId?: string;
+        replacedChat?: boolean;
+        prevPrimary?: string | null;
+        prevAssignee?: string | null;
+        toProfile?: string | null;
+      };
+      const at = nowIso();
+      // The run stops being "working" at once; the route asks the assistant to stop the turn itself.
+      if (p.runId)
+        tx.update(schema.agentRuns)
+          .set({ state: "done", summary: "Stopped: you undid this start", finishedAt: at, updatedAt: at, interruptedAt: null })
+          .where(
+            and(eq(schema.agentRuns.id, p.runId), eq(schema.agentRuns.userId, user.id), inArray(schema.agentRuns.state, ["running", "waiting", "interrupted"])),
+          )
+          .run();
+      const back: Partial<typeof T.$inferInsert> = {};
+      // A hand-off: the assignee and the chat go back, unless they were changed again since.
+      if (kind === "task_handoff" && row.assignee === `agent:${p.toProfile}`) back.assignee = p.prevAssignee ?? null;
+      if (p.replacedChat && row.primarySessionId === p.sessionId && !(p.prevPrimary && primaryChatTask(user.id, p.prevPrimary, tx)))
+        back.primarySessionId = p.prevPrimary ?? null;
+      if (Object.keys(back).length)
+        tx.update(T)
+          .set({ ...back, updatedAt: at })
+          .where(eq(T.id, row.id))
+          .run();
+      event(tx, row.id, user.id, { kind: "undo", reason: kind === "task_handoff" ? "Undid hand-off" : "Undid start" });
+      stopRunId = p.hermesRunId ?? null;
     } else if (kind === "primary_chat") {
       const p = payload as { prev?: string | null; next?: string | null };
       if ((row.primarySessionId ?? null) !== (p.next ?? null))
@@ -1094,7 +1127,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         outcome = "archived";
       }
     }
-    return { itemId: row.id, kind, outcome };
+    return { itemId: row.id, kind, outcome, ...(stopRunId ? { stopRunId } : {}) };
   });
   audit({
     actor: user.id,

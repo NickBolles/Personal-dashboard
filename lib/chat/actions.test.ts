@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionRows, plainActionLabel, summarizeActions, type ChatAction } from "./actions";
+import type { TimelineItem } from "@/lib/hermes";
+import { actionFromTool, actionRows, plainActionLabel, summarizeActions, type ChatAction } from "./actions";
 
 const action = (extra: Partial<ChatAction> = {}): ChatAction => ({
   id: "t1:created",
@@ -68,5 +69,73 @@ describe("actionRows", () => {
     expect(actionRows([run("arun_1"), run("arun_2", { href: "/areas?item=wk_other", itemId: "wk_other" })])).toHaveLength(2);
     expect(actionRows([action({ id: "a", kind: "updated", undoOpId: "op_1" }), action({ id: "b", kind: "updated", undoOpId: "op_2" })])).toHaveLength(2);
     expect(actionRows([delegated(2), { ...delegated(2), id: "again:delegated" }])).toHaveLength(2);
+  });
+});
+
+describe("work that happens in a task's own chat", () => {
+  const step = (tool: string, input: unknown, result: unknown): Extract<TimelineItem, { kind: "tool" }> => ({
+    kind: "tool",
+    id: `s_${tool}`,
+    tool: `mcp__jarvis__${tool}`,
+    summary: "",
+    input: JSON.stringify(input),
+    detail: JSON.stringify(result),
+    at: "2026-11-22T10:00:00.000Z",
+  });
+  it("a started task is one line in the channel chat that opens the task on its Chat tab", () => {
+    const a = actionFromTool(
+      step(
+        "jarvis_start_task",
+        { itemId: "wk_audit", brief: "List the live previews" },
+        {
+          itemId: "wk_audit",
+          title: "Audit preview deployments",
+          runId: "arun_1",
+          ref: "R-7",
+          sessionId: "s1",
+          worker: "opschief",
+          href: "/areas?item=wk_audit&tab=chat",
+          undoOpId: "op_1",
+        },
+      ),
+    )!;
+    expect(a).toMatchObject({
+      kind: "task_started",
+      label: "Started",
+      title: "Audit preview deployments",
+      itemId: "wk_audit",
+      runId: "arun_1",
+      undoOpId: "op_1",
+      href: "/areas?item=wk_audit&tab=chat",
+    });
+    expect(plainActionLabel(a)).toBe("Started a task");
+    expect(summarizeActions([a, { ...a, id: "x:task_started" }])).toBe("Started 2 tasks");
+  });
+  it("steers and hand-offs read as what they are, and a refused or failed call leaves no line", () => {
+    const steer = actionFromTool(
+      step(
+        "jarvis_steer_task",
+        { itemId: "wk_audit", message: "Skip the coupon test", ownerAsked: true },
+        { itemId: "wk_audit", title: "Audit", delivered: "guidance" },
+      ),
+    )!;
+    expect(steer).toMatchObject({ kind: "task_steered", title: "Audit", href: "/areas?item=wk_audit&tab=chat", undoOpId: null });
+    expect(plainActionLabel(steer)).toBe("Steered a task");
+    const hand = actionFromTool(
+      step(
+        "jarvis_hand_off",
+        { itemId: "wk_audit", toProfile: "opschief", brief: "Take it" },
+        { itemId: "wk_audit", title: "Audit", runId: "arun_2", undoOpId: "op_2" },
+      ),
+    )!;
+    expect(hand).toMatchObject({ kind: "handed_off", undoOpId: "op_2" });
+    expect(plainActionLabel(hand)).toBe("Handed off a task");
+    expect(
+      actionFromTool(step("jarvis_steer_task", { itemId: "wk_audit", message: "x", ownerAsked: false }, { error: "owner_only", message: "…" })),
+    ).toBeNull();
+  });
+  it("any task link from a chat lands on the task's Chat tab", () => {
+    const created = actionFromTool(step("jarvis_create_item", { parentId: "wk_p", title: "New" }, { item: { id: "wk_new", title: "New" }, undoOpId: "op_3" }))!;
+    expect(created.href).toBe("/areas?item=wk_new&tab=chat");
   });
 });
