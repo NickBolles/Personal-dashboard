@@ -159,7 +159,10 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
   const answers = rowAnswers(row.question);
   const receipt = row.question ? hooks.flow.receipts[row.question.ref] : undefined;
   const sending = !!row.question && hooks.flow.pending.includes(row.question.ref);
-  const detail = row.project && row.rollup ? [rollupLine(row.rollup)] : taskDetail(row, row.who, now);
+  const detail = row.project && row.rollup ? [rollupLine(row.rollup)] : taskDetail(row, null, now);
+  // Who has it: always while an agent is on it; on work nothing has touched, only its own assignee.
+  const who = row.project || row.state === "done" || (row.state === "idle" && !row.assignee) ? null : row.who;
+  const tags = row.project ? [] : row.tags.slice(0, 2);
   const inside = row.children ?? [];
   const opens = row.project ? inside.length > 0 || !!row.more : true;
   const lines = row.activity.slice(0, 2);
@@ -181,6 +184,7 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
       data-testid="task-row"
       data-task={row.id}
       data-task-state={row.state}
+      data-node-row={row.id}
       data-selected={hooks.selectedId === row.id || undefined}
       data-depth={depth || undefined}
     >
@@ -194,6 +198,18 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
               <span key={part} className="tl-detail" data-dynamic>
                 {" "}
                 · {part}
+              </span>
+            ))}
+            {who ? (
+              <span className="tl-detail" data-assignee={row.assignee ?? undefined}>
+                {" "}
+                · {who}
+              </span>
+            ) : null}
+            {tags.map((tag) => (
+              <span key={tag} className="tl-detail" data-tag={tag}>
+                {" "}
+                · #{tag}
               </span>
             ))}
           </>

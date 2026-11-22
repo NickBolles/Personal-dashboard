@@ -25,6 +25,9 @@
 .tl-row .k-sd[data-state="working"]::after {
   animation: none;
 }
+.tl-row :is(a, button).k-thing-title {
+  padding-block: 2px;
+}
 .tl-word[data-task-state="review"] {
   color: var(--ok);
 }

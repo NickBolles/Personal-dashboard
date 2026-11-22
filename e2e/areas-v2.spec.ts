@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 import { appPost, openTaskPane } from "./helpers";
 
 /**
- * Areas v2 (N6): the view tabs (Overview · Board · Activity · Graph) swap the
- * pane in place and keep the selected node; a task's bar is Overview · Chat (its own conversation, side by side
- * with room); the Graph tab is a radial mind map
+ * Areas v2 (N6): an area's view tabs (Overview · Board · Activity · Graph) swap the
+ * pane in place and keep the selected node; a task's and a project's bar is Overview · Chat (its own conversation,
+ * side by side with room), a project's Board and Graph being views of its Tasks section; the Graph tab is a radial mind map
  * whose nodes re-centre it; /areas/map redirects there. Runs on phone (mobile)
  * and desktop. Titles use Quokka/Wombat/Bilby words no other spec uses.
  */
@@ -30,41 +30,62 @@ const tab = (page: Page, name: string) => views(page).getByRole("tab", { name, e
 test("view tabs keep the selected node and stay in the same spot", async ({ page }) => {
   await page.goto("/home");
   const s = await seed(page);
-  await page.goto(`/areas?item=${s.project}`);
-  await expect(page.getByRole("heading", { level: 2, name: `Wombat burrow ${s.nonce}` })).toBeVisible();
+  // An area keeps its four views as tabs.
+  await page.goto(`/areas?item=${s.area}`);
+  await expect(page.getByRole("heading", { level: 2, name: `Quokka range ${s.nonce}` })).toBeVisible();
   await expect(tab(page, "Overview")).toHaveAttribute("aria-selected", "true");
   const top = async () => (await views(page).boundingBox())!.y;
   const y0 = await top();
 
   await tab(page, "Board").click();
-  await expect(page).toHaveURL(new RegExp(`item=${s.project}&tab=board$`));
+  await expect(page).toHaveURL(new RegExp(`item=${s.area}&tab=board$`));
   await expect(tab(page, "Board")).toHaveAttribute("aria-selected", "true");
   // The node stays named above the pane, and the board is scoped to it.
-  await expect(page.getByTestId("node-header")).toContainText(`Wombat burrow ${s.nonce}`);
+  await expect(page.getByTestId("node-header")).toContainText(`Quokka range ${s.nonce}`);
   await expect(page.getByTestId("map-row").filter({ hasText: `Bilby lantern ${s.nonce}` })).toBeVisible();
   expect(Math.abs((await top()) - y0)).toBeLessThan(2);
 
   await tab(page, "Activity").click();
-  await expect(page).toHaveURL(new RegExp(`item=${s.project}&tab=activity$`));
-  await expect(page.getByTestId("node-header")).toContainText(`Wombat burrow ${s.nonce}`);
+  await expect(page).toHaveURL(new RegExp(`item=${s.area}&tab=activity$`));
+  await expect(page.getByTestId("node-header")).toContainText(`Quokka range ${s.nonce}`);
 
   await tab(page, "Graph").click();
-  await expect(page).toHaveURL(new RegExp(`item=${s.project}&tab=graph$`));
-  await expect(page.getByTestId("radial-graph").locator(`[data-node-id="${s.project}"][data-centre="true"]`)).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`item=${s.area}&tab=graph$`));
+  await expect(page.getByTestId("radial-graph").locator(`[data-node-id="${s.area}"][data-centre="true"]`)).toBeVisible();
   expect(Math.abs((await top()) - y0)).toBeLessThan(2);
 
   // Reload keeps both (URL state), then back to Overview.
   await page.reload();
   await expect(tab(page, "Graph")).toHaveAttribute("aria-selected", "true");
   await tab(page, "Overview").click();
-  await expect(page).toHaveURL(new RegExp(`item=${s.project}$`));
-  await expect(page.getByRole("heading", { level: 2, name: `Wombat burrow ${s.nonce}` })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`item=${s.area}$`));
+  await expect(page.getByRole("heading", { level: 2, name: `Quokka range ${s.nonce}` })).toBeVisible();
 
   // Keyboard: arrows move between tabs (automatic activation).
   await tab(page, "Overview").focus();
   await page.keyboard.press("ArrowRight");
   await expect(tab(page, "Board")).toBeFocused();
   await expect(page).toHaveURL(/tab=board/);
+
+  // A project uses the task page: Overview and Chat. List, Board and Graph are views of its Tasks section,
+  // switched in place; each can open full screen, and the bar names that view only while it is open.
+  await page.goto(`/areas?item=${s.project}`);
+  await expect(page.getByRole("heading", { level: 2, name: `Wombat burrow ${s.nonce}` })).toBeVisible();
+  const tasks = page.getByTestId("children-work");
+  await expect(tasks.getByTestId("task-row").filter({ hasText: `Bilby lantern ${s.nonce}` })).toBeVisible();
+  if (await views(page).count()) await expect(views(page).getByRole("tab")).toHaveText(["Overview", "Chat"]);
+  const pick = tasks.getByRole("radiogroup", { name: "View of the tasks" });
+  await pick.getByRole("radio", { name: "Board", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`item=${s.project}$`));
+  await expect(tasks.getByTestId("map-row").filter({ hasText: `Bilby lantern ${s.nonce}` })).toBeVisible();
+  await tasks.getByRole("button", { name: "Open full screen" }).click();
+  await expect(page).toHaveURL(new RegExp(`item=${s.project}&tab=board$`));
+  await expect(page.getByTestId("node-header")).toContainText(`Wombat burrow ${s.nonce}`);
+  await expect(views(page).getByRole("tab")).toHaveText(["Overview", "Chat", "Board"]);
+  await expect(tab(page, "Board")).toHaveAttribute("aria-selected", "true");
+  await tab(page, "Overview").click();
+  await expect(page).toHaveURL(new RegExp(`item=${s.project}$`));
+  await expect(tasks).toBeVisible();
 
   // A task has ONE tab bar, Overview · Chat. Its old Activity address opens Overview with the log open in place.
   await page.goto(`/areas?item=${s.item}&tab=activity`);

@@ -31,7 +31,8 @@ import { localDate } from "../lib/time";
 import { stubTasks } from "./fixtures/tasks";
 import { skylightTaskUxFixture } from "./fixtures/skylight-task-ux";
 import type { CaptureTriageView } from "../lib/capture-triage";
-import type { InboxEntry } from "../lib/work";
+import type { InboxEntry, WorkItem } from "../lib/work";
+import { buildTaskList, type TaskView } from "../lib/task-list";
 
 for (const scheme of ["light", "dark"] as const) {
   test(`visual: task UX skipped recap and daily filtering (${scheme})`, async ({ page }) => {
@@ -711,6 +712,16 @@ for (const [name, detail] of [
     );
     await page.route(/\/api\/work\/agent-runs(?:\?.*)?$/, (route) => route.fulfill({ json: { items: {}, active: [] } }));
     await page.route(/\/api\/work\/decisions(?:\?.*)?$/, (route) => route.fulfill({ json: { count: 0, entries: [] } }));
+    // A project's Tasks section reads the task list: build it from the same stubbed tree.
+    await page.route(/\/api\/work\/tasks(?:\?.*)?$/, (route) => {
+      const q = new URL(route.request().url()).searchParams;
+      return route.fulfill({
+        json: buildTaskList(
+          { items: areasVisual.items as unknown as WorkItem[], runs: [], events: [], decisions: [], info: {}, lastLooked: null },
+          { scope: q.get("scope") ?? "all", view: (q.get("view") ?? "flight") as TaskView, now: Date.parse(visualNow) },
+        ),
+      });
+    });
     await page.goto(`/areas?item=${detail.item.id}`);
     await expect(page.getByRole("heading", { level: 2, name: detail.item.title })).toBeVisible();
     await page.waitForTimeout(800);

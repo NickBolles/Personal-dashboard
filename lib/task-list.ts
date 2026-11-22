@@ -40,6 +40,9 @@ export type TaskRow = TaskStatus & {
   project: boolean;
   /** Who has it: the agent working on it, else its assignee or the channel's coordinator. */
   who: string | null;
+  /** Its own assignee ("agent:<profile>" | "person:<id>"), when it has one, and its tags: lists filter by both. */
+  assignee: string | null;
+  tags: string[];
   /** The newest things that happened (at most three): the row shows the latest fading into the one before. */
   activity: TaskMoment[];
   /** The open question it waits on, when there is one. */
@@ -256,6 +259,8 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
       parentId: item.parentId,
       project: item.kind === "project" || children.length > 0,
       who: agentWork && deciding ? name(deciding.profile) : assigned,
+      assignee: item.assignee ?? null,
+      tags: item.tags ?? [],
       activity: rowMoments(
         taskMoments(
           runs,

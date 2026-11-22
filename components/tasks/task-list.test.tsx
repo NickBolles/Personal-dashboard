@@ -203,6 +203,7 @@ describe("the lists", () => {
   });
 
   it("All shows a project as one row that rolls up what is inside and opens in place", async () => {
+    fixture.rows.inventory.tags = ["inventory"];
     render(<TaskList scope="all" view="all" />, { wrapper });
     await screen.findByText("Storefront");
     const project = screen.getAllByTestId("task-row").find((el) => el.getAttribute("data-task") === "proj_store")!;
@@ -212,6 +213,9 @@ describe("the lists", () => {
     const inside = within(project).getAllByTestId("task-row");
     expect(inside.map((el) => el.getAttribute("data-task"))).toEqual(["task_smoke", "task_inventory", "task_theme", "task_sale"]);
     expect(inside[3]!.textContent).toContain("Not started · captured 3d ago");
+    // Work nothing has touched names nobody, unless it has its own assignee; tags stay addressable on the row.
+    expect(inside[3]!.querySelector("[data-assignee]")).toBeNull();
+    expect(inside[1]!.querySelector('[data-tag="inventory"]')?.textContent).toContain("#inventory");
     expect(inside[2]!.textContent).toContain("Ready for review");
     // Finished work can be sent back from its row.
     expect(within(inside[2]!).getByRole("button", { name: "Send back Quieter stalled-run notices" })).toBeTruthy();

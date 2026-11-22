@@ -7,6 +7,7 @@ import { BoardTab } from "@/components/areas/BoardTab";
 import { GraphTab } from "@/components/areas/GraphTab";
 import { useDecisionFlowController } from "@/components/decisions/useAnswerDecision";
 import { Button, Pill, ProgressBar, Segmented, useNow } from "@/components/ui";
+import { ItemFilterBar, NO_FILTER, filterItems, type ItemFilter } from "@/components/work/ItemMeta";
 import { InlineAdd } from "@/components/work/QuickAdd";
 import { ItemRows } from "@/components/work/Rollup";
 import type { RollupItemRow } from "@/lib/item-page";
@@ -51,6 +52,11 @@ export function ProjectTasks({
   const flow = useDecisionFlowController();
   const [view, setView] = useState<View>("list");
   const [adding, setAdding] = useState(false);
+  // The list filters by tag and assignee, as the project's list always has.
+  const [filter, setFilter] = useState<ItemFilter>(NO_FILTER);
+  const inside = items.filter((i) => i.parentId === parent.id && i.kind !== "conversation" && !i.archived);
+  const kept = new Set(filterItems(inside, filter).map((i) => i.id));
+  const filteredOut = inside.filter((i) => !kept.has(i.id)).map((i) => i.id);
   const all = useTaskList(parent.id, "all");
   const flight = useTaskList(parent.id, "flight");
   const project = all.data?.project;
@@ -108,13 +114,14 @@ export function ProjectTasks({
         ) : null}
         {view === "list" ? (
           <>
+            <ItemFilterBar rows={inside} value={filter} onChange={setFilter} idPrefix="kids-work" className="mb-1.5" />
             <TaskList
               scope={parent.id}
               view="all"
               bare
               limit={8}
               open={onOpenTask}
-              exclude={needs.map((r) => r.id)}
+              exclude={[...needs.map((r) => r.id), ...filteredOut]}
               empty={<p className="tl-quiet">No open tasks</p>}
             />
             {done.length ? (

@@ -14,6 +14,8 @@ export function taskFixture(now: number) {
     cause: null,
     line: null,
     who: "@devchief",
+    assignee: null,
+    tags: [],
     activity: [],
     question: null,
     pr: null,

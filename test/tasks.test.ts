@@ -152,6 +152,10 @@ describe("All", () => {
 
   it("a project's Tasks section is the same read, scoped to the project", () => {
     const t = seed();
+    // Rows carry their tags and assignee: the project's list filters by both.
+    store.updateItem(owner, t.sale.id, { tags: ["seasonal"], assignee: "agent:devchief" }, cid);
+    const sale = taskList(owner, { scope: t.store.id, view: "all" }).groups[0]!.rows.find((r) => r.id === t.sale.id)!;
+    expect(sale).toMatchObject({ tags: ["seasonal"], assignee: "agent:devchief", who: "@devchief" });
     const list = taskList(owner, { scope: t.store.id, view: "all" });
     expect(list.groups).toHaveLength(1);
     expect(titles(list.groups[0]!.rows)).toEqual(["Checkout smoke tests", "Reconcile inventory export", "Theme switch", "Holiday sale checklist"]);

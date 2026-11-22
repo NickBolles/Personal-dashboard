@@ -2598,6 +2598,10 @@ button:active > .dock-orb {
     -webkit-mask-image: linear-gradient(#000 45%, transparent 98%);
     mask-image: linear-gradient(#000 45%, transparent 98%);
   }
+  /* Over a peek that is itself a control, the title keeps a 24px target of its own. */
+  .k-thing-main:has(> button.k-thing-peek) > :is(a, button).k-thing-title {
+    padding-block: 2px;
+  }
   /* One line has nothing to fade into. */
   .k-thing-peek:not(:has(> span:not(.sr-only) ~ span:not(.sr-only))) {
     -webkit-mask-image: none;
