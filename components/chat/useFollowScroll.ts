@@ -5,9 +5,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 /** How close to the bottom (px) counts as "at the latest message" again after the person scrolled up. */
 const REATTACH_GAP = 48;
 
-const gap = () => document.documentElement.scrollHeight - (window.scrollY + window.innerHeight);
-/** The page has nowhere to scroll. */
-const fits = () => document.documentElement.scrollHeight - window.innerHeight <= 1;
+/** Where the thread scrolls: the page itself (the chat page), or an element (a thread docked in a pane or a panel). */
+type Scroller = HTMLElement | null;
+/** How far it is scrolled, and how far it can be. */
+const position = (el: Scroller) =>
+  el ? { y: el.scrollTop, max: el.scrollHeight - el.clientHeight } : { y: window.scrollY, max: document.documentElement.scrollHeight - window.innerHeight };
+const gap = (el: Scroller) => {
+  const p = position(el);
+  return p.max - p.y;
+};
+/** There is nowhere to scroll. */
+const fits = (el: Scroller) => position(el).max <= 1;
 
 function isTypingTarget(t: EventTarget | null) {
   const el = t as HTMLElement | null;
@@ -22,8 +30,17 @@ function isTypingTarget(t: EventTarget | null) {
  * When detached, nothing scrolls the page: the browser's scroll anchoring keeps their place, and
  * "Jump to latest" resumes following. `below` says whether there really is content under the fold:
  * the jump button is only offered then (never on a thread that fits the screen).
+ *
+ * `scrollerRef` is the element that scrolls when the thread does not scroll the page (a thread docked beside a
+ * page, or inside a panel). `contentRef` is then the content inside it. Left out, the page scrolls.
  */
-export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, bottomRef: RefObject<HTMLElement | null>, ready: boolean) {
+export function useFollowScroll(
+  contentRef: RefObject<HTMLElement | null>,
+  bottomRef: RefObject<HTMLElement | null>,
+  ready: boolean,
+  scrollerRef?: RefObject<HTMLElement | null>,
+) {
+  const scroller = useCallback((): Scroller => scrollerRef?.current ?? null, [scrollerRef]);
   const follow = useRef(true);
   // A message permalink holds its place through transcript growth and composer focus.
   const anchor = useRef<string | null>(null);
@@ -38,16 +55,19 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
   const hidden = useCallback(() => {
     const marker = bottomRef.current;
     if (!marker || !marker.getClientRects().length) return null;
+    const el = scroller();
+    // An element that scrolls ends at its own bottom edge (the composer sits under it, outside).
+    if (el) return marker.getBoundingClientRect().top - el.getBoundingClientRect().bottom;
     const dock = contentRef.current?.parentElement?.querySelector<HTMLElement>(".chat-dock");
     return marker.getBoundingClientRect().top - (dock ? dock.getBoundingClientRect().top : window.innerHeight);
-  }, [bottomRef, contentRef]);
+  }, [bottomRef, contentRef, scroller]);
   /** An empty or short thread shows whole even from the top of the page: scrolling up there is not "leaving the latest". */
   const short = useCallback(() => {
-    if (fits()) return true;
+    if (fits(scroller())) return true;
     const h = hidden();
-    return h !== null && h + window.scrollY <= 1;
-  }, [hidden]);
-  const measure = useCallback(() => setBelow((hidden() ?? gap()) > REATTACH_GAP), [hidden]);
+    return h !== null && h + position(scroller()).y <= 1;
+  }, [hidden, scroller]);
+  const measure = useCallback(() => setBelow((hidden() ?? gap(scroller())) > REATTACH_GAP), [hidden, scroller]);
 
   const setFollow = useCallback((on: boolean) => {
     follow.current = on;
@@ -56,10 +76,12 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
 
   const toBottom = useCallback(
     (smooth = false) => {
-      if (smooth) bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+      const el = scroller();
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+      else if (smooth) bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
       else window.scrollTo({ top: document.documentElement.scrollHeight });
     },
-    [bottomRef],
+    [bottomRef, scroller],
   );
 
   useEffect(() => {
@@ -90,9 +112,9 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       if (["PageUp", "PageDown", "ArrowUp", "ArrowDown", "Home", "End", " "].includes(e.key)) releaseAnchor();
       if (e.key === "PageUp" || e.key === "ArrowUp" || e.key === "Home" || (e.key === " " && e.shiftKey)) up();
     };
+    const el = scroller();
     const onScroll = () => {
-      const y = window.scrollY;
-      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const { y, max } = position(el);
       // scrollIntoView itself fires scroll; it must not unlock a permalink near the bottom.
       if (anchor.current) {
         last.current = { y };
@@ -102,28 +124,30 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       // the browser clamping to a shrunken page (y pinned at the new max) is the person's intent.
       // Following only ever scrolls DOWN, so programmatic scrolls never trip this.
       if (y < last.current.y - 2 && y < max - 2) up();
-      else if (!follow.current && gap() <= REATTACH_GAP) setFollow(true);
+      else if (!follow.current && gap(el) <= REATTACH_GAP) setFollow(true);
       measure();
       last.current = { y };
     };
     const onPointerDown = (e: PointerEvent) => {
-      if (e.target === document.documentElement) releaseAnchor(); // scrollbar drag
+      if (e.target === (el ?? document.documentElement)) releaseAnchor(); // scrollbar drag
     };
-    window.addEventListener("wheel", onWheel, { passive: true });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("pointerdown", onPointerDown, { passive: true });
+    // The person's scrolling is heard where the thread scrolls: the page, or the element (once it is there).
+    const on: Pick<Window, "addEventListener" | "removeEventListener"> = el ?? window;
+    on.addEventListener("wheel", onWheel as EventListener, { passive: true });
+    on.addEventListener("touchstart", onTouchStart as EventListener, { passive: true });
+    on.addEventListener("touchmove", onTouchMove as EventListener, { passive: true });
+    on.addEventListener("keydown", onKey as EventListener);
+    on.addEventListener("scroll", onScroll, { passive: true });
+    on.addEventListener("pointerdown", onPointerDown as EventListener, { passive: true });
     return () => {
-      window.removeEventListener("wheel", onWheel);
-      window.removeEventListener("touchstart", onTouchStart);
-      window.removeEventListener("touchmove", onTouchMove);
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("pointerdown", onPointerDown);
+      on.removeEventListener("wheel", onWheel as EventListener);
+      on.removeEventListener("touchstart", onTouchStart as EventListener);
+      on.removeEventListener("touchmove", onTouchMove as EventListener);
+      on.removeEventListener("keydown", onKey as EventListener);
+      on.removeEventListener("scroll", onScroll);
+      on.removeEventListener("pointerdown", onPointerDown as EventListener);
     };
-  }, [setFollow, measure, short]);
+  }, [setFollow, measure, short, scroller, ready]);
 
   // Resolve only after the transcript mounts. Cached/partial transcripts may add the target later.
   // Lock following before ResizeObserver can schedule a bottom scroll; state updates run in a frame.
@@ -181,7 +205,7 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        if (follow.current && gap() > 1) toBottom();
+        if (follow.current && gap(scroller()) > 1) toBottom();
         // Detached: content that arrived (or collapsed) under the fold decides whether a jump is on offer.
         else if (!follow.current) measure();
       });
@@ -189,11 +213,14 @@ export function useFollowScroll(contentRef: RefObject<HTMLElement | null>, botto
     ro.observe(el);
     const dock = el.parentElement?.querySelector(".chat-dock");
     if (dock) ro.observe(dock);
+    // An element that scrolls is resized by the composer under it (a growing draft, the status bar appearing).
+    const own = scroller();
+    if (own) ro.observe(own);
     return () => {
       ro.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [contentRef, toBottom, ready, measure]);
+  }, [contentRef, toBottom, ready, measure, scroller]);
 
   /** Composer focus/keyboard may follow, but only a send or explicit jump overrides a permalink. */
   const jumpToLatest = useCallback(

@@ -42,7 +42,7 @@ test("adopt an existing chat into an area; its notices render as cards", async (
   const fresh = ((await adoptable.json()) as { sessions: { id: string }[] }).sessions.some((s) => s.id === "sess_mc_notices");
 
   await page.goto(`/areas?item=${item.id}`);
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Adopt existing chat…" }).click();
   const dialog = page.getByRole("dialog", { name: "Adopt an existing chat" });
   await expect(dialog).toBeVisible();

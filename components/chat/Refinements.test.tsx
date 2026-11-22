@@ -36,7 +36,7 @@ describe("chat refinements", () => {
   });
   it("only links returned Jarvis item metadata and never treats proposals as completion", () => {
     expect(toolOutcome("jarvis_update_item", '{"item":{"id":"wk_abc","title":"Item","status":"active"}}')).toEqual({
-      label: "Updated item · Item",
+      label: "Updated task · Item",
       href: "/areas?item=wk_abc",
       status: "active",
     });

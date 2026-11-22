@@ -669,7 +669,7 @@ export function PRCard({ element }: P<"PRCard">) {
         <p className="min-w-0 flex-1 text-xs text-muted">{open ? "Merging happens on GitHub. Jarvis never merges." : "Read from GitHub just now."}</p>
         {pr.itemHref ? (
           <Link href={pr.itemHref} className="tap inline-flex items-center px-1 text-sm text-accent hover:underline">
-            Open item
+            Open task
           </Link>
         ) : null}
         <ButtonLink href={pr.url} external size="sm" className="max-w-full whitespace-normal">

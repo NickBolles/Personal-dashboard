@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
-import { isOpsConversation } from "@/lib/coordinator/thread";
 import { Button, useToast } from "@/components/ui";
 
 /** Pins the area's coordinator thread (null = unpin). Refreshes the coordinator info so every surface follows. */
@@ -18,12 +17,11 @@ export function usePinThread(areaId: string) {
   });
 }
 
-type Earlier = { id: string; title: string };
-
 /**
- * The coordinator thread's header row: earlier threads (opened here, in the panel), "New thread" behind a confirm with
- * Undo, and — while an earlier thread is open — the way back or "Use this thread". Everything that changes which
- * thread the Chief of staff talks in goes through the pin (one setting per area); nothing here sends a message.
+ * The coordinator thread's header row: "New thread" behind a confirm with Undo, and — while an earlier thread is
+ * open — the way back or "Use this thread". Earlier threads themselves are the top of the chat (EarlierThreads), not
+ * a list here. Everything that changes which thread the Chief of staff talks in goes through the pin (one setting per
+ * area); nothing here sends a message.
  */
 export function ThreadBar({
   areaId,
@@ -33,9 +31,6 @@ export function ThreadBar({
   viewingTitle,
   fresh,
   busy,
-  earlier,
-  earlierState,
-  onEarlierOpen,
   onOpen,
   onNew,
   onUndoNew,
@@ -50,9 +45,6 @@ export function ThreadBar({
   viewingTitle: string | null;
   fresh: boolean;
   busy: boolean;
-  earlier: Earlier[];
-  earlierState: "idle" | "loading" | "error" | "ready";
-  onEarlierOpen: (open: boolean) => void;
   /** show a thread in the panel (null = back to the current thread) */
   onOpen: (sessionId: string | null) => void;
   onNew: () => void;
@@ -65,7 +57,6 @@ export function ThreadBar({
   /** What Undo restores: the previous pin (null = no pin, back to the newest-conversation rule). */
   const [undo, setUndo] = useState<{ pin: string | null } | null>(null);
   const onEarlierThread = !!viewing && !!current && viewing !== current && !fresh;
-  const list = earlier.filter((c) => c.id !== viewing && !isOpsConversation(c)).slice(0, 8);
   return (
     <div className="gc-threadbar mb-2 text-xs" data-testid="gc-threadbar">
       {onEarlierThread ? (
@@ -108,7 +99,7 @@ export function ThreadBar({
       ) : null}
       {confirming ? (
         <div className="gc-thread-confirm flex flex-wrap items-center gap-1" role="group" aria-label="Start a new thread?">
-          <span className="min-w-0 flex-1">Start a new thread? This one moves to Earlier threads.</span>
+          <span className="min-w-0 flex-1">Start a new thread? This one stays above it, greyed.</span>
           <Button
             size="sm"
             variant="primary"
@@ -146,28 +137,11 @@ export function ThreadBar({
           </Button>
         </p>
       ) : null}
-      <details className="gc-thread-list" onToggle={(event) => onEarlierOpen(event.currentTarget.open)}>
-        <summary className="min-h-6 cursor-pointer text-muted">Earlier threads</summary>
-        <div className="flex flex-wrap items-center gap-1">
-          <Button size="sm" variant="ghost" disabled={busy || fresh || confirming} onClick={() => setConfirming(true)}>
-            New thread
-          </Button>
-          {earlierState === "loading" ? <span className="text-muted">Loading threads…</span> : null}
-          {earlierState === "error" ? <span role="alert">Couldn&apos;t load earlier threads.</span> : null}
-          {earlierState === "ready" && !list.length ? <span className="text-muted">No earlier threads.</span> : null}
-        </div>
-        {list.length ? (
-          <ul aria-label="Earlier threads">
-            {list.map((c) => (
-              <li key={c.id}>
-                <Button size="sm" variant="ghost" className="gc-thread-open max-w-full justify-start" onClick={() => onOpen(c.id)}>
-                  <span className="truncate">{c.title}</span>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </details>
+      {!confirming ? (
+        <Button size="sm" variant="ghost" className="gc-thread-new" disabled={busy || fresh} onClick={() => setConfirming(true)}>
+          New thread
+        </Button>
+      ) : null}
     </div>
   );
 }

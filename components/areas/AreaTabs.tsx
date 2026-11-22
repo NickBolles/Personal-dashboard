@@ -4,13 +4,14 @@ import "./areas.css";
 
 import type { KeyboardEvent, MouseEvent } from "react";
 import { cx } from "@/components/ui";
-import { AREA_TAB_LABELS, AREA_TABS, areasHref, type AreaTab } from "@/lib/areas-view";
+import { AREA_TAB_LABELS, areasHref, tabsFor, type AreaTab } from "@/lib/areas-view";
 
 /** id of the tab panel the tabs control (WorkView renders it). */
 export const AREA_PANEL_ID = "areas-tabpanel";
 
 /**
- * Areas v2 view tabs: Overview · (Portfolio on the landing) · (Chats) · Board · Activity · Graph. Each tab is a real
+ * Areas v2 view tabs. An area or project: Overview · (Portfolio on the landing) · Board · Activity · Graph. A task:
+ * Overview · Chat (its own conversation), plus Board or Graph only while it is open in that view. Each tab is a real
  * link (new tab, bookmarks) but a plain click swaps the pane in place: the
  * selected node (`?item=`) and the page scroll stay where they are.
  * Arrow keys / Home / End move between tabs (WAI-ARIA tabs pattern, automatic activation).
@@ -19,17 +20,23 @@ export function AreaTabs({
   tab,
   item,
   leaf = false,
+  chat = false,
+  project = false,
   onTab,
   className,
 }: {
   tab: AreaTab;
   item: string | null;
-  /** a work item (not an area/project): its Chats section joins the bar */
+  /** a task (not an area/project): its bar is Overview · Chat */
   leaf?: boolean;
+  /** the task can have a chat (it is not a note, and the person can chat) */
+  chat?: boolean;
+  /** a project (a task with tasks inside): Activity is one of the views it can be opened in */
+  project?: boolean;
   onTab: (t: AreaTab) => void;
   className?: string;
 }) {
-  const tabs = AREA_TABS.filter((t) => (t !== "chats" || leaf) && (t !== "portfolio" || !item));
+  const tabs = tabsFor({ item, task: leaf, chat, project }, tab);
   const href = (t: AreaTab) => areasHref(item ? `/areas?item=${encodeURIComponent(item)}` : "/areas", { tab: t });
   const pick = (e: MouseEvent, t: AreaTab) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;

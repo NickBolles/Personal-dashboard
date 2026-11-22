@@ -64,20 +64,21 @@ afterEach(() => {
   localStorage.clear();
 });
 
-it("keeps roving keyboard tabs linked to their active panel", () => {
-  mount();
-  const running = screen.getByRole("tab", { name: /^Running/ });
-  expect(running.getAttribute("aria-selected")).toBe("true");
-  const files = screen.getByRole("tab", { name: /^Files/ });
-  fireEvent.keyDown(running, { key: "ArrowRight" });
-  expect(document.activeElement).toBe(files);
-  expect(files.getAttribute("tabindex")).toBe("0");
-  expect(running.getAttribute("tabindex")).toBe("-1");
-  expect(files.getAttribute("aria-controls")).toBe(screen.getByRole("tabpanel").id);
-  fireEvent.keyDown(files, { key: "End" });
-  expect(screen.getByRole("tab", { name: /^Context/ }).getAttribute("aria-selected")).toBe("true");
-  fireEvent.keyDown(document.activeElement!, { key: "Home" });
-  expect(screen.getByRole("tab", { name: /^Links/ }).getAttribute("aria-selected")).toBe("true");
+it("brings the section that was asked for into view, with every other section still on the page", () => {
+  const scrolled: string[] = [];
+  const original = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this.getAttribute("data-section") ?? "");
+  };
+  try {
+    mount({ tab: "Files" });
+    expect(scrolled).toEqual(["Files"]);
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.getByRole("heading", { name: /^Running/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Context/ })).toBeTruthy();
+  } finally {
+    Element.prototype.scrollIntoView = original;
+  }
 });
 
 it("puts workflow tabs first and workflow bodies inside the selected tabpanel", () => {
@@ -88,6 +89,8 @@ it("puts workflow tabs first and workflow bodies inside the selected tabpanel", 
       .slice(0, 4)
       .map((tab) => tab.textContent),
   ).toEqual(["Outline", "Form", "Notes", "Outputs"]);
+  // Everything of the chat itself is one more tab after the workflow's own.
+  expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Outline", "Form", "Notes", "Outputs", "In this chat"]);
   expect(within(screen.getByRole("tabpanel")).getByTestId("workflow-outline").textContent).toContain("Keep going");
   expect(screen.getByRole("button", { name: "End session" })).toBeTruthy();
   fireEvent.click(screen.getByRole("tab", { name: "Form" }));
@@ -95,6 +98,10 @@ it("puts workflow tabs first and workflow bodies inside the selected tabpanel", 
   expect(screen.queryByTestId("workflow-outline")).toBeNull();
   fireEvent.click(screen.getByRole("tab", { name: "Outputs" }));
   expect(screen.getByRole("tabpanel").textContent).toContain("End session to prepare outputs.");
+  fireEvent.click(screen.getByRole("tab", { name: "In this chat" }));
+  expect(within(screen.getByRole("tabpanel")).getByRole("heading", { name: /^Waiting on you/ })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "In this chat" }), { key: "Home" });
+  expect(screen.getByRole("tab", { name: "Outline" }).getAttribute("aria-selected")).toBe("true");
 });
 
 it("clamps and persists the desktop panel width with keyboard resizing", () => {

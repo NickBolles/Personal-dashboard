@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { appPost, pickOption } from "./helpers";
+import { appPost, openItemLog, pickOption } from "./helpers";
 
 /**
  * Activity timeline (components/work/ActivityFeed.tsx): item Activity tab shows an inline edit
@@ -26,8 +26,7 @@ test("item activity shows an edit with Undo, and filters narrow it", async ({ pa
   const { id } = await makeItem(page, nonce);
   expect((await patch(page, id, { summary: `Veneer glue-up ${nonce}` })).ok()).toBeTruthy();
   await page.goto(`/areas?item=${id}`);
-  await page.getByRole("tab", { name: "Activity" }).click();
-  const feed = page.getByRole("region", { name: "Activity" });
+  const feed = (await openItemLog(page)).getByRole("region", { name: "Activity" });
   const editRow = feed.locator(".jv-activity-row", { hasText: "edited summary" });
   await expect(editRow).toBeVisible();
   await expect(feed.locator(".jv-activity-dayh").first()).toHaveText("Today");

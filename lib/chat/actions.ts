@@ -23,6 +23,9 @@ export type ActionKind =
   | "filed" // jarvis_file_conversation
   | "device_proposal" // jarvis_propose_device_change
   | "quick_action" // jarvis_add_quick_action (proposal)
+  | "task_started" // jarvis_start_task: the work happens in the task's own chat
+  | "task_steered" // jarvis_steer_task
+  | "handed_off" // jarvis_hand_off
   | "delegated"; // delegate_task spawn (N sub-agents)
 
 export type ChatAction = {
@@ -64,6 +67,9 @@ export const ACTION_LABEL: Record<ActionKind, string> = {
   filed: "Filed chat",
   device_proposal: "Device proposal",
   quick_action: "Quick action proposed",
+  task_started: "Started",
+  task_steered: "Steered",
+  handed_off: "Handed off",
   delegated: "Sub-agents",
 };
 
@@ -79,6 +85,9 @@ const TOOL_KIND: Record<string, ActionKind> = {
   jarvis_file_conversation: "filed",
   jarvis_propose_device_change: "device_proposal",
   jarvis_add_quick_action: "quick_action",
+  jarvis_start_task: "task_started",
+  jarvis_steer_task: "task_steered",
+  jarvis_hand_off: "handed_off",
 };
 
 const ITEM_ID = /^wk_[A-Za-z0-9-]{1,80}$/;
@@ -146,7 +155,11 @@ function parseArgs(input: string | undefined): Obj {
 /** The item a "Focus" chat starts on for this chip (notes focus their parent item), or null. */
 export const focusTarget = (a: Pick<ChatAction, "itemId" | "focusId">): string | null => (a.focusId === undefined ? a.itemId : a.focusId);
 
-const itemHref = (id: string | null) => (id ? `/areas?item=${encodeURIComponent(id)}` : null);
+/**
+ * A task link inside a chat lands on the task's Chat tab (an area or project has none and opens on Overview).
+ * This is the one line a channel chat keeps for work that happens in a task's own chat.
+ */
+const itemHref = (id: string | null) => (id ? `/areas?item=${encodeURIComponent(id)}&tab=chat` : null);
 
 /** One tool step → zero or one action. Errors and unknown tools give null. */
 export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): ChatAction | null {
@@ -198,6 +211,7 @@ export function actionFromTool(step: Extract<TimelineItem, { kind: "tool" }>): C
   const href = kind === "linked" && linkUrl && /^https:\/\//.test(linkUrl) ? linkUrl : itemHref(itemId);
   const title =
     str(item.title) ??
+    (kind === "task_started" || kind === "task_steered" || kind === "handed_off" ? str(res.title) : null) ??
     (kind === "linked" ? (str(link.title) ?? str(args.title) ?? linkUrl) : null) ??
     str(args.title) ??
     str(args.question) ??
@@ -258,6 +272,9 @@ const PLAIN: Record<ActionKind, { one: string; many: (n: number) => string }> = 
   filed: { one: "Filed this chat", many: () => "filed this chat" },
   device_proposal: { one: "Proposed a device change", many: (n) => `proposed ${n} device ${n === 1 ? "change" : "changes"}` },
   quick_action: { one: "Proposed a quick action", many: (n) => `proposed ${n} quick ${n === 1 ? "action" : "actions"}` },
+  task_started: { one: "Started a task", many: (n) => `started ${n} ${n === 1 ? "task" : "tasks"}` },
+  task_steered: { one: "Steered a task", many: (n) => `steered ${n} ${n === 1 ? "task" : "tasks"}` },
+  handed_off: { one: "Handed off a task", many: (n) => `handed off ${n} ${n === 1 ? "task" : "tasks"}` },
   delegated: { one: "Handed off", many: (n) => `handed off to ${n} ${n === 1 ? "agent" : "agents"}` },
 };
 

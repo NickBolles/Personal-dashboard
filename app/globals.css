@@ -2580,6 +2580,46 @@ button:active > .dock-orb {
   .k-thing[data-stacked] .k-thing-open {
     margin-inline: 12px 8px;
   }
+  /* The peek: the latest activity, fading into the one before it to show there is more. A button when it opens
+     the row in place. Two lines at most; the fade is a mask, so it holds on any surface colour. */
+  .k-thing-peek {
+    display: flex;
+    min-width: 0;
+    max-height: 38px;
+    flex-direction: column;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--r1);
+    background: none;
+    padding: 0;
+    color: var(--t2);
+    font: 400 13px/19px var(--sans);
+    text-align: left;
+    -webkit-mask-image: linear-gradient(#000 45%, transparent 98%);
+    mask-image: linear-gradient(#000 45%, transparent 98%);
+  }
+  /* Over a peek that is itself a control, the title keeps a 24px target of its own. */
+  .k-thing-main:has(> button.k-thing-peek) > :is(a, button).k-thing-title {
+    padding-block: 2px;
+  }
+  /* One line has nothing to fade into. */
+  .k-thing-peek:not(:has(> span:not(.sr-only) ~ span:not(.sr-only))) {
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  button.k-thing-peek {
+    min-height: 24px;
+    cursor: pointer;
+  }
+  button.k-thing-peek:hover {
+    color: var(--t1);
+  }
+  .k-thing-peek > span:not(.sr-only) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .k-thing-chev {
     transition: transform var(--d1) var(--ease);
   }
@@ -3908,4 +3948,168 @@ button:active > .dock-orb {
 }
 .sk-day {
   padding: 0.25rem 0.25rem 0.125rem;
+}
+
+/* ---------- library layout pieces (components/ui/Layout.tsx): Disclosure, Sheet, SideDock, SplitPane ---------- */
+@layer components {
+  /* Disclosure: one row that opens its content in place. */
+  .k-disc {
+    min-width: 0;
+  }
+  .k-disc-sum {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--t2);
+    font: 400 13px/1.4 var(--sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .k-disc-sum:hover {
+    color: var(--t1);
+  }
+  .k-disc-chev {
+    flex: none;
+    color: var(--t3);
+    transition: transform var(--d2) var(--ease);
+  }
+  .k-disc[data-open] .k-disc-chev {
+    transform: rotate(90deg);
+  }
+  .k-disc-label {
+    flex: none;
+    color: var(--t3);
+    font: 600 11px/1.4 var(--sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .k-disc-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .k-disc-body {
+    min-width: 0;
+    padding: 2px 0 8px;
+  }
+  @media (min-width: 600px) {
+    .k-disc-sum {
+      min-height: 40px;
+    }
+  }
+  @media (min-width: 1100px) and (pointer: fine) {
+    .k-disc-sum {
+      min-height: 32px;
+    }
+  }
+
+  /* Sheet: a bottom sheet with two resting heights (Layout.tsx `sheetHeights` mirrors the numbers). A drag sets
+     inline height/transform; these take over again when the finger lifts. */
+  .k-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+  }
+  .k-sheet-scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+  }
+  .k-sheet-body {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    height: min(60dvh, 560px);
+    max-height: 90dvh;
+    border: 1px solid var(--bd);
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+    background: var(--s1);
+    box-shadow: var(--sh2);
+    transition:
+      height var(--d2) var(--ease),
+      transform var(--d2) var(--ease);
+  }
+  .k-sheet-body[data-dragging] {
+    transition: none;
+  }
+  .k-sheet[data-full="true"] .k-sheet-body {
+    height: 90dvh;
+  }
+  .k-sheet-head {
+    flex: none;
+    border-bottom: 1px solid var(--bd);
+  }
+  .k-sheet-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px 4px 12px;
+  }
+  .k-sheet-title > h2 {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--t1);
+    font: 600 14px/1.3 var(--sans);
+  }
+  .k-sheet-close {
+    transform: rotate(90deg);
+  }
+  .k-sheet-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* SideDock: a column that stays in view beside a scrolling page. */
+  .k-dock {
+    position: sticky;
+    top: 0;
+    display: flex;
+    min-width: 0;
+    box-sizing: border-box;
+    height: calc(100dvh - var(--k-dock-top, 0px) - var(--kb-inset, 0px));
+    padding-bottom: var(--k-dock-bottom, 0px);
+    flex-direction: column;
+    align-self: start;
+    border-left: 1px solid var(--bd);
+    background: var(--s1);
+  }
+  .k-dock-head,
+  .k-dock-foot {
+    flex: none;
+    min-width: 0;
+  }
+  .k-dock-body {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* SplitPane: two panes side by side with room, one at a time (swipe) without. */
+  .k-panes {
+    min-width: 0;
+  }
+  .k-panes[data-split] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 54%, 620px);
+    align-items: start;
+  }
+  .k-panes-main,
+  .k-panes-one {
+    min-width: 0;
+  }
 }

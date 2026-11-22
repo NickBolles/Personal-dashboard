@@ -22,7 +22,7 @@ it("deduplicates quiet stalls into one disclosure, keeps original rows and Activ
   expect(screen.getByText("failed")).toBeTruthy();
   expect(screen.getByText("approval")).toBeTruthy();
   expect(screen.getByText("new error")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Activity" }));
+  fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
   expect(onActivity).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: "1 stalled run" }));
   expect(screen.getAllByText("quiet")).toHaveLength(1);

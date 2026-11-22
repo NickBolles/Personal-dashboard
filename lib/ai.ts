@@ -61,7 +61,7 @@ export const AI_ACTIONS: Record<AiActionKind, { label: string; verb: string; ico
     verb: "Summarizing",
     icon: "≡",
     tier: "standard",
-    description: "A review-only summary of this item. Nothing is saved as a note until you choose Save as note.",
+    description: "A review-only summary of this task. Nothing is saved as a note until you choose Save as note.",
   },
 };
 

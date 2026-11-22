@@ -113,8 +113,10 @@ test("coordinator parity: reply actions and Running shortcut, area sub-agent ste
   await expect(menu.getByRole("menuitem", { name: "Focus", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await reply.getByRole("button", { name: "Handed off to 2 agents · Audit retries" }).click();
-  await expect(page.getByRole("tab", { name: /Running/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("tabpanel", { name: /Running/ })).toContainText("Audit retries");
+  // "In this chat" opens with its Running section (a fixed section, not a tab) showing the hand-off.
+  const running = page.getByTestId("chat-panel-content").locator('[data-section="Running"]');
+  await expect(running.getByRole("heading", { level: 3, name: /^Running/ })).toBeVisible();
+  await expect(running).toContainText("Audit retries");
   await expectNoHorizontalOverflow(page);
 
   const pane = await openAreaPane(page);

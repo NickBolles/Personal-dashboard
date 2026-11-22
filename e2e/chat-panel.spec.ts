@@ -38,12 +38,10 @@ test("chat panel: tray opens chip tabs, truthful running and parent links", asyn
   await expect(panel.getByText("Panel builder")).toBeVisible();
   await expect(panel.getByRole("link", { name: "↩ Back to parent chat" })).toHaveAttribute("href", "/chat/sess_morning");
   await expect(panel.getByRole("link", { name: "Open child chat · @devchief" })).toHaveAttribute("href", "/chat/child");
-  for (const tab of ["Links", "Artifacts", "PRs", "Files", "Context", "Running"]) {
-    await openChatPanel(page, tab);
-    await expect(panel.getByRole("tab", { name: new RegExp(`^${tab}(?:\\s|$)`) })).toHaveAttribute("aria-selected", "true");
-  }
-  await panel.getByRole("tab", { name: /^Running/ }).press("ArrowRight");
-  await expect(panel.getByRole("tab", { name: /^Files/ })).toBeFocused();
+  // "In this chat" has a fixed section for each kind of thing, all on the page at once (no tabs).
+  await expect(panel.getByRole("tab")).toHaveCount(0);
+  for (const title of ["Running", "Waiting on you", "Pull requests", "Artifacts", "Files", "Links", "Context"])
+    await expect(panel.getByRole("heading", { level: 3, name: new RegExp(`^${title}`) })).toBeVisible();
   // The sheet's height is set by dragging its grab bar, not by buttons: up for full height, down to close.
   const sheet = page.getByRole("dialog", { name: "In this chat", exact: true });
   await expect(sheet.getByRole("button", { name: /^(Done|Full height|Half height)$/ })).toHaveCount(1);

@@ -205,7 +205,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const nodeItem = node ? byId.get(node.id) : undefined;
   const hereItem = nodeItem && !isContainer(nodeItem) ? nodeItem : undefined;
   const hereArea = node ? byId.get(node.areaId) : undefined;
-  // #108: on a project page "New item in ‹project›" / "Ask ‹project›" preset that project, not its root area.
+  // #108: on a project page "New task in ‹project›" / "Ask ‹project›" preset that project, not its root area.
   const hereContainer = nodeItem && isContainer(nodeItem) ? nodeItem : hereArea;
   const has = { item: Boolean(hereItem), area: Boolean(hereArea) };
   const here: Here = node
@@ -452,7 +452,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     if (row.kind === "action") return startTyped(row.m.def, row.m.rest);
     if (row.kind === "sugg" && row.s.action) {
       const def = actionById(row.s.action);
-      // "New item in Home" from an area page: the area chip comes from where you are
+      // "New task in Home" from an area page: the area chip comes from where you are
       const preset =
         (def.id === "new-item" || def.id === "ask") && hereContainer
           ? [{ arg: def.args[0]!, value: { id: hereContainer.id, label: hereContainer.title } }]

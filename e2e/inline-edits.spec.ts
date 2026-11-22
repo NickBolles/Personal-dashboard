@@ -117,7 +117,7 @@ test("detail ⋯: Abandon… and Mark superseded… close the item with an optio
   await page.goto(`/areas?item=${id}`);
   await expect(heading(page)).toHaveText(title);
 
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Abandon…" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText(`Abandon ${title}`);
@@ -129,12 +129,12 @@ test("detail ⋯: Abandon… and Mark superseded… close the item with an optio
   await bar.getByRole("button", { name: "Undo" }).click();
   await expect(page.locator('[data-status="captured"]')).toBeVisible();
 
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Mark superseded…" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Mark superseded", exact: true }).click();
   await expect(page.locator('[data-status="superseded"]')).toBeVisible();
   // closed items offer Reopen, not Abandon/Superseded again
-  await page.getByRole("button", { name: "More item actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await expect(page.getByRole("menuitem", { name: "Abandon…" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 });

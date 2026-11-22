@@ -25,6 +25,10 @@ export { ThingRow, StateDot, StateWord, RefPill, RowAction, type ThingState } fr
 // Bottom-sheet grab bar: drag up for full height, down to close; the bar is also a button and takes arrow keys.
 export { SheetHandle, useSheetDrag } from "./SheetDrag";
 
+// Layout: a section that opens in place, a bottom sheet, a column docked beside a page, and two panes that sit side
+// by side with room and swipe one at a time without.
+export { Disclosure, Sheet, SideDock, SplitPane, useSplitWidth, type SplitPaneItem } from "./Layout";
+
 // Loading state (named status + skeletons).
 export { LoadingState } from "./LoadingState";
 

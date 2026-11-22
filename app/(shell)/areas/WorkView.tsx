@@ -6,6 +6,7 @@ import {
   ButtonLink as KButtonLink,
   ChipButton,
   Dialog,
+  Disclosure,
   ErrorNote,
   Field,
   Input,
@@ -14,10 +15,12 @@ import {
   Pill,
   RefPill,
   Select,
+  SplitPane,
   StateWord,
   Textarea,
   useAnchoredMenu,
   useNow,
+  useSplitWidth,
   useToast,
   type KMenuItem,
 } from "@/components/ui";
@@ -26,13 +29,17 @@ import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
-import { ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
+import { ItemTimeline, ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
+import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
+import { ProjectTasks } from "@/components/tasks/ProjectTasks";
+import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
+import { canHaveChat, taskChats } from "@/lib/task-chat";
 import { ItemRows, RollupGroups } from "@/components/work/Rollup";
 import "@/components/work/item-page.css";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useState, useSyncExternalStore, type ButtonHTMLAttributes, type Ref } from "react";
+import { useCallback, useEffect, useEffectEvent, useId, useMemo, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type Ref } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/client/api";
 import { daysBetween } from "@/lib/time";
@@ -110,7 +117,8 @@ import {
 } from "@/lib/work";
 
 const KIND_LABEL = KIND_LABELS;
-type ItemSection = "overview" | "chats" | "activity";
+/** A task page's two panes. */
+type ItemSection = "overview" | "chat";
 const textareaCls = `${inputCls} min-h-24`;
 
 function useItems(archived: boolean) {
@@ -268,9 +276,21 @@ export function WorkView({
   // "+ New" creates where you are: inside the open area/project, or next to the open item.
   const open = current ? list.find((i) => i.id === current) : undefined;
   const contextNode = open ? (isContainer(open) ? open : (list.find((i) => i.id === open.parentId) ?? null)) : null;
-  // Work items (leaves) fold their Chats section into the view tabs; areas/projects have no Chats tab.
+  // A task (a leaf: not an area or project) has two panes, Overview and Chat; areas and projects have no Chat tab.
   const leaf = !!open && !isContainer(open);
-  const shownTab: AreaTab = (tab === "chats" && !leaf) || (tab === "portfolio" && current) ? "overview" : tab;
+  /** A project is a task with tasks inside: it uses the task page (Overview and Chat) with a Tasks section. */
+  const project = !!open && isContainer(open) && open.parentId !== null && open.kind !== "conversation";
+  /** The task can have a chat of its own (a note cannot), and this person can chat. */
+  const chatTab = (leaf || project) && canChat && canHaveChat(open!);
+  /** The two-pane page: every task, and a project when its chat can be shown. */
+  const paged = leaf || (project && chatTab);
+  // A task's log opens in place on its Overview: the old Activity address lands there, with the log open.
+  const shownTab: AreaTab = (tab === "chat" && !chatTab) || (tab === "portfolio" && current) || (tab === "activity" && leaf) ? "overview" : tab;
+  /** The task page itself (Overview and Chat); Board and Graph are views it can be opened in. */
+  const taskPage = !!current && paged && (shownTab === "overview" || shownTab === "chat");
+  // With 600px of content the two panes sit side by side (unfolded Fold, tablets, desktop).
+  const contentRef = useRef<HTMLDivElement>(null);
+  const split = useSplitWidth(contentRef, 600);
 
   // Header bar "New" → Item/Project/Area, created in the open container like the in-page menu.
   useEffect(() => {
@@ -320,7 +340,7 @@ export function WorkView({
           className="px-1"
         />
       </div>
-      <div id="work-content" className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
+      <div id="work-content" ref={contentRef} className="order-2 min-w-0 scroll-mt-4 lg:order-none lg:col-start-2 lg:row-span-2 lg:row-start-1">
         {selectMode ? (
           <section aria-label="Select items" className="wk-select-page hidden min-w-0 px-3 py-3 sm:px-5 lg:block lg:px-6 lg:py-5">
             <SelectList
@@ -352,29 +372,42 @@ export function WorkView({
           </section>
         ) : null}
         <div className={selectMode ? "lg:hidden" : undefined}>
-          {view.kind === "today" || current ? (
+          {taskPage ? (
+            // A task: its title, then ONE tab bar (Overview · Chat), then the two panes. The page draws the bar itself,
+            // under the title, and leaves it out when both panes show side by side.
+            <ItemDetail
+              key={current}
+              id={current!}
+              items={list}
+              onSelect={select}
+              onOp={onOp}
+              initialAction={view.kind === "item" ? view.action : undefined}
+              onAdd={(kind, parent) => setAdding({ kind, parent })}
+              onMove={(ids) => setMoving(ids)}
+              section={shownTab === "chat" ? "chat" : "overview"}
+              onSection={setTab}
+              onOpenTask={(id, to) => go({ kind: "item", id }, { push: true, tab: to })}
+              chatTab={chatTab}
+              split={split}
+              logOpen={tab === "activity"}
+            />
+          ) : view.kind === "today" || current ? (
             // Areas v2: one tab bar in a fixed spot; a tab swaps only the pane below it and keeps the selection.
             <div className="min-w-0">
-              <AreaTabs tab={shownTab} item={current} leaf={leaf} onTab={setTab} className="mx-3 mt-2 sm:mx-5 lg:mx-6 lg:mt-3" />
+              <AreaTabs
+                tab={shownTab}
+                item={current}
+                leaf={paged}
+                chat={chatTab}
+                project={project}
+                onTab={setTab}
+                className="mx-3 mt-2 sm:mx-5 lg:mx-6 lg:mt-3"
+              />
               <div id={AREA_PANEL_ID} role="tabpanel" aria-labelledby={`areas-tab-${shownTab}`} className="ar-panel min-w-0">
                 {current && (shownTab === "board" || shownTab === "graph" || (shownTab === "activity" && !leaf)) ? (
                   <NodeHeader id={current} items={list} onSelect={select} />
                 ) : null}
-                {current && leaf && (shownTab === "overview" || shownTab === "chats" || shownTab === "activity") ? (
-                  // A work item keeps its own page (header, actions); the view tab picks its section.
-                  <ItemDetail
-                    key={current}
-                    id={current}
-                    items={list}
-                    onSelect={select}
-                    onOp={onOp}
-                    initialAction={view.kind === "item" ? view.action : undefined}
-                    onAdd={(kind, parent) => setAdding({ kind, parent })}
-                    onMove={(ids) => setMoving(ids)}
-                    section={shownTab}
-                    onSection={setTab}
-                  />
-                ) : shownTab === "board" ? (
+                {shownTab === "board" ? (
                   <div className="min-w-0 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
                     <BoardTab scopeId={current} selectedId={current} onOpen={openOverview} />
                   </div>
@@ -580,7 +613,7 @@ const CMP_TEXT: Record<string, string> = { "<=": "≤", ">=": "≥", "<": "<", "
  * say. Where it sits (area, repo, settle policy), when it is planned and closed, and its lineage. Status, due,
  * pull requests, blockers and conversations are on the page itself (header, Plan), so they are not repeated here.
  */
-function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => void }) {
+function ItemRail({ d, onSelect, inline }: { d: WorkDetail; onSelect: (id: string) => void; inline?: boolean }) {
   const { item } = d;
   const lineage = d.lineage
     .map((l) => {
@@ -594,7 +627,7 @@ function ItemRail({ d, onSelect }: { d: WorkDetail; onSelect: (id: string) => vo
     .filter((x): x is NonNullable<typeof x> => !!x)
     .slice(0, 6);
   return (
-    <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail">
+    <aside aria-label="Item context" className="wk-rail flex min-w-0 flex-col gap-3 p-3.5" data-testid="item-rail" data-inline={inline || undefined}>
       <Block label="Properties">
         <dl className="wk-kv">
           {d.area ? (
@@ -656,7 +689,7 @@ const SETTLE_TEXT: Record<string, string> = { manual: "Manual", suggest: "Sugges
 
 type ChatRow = { key: string; sessionId: string; title: string; note: string };
 
-/** Chats tab rows: linked chat sessions plus conversations filed under the item (deduped by session). */
+/** An area's chat rows: linked chat sessions plus conversations filed under it (deduped by session). */
 function itemChatRows(d: { links: WorkLink[]; children: WorkItem[] }): ChatRow[] {
   const rows: ChatRow[] = [];
   const seen = new Set<string>();
@@ -671,33 +704,6 @@ function itemChatRows(d: { links: WorkLink[]; children: WorkItem[] }): ChatRow[]
     rows.push({ key: c.id, sessionId: c.sessionId, title: c.title, note: "filed here" });
   }
   return rows;
-}
-
-/** Chats tab: conversations linked to or filed under this item. */
-function ItemChats({ chats, canChat, onNew, busy }: { chats: ChatRow[]; canChat: boolean; onNew: () => void; busy: boolean }) {
-  return (
-    <section aria-label="Chats">
-      {chats.length ? (
-        <ul className="k-card wk-node-rows overflow-hidden">
-          {chats.map((l) => (
-            <li key={l.key}>
-              <Link href={`/chat/${encodeURIComponent(l.sessionId)}`} className="wk-node-row" aria-label={`Chat: ${l.title || l.sessionId}`}>
-                <span className="min-w-0 flex-1 truncate">{l.title || <span className="font-mono text-xs">{l.sessionId}</span>}</span>
-                <span className="shrink-0 text-xs text-muted">{l.note}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[13px] text-muted">No chats linked yet.</p>
-      )}
-      {canChat ? (
-        <Button size="sm" className="mt-2" busy={busy} onClick={onNew}>
-          New chat here
-        </Button>
-      ) : null}
-    </section>
-  );
 }
 
 /** The summary, shown once (the details form no longer repeats it): two lines, "More" when it runs longer. */
@@ -773,18 +779,25 @@ function AddMenuChip({ label, name, items }: { label: string; name: string; item
   );
 }
 
-/** Log: one line that opens the Activity view (the feed is drawn there, once). */
-function LogLine({ d, onOpen }: { d: WorkDetail; onOpen: () => void }) {
+/** Log: one line that opens the item's lineage and activity in place (drawn once, here). */
+function LogLine({ d, defaultOpen, onSelect }: { d: WorkDetail; defaultOpen?: boolean; onSelect: (id: string) => void }) {
   const now = useNow();
   return (
-    <KButton variant="ghost" className="ip-log" onClick={onOpen} data-testid="item-log">
-      <span className="ip-next-label">Log</span>
-      <span className="ip-log-text">
-        <span data-dynamic>{logLine(d.events, now) ?? "No changes yet"}</span>
-        {itemAgentChip(d.item)}
-      </span>
-      <ChevronIcon className="ip-chev h-4 w-4" />
-    </KButton>
+    <Disclosure
+      summary="Log"
+      defaultOpen={defaultOpen}
+      testId="item-log"
+      meta={
+        <span className="ip-log-text">
+          <span data-dynamic>{logLine(d.events, now) ?? "No changes yet"}</span>
+          {itemAgentChip(d.item)}
+        </span>
+      }
+    >
+      <div className="ip-log-body" data-testid="item-log-body">
+        <Activity d={d} onSelect={onSelect} />
+      </div>
+    </Disclosure>
   );
 }
 
@@ -803,24 +816,40 @@ function ItemDetail({
   onMove,
   section,
   onSection,
+  onOpenTask,
+  chatTab = false,
+  split = false,
+  logOpen = false,
 }: {
   id: string;
   items: WorkItem[];
   onSelect: (id: string) => void;
+  /** Open another task on its Overview or its Chat (a project's rows). */
+  onOpenTask?: (id: string, to: "overview" | "chat") => void;
   onOp: OnOp;
   /** from the command palette / Today: packet | continue | settle | validate */
   initialAction?: string;
   onAdd: (kind: CreatableKind | undefined, parent: WorkItem) => void;
   onMove: (ids: string[]) => void;
-  /** Areas v2: the page's view tabs own the work item's sections (one tab bar, no inner tablist) */
+  /** A task: which of its two panes shows when there is room for one (the page's ONE tab bar picks it). */
   section?: ItemSection;
-  onSection?: (s: ItemSection) => void;
+  onSection?: (s: AreaTab) => void;
+  /** A task that can have a chat: it gets the Chat pane beside (or a swipe from) Overview. */
+  chatTab?: boolean;
+  /** There is room for both panes side by side (600px of content). */
+  split?: boolean;
+  /** Open the log (the old Activity address of a task). */
+  logOpen?: boolean;
 }) {
   const router = useRouter();
   const q = useQuery({ queryKey: ["work", "item", id], queryFn: () => api.get<WorkDetail>(`/api/work/items/${encodeURIComponent(id)}`) });
-  const [ownTab, setOwnTab] = useState<ItemSection>("overview");
-  const tab = section ?? ownTab;
-  const setTab = onSection ?? setOwnTab;
+  const tab: ItemSection = section ?? "overview";
+  const setTab = useCallback((next: AreaTab) => onSection?.(next), [onSection]);
+  /**
+   * A draft handed to the task's chat: a work packet's handoff, or what a list row's Steer / Retry / Resume opened
+   * the task with (`?compose=1`, `?draft=retry|resume`). The Chat pane puts it in its composer; nothing is sent.
+   */
+  const [prefill, setPrefill] = useState<TaskDraft | undefined>(draftFromUrl);
   const [dialog, setDialog] = useState<DialogKind>(
     initialAction === "packet" ? "packet" : initialAction === "continue" ? "continue" : initialAction === "settle" ? "settle" : null,
   );
@@ -856,7 +885,26 @@ function ItemDetail({
   useGithubAutoRefresh(!!q.data?.githubRefresh && q.data.links.some((l) => l.kind === "github_pr" || l.kind === "github_issue"), id);
   const menu = useAnchoredMenu();
   // Runs, jobs and reports on the item (and, for a project, under it): the Work list, the Now slot, the roll-up.
-  const work = useItemWork(id, !!q.data);
+  const work = useItemWork(id, !!q.data, q.data?.item.primarySessionId ?? null);
+  const taskDecisions = useTaskDecisions(id, !!q.data && !isContainer(q.data.item));
+  // What the task's chat made or linked, beside the links the task lists itself (TaskOverview.tsx).
+  const ownUrls = useMemo(() => new Set((q.data?.links ?? []).flatMap((l) => (l.url ? [l.url] : []))), [q.data?.links]);
+  const chatMade = useChatMade(chatTab ? (q.data?.item.primarySessionId ?? null) : null, ownUrls, !!q.data);
+  // "Continue" on a task hands the packet to the task's own chat: the handoff becomes a draft there (never sent here).
+  const handoffToChat = useEffectEvent(() => {
+    if (!q.data) return;
+    setPrefill({ text: handoffMarkdown(q.data, window.location.origin), at: Date.now(), handoff: true });
+    setDialog(null);
+    setTab("chat");
+    // A task that has its chat already: the handoff is recorded on the task now (nothing is created or sent).
+    // Without one, it is recorded when the first message creates the chat (TaskChat).
+    if (q.data.item.primarySessionId) void api.post(`/api/work/items/${encodeURIComponent(id)}/continue`, {}).catch(() => undefined);
+  });
+  const continueInChat = chatTab && dialog === "continue" && !!q.data;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- "Continue" on a task (button, menu or the palette's ?do=continue) moves to its chat once the task has loaded
+    if (continueInChat) handoffToChat();
+  }, [continueInChat]);
   const asked = useQuery({
     queryKey: ["work", "decisions"],
     queryFn: () => api.get<DecisionsResponse>("/api/work/decisions"),
@@ -888,7 +936,7 @@ function ItemDetail({
   const container = isContainer(item) && item.kind !== "conversation";
   /** A piece of work with its own page: everything but containers and conversations. */
   const leaf = !container && item.kind !== "conversation";
-  const chat = d.links.find((l) => l.kind === "chat_session");
+  const chats = taskChats(d);
   const scrollTo = (selector: string) => {
     setTab("overview");
     requestAnimationFrame(() => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -907,7 +955,8 @@ function ItemDetail({
   };
   const action = itemPrimary(d, canChat);
   // Now: the escalation, else a pointer to what waits on the owner, else the one primary action for this state.
-  const escalated = leaf && !!selectEscalation(item.id, asked.data?.entries ?? [], work.info, nowMs);
+  const escalation = leaf ? selectEscalation(item.id, asked.data?.entries ?? [], work.info, nowMs) : null;
+  const escalated = !!escalation;
   const now: ItemNow = leaf
     ? itemNow({ itemId: item.id, escalation: escalated, action, rows: work.rows, decisions: work.decisions })
     : { kind: "action", action };
@@ -921,9 +970,8 @@ function ItemDetail({
     prLinks.find((l) => l.externalState === "open") ??
     prLinks.find((l) => l.externalState !== "merged" && l.externalState !== "closed") ??
     prLinks[0];
-  const chats = itemChatRows(d);
   const reopenable = item.status === "settled" || item.status === "awaiting_validation" || d.validations.some((v) => v.status === "fail");
-  const childLabel = isArea ? "Project" : "Item";
+  const childLabel = isArea ? "Project" : "Task";
   const usedAsWork = d.packets.length > 0 || d.validations.length > 0;
   const hasBlockers = d.blockedBy.length + d.blocking.length > 0;
   const rollup = containerRollup({ item, items, agents: work.agents, runs: work.runs, decisions: work.decisions, now: nowMs });
@@ -939,7 +987,13 @@ function ItemDetail({
   const answers = nodeAgent?.requested ? agentChipLabel(nodeAgent) : null;
   const menuItems: KMenuItem[] = [
     ...group(answers ? `Ask · ${answers.startsWith("@") ? answers : `@${answers}`} answers here` : "Ask", [
-      leaf && canChat ? { label: "Chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
+      // A task's chat is a pane of this page; a note (no chat of its own) still starts one beside it.
+      leaf && canChat
+        ? chatTab
+          ? { label: "Open chat", onSelect: () => setTab("chat") }
+          : { label: "Chat here", onSelect: () => newChat.start({ areaId: item.id }) }
+        : null,
+      container && chatTab ? { label: "Open chat", onSelect: () => setTab("chat") } : null,
       container && canChat ? { label: "New chat here", onSelect: () => newChat.start({ areaId: item.id }) } : null,
       isArea && canChat && isOwner ? { label: "Adopt existing chat…", onSelect: () => setDialog("adopt") } : null,
       ...aiItems,
@@ -957,12 +1011,20 @@ function ItemDetail({
       // The packet block carries these once a packet exists.
       !container && !d.packets.length ? { label: "Copy handoff", onSelect: () => void copyHandoff() } : null,
       !container && !d.packets.length ? { label: "Preview handoff", onSelect: () => setDialog("handoff") } : null,
-      !container && canChat && !d.packets.length ? { label: "Continue in new conversation", onSelect: () => setDialog("continue") } : null,
+      !container && canChat && !d.packets.length
+        ? { label: chatTab ? "Continue in chat" : "Continue in new conversation", onSelect: () => setDialog("continue") }
+        : null,
+    ]),
+    // A task's tab bar is Overview · Chat: its other views open from here.
+    ...group("View", [
+      (leaf && kidCount) || (container && chatTab) ? { label: "Board", onSelect: () => setTab("board") } : null,
+      container && chatTab ? { label: "Activity", onSelect: () => setTab("activity") } : null,
+      leaf || (container && chatTab) ? { label: "Graph", onSelect: () => setTab("graph") } : null,
     ]),
     ...group("Add", [
-      container || item.kind === "note" ? null : { label: "Add sub-item", onSelect: () => onAdd("thread", item) },
+      container || item.kind === "note" ? null : { label: "Add sub-task", onSelect: () => onAdd("thread", item) },
       // Areas: "+ Project" is the one primary add; a loose item goes through ⋯.
-      isArea ? { label: "Add item to area", onSelect: () => onAdd("thread", item) } : null,
+      isArea ? { label: "Add task to area", onSelect: () => onAdd("thread", item) } : null,
       isArea ? null : { label: "Link PR", onSelect: () => setDialog("github_pr") },
       isArea || !canChat ? null : { label: "Link conversation", onSelect: () => setDialog("chat_session") },
       isArea ? null : { label: "Link URL", onSelect: () => setDialog("url") },
@@ -1052,7 +1114,7 @@ function ItemDetail({
       : shown === "record"
         ? `${pending} check${pending === 1 ? " still needs" : "s still need"} a result.`
         : shown === "resolve_blocker"
-          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} items`}.`
+          ? `Blocked by ${openBlockers.length === 1 ? openBlockers[0]!.title : `${openBlockers.length} tasks`}.`
           : shown === "reopen"
             ? item.settledReason
             : null;
@@ -1088,7 +1150,7 @@ function ItemDetail({
         !item.summary && !item.builtIn && editing !== "summary" ? (
           <AddChip key="summary" label="Summary" name="Add a summary" onClick={() => setEditing("summary")} />
         ) : null,
-        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-item" name="Add sub-item" onClick={() => onAdd("thread", item)} /> : null,
+        !kidCount && item.kind !== "note" ? <AddChip key="sub" label="Sub-task" name="Add sub-task" onClick={() => onAdd("thread", item)} /> : null,
         !d.links.length ? (
           <AddMenuChip
             key="link"
@@ -1134,9 +1196,196 @@ function ItemDetail({
   // While something needs the owner, an unwritten next action is not drawn (its "add" chip offers it instead).
   const showNext = item.kind !== "conversation" && (!!item.nextAction || editing === "next" || (!isArea && !needsOwner));
 
+  /** The fields line (status, due, owner, tags) and the Next section: the top of a task's Overview, a container's header. */
+  const headFields = (
+    <>
+      <div className="ip-meta">
+        {statusSelect}
+        {item.archived ? <Badge>Archived</Badge> : null}
+        {leaf ? (
+          <div className="ip-meta-in" data-testid="work-item-meta">
+            <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(change) => inline.mutate(change)} />
+          </div>
+        ) : null}
+        {container ? (
+          <span className="ip-meta-text wk-cmeta" data-dynamic>
+            {rollup.meta}
+          </span>
+        ) : null}
+        {/* The agent mode is set on areas and projects, so they say who answers here; an item says it in ⋯. */}
+        {container && canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
+      </div>
+      {/* Next: ONE section. What needs you is the next step (the decision, or a chip that jumps to what waits on
+            you), with the written next action under it as a quiet line. When nothing needs you: the next action,
+            then the page's one primary action for this state. */}
+      <div className="ip-nextsec" role="group" aria-labelledby="ip-next-h" data-testid="item-next" data-needs={needsOwner || undefined}>
+        {needsOwner || !showNext ? (
+          <h3 id="ip-next-h" className={needsOwner ? "ip-label ip-next-head" : "sr-only"}>
+            Next
+          </h3>
+        ) : null}
+        {leaf ? <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => (chatTab ? setTab("chat") : setDialog("continue")) : undefined} /> : null}
+        {leaf ? <CaptureTriageCard itemId={item.id} /> : null}
+        {now.kind === "pointer" ? (
+          <p className="ip-now-pointer" data-testid="now-pointer">
+            <StateWord state={now.decisions.length ? "needs" : now.rows[0]!.state} />
+            {now.decisions.map((x) => (
+              <RefPill key={x.ref} id={x.ref} onClick={() => router.push(coordHref(item.id, "needs", x.ref))} />
+            ))}
+            {now.rows.map((row) =>
+              row.kind === "run" && row.refId ? (
+                <RefPill key={row.key} id={row.refId} onClick={() => jumpToWork(row.key)} />
+              ) : (
+                <ChipButton key={row.key} className="ip-jump" onClick={() => jumpToWork(row.key)}>
+                  {row.title}
+                </ChipButton>
+              ),
+            )}
+            {/* One thing waiting: say what it waits for, so the next step reads without opening anything. */}
+            {now.decisions.length + now.rows.length === 1 ? <span className="ip-now-note">{now.decisions[0]?.question ?? now.rows[0]!.note}</span> : null}
+          </p>
+        ) : null}
+        {showNext ? (
+          <div className="ip-next" data-quiet={needsOwner || undefined} data-testid="next-action">
+            {needsOwner ? (
+              <span className="ip-next-label">Then</span>
+            ) : (
+              <h3 id="ip-next-h" className="ip-next-label">
+                Next
+              </h3>
+            )}
+            <InlineText
+              key={item.updatedAt}
+              field="nextAction"
+              value={item.nextAction}
+              status={item.status}
+              disabled={item.builtIn}
+              editing={editing === "next" ? true : undefined}
+              onEditingChange={(on) => setEditing(on ? "next" : null)}
+              placeholder="Add the very next step"
+              onSave={(nextAction) => inline.mutate({ nextAction })}
+            />
+          </div>
+        ) : null}
+        {primary ? (
+          <div className="ip-now-act" data-testid={item.status === "ready_to_settle" ? "settle-prompt" : "item-primary"}>
+            {why ? <p className="ip-now-why">{why}</p> : null}
+            {primary}
+          </div>
+        ) : item.settledReason ? (
+          <p className="ip-now-why mt-2">{item.settledReason}</p>
+        ) : null}
+      </div>
+    </>
+  );
+  // The status bar under Overview: what waits on the owner, else what the agents on the task are doing.
+  const topRow = work.rows.find((row) => row.state !== "done" && row.state !== "stopped");
+  const said = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
+  const status: TaskStatus | null = !chatTab
+    ? null
+    : now.kind === "pointer"
+      ? { state: "needs", text: now.decisions[0] ? said([now.decisions[0].ref, now.decisions[0].question]) : said([now.rows[0]?.title, now.rows[0]?.note]) }
+      : escalation?.kind === "decision"
+        ? { state: "needs", text: escalation.decision.question }
+        : escalation?.kind === "run"
+          ? { state: escalation.stalled ? "stalled" : "failed", text: escalation.run.title }
+          : escalation
+            ? { state: "failed", text: "The last run failed" }
+            : topRow
+              ? { state: topRow.state, text: said([topRow.title, topRow.note]) }
+              : null;
+  // The task's own chat is a pane of this page (and the status bar speaks for it): a turn in it is not also a row.
+  const agentRows = chatTab ? work.rows.filter((row) => row.kind !== "chat" || (!!row.sessionId && row.sessionId !== item.primarySessionId)) : work.rows;
+  const plan =
+    summary || hasBlockers || d.packets.length || adds.length ? (
+      <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
+        <h3 id="ip-plan-h" className="ip-label">
+          Plan
+        </h3>
+        {summary}
+        <Blockers d={d} onSelect={onSelect} />
+        <PacketCard
+          d={d}
+          onCopy={() => void copyHandoff()}
+          onRevise={() => setDialog("packet")}
+          // "Continue in chat" is the page's primary while a packet is ready: not offered twice.
+          onContinue={canChat && shown !== "continue" ? () => setDialog("continue") : undefined}
+        />
+        <div className="ip-adds" role="group" aria-label="Add to this task">
+          {adds}
+        </div>
+      </section>
+    ) : null;
+  /**
+   * A task's Overview, top to bottom: its fields; Next (what needs you, then the written next step); the timeline;
+   * agents and sub-tasks; decisions; what was made or linked; Done when; the plan; and one Log line.
+   */
+  const overview = leaf ? (
+    <div className="wk-with-rail min-w-0" data-rail={wide && !chatTab ? "on" : undefined}>
+      <div className="min-w-0">
+        <div className="bg-surface px-3 pb-3 sm:px-5 lg:px-6" data-testid="item-fields">
+          {headFields}
+        </div>
+        <div className="wk-panel ip-body px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
+          <ItemTimeline
+            section
+            events={work.timeline}
+            live={work.rows.some((row) => row.state === "working")}
+            // The chat is a tab of this page; side by side it is already on screen.
+            onOpenChat={chatTab && !split ? () => setTab("chat") : undefined}
+            sessionId={chatTab ? null : work.sessionId}
+          />
+          <ItemWorkList
+            label="Agents and sub-tasks"
+            itemId={item.id}
+            areaId={d.area?.id ?? null}
+            rows={agentRows}
+            open={workOpen}
+            onToggle={toggleWork}
+            onOp={onOp}
+            extraCount={kidCount}
+            extra={
+              kidCount ? (
+                <ItemsSection sub label="Sub-tasks" testId="sub-items" parent={item} open={kids.items} done={kids.done} onSelect={onSelect} />
+              ) : undefined
+            }
+          />
+          <TaskDecisions itemId={item.id} decisions={taskDecisions.data ?? []} />
+          <MadeAndLinked d={d} made={chatMade} hideChats={chatTab} canChat={canChat} />
+          <DoneWhen d={d} onReopen={() => setDialog("reopen")} focusRecord={initialAction === "validate"} recording={item.status === "awaiting_validation"} />
+          {plan}
+          <LogLine d={d} defaultOpen={logOpen} onSelect={onSelect} />
+          {chatTab && wide ? <ItemRail d={d} onSelect={onSelect} inline /> : null}
+        </div>
+        {chatTab && !split ? <TaskStatusBar status={status} onOpen={() => setTab("chat")} /> : null}
+      </div>
+      {wide && !chatTab ? <ItemRail d={d} onSelect={onSelect} /> : null}
+    </div>
+  ) : null;
+  /** An area's page, and a project's Overview pane: what is inside it, then what it carries itself. */
+  const containerBody = container ? (
+    <ContainerBody
+      d={d}
+      items={items}
+      rollup={rollup}
+      reports={work.rows.filter((row) => row.kind === "job" || row.kind === "report")}
+      workOpen={workOpen}
+      onToggleWork={toggleWork}
+      onSelect={onSelect}
+      onOp={onOp}
+      canChat={canChat}
+      onDialog={setDialog}
+      onCopy={() => void copyHandoff()}
+      onFull={(next) => setTab(next)}
+      onOpenTask={onOpenTask ?? ((taskId) => onSelect(taskId))}
+    />
+  ) : null;
+  /** The tab bar shows while one pane shows at a time; side by side there is nothing to switch. */
+  const tabsShown = chatTab && !split;
+
   return (
     <article aria-labelledby="work-item-title" className="min-w-0" data-node-kind={container ? (isArea ? "area" : "project") : "work"}>
-      <section className="bg-surface px-3 pt-3 pb-3 sm:px-5 lg:px-6 lg:pt-4">
+      <section className={`bg-surface px-3 pt-3 sm:px-5 lg:px-6 lg:pt-4 ${leaf ? "pb-1" : "pb-3"}`}>
         <nav aria-label="Breadcrumb" className="wk-crumbs">
           <ol className="flex flex-wrap items-center gap-0.5 text-xs text-muted">
             {d.breadcrumb.map((b) => (
@@ -1151,7 +1400,7 @@ function ItemDetail({
               {isArea && item.settings?.color ? (
                 <span className={`jv-pick-dot jv-tag-${item.settings.color}`} aria-hidden="true" data-testid="area-color" />
               ) : null}
-              {isArea ? "Area" : item.kind === "thread" ? "Item" : KIND_LABEL[item.kind]}
+              {isArea ? "Area" : item.kind === "thread" ? "Task" : KIND_LABEL[item.kind]}
             </li>
           </ol>
         </nav>
@@ -1174,87 +1423,11 @@ function ItemDetail({
                 + {childLabel}
               </KButton>
             ) : null}
-            <MenuButton menu={menu} label="More item actions" />
-            <AnchoredMenu menu={menu} label="More item actions" items={menuItems} />
+            <MenuButton menu={menu} label="More actions" />
+            <AnchoredMenu menu={menu} label="More actions" items={menuItems} />
           </div>
         </div>
-        <div className="ip-meta">
-          {statusSelect}
-          {item.archived ? <Badge>Archived</Badge> : null}
-          {leaf ? (
-            <div className="ip-meta-in" data-testid="work-item-meta">
-              <ItemMetaEditor tags={item.tags ?? []} assignee={item.assignee ?? null} disabled={item.archived} onSave={(change) => inline.mutate(change)} />
-            </div>
-          ) : null}
-          {container ? (
-            <span className="ip-meta-text wk-cmeta" data-dynamic>
-              {rollup.meta}
-            </span>
-          ) : null}
-          {/* The agent mode is set on areas and projects, so they say who answers here; an item says it in ⋯. */}
-          {container && canChat ? <NodeAgentChip nodeId={item.id} version={item.updatedAt} /> : null}
-        </div>
-        {/* Next: ONE section. What needs you is the next step (the decision, or a chip that jumps to what waits on
-            you), with the written next action under it as a quiet line. When nothing needs you: the next action,
-            then the page's one primary action for this state. */}
-        <div className="ip-nextsec" role="group" aria-labelledby="ip-next-h" data-testid="item-next" data-needs={needsOwner || undefined}>
-          {needsOwner || !showNext ? (
-            <h3 id="ip-next-h" className={needsOwner ? "ip-label ip-next-head" : "sr-only"}>
-              Next
-            </h3>
-          ) : null}
-          {leaf ? <EscalationBanner itemId={item.id} onAskAgain={canChat ? () => setDialog("continue") : undefined} /> : null}
-          {leaf ? <CaptureTriageCard itemId={item.id} /> : null}
-          {now.kind === "pointer" ? (
-            <p className="ip-now-pointer" data-testid="now-pointer">
-              <StateWord state={now.decisions.length ? "needs" : now.rows[0]!.state} />
-              {now.decisions.map((x) => (
-                <RefPill key={x.ref} id={x.ref} onClick={() => router.push(coordHref(item.id, "needs", x.ref))} />
-              ))}
-              {now.rows.map((row) =>
-                row.kind === "run" && row.refId ? (
-                  <RefPill key={row.key} id={row.refId} onClick={() => jumpToWork(row.key)} />
-                ) : (
-                  <ChipButton key={row.key} className="ip-jump" onClick={() => jumpToWork(row.key)}>
-                    {row.title}
-                  </ChipButton>
-                ),
-              )}
-              {/* One thing waiting: say what it waits for, so the next step reads without opening anything. */}
-              {now.decisions.length + now.rows.length === 1 ? <span className="ip-now-note">{now.decisions[0]?.question ?? now.rows[0]!.note}</span> : null}
-            </p>
-          ) : null}
-          {showNext ? (
-            <div className="ip-next" data-quiet={needsOwner || undefined} data-testid="next-action">
-              {needsOwner ? (
-                <span className="ip-next-label">Then</span>
-              ) : (
-                <h3 id="ip-next-h" className="ip-next-label">
-                  Next
-                </h3>
-              )}
-              <InlineText
-                key={item.updatedAt}
-                field="nextAction"
-                value={item.nextAction}
-                status={item.status}
-                disabled={item.builtIn}
-                editing={editing === "next" ? true : undefined}
-                onEditingChange={(on) => setEditing(on ? "next" : null)}
-                placeholder="Add the very next step"
-                onSave={(nextAction) => inline.mutate({ nextAction })}
-              />
-            </div>
-          ) : null}
-          {primary ? (
-            <div className="ip-now-act" data-testid={item.status === "ready_to_settle" ? "settle-prompt" : "item-primary"}>
-              {why ? <p className="ip-now-why">{why}</p> : null}
-              {primary}
-            </div>
-          ) : item.settledReason ? (
-            <p className="ip-now-why mt-2">{item.settledReason}</p>
-          ) : null}
-        </div>
+        {leaf ? null : headFields}
         {container ? (
           <>
             {summary}
@@ -1284,120 +1457,63 @@ function ItemDetail({
         }
       />
 
-      {container ? (
-        <ContainerBody
-          d={d}
-          items={items}
-          rollup={rollup}
-          reports={work.rows.filter((row) => row.kind === "job" || row.kind === "report")}
-          workOpen={workOpen}
-          onToggleWork={toggleWork}
-          onSelect={onSelect}
-          onOp={onOp}
-          canChat={canChat}
-          onDialog={setDialog}
-          onCopy={() => void copyHandoff()}
-        />
+      {container && !chatTab ? (
+        containerBody
       ) : (
-        <div className="wk-with-rail min-w-0" data-rail={wide ? "on" : undefined}>
-          <div className="min-w-0">
-            {section ? null : (
-              <div role="tablist" aria-label="Item sections" className="flex gap-5 border-b border-line bg-surface px-3 sm:px-5 lg:px-6">
-                {(
-                  [
-                    ["overview", "Overview"],
-                    ["chats", chats.length ? `Chats ${chats.length}` : "Chats"],
-                    ["activity", "Activity"],
-                  ] as const
-                ).map(([k, label], ix, all) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="tab"
-                    id={`tab-${k}`}
-                    aria-selected={tab === k}
-                    aria-controls={`panel-${k}`}
-                    tabIndex={tab === k ? 0 : -1}
-                    onClick={() => setTab(k)}
-                    onKeyDown={(e) => {
-                      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                        const n = all[(ix + (e.key === "ArrowRight" ? 1 : all.length - 1)) % all.length][0];
-                        setTab(n);
-                        document.getElementById(`tab-${n}`)?.focus();
-                      }
-                    }}
-                    className="wk-tab"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div
-              role={section ? undefined : "tabpanel"}
-              id={section ? undefined : `panel-${tab}`}
-              aria-labelledby={section ? undefined : `tab-${tab}`}
-              className="wk-panel ip-body px-3 py-3 sm:px-5 lg:px-6 lg:py-4"
-            >
-              {tab === "overview" ? (
-                <>
-                  {/* Work: every run, job and report, once. Then what proves it is done, the plan, and one Log line. */}
-                  <ItemWorkList
-                    itemId={item.id}
-                    areaId={d.area?.id ?? null}
-                    rows={work.rows}
-                    timeline={work.timeline}
-                    sessionId={work.sessionId}
-                    open={workOpen}
-                    onToggle={toggleWork}
-                    onOp={onOp}
-                  />
-                  <DoneWhen
-                    d={d}
-                    onReopen={() => setDialog("reopen")}
-                    focusRecord={initialAction === "validate"}
-                    recording={item.status === "awaiting_validation"}
-                  />
-                  {summary || kidCount || hasBlockers || d.links.length || d.packets.length || adds.length ? (
-                    <section className="ip-sec ip-plan" aria-labelledby="ip-plan-h" data-testid="item-plan">
-                      <h3 id="ip-plan-h" className="ip-label">
-                        Plan
-                      </h3>
-                      {summary}
-                      {kidCount ? (
-                        <ItemsSection sub label="Sub-items" testId="sub-items" parent={item} open={kids.items} done={kids.done} onSelect={onSelect} />
-                      ) : null}
-                      <Blockers d={d} onSelect={onSelect} />
-                      <Links d={d} canChat={canChat} />
-                      <PacketCard
+        <>
+          {tabsShown ? <AreaTabs tab={tab} item={item.id} leaf chat onTab={setTab} className="task-tabs px-3 sm:px-5 lg:px-6" /> : null}
+          <div
+            id={AREA_PANEL_ID}
+            role={tabsShown ? "tabpanel" : undefined}
+            aria-labelledby={tabsShown ? `areas-tab-${tab}` : undefined}
+            className="min-w-0"
+            data-testid="task-panes"
+            data-split={chatTab && split ? "" : undefined}
+          >
+            {chatTab ? (
+              <SplitPane
+                split={split}
+                value={tab}
+                onChange={(next) => setTab(next as AreaTab)}
+                panes={[
+                  {
+                    id: "overview",
+                    label: "Overview",
+                    content: container ? (
+                      <>
+                        {containerBody}
+                        {!split ? <TaskStatusBar status={status} onOpen={() => setTab("chat")} /> : null}
+                      </>
+                    ) : (
+                      overview
+                    ),
+                  },
+                  {
+                    id: "chat",
+                    label: "Chat",
+                    content: (
+                      <TaskChat
                         d={d}
-                        onCopy={() => void copyHandoff()}
-                        onRevise={() => setDialog("packet")}
-                        // "Continue in chat" is the page's primary while a packet is ready: not offered twice.
-                        onContinue={canChat && shown !== "continue" ? () => setDialog("continue") : undefined}
+                        scroll={split ? "element" : "window"}
+                        runSessions={work.info?.agentRuns?.map((run) => run.hermesSessionId)}
+                        prefill={prefill}
+                        onOp={onOp}
                       />
-                      <div className="ip-adds" role="group" aria-label="Add to this item">
-                        {adds}
-                      </div>
-                    </section>
-                  ) : null}
-                  <LogLine d={d} onOpen={() => setTab("activity")} />
-                </>
-              ) : tab === "chats" ? (
-                <ItemChats chats={chats} canChat={canChat} onNew={() => newChat.start({ areaId: item.id })} busy={newChat.busy} />
-              ) : (
-                <Activity d={d} onSelect={onSelect} />
-              )}
-            </div>
+                    ),
+                  },
+                ]}
+              />
+            ) : (
+              overview
+            )}
           </div>
-          {wide ? <ItemRail d={d} onSelect={onSelect} /> : null}
-        </div>
+        </>
       )}
 
-      <ForkDialog open={dialog === "fork"} onClose={close} item={item} chat={canChat ? chat : undefined} onCreated={onSelect} onOp={onOp} />
+      <ForkDialog open={dialog === "fork"} onClose={close} item={item} hasChat={!!chats.primary} onCreated={onSelect} onOp={onOp} />
       <SplitDialog open={dialog === "split"} onClose={close} item={item} onCreated={onSelect} onOp={onOp} />
       {dialog === "packet" ? <PacketDialog open onClose={close} d={d} /> : null}
-      {dialog === "continue" ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
+      {dialog === "continue" && !chatTab ? <ContinueDialog d={d} markdown={handoffMarkdown(d, window.location.origin)} onClose={close} /> : null}
       <SettleDialog open={dialog === "settle"} onClose={close} d={d} />
       {dialog === "abandoned" || dialog === "superseded" ? <CloseDialog to={dialog} onClose={close} item={item} onOp={onOp} /> : null}
       {aiSheet ? <ActionSheet itemId={item.id} areaId={d.area?.id ?? null} action={aiSheet} onClose={() => setAiSheet(null)} /> : null}
@@ -1441,6 +1557,8 @@ function ContainerBody({
   canChat,
   onDialog,
   onCopy,
+  onFull,
+  onOpenTask,
 }: {
   d: WorkDetail;
   items: WorkItem[];
@@ -1454,6 +1572,10 @@ function ContainerBody({
   canChat: boolean;
   onDialog: (k: DialogKind) => void;
   onCopy: () => void;
+  /** Open Board or Graph as a full view of this project. */
+  onFull: (view: "board" | "graph") => void;
+  /** Open a task inside this project on its Overview or its Chat. */
+  onOpenTask: (id: string, to: "overview" | "chat") => void;
 }) {
   const { item } = d;
   const isArea = item.parentId === null;
@@ -1485,13 +1607,14 @@ function ContainerBody({
   return (
     <div className="wk-panel wk-cpage px-3 py-3 sm:px-5 lg:px-6 lg:py-4" data-side={side ? undefined : "none"}>
       <div className="wk-cpage-main ip-body min-w-0">
-        <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} />
+        {/* An area keeps its Needs you / Working roll-up; a project's tasks say the same in its Tasks section. */}
+        {isArea ? <RollupGroups id={item.id} rollup={rollup} onSelect={onSelect} /> : null}
         {coord ? <AreaCoordinator variant="sheet" {...coord} /> : null}
-        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add item to area". */}
+        {/* Areas: project cards + item tree (AreaProjects) are the only lists; adding goes through "+ Project" / ⋯ "Add task to area". */}
         {isArea ? (
           <AreaProjects areaId={item.id} onOpen={onSelect} />
         ) : (
-          <ItemsSection label="Items" testId="work" parent={item} open={rollup.items} done={rollup.done} onSelect={onSelect} />
+          <ProjectTasks parent={item} items={items} done={rollup.done} onSelect={onSelect} onOpenTask={onOpenTask} onFull={onFull} />
         )}
         {usedAsWork ? (
           <>
@@ -1561,7 +1684,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
             </li>
           ))}
           <li aria-current="page" className="px-1">
-            {node.parentId === null ? "Area" : node.kind === "thread" ? "Item" : KIND_LABEL[node.kind]}
+            {node.parentId === null ? "Area" : node.kind === "thread" ? "Task" : KIND_LABEL[node.kind]}
           </li>
         </ol>
       </nav>
@@ -1576,7 +1699,7 @@ function NodeHeader({ id, items, onSelect }: { id: string; items: WorkItem[]; on
 /**
  * The items under a project (or the sub-items under an item): one row per open item with its one headline, then
  * "Done · N" as one tight row that expands. A tag / assignee filter appears once rows carry either. A project's
- * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Item" adds).
+ * heading carries a quiet "+" that adds in place; with no items yet nothing is drawn (the header's "+ Task" adds).
  */
 function ItemsSection({
   label,
@@ -1619,17 +1742,17 @@ function ItemsSection({
           ) : (
             <h3 id={`kids-${testId}`} className="ip-label">
               {label} <span className="ip-count">{count}</span>
-              {/* The header's "+ Item" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
+              {/* The header's "+ Task" opens the full dialog; this adds in place (type "Sub-project / item" to nest). */}
               <span className="ip-label-acts">
                 <KButton
                   variant="ghost"
                   size="sm"
                   iconOnly
                   icon={<PlusIcon className="h-4 w-4" />}
-                  title="Add item, sub-project or path"
+                  title="Add task, sub-project or path"
                   onClick={() => setAdding(true)}
                 >
-                  Add item, sub-project or path
+                  Add task, sub-project or path
                 </KButton>
               </span>
             </h3>
@@ -2356,6 +2479,43 @@ function Links({ d, canChat }: { d: WorkDetail; canChat: boolean }) {
   );
 }
 
+/**
+ * Made and linked: the pull requests, artifacts, files and links on a task, each once. The task's own links first,
+ * then what its chat made or linked. A task's chats are not listed here: they are under "Other chats" on Chat.
+ */
+function MadeAndLinked({ d, made, hideChats, canChat }: { d: WorkDetail; made: readonly ChatMade[]; hideChats: boolean; canChat: boolean }) {
+  const links = hideChats ? d.links.filter((l) => l.kind !== "chat_session") : d.links;
+  const hasChat = links.some((l) => l.kind === "chat_session");
+  const convs = useConversations(canChat && hasChat);
+  if (!links.length && !made.length) return null;
+  const activity = new Map((convs.data?.conversations ?? []).map((c) => [c.id, c.lastActiveAt]));
+  const prs = links.some((l) => l.kind === "github_pr" || l.kind === "github_issue");
+  return (
+    <section className="ip-sec" aria-labelledby="ip-made-h" data-testid="work-links">
+      <h3 id="ip-made-h" className="ip-label">
+        Made and linked <span className="ip-count">· {links.length + made.length}</span>
+      </h3>
+      <ul className="ip-links">
+        {links.map((l) => (
+          <LinkRow
+            key={l.id}
+            l={l}
+            refresh={d.githubRefresh}
+            deploy={l.kind === "github_pr" ? deployOf(l.externalState, d.item) : null}
+            lastActive={l.kind === "chat_session" ? activity.get(l.targetId ?? "") : undefined}
+          />
+        ))}
+        <ChatMadeRows made={made} />
+      </ul>
+      {!d.githubRefresh && prs ? (
+        <p className="mt-1.5 text-xs text-muted">
+          Add a GitHub token (Settings → Connections → GitHub) to refresh PR state from GitHub (read-only). Until then, mark it yourself.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function LinkRow({ l, refresh, lastActive, deploy }: { l: WorkLink; refresh: boolean; lastActive?: string | null; deploy?: "live" | "waiting" | null }) {
   const url = `/api/work/links/${encodeURIComponent(l.id)}`;
   const state = useWorkMutation((externalState: "open" | "merged" | "closed") => api.patch(url, { externalState }), {
@@ -2520,14 +2680,15 @@ function ForkDialog({
   open,
   onClose,
   item,
-  chat,
+  hasChat,
   onCreated,
   onOp,
 }: {
   open: boolean;
   onClose: () => void;
   item: WorkItem;
-  chat?: WorkLink;
+  /** The task has a chat: the fork starts without one (the chat stays this task's). */
+  hasChat?: boolean;
   onCreated: (id: string) => void;
   onOp: OnOp;
 }) {
@@ -2544,7 +2705,7 @@ function ForkDialog({
       open={open}
       onClose={onClose}
       title={`Fork ${item.title}`}
-      description="Creates a sibling with the same summary, next action and source links."
+      description="Creates a sibling with the same summary, next action and source links. Its chat is not copied."
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -2557,14 +2718,8 @@ function ForkDialog({
       <Field id="fk-title" label="Title">
         <input id="fk-title" data-autofocus className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} />
       </Field>
-      {chat ? (
-        <p className="mt-3 text-sm">
-          This item has a linked conversation.{" "}
-          <Link href={`/chat/${encodeURIComponent(chat.targetId ?? "")}`} className="text-accent underline">
-            Open conversation to fork there
-          </Link>
-          . Jarvis doesn&apos;t fork it automatically.
-        </p>
+      {hasChat ? (
+        <p className="mt-3 text-sm text-muted">The fork starts without a chat. To branch the conversation itself, fork it from the Chat tab.</p>
       ) : null}
     </Dialog>
   );

@@ -31,6 +31,7 @@ import * as undoRoute from "@/app/api/work/ops/[id]/undo/route";
 import * as moveRoute from "@/app/api/work/items/[id]/move/route";
 import { isUntouched, latestOp, undoCheck, UNDO_WINDOW_MS } from "@/server/work/undo-rules";
 import * as store from "@/server/work/store";
+import { continueInConversation } from "@/server/work/primary-chat";
 import * as conversations from "@/server/work/conversations";
 import * as conversationsRoute from "@/app/api/work/conversations/route";
 import * as unfiledRoute from "@/app/api/work/conversations/unfiled/route";
@@ -177,8 +178,11 @@ describe("continue in a new conversation", () => {
     const { u, v5 } = flagship();
     store.createPacket(u, v5.id, packetSchema.parse({ objective: "Define V5", nextAction: "Open the PR" }), cid);
     const p2 = store.createPacket(u, v5.id, packetSchema.parse({ objective: "Define V5 (rev)", nextAction: "Open the PR" }), cid);
-    const r = await store.continueInConversation(u, v5.id, "claude", cid);
+    const r = await continueInConversation(u, v5.id, "claude", cid);
     expect(r.session.id).toMatch(/^loc_/);
+    // The conversation is the task's own chat: filed under it and recorded as primary (task threads, step 1).
+    expect(store.getDetail(owner, v5.id).item.primarySessionId).toBe(r.session.id);
+    expect(store.conversationNodes(owner).get(r.session.id)?.parentId).toBe(v5.id);
     expect(r.link).toMatchObject({ kind: "chat_session", role: "source", lineage: "handoff_from", packetId: p2.id, targetId: r.session.id });
     const d = store.getDetail(owner, v5.id);
     expect(d.events.find((e) => e.kind === "handoff")?.reason).toBe("Continued in a new conversation (handoff from packet v2)");
@@ -189,9 +193,9 @@ describe("continue in a new conversation", () => {
     expect(s.session.activeRun).toBeUndefined();
     // The handoff the browser pre-fills is the same Markdown as "Copy handoff".
     expect(handoffMarkdown(d, "https://jarvis.test")).toContain("# Handoff: V5 evaluator contract");
-    // Forking doesn't copy the handoff lineage.
+    // Forking a task doesn't share its chat (so the handoff lineage isn't copied either).
     const fork = store.forkItem(u, v5.id, undefined, cid);
-    expect(store.getDetail(owner, fork.id).links[0]).toMatchObject({ lineage: null, packetId: null });
+    expect(store.getDetail(owner, fork.id).links).toEqual([]);
   });
 
   it("needs work.use, hermes.chat, ownership and an available backend", async () => {

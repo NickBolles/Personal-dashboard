@@ -123,5 +123,7 @@ test("portfolio tab: project lanes, then import a map with preview, undo and no 
   await expectNoHorizontalOverflow(page);
   await page.goto(`/areas?item=${project}&tab=portfolio`);
   await expect(views(page).getByRole("tab", { name: "Portfolio", exact: true })).toHaveCount(0);
-  await expect(views(page).getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
+  // A project shows its Overview (with room, beside its Chat and without a tab bar at all).
+  await expect(page.getByTestId("children-work")).toBeVisible();
+  if (await views(page).count()) await expect(views(page).getByRole("tab", { name: "Overview", exact: true })).toHaveAttribute("aria-selected", "true");
 });

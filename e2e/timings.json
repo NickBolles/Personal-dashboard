@@ -174,7 +174,7 @@
       "palette-raycast.spec.ts": {
         "action panel and breadcrumb Backspace": 4100,
         "phone: orb tap opens the palette, hold shows the radial map": 300,
-        "typed action: New item in an area → confirm → created": 4500
+        "typed action: New task in an area → confirm → created": 4500
       },
       "pickers.spec.ts": {
         "unified pickers: keyboard status, local Tomorrow, overview filter and Escape focus": 8100
@@ -645,7 +645,7 @@
       "palette-raycast.spec.ts": {
         "action panel and breadcrumb Backspace": 2900,
         "phone: orb tap opens the palette, hold shows the radial map": 3000,
-        "typed action: New item in an area → confirm → created": 3000
+        "typed action: New task in an area → confirm → created": 3000
       },
       "people.spec.ts": {
         "people: a kid signs in with their name and sees the calendar, not Hermes": 5100,

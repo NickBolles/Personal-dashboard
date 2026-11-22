@@ -7,9 +7,7 @@ import { currentVia } from "@/server/work/actor";
 import { config } from "@/server/config";
 import { HttpError } from "@/server/http/errors";
 import type { CurrentUser } from "@/server/auth";
-import { createSession as createConversation, getSessionDetail, sessionAccess } from "@/server/assistant";
-import { requireCap } from "@/server/access";
-import type { AssistantBackend } from "@/lib/assistant";
+import { getSessionDetail, sessionAccess } from "@/server/assistant";
 import { localDate } from "@/lib/time";
 import { parseDecision, serialiseDecision, type DecisionAction } from "@/lib/decisions";
 import type { RiskFlag } from "@/lib/cw-decisions";
@@ -120,6 +118,7 @@ export function toItem(r: ItemRow): WorkItem {
     builtIn: !!r.systemKey,
     validationDefault: r.validationDefault === "required" || r.validationDefault === "optional" ? r.validationDefault : null,
     sessionId: r.sessionId ?? null,
+    primarySessionId: r.primarySessionId ?? null,
     settings: (r.parentId === null && r.kind === "area") || r.settings ? parseAreaSettings(r.settings) : null,
     tags: parseTags(r.tags),
     assignee: r.assignee ?? null,
@@ -130,7 +129,7 @@ export function toItem(r: ItemRow): WorkItem {
     updatedAt: r.updatedAt,
   };
 }
-const toLink = (r: typeof schema.workLinks.$inferSelect): WorkLink => ({
+export const toLink = (r: typeof schema.workLinks.$inferSelect): WorkLink => ({
   ...r,
   kind: r.kind as WorkLink["kind"],
   role: r.role as WorkLink["role"],
@@ -328,7 +327,7 @@ export function listItems(userId: string, opts: { includeArchived?: boolean } = 
     .map(toItem);
 }
 
-function latestPacket(itemId: string, db: Db = getDb()) {
+export function latestPacket(itemId: string, db: Db = getDb()) {
   return db.select().from(schema.workPackets).where(eq(schema.workPackets.itemId, itemId)).orderBy(desc(schema.workPackets.version)).get() ?? null;
 }
 function validationsOf(itemId: string, db: Db = getDb()) {
@@ -786,11 +785,13 @@ export function forkItem(user: CurrentUser, id: string, title: string | undefine
       summary: row.summary,
       nextAction: row.nextAction,
     });
+    // A fork is a new task: it starts without a chat. The source's chats stay the source's (a chat is one task's).
     const sources = tx
       .select()
       .from(schema.workLinks)
       .where(and(eq(schema.workLinks.itemId, id), eq(schema.workLinks.role, "source")))
-      .all();
+      .all()
+      .filter((l) => l.kind !== "chat_session");
     for (const l of sources)
       tx.insert(schema.workLinks)
         .values({ ...l, id: newId(), itemId: forkId, lineage: null, packetId: null, createdAt: nowIso() })
@@ -949,6 +950,8 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
     tx.update(schema.workOps).set({ undoneAt: now.toISOString() }).where(eq(schema.workOps.id, op.id)).run();
     const kind = op.kind as UndoKind;
     let outcome: "restored" | "deleted" | "archived" = "restored";
+    /** A bot's start that was undone: the assistant's own run, for the route to stop. */
+    let stopRunId: string | null = null;
     if (kind === "move" || kind === "reorder") {
       const from = payload.fromParentId ?? null;
       if (row.parentId !== (payload.toParentId ?? null)) throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
@@ -969,6 +972,45 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
       }
       restoreOrder(tx, allRows(user.id, tx), from, payload.prevOrder ?? [], row.id);
       event(tx, row.id, user.id, { kind: "undo", reason: kind === "move" ? "Undid move" : "Undid reorder" });
+    } else if (kind === "task_start" || kind === "task_handoff") {
+      const p = payload as {
+        runId?: string;
+        hermesRunId?: string | null;
+        sessionId?: string;
+        replacedChat?: boolean;
+        prevPrimary?: string | null;
+        prevAssignee?: string | null;
+        toProfile?: string | null;
+      };
+      const at = nowIso();
+      // The run stops being "working" at once; the route asks the assistant to stop the turn itself.
+      if (p.runId)
+        tx.update(schema.agentRuns)
+          .set({ state: "done", summary: "Stopped: you undid this start", finishedAt: at, updatedAt: at, interruptedAt: null })
+          .where(
+            and(eq(schema.agentRuns.id, p.runId), eq(schema.agentRuns.userId, user.id), inArray(schema.agentRuns.state, ["running", "waiting", "interrupted"])),
+          )
+          .run();
+      const back: Partial<typeof T.$inferInsert> = {};
+      // A hand-off: the assignee and the chat go back, unless they were changed again since.
+      if (kind === "task_handoff" && row.assignee === `agent:${p.toProfile}`) back.assignee = p.prevAssignee ?? null;
+      if (p.replacedChat && row.primarySessionId === p.sessionId && !(p.prevPrimary && primaryChatTask(user.id, p.prevPrimary, tx)))
+        back.primarySessionId = p.prevPrimary ?? null;
+      if (Object.keys(back).length)
+        tx.update(T)
+          .set({ ...back, updatedAt: at })
+          .where(eq(T.id, row.id))
+          .run();
+      event(tx, row.id, user.id, { kind: "undo", reason: kind === "task_handoff" ? "Undid hand-off" : "Undid start" });
+      stopRunId = p.hermesRunId ?? null;
+    } else if (kind === "primary_chat") {
+      const p = payload as { prev?: string | null; next?: string | null };
+      if ((row.primarySessionId ?? null) !== (p.next ?? null))
+        throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
+      const prev = p.prev ?? null;
+      if (prev && primaryChatTask(user.id, prev, tx)) throw new HttpError(409, "superseded", "That chat is another task's primary chat now");
+      tx.update(T).set({ primarySessionId: prev, updatedAt: nowIso() }).where(eq(T.id, row.id)).run();
+      event(tx, row.id, user.id, { kind: "undo", reason: "Undid primary chat change" });
     } else if (kind === "settle") {
       if (row.status !== "settled") throw new HttpError(409, "superseded", "Something else changed this item since, so undo isn't safe");
       const back = (payload.fromStatus ?? "ready_to_settle") as WorkStatus;
@@ -1085,7 +1127,7 @@ export function undoOp(user: CurrentUser, opId: string, correlationId: string, n
         outcome = "archived";
       }
     }
-    return { itemId: row.id, kind, outcome };
+    return { itemId: row.id, kind, outcome, ...(stopRunId ? { stopRunId } : {}) };
   });
   audit({
     actor: user.id,
@@ -1282,47 +1324,6 @@ export async function addLink(user: CurrentUser, itemId: string, body: z.infer<t
     detail: { kind: values.kind, target: values.targetId },
   });
   return toLink(getDb().select().from(schema.workLinks).where(eq(schema.workLinks.id, id)).get()!);
-}
-
-/**
- * "Continue in new conversation": a new Hermes or Claude conversation through
- * the assistant layer, linked as a `source` with `handoff_from` lineage. The
- * handoff is only a draft in the browser; nothing is sent to the assistant here.
- */
-export async function continueInConversation(user: CurrentUser, itemId: string, backend: AssistantBackend | undefined, correlationId: string) {
-  requireCap(user, "hermes.chat");
-  const row = ownedItem(user.id, itemId);
-  const packet = latestPacket(itemId);
-  const session = await createConversation(user, `Continue: ${row.title}`.slice(0, 200), backend);
-  const id = newId();
-  const via = packet ? `handoff from packet v${packet.version}` : "handoff, no packet yet";
-  getDb().transaction((tx) => {
-    tx.insert(schema.workLinks)
-      .values({
-        id,
-        itemId,
-        kind: "chat_session",
-        targetId: session.id,
-        url: null,
-        title: session.title || `Continue: ${row.title}`,
-        role: "source",
-        lineage: "handoff_from",
-        packetId: packet?.id ?? null,
-        createdAt: nowIso(),
-      })
-      .run();
-    event(tx, itemId, user.id, { kind: "handoff", reason: `Continued in a new conversation (${via})` });
-  });
-  audit({
-    actor: user.id,
-    action: "work.handoff",
-    source: "work",
-    sourceRecord: itemId,
-    result: "ok",
-    correlationId,
-    detail: { session: session.id, packet: packet?.version ?? null },
-  });
-  return { session: { id: session.id, title: session.title }, link: toLink(getDb().select().from(schema.workLinks).where(eq(schema.workLinks.id, id)).get()!) };
 }
 
 /** Apply a PR/issue state change (manual or read back from GitHub), including merge handling. */
@@ -1720,6 +1721,17 @@ export function itemsWithValidations(userId: string) {
 }
 
 // --- Areas (phase 4): conversations in the tree, settle policy ---
+
+/** The task this session is the primary chat of (lib/task-chat.ts), or null. A session is primary for one task at most. */
+export function primaryChatTask(userId: string, sessionId: string, db: Db = getDb()): ItemRow | null {
+  return (
+    db
+      .select()
+      .from(T)
+      .where(and(eq(T.userId, userId), eq(T.primarySessionId, sessionId)))
+      .get() ?? null
+  );
+}
 
 /** session id → the person's conversation node for it. */
 export function conversationNodes(userId: string, db: Db = getDb()) {

@@ -141,7 +141,8 @@ it("lists runs once, Needs you before Working, in the shared words and with at m
   const panel = screen.getByTestId("item-agent-panel");
   const drawn = within(panel).getAllByTestId("agent-run");
   expect(drawn.map((el) => el.getAttribute("data-state"))).toEqual(["needs", "stalled", "working"]);
-  expect(drawn[0]!.textContent).toContain("R-1");
+  // A run is part of its task: its number is not shown on the page.
+  expect(panel.textContent).not.toMatch(/\bR-\d+\b/);
   expect(within(drawn[0]!).getByTestId("agent-live").textContent).toBe("Needs you");
   expect(within(drawn[1]!).getByTestId("agent-stalled").textContent).toBe("Stalled");
   expect(within(drawn[2]!).getByTestId("agent-live").textContent).toBe("Working");
@@ -150,8 +151,8 @@ it("lists runs once, Needs you before Working, in the shared words and with at m
   for (const el of drawn) expect(el.querySelectorAll(".k-thing-acts button").length).toBeLessThanOrEqual(2);
   fireEvent.click(within(drawn[0]!).getByRole("button", { name: "Open conversation" }));
   expect(push).toHaveBeenCalledWith("/chat/sess_run");
-  fireEvent.click(within(drawn[0]!).getByRole("button", { name: "Log of R-1" }));
-  expect(push).toHaveBeenLastCalledWith("/areas?item=a&coord=running&r=R-1");
+  // What a run reported is the task's own timeline now: there is no separate log to open.
+  expect(within(drawn[0]!).queryByRole("button", { name: /^Log of/ })).toBeNull();
 });
 
 it("opens a run in place for its report line, sub-agents and the ids to copy", () => {

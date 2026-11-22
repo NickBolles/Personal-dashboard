@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ChevronIcon, LogIcon } from "@/components/icons";
-import { RowAction, StateWord, ThingRow } from "@/components/ui";
+import { ChevronIcon } from "@/components/icons";
+import { StateWord, ThingRow } from "@/components/ui";
 import { useTagDirectory } from "@/components/work/ItemMeta";
 import { coordHref, type ContainerRollup, type RollupItemRow } from "@/lib/item-page";
 import { assigneeLabel } from "@/lib/item-tags";
@@ -13,18 +12,16 @@ const dot = (parts: (string | false | null | undefined)[]) => parts.filter(Boole
 
 /**
  * Needs you and Working on a project or area page, rolled up from everything under it. A decision opens in the
- * Chief of staff panel; a run opens the item it is on, and its Log icon opens the run's report and timeline.
+ * Chief of staff panel; a run opens the task it is on (whose timeline is what the run reported).
  * Neither group is drawn when it is empty.
  */
 export function RollupGroups({ id, rollup, onSelect }: { id: string; rollup: Pick<ContainerRollup, "needs" | "working">; onSelect: (id: string) => void }) {
-  const router = useRouter();
   const run = (row: ContainerRollup["working"][number]) => (
     <ThingRow
       key={row.key}
       className="ip-row"
       data-testid="rollup-run"
       state={row.state}
-      refId={row.refId}
       title={row.title}
       sub={
         <>
@@ -34,9 +31,6 @@ export function RollupGroups({ id, rollup, onSelect }: { id: string; rollup: Pic
         </>
       }
       onOpen={() => onSelect(row.itemId)}
-      actions={
-        <RowAction label={`Log of ${row.refId}`} icon={<LogIcon className="h-4 w-4" />} onClick={() => router.push(coordHref(id, "running", row.refId))} />
-      }
     />
   );
   return (
@@ -139,7 +133,7 @@ function ItemRow({ row, people, onSelect }: { row: RollupItemRow; people: readon
   );
 }
 
-/** Open items as rows, then "Done · N" as one tight row that expands. */
+/** Open tasks as rows, then "Done · N" as one tight row that expands. */
 export function ItemRows({ open, done, onSelect }: { open: readonly RollupItemRow[]; done: readonly RollupItemRow[]; onSelect: (id: string) => void }) {
   const [showDone, setShowDone] = useState(false);
   // People's names for the assignee on a row (agents are named by their profile and need no lookup).

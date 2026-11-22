@@ -24,6 +24,8 @@ data class WorkItem(
     val archived: Boolean = false,
     val builtIn: Boolean = false,
     val sessionId: String? = null,
+    /** Tasks: the session of the task's one primary chat (null while it has none). */
+    val primarySessionId: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
 ) {

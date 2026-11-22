@@ -7,24 +7,40 @@
  */
 
 /**
- * `chats` only exists for work items (leaves): it is their Chats section, folded into the one tab bar.
+ * `chat` only exists for tasks (work items that are not areas or projects): the task's own conversation, one swipe
+ * from Overview. A task's tab bar is `Overview · Chat`; Board and Graph are views it can be opened in.
  * `portfolio` only exists on the all-areas landing (Phase 4: replaces the published portfolio map).
  */
-export const AREA_TABS = ["overview", "portfolio", "chats", "board", "activity", "graph"] as const;
+export const AREA_TABS = ["overview", "portfolio", "chat", "board", "activity", "graph"] as const;
 export type AreaTab = (typeof AREA_TABS)[number];
 
 export const AREA_TAB_LABELS: Record<AreaTab, string> = {
   overview: "Overview",
   portfolio: "Portfolio",
-  chats: "Chats",
+  chat: "Chat",
   board: "Board",
   activity: "Activity",
   graph: "Graph",
 };
 
-/** Unknown, missing or legacy values fall back to Overview. */
+/** Unknown or missing values fall back to Overview. The old `chats` address still opens the task's chat. */
 export function parseTab(v: string | null | undefined): AreaTab {
+  if (v === "chats") return "chat";
   return (AREA_TABS as readonly string[]).includes(v ?? "") ? (v as AreaTab) : "overview";
+}
+
+/**
+ * The tabs a node's page shows. A task or a project: Overview, Chat (when it can have one), and the view it is open
+ * in while that is Board, Graph or (a project's) Activity. An area: Overview, Board, Activity, Graph. The landing
+ * adds Portfolio.
+ */
+export function tabsFor(node: { item: string | null; task: boolean; chat: boolean; project?: boolean }, current: AreaTab): AreaTab[] {
+  if (node.task) {
+    // A task's log opens in place on its Overview; a project's Activity is a view of everything inside it.
+    const view = current === "board" || current === "graph" || (current === "activity" && node.project);
+    return ["overview", ...(node.chat ? (["chat"] as const) : []), ...(view ? [current] : [])];
+  }
+  return AREA_TABS.filter((t) => t !== "chat" && (t !== "portfolio" || !node.item));
 }
 
 /** Query keys owned by the view state (the rest of the query is left alone). */

@@ -572,3 +572,67 @@ a.ip-linkrow-name:hover {
     transition: none;
   }
 }
+
+/* ---- Decisions on a task: the question asked and what was chosen, one line each ---- */
+.ip-decisions {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-bottom: 1px solid var(--bd);
+}
+.ip-decision {
+  display: flex;
+  min-width: 0;
+  min-height: 36px;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--bd);
+  font: 400 13px/1.4 var(--sans);
+}
+.ip-decision-q {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.ip-decision[data-open] .ip-decision-q,
+.ip-decision-q > b {
+  color: var(--t1);
+}
+.ip-decision-q > b {
+  font-weight: 600;
+}
+.ip-decision-at {
+  flex: none;
+  color: var(--t3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ip-decision[data-open] .ip-decision-at {
+  color: var(--wn);
+}
+/* The Timeline heading carries "Open chat" at its end. */
+.ip-label.ip-timeline-h {
+  align-items: center;
+  justify-content: space-between;
+}
+/* The log opens in place under its line. */
+.ip-log-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+/* The context rail at the end of Overview (the chat has the side column). */
+.wk-rail[data-inline] {
+  position: static;
+  max-height: none;
+  padding: 0;
+  border-left: 0;
+  background: none;
+}
+/* A task's tab bar sits under its title, edge to edge. */
+.task-tabs.ar-tabs {
+  margin-inline: 0;
+}
