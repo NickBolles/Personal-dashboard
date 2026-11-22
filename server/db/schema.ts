@@ -2015,6 +2015,8 @@ export const agentRuns = sqliteTable(
     startedAt: text("started_at").notNull().default(now),
     updatedAt: text("updated_at").notNull().default(now),
     finishedAt: text("finished_at"),
+    /** When the run's chat was last active, as the ended-chat check last read it (server/work/session-end.ts). */
+    chatActiveAt: text("chat_active_at"),
     /** CW-2: per-owner display number (R-n), never reused; assigned on insert (server/work/registered-runs.ts) */
     seq: integer("seq"),
     /** CW-2: the run that delegated this one (sub-agent tree); same owner */

@@ -59,7 +59,12 @@ const taskRow = (id: string, title: string, state: TaskRow["state"], over: Parti
   question: null,
   pr: null,
   chat: null,
-  can: { steer: state === "working" || state === "stalled", stop: state === "working", retry: state === "failed" || state === "stalled" },
+  can: {
+    steer: state === "working" || state === "stalled",
+    stop: state === "working",
+    retry: state === "failed" || state === "stalled",
+    checkIn: state === "stalled",
+  },
   ...over,
 });
 const listOf = (...rows: TaskRow[]): TaskListResponse => ({

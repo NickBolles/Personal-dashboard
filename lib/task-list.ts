@@ -12,7 +12,7 @@ import type { ItemAgentInfo } from "@/lib/agent-runs";
 import { eventChip, eventText, tidyOutcome, type CardTone } from "@/lib/coordinator/run-card";
 import type { CoordinatorRunRow } from "@/lib/coordinator/runs-view";
 import type { Decision } from "@/lib/cw-decisions";
-import type { RunEvent } from "@/lib/cw-runs";
+import { momentOfPayload, type AgentMoment, type RunEvent } from "@/lib/cw-runs";
 import { rowChoices, viewOfDecision, type DecisionView } from "@/lib/decision-view";
 import { primarySessionOf } from "@/lib/task-chat";
 import { isInFlight, taskState, TASK_RANK, type TaskRunFact, type TaskStatus } from "@/lib/task-state";
@@ -51,7 +51,7 @@ export type TaskRow = TaskStatus & {
   pr: TaskPr | null;
   /** The task's chat (its primary), when it has one. */
   chat: string | null;
-  can: { steer: boolean; stop: boolean; retry: boolean };
+  can: { steer: boolean; stop: boolean; retry: boolean; checkIn: boolean };
   /** Projects: what is inside. */
   rollup?: TaskRollup;
   /** Projects in the All view: the rows inside, two levels at most. */
@@ -133,11 +133,31 @@ export function rollupLine(r: TaskRollup): string {
   return parts.join(" · ");
 }
 
-/** A run event as a timeline line; null when it only repeats the run's title. */
+const MOMENT_CHIP: Record<AgentMoment, { label: string; tone: CardTone }> = {
+  found: { label: "Found", tone: "ai" },
+  made: { label: "Made", tone: "ok" },
+  blocked: { label: "Blocked", tone: "wn" },
+  handed_off: { label: "Handed off", tone: "ai" },
+};
+
+/** Its chat ended (the ended-chat check's own words on the run's last event): the work is back, not stalled. */
+export const chatEnded = (event: Pick<RunEvent, "type" | "summary"> | null | undefined) =>
+  event?.type === "interrupted" && /^Session ended\b/i.test(event.summary);
+
+/**
+ * A run event as a timeline line, in the moment words (D4); null when it only repeats the run's title.
+ * A moment the agent named keeps its name; a stop by the owner reads Stopped; an ended chat reads Chat ended.
+ */
 export function momentOf(event: RunEvent, runTitle: string): TaskMoment | null {
-  const chip = eventChip(event);
   const text = eventText(event, runTitle);
   if (!text && (event.type === "progress" || event.type === "notice")) return null;
+  const named = event.type === "progress" ? momentOfPayload(event.payload) : null;
+  if (named) return { id: event.id, ...MOMENT_CHIP[named], text, at: event.at };
+  if (event.type === "interrupted") {
+    if (chatEnded(event)) return { id: event.id, label: "Chat ended", tone: "neutral", text: "", at: event.at };
+    return { id: event.id, label: "Stopped", tone: "wn", text: /^stopped by you$/i.test(text) ? "By you" : text, at: event.at };
+  }
+  const chip = eventChip(event);
   return { id: event.id, label: chip.label, tone: chip.tone, text, at: event.at };
 }
 
@@ -229,6 +249,7 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
         updatedAt: r.updatedAt,
         summary: tidyOutcome(r.summary),
         waitsFor: r.lock?.mode === "waits" ? r.lock.name : null,
+        chatEnded: r.state === "interrupted" && chatEnded(r.lastEvent),
       }));
     // A question the task carries itself (no D-n row yet) still needs the owner.
     const own = !asks.length && item.decision ? [{ question: item.decision.question, askedAt: item.decision.askedAt || item.updatedAt }] : [];
@@ -240,7 +261,7 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
       nextAction: item.nextAction,
       questions: [...asks.map((d) => ({ question: d.question, askedAt: d.createdAt })), ...own],
       approvalAt: info?.live === "waiting" && info.approval ? info.liveAt : null,
-      chatRunningAt: info?.live === "running" ? info.liveAt : null,
+      chatRunningAt: info?.chatRunningAt ?? null,
       runs: facts,
     });
     const open = runs.filter((r) => r.state === "running" || r.state === "waiting");
@@ -275,6 +296,8 @@ export function buildTaskList(src: TaskSource, opts: { scope: string; view: Task
         steer: status.state === "working" || status.state === "stalled" || (status.state === "needs" && !asks.length),
         stop: open.length > 0 || (status.state === "working" && !!chat),
         retry: status.state === "failed" || status.state === "stalled",
+        // A silent task with a chat to ask in.
+        checkIn: status.state === "stalled" && !!chat,
       },
     };
     built.set(item.id, { row, item });

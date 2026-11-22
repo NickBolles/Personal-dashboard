@@ -29,9 +29,10 @@ import { useAgentRuns } from "@/components/agents/AgentRuns";
 import { EscalationBanner } from "@/components/work/EscalationBanner";
 import { CaptureTriageCard } from "@/components/capture/CaptureTriageCard";
 import { itemAgentChip } from "@/components/work/AgentChip";
-import { ItemTimeline, ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
+import { ItemWorkList, useItemWork, workRowId } from "@/components/work/ItemWork";
 import { TaskChat, draftFromUrl, type TaskDraft } from "@/components/work/TaskChat";
 import { ProjectTasks } from "@/components/tasks/ProjectTasks";
+import { TaskTimelineSection } from "@/components/tasks/TaskList";
 import { ChatMadeRows, TaskDecisions, TaskStatusBar, useChatMade, useTaskDecisions, type ChatMade, type TaskStatus } from "@/components/work/TaskOverview";
 import { canHaveChat, taskChats } from "@/lib/task-chat";
 import { ItemRows, RollupGroups } from "@/components/work/Rollup";
@@ -1327,14 +1328,8 @@ function ItemDetail({
           {headFields}
         </div>
         <div className="wk-panel ip-body px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
-          <ItemTimeline
-            section
-            events={work.timeline}
-            live={work.rows.some((row) => row.state === "working")}
-            // The chat is a tab of this page; side by side it is already on screen.
-            onOpenChat={chatTab && !split ? () => setTab("chat") : undefined}
-            sessionId={chatTab ? null : work.sessionId}
-          />
+          {/* One timeline: the list a task's row opens in place. The chat is a tab of this page; side by side it is already on screen. */}
+          <TaskTimelineSection taskId={item.id} onOpenChat={chatTab && !split ? () => setTab("chat") : undefined} />
           <ItemWorkList
             label="Agents and sub-tasks"
             itemId={item.id}

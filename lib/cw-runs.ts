@@ -60,6 +60,18 @@ export type RunEventType = (typeof RUN_EVENT_TYPES)[number];
 /** Types only Jarvis writes (from run_start / run_update); agents send the rest via jarvis_run_event. */
 export const SYSTEM_RUN_EVENTS: readonly RunEventType[] = ["started", "done", "failed", "interrupted", "resumed"];
 
+/**
+ * The key moments of a task (task threads D4): started, found, made, asked, decided, blocked, handed off, resumed,
+ * stopped, failed, done. Each is one line under 140 characters. An agent reports the four it can know itself
+ * (found, made, blocked, handed off) as `moment` on a `progress` event; Jarvis writes the rest from what happens
+ * (a run starting, a question, an answer, a stop, an end).
+ */
+export const AGENT_MOMENTS = ["found", "made", "blocked", "handed_off"] as const;
+export type AgentMoment = (typeof AGENT_MOMENTS)[number];
+export const MOMENT_MAX = 140;
+export const momentOfPayload = (payload: Record<string, unknown> | null | undefined): AgentMoment | null =>
+  typeof payload?.moment === "string" && (AGENT_MOMENTS as readonly string[]).includes(payload.moment) ? (payload.moment as AgentMoment) : null;
+
 export type RunEvent = {
   id: string;
   runId: string;

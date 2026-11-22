@@ -126,7 +126,7 @@ export function briefFooter(item: Pick<WorkItem, "id" | "title">, ref: string) {
   return [
     "---",
     `Jarvis task: ${item.title} (item ${item.id}), run ${ref}. This conversation is the task's chat: do the work here.`,
-    `Report each key moment with jarvis_run_event (runId ${ref}): what you found, made, asked or are blocked on, one line each.`,
+    `Report each key moment with jarvis_run_event (runId ${ref}, type "progress", moment "found" | "made" | "blocked" | "handed_off"): one line of at most 140 characters each. Report at least one before you finish.`,
     `When you finish or fail, call jarvis_run_update (runId ${ref}) with state done or failed and a one-line summary.`,
     `To ask the owner, call jarvis_raise_decision (itemId ${item.id}, runId ${ref}).`,
   ].join("\n");
@@ -301,4 +301,37 @@ export async function steerTask(
     detail: { delivered },
   });
   return { itemId: item.id, title: item.title, sessionId, delivered, href: taskPath(item.id) };
+}
+
+/** What "Check in" sends: a status question the agent can answer in a few lines, then carry on. */
+export const CHECK_IN_TEXT =
+  "Status check from the owner: in two or three lines, say what is done, what is left and anything you are blocked on. Then carry on.";
+
+/**
+ * "Check in" on a silent task (D6): ask its agent for a status, in the task's chat. It is a message the owner
+ * sends with their own tap, never automatic: guidance for the turn in flight, else the next message.
+ */
+export async function checkInTask(
+  user: Viewer,
+  item: WorkItem,
+  correlationId: string,
+  deps: TaskRunDeps = defaultDeps,
+): Promise<{ itemId: string; sessionId: string; delivered: "guidance" | "message" }> {
+  startable(user, item);
+  const sessionId = item.primarySessionId;
+  if (!sessionId) throw new HttpError(409, "no_chat", "This task has no chat to ask in yet");
+  const running = activeRun(user.id, sessionId);
+  let delivered: "guidance" | "message";
+  if (running && liveOfRun(running.status) === "running") {
+    await deps.steerRun(user, running.runId, CHECK_IN_TEXT, correlationId);
+    delivered = "guidance";
+  } else if (running) {
+    throw new HttpError(409, "waiting", "Its agent is waiting on you. Answer that first");
+  } else {
+    await deps.startRun(user, { sessionId, input: CHECK_IN_TEXT, idempotencyKey: `checkin:${item.id}:${correlationId}` }, correlationId);
+    delivered = "message";
+  }
+  getDb().transaction((tx) => event(tx, item.id, user.id, { kind: "agent_run", reason: "Checked in" }));
+  audit({ actor: user.id, action: "work.task_check_in", source: "work", sourceRecord: item.id, result: "ok", correlationId, detail: { delivered } });
+  return { itemId: item.id, sessionId, delivered };
 }

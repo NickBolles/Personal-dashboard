@@ -84,7 +84,21 @@
   padding: 0;
   list-style: none;
 }
+.tl-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tl-timeline-list time {
+  flex: none;
+  color: var(--t3);
+  font: 400 12px/18px var(--mono);
+}
 /* Opened, a line shows all it says. */
+.tl-timeline-list .tl-moment-text,
 .tl-timeline .tl-moment-text {
   overflow: visible;
   white-space: normal;

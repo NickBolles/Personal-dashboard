@@ -106,9 +106,32 @@ function MomentLine({ moment, now }: { moment: TaskMoment; now: number }) {
 }
 
 /** A task's whole timeline, newest first, each line with its type and time. Read when a row is opened. */
-export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; title: string; seed: TaskMoment[]; onOpen?: () => void }) {
+export function TaskTimeline({
+  taskId,
+  title,
+  seed,
+  onOpen,
+  checkIn,
+}: {
+  taskId: string;
+  title: string;
+  seed: TaskMoment[];
+  onOpen?: () => void;
+  /** A silent task: offer "Check in" (a status question the owner sends to its agent, in the task's chat). */
+  checkIn?: boolean;
+}) {
   const now = useNow();
   const nav = useTaskNav();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const ask = useMutation({
+    mutationFn: () => api.post(`/api/work/items/${encodeURIComponent(taskId)}/check-in`),
+    onSuccess: () => {
+      toast("Asked for a status");
+      void qc.invalidateQueries({ queryKey: ["work"] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Couldn't ask. Try again.", "danger"),
+  });
   const q = useQuery({
     queryKey: ["work", "tasks", "timeline", taskId],
     queryFn: ({ signal }) => api.get<{ moments: TaskMoment[] }>(`/api/work/items/${encodeURIComponent(taskId)}/timeline`, signal),
@@ -129,6 +152,11 @@ export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; 
         <p className="tl-quiet">{q.isLoading ? "Loading…" : "Nothing has happened yet"}</p>
       )}
       {q.error && !q.data ? <p className="tl-quiet">Couldn&apos;t load the rest</p> : null}
+      {checkIn ? (
+        <Button size="sm" variant="ghost" className="tl-open" loading={ask.isPending} disabled={ask.isSuccess} onClick={() => ask.mutate()}>
+          {ask.isSuccess ? "Asked for a status" : "Check in"}
+        </Button>
+      ) : null}
       {onOpen ? (
         <Button size="sm" variant="ghost" className="tl-open" onClick={onOpen}>
           Open task
@@ -144,6 +172,51 @@ export function TaskTimeline({ taskId, title, seed, onOpen }: { taskId: string; 
           Open task
         </ButtonLink>
       )}
+    </div>
+  );
+}
+
+/** How many lines the Overview's timeline shows before "Show earlier". */
+const SECTION_SHOWN = 5;
+
+/**
+ * The timeline on a task's Overview: the same list a row opens in place (one read, so the two never disagree),
+ * newest first, with the task's chat one tap away.
+ */
+export function TaskTimelineSection({ taskId, onOpenChat }: { taskId: string; onOpenChat?: () => void }) {
+  const now = useNow();
+  const [all, setAll] = useState(false);
+  const q = useQuery({
+    queryKey: ["work", "tasks", "timeline", taskId],
+    queryFn: ({ signal }) => api.get<{ moments: TaskMoment[] }>(`/api/work/items/${encodeURIComponent(taskId)}/timeline`, signal),
+    refetchInterval: 15_000,
+  });
+  const moments = q.data?.moments ?? [];
+  // A task nothing has happened on shows no timeline: how it was captured is in its log.
+  if (moments.length <= 1) return null;
+  const shown = all ? moments : moments.slice(0, SECTION_SHOWN);
+  return (
+    <div className="ip-sec ip-timeline" data-testid="item-timeline">
+      <h3 className="ip-label ip-timeline-h">
+        Timeline
+        {onOpenChat ? (
+          <Button variant="ghost" size="sm" className="ip-link" onClick={onOpenChat}>
+            Open chat
+          </Button>
+        ) : null}
+      </h3>
+      <ol className="tl-timeline-list" aria-label="What happened on this task, newest first">
+        {shown.map((m) => (
+          <li key={m.id}>
+            <MomentLine moment={m} now={now} />
+          </li>
+        ))}
+      </ol>
+      {moments.length > SECTION_SHOWN ? (
+        <Button variant="ghost" size="sm" className="ip-more" aria-expanded={all} onClick={() => setAll((value) => !value)}>
+          {all ? "Show fewer" : `Show earlier (${moments.length - SECTION_SHOWN})`}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -337,7 +410,13 @@ export function TaskRowView({ row, depth = 0, ...hooks }: { row: TaskRow; depth?
             ) : null}
           </div>
         ) : (
-          <TaskTimeline taskId={row.id} title={row.title} seed={row.activity} onOpen={hooks.open ? () => go("overview") : undefined} />
+          <TaskTimeline
+            taskId={row.id}
+            title={row.title}
+            seed={row.activity}
+            onOpen={hooks.open ? () => go("overview") : undefined}
+            checkIn={row.can.checkIn}
+          />
         )}
       </ThingRow>
       {confirmStop ? (

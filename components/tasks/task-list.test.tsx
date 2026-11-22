@@ -178,6 +178,25 @@ describe("a row", () => {
     expect(within(asking).getByRole("link", { name: "Answer" }).getAttribute("href")).toBe("/areas?item=task_desk#ip-next-h");
   });
 
+  it("a silent task's opened timeline offers Check in: a status question the owner sends, once", async () => {
+    render(<TaskList scope="all" view="flight" />, { wrapper });
+    await screen.findByText("Compare standing desk frames");
+    const quiet = row("Price lumber for the garage shelving");
+    fireEvent.click(within(quiet).getByRole("button", { name: /^Timeline for Price lumber/ }));
+    const ask = await within(quiet).findByRole("button", { name: "Check in" });
+    expect(posts).toEqual([]);
+    await act(async () => {
+      fireEvent.click(ask);
+    });
+    await waitFor(() => expect(posts.map((p) => p.path)).toEqual(["/api/work/items/task_lumber/check-in"]));
+    expect(within(quiet).getByRole("button", { name: "Asked for a status" }).hasAttribute("disabled")).toBe(true);
+    // A task that is working is not checked in on.
+    const working = row("Reconcile the storefront inventory export");
+    fireEvent.click(within(working).getByRole("button", { name: /^Timeline for Reconcile/ }));
+    await within(working).findByRole("list");
+    expect(within(working).queryByRole("button", { name: "Check in" })).toBeNull();
+  });
+
   it("Stop asks first, in place, then stops the work on the task", async () => {
     render(<TaskList scope="all" view="flight" />, { wrapper });
     await screen.findByText("Compare standing desk frames");

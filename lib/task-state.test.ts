@@ -47,9 +47,23 @@ describe("one state per task", () => {
     expect(taskDetail(s, "@dev", NOW)).toEqual(["6m", "@dev"]);
   });
 
-  it("a turn in flight in the task's chat is working too, but a silent registered run is still the worse news", () => {
+  it("working is checked against the chat: a turn in flight there is work, even when the run has gone quiet", () => {
     expect(taskState({ ...base, chatRunningAt: ago(2) })).toMatchObject({ state: "working", since: ago(2) });
-    expect(taskState({ ...base, chatRunningAt: ago(2), runs: [run({ stalled: true })] }).state).toBe("stalled");
+    expect(taskState({ ...base, chatRunningAt: ago(2), runs: [run({ stalled: true })] }).state).toBe("working");
+    // Silent run, silent chat: stalled.
+    expect(taskState({ ...base, runs: [run({ stalled: true })] }).state).toBe("stalled");
+    // A stop by the owner still reads stalled while the turn winds down.
+    expect(taskState({ ...base, chatRunningAt: ago(1), runs: [run({ state: "interrupted", summary: "Stopped by you" })] }).cause).toBe("stopped by you");
+  });
+
+  it("a run whose chat ended is ready for review, never working or stalled", () => {
+    const ended = run({ state: "interrupted", chatEnded: true, updatedAt: ago(40), summary: "Session ended (agent_close)" });
+    expect(taskState({ ...base, runs: [ended] })).toMatchObject({ state: "review", line: "Its chat ended", since: ago(40) });
+    expect(taskState({ ...base, runs: [{ ...ended, summary: "Matched 172 of 212 rows" }] }).line).toBe("Matched 172 of 212 rows");
+    // Picked up again in the same chat: working.
+    expect(taskState({ ...base, chatRunningAt: ago(1), runs: [ended] }).state).toBe("working");
+    // A question still open on it needs you first.
+    expect(taskState({ ...base, runs: [ended], questions: [{ question: "Ship it?", askedAt: ago(50) }] }).state).toBe("needs");
   });
 
   it("a finished run is ready for review, never done; so is work whose status waits for a look", () => {
