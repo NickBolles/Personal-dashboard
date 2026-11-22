@@ -11,7 +11,6 @@ import type { ChatExecutionResponse, ExecutionRecord } from "@/lib/chat-executio
 import type { CoordinatorRunRow, RunsResponse } from "@/lib/coordinator/runs-view";
 import type { SessionSummary, TimelineItem } from "@/lib/hermes";
 
-
 const mocks = vi.hoisted(() => ({ push: vi.fn(), toast: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => "/areas" }));
 vi.mock("@/components/ui", async (original) => ({ ...(await original<object>()), useToast: () => ({ toast: mocks.toast, announce: vi.fn() }) }));
