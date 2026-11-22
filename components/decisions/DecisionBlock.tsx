@@ -125,6 +125,8 @@ export function DecisionReceiptLine({
             <span className="sr-only">answered: </span>
             <span className="dcs-rc-q">{shortQuestion(view)}</span>
             <span className="dcs-rc-a"> · {choice}</span>
+            {/* Until Undo is gone the answer has not left Jarvis; then it is posted to the agent's chat. */}
+            {receipt.sending ? <span className="dcs-rc-s"> · {receipt.undoable ? "Sending" : "Sent to the agent"}</span> : null}
           </span>
         }
         actions={

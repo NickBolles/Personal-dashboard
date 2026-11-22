@@ -543,3 +543,53 @@ export function useCanChat() {
   const { capabilities } = useAccess();
   return capabilities.includes("hermes.chat");
 }
+
+/**
+ * A task page's header actions (C8): Stop while it works (asks first), Resume once it is stalled or stopped, Retry
+ * once it failed. Resume and Retry open its chat with the words ready; nothing is sent from here.
+ */
+export function TaskHeaderActions({ taskId, onChat }: { taskId: string; onChat: (draft: "resume" | "retry") => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [confirm, setConfirm] = useState(false);
+  const q = useQuery({
+    queryKey: ["work", "tasks", "row", taskId],
+    queryFn: ({ signal }) => api.get<{ task: TaskRow }>(`/api/work/items/${encodeURIComponent(taskId)}/task`, signal),
+    refetchInterval: 15_000,
+  });
+  const stop = useMutation({
+    mutationFn: () => api.post(`/api/work/items/${encodeURIComponent(taskId)}/stop`),
+    onSuccess: () => {
+      setConfirm(false);
+      toast("Stopped");
+      void qc.invalidateQueries({ queryKey: ["work"] });
+    },
+    onError: (error) => toast(error instanceof Error ? error.message : "Couldn't stop it. Try again.", "danger"),
+  });
+  const row = q.data?.task;
+  if (!row) return null;
+  return (
+    <>
+      {row.can.stop ? (
+        <RowAction label="Stop" tone="danger" icon={<StopIcon className={ic} />} aria-expanded={confirm} onClick={() => setConfirm((v) => !v)} />
+      ) : row.can.retry ? (
+        <RowAction
+          label={row.state === "failed" ? "Retry" : "Resume"}
+          icon={<RetryIcon className={ic} />}
+          onClick={() => onChat(row.state === "failed" ? "retry" : "resume")}
+        />
+      ) : null}
+      {confirm ? (
+        <div role="group" aria-label="Stop work on this task?" className="tl-confirm tl-confirm-head">
+          <p>Stop work on this task? You can resume it after.</p>
+          <Button size="sm" variant="danger" loading={stop.isPending} onClick={() => stop.mutate()}>
+            Stop
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+}

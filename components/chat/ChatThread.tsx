@@ -128,6 +128,8 @@ export type ChatThreadProps = {
   scroll?: "window" | "element";
   /** embedded: drawn at the top of the thread (a task's "Other chats"). */
   lead?: ReactNode;
+  /** embedded: drawn at the end of the thread, right above the composer (a task's open questions). */
+  tail?: ReactNode;
   /** Text put into the composer from outside (a handoff draft). `at` tells one from the next. */
   prefill?: { text: string; at: number };
   /** Says what the field is for when the host knows better ("Steer or ask…"). */
@@ -143,7 +145,7 @@ const EMBEDDED_COMMANDS = ["context", "model", "fork", "share"] as const satisfi
  * One conversation: its messages and tool steps, the run in flight, the status bar ("In this chat") and the
  * composer. The chat page shows it as the page (`Conversation`); a task shows the same thread as its Chat tab.
  */
-export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "window", lead, prefill, placeholder, onForked }: ChatThreadProps) {
+export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "window", lead, tail, prefill, placeholder, onForked }: ChatThreadProps) {
   const embedded = frame === "embedded";
   const elementScroll = embedded && scroll === "element";
   const qc = useQueryClient();
@@ -912,6 +914,7 @@ export function ChatThread({ sessionId, initialRunId, frame = "page", scroll = "
                             }}
                           />
                         </AskAboutStep.Provider>
+                        {tail}
                         <div ref={bottomRef} />
                       </div>
                     </ThreadScroll>

@@ -13,7 +13,7 @@ import { takeFirstRun } from "@/lib/client/first-run";
 import { taskFixture } from "@/e2e/fixtures/tasks";
 import { InFlightView } from "./InFlightView";
 import { ReviewQueue } from "./ReviewQueue";
-import { TaskList } from "./TaskList";
+import { TaskHeaderActions, TaskList } from "./TaskList";
 
 const nav = vi.hoisted(() => ({ search: "", replace: vi.fn(), push: vi.fn() }));
 vi.mock("next/navigation", () => ({
@@ -56,6 +56,7 @@ beforeEach(() => {
   vi.spyOn(api, "get").mockImplementation(async (path: string) => {
     if (path.startsWith("/api/work/tasks?")) return fixture.lists[new URLSearchParams(path.split("?")[1]).get("view") as "flight"];
     if (path.endsWith("/timeline")) return { moments: fixture.timeline };
+    if (path.endsWith("/task")) return { task: Object.values(fixture.rows).find((r) => path.includes(`/${r.id}/`)) };
     if (path === "/api/work/items")
       return {
         items: [
@@ -319,5 +320,32 @@ describe("review queue", () => {
       fireEvent.click(within(receipt).getByRole("button", { name: "Undo" }));
     });
     await waitFor(() => expect(posts.map((p) => p.path)).toContain("/api/work/ops/op_1/undo"));
+  });
+});
+
+describe("a task page's header", () => {
+  it("offers Stop while the task works (asked first), Resume once it went quiet, Retry once it failed, and nothing otherwise", async () => {
+    const onChat = vi.fn();
+    const view = render(<TaskHeaderActions taskId="task_inventory" onChat={onChat} />, { wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    expect(posts).toEqual([]);
+    const confirm = screen.getByRole("group", { name: "Stop work on this task?" });
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole("button", { name: "Stop" }));
+    });
+    await waitFor(() => expect(posts.map((p) => p.path)).toEqual(["/api/work/items/task_inventory/stop"]));
+    view.unmount();
+    render(<TaskHeaderActions taskId="task_lumber" onChat={onChat} />, { wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "Resume" }));
+    expect(onChat).toHaveBeenLastCalledWith("resume");
+    cleanup();
+    render(<TaskHeaderActions taskId="task_smoke" onChat={onChat} />, { wrapper });
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    expect(onChat).toHaveBeenLastCalledWith("retry");
+    cleanup();
+    render(<TaskHeaderActions taskId="task_desk" onChat={onChat} />, { wrapper });
+    await waitFor(() => expect(vi.mocked(api.get).mock.calls.some(([p]) => p === "/api/work/items/task_desk/task")).toBe(true));
+    expect(screen.queryByRole("button", { name: /^(Stop|Resume|Retry)$/ })).toBeNull();
+    expect(posts.length).toBe(1);
   });
 });

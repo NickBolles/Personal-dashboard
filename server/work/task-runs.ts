@@ -56,7 +56,7 @@ const defaultDeps: TaskRunDeps = {
 const taskPath = (id: string) => `/areas?item=${encodeURIComponent(id)}&tab=chat`;
 
 /** The Hermes run that is in flight in this conversation, if any (Jarvis' own record of runs it started). */
-function activeRun(userId: string, sessionId: string) {
+export function activeRun(userId: string, sessionId: string) {
   return (
     getDb()
       .select({ runId: schema.runs.runId, status: schema.runs.status })

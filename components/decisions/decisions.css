@@ -412,6 +412,15 @@
   text-overflow: ellipsis;
   white-space: pre;
 }
+/* "· Sending": on its way to the agent's chat (quiet, and the first thing to give way). */
+.dcs-rc-s {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--t2);
+  text-overflow: ellipsis;
+  white-space: pre;
+}
 .dcs-receipt .k-thing-acts {
   gap: 10px;
 }

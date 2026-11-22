@@ -125,6 +125,8 @@ export type DecisionReceipt = {
   index: number;
   /** False once the ten seconds are over (a receipt that stays on screen then has no Undo). */
   undoable: boolean;
+  /** The answer goes to the agent's chat when the Undo window closes (task threads E3). */
+  sending?: boolean;
 };
 export type DecisionNotice = { id: string; text: string; undoLabel?: string; undo: () => Promise<void> };
 export type AnswerOptions = { confirmed?: boolean; index?: number };
@@ -221,7 +223,15 @@ export function useDecisionFlowController({ keepReceipts = false }: { keepReceip
     setPending((refs) => [...refs, view.ref]);
     try {
       const result = await mutation.mutateAsync({ decision: view, answer: text, confirmed: options.confirmed });
-      if (mounted.current) addReceipt({ view, choice: text, op: result.op, index: options.index ?? 0, undoable: !!result.op });
+      if (mounted.current)
+        addReceipt({
+          view,
+          choice: text,
+          op: result.op,
+          index: options.index ?? 0,
+          undoable: !!result.op,
+          sending: result.decision?.delivery?.state === "pending",
+        });
       return result;
     } catch (error) {
       toast(error instanceof Error ? error.message : "Couldn't answer. Try again.", "danger");

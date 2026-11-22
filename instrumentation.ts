@@ -60,6 +60,11 @@ export async function register() {
     const { registerDispatcherTask } = await import("./server/notifications/dispatcher");
     const { applyDueDecisions } = await import("./server/work/decision-store");
     registerDispatcherTask("decision_defaults", 60_000, (now) => applyDueDecisions(now));
+    // Task threads E3: an answer reaches the agent's chat once its Undo window has passed, and is read back.
+    const { deliverAnswers, DELIVERY_EVERY_MS } = await import("./server/work/answer-delivery");
+    registerDispatcherTask("answer_delivery", DELIVERY_EVERY_MS, (now) =>
+      deliverAnswers(now).catch((e) => console.error("[jarvis] answer delivery failed", (e as Error).message.slice(0, 200))),
+    );
     const { decisionDigest } = await import("./server/work/cw-push");
     registerDispatcherTask("decision_digest", 10 * 60_000, (now) => decisionDigest(now));
   } catch (err) {

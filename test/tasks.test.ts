@@ -10,7 +10,7 @@ import * as store from "@/server/work/store";
 import { raiseDecision } from "@/server/work/decision-store";
 import { finishRegisteredRun, registerAgentRun } from "@/server/work/registered-runs";
 import { recordRunEvent } from "@/server/work/run-events";
-import { markReviewed, stopTask, taskList, taskTimeline, tasksNeedingYou } from "@/server/work/tasks";
+import { markReviewed, stopTask, taskList, taskRowFor, taskTimeline, tasksNeedingYou } from "@/server/work/tasks";
 import { rowAnswers, rollupLine, type TaskRow } from "@/lib/task-list";
 
 const cid = "test";
@@ -204,6 +204,13 @@ describe("stop and timeline", () => {
     expect(row).toMatchObject({ state: "stalled", cause: "stopped by you", can: { stop: false, retry: true } });
     await expect(stopTask(owner, t.inventory.id, cid)).rejects.toMatchObject({ code: "not_running" });
     await expect(stopTask(owner, t.portfolio.id, cid)).rejects.toMatchObject({ code: "bad_item" });
+  });
+
+  it("one task's own row is the same row the lists draw; an area is not a task", () => {
+    const t = seed();
+    expect(taskRowFor(owner, t.inventory.id)).toMatchObject({ id: t.inventory.id, state: "working", can: { stop: true } });
+    expect(taskRowFor(owner, t.smoke.id)).toMatchObject({ state: "failed", can: { retry: true, stop: false } });
+    expect(() => taskRowFor(owner, t.home.id)).toThrow(/Task not found/);
   });
 
   it("the timeline is newest first: reports, the question and its answer, and how it began", () => {
