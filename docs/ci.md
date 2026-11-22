@@ -14,15 +14,15 @@ select ─┴─► e2e shard 1..N (Playwright container, E2E_WORKERS isolated s
 Nothing waits on anything except the e2e shards (on `build` and `select`) and the report (on the shards), so the run is as
 long as its longest path: build, then the slowest shard, then the report.
 
-| Job               | What it does                                                                                                                  |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| verify            | `npm ci`, audit, typecheck, lint, format check, docker compose config                                                         |
-| unit              | `npm ci`, vitest with coverage                                                                                                |
-| build             | the only `next build`; runs `secrets:scan` on the bundles, packs `.next/standalone` (assets copied in) as `next-build`        |
-| select            | decides what the e2e shards run (see _Smart selection_)                                                                       |
-| e2e (matrix)      | `npx playwright test --shard i/N --workers $E2E_WORKERS [--grep <selection>]` in `mcr.microsoft.com/playwright:v1.56.1-noble` |
-| Playwright report | merges the shards' blob reports into one HTML report + JSON, writes the job summary and a sticky PR comment, gates the run    |
-| docker            | demo image build, health/readiness, persistence + backup drill (alongside the checks, not after them)                         |
+| Job               | What it does                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| verify            | `npm ci`, audit, typecheck, lint, format check, docker compose config                                                                                                        |
+| unit              | `npm ci`, vitest with coverage                                                                                                                                               |
+| build             | the only `next build`; runs `secrets:scan` on the bundles, packs `.next/standalone` (assets copied in) as `next-build`                                                       |
+| select            | decides what the e2e shards run (see _Smart selection_)                                                                                                                      |
+| e2e (matrix)      | plans its shard by recorded time, then `npx playwright test --test-list <shard> --workers $E2E_WORKERS [--grep <selection>]` in `mcr.microsoft.com/playwright:v1.56.1-noble` |
+| Playwright report | merges the shards' blob reports into one HTML report + JSON, writes the job summary and a sticky PR comment, gates the run                                                   |
+| docker            | demo image build, health/readiness, persistence + backup drill (alongside the checks, not after them)                                                                        |
 
 The shard count (`E2E_SHARDS`, 7) and workers per runner (`E2E_WORKERS`, 3) are the `env` at the top of `ci.yml`; a manual
 dispatch can override both (`gh workflow run ci.yml --ref <branch> -f e2e_shards=4 -f e2e_workers=3`).
@@ -44,8 +44,8 @@ packed artifact.
 | 5 shards × 3 workers     | 8m47s         | 6m44s / 5m16s               | ~41                                       | default until Nov 2026                                           |
 | **7 shards × 3 workers** | 7m56s         | 5m42s / 4m48s               | ~46                                       | run 45040797431, build cold; checks, unit and docker in parallel |
 
-Per shard ~1 min is fixed cost (container 27 s, `npm ci` 9–18 s, artifact, 3 servers + onboarding ~10 s). Shards are split by
-test count (Playwright `--shard`), so the desktop-heavy shard runs longest.
+Per shard ~1 min is fixed cost (container 27 s, `npm ci` 9–18 s, artifact, listing the tests to plan the shard, 3 servers +
+onboarding ~10 s). Shards are split by recorded time (see _Balanced shards_).
 
 ### Where the time went (5 shards, run 45035831824, Nov 2026)
 
@@ -72,11 +72,36 @@ The run is now the e2e path alone. It cost about five more billable minutes (two
 wall time; a warm build should take another half minute off, and that first shows on the pull request after this one
 merges.
 
-**The shards are uneven, and that is what is left.** Their Playwright steps took 4m11s, 2m31s, 2m57s, 3m23s, 2m46s, 4m48s
-and 2m29s: 3m18s on average, 4m48s on the slowest. Playwright splits by test count, and the slow tests (desktop a11y at
-200% text zoom, 17–26 s each) sit together. Two more runners moved the slowest shard by a minute; a split by measured
-duration (`--test-list` per shard, built from recorded timings) would bring it near the average, about a minute and a
-half less, with no more runners. Not built.
+The shards were uneven: their Playwright steps took 4m11s, 2m31s, 2m57s, 3m23s, 2m46s, 4m48s and 2m29s (3m18s on average).
+Playwright's `--shard` splits by test count, and the slow tests (desktop a11y at 200% text zoom, 17–26 s each) sat together.
+That is what _Balanced shards_ fixes. Estimated from that run's times (3 workers per shard), the slowest shard's tests go
+from about 4.4 minutes to about 3.3.
+
+## Balanced shards
+
+`scripts/e2e-shards.mjs` plans the shards by recorded test time instead of count. Each shard lists the tests
+(`playwright test --list`, with the PR's `--grep` if any), computes the same plan from `e2e/timings.json`, and runs its part
+with `--test-list`.
+
+- Longest group first, each to the shard with the least recorded time so far. A spec file runs whole on one shard (per
+  project), as Playwright runs it; files that opt into `mode: "parallel"` (a11y, visual) split test by test, a top-level
+  describe staying together.
+- A test the timings do not know (a new one) counts as the median of its file, else of the suite, so a stale file only makes
+  the balance a little worse.
+- `*.setup.ts` tests are not listed: the setup project is every project's dependency, so it runs on every shard anyway.
+- A test the `--test-list` format cannot name (a title with `›`, or leading/trailing spaces) stops the planner, and the
+  workflow falls back to `--shard` for that run with a warning: nothing is skipped. Keep `›` out of test titles.
+
+**Refreshing the times.** Every full run (main, nightly, `full-e2e`) uploads an `e2e-timings` artifact. When the shards drift
+apart (the report's per-shard table), download it over `e2e/timings.json` and commit:
+
+```sh
+gh run download <run id> -n e2e-timings && mv e2e-timings.json e2e/timings.json
+```
+
+Try a plan locally: `npx playwright test --list --reporter=json > list.json`, then
+`node scripts/e2e-shards.mjs --shard 1/7 --out shard.txt --from-list list.json` (it prints every shard's estimate).
+`npx vitest run test/e2e-shards.test.ts` after changing the planner.
 
 ## Isolated workers (one app + mock per Playwright worker)
 

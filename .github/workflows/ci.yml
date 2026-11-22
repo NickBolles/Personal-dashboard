@@ -192,10 +192,21 @@ jobs:
           MODE: ${{ needs.select.outputs.mode }}
           GREP: ${{ needs.select.outputs.grep }}
           SHARD: ${{ matrix.shard }}/${{ needs.select.outputs.total }}
+        # Shards are planned by recorded test time (scripts/e2e-shards.mjs, e2e/timings.json): Playwright's own
+        # --shard splits by count, which left the slowest shard about a minute and a half behind the rest. Every
+        # shard computes the same plan, and runs its part as a --test-list. If the planner cannot plan (a test the
+        # list format cannot name, say), the run falls back to --shard with a warning: nothing is skipped.
         run: |
-          args=(--shard "$SHARD" --workers "$E2E_WORKERS" --pass-with-no-tests)
-          if [ "$MODE" = subset ] && [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
-          npx playwright test "${args[@]}"
+          args=(--workers "$E2E_WORKERS" --pass-with-no-tests)
+          grep=()
+          if [ "$MODE" = subset ] && [ -n "$GREP" ]; then grep=(--grep "$GREP"); fi
+          if node scripts/e2e-shards.mjs --shard "$SHARD" --out "$RUNNER_TEMP/tests.txt" "${grep[@]}"; then
+            args+=(--test-list "$RUNNER_TEMP/tests.txt")
+          else
+            echo "::warning title=e2e shards::Could not plan shards by recorded time; using Playwright's --shard (split by count)."
+            args+=(--shard "$SHARD")
+          fi
+          npx playwright test "${args[@]}" "${grep[@]}"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -239,6 +250,17 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report
+          retention-days: 14
+      # This run's test times, in the shape e2e/timings.json has: refreshing the shard plan is downloading this
+      # artifact over that file (docs/ci.md). Only a full run has every test.
+      - name: Record test times
+        if: needs.select.outputs.mode == 'full'
+        run: node scripts/e2e-shards.mjs --record results.json --out e2e-timings.json --source "CI run $GITHUB_RUN_ID"
+      - uses: actions/upload-artifact@v4
+        if: needs.select.outputs.mode == 'full'
+        with:
+          name: e2e-timings
+          path: e2e-timings.json
           retention-days: 14
       - name: Summary
         id: summary
