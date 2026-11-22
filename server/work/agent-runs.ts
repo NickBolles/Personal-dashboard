@@ -312,6 +312,7 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
     const report = reports.get(i.id) ?? null;
     if (!who && !samples.length && !prs.length && !report) continue;
     const agg = aggregateRunState(samples);
+    const chatTurn = samples.filter((s) => s.source === "chat" && s.live === "running").sort((a, b) => b.at.localeCompare(a.at))[0];
     const kids = kidsOf.get(i.id) ?? [];
     out[i.id] = {
       itemId: i.id,
@@ -321,6 +322,7 @@ export function agentRuns(user: CurrentUser, items: WorkItem[] = listItems(user.
       live: agg.live,
       ...(agg.approval ? { approval: true } : {}),
       liveAt: agg.at,
+      ...(chatTurn ? { chatRunningAt: chatTurn.at } : {}),
       // One answer to "the task's chat" (lib/task-chat.ts): the recorded primary, else what the old rule picked.
       sessionId: primarySessionOf(i) ?? agg.sessionId ?? ([...(sessions.get(i.id) ?? [])][0] || null),
       ...(agg.sessionId && primarySessionOf(i) && agg.sessionId !== primarySessionOf(i) ? { runSessionId: agg.sessionId } : {}),

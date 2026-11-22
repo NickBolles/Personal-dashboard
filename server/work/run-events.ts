@@ -226,7 +226,7 @@ export function runTree(user: CurrentUser, items: WorkItem[] = listItems(user.id
         profile: r.profile,
         title: r.title,
         state,
-        stalled: isStalled({ state, updatedAt: r.updatedAt }),
+        stalled: isStalled({ state, updatedAt: r.updatedAt, chatActiveAt: r.chatActiveAt }),
         summary: r.summary,
         prUrl: r.prUrl,
         parentRunId: r.parentRunId && parents.has(r.parentRunId) ? r.parentRunId : null,

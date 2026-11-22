@@ -1,0 +1,1 @@
+ALTER TABLE `agent_runs` ADD `chat_active_at` text;

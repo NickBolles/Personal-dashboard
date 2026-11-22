@@ -1,7 +1,7 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { RUN_EVENT_TYPES, SYSTEM_RUN_EVENTS, lockSchema, pipelineSchema, runRef } from "@/lib/cw-runs";
+import { AGENT_MOMENTS, MOMENT_MAX, RUN_EVENT_TYPES, SYSTEM_RUN_EVENTS, lockSchema, pipelineSchema, runRef } from "@/lib/cw-runs";
 import { getDb, schema } from "@/server/db";
 import { audit } from "@/server/audit";
 import { HttpError } from "@/server/http/errors";
@@ -23,10 +23,16 @@ export const RUN_TOOLS: ToolDef[] = [
         runId: runIdentifier,
         type: z.enum(AGENT_EVENTS),
         summary: z.string().trim().max(300),
+        /** A key moment of the task (with type "progress"): what you found, made, are blocked on or handed off. One line, 140 characters at most. */
+        moment: z.enum(AGENT_MOMENTS).optional(),
         payload: z.record(z.string(), z.unknown()).optional(),
       })
       .strict(),
-    run: ({ runId, type, summary, payload }, { agent, correlationId }) => {
+    run: ({ runId, type, summary, moment, payload: given }, { agent, correlationId }) => {
+      if (moment && type !== "progress") throw new HttpError(400, "moment", 'A moment goes on a "progress" event');
+      if (moment && (summary.length > MOMENT_MAX || /[\r\n]/.test(summary) || !summary))
+        throw new HttpError(400, "moment", `A moment is one line of at most ${MOMENT_MAX} characters`);
+      const payload: Record<string, unknown> | undefined = moment ? { ...(given ?? {}), moment } : given;
       ensureRunSeqs(agent.user.id);
       const db = getDb();
       const result = db.transaction(

@@ -125,7 +125,9 @@ describe("start a task (through MCP, against the mock assistant)", () => {
     const detail = await getSessionDetail(owner, sessionId);
     const first = detail.timeline.find((t) => t.kind === "user");
     expect(first && "text" in first ? first.text : "").toContain("List the live previews and which still get traffic.");
-    expect(first && "text" in first ? first.text : "").toContain(`jarvis_run_event (runId ${ref})`);
+    expect(first && "text" in first ? first.text : "").toContain(
+      `jarvis_run_event (runId ${ref}, type "progress", moment "found" | "made" | "blocked" | "handed_off")`,
+    );
     // The owner sees it in Activity terms: an event on the task, by the bot that started it, with an undo.
     const events = store.getDetail(owner.id, task.id).events;
     expect(events.some((e) => e.reason === "Started in its chat: Audit preview deployments")).toBe(true);

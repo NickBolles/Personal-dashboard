@@ -20,7 +20,7 @@ export function taskFixture(now: number) {
     question: null,
     pr: null,
     chat: null,
-    can: { steer: false, stop: false, retry: false },
+    can: { steer: false, stop: false, retry: false, checkIn: false },
     ...over,
   });
   const question = {
@@ -44,7 +44,7 @@ export function taskFixture(now: number) {
     since: ago(49),
     line: "Coupon test timed out, second run",
     activity: [moment("m1", "Failed", "bad", "Coupon test timed out, second run", 49), moment("m2", "Progress", "ai", "11 of 12 checks passed", 64)],
-    can: { steer: false, stop: false, retry: true },
+    can: { steer: false, stop: false, retry: true, checkIn: false },
   });
   const inventory = row({
     id: "task_inventory",
@@ -52,7 +52,7 @@ export function taskFixture(now: number) {
     state: "working",
     chat: "sess_inventory",
     activity: [moment("m3", "Progress", "ai", "40 mismatches so far, all in one category", 2), moment("m4", "Step done", "ok", "Matched 172 of 212 rows", 6)],
-    can: { steer: true, stop: true, retry: false },
+    can: { steer: true, stop: true, retry: false, checkIn: false },
   });
   const desk = row({
     id: "task_desk",
@@ -83,7 +83,7 @@ export function taskFixture(now: number) {
       moment("m7", "Progress", "ai", "Asked two suppliers for quotes", 143),
       moment("m8", "Step done", "ok", "Cut list: 14 boards, 2 sheets of plywood", 145),
     ],
-    can: { steer: true, stop: false, retry: true },
+    can: { steer: true, stop: false, retry: true, checkIn: true },
   });
   const sale = row({
     id: "task_sale",

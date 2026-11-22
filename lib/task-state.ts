@@ -5,9 +5,11 @@
  * Seven states, in the order a list shows them:
  * - Needs you: an open question, an approval, or a run that paused on the owner.
  * - Failed: the newest piece of agent work on it stopped with an error.
- * - Stalled: agent work is open but silent (or was interrupted). Says what would move it, else "no word since".
- * - Working: agent work reported inside the threshold.
- * - Ready for review: the work came back (a finished run), or the task's own status says it waits for a look.
+ * - Stalled: agent work is open but silent, the run and its chat both (or it was stopped). Says what would move
+ *   it, else "no word since".
+ * - Working: agent work reported, or its chat was active, inside the threshold.
+ * - Ready for review: the work came back (a finished run, or a run whose chat ended), or the task's own status
+ *   says it waits for a look.
  * - Not started: nothing has worked on it.
  * - Done: closed.
  *
@@ -62,6 +64,8 @@ export type TaskRunFact = {
   summary?: string | null;
   /** What it says it is waiting for (a lock it does not hold), when it said so. */
   waitsFor?: string | null;
+  /** Interrupted because its chat ended: the agent is gone, so what it left is ready for a look. */
+  chatEnded?: boolean;
 };
 
 export type TaskFacts = {
@@ -121,7 +125,11 @@ export function taskState(f: TaskFacts): TaskStatus {
   const latest = runs[0];
   if (latest?.state === "failed") return { state: "failed", since: latest.updatedAt, cause: null, line: flat(latest.summary) || "It stopped with an error" };
 
-  const silent = runs.find((r) => r.state === "interrupted" || (r.state === "running" && r.stalled));
+  // A run whose chat ended is not coming back by itself: its task is ready for review, never Working or Stalled.
+  const live = runs.filter((r) => !(r.state === "interrupted" && r.chatEnded));
+  const ended = runs.find((r) => r.state === "interrupted" && r.chatEnded);
+  // A turn in flight in the task's chat is activity too: a run that reports little is not stalled while it lasts.
+  const silent = live.find((r) => r.state === "interrupted" || (r.state === "running" && r.stalled && !f.chatRunningAt));
   if (silent) {
     const stopped = silent.state === "interrupted" && /^stopped/i.test(flat(silent.summary));
     const cause = flat(silent.waitsFor)
@@ -133,11 +141,18 @@ export function taskState(f: TaskFacts): TaskStatus {
           : null;
     return { state: "stalled", since: silent.updatedAt, cause, line: flat(silent.summary) || null };
   }
-  const running = runs.find((r) => r.state === "running");
+  const running = live.find((r) => r.state === "running");
   if (running) return { state: "working", since: running.startedAt, cause: null, line: flat(running.summary) || null };
   // No registered run, but the agent is answering in the task's chat right now.
   if (f.chatRunningAt) return { state: "working", since: f.chatRunningAt, cause: null, line: null };
 
+  if (ended && !f.chatRunningAt)
+    return {
+      state: "review",
+      since: ended.updatedAt,
+      cause: null,
+      line: flat(ended.summary) && !/^session ended/i.test(flat(ended.summary)) ? flat(ended.summary) : "Its chat ended",
+    };
   if (latest?.state === "done") return { state: "review", since: latest.updatedAt, cause: null, line: flat(latest.summary) || REVIEW_LINE[f.status] || null };
   if (REVIEW_STATUSES.includes(f.status)) return { state: "review", since: f.updatedAt, cause: null, line: REVIEW_LINE[f.status] ?? null };
 
