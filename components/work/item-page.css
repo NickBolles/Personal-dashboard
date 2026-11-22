@@ -23,6 +23,29 @@
   align-items: center;
   gap: 4px;
 }
+.ip-task-id {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 2px;
+  color: var(--t2);
+  font: 400 12px/1.35 var(--sans);
+}
+.ip-task-id-label {
+  flex: none;
+}
+.ip-task-id-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--t1);
+  font: 500 12px/1.35 var(--mono);
+}
+.ip-task-id-fallback {
+  flex-basis: 100%;
+  color: var(--t2);
+}
 .ip-meta {
   display: flex;
   min-width: 0;

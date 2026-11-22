@@ -111,6 +111,19 @@ afterEach(() => {
 });
 
 describe("a task with no chat yet", () => {
+  it("shows an existing source conversation without inventing a dedicated task chat", () => {
+    const post = vi.spyOn(api, "post");
+    render(<TaskChat d={detail()} scroll="element" runSessions={["api_1794613321_2fcac4e5"]} onOp={() => undefined} />, { wrapper });
+
+    expect(screen.getByText("No dedicated chat on this task yet.")).toBeTruthy();
+    const sources = screen.getByTestId("task-other-chats");
+    fireEvent.click(within(sources).getByRole("button", { name: /^Source conversations/ }));
+    expect(within(sources).getByRole("link", { name: "Source conversation" }).getAttribute("href")).toBe("/chat/api_1794613321_2fcac4e5");
+    expect(within(sources).getByText("also used for other work")).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("thread")).toBeNull();
+  });
+
   it("shows what the task is and creates the chat with the first message, never before", async () => {
     const d = detail();
     client.setQueryData(["work", "item", "t1"], d);
@@ -214,7 +227,7 @@ describe("a task with a chat", () => {
     fireEvent.click(within(others).getByRole("button", { name: /^Other chats/ }));
     expect(within(others).getByRole("link", { name: "First look" }).getAttribute("href")).toBe("/chat/s-old");
     expect(within(others).getByRole("link", { name: "Loose notes" }).getAttribute("href")).toBe("/chat/s-linked");
-    expect(within(others).getByRole("link", { name: "Started in another chat" }).getAttribute("href")).toBe("/chat/s-coordinator");
+    expect(within(others).getByRole("link", { name: "Source conversation" }).getAttribute("href")).toBe("/chat/s-coordinator");
     expect(within(others).getAllByRole("button", { name: "Make primary" })).toHaveLength(2);
     expect(within(others).queryByText("Desk chat")).toBeNull();
   });
