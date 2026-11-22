@@ -16,9 +16,9 @@ async function api<T = unknown>(page: Page, method: "get" | "post" | "put" | "pa
 }
 
 async function serious(page: Page) {
-  // The brief arrives top to bottom; check it once it has landed (a fading section reads as low contrast).
-  const last = page.locator('[data-testid="brief"] > :last-child');
-  if (await last.count()) await expect(last).toHaveCSS("opacity", "1");
+  // The brief arrives top to bottom, and a section added later (In the works) fades in too: check it once every
+  // section has landed (a fading section reads as low contrast).
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="brief"] > *')].every((el) => getComputedStyle(el).opacity === "1"));
   const results = await new AxeBuilder({ page: page as never }).include("main").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   return results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")
@@ -38,6 +38,9 @@ test.beforeEach(async ({ page, request }) => {
   await setHa(request, "cover.garage_door", "closed");
   await api(page, "delete", "/api/brief/profile");
   await api(page, "put", "/api/brief/settings", { ai: false });
+  // An earlier attempt that failed midway may have left an agent request open: take it back so a retry starts clean.
+  const left = await api<{ improve?: { open: { id: string }[] } }>(page, "get", "/api/brief");
+  for (const r of left.improve?.open ?? []) await api(page, "delete", `/api/brief/improve/${encodeURIComponent(r.id)}`);
 });
 test.afterEach(async ({ page }) => {
   await api(page, "put", "/api/brief/settings", { ai: false });
@@ -74,6 +77,11 @@ test("turn it on, read it, correct it, and keep what Jarvis noticed", async ({ p
   await expect(page.getByText(/Finance and AI-excluded areas are never sent/)).toBeVisible();
   await page.getByRole("button", { name: "Turn on", exact: true }).click();
   await expect(brief.getByText("Written by Jarvis")).toBeVisible({ timeout: 30_000 });
+  // On a second attempt the same day, the earlier attempt's brief shows at once while the new build is still
+  // running, and would be replaced under the steps below. Wait for the build to land, then read the page fresh.
+  await expect.poll(async () => (await api<{ build: { state: string } }>(page, "get", "/api/brief")).build.state, { timeout: 30_000 }).toBe("idle");
+  await page.reload();
+  await expect(brief.getByText("Written by Jarvis")).toBeVisible();
   await expect(brief.getByRole("heading", { name: "Protect the morning for the one thing that moves this week" })).toBeVisible();
 
   // One primary action on the page: opening the first pick.
@@ -99,7 +107,8 @@ test("turn it on, read it, correct it, and keep what Jarvis noticed", async ({ p
   await expect(callout.getByRole("link", { name: "Answer: What got in the way?" })).toHaveAttribute("href", /^\/chat\?new=1&context=/);
   // A small step can be ticked off, and stays ticked.
   const step = callout.getByRole("checkbox", { name: "Tell the person it involves" });
-  await step.check();
+  // Wait for the save before reloading: a reload cancels a request still in flight and the tick would be lost.
+  await Promise.all([page.waitForResponse((r) => r.url().includes("/api/brief/steps") && r.ok()), step.check()]);
   await page.reload();
   await callout.getByRole("button", { name: /^1 of 3 done/ }).click();
   await expect(step).toBeChecked();
